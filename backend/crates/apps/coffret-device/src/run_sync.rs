@@ -51,6 +51,7 @@ impl OpenLibrary {
                 &self.keys,
                 self.local_fs.as_ref(),
                 self.local_fs.as_ref(),
+                self.local_fs.as_ref(),
                 &self.spool,
                 batch,
                 now,

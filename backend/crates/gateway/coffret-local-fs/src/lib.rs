@@ -130,11 +130,12 @@ mod local_times;
 mod unix_fs;
 pub use unix_fs::UnixFs;
 
-// The two other capabilities `UnixFs` answers, the `Spool` being in `unix_fs.rs`
+// The other capabilities `UnixFs` answers, the `Spool` being in `unix_fs.rs`
 // with the type itself: the mapped folders a scan reads, and the places a local
-// writer puts a file into. Each is a directory of its own because its
-// descriptor-relative operations divide into several independent
-// responsibilities.
+// writer puts a file into — beside which, sharing that descent, the desktop's
+// trash a deleted Entry's unedited copy goes to (spec: EP-15). Each is a
+// directory of its own because its descriptor-relative operations divide into
+// several independent responsibilities.
 mod unix_destinations;
 
 mod unix_mapped_roots;

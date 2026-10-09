@@ -124,6 +124,7 @@ impl SpooledContainer {
             size: entry.extent.size(),
             mtime: entry.mtime,
             at,
+            hash: Some(entry.hash),
         })
     }
 }

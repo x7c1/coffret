@@ -299,6 +299,7 @@ async fn a_sync_reads_a_decomposed_filesystem_spelling_after_normalizing_its_ent
         &keys,
         &local,
         &local,
+        &local,
         spool,
         BatchId::new("decomposed-source"),
         DeviceTime::from_unix_seconds(1_700_000_000),

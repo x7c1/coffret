@@ -319,6 +319,14 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()> {
+        let path = path.clone();
+        self.write("forgetting a local file's row", move |connection| {
+            device_state::forget_local_entry(connection, &path)
+        })
+        .await
+    }
+
     async fn local_entry_at(&self, path: &EntryPath) -> IndexResult<Option<LocalEntry>> {
         let path = path.clone();
         self.read("reading a local file's row", move |connection| {

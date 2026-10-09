@@ -68,5 +68,6 @@ fn code(operation: LocalOperation) -> u8 {
         // device keeping a file of its own — so this counter exists to keep the
         // match exhaustive rather than because a case ever scripts it.
         LocalOperation::Locking => 9,
+        LocalOperation::MovingToTrash => 10,
     }
 }

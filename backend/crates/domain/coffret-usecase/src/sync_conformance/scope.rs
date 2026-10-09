@@ -46,11 +46,13 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
         .expect("a sync meeting a local deletion must succeed");
 
     assert!(outcome.commit.is_none(), "a sync propagates no deletion");
-    assert_eq!(
+    assert!(
+        matches!(
+            outcome.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("a.jpg")
+        ),
+        "the missing file is reported: {:?}",
         outcome.surfaced,
-        vec![Surfaced::DeletedLocally {
-            path: entry_path("a.jpg"),
-        }],
     );
     assert_eq!(outcome.unchanged, 1, "the file that stayed is unchanged");
 
@@ -71,7 +73,14 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     let again = sync_folders(request(store, index, &keys, fixture.fs(), 3))
         .await
         .expect("a third sync must succeed");
-    assert_eq!(again.surfaced, outcome.surfaced);
+    assert!(
+        matches!(
+            again.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("a.jpg")
+        ),
+        "the missing file is reported again: {:?}",
+        again.surfaced,
+    );
 }
 
 /// An Entry this device never materialized is left alone, mapping or no

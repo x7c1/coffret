@@ -50,6 +50,22 @@ pub use completion::{
 
 mod counting_store;
 
+mod departed;
+pub use departed::{
+    a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_back,
+    a_departed_file_with_no_recorded_hash_is_kept_once_it_changed,
+    a_departed_path_whose_file_is_gone_is_forgotten,
+    a_file_put_where_one_was_moved_to_the_trash_is_new,
+    a_freeze_leaves_a_departed_file_to_the_sync, a_path_a_new_entry_arrived_at_is_not_departed,
+    a_refused_move_to_the_trash_leaves_the_file_and_is_retried,
+    a_touched_departed_file_with_its_recorded_content_is_unedited,
+    an_edited_departed_file_is_kept_and_reported_every_run,
+    an_unedited_file_another_device_deleted_goes_to_the_trash,
+    an_unedited_file_this_device_deleted_goes_to_the_trash,
+    nothing_is_moved_to_the_trash_through_a_refused_root,
+    nothing_is_moved_to_the_trash_under_an_unavailable_root,
+};
+
 // Visible to the freeze suite, which borrows the one helper that arranges an
 // identity mismatch: what an unmounted disk looks like to the guard is one
 // account, not one per suite.
@@ -165,6 +181,19 @@ macro_rules! sync_conformance {
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,
             an_entry_this_device_never_materialized_is_left_alone,
+            an_unedited_file_this_device_deleted_goes_to_the_trash,
+            an_unedited_file_another_device_deleted_goes_to_the_trash,
+            an_edited_departed_file_is_kept_and_reported_every_run,
+            a_touched_departed_file_with_its_recorded_content_is_unedited,
+            a_departed_file_with_no_recorded_hash_is_kept_once_it_changed,
+            a_path_a_new_entry_arrived_at_is_not_departed,
+            a_file_put_where_one_was_moved_to_the_trash_is_new,
+            a_departed_path_whose_file_is_gone_is_forgotten,
+            a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_back,
+            a_refused_move_to_the_trash_leaves_the_file_and_is_retried,
+            nothing_is_moved_to_the_trash_through_a_refused_root,
+            nothing_is_moved_to_the_trash_under_an_unavailable_root,
+            a_freeze_leaves_a_departed_file_to_the_sync,
             a_missing_mapped_root_is_reported_and_infers_no_deletion,
             an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
             an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,

@@ -189,6 +189,10 @@ impl State {
         }
     }
 
+    pub(super) fn forget_local_entry(&mut self, path: &EntryPath) {
+        self.local_entries.remove(path);
+    }
+
     pub(super) fn local_entry_at(&self, path: &EntryPath) -> Option<LocalEntry> {
         self.local_entries.get(path).cloned()
     }

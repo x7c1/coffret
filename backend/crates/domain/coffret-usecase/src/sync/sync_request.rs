@@ -5,6 +5,7 @@ use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::local_scan::{UnknownBirths, NONE_PLACED};
+use crate::local_trash::LocalTrash;
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
@@ -12,9 +13,10 @@ use crate::spool::Spool;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
 ///
-/// The two ports, the epoch's keys, the two halves of this device's own disk —
-/// where the ciphertext waits between being encoded and being committed, and the
-/// mapped folders the scan reads — and the two values a device supplies rather
+/// The two ports, the epoch's keys, the three things this device's own disk is
+/// asked for — where the ciphertext waits between being encoded and being
+/// committed, the mapped folders the scan reads, and the trash a deleted Entry's
+/// unedited copy goes to — and the two values a device supplies rather
 /// than derives: what it calls this batch and what its clock says. Which
 /// folders are scanned is not among them — that is the device's mappings, which
 /// the [`Index`] holds (spec: EP-9), so a caller cannot sync a folder the
@@ -40,6 +42,13 @@ pub struct SyncRequest<'a> {
     /// cannot be stated, a folder cannot be listed, or a source cannot be read
     /// (spec: EP-8, EP-12).
     pub roots: &'a dyn MappedRoots,
+    /// The desktop's trash, which a file a deleted Entry left behind unedited is
+    /// moved into (spec: EP-15).
+    ///
+    /// A capability like the two above it, so a case asks what the run does
+    /// when the trash will not take a file without reaching the trash of the
+    /// desktop it runs on.
+    pub trash: &'a dyn LocalTrash,
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -76,8 +85,8 @@ pub struct SyncRequest<'a> {
 
 impl<'a> SyncRequest<'a> {
     /// A run against `store` and `index`, reading the mapped folders through
-    /// `roots` and spooling into `spool_dir` of `spool`, under the default
-    /// policy.
+    /// `roots`, moving departed files to the desktop's trash through `trash`,
+    /// and spooling into `spool_dir` of `spool`, under the default policy.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
@@ -85,6 +94,7 @@ impl<'a> SyncRequest<'a> {
         keys: &'a LibraryKeys,
         spool: &'a dyn Spool,
         roots: &'a dyn MappedRoots,
+        trash: &'a dyn LocalTrash,
         spool_dir: impl AsRef<Path>,
         batch: BatchId,
         now: DeviceTime,
@@ -95,6 +105,7 @@ impl<'a> SyncRequest<'a> {
             keys,
             spool,
             roots,
+            trash,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             batch,
             now,

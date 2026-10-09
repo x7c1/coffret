@@ -11,8 +11,8 @@ impl InMemoryFs {
     ///
     /// The count is per operation, so scripting the second
     /// [`Writing`](LocalOperation::Writing) fails the second write whatever else
-    /// the run did in between. Nine operations are worth scripting, and they are
-    /// the ones the three capabilities perform:
+    /// the run did in between. Ten operations are worth scripting, and they are
+    /// the ones the four capabilities perform:
     ///
     /// - [`Creating`](LocalOperation::Creating) for
     ///   [`create`](crate::Spool::create),
@@ -49,6 +49,10 @@ impl InMemoryFs {
     ///   share one counter, so the `nth` is the nth of *whichever comes first* —
     ///   a case that scripts a read partway through a Pack's member stream
     ///   counts the scan's own opens and reads on the way there.
+    ///
+    /// - [`MovingToTrash`](LocalOperation::MovingToTrash) for
+    ///   [`move_to_trash`](crate::LocalTrash::move_to_trash), which leaves the
+    ///   file where it was (spec: EP-15).
     ///
     /// [`prepare_dir`](crate::Spool::prepare_dir) is deliberately not counted or
     /// scripted: it is one call at the top of a run, and a case that wants the

@@ -100,7 +100,7 @@ fn split(components: &[String]) -> (&String, &[String]) {
 /// configured this device to keep a subtree in, so what that path points at is
 /// their choice to make (spec: EP-9). Every name *below* it comes from the
 /// Library and is descended into instead.
-fn open_root(root: &Path) -> Result<OwnedFd, Errno> {
+pub(super) fn open_root(root: &Path) -> Result<OwnedFd, Errno> {
     rustix::fs::open(
         root,
         OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,

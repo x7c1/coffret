@@ -131,13 +131,14 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
     assert!(outcome.commit.is_none(), "no Pack is rewritten by a sync");
     assert!(outcome.added.is_empty());
     assert!(outcome.replaced.is_empty());
-    assert_eq!(
+    assert!(
+        matches!(
+            outcome.surfaced.as_slice(),
+            [Surfaced::PackResident { path, container_id }]
+                if *path == entry_path("a.jpg") && *container_id == pack
+        ),
+        "the file needing an update is surfaced (spec: PK-14): {:?}",
         outcome.surfaced,
-        vec![Surfaced::PackResident {
-            path: entry_path("a.jpg"),
-            container_id: pack,
-        }],
-        "the file needing an update is surfaced (spec: PK-14)",
     );
 
     let location = index

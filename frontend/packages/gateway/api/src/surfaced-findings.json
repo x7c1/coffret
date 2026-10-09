@@ -6,5 +6,8 @@
   "KeyLost",
   "ReservedComponent",
   "ChangedInPack",
-  "DeletedLocally"
+  "DeletedLocally",
+  "MovedToTrash",
+  "KeptEdited",
+  "MoveToTrashRefused"
 ]

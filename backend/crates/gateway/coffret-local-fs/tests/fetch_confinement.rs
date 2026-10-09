@@ -182,6 +182,7 @@ impl Devices {
                 &keys(),
                 &self.local,
                 &self.local,
+                &self.local,
                 &self.spool_dir,
                 BatchId::new("run-1"),
                 at(1),

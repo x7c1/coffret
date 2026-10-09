@@ -26,7 +26,9 @@ pub(super) struct Selection {
 /// The name is asked about first, and decides the path before anything else is
 /// worth asking: an Entry Path carrying `.coffret` at any depth names the
 /// device's own management area, which is reserved and never content
-/// (spec: EP-14), so it is reported rather than placed.
+/// (spec: EP-14), so it is reported rather than placed. So is a place whose
+/// first folder under the mapped root is one a desktop keeps its trash in
+/// (spec: EP-16).
 ///
 /// Then two questions per target and no more: what this device wrote down about
 /// the path, and what is on disk at it now. Between them they pick out the two
@@ -87,6 +89,21 @@ pub(super) async fn select(
         {
             selection.surfaced.push(Surfaced::ReservedComponent {
                 path: target.location.entry.path,
+            });
+            continue;
+        }
+
+        // A folder a desktop keeps its trash in, directly under the mapped
+        // root, is not a folder of the mapped root either: no scan enters it,
+        // so a file placed there would be one the next sync never sees again
+        // (spec: EP-16). Decided from the name, before anything on disk is
+        // reached, and reported as the folder that stopped the place — no scan
+        // of this device makes such a path, so it is one another device, or a
+        // build before the rule, committed.
+        if let Some(stopped_at) = target.place.trash_folder() {
+            selection.surfaced.push(Surfaced::UnreachablePlace {
+                path: target.location.entry.path,
+                stopped_at,
             });
             continue;
         }

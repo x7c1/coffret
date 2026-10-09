@@ -161,3 +161,15 @@ pub(super) fn content_hash(
     let bytes: Vec<u8> = row.get(column).map_err(classify(operation))?;
     ContentHash::from_slice(&bytes).map_err(unreadable_model(operation))
 }
+
+/// The same, for a column that may hold no hash at all.
+pub(super) fn optional_content_hash(
+    row: &Row<'_>,
+    column: &'static str,
+    operation: &'static str,
+) -> IndexResult<Option<ContentHash>> {
+    optional_blob(row, column, operation)?
+        .map(|bytes| ContentHash::from_slice(&bytes))
+        .transpose()
+        .map_err(unreadable_model(operation))
+}

@@ -159,6 +159,10 @@ impl Index for RivalIndex<'_> {
         self.inner.mark_absent(path, at).await
     }
 
+    async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()> {
+        self.inner.forget_local_entry(path).await
+    }
+
     async fn local_entry_at(&self, path: &EntryPath) -> IndexResult<Option<LocalEntry>> {
         self.inner.local_entry_at(path).await
     }

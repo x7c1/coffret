@@ -30,9 +30,11 @@ pub use commit::{
 
 mod device_state;
 pub use device_state::{
-    a_file_left_behind_by_the_library_is_reported, a_mapping_is_kept_once_per_prefix,
-    a_mapping_round_trips_its_root_identity, a_replay_leaves_device_state_alone,
-    a_restore_leaves_device_state_alone, a_spool_is_recorded_until_its_row_is_cleared,
+    a_file_left_behind_by_the_library_is_reported,
+    a_forgotten_row_is_gone_and_forgetting_twice_succeeds, a_mapping_is_kept_once_per_prefix,
+    a_mapping_round_trips_its_root_identity, a_materialization_keeps_the_hash_it_was_recorded_with,
+    a_replay_leaves_device_state_alone, a_restore_leaves_device_state_alone,
+    a_spool_is_recorded_until_its_row_is_cleared,
     a_spooling_row_becomes_spooled_when_its_file_completes,
     a_spooling_row_that_names_an_object_is_refused, only_a_file_this_device_had_can_go_absent,
 };
@@ -95,6 +97,8 @@ macro_rules! index_conformance {
             a_replay_leaves_device_state_alone,
             a_file_left_behind_by_the_library_is_reported,
             only_a_file_this_device_had_can_go_absent,
+            a_materialization_keeps_the_hash_it_was_recorded_with,
+            a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
             a_mapping_is_kept_once_per_prefix,
             a_mapping_round_trips_its_root_identity,
             a_spool_is_recorded_until_its_row_is_cleared,

@@ -106,7 +106,8 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
 /**
  * Which finding names a refusal carries, as against the ones only a run's
  * finding does — nothing a fetch does is declined over a file that changed
- * inside a Pack or one this device no longer has.
+ * inside a Pack, one this device no longer has, or one whose Entry left the
+ * Library.
  */
 const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   ForeignFile: 'refusal',
@@ -117,6 +118,9 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   ReservedComponent: 'refusal',
   ChangedInPack: 'finding',
   DeletedLocally: 'finding',
+  MovedToTrash: 'finding',
+  KeptEdited: 'finding',
+  MoveToTrashRefused: 'finding',
 };
 
 const FINDING_REASONS: Literals<FindingReason> = {

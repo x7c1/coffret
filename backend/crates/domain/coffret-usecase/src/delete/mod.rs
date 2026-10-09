@@ -46,8 +46,8 @@
 //! that wants the preview to name the Packs a run would be refused for.
 //!
 //! What is deliberately not here. **The local files** a device holds for a
-//! deleted Entry: what a device does about a file whose Entry left the Library
-//! is a separate question, and a deletion touches no mapped folder.
+//! deleted Entry: a deletion touches no mapped folder, and what becomes of a
+//! file whose Entry left the Library is the next sync's to decide (spec: EP-15).
 //! **`update`** (spec: PK-11, PK-12), which rebuilds Packs the same way and
 //! substitutes changed Entries; the rebuild is kept apart from this flow for it.
 //! **Repack and compaction** (spec: PK-8), which regroup what deletions leave

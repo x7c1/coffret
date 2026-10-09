@@ -271,6 +271,18 @@ fn said(reason: &FindingReason) -> &'static str {
         FindingReason::DeletedLocally => {
             "this device had this file and it is gone; the Library still holds it"
         }
+        FindingReason::MovedToTrash => {
+            "this file was deleted from the Library, and this device's unedited copy was moved \
+             to the trash"
+        }
+        FindingReason::KeptEdited => {
+            "this file was deleted from the Library, and this device's copy is kept because it \
+             changed; move or remove it to stop this report"
+        }
+        FindingReason::MoveToTrashRefused { .. } => {
+            "this file was deleted from the Library, and moving this device's copy to the trash \
+             was refused; it is left in place, and the next sync tries again"
+        }
         FindingReason::KeyLost => "the Library records no key for the Container holding this file",
         FindingReason::ForeignFile => {
             "a file this device did not put there stands where this Entry belongs"
@@ -312,6 +324,9 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         // left as it was.
         FindingReason::ChangedInPack => ("surfaced", "ChangedInPack"),
         FindingReason::DeletedLocally => ("surfaced", "DeletedLocally"),
+        FindingReason::MovedToTrash => ("surfaced", "MovedToTrash"),
+        FindingReason::KeptEdited => ("surfaced", "KeptEdited"),
+        FindingReason::MoveToTrashRefused { .. } => ("surfaced", "MoveToTrashRefused"),
     }
 }
 
@@ -586,7 +601,18 @@ mod tests {
                 FindingReason::KeyLost => surfaced(FindingReason::ReservedComponent),
                 FindingReason::ReservedComponent => surfaced(FindingReason::ChangedInPack),
                 FindingReason::ChangedInPack => surfaced(FindingReason::DeletedLocally),
-                FindingReason::DeletedLocally => unavailable(RootUnavailable::Missing),
+                FindingReason::DeletedLocally => surfaced(FindingReason::MovedToTrash),
+                FindingReason::MovedToTrash => surfaced(FindingReason::KeptEdited),
+                FindingReason::KeptEdited => surfaced(FindingReason::MoveToTrashRefused {
+                    cause: std::sync::Arc::new(coffret_device::DescentError::Io(
+                        coffret_usecase::LocalIoError::new(
+                            coffret_usecase::LocalOperation::MovingToTrash,
+                            LOCAL_ROOT,
+                            std::io::Error::other("no trash on this volume"),
+                        ),
+                    )),
+                }),
+                FindingReason::MoveToTrashRefused { .. } => unavailable(RootUnavailable::Missing),
             }),
             Finding::UnavailableRoot { reason, .. } => Some(match reason {
                 RootUnavailable::Missing => unavailable(RootUnavailable::AnotherFilesystem),

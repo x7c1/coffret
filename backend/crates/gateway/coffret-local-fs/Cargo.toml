@@ -26,6 +26,10 @@ rustix = { workspace = true }
 # on: a spool is written while a Container is being encoded and read while it is
 # being uploaded, so neither may hold a worker thread against the disk.
 tokio = { workspace = true }
+# The desktop's own trash, which a file a deleted Entry left behind unedited is
+# moved into rather than deleted outright, so a person can still take it back
+# (spec: EP-15).
+trash = { workspace = true }
 # The two outcomes nothing above can see, because each is answered as a verdict
 # rather than a refusal: a spool that was already gone when it was discarded
 # (spec: OC-8), and a mapped root that was not there when it was stated

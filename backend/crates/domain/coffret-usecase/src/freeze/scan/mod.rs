@@ -261,6 +261,9 @@ pub(super) async fn preview(
                 preview.bytes += source.size;
             }
             Verdict::NotMaterialized => preview.not_here += 1,
+            // Neither in the Library nor going into it: the sync is what says
+            // what becomes of it (spec: EP-15).
+            Verdict::Departed => {}
             Verdict::KeyLostInPack(_) | Verdict::InPack => preview.in_pack += 1,
             Verdict::InPackTouched(_) => preview.changed_in_pack += 1,
         }

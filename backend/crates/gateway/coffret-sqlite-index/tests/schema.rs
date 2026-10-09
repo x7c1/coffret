@@ -49,7 +49,7 @@ use support::{
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers — here, two that are equal — that decide
 /// everything below.
-const SCHEMA_VERSION: i64 = 9;
+const SCHEMA_VERSION: i64 = 10;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -84,6 +84,7 @@ fn observation() -> LocalObservation {
         size: 100,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_400),
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
     }
 }
 

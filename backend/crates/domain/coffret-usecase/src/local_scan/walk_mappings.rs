@@ -15,6 +15,7 @@ use crate::local_scan::walked_root::WalkedRoot;
 use crate::mapped_roots::MappedRoots;
 use crate::root_marker;
 use crate::scratch;
+use crate::trash_folders;
 use crate::MappedRelativeLocation;
 
 /// Every regular file under every available mapping, and a verdict on each
@@ -201,6 +202,13 @@ async fn walk(
             if relative.is_none() && elsewhere.contains(name.as_str()) {
                 continue;
             }
+            // A folder a desktop keeps its trash in, which it puts at the top of
+            // a volume a mapped root may be the top of — the move of a departed
+            // file included. Asked of the name before what it is, like the two
+            // names above, so the walk never enters it (spec: EP-16).
+            if relative.is_none() && trash_folders::is_trash_folder(name.as_str()) {
+                continue;
+            }
             let below = match &relative {
                 None => name,
                 Some(relative) => relative.below(&name),
@@ -360,6 +368,51 @@ mod tests {
                 parsed("below/b.png"),
             ],
             "the user's files, and nothing under the reserved name at any depth",
+        );
+    }
+
+    // EP-16: a desktop keeps its trash at the top of a volume, and a mapped root
+    // may be one — so the trash folders directly under a mapped root, whichever
+    // mapping it is, are never entered and nothing under them is found. A folder
+    // of the same name deeper down is the person's own and is walked as usual.
+    #[tokio::test]
+    async fn a_desktop_trash_folder_at_a_mapped_roots_top_is_not_walked() {
+        let fs = InMemoryFs::new();
+        let library_root = Path::new(ROOT).join("library");
+        let albums_root = Path::new(ROOT).join("albums");
+
+        for relative in [
+            "a.jpg",
+            ".Trash-1000/files/a.jpg",
+            ".Trash-1000/info/a.jpg.trashinfo",
+            ".Trash/1000/files/b.jpg",
+            ".Trashes/501/c.jpg",
+            "below/.Trash-1000/files/d.jpg",
+        ] {
+            fs.write_file(&library_root.join(relative), b"some bytes");
+        }
+        fs.write_file(&albums_root.join("e.jpg"), b"some bytes");
+        fs.write_file(&albums_root.join(".Trash-1000/files/f.jpg"), b"some bytes");
+
+        let walked = walk_mappings(
+            &fs,
+            &[
+                Mapping::new(None, library_root),
+                Mapping::new(Some(parsed("albums")), albums_root),
+            ],
+            &NONE_PLACED,
+        )
+        .await
+        .expect("walking mapped folders must succeed");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                parsed("a.jpg"),
+                parsed("albums/e.jpg"),
+                parsed("below/.Trash-1000/files/d.jpg"),
+            ],
+            "the person's files, and nothing under a trash folder at either root's top",
         );
     }
 

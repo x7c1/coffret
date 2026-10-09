@@ -70,19 +70,21 @@ pub(crate) fn mark_present(
     const OPERATION: &str = "recording a materialized file";
     connection
         .execute(
-            "INSERT INTO local_entries (path, state, observed_size, observed_mtime, observed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO local_entries (path, state, observed_size, observed_mtime, observed_at, hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (path) DO UPDATE SET
                  state = excluded.state,
                  observed_size = excluded.observed_size,
                  observed_mtime = excluded.observed_mtime,
-                 observed_at = excluded.observed_at",
+                 observed_at = excluded.observed_at,
+                 hash = excluded.hash",
             params![
                 observation.path.as_str(),
                 rows::state_text(LocalEntryState::Present),
                 rows::to_integer(OPERATION, "observed_size", observation.size)?,
                 observation.mtime.as_unix_seconds(),
                 observation.at.as_unix_seconds(),
+                observation.hash.as_ref().map(|hash| hash.as_bytes().as_slice()),
             ],
         )
         .map_err(classify(OPERATION))?;
@@ -111,6 +113,21 @@ pub(crate) fn mark_absent(
             ],
         )
         .map_err(classify("recording a file as gone"))?;
+    Ok(())
+}
+
+/// Forgets this device's row for one Entry Path, so the path is outside its
+/// scope again (spec: EP-10, EP-15).
+///
+/// A `DELETE`, so a path with no row is left as it is: an interrupted run's
+/// next pass forgets it again and finds nothing to forget.
+pub(crate) fn forget_local_entry(connection: &Connection, path: &EntryPath) -> IndexResult<()> {
+    connection
+        .execute(
+            "DELETE FROM local_entries WHERE path = ?1",
+            params![path.as_str()],
+        )
+        .map_err(classify("forgetting a local file's row"))?;
     Ok(())
 }
 

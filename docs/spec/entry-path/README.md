@@ -379,3 +379,81 @@ Concept background: [Entry Path](../../concepts/entry-path/),
       whatever name the volume handed it. Something standing at that name that
       is not a directory at all keeps EP-13's sentence too, since the spelling
       changes neither the verdict nor what the person does about it.
+- **EP-15.** A file is **departed** when a scan finds it at an Entry Path the
+  Library holds no current Entry for, and the device's own materialization
+  record for that path (EP-10) says the file is present: the device put an
+  Entry's content there, and that Entry has since left the Library — removed by
+  this device or by another, and caught up. A departed file is never selected
+  for upload, by a sync or by a freeze. A sync decides what it is:
+  *(Form: test)*
+  - **Unedited** — it still holds what the device last made it match: its byte
+    length and modification time equal the recorded ones, or, where either
+    differs, its plaintext hashes to the content hash recorded beside the
+    materialization. It is moved to the desktop's own trash — the freedesktop.org
+    Trash on Linux, the Finder's on macOS — its record is forgotten, so the
+    path is outside the device's scope again, and the run reports it as moved
+    to the trash with its Entry Path.
+  - **Edited** — anything else. It is left where it is and reported by every
+    run as deleted from the Library and kept because it changed, until the
+    person moves or removes it. Moved to another path it is an ordinary new
+    file there (EP-10).
+  - The device records the content hash of the Entry a file was made to match
+    whenever it marks the file present — by uploading it, fetching it, or
+    finding it unchanged against its Entry — because the Entry's own hash
+    leaves the catalog with the Entry. A record that carries no hash, made by a
+    build that did not keep one, judges the file by length and modification
+    time alone: a file whose either differs is kept rather than guessed about.
+  - The move is made only under a root the scan found available (EP-12), and
+    only after the root has vouched for itself against the mapping's expected
+    identity, each folder below it has been entered without following links,
+    and the name has been stated as a regular file (EP-8, EP-13). Nothing here
+    ever deletes a file outright. A move that is refused — the root does not
+    vouch for itself, the volume has no trash, a permission — leaves the file
+    and its record where they are, is reported with what refused it, fails
+    nothing else in the run, and is tried again by the next run.
+  - A path where a current Entry stands again — another device added a file
+    there since — is not departed, and the existing rules apply to it. A path
+    whose record says absent, or that has no record at all, is not departed
+    either: a file standing there is new (EP-10).
+  - A departed path whose file is gone from disk as well holds nothing for a
+    finding to be about. Its record is forgotten and nothing is reported: the
+    deletion it would otherwise read as (EP-10) is of an Entry the Library no
+    longer holds.
+  - A forgotten record and an absent one are not the same state. Absence is a
+    deletion the device witnessed of an Entry it materialized, which a fetch
+    declines to put back (EP-11); a forgotten record witnesses nothing, so an
+    Entry another device later adds at the path is fetched as any other.
+  - What the rule does not do: restore anything from the trash, re-register an
+    edited departed file by itself, touch a file the device never materialized,
+    or empty the provider's trash on Storage (OC-6).
+- **EP-16.** The folders a desktop keeps its trash in at the top of a volume —
+  `.Trash`, `.Trashes`, and `.Trash-` followed by one or more ASCII digits —
+  are never Library content when one stands as the first component directly
+  under a mapped root. A scan decides from the name alone, as it does for
+  `.coffret` (EP-14): it never enters such a folder and never reports anything
+  under it as a file to back up; a fetch never places a file at a path whose
+  first component under the mapped root is one, and reports the Entry with
+  that folder as the one on the way that is not a folder of the mapped root
+  (EP-11). *(Form: test)*
+  - A mapped root may be a volume's own top — a disk mounted at the folder the
+    person mapped — and a desktop moving a file to the trash on that volume
+    keeps the trash there: `.Trash-<uid>` or `.Trash/<uid>` under the
+    freedesktop.org Trash specification, `.Trashes` on macOS, and `.Trash` for
+    a home folder mapped as a whole. The move of a departed file (EP-15) lands
+    there too. Without the rule the next sync would carry the trash back into
+    the Library.
+  - Only the first component under a mapped root, because that is the one
+    place a desktop puts them; a folder of the same name anywhere deeper is the
+    person's own and is walked as usual. Where one mapped root stands inside
+    another, the inner root's trash folders are under the outer root at depth
+    and are not covered.
+  - Exactly those spellings, compared byte for byte. A desktop writes them so,
+    and a spelling that differs in case is a folder somebody named. The cost is
+    EP-14's kind: anything of the person's own in a folder of one of those names
+    at a mapped root's top is not backed up.
+  - An Entry already in the Library at such a path — carried in before this
+    rule — stays in the Library until deleted. On the device whose record says
+    it put the file there, the scan no longer finds the file, so the Entry is
+    reported as deleted locally (EP-10).
+  - Whether a root holds nothing (EP-12) is not changed: a trash folder still
+    counts as something standing in the root.

@@ -52,4 +52,14 @@ impl InMemoryFs {
     pub fn holds(&self, path: &Path) -> bool {
         lock(&self.state).holds(path)
     }
+
+    /// Every file a run moved into the fake's trash, in the order it moved them
+    /// (spec: EP-15).
+    ///
+    /// What a case asks instead of looking for the file in a desktop trash: the
+    /// fake has one of its own, and a moved file is gone from the folder it
+    /// stood in and listed here.
+    pub fn moved_to_trash(&self) -> Vec<PathBuf> {
+        lock(&self.state).moved_to_trash()
+    }
 }

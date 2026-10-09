@@ -1,7 +1,13 @@
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-/// Why a run left an Entry exactly as it found it.
+use coffret_usecase::DescentError;
+
+use crate::finding::chained;
+
+/// Why a run left an Entry exactly as it found it — or, for a file whose Entry
+/// left the Library, what the run did with this device's copy of it.
 ///
 /// The three flows each have their own word for this — a sync surfaces a
 /// Pack-resident change, a freeze calls the same thing not frozen, a fetch
@@ -38,6 +44,32 @@ pub enum FindingReason {
     /// deletion a person asks for, never one a sync infers from a missing file
     /// (spec: EP-10).
     DeletedLocally,
+    /// The Entry this device had put here left the Library, the file still held
+    /// what this device last made it match, and the run moved it to the
+    /// desktop's trash (spec: EP-15).
+    ///
+    /// Work done rather than work left: nobody has to act on it, and the trash
+    /// is where a person who meant to keep the file takes it back from.
+    MovedToTrash,
+    /// The Entry this device had put here left the Library, and the file has
+    /// changed since, so it is kept where it is (spec: EP-15).
+    ///
+    /// Never carried back in as new: the change is the person's, to a file the
+    /// Library no longer has. Reported by every run until they move it — at
+    /// another path it is an ordinary new file — or remove it.
+    KeptEdited,
+    /// The Entry this device had put here left the Library, the file was due to
+    /// go to the trash, and the move was refused (spec: EP-15).
+    ///
+    /// Left where it is and never deleted in the trash's place; the next run
+    /// tries again.
+    MoveToTrashRefused {
+        /// What the move was refused with.
+        ///
+        /// Shared, because a refusal is not a value that can be copied; it is
+        /// reported, never changed.
+        cause: Arc<DescentError>,
+    },
     /// The committed Keyring records no key for the Container holding the Entry.
     ///
     /// The ciphertext stays where it is and stays unreadable, so the Entry is
@@ -61,11 +93,13 @@ pub enum FindingReason {
     /// A folder on the way to where the file belongs is not a folder of the
     /// mapped folder.
     ///
-    /// A symbolic link, or an ordinary file where a folder must be. Nothing is
-    /// written through such a name: what stands past it is not the folder this
-    /// device maps, and a file placed there would be one the Library never
-    /// pointed at (spec: EP-4, EP-11). The rest of the run is unaffected — this
-    /// is the shape of one folder rather than anything about the next Entry.
+    /// A symbolic link, an ordinary file where a folder must be, or a folder a
+    /// desktop keeps its trash in directly under the mapped folder, which no
+    /// scan enters (spec: EP-16). Nothing is written through such a name: what
+    /// stands past it is not the folder this device maps, and a file placed
+    /// there would be one the Library never pointed at (spec: EP-4, EP-11). The
+    /// rest of the run is unaffected — this is the shape of one folder rather
+    /// than anything about the next Entry.
     UnreachablePlace {
         /// The folder on this device the descent stopped at, which is the one
         /// thing there is to go and look at.
@@ -98,6 +132,14 @@ impl fmt::Display for FindingReason {
             // next to a sync that says of the same file that it is gone.
             Self::LocallyChanged => "what this device wrote there has since changed or gone",
             Self::WitnessedDeletion => "this device witnessed its deletion",
+            Self::MovedToTrash => {
+                "it was deleted from the Library, and this device's unedited copy was moved to \
+                 the trash"
+            }
+            Self::KeptEdited => {
+                "it was deleted from the Library, and this device's copy is kept here because it \
+                 changed; move or remove it to stop this report"
+            }
             // The name is said rather than left implicit, because a person
             // reading this has to recognize which part of the path it is about —
             // and `.coffret` is a name they never chose. The case is said for
@@ -107,6 +149,19 @@ impl fmt::Display for FindingReason {
             Self::ReservedComponent => {
                 "a component of its path is `.coffret`, or differs from it only in case, and \
                  that is coffret's own folder and never content"
+            }
+            // Not "the trash would not take it": the refusal may be the mapped
+            // root's or a folder's on the way down, before the trash is asked.
+            // What refused is what a person acts on — a root that is not the
+            // one recorded, a link on the way, a volume with no trash, a
+            // permission — so the cause is said in full, chain and all.
+            Self::MoveToTrashRefused { cause } => {
+                return write!(
+                    f,
+                    "it was deleted from the Library, and moving this device's copy to the \
+                     trash was refused ({}); it is left here, and the next run tries again",
+                    chained(cause.as_ref()),
+                );
             }
             // The one reason with something of its own to name. Which folder it
             // is is the whole of what a person does next — `ls -l` on that one

@@ -6,6 +6,7 @@ use crate::device_state::Mapping;
 use crate::index::Index;
 use crate::local_scan::{RootState, SourceFile, WalkedRoot};
 use crate::sync::surfaced::Surfaced;
+use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
 /// The files this device materialized that are no longer on disk (spec: EP-10).
@@ -29,11 +30,18 @@ use crate::sync::sync_error::SyncResult;
 /// root mapping accounts for the remainder here too: a row under a prefix another
 /// mapping stands for belongs to that mapping, and if that mapping is
 /// unavailable the row is nobody's evidence.
+///
+/// A row whose Entry has left the Library is no deletion to report: the
+/// Library no longer holds what the file was a copy of, and the disk no longer
+/// holds the file. Whether the sync moved it to the trash or the person moved or
+/// removed it themselves, nothing is left for a finding to be about, so the row
+/// goes into [`Survey::forgotten`] instead (spec: EP-15).
 pub(super) async fn deletions(
     index: &dyn Index,
     roots: &[WalkedRoot],
     found: &BTreeMap<EntryPath, SourceFile>,
-) -> SyncResult<Vec<Surfaced>> {
+    survey: &mut Survey,
+) -> SyncResult<()> {
     // Every mapping's prefix, available or not: the same set the walk holds its
     // root mapping to (spec: EP-9, EP-12).
     let represented_elsewhere =
@@ -59,8 +67,12 @@ pub(super) async fn deletions(
             }
         }
     }
-    Ok(gone
-        .into_iter()
-        .map(|path| Surfaced::DeletedLocally { path })
-        .collect())
+    for path in gone {
+        if index.entry_at(&path).await?.is_some() {
+            survey.surfaced.push(Surfaced::DeletedLocally { path });
+        } else {
+            survey.forgotten.push(path);
+        }
+    }
+    Ok(())
 }
