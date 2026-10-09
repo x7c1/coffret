@@ -121,13 +121,13 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   state — a file this device never placed, or one whose record and disk state
   disagree — is surfaced as a conflict and never overwritten. An Entry whose
   absence this device already witnessed is not re-fetched either. A fetched file
-  becomes visible at its final path only once it is fully verified: its
-  Container authenticates and the Entry's plaintext hashes to what the current
-  catalog records for it, and the bytes reach the destination directory as a
-  scratch that is then renamed into place, so no reader ever observes a
-  partial or unverified file. Every Entry a fetch declines to place is reported
-  with the reason it was declined, on the same no-silent-selection posture EP-4
-  sets. *(Form: test)*
+  becomes visible at its final path only once it is fully verified: every
+  chunk it was taken from authenticates and the Entry's plaintext hashes to
+  what the current catalog records for it (PK-22), and the bytes reach the
+  destination directory as a scratch that is then renamed into place, so no
+  reader ever observes a partial or unverified file. Every Entry a fetch
+  declines to place is reported with the reason it was declined, on the same
+  no-silent-selection posture EP-4 sets. *(Form: test)*
   - Writes and reads use the same confinement boundary. A fetch creates and
     publishes against directory handles reached below the mapped root without
     following links. A later local read, including the explorer's file route,

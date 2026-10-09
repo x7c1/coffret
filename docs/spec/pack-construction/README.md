@@ -2,8 +2,9 @@
 
 Rule prefix: `PK`. What makes a Container a Pack, which files `freeze`
 selects, how it cuts them into Packs, what its Journal batch contains, how
-`update` propagates modified files, and how Packs are replaced or removed
-when Entries change or are deleted.
+`update` propagates modified files, how Packs are replaced or removed
+when Entries change or are deleted, and how a Container is read back by the
+parcel.
 
 Concept background: [Pack](../../concepts/pack/),
 [Library](../../concepts/library/), [Entry](../../concepts/container/entry/).
@@ -139,11 +140,21 @@ Concept background: [Pack](../../concepts/pack/),
   one-file Container remains one-file. The replacement has a new Container
   ID and is not the same Container. An oversized singleton Pack is a form of
   Pack, not a third kind. *(Form: test)*
-- **PK-16.** The normal fetch unit is a complete Container, not an individual
-  Entry. A client may use authenticated range reads to make an Entry available
-  early, stream a large Entry, or resume an interrupted transfer, but those
-  reads are steps in fetching the containing Container and do not define a
-  separate single-Entry fetch operation. *(Form: test)*
+- **PK-16.** The fetch unit is the parcel (PK-19), not an individual Entry
+  and not necessarily the whole Container. Every read of a Container's chunks
+  asks for whole parcels — one parcel, several adjacent ones, or the whole
+  object, every parcel at once — and no range smaller than a parcel is issued,
+  not even to show an Entry early. *(Form: test)*
+  - Showing an Entry early needs no smaller read: the parcel is streamed,
+    every chunk authenticates on its own (FM-5), and the Entry is released as
+    soon as the chunks covering it have arrived, while the rest of the parcel
+    is still on its way.
+  - An Entry that spans a parcel boundary is reached by reading every parcel
+    it overlaps. Which parcels those are follows from the header and the entry
+    table alone (FM-2, FM-9), so a reader names them before any chunk arrives.
+  - The front of the object — its header and meta section (FM-2) — is not part
+    of any parcel. It is read on its own, is the same read for every Entry of
+    the Container, and names no Entry.
   - A range read holds what came back against the extent it asked for: an
     answer of any other length — a provider that ignored the range and sent the
     whole object, or one that stopped short — is refused rather than decoded,
@@ -179,3 +190,48 @@ Concept background: [Pack](../../concepts/pack/),
   as they pass, and a member that is not the file the table promises stops the
   Pack instead of being committed under a table that does not describe it.
   *(Form: test)*
+- **PK-19.** A Container's chunk sequence (FM-2, FM-5) is divided, from its
+  first chunk, into **parcels** of `n` consecutive chunks, where
+  `n = max(1, S div chunk size)`, the chunk size is the one the header records
+  (FM-6), and `S` is the constant below. The last parcel holds whatever chunks
+  remain, so a Container with no more than `n` chunks is one parcel.
+  *(Form: test for the division into parcels; the value of `S` is provisional
+  and is set by measurement, as below)*
+  - A parcel is a chunk run (FM-5) of fixed length at a fixed place. Its
+    boundaries are positions in the chunk sequence and have nothing to do with
+    where Entries begin or end.
+  - `S` is a constant of this register, the same for every Container and
+    recorded in none: provisionally 32 MiB. Its value is set by measuring how
+    long the first page of a book takes to appear, because `S` is both the
+    granularity the provider observes (PK-20) and the lower bound on that wait
+    — 32 MiB at 100 Mbit/s arrives in under three seconds, where 100 MiB
+    would take about eight.
+- **PK-20.** What the Storage provider observes of a read is the parcel: it can
+  tell that parcel `k` of object `X` was read, and when. It cannot tell where
+  an Entry begins or ends, nor how large one is, because no read starts or
+  stops at an Entry (PK-16, PK-19). *(Form: prose — a claim about what an
+  adversarial counterparty can infer, honored by construction through PK-16,
+  PK-19, and PK-21 rather than observed by a test)*
+  - The limit is `S` against the size of what the Entries group into: where `S`
+    is close to the size of one volume of a book, the parcels read still tell
+    volumes apart, even though the pages inside them stay hidden.
+  - The front of the object (PK-16) shows only that the Container was opened,
+    since it is the same read whichever Entry is wanted.
+- **PK-21.** A fetched parcel is kept on the device until every Entry with
+  bytes in it is on the device or witnessed absent (EP-10, EP-11), and a parcel
+  the device holds is never requested from Storage again, so reading a page a
+  second time shows the provider nothing. *(Form: test)*
+  - Cancelling a fetch and reading ahead happen on parcel boundaries only: a
+    cancelled fetch asks for no further parcel and never cuts one short to stop
+    at an Entry, and read-ahead asks for the next parcel, never the next Entry.
+  - A parcel that did not arrive whole is not held, and it is asked for again
+    whole rather than from where it stopped.
+- **PK-22.** An Entry taken out of parcels is verified by chunk authentication
+  (FM-5, FM-7, FM-8) and by its plaintext hash against the catalog (EP-11).
+  The Container's ciphertext hash (CP-11, CP-17) is verified only by a read of
+  every parcel; a device that holds some parcels of a Container vouches for the
+  Entries it placed from them and for nothing else in that Container.
+  *(Form: test)*
+  - For such an Entry, chunk authentication and the catalog's hash stand in
+    for the ciphertext hash: each chunk's tag under the Container Key is bound
+    to the chunk's position and to the header (FM-7, FM-8).

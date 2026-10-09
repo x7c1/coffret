@@ -160,8 +160,10 @@ and has a window of its own for entering the Passphrase.
   path resolution
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
-  fetching the distinct Packs that hold them, and a file somebody asked for
-  arrives by a range read over the chunks covering it alone
+  reading, from the distinct Packs that hold them, the
+  [parcels](../container/#domain-rules) they overlap, and a file somebody
+  asked for arrives by reading the parcels it overlaps, ahead of the rest —
+  never by a read that starts or stops where the file does (spec: PK-16)
 - serve (a Library for browsing on this device, to a browser on it)
 - unlock (a Library served on this device: its [Master Key](../master-key/),
   in place, with the Passphrase entered in the desktop app's own window)
@@ -170,12 +172,14 @@ and has a window of its own for entering the Passphrase.
 - drop (files a browser drops into a mapped folder, for a later run — a sync, or
   where the drop held a folder the person chose to add as a Pack, a freeze of
   exactly the files dropped — to carry them into the Library)
-- fill (the folder around an Entry somebody just opened, by fetching in the
-  background the rest of what that folder holds and this device has not got)
+- fill (the folder around an Entry somebody just opened, by reading in the
+  background the parcels holding the rest of what that folder holds and this
+  device has not got — parcel after parcel, never Entry by Entry, and none it
+  already holds (spec: PK-16, PK-21))
 - arm (a run on this device: ask for it, so the server starts it as soon as
   the runs ahead of it allow)
 - supersede (a fill, by arming one for another folder: the earlier fill stops
-  between one Entry and the next and is not taken up again on its own)
+  between one parcel and the next and is not taken up again on its own)
 - displace (a stopped run from the server's record of the last run of its
   kind, as a later run of that kind does; the stopped run is still reported
   beside it, with its refusal)

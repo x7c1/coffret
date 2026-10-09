@@ -27,8 +27,9 @@ User files are packaged into [Containers](container/), each holding one or more
 [eligible](pack/#domain-rules) for packing, sorts them by
 Entry Path, and cuts them into target-sized segments, each stored as a
 [Pack](pack/); regrouping existing Packs is a separate repack or compaction
-operation. A book or an album is simply a folder, opened by fetching the
-distinct Packs that hold its current Entries.
+operation. A book or an album is simply a folder, opened by reading, from the
+distinct Packs that hold its current Entries, the fixed-length
+[parcels](container/#domain-rules) those Entries overlap.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which

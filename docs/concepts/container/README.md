@@ -32,9 +32,12 @@ the Container's [Key Envelope](../key-envelope/) from the
 ## Collocations
 
 - upload (a Container to Storage)
-- fetch (a Container from Storage)
+- fetch (a Container from Storage, by the parcel: the parcels overlapping the
+  wanted Entries, or every parcel of it)
 - open (a Container with the Master Key and its Key Envelope)
-- range-read (the chunks covering one Entry of a Container)
+- read (a parcel of a Container, or several adjacent ones, never a range
+  smaller than a parcel)
+- hold (a parcel on the device, so it is never asked of Storage again)
 - trash (a superseded or removed Container, after the commit that takes it out
   of the current set)
 
@@ -60,26 +63,41 @@ the Container's [Key Envelope](../key-envelope/) from the
   a [Pack](../pack/), and the kind is never inferred from its Entry count — a
   Pack left with a single Entry is still a Pack, and an `update` replacement
   for a one-file Container is still one-file (spec: PK-15).
-- **Fetched whole**: the normal fetch unit is a whole Container, not an
-  individual Entry. This granularity bounds how much of a reading pattern the
-  storage provider observes (spec: PK-16).
-  - A client may **range-read** the chunks covering one Entry — to make it
-    available early, to stream a large Entry, or to resume an interrupted
-    transfer — but those reads are steps inside fetching the containing
-    Container and make no Entry a fetch unit of its own (spec: PK-16). *Range
-    read* is the mechanism, in the
-    [specification register](../../spec/)'s own words; "partial fetch" is the
-    informal name of the flow that uses it.
+- **Fetched by the parcel**: a Container's chunk sequence is divided, from
+  its first chunk, into **parcels** of a fixed length set by the register, and
+  every read of its chunks asks for whole parcels — one, several adjacent
+  ones, or every parcel at once. Neither an Entry nor the whole Container is
+  the fetch unit; the parcel is (spec: PK-16, PK-19).
+  - Parcel boundaries have nothing to do with where Entries begin or end, so
+    the storage provider can tell which parcels of which object were read, and
+    when, but not where an Entry begins or ends nor how large one is (spec:
+    PK-20; the residual leakage is listed under
+    [Storage Object](../storage-object/#domain-rules)).
+  - An Entry is shown early without a smaller read: its parcel streams, and
+    the Entry is released as soon as the chunks covering it have arrived. An
+    Entry that spans a parcel boundary is reached by reading every parcel it
+    overlaps (spec: PK-16).
+  - A device **holds** a parcel it read until every Entry with bytes in it is
+    on the device or witnessed absent, and never asks Storage for a held
+    parcel again, so reading a page twice shows the provider nothing.
+    Cancelling and reading ahead stop and start at parcel boundaries only
+    (spec: PK-21).
+  - The header and meta section at the front of the object belong to no
+    parcel: they are read on their own, the same read whichever Entry is
+    wanted (spec: PK-16).
+  - An Entry taken out of parcels is verified by its chunks' authentication
+    and its plaintext hash against the catalog; the Container's ciphertext
+    hash is verified only by a read of every parcel (spec: PK-22).
 - **Streamable**: the entry table travels ahead of the content (spec: FM-2,
   FM-9) and every chunk authenticates on its own (spec: FM-5), so neither
   writing a Container nor reading one requires holding it in memory. A writer
   fixes the table first and then emits chunk by chunk; a reader releases each
   chunk's plaintext as it verifies.
-  - The consecutive chunks covering one plaintext extent are a **chunk run** —
-    the register's word for what a range read asks for. Where its bytes lie
-    follows from the header and the entry table alone, so a reader can name the
-    bytes covering one Entry before any of them arrive (spec: FM-5, FM-2, FM-9,
-    PK-16).
+  - The consecutive chunks covering one plaintext extent are a **chunk run**.
+    Where its bytes lie follows from the header and the entry table alone, so a
+    reader can name the bytes covering one Entry, and the parcels they lie in,
+    before any of them arrive (spec: FM-5, FM-2, FM-9, PK-16). A parcel is a
+    chunk run of fixed length at a fixed place (spec: PK-19).
 
 ## Related Concepts
 

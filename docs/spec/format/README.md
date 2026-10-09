@@ -102,8 +102,8 @@ fields until a coordinated implementation changes the format.
     ciphertext extent follows from the header and the meta section alone — the
     chunk size and the meta section length place every chunk (FM-2), and the
     entry table gives the extent to round out to chunk boundaries (FM-9) — so a
-    reader can name the bytes covering one Entry before any of them arrive
-    (PK-16).
+    reader can name the bytes covering one Entry, and so the parcels it
+    overlaps, before any of them arrive (PK-16, PK-19).
   - An empty padded stream — every Entry empty and no padding added (FM-4)
     — is encoded as exactly one empty final chunk: a message of tag alone.
     The chunk sequence is never empty, so every object still ends with the
@@ -203,8 +203,8 @@ fields until a coordinated implementation changes the format.
     sum to the stream's unpadded length. A decoder rejects a table that
     does not.
   - `offset` and `size` place an Entry against chunk boundaries, which is
-    what lets a client range-read one Entry of a Pack as a step in fetching
-    its Container (PK-16).
+    what lets a client tell which parcels of a Pack one Entry overlaps and
+    read just those (PK-16, PK-19).
 - **FM-10.** The entry table of every Container — one-file or Pack — lists
   at least one Entry. A Container exists only to hold user data: no
   operation writes an empty Container, and control state never travels in
