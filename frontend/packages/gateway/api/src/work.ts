@@ -233,7 +233,7 @@ export type SyncStatus =
  * a mapped folder that is not the one its mapping was recorded against is
  * `refused_root` either way. Those three are taken from `PlacementReason`
  * itself, so a spelling changed there drops out of this union and the literals
- * written for it stop compiling; the four a refusal never carries are a run's
+ * written for it stop compiling; the five a refusal never carries are a run's
  * own. The list the server sends is `finding-reasons.json`: the server's tests
  * hold what it sends to that file, and `work.test.ts` holds this union to it.
  */
@@ -268,7 +268,15 @@ export type FindingReason =
    * one that stopped after its commit repaired the set; the set is whole
    * again, so nothing waits on the person reading it.
    */
-  | 'keyring_repaired';
+  | 'keyring_repaired'
+  /**
+   * A part of a Container kept on this device was gone or damaged, and was
+   * read from Storage again. The file it was for opened all the same, so
+   * nothing waits on the person reading it; it is said because the second
+   * read is one the Storage provider sees, and because a kept file that changed
+   * under the device is a disk worth hearing about.
+   */
+  | 'parcel_unheld';
 
 /**
  * One thing a run that succeeded still has to say — a finding, in the word the

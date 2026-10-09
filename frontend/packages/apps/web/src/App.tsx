@@ -418,8 +418,10 @@ export function App() {
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than
-  // the rows being edited here. `done` moving is one file placed; the status
-  // changing is the last of them, or the end of trying.
+  // the rows being edited here. `done` moving is a file placed — or several at
+  // once, the pages one parcel read covered, which turn present together with
+  // the one reload; the status changing is the last of them, or the end of
+  // trying.
   //
   // Walking into a folder a fill has been working on asks once for the same
   // reason, which is not waste: what the listing arrived with may already be

@@ -334,6 +334,13 @@ pub use standing::Standing;
 mod local_trash;
 pub use local_trash::LocalTrash;
 
+// A fifth: where a fetch keeps the parcels it read, so that a parcel this
+// device holds is never asked of Storage again (spec: PK-21). It takes the
+// spool's shape, writer included, because what it promises is the spool's kind
+// of promise — about absence and interruption.
+mod parcel_files;
+pub use parcel_files::ParcelFiles;
+
 // The mapped-roots capability's own contract, behind the same feature as the
 // spool capability's.
 #[cfg(feature = "conformance")]

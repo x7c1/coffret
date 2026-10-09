@@ -2,7 +2,9 @@
 
 use serde::Serialize;
 
-use coffret_device::{Disposal, Finding, FindingReason, RootRefused, RootUnavailable, Settled};
+use coffret_device::{
+    Disposal, Finding, FindingReason, RootRefused, RootUnavailable, Settled, UnheldReason,
+};
 
 use super::{prefix_said, said_path};
 
@@ -53,6 +55,12 @@ enum Facts {
     },
     /// A committed Keyring a run put replicas back into.
     KeyringRepaired { generation: u64, rewritten: usize },
+    /// A kept parcel that was not held, and was read again.
+    Parcel {
+        container_id: String,
+        parcel: u64,
+        reason: &'static str,
+    },
     /// Nothing beyond the sentence.
     Nothing {},
 }
@@ -160,6 +168,21 @@ impl From<&Finding> for Found {
                 "untrashed_removal",
                 Facts::Container {
                     container_id: container_id.to_string(),
+                },
+            ),
+            Finding::UnheldParcel {
+                container_id,
+                parcel,
+                reason,
+            } => (
+                "unheld_parcel",
+                Facts::Parcel {
+                    container_id: container_id.to_string(),
+                    parcel: *parcel,
+                    reason: match reason {
+                        UnheldReason::Missing => "Missing",
+                        UnheldReason::Unauthenticated { .. } => "Unauthenticated",
+                    },
                 },
             ),
             Finding::CheckpointFailed { .. } => ("checkpoint_failed", Facts::Nothing {}),

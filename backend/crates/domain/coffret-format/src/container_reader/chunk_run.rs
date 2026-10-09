@@ -61,6 +61,16 @@ impl ChunkRun {
         self.layout.plaintext_start_of(self.first)
     }
 
+    /// The stretch of the Container's plaintext stream the run opens into.
+    ///
+    /// What a reader holding a run's ciphertext can place from it: an Entry
+    /// whose extent lies inside this is wholly in the run.
+    pub fn plaintext(&self) -> Range<u64> {
+        let last = self.first + self.count - 1;
+        self.plaintext_start()
+            ..self.layout.plaintext_start_of(last) + self.layout.plaintext_len_of(last)
+    }
+
     /// The object byte range the run's ciphertext occupies.
     ///
     /// This is what a caller hands a Storage range read, and it is exact rather

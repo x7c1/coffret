@@ -94,6 +94,23 @@ pub use partial::{
     one_entry_is_read_out_of_a_pack_without_reading_the_pack,
 };
 
+mod parcels;
+pub use parcels::{
+    a_kept_parcel_that_is_gone_or_damaged_is_read_again_with_a_finding,
+    a_parcel_is_let_go_once_every_entry_it_covers_is_present,
+    a_parcel_is_let_go_once_the_entries_it_waits_for_are_witnessed_absent,
+    a_parcel_is_not_kept_for_an_entry_this_device_does_not_map,
+    a_parcel_of_a_container_that_left_the_current_set_is_let_go,
+    a_parcel_read_is_not_held_to_the_ciphertext_hash_and_a_whole_read_is,
+    a_revisit_of_a_held_parcel_reads_nothing_from_storage,
+    an_entry_across_a_parcel_boundary_reads_both_parcels,
+    an_entry_of_no_bytes_is_placed_by_its_parcel,
+    every_read_of_a_containers_chunks_is_a_whole_parcel_or_the_whole_object,
+    letting_go_after_a_catch_up_drops_the_parcels_of_a_departed_container,
+    one_page_reads_its_parcels_and_places_what_they_cover,
+    the_page_asked_for_is_published_before_its_parcel_has_arrived,
+};
+
 mod progress;
 pub use progress::{
     a_device_that_maps_nothing_is_told_apart_from_an_empty_prefix,
@@ -156,6 +173,19 @@ macro_rules! fetch_conformance {
             a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,
             a_short_ranged_read_of_the_chunks_is_asked_again,
             a_header_placing_chunks_past_its_object_is_not_asked_again,
+            every_read_of_a_containers_chunks_is_a_whole_parcel_or_the_whole_object,
+            one_page_reads_its_parcels_and_places_what_they_cover,
+            the_page_asked_for_is_published_before_its_parcel_has_arrived,
+            an_entry_across_a_parcel_boundary_reads_both_parcels,
+            a_revisit_of_a_held_parcel_reads_nothing_from_storage,
+            a_parcel_is_let_go_once_every_entry_it_covers_is_present,
+            a_parcel_is_not_kept_for_an_entry_this_device_does_not_map,
+            a_parcel_of_a_container_that_left_the_current_set_is_let_go,
+            a_parcel_is_let_go_once_the_entries_it_waits_for_are_witnessed_absent,
+            letting_go_after_a_catch_up_drops_the_parcels_of_a_departed_container,
+            a_kept_parcel_that_is_gone_or_damaged_is_read_again_with_a_finding,
+            a_parcel_read_is_not_held_to_the_ciphertext_hash_and_a_whole_read_is,
+            an_entry_of_no_bytes_is_placed_by_its_parcel,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

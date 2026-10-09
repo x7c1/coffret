@@ -35,10 +35,13 @@
 //!
 //! It fetches through [`EntryFetches`](coffret_device::EntryFetches), the same
 //! per-Entry gate the routes fetch through, so a reader's prefetch and this
-//! never both place one Entry. And it stops for Storage and for nothing else: a
-//! declined Entry is about that Entry alone (spec: EP-11), recorded so the
-//! browser can mark the row, and the fill goes on to the next file — exactly as
-//! the command line's `fetch` does.
+//! never both place one Entry nor both read one parcel. It steps in parcels:
+//! each fetch reads the parcels its Entry needs, keeps them, and places every
+//! other Entry they wholly cover on the way, and a folder armed under it is
+//! noticed only between parcels, never inside one (spec: PK-16, PK-21). And it
+//! stops for Storage and for nothing else: a declined Entry is about that Entry
+//! alone (spec: EP-11), recorded so the browser can mark the row, and the fill
+//! goes on to the next file — exactly as the command line's `fetch` does.
 //!
 //! What it reports of itself is device state and nothing more, which is
 //! [`FillRun`]'s own business to say.

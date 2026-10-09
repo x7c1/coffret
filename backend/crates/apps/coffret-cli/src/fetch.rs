@@ -22,8 +22,8 @@ pub struct FetchArgs {
     /// is not given
     #[arg(long)]
     under: Option<String>,
-    /// Fetch the one Entry at this path, reading only the part of its Container
-    /// that holds it
+    /// Fetch the one Entry at this path, reading only the parcels of its
+    /// Container that it overlaps; the other files wholly inside them come too
     #[arg(long, conflicts_with = "under")]
     entry: Option<String>,
     /// Read the Passphrase from one line of standard input instead of asking
@@ -64,7 +64,7 @@ pub async fn run(args: FetchArgs, form: Form) -> anyhow::Result<Ran> {
         ));
     };
 
-    // A range read out of a Pack can still be megabytes, after the same
+    // A parcel read out of a Pack is tens of megabytes, after the same
     // catch-up a folder fetch starts with, so one Entry says it is moving too.
     let watching = Reporting::to_stderr(Units::Fetching);
     let fetched = run_fetch_entry(&args.library, enter, entry, &watching)
@@ -73,13 +73,13 @@ pub async fn run(args: FetchArgs, form: Form) -> anyhow::Result<Ran> {
     watching.finish();
 
     if form.is_text() {
-        println!("{}", entry_summary(&fetched.fetch));
+        println!("{}", entry_summary(&fetched.fetch, fetched.alongside.len()));
     }
     let findings = Findings::from(&fetched);
     let report = report::findings(&findings, form);
     Ok(Ran::found(
         report,
-        Answer::FetchedEntry(FetchedEntry::from(&fetched.fetch)),
+        Answer::FetchedEntry(FetchedEntry::from(&fetched)),
         &findings,
     ))
 }
@@ -97,10 +97,11 @@ fn summary(outcome: &FetchOutcome) -> Vec<String> {
 
 /// The one line a person reads to know what the run did.
 ///
-/// The Container count is beside the Entry count because the fetch unit is the
-/// whole Container however many of its Entries were wanted (spec: PK-16), so the
-/// two differ wherever a Pack held several of them — and the difference is what
-/// says the folder was filled out of Packs rather than one file at a time.
+/// The Container count is beside the Entry count because a folder fetch reads
+/// each Container whole, every parcel at once, however many of its Entries were
+/// wanted (spec: PK-16), so the two differ wherever a Pack held several of
+/// them — and the difference is what says the folder was filled out of Packs
+/// rather than one file at a time.
 fn counts(outcome: &FetchOutcome) -> String {
     format!(
         "fetched {}, containers {}, skipped {}",
@@ -162,13 +163,23 @@ impl std::error::Error for UnmappedEntry {}
 const UNMAPPED_ENTRY: &str = "to put it on this device, record a mapping that reaches it with \
                               `coffret map` and run this again";
 
-/// The same for a run of one Entry, which has three answers and no counts.
-fn entry_summary(fetched: &EntryFetch) -> &'static str {
-    match fetched {
+/// The same for a run of one Entry, which has four answers and no counts.
+///
+/// The parcels read for it are read whole, so other files can land in the
+/// folder with it (spec: PK-16); the line says how many, or a person counting
+/// what appeared would read "fetched 1" as wrong.
+fn entry_summary(fetched: &EntryFetch, alongside: usize) -> String {
+    let said = match fetched {
         EntryFetch::Placed => "fetched 1, skipped 0",
         // The file is the Entry and there was nothing to fetch (spec: EP-10).
         EntryFetch::AlreadyPresent => "fetched 0, skipped 1",
-        EntryFetch::Surfaced(_) => "fetched 0, skipped 0",
+        // A command line cancels nothing, so it never hears this; it placed
+        // nothing either way (spec: PK-21).
+        EntryFetch::Surfaced(_) | EntryFetch::Cancelled => "fetched 0, skipped 0",
+    };
+    match alongside {
+        0 => said.to_owned(),
+        more => format!("{said}, placed alongside {more}"),
     }
 }
 
@@ -277,5 +288,23 @@ mod tests {
             degraded: None,
         };
         assert_eq!(summary(&outcome), ["fetched 1, containers 0, skipped 0"]);
+    }
+
+    // The files that came with the one asked for are counted on its line,
+    // and a run that brought none says what it always said.
+    #[test]
+    fn one_entry_counts_the_files_that_came_with_it() {
+        assert_eq!(
+            entry_summary(&EntryFetch::Placed, 0),
+            "fetched 1, skipped 0"
+        );
+        assert_eq!(
+            entry_summary(&EntryFetch::Placed, 12),
+            "fetched 1, skipped 0, placed alongside 12",
+        );
+        assert_eq!(
+            entry_summary(&EntryFetch::AlreadyPresent, 0),
+            "fetched 0, skipped 1",
+        );
     }
 }

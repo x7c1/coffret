@@ -6,10 +6,12 @@ use crate::aead::Cipher;
 use crate::chunk_size::ChunkSize;
 use crate::container_reader::chunk_layout::ChunkLayout;
 use crate::container_reader::chunk_run::ChunkRun;
+use crate::container_reader::parcels::Parcels;
 use crate::error::{Error, Result};
 use crate::header::Header;
 use crate::meta;
 use crate::nonce;
+use crate::parcel_len::ParcelLen;
 
 /// What a Container's front says about the rest of it.
 ///
@@ -207,6 +209,20 @@ impl ContainerOutline {
     /// Every chunk of the object, as one run.
     pub fn all_chunks(&self) -> ChunkRun {
         ChunkRun::new(self.layout, 0, self.layout.chunk_count())
+    }
+
+    /// The chunk sequence divided into parcels of `len` (spec: PK-19).
+    ///
+    /// Every read of this Container's chunks asks for whole parcels, so this is
+    /// what a reader aims its reads with rather than the chunks covering one
+    /// Entry (spec: PK-16).
+    pub fn parcels(&self, len: ParcelLen) -> Parcels {
+        Parcels::of(self, len)
+    }
+
+    /// The layout the outline read, for the parcels cut from it.
+    pub(super) fn layout(&self) -> ChunkLayout {
+        self.layout
     }
 
     /// The chunks covering a range of the plaintext stream.

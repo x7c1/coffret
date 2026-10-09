@@ -9,19 +9,20 @@ use crate::error::classify;
 
 /// Current layout. Version 8 adds the durable commit-attempt marker, version 9
 /// the marker saying whether a pending Container's Entries are files this
-/// device put into it, and version 10 the content hash a materialized file was
-/// made to match.
-pub(crate) const SCHEMA_VERSION: i64 = 10;
+/// device put into it, version 10 the content hash a materialized file was
+/// made to match, and version 11 the parcels this device holds (spec: PK-21).
+pub(crate) const SCHEMA_VERSION: i64 = 11;
 
-/// The device-local layout floor. Versions 7, 8 and 9 have one explicit,
+/// The device-local layout floor. Versions 7 to 10 have one explicit,
 /// transactional upgrade that preserves every row, treats old attempts as
 /// unknown, takes every old pending row to name a Container built out of this
 /// device's own files — the only kind a build before version 9 could spool —
-/// and leaves every old materialization without a recorded hash, which is what
-/// a build before version 10 never wrote down. Other unreadable device layouts
-/// are refused rather than discarded, because Storage cannot reconstruct
-/// mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 10;
+/// leaves every old materialization without a recorded hash, which is what a
+/// build before version 10 never wrote down, and starts with no parcel held,
+/// which is what a build before version 11 never kept. Other unreadable device
+/// layouts are refused rather than discarded, because Storage cannot
+/// reconstruct mappings, materializations, or provenance.
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 11;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -148,6 +149,29 @@ CREATE TABLE pending_rows (
 ) STRICT;
 "#;
 
+/// The table of held parcels, which layout 11 added to the device-local group.
+///
+/// Apart from the rest of that group because the upgrade from an older layout
+/// lays it out on its own (spec: PK-21).
+pub(crate) const HELD_PARCELS_DDL: &str = r#"
+CREATE TABLE held_parcels (
+    -- One parcel of one Container whose ciphertext this device keeps at
+    -- `file_path`, a local path rather than an Entry Path (spec: PK-21). The
+    -- row precedes the file, as a pending row precedes its spool (spec: OC-2),
+    -- so a row may name a file that is short or missing, which the fetch meets
+    -- as a parcel not held. `plaintext_start` and `plaintext_end` are the
+    -- stretch of the Container's plaintext stream the parcel opens into, which
+    -- is what says which Entries it covers. No foreign key: a parcel outlives
+    -- its Container's leaving the catalog until it is let go.
+    container_id    BLOB NOT NULL,
+    parcel          INTEGER NOT NULL,
+    plaintext_start INTEGER NOT NULL,
+    plaintext_end   INTEGER NOT NULL,
+    file_path       TEXT NOT NULL,
+    PRIMARY KEY (container_id, parcel)
+) STRICT;
+"#;
+
 /// Brings a connection to the layout this build works in.
 ///
 /// A file with no layout at all gets one; a file already at this version is left
@@ -167,7 +191,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7..=9 => provenance::preserve_device_state(connection),
+        7..=10 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }
@@ -204,6 +228,9 @@ fn create(connection: &Connection) -> IndexResult<()> {
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(DEVICE_LOCAL_DDL)
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute_batch(HELD_PARCELS_DDL)
         .map_err(classify(OPERATION))?;
     connection
         .pragma_update(None, "user_version", SCHEMA_VERSION)

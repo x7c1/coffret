@@ -182,16 +182,18 @@ impl From<&FetchOutcome> for Findings {
 impl From<&EntryFetchOutcome> for Findings {
     fn from(outcome: &EntryFetchOutcome) -> Self {
         let entry = match &outcome.fetch {
-            // A Container this run read a range out of is exactly as unfetched
-            // afterwards as it was before (spec: PK-16), so there is no key-lost
-            // Container to report here even where the one Entry was unreadable: the
-            // finding is about the Entry that was asked for.
-            EntryFetch::Placed | EntryFetch::AlreadyPresent => None,
+            // A Container this run read parcels out of is a Container whose
+            // other parcels are as unread as before (spec: PK-16, PK-22), so
+            // there is no key-lost Container to report here even where the one
+            // Entry was unreadable: the finding is about the Entry that was
+            // asked for. A cancelled run is what its caller asked for.
+            EntryFetch::Placed | EntryFetch::AlreadyPresent | EntryFetch::Cancelled => None,
             EntryFetch::Surfaced(surfaced) => Some(declined(surfaced)),
         };
         Self(
             entry
                 .into_iter()
+                .chain(outcome.unheld.iter().map(Finding::from))
                 .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),
         )
@@ -890,8 +892,8 @@ mod tests {
             degraded: Some(degraded_keyring(1, 0)),
         };
         let entry = EntryFetchOutcome {
-            fetch: EntryFetch::Placed,
             degraded: Some(degraded_keyring(1, 0)),
+            ..EntryFetchOutcome::of(EntryFetch::Placed)
         };
         let freeze = FreezeOutcome {
             packs: Vec::new(),
@@ -933,8 +935,8 @@ mod tests {
     fn a_degraded_keyring_is_said_as_loss_only_where_a_loss_is_established() {
         let said = |lost, unfetched| {
             Findings::from(&EntryFetchOutcome {
-                fetch: EntryFetch::Placed,
                 degraded: Some(degraded_keyring(lost, unfetched)),
+                ..EntryFetchOutcome::of(EntryFetch::Placed)
             })
             .iter()
             .map(ToString::to_string)

@@ -84,10 +84,10 @@ pub async fn a_run_says_how_far_through_the_containers_it_is(fixture: &FetchUnde
 
 /// A run for one Entry says how it is moving the way a folder's run does.
 ///
-/// A range read is only the front of one object and the chunks covering the
-/// Entry, but out of a Pack that can still be megabytes, and it comes after the
+/// A parcel read is only the front of one object and the parcels the Entry
+/// overlaps, but out of a Pack that is tens of megabytes, and it comes after the
 /// same catch-up a folder fetch starts with. So the run says the same phases in
-/// the same order, and counts its one Container: once before the range read
+/// the same order, and counts its one Container: once before the parcel read
 /// travels and once when the Entry is placed. A caller that renders a folder's
 /// run renders this one with nothing added.
 pub async fn a_partial_fetch_says_how_far_through_its_container_it_is(fixture: &FetchUnderTest) {

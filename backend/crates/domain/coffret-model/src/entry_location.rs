@@ -28,8 +28,8 @@ impl EntryLocation {
     }
 
     /// Where this Entry's plaintext lies in its Container's plaintext stream —
-    /// what a range read of a single Entry out of a Pack is aimed with
-    /// (spec: PK-16).
+    /// what says which parcels of a Pack a reader of this Entry asks for
+    /// (spec: PK-16, PK-19).
     pub fn extent(&self) -> EntryExtent {
         self.entry.extent
     }

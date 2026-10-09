@@ -393,6 +393,11 @@
           "message": "the Library's Keyring is degraded: some of its replicas are missing or unreadable. Files still open, and the next run that writes to the Library repairs it",
           "path": null,
           "reason": "keyring_degraded"
+        },
+        {
+          "message": "a part of a Container kept on this device was gone or damaged and was read from Storage again",
+          "path": null,
+          "reason": "parcel_unheld"
         }
       ],
       "folder": "albums",

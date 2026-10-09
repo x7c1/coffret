@@ -208,10 +208,13 @@ export function fillLine(fill: Fill | DisplacedFill | null): string | null {
  *
  * The Entries it left behind first, because that is the news about the folder
  * somebody is reading. What it found beside them — what its reads found of the
- * Library's Keyring — is said the way a sync's and a freeze's findings are, and
- * after them rather than instead of them: the rows carry the declined Entries,
- * and nothing but this line carries the finding, which is the only place a
- * person who only opens files hears that the Keyring is short (spec: KL-15).
+ * Library's Keyring, and the parts of Containers kept on this device that were
+ * gone or damaged and were read from Storage again — is said the way a sync's
+ * and a freeze's findings are, and after them rather than instead of them: the
+ * rows carry the declined Entries, and nothing but this line carries the
+ * findings, which is the only place a person who only opens files hears that
+ * the Keyring is short (spec: KL-15) or that something kept on this device went
+ * bad (spec: PK-21).
  */
 function doneLine(fill: Fill): string | null {
   if (fill.findings.length === 0) {

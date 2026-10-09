@@ -1,7 +1,7 @@
 use coffret_model::{ContainerId, ContentHash, EntryPath, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntryState, LocalObservation, PendingRow, SpoolState,
+    BatchId, DeviceTime, HeldParcel, LocalEntryState, LocalObservation, PendingRow, SpoolState,
 };
 use coffret_usecase::{Index, IndexError};
 
@@ -41,7 +41,8 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
              ALTER TABLE pending_rows DROP COLUMN materializes; \
-             ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 7;",
+             ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
+             PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -89,7 +90,8 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
     connection
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
-             ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 8;",
+             ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
+             PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -129,7 +131,10 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 9;")
+        .execute_batch(
+            "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
+             PRAGMA user_version = 9;",
+        )
         .unwrap();
     drop(connection);
 
@@ -146,6 +151,56 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
             hash: None,
             ..observation
         }
+    );
+}
+
+/// Layout 10 kept no parcel. Its device state is kept whole, and it reopens
+/// holding none — a device that has read nothing it still keeps — and able to
+/// hold one from then on (spec: PK-21).
+#[tokio::test]
+async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let observation = LocalObservation {
+        path: EntryPath::parse("books/atlas/003.jpg").unwrap(),
+        size: 100,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        at: DeviceTime::from_unix_seconds(1_700_000_400),
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
+    };
+    index.mark_present(observation.clone()).await.unwrap();
+    drop(index);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("DROP TABLE held_parcels; PRAGMA user_version = 10;")
+        .unwrap();
+    drop(connection);
+
+    let reopened = SqliteIndex::open(&path).unwrap();
+    let row = reopened
+        .local_entry_at(&observation.path)
+        .await
+        .unwrap()
+        .expect("the materialization survives the upgrade");
+    assert_eq!(row.observation, observation);
+    assert!(reopened.held_parcels().await.unwrap().is_empty());
+
+    let parcel = HeldParcel {
+        container_id: ContainerId::from_bytes([7; 16]),
+        index: 2,
+        plaintext: 2048..3072,
+        path: dir.path().join("parcels").join("held"),
+    };
+    reopened.hold_parcel(parcel.clone()).await.unwrap();
+    drop(reopened);
+    assert_eq!(
+        SqliteIndex::open(&path)
+            .unwrap()
+            .held_parcels()
+            .await
+            .unwrap(),
+        [parcel]
     );
 }
 

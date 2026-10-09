@@ -167,14 +167,16 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         "what comes back out must be what went in, byte for byte"
     );
 
-    // And one Entry on its own, which reads the part of its Container that holds
-    // it rather than the Container around it — and here that Container is the
-    // one Pack holding every file the folder has (spec: PK-16).
+    // And one Entry on its own, which reads the parcels of its Container that it
+    // overlaps rather than the Container around it — and here that Container is
+    // the one Pack holding every file the folder has, small enough to be one
+    // parcel, so the other two files come along and are placed alongside the
+    // one asked for (spec: PK-16, PK-19).
     let one = device.folder("one-entry");
     join(&device, "c", &recovery_code, &prefix, &minio);
     map(&device, "c", &one);
 
-    let (wanted, contents) = files.iter().next().expect("the folder is not empty");
+    let (wanted, _) = files.iter().next().expect("the folder is not empty");
     let placed = device.run_with(
         &[
             "--json",
@@ -190,12 +192,12 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     succeeded(&placed, "fetch --entry");
     assert_eq!(
         answered(&placed)["answer"],
-        json!({ "entry": "placed", "fetched": 1, "skipped": 0 }),
+        json!({ "entry": "placed", "fetched": 1, "skipped": 0, "alongside": 2 }),
     );
     assert_eq!(
         read_files(&one),
-        BTreeMap::from([(wanted.clone(), contents.clone())]),
-        "one Entry means one file and no others"
+        files,
+        "the one Entry asked for comes with the two that share its parcel"
     );
 
     // 4. A file gone from the folder it was synced from. Propagating a deletion

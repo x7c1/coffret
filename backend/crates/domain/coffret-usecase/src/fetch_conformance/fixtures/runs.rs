@@ -13,7 +13,7 @@ use crate::sync::{sync_folders, SyncOutcome, SyncRequest};
 /// Two replicas rather than one, because one of the cases is about a fetch
 /// stepping over a replica it cannot read (spec: RV-2), and that needs a second
 /// position to step onto.
-pub(super) fn policy() -> CommitPolicy {
+pub(crate) fn policy() -> CommitPolicy {
     CommitPolicy::default()
         .with_replica_count(2)
         .with_checkpoint_threshold(NEVER_CHECKPOINT)
@@ -66,7 +66,15 @@ pub(crate) fn request<'a>(
     keys: &'a LibraryKeys,
     run: i64,
 ) -> FetchRequest<'a> {
-    FetchRequest::new(store, fixture.target(), keys, fixture.fs(), at(run)).with_policy(policy())
+    FetchRequest::new(
+        store,
+        fixture.target(),
+        keys,
+        fixture.fs(),
+        fixture.parcels(),
+        at(run),
+    )
+    .with_policy(policy())
 }
 
 /// Carries the source device's folder into the Library as Packs (spec: PK-1).
@@ -112,6 +120,7 @@ pub(crate) fn entry_request<'a>(
         fixture.target(),
         keys,
         fixture.fs(),
+        fixture.parcels(),
         entry_path(path),
         at(run),
     )

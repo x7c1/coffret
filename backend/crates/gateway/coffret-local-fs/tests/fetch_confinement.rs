@@ -49,7 +49,7 @@ use coffret_model::{EntryPath, MasterKey, MasterKeyEpoch};
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 use coffret_usecase::fetch::{
-    fetch_folders, FetchError, FetchOutcome, FetchRequest, LibraryKeys, Surfaced,
+    fetch_folders, FetchError, FetchOutcome, FetchRequest, KeptParcels, LibraryKeys, Surfaced,
 };
 use coffret_usecase::root_marker::{MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
@@ -202,8 +202,17 @@ impl Devices {
     async fn fetch(&self) -> Result<FetchOutcome, FetchError> {
         let keys = keys();
         fetch_folders(
-            FetchRequest::new(&self.store, &self.target, &keys, &self.local, at(2))
-                .with_policy(policy()),
+            FetchRequest::new(
+                &self.store,
+                &self.target,
+                &keys,
+                &self.local,
+                // A folder fetch reads whole objects and keeps no parcel, so
+                // the directory is named and never made (spec: PK-16).
+                KeptParcels::new(&self.local, &self.spool_dir.with_file_name("parcels")),
+                at(2),
+            )
+            .with_policy(policy()),
         )
         .await
     }

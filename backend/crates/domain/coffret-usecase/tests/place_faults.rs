@@ -42,7 +42,7 @@ use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow, RootMarkerId,
 };
-use coffret_usecase::fetch::{fetch_folders, FetchError, FetchOutcome, FetchRequest};
+use coffret_usecase::fetch::{fetch_folders, FetchError, FetchOutcome, FetchRequest, KeptParcels};
 use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
 use coffret_usecase::root_marker::{self, MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::{sync_folders, SyncOutcome, SyncRequest};
@@ -261,7 +261,11 @@ async fn fetch(
     fs: &InMemoryFs,
 ) -> Result<FetchOutcome, FetchError> {
     let keys = keys();
-    fetch_folders(FetchRequest::new(store, index, &keys, fs, at(2)).with_policy(policy())).await
+    // A folder fetch reads whole objects and keeps no parcel, so the directory
+    // is named and never made (spec: PK-16).
+    let parcels = KeptParcels::new(fs, Path::new("/target-state/parcels"));
+    fetch_folders(FetchRequest::new(store, index, &keys, fs, parcels, at(2)).with_policy(policy()))
+        .await
 }
 
 /// One scan of the target device's folder, through its own disk.
@@ -1202,5 +1206,20 @@ impl Index for RefusingIndex<'_> {
 
     async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
         self.inner.pending_rows().await
+    }
+
+    async fn hold_parcel(
+        &self,
+        parcel: coffret_usecase::device_state::HeldParcel,
+    ) -> IndexResult<()> {
+        self.inner.hold_parcel(parcel).await
+    }
+
+    async fn held_parcels(&self) -> IndexResult<Vec<coffret_usecase::device_state::HeldParcel>> {
+        self.inner.held_parcels().await
+    }
+
+    async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
+        self.inner.let_go_parcel(container_id, index).await
     }
 }

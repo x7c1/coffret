@@ -157,4 +157,16 @@ impl Index for RefusingIndex {
     async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
         self.inner.pending_rows().await
     }
+
+    async fn hold_parcel(&self, parcel: crate::device_state::HeldParcel) -> IndexResult<()> {
+        self.inner.hold_parcel(parcel).await
+    }
+
+    async fn held_parcels(&self) -> IndexResult<Vec<crate::device_state::HeldParcel>> {
+        self.inner.held_parcels().await
+    }
+
+    async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
+        self.inner.let_go_parcel(container_id, index).await
+    }
 }

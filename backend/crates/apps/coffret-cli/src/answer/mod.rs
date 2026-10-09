@@ -142,7 +142,8 @@ answer, per command:
                  mappings
   fetch          fetched, containers, skipped, mappings; with --entry,
                  entry (\"placed\", \"already_present\" or \"surfaced\"),
-                 fetched and skipped
+                 fetched, skipped and alongside (the other files the
+                 parcels read placed)
 
 storage is {\"provider\": \"s3\", \"bucket\", \"prefix\"} or {\"provider\":
 \"drive\", \"folder_id\"}. committed_head is the generation committed, or

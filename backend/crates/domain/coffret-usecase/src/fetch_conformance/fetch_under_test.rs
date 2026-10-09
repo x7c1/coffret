@@ -1,5 +1,9 @@
+use std::num::NonZeroU64;
 use std::path::Path;
 
+use coffret_format::{ChunkSize, ParcelLen};
+
+use crate::fetch::KeptParcels;
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -40,6 +44,25 @@ pub struct FetchUnderTest {
 /// mapped the two onto one folder would have the target device fetching what the
 /// source device is still scanning.
 const TARGET_FOLDER: &str = "/target";
+
+/// Where the fetching device keeps the parcels it reads, beside its state
+/// rather than inside the folder it fetches into (spec: PK-21).
+const PARCEL_DIR: &str = "/target-state/parcels";
+
+/// The parcel length the suite reads with: one chunk at the size the encoder
+/// writes (spec: FM-6, PK-19).
+///
+/// The register's 32 MiB would make every Pack a case can afford one parcel, and
+/// a case about parcels needs a Pack of several. So the suite lowers `S` rather
+/// than writing a hundred megabytes: at one chunk per parcel, a Pack of a few
+/// mebibytes is a few parcels, and every rule the cases hold — whole parcels
+/// only, parcels kept, let go — is the same rule at any `S`.
+pub(crate) fn suite_parcel_len() -> ParcelLen {
+    ParcelLen::new(
+        NonZeroU64::new(u64::from(ChunkSize::DEFAULT.get()))
+            .expect("the encoder's chunk size is not zero"),
+    )
+}
 
 impl FetchUnderTest {
     /// Takes an empty store and two empty catalogs.
@@ -107,6 +130,17 @@ impl FetchUnderTest {
     /// the cases about a disk that refuses script it.
     pub fn fs(&self) -> &InMemoryFs {
         &self.fs
+    }
+
+    /// Where the fetching device keeps the parcels it reads, and how long one
+    /// is (spec: PK-19, PK-21).
+    pub fn parcels(&self) -> KeptParcels<'_> {
+        KeptParcels::new(&self.fs, Path::new(PARCEL_DIR)).with_len(suite_parcel_len())
+    }
+
+    /// The directory those parcels are kept in, inside the same disk.
+    pub fn parcel_dir(&self) -> &Path {
+        Path::new(PARCEL_DIR)
     }
 
     /// The directory inside that same disk the source device's runs write into.

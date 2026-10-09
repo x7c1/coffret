@@ -48,6 +48,7 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
             // The largest allocation four edited bytes can ask for.
             meta_len: Some(u32::MAX),
             short_by: None,
+            misrecorded: false,
         },
     )
     .await;
@@ -122,6 +123,7 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
             actual_content: None,
             meta_len: Some(u32::MAX),
             short_by: None,
+            misrecorded: false,
         },
     )
     .await;

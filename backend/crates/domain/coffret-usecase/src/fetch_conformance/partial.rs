@@ -7,19 +7,20 @@ use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
     body_start, container_handle, entry_at, entry_request, exists, filler, freeze_source, keys,
-    map, observed, plant, read, scratch_left, write, Planted, OLDER,
+    map, observed, parcels_overlapping, plant, read, scratch_left, write, Planted, OLDER,
 };
 use crate::fetch_conformance::mangling_store::ManglingStore;
 use crate::fetch_conformance::shortening_store::ShorteningStore;
 
-/// One file of the Pack the range-read case builds.
+/// One file of the Pack the partial-fetch case builds.
 ///
 /// The chunk size is a per-Container format parameter and the encoder writes
-/// 1 MiB (spec: FM-6), so a Pack a range read can save anything on has to be
-/// several chunks long — a Pack that fits in one chunk is a Pack a reader has to
-/// read whole whatever it asks for. Eight of these make a Pack of some four
-/// chunks, which is the smallest arrangement in which "read one Entry" and "read
-/// the Pack" are different amounts of work.
+/// 1 MiB (spec: FM-6), and the suite reads at one chunk per parcel, so a Pack a
+/// parcel read can save anything on has to be several chunks long — a Pack that
+/// fits in one parcel is a Pack a reader reads whole whatever it asks for
+/// (spec: PK-19). Eight of these make a Pack of some four parcels, which is the
+/// smallest arrangement in which "read one Entry" and "read the Pack" are
+/// different amounts of work.
 const FILE_LEN: usize = 400 * 1024;
 
 /// How many of them go into the one Pack.
@@ -30,12 +31,13 @@ const ONE_PACK: u64 = 16 * 1024 * 1024;
 
 /// One Entry is read out of a Pack without the Pack being read.
 ///
-/// This is what PK-16's range-read clause is for. The fetch unit is still the
-/// whole Container — the rest of this Pack is exactly as unfetched afterwards as
-/// it was before — but a reader that wants one page of an unfetched book does
-/// not wait for the gigabyte around it. The Container says where everything in
-/// it is before any of it arrives (spec: FM-2, FM-5, FM-9), so the run reads the
-/// object's front and then the chunks covering that one Entry.
+/// The fetch unit is the parcel (spec: PK-16, PK-19): a reader that wants one
+/// page of an unfetched book does not wait for the gigabyte around it. The
+/// Container says where everything in it is before any of it arrives
+/// (spec: FM-2, FM-5, FM-9), so the run reads the object's front and then the
+/// parcels that one Entry overlaps — and every other Entry wholly inside those
+/// parcels comes with it, while the rest of the Pack, outside the parcels read,
+/// is as unfetched as it was.
 ///
 /// The claim is about which bytes were asked for, which nothing the call returns
 /// can carry, so the reads are counted: every read of the Pack carried a range,
@@ -139,26 +141,40 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
         "a placed file leaves no scratch behind (spec: EP-11)",
     );
 
-    // The rest of the Pack is as unfetched as it was: PK-16's range read is a
-    // step inside fetching a Container and not a fetch of one.
-    for (relative, _) in files.iter().filter(|(relative, _)| relative != wanted) {
-        assert!(
-            !exists(fixture.fs(), &fixture.target_folder().join(relative)),
-            "{relative} was not placed by a fetch of another Entry",
-        );
+    // Outside the parcels read, the rest of the Pack is as unfetched as it
+    // was; inside them, every Entry the parcels wholly cover came along
+    // (spec: PK-16, PK-19).
+    let overlapped = parcels_overlapping(&location.entry.extent);
+    for (relative, content) in files.iter().filter(|(relative, _)| relative != wanted) {
+        let other = entry_at(fixture.source(), relative).await;
+        let inside = parcels_overlapping(&other.entry.extent);
+        let placed = fixture.target_folder().join(relative);
+        if overlapped.start <= inside.start && inside.end <= overlapped.end {
+            assert_eq!(
+                &read(fixture.fs(), &placed),
+                content,
+                "{relative} lies inside the parcels read and was placed out of them",
+            );
+            assert!(fetched.alongside.contains(&entry_path(relative.clone())));
+        } else {
+            assert!(
+                !exists(fixture.fs(), &placed),
+                "{relative} reaches outside the parcels read and was not placed",
+            );
+        }
     }
 }
 
-/// A damaged chunk inside the range a partial fetch asked for is refused, and
-/// nothing becomes visible.
+/// A damaged chunk inside the parcel a partial fetch asked for is refused,
+/// nothing becomes visible, and the parcel is not held.
 ///
-/// A range read cannot check the object's own hash — that hash is a claim about
-/// bytes it deliberately did not ask for. What holds over a range is per-chunk
-/// authentication: each chunk carries its own tag, over its own position in this
-/// object and this Container's header as associated data (spec: FM-5, FM-7,
-/// FM-8). So damage inside the requested range is caught by the format layer
-/// before a byte of it reaches a caller's buffer, which is what makes it safe to
-/// ask for part of an object at all.
+/// A parcel read cannot check the object's own hash — that hash is a claim
+/// about bytes it did not ask for (spec: PK-22). What holds over a parcel is
+/// per-chunk authentication: each chunk carries its own tag, over its own
+/// position in this object and this Container's header as associated data
+/// (spec: FM-5, FM-7, FM-8). So damage inside the requested range is caught by
+/// the format layer before a byte of it reaches a caller's buffer, which is
+/// what makes it safe to ask for part of an object at all.
 ///
 /// The damage happens in transit, which is the only place it can be tested from,
 /// and only from the chunk sequence onwards: an object whose header or meta
@@ -232,6 +248,18 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
             .is_none(),
         "a run that placed nothing claims nothing (spec: EP-10)",
     );
+    // A parcel that did not arrive whole is not held: neither its row nor its
+    // file outlives the refusal (spec: PK-21).
+    assert!(
+        fixture
+            .target()
+            .held_parcels()
+            .await
+            .expect("asking the target catalog for its held parcels must succeed")
+            .is_empty(),
+        "a refused parcel is not held",
+    );
+    assert!(fixture.fs().files_beneath(fixture.parcel_dir()).is_empty());
 
     // And a later run, against a store that answers honestly, gets the file.
     let fetched = fetch_entry(entry_request(fixture.store(), fixture, &keys, "b.jpg", 3))
@@ -252,9 +280,9 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
 /// the key the committed Keyring maps this Container to. What they do not agree
 /// with is the entry table the *Journal record* carried, which is what the Index
 /// answers from (spec: CP-11). That comparison is the last gate before a fetched
-/// file becomes visible, and a range read leans on it harder than a whole-object
-/// fetch does — it is the only end-to-end check either has once the object's own
-/// hash is out of reach (spec: EP-11).
+/// file becomes visible, and a parcel read leans on it harder than a
+/// whole-object fetch does — it is the only end-to-end check either has once the
+/// object's own hash is out of reach (spec: EP-11, PK-22).
 pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     fixture: &FetchUnderTest,
 ) {
@@ -279,6 +307,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
             actual_content: Some(b"the content the object really holds"),
             meta_len: None,
             short_by: None,
+            misrecorded: false,
         },
     )
     .await;
@@ -298,11 +327,11 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 
-/// A range read of the chunks answered short is Storage's doing, and is asked
-/// again.
+/// A parcel read answered short is Storage's doing, and the parcel is asked
+/// for again, whole.
 ///
-/// The run a partial fetch asks for is placed by the Container's own header and
-/// meta section, and held against the object's recorded length before it is
+/// The parcel a partial fetch asks for is placed by the Container's own header
+/// and meta section, and held against the object's recorded length before it is
 /// asked for (spec: FM-2, FM-5, FM-15), so every byte of it is one Storage
 /// holds. An answer that keeps to the length it declares and declares less than
 /// the run is a provider or a proxy cutting the range short — the same family as
@@ -350,7 +379,9 @@ pub async fn a_short_ranged_read_of_the_chunks_is_asked_again(fixture: &FetchUnd
         "the case gave the short answer it is about"
     );
 
-    // The chunk run was asked for twice: once answered short, and once whole.
+    // The parcel was asked for twice: once answered short, and once whole —
+    // from its start rather than from where the short answer stopped
+    // (spec: PK-21).
     let runs: Vec<_> = counting
         .ranges_of(&object)
         .into_iter()
@@ -406,6 +437,7 @@ pub async fn a_header_placing_chunks_past_its_object_is_not_asked_again(fixture:
             // One byte off the last chunk: the front is whole, and the run the
             // one Entry needs ends a byte past the object.
             short_by: Some(1),
+            misrecorded: false,
         },
     )
     .await;

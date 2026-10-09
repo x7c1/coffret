@@ -9,6 +9,7 @@ use crate::below_root_error::BelowRootError;
 use crate::commit::CommitError;
 use crate::error::Error;
 use crate::index_error::IndexError;
+use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
 use crate::refused_root::RefusedRoot;
 use crate::root_refused::RootRefused;
@@ -280,9 +281,10 @@ pub enum FetchError {
     /// reported as that rather than as a Container that would not open
     /// (spec: FM-15, CP-11). Nothing is placed.
     ///
-    /// Only [`fetch_folders`](super::fetch_folders) raises it. A range read
-    /// deliberately does not ask for the rest of the object, so it has no
-    /// standing to make this claim at all (spec: PK-16).
+    /// Only [`fetch_folders`](super::fetch_folders) raises it, because only it
+    /// reads the whole object. A read of some parcels does not ask for the rest
+    /// of the object, so it has no standing to make this claim at all
+    /// (spec: PK-22).
     CiphertextMismatch {
         /// The Container whose object did not arrive as the record describes it.
         container_id: ContainerId,
@@ -687,6 +689,19 @@ impl From<IndexError> for FetchError {
 impl From<coffret_format::Error> for FetchError {
     fn from(error: coffret_format::Error) -> Self {
         Self::Format(error)
+    }
+}
+
+/// A refusal of this device's own disk outside any mapped root — the directory
+/// the fetch keeps parcels in (spec: PK-21) — in the words every other refused
+/// local call of a fetch travels in.
+impl From<LocalIoError> for FetchError {
+    fn from(refused: LocalIoError) -> Self {
+        Self::Io {
+            operation: refused.operation,
+            path: refused.path,
+            cause: refused.cause,
+        }
     }
 }
 

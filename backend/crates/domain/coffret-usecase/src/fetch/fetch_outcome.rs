@@ -23,8 +23,8 @@ pub struct FetchOutcome {
     pub fetched: Vec<EntryPath>,
     /// The Containers the run fetched, once each, in Container ID order.
     ///
-    /// The fetch unit is a whole Container however many of its Entries were
-    /// wanted (spec: PK-16), so this is shorter than
+    /// A folder fetch reads each Container whole, every parcel at once, however
+    /// many of its Entries were wanted (spec: PK-16), so this is shorter than
     /// [`fetched`](Self::fetched) wherever a Pack held several of them.
     pub containers: Vec<ContainerId>,
     /// How many selected Entries were already materialized here.

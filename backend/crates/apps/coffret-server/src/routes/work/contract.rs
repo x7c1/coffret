@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use coffret_device::{
     ByteCount, DegradedKeyring, FindingReason, Generation, Phase, RootRefused, RootUnavailable,
-    Step, Surfaced as DeviceSurfaced,
+    Step, Surfaced as DeviceSurfaced, UnheldParcel, UnheldReason,
 };
 use coffret_model::ContainerId;
 
@@ -159,6 +159,7 @@ fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
         done: 1,
         declined: Vec::new(),
         degraded: None,
+        unheld: Vec::new(),
     }
 }
 
@@ -350,6 +351,11 @@ fn every_answer() -> Vec<WorkDto> {
         Some(alone(FillRun {
             declined: declined.clone(),
             degraded: Some(DegradedKeyring::new(Generation::FIRST, 3, 1, 0)),
+            unheld: vec![UnheldParcel {
+                container_id: ContainerId::from_bytes([8; ContainerId::BYTE_LEN]),
+                index: 2,
+                reason: UnheldReason::Missing,
+            }],
             ..fill(3, "albums", FillStatus::Done)
         })),
         Some(SyncRun {

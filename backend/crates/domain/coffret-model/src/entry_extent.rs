@@ -7,12 +7,12 @@ use crate::format_integer::MAX_FORMAT_INTEGER;
 /// (spec: FM-9).
 ///
 /// The offset and the length are one value because neither answers anything on
-/// its own: what a range read of a single Entry out of a Pack is aimed with is
-/// the pair (spec: PK-16), and every reader that had them apart went on to add
-/// them together. Carrying them together is what makes the one condition they
-/// have an invariant instead of a check each caller remembers to make — the
-/// extent ends inside the address space the format admits, so `offset + size`
-/// is at most [`MAX_FORMAT_INTEGER`] (spec: FM-19).
+/// its own: which parcels of a Pack a reader of a single Entry asks for follows
+/// from the pair (spec: PK-16, PK-19), and every reader that had them apart
+/// went on to add them together. Carrying them together is what makes the one
+/// condition they have an invariant instead of a check each caller remembers to
+/// make — the extent ends inside the address space the format admits, so
+/// `offset + size` is at most [`MAX_FORMAT_INTEGER`] (spec: FM-19).
 ///
 /// That is the whole of what is refused here. Whether a table of these tiles
 /// its stream from zero without gaps or overlaps is a rule about the table
@@ -90,7 +90,8 @@ impl EntryExtent {
     }
 
     /// The stream positions this Entry occupies, which is what a reader rounds
-    /// out to the chunks covering it (spec: FM-5, PK-16).
+    /// out to the chunks covering it, and those to the parcels holding them
+    /// (spec: FM-5, PK-16, PK-19).
     pub fn range(&self) -> Range<u64> {
         self.offset..self.end()
     }
@@ -182,7 +183,7 @@ mod tests {
         );
     }
 
-    // PK-16: the three questions a range read asks of an Entry's place — where
+    // PK-16: the three questions a parcel read asks of an Entry's place — where
     // it ends, which stream positions to round out to chunks, and whether a
     // position the reader is standing at is one of them.
     #[test]

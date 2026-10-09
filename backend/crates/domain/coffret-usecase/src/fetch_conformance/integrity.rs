@@ -44,6 +44,7 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
             actual_content: None,
             meta_len: None,
             short_by: None,
+            misrecorded: false,
         },
     )
     .await;
@@ -205,6 +206,7 @@ pub async fn a_container_whose_content_is_not_what_the_catalog_names_is_refused(
             actual_content: Some(b"the content the object really holds"),
             meta_len: None,
             short_by: None,
+            misrecorded: false,
         },
     )
     .await;

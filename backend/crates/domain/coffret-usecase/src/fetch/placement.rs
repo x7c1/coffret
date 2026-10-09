@@ -360,7 +360,7 @@ impl<'a> Placement<'a> {
     }
 
     /// Where in the Library this placement stands.
-    fn path(&self) -> &EntryPath {
+    pub(super) fn path(&self) -> &EntryPath {
         self.target.path()
     }
 }

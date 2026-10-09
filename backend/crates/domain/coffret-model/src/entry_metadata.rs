@@ -8,9 +8,9 @@ use crate::mtime::Mtime;
 /// What a Container's entry table records about one Entry.
 ///
 /// The `extent` places the Entry against the Container's plaintext stream,
-/// which is what lets a reader range-read a single Entry out of a Pack as a
-/// step in fetching its Container (spec: PK-16) — the fetch unit stays the
-/// whole Container.
+/// which is what lets a reader take a single Entry out of a Pack by reading
+/// only the parcels it overlaps (spec: PK-16, PK-19) — the fetch unit is the
+/// parcel, never the Entry.
 ///
 /// A plain record of values, and it stays one: what could be wrong about an
 /// Entry's place in a stream is a condition on the two halves of the extent

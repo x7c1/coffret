@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use coffret_device::DegradedKeyring;
+use coffret_device::{DegradedKeyring, UnheldParcel};
 
 use crate::displaced::Displaced;
 use crate::folder::Folder;
@@ -119,6 +119,14 @@ pub(super) struct Progress {
     /// folder, so it goes to whichever run takes the arming up — the one on the
     /// folder already, or the next one taken off the queue.
     heard: Option<DegradedKeyring>,
+    /// The kept parcels a reader's fetch found not held, until a run takes them
+    /// in — see [`hand_over_unheld`](Self::hand_over_unheld).
+    ///
+    /// Here for the reason [`heard`](Self::heard) is, and not held per folder
+    /// either — a parcel is a part of a Container and not of a folder. It can
+    /// also arrive later, from the rest of a reader's fetch that goes on
+    /// reading its parcel after the reader was answered.
+    unheld: Vec<UnheldParcel>,
     /// The latest fill, running or finished — what the work route answers
     /// with.
     pub(super) on_record: Option<FillRun>,
@@ -163,6 +171,22 @@ impl Progress {
     /// the run that takes the arming up.
     pub(super) fn hear(&mut self, found: DegradedKeyring) {
         self.heard = Some(graver(self.heard, found));
+    }
+
+    /// Keeps the kept parcels a reader's fetch found not held, for the run
+    /// that takes them in.
+    pub(super) fn hear_unheld(&mut self, unheld: Vec<UnheldParcel>) {
+        self.unheld.extend(unheld);
+    }
+
+    /// The kept parcels a reader's fetch found not held, for the run being
+    /// published — and nothing where that run is not the one an arming is for,
+    /// by the rule [`hand_over`](Self::hand_over) keeps.
+    pub(super) fn hand_over_unheld(&mut self) -> Vec<UnheldParcel> {
+        if self.superseded() {
+            return Vec::new();
+        }
+        std::mem::take(&mut self.unheld)
     }
 
     /// What a fetch that armed a fill found of the committed Keyring, for the

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath, Generation};
 use coffret_usecase::commit::{DegradedKeyring, KeyringRepair};
+use coffret_usecase::fetch::{UnheldParcel, UnheldReason};
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
@@ -162,6 +163,21 @@ pub enum Finding {
         /// What Storage answered the trash with.
         cause: StorageError,
     },
+    /// A parcel this device's record said it kept, and that it did not: the
+    /// file was gone, or no longer authenticated as that parcel (spec: PK-21).
+    ///
+    /// Said rather than silently read again, because the second read is one
+    /// the Storage provider observes (spec: PK-20) and because a kept file that
+    /// changed under the device is a disk worth hearing about. Nobody has to
+    /// act on it: the run let the record go and read the parcel again.
+    UnheldParcel {
+        /// The Container the parcel is a part of.
+        container_id: ContainerId,
+        /// Which parcel it was, counted from the first chunk (spec: PK-19).
+        parcel: u64,
+        /// What was wrong with the kept file.
+        reason: UnheldReason,
+    },
     /// A checkpoint this run's commit was due to write and could not
     /// (spec: CK-8).
     ///
@@ -190,6 +206,9 @@ impl Finding {
     /// A deleted Entry's copy moved to the trash is work the run did, and the
     /// person who wants it back knows where to look (spec: EP-15).
     ///
+    /// A kept parcel that was not held is said and not escalated: the run read
+    /// it again, and nothing is left for anybody (spec: PK-21).
+    ///
     /// A degraded Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
     /// before it commits (spec: KL-13, KL-16), so a run that only reports one
@@ -206,6 +225,7 @@ impl Finding {
                 | Self::CheckpointFailed { .. }
                 | Self::DegradedKeyring { .. }
                 | Self::KeyringRepaired { .. }
+                | Self::UnheldParcel { .. }
         )
     }
 }
@@ -224,6 +244,21 @@ impl From<&DegradedKeyring> for Finding {
             replicas: found.replicas(),
             lost: found.lost(),
             unfetched: found.unfetched(),
+        }
+    }
+}
+
+/// The finding a kept parcel that was not held makes of it (spec: PK-21).
+///
+/// One conversion for every caller that carries an
+/// [`EntryFetchOutcome`](coffret_usecase::fetch::EntryFetchOutcome), so a fill
+/// reporting one per Entry says it in the words a single fetch does.
+impl From<&UnheldParcel> for Finding {
+    fn from(unheld: &UnheldParcel) -> Self {
+        Self::UnheldParcel {
+            container_id: unheld.container_id,
+            parcel: unheld.index,
+            reason: unheld.reason.clone(),
         }
     }
 }
@@ -472,6 +507,20 @@ impl fmt::Display for Finding {
                      unreadable, and {was} rewritten from a surviving one",
                     generation.get(),
                 )
+            }
+            Self::UnheldParcel {
+                container_id,
+                parcel,
+                reason,
+            } => {
+                write!(f, "unheld parcel {parcel} of container {container_id}: ")?;
+                match reason {
+                    UnheldReason::Missing => write!(f, "its file was gone")?,
+                    UnheldReason::Unauthenticated { cause } => {
+                        write!(f, "its file did not authenticate ({cause})")?
+                    }
+                }
+                write!(f, ", so it was read from Storage again")
             }
             Self::CheckpointFailed { cause } => write!(
                 f,

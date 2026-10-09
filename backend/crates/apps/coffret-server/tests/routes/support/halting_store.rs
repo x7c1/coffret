@@ -1,5 +1,5 @@
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use coffret_model::ObjectRef;
@@ -7,6 +7,7 @@ use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectStore, PageToken, Result as StoreResult,
     UploadedObject,
 };
+use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 /// A store that can be made to stop answering, and to answer again.
@@ -31,6 +32,11 @@ use tokio::sync::watch;
 /// is stated: a request that began unlocked finishes (spec: DK-2), and nothing
 /// but a request that is genuinely mid-flight can say so.
 ///
+/// The hold can also wait for a fetch to get somewhere first:
+/// [`hold_after_parcels`](Self::hold_after_parcels) lets a number of parcel
+/// reads through and then holds the next ranged read, which is how a case
+/// stops a fill between two parcels rather than at its first read.
+///
 /// Only reads are held. A fill's first Storage call for an Entry is a read, and
 /// so is every control object a catch-up opens, so holding them is enough to
 /// stop either where it would be stopped; leaving the rest alone keeps this a
@@ -53,7 +59,22 @@ pub struct HaltingStore {
     refused: AtomicUsize,
     stalled_reads: AtomicUsize,
     held_reads: AtomicUsize,
+    /// How many parcel reads to let through before holding the next ranged
+    /// read, where a case asked for that; `usize::MAX` where it did not.
+    hold_after: AtomicUsize,
+    /// How many parcel reads have gone through.
+    parcel_reads: AtomicUsize,
+    /// How many bytes of the next parcel read go through before the rest of
+    /// it is held, where a case asked for that; `u64::MAX` where it did not.
+    hold_within: AtomicU64,
+    /// Whether the rest of a parcel read is waiting, and what wakes it — a
+    /// watch for the reason [`held`](Self::held) is one.
+    tail_held: watch::Sender<bool>,
 }
+
+/// A ranged read longer than this is a parcel; the front of an object is a
+/// header and a meta section, a few kilobytes at most (spec: PK-16, PK-19).
+const PARCEL_SIZED: u64 = 64 * 1024;
 
 impl HaltingStore {
     /// Answering, until told otherwise.
@@ -67,6 +88,10 @@ impl HaltingStore {
             refused: AtomicUsize::new(0),
             stalled_reads: AtomicUsize::new(0),
             held_reads: AtomicUsize::new(0),
+            hold_after: AtomicUsize::new(usize::MAX),
+            parcel_reads: AtomicUsize::new(0),
+            hold_within: AtomicU64::new(u64::MAX),
+            tail_held: watch::channel(false).0,
         }
     }
 
@@ -106,7 +131,24 @@ impl HaltingStore {
 
     /// Lets whatever is being held go, and takes no more.
     pub fn release(&self) {
+        self.hold_after.store(usize::MAX, Ordering::SeqCst);
+        self.hold_within.store(u64::MAX, Ordering::SeqCst);
         self.held.send_replace(false);
+        self.tail_held.send_replace(false);
+    }
+
+    /// Answers the next parcel read with its first `after` bytes, and holds
+    /// the rest of it until [`release`](Self::release).
+    pub fn hold_within_parcel(&self, after: u64) {
+        self.tail_held.send_replace(true);
+        self.hold_within.store(after, Ordering::SeqCst);
+    }
+
+    /// Lets `parcels` parcel reads through, then holds every read from the
+    /// next ranged one on, until [`release`](Self::release).
+    pub fn hold_after_parcels(&self, parcels: usize) {
+        self.parcel_reads.store(0, Ordering::SeqCst);
+        self.hold_after.store(parcels, Ordering::SeqCst);
     }
 
     /// Answers again, however it had stopped.
@@ -168,6 +210,14 @@ impl ObjectStore for HaltingStore {
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> StoreResult<ByteStream> {
+        if let Some(asked) = &range {
+            if self.parcel_reads.load(Ordering::SeqCst) >= self.hold_after.load(Ordering::SeqCst) {
+                self.held.send_replace(true);
+            }
+            if asked.end - asked.start > PARCEL_SIZED {
+                self.parcel_reads.fetch_add(1, Ordering::SeqCst);
+            }
+        }
         let mut waiting = self.held.subscribe();
         if *waiting.borrow_and_update() {
             self.held_reads.fetch_add(1, Ordering::SeqCst);
@@ -192,7 +242,40 @@ impl ObjectStore for HaltingStore {
                 source: None,
             });
         }
-        self.inner.get(object, range).await
+        let parcel_sized = range
+            .as_ref()
+            .is_some_and(|asked| asked.end - asked.start > PARCEL_SIZED);
+        let stream = self.inner.get(object, range).await?;
+        if !parcel_sized {
+            return Ok(stream);
+        }
+        let after = self.hold_within.swap(u64::MAX, Ordering::SeqCst);
+        if after == u64::MAX {
+            return Ok(stream);
+        }
+        self.held_reads.fetch_add(1, Ordering::SeqCst);
+        // The answer is the whole parcel, declared as such, and it goes out
+        // through a pipe that is fed up to `after` and then waits: the reader
+        // sees an answer that has started and stopped arriving, which is what
+        // a slow transfer looks like.
+        let len = stream.len();
+        let bytes = stream.into_bytes().await?;
+        let (mut feed, answer) = tokio::io::duplex(64 * 1024);
+        let mut tail = self.tail_held.subscribe();
+        tokio::spawn(async move {
+            let split = usize::try_from(after).map_or(bytes.len(), |after| after.min(bytes.len()));
+            // A reader that went away has nobody left to feed.
+            if feed.write_all(&bytes[..split]).await.is_err() {
+                return;
+            }
+            while *tail.borrow_and_update() {
+                if tail.changed().await.is_err() {
+                    break;
+                }
+            }
+            let _ = feed.write_all(&bytes[split..]).await;
+        });
+        Ok(ByteStream::new(len, answer))
     }
 
     async fn list(&self, page: Option<&PageToken>) -> StoreResult<ObjectPage> {

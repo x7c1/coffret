@@ -69,6 +69,9 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   on this device, which is what lets a device hold part of a subtree without
   the rest counting as deleted; [Entry Path](../entry-path/) and
   [Library](../library/) state what a scan may conclude instead (spec: EP-10).
+- A device mapping only part of a [Pack](../pack/) still holds the parcels it
+  read until the mapped Entries in them are placed, and holds none of them for
+  the Entries no mapping of it reaches (spec: PK-21).
 - **What a mapping does assert is two things about its root, and neither is
   what is in it.** The filesystem the root stood on when a scan last looked
   says whether the root is there to be read from — observed, and re-stamped by

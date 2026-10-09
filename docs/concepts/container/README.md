@@ -77,11 +77,11 @@ the Container's [Key Envelope](../key-envelope/) from the
     the Entry is released as soon as the chunks covering it have arrived. An
     Entry that spans a parcel boundary is reached by reading every parcel it
     overlaps (spec: PK-16).
-  - A device **holds** a parcel it read until every Entry with bytes in it is
-    on the device or witnessed absent, and never asks Storage for a held
-    parcel again, so reading a page twice shows the provider nothing.
-    Cancelling and reading ahead stop and start at parcel boundaries only
-    (spec: PK-21).
+  - A device **holds** a parcel it read until every Entry with bytes in it
+    that the device maps is on the device or witnessed absent, or until the
+    Container leaves the current set, and never asks Storage for a held parcel
+    again, so reading a page twice shows the provider nothing. Cancelling and
+    reading ahead stop and start at parcel boundaries only (spec: PK-21).
   - The header and meta section at the front of the object belong to no
     parcel: they are read on their own, the same read whichever Entry is
     wanted (spec: PK-16).

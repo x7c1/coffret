@@ -155,4 +155,18 @@ impl Index for InMemoryIndex {
     async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
         Ok(self.locked().pending_rows())
     }
+
+    async fn hold_parcel(&self, parcel: crate::device_state::HeldParcel) -> IndexResult<()> {
+        self.locked().hold_parcel(parcel);
+        Ok(())
+    }
+
+    async fn held_parcels(&self) -> IndexResult<Vec<crate::device_state::HeldParcel>> {
+        Ok(self.locked().held_parcels())
+    }
+
+    async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
+        self.locked().let_go_parcel(container_id, index);
+        Ok(())
+    }
 }

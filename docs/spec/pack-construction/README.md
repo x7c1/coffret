@@ -218,9 +218,24 @@ Concept background: [Pack](../../concepts/pack/),
   - The front of the object (PK-16) shows only that the Container was opened,
     since it is the same read whichever Entry is wanted.
 - **PK-21.** A fetched parcel is kept on the device until every Entry with
-  bytes in it is on the device or witnessed absent (EP-10, EP-11), and a parcel
+  bytes in it that the device maps (EP-9) is on the device or witnessed absent
+  (EP-10, EP-11), or until its Container leaves the current set, and a parcel
   the device holds is never requested from Storage again, so reading a page a
   second time shows the provider nothing. *(Form: test)*
+  - An Entry the device does not map, or maps to no local path it could place
+    it at (EP-4), is not waited for. A Pack holds whatever folders it was
+    frozen from, so a device mapping only some of them would otherwise keep
+    the parcels it shares with the rest for ever — and so would a padding-only
+    last parcel, which no Entry ever completes.
+  - A Container a later commit replaced or removed holds no current Entry, so
+    its parcels are let go by the device's first fetch, catch-up, or deletion
+    once its catalog no longer lists the Container (CK-9). Until then they cost
+    disk and nothing else: a parcel is held under its Container's ID, so no
+    read of another Container ever opens it.
+  - A kept parcel is device state, never uploaded: losing it costs a read the
+    provider can observe and nothing else. One whose file is gone, or no longer
+    authenticates as that parcel (FM-5), is not held; it is said, and asked for
+    again whole.
   - Cancelling a fetch and reading ahead happen on parcel boundaries only: a
     cancelled fetch asks for no further parcel and never cuts one short to stop
     at an Entry, and read-ahead asks for the next parcel, never the next Entry.

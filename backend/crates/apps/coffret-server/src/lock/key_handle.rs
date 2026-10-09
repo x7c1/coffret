@@ -34,6 +34,19 @@ impl KeyHandle {
         idle.taken();
         Self { library, idle }
     }
+
+    /// The open Library itself, for work that goes on after this handle's span
+    /// has ended.
+    ///
+    /// A reader's fetch is answered the moment its Entry is placed, and the rest
+    /// of the parcel it came out of is read by a task of its own (see
+    /// [`EntryFetches::fetch`](coffret_device::EntryFetches::fetch)). That task
+    /// holds the keys until it ends, as this handle would (spec: DK-2), and it
+    /// is not somebody being here: it is the tail of a request that has already
+    /// been answered, so it marks no span (spec: DK-4).
+    pub(crate) fn shared(&self) -> Arc<OpenLibrary> {
+        Arc::clone(&self.library)
+    }
 }
 
 impl Deref for KeyHandle {

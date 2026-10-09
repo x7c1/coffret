@@ -128,6 +128,7 @@ it('names every reason the server can send', () => {
     'refused_root',
     'keyring_degraded',
     'keyring_repaired',
+    'parcel_unheld',
   ];
 
   expect(reasons).toEqual(findingReasons);
@@ -136,7 +137,7 @@ it('names every reason the server can send', () => {
 // One state, one spelling: every finding reason a refusal can also carry is
 // the refusal's own literal. The ones a finding shares are typed as
 // `PlacementReason`, so a refusal spelling that moved fails to compile here, and
-// the rest of the file is exactly the run's own four.
+// the rest of the file is exactly the run's own five.
 it('spells every reason a refusal also carries as the refusal does', () => {
   const shared: PlacementReason[] = ['surfaced', 'key_lost', 'refused_root'];
   const runOnly: FindingReason[] = [
@@ -144,6 +145,7 @@ it('spells every reason a refusal also carries as the refusal does', () => {
     'root_on_another_filesystem',
     'keyring_degraded',
     'keyring_repaired',
+    'parcel_unheld',
   ];
 
   expect(

@@ -44,19 +44,20 @@ pub struct Finding {
     /// Which way the run left this alone, for a page to branch on rather than
     /// to read out of the sentence: `surfaced` or `key_lost` for one Entry,
     /// `root_missing`, `root_on_another_filesystem` or `refused_root` for a
-    /// mapping, `key_lost` for a Container, and `keyring_degraded` or
+    /// mapping, `key_lost` for a Container, `keyring_degraded` or
     /// `keyring_repaired` for the Library's committed Keyring (spec: KL-5,
-    /// KL-15).
+    /// KL-15), and `parcel_unheld` for a kept parcel read again (spec: PK-21).
     ///
     /// A refusal's `reason` vocabulary, spelled as a refusal spells it, because
     /// the states are the same ones: one Entry whose Container the Library
     /// records no key for is `key_lost` whether a fetch declined it or a run
     /// reported it, and a mapped folder that is not the one its mapping was
-    /// recorded against is `refused_root` either way. The four a refusal never
+    /// recorded against is `refused_root` either way. The five a refusal never
     /// carries are a run's own — a mapped root it could not vouch for is not
     /// something a request is declined over (spec: EP-12), a degraded Keyring
-    /// is read through rather than refused (spec: RV-2), and a repaired one is
-    /// work a run did (spec: KL-13). The whole set is
+    /// is read through rather than refused (spec: RV-2), a repaired one is
+    /// work a run did (spec: KL-13), and a kept parcel not held was read again
+    /// from Storage rather than refused over (spec: PK-21). The whole set is
     /// named here for the reason a refusal's is: a page writes a branch per
     /// reason, and one it has never heard of is one it falls off the end of.
     pub reason: &'static str,
@@ -125,7 +126,7 @@ impl Finding {
                 reason: "key_lost",
                 surfaced: None,
             }),
-            // Shown although nobody has to act on it, unlike the four at the
+            // Shown although nobody has to act on it, unlike the three at the
             // end of this match: a person who only uses the explorer is
             // exactly who KL-15 says must hear of replica loss, and nothing
             // else they do would tell them. No path, because it is about the
@@ -151,6 +152,20 @@ impl Finding {
                 reason: "keyring_repaired",
                 surfaced: None,
             }),
+            // Shown although nothing is left to do, for the reason a degraded
+            // Keyring is: PK-21 says it is said, the second read is one the
+            // provider observes, and a person who only opens files hears of a
+            // disk that changed under the device nowhere else. No path, and
+            // neither which Container nor which parcel, because none is the
+            // person's to act on and a Container's ID is not something to put
+            // across this boundary (spec: EL-1); how many there were is the
+            // number of these a run carries.
+            Finding::UnheldParcel { .. } => Some(Self {
+                path: None,
+                message: UNHELD_PARCEL.to_owned(),
+                reason: "parcel_unheld",
+                surfaced: None,
+            }),
             // Not shown, because none of these leaves anything for the person
             // who dropped a file. Each leaves the committed state correct: a
             // settled batch is one the run already dealt with, and what a
@@ -165,6 +180,17 @@ impl Finding {
         }
     }
 }
+
+/// The sentence shown for a kept parcel that was not held after all
+/// (spec: PK-21).
+///
+/// In the Library's words rather than the format's: a parcel is a part of a
+/// Container, which a person meets in the explorer already (`key_lost`), and
+/// what the person needs to know is that something kept on this device went
+/// bad and was read from Storage again, as the terminal says it — not which
+/// Container, nor where on the disk (spec: EL-1).
+const UNHELD_PARCEL: &str =
+    "a part of a Container kept on this device was gone or damaged and was read from Storage again";
 
 /// The explanation shown for a committed Keyring a run's read had to step over
 /// a position of (spec: KL-5, KL-15).
@@ -336,7 +362,7 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::path::{Path, PathBuf};
 
-    use coffret_device::{Disposal, Generation, Settled, StorageError};
+    use coffret_device::{Disposal, Generation, Settled, StorageError, UnheldReason};
     use coffret_model::ContainerId;
 
     use super::*;
@@ -526,6 +552,31 @@ mod tests {
         );
     }
 
+    // A kept parcel read again reaches the explorer as one sentence about a
+    // part of a Container, and names neither which Container nor which parcel:
+    // neither is the person's to act on, and a Container's ID does not cross
+    // this boundary (spec: PK-21, EL-1).
+    #[test]
+    fn an_unheld_parcel_is_shown_without_its_container() {
+        let container_id = ContainerId::from_bytes([9; ContainerId::BYTE_LEN]);
+        let shown = Finding::of(&coffret_device::Finding::UnheldParcel {
+            container_id,
+            parcel: 3,
+            reason: UnheldReason::Missing,
+        })
+        .expect("a parcel read again is something to say");
+
+        assert_eq!(shown.reason, "parcel_unheld");
+        assert_eq!(shown.path, None);
+        assert_eq!(shown.surfaced, None);
+        assert_eq!(shown.message, UNHELD_PARCEL);
+        assert!(
+            !shown.message.contains(&container_id.to_string()),
+            "{}",
+            shown.message,
+        );
+    }
+
     // A repaired Keyring reaches the explorer in the terminal's own words:
     // the generation and how many replicas were put back, and nothing else
     // (spec: KL-15, EL-1).
@@ -635,7 +686,12 @@ mod tests {
                 generation: Generation::FIRST,
                 rewritten: NonZeroUsize::MIN,
             }),
-            Finding::KeyringRepaired { .. }
+            Finding::KeyringRepaired { .. } => Some(Finding::UnheldParcel {
+                container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+                parcel: 1,
+                reason: UnheldReason::Missing,
+            }),
+            Finding::UnheldParcel { .. }
             | Finding::Settled(_)
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,

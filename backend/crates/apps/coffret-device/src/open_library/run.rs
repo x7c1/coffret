@@ -73,6 +73,8 @@ where
         local_fs: Arc::new(UnixFs::new()),
         keys: LibraryKeys::derive(&unlocked.master_key, unlocked.epoch),
         spool: dir.spool_dir(),
+        parcel_dir: dir.parcel_dir(),
+        parcel_len: coffret_format::PARCEL_LEN,
         library_id: settings.library_id,
         epoch: unlocked.epoch,
         provider: settings.provider.kind(),

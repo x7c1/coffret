@@ -59,8 +59,9 @@ pub(crate) async fn plant(
                 id: container_id,
                 kind: ContainerKind::OneFile,
                 // The hash of what is really stored, so the fetch's first check
-                // passes and the case reaches the one it is about (spec: FM-15).
-                ciphertext_hash: ContentHash::from_bytes(*blake3::hash(&ciphertext).as_bytes()),
+                // passes and the case reaches the one it is about (spec: FM-15)
+                // — unless the case is about that check.
+                ciphertext_hash: planted.recorded_hash(&ciphertext),
                 ciphertext_len: ciphertext_len(ciphertext.len() as u64),
                 object_ref: None,
             },
@@ -111,9 +112,27 @@ pub(crate) struct Planted<'a> {
     /// the one the Library committed — and its authenticated header and meta
     /// section place chunks past its end. `None` stores the object whole.
     pub(crate) short_by: Option<usize>,
+    /// Whether the Journal record carries a ciphertext hash other than the
+    /// stored object's, where a case is about the read held to that hash
+    /// (spec: CP-11, PK-22).
+    ///
+    /// Everything else about the object is true: it is a real Container under
+    /// the key the record maps it to, holding the content the record names.
+    pub(crate) misrecorded: bool,
 }
 
 /// Where the meta section length sits in a Container header (spec: FM-2).
+impl Planted<'_> {
+    /// The ciphertext hash the Journal record carries for what is stored.
+    fn recorded_hash(&self, ciphertext: &[u8]) -> ContentHash {
+        let stored = blake3::hash(ciphertext);
+        if !self.misrecorded {
+            return ContentHash::from_bytes(*stored.as_bytes());
+        }
+        ContentHash::from_bytes(*blake3::hash(stored.as_bytes()).as_bytes())
+    }
+}
+
 const META_LEN_RANGE: std::ops::Range<usize> = 28..32;
 
 impl Planted<'_> {
