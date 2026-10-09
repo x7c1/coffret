@@ -475,6 +475,26 @@ it("says a finished fill's findings, after what it declined", () => {
   expect(fillLine(filling({ status: 'done', done: 3 }))).toBeNull();
 });
 
+// A kept part of a Container that was gone or damaged and was read from
+// Storage again is said by the fill a reader's open armed, the one line a
+// person who only opens files reads (spec: PK-21). Several are one sentence
+// and a count, as any run's findings are.
+it('says a part of a Container read from Storage again, once however many there were', () => {
+  const unheld = {
+    path: null,
+    message: 'a part of a Container kept on this device was gone or damaged and was read from Storage again',
+    reason: 'parcel_unheld' as const,
+    surfaced: null,
+  };
+  expect(fillLine(filling({ status: 'done', done: 3, findings: [unheld] }))).toBe(
+    'a part of a Container kept on this device was gone or damaged and was read from Storage again',
+  );
+  expect(fillLine(filling({ status: 'done', done: 3, findings: [unheld, unheld] }))).toBe(
+    'a part of a Container kept on this device was gone or damaged and was read from Storage again ' +
+      '(and 1 more)',
+  );
+});
+
 // One line for all of them, because a folder of three hundred Entries declined
 // for the one reason would otherwise be three hundred sentences in a bar one
 // line high. The rows carry the rest, each marked with its own.

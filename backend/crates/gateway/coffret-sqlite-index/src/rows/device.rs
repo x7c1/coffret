@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use coffret_model::{Mtime, ObjectRef};
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow,
-    RootIdentity, RootMarkerId, SpoolState,
+    BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation, Mapping,
+    PendingRow, RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::Row;
@@ -79,6 +79,18 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
             "absent" => LocalEntryState::Absent,
             found => return Err(unreadable(OPERATION, "local file state", found)),
         },
+    })
+}
+
+/// One row of `held_parcels` (spec: PK-21).
+pub(crate) fn held_parcel(row: &Row<'_>) -> IndexResult<HeldParcel> {
+    const OPERATION: &str = "reading a held parcel";
+    Ok(HeldParcel {
+        container_id: container_id(row, "container_id", OPERATION)?,
+        index: from_integer(row, "parcel", OPERATION)?,
+        plaintext: from_integer(row, "plaintext_start", OPERATION)?
+            ..from_integer(row, "plaintext_end", OPERATION)?,
+        path: PathBuf::from(text(row, "file_path", OPERATION)?),
     })
 }
 

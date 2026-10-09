@@ -3,6 +3,7 @@ use coffret_model::EntryPath;
 use crate::commit::CommitPolicy;
 use crate::destinations::Destinations;
 use crate::device_state::DeviceTime;
+use crate::fetch::kept_parcels::KeptParcels;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
@@ -33,6 +34,13 @@ pub struct FetchRequest<'a> {
     /// about an interrupted placement can only be held to what the thing
     /// underneath it actually does when it fails (spec: EP-11).
     pub destinations: &'a dyn Destinations,
+    /// The parcels this device holds of earlier reads (spec: PK-21).
+    ///
+    /// A folder fetch reads whole objects and keeps none of them, but what it
+    /// places may be the last Entry a held parcel was waiting for, and the
+    /// catch-up it starts with may have taken a held parcel's Container out of
+    /// the current set: either way the parcel is let go here.
+    pub parcels: KeptParcels<'a>,
     /// The subtree to fetch, or `None` for everything the mappings cover.
     ///
     /// It narrows the run and never widens it: a prefix outside every mapping
@@ -71,6 +79,7 @@ impl<'a> FetchRequest<'a> {
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
         destinations: &'a dyn Destinations,
+        parcels: KeptParcels<'a>,
         now: DeviceTime,
     ) -> Self {
         Self {
@@ -78,6 +87,7 @@ impl<'a> FetchRequest<'a> {
             index,
             keys,
             destinations,
+            parcels,
             prefix: None,
             now,
             progress: &UNWATCHED,

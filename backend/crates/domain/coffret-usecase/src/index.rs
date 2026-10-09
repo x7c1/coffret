@@ -5,7 +5,9 @@ use coffret_model::{
 };
 
 use crate::committed_batch::CommittedBatch;
-use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow};
+use crate::device_state::{
+    DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping, PendingRow,
+};
 use crate::index_error::IndexResult;
 
 /// The cached Catalog and device-local records of one Library.
@@ -32,8 +34,9 @@ use crate::index_error::IndexResult;
 ///   [`restore`](Self::restore) replaces it wholesale and
 ///   [`snapshot`](Self::snapshot) hands it back (spec: CK-7).
 /// - **Device-local** — how this device maps the Library onto its folders
-///   (spec: EP-9), which Entries it has actually put on disk (spec: EP-10), and
-///   what it has spooled before committing (spec: OC-2). None of it is ever
+///   (spec: EP-9), which Entries it has actually put on disk (spec: EP-10),
+///   what it has spooled before committing (spec: OC-2), and which parcels of
+///   the Containers it read it still holds (spec: PK-21). None of it is ever
 ///   uploaded, and no Library-wide operation touches it.
 ///
 /// # Catching up
@@ -139,8 +142,8 @@ pub trait Index: Send + Sync {
     ///
     /// One Entry Path identifies at most one current Entry, so this is the
     /// whole answer rather than one of several (spec: EP-5). The location
-    /// carries the Container and the Entry's extent inside it, which is what a
-    /// range read of a single Entry out of a Pack is aimed with (spec: PK-16).
+    /// carries the Container and the Entry's extent inside it, which is what
+    /// says which parcels of a Pack hold the Entry (spec: PK-16, PK-19).
     async fn entry_at(&self, path: &EntryPath) -> IndexResult<Option<EntryLocation>>;
 
     /// Every current Entry under a prefix, ordered by Entry Path bytes.
@@ -156,8 +159,8 @@ pub trait Index: Send + Sync {
     /// Distinct because Packs do not partition the Library's path order: those
     /// built by different `freeze` invocations may overlap and interleave, so
     /// one Container can hold several Entries under a prefix and one prefix can
-    /// span many Containers (spec: PK-8). This is the set to fetch to
-    /// materialize that subtree, the fetch unit being a whole Container
+    /// span many Containers (spec: PK-8). This is the set to read from to
+    /// materialize that subtree, a parcel at a time or every parcel at once
     /// (spec: PK-16).
     async fn containers_under(
         &self,
@@ -280,4 +283,23 @@ pub trait Index: Send + Sync {
     /// [`Spooling`](crate::device_state::SpoolState::Spooling) can name a
     /// file that is half-written or that was never created at all (spec: OC-2).
     async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>>;
+
+    /// Records that this device holds one parcel of one Container, replacing
+    /// any row already held for that parcel (spec: PK-21).
+    ///
+    /// Written before the parcel's file is created, the order a pending row
+    /// keeps with its spool (spec: OC-2): the record has to cover the
+    /// ciphertext from the moment there can be any, and a row whose file turns
+    /// out short or missing is a parcel the fetch treats as not held.
+    async fn hold_parcel(&self, parcel: HeldParcel) -> IndexResult<()>;
+
+    /// Every parcel this device holds, ordered by Container ID and then by
+    /// parcel index (spec: PK-21).
+    async fn held_parcels(&self) -> IndexResult<Vec<HeldParcel>>;
+
+    /// Forgets the row of one held parcel, the parcel having been let go.
+    ///
+    /// Forgetting one that is not there succeeds, so an interrupted letting go
+    /// is simply run again (spec: OC-8, PK-21).
+    async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()>;
 }

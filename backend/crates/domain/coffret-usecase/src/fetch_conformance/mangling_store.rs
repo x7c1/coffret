@@ -46,11 +46,11 @@ impl<'a> ManglingStore<'a> {
 
     /// The same, damaging only reads that start at or beyond `from`.
     ///
-    /// A partial fetch reads an object in three pieces — its header, its meta
-    /// section, and the chunks covering one Entry — and the case about a damaged
-    /// chunk is about the third. Damaging the first two as well would have the
-    /// run refuse the object before it had aimed a read at a chunk at all, which
-    /// is a different refusal (spec: FM-2, FM-8).
+    /// A partial fetch reads an object in pieces — its header, its meta
+    /// section, and the parcels one Entry overlaps — and the case about a
+    /// damaged chunk is about the last of them. Damaging the first two as well
+    /// would have the run refuse the object before it had aimed a read at a
+    /// chunk at all, which is a different refusal (spec: FM-2, FM-8).
     pub(super) fn beyond(inner: &'a dyn ObjectStore, mangled: ObjectRef, from: u64) -> Self {
         Self {
             inner,

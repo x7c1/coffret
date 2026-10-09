@@ -64,13 +64,13 @@ mod tests {
     #[test]
     fn a_worker_leaving_the_ordinary_way_leaves_the_next_run_alone() {
         let fills = Fills::new();
-        assert!(fills.arm(albums(), None));
+        assert!(fills.arm(albums(), None, Vec::new()));
         let leaving = Leaving(&fills);
         assert_eq!(fills.take_next(), Some(albums()));
         assert_eq!(fills.take_next(), None);
 
         assert!(
-            fills.arm(photos(), None),
+            fills.arm(photos(), None, Vec::new()),
             "nothing is running, so the arming starts a worker of its own",
         );
         drop(leaving);
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn a_worker_that_panics_is_put_back() {
         let fills = Fills::new();
-        assert!(fills.arm(albums(), None));
+        assert!(fills.arm(albums(), None, Vec::new()));
 
         let unwound = catch_unwind(AssertUnwindSafe(|| {
             let _leaving = Leaving(&fills);
@@ -112,7 +112,7 @@ mod tests {
             FillStatus::Stopped(Reported::unfinished()),
         );
         assert!(
-            fills.arm(albums(), None),
+            fills.arm(albums(), None, Vec::new()),
             "and the next arming starts a worker again",
         );
     }

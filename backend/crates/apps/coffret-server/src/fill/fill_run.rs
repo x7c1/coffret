@@ -1,4 +1,4 @@
-use coffret_device::DegradedKeyring;
+use coffret_device::{DegradedKeyring, UnheldParcel};
 
 use crate::finding::Finding;
 use crate::folder::Folder;
@@ -49,6 +49,9 @@ pub struct FillRun {
     /// line per Entry would be one fact said as many times as the folder has
     /// files. Where the reads disagree, `graver` says which one is kept.
     pub degraded: Option<DegradedKeyring>,
+    /// The kept parcels the run's reads — and the reader's fetch that armed it —
+    /// found not held, each read again from Storage (spec: PK-21).
+    pub unheld: Vec<UnheldParcel>,
 }
 
 impl FillRun {
@@ -62,6 +65,7 @@ impl FillRun {
             done: 0,
             declined: Vec::new(),
             degraded: None,
+            unheld: Vec::new(),
         }
     }
 
@@ -70,16 +74,24 @@ impl FillRun {
         self.degraded = Some(graver(self.degraded, found));
     }
 
-    /// What the run found and did not act on, as the browser is told it.
+    /// Takes in the kept parcels one read found not held.
+    pub(super) fn read_unheld(&mut self, unheld: Vec<UnheldParcel>) {
+        self.unheld.extend(unheld);
+    }
+
+    /// What the run found and did not act on, as the browser is told it: the
+    /// committed Keyring first, then each kept parcel found not held.
     ///
     /// None of it stops the run or asks anything of whoever reads it: the
-    /// files still open (spec: RV-2), and the next run that writes to the
-    /// Library examines the set and repairs what it finds lost before it
-    /// commits (spec: KL-13, KL-16).
+    /// files still open (spec: RV-2), the next run that writes to the Library
+    /// examines the set and repairs what it finds lost before it commits
+    /// (spec: KL-13, KL-16), and a parcel not held was read again on the spot
+    /// (spec: PK-21).
     pub fn findings(&self) -> Vec<Finding> {
         self.degraded
             .iter()
             .map(coffret_device::Finding::from)
+            .chain(self.unheld.iter().map(coffret_device::Finding::from))
             .filter_map(|found| Finding::of(&found))
             .collect()
     }

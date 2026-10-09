@@ -145,6 +145,9 @@ pub struct Served {
     /// The app's end of the unlock prompt, where the server was started the
     /// way the desktop app starts one, and `None` for the command line's.
     prompted: Option<std::sync::Mutex<mpsc::Receiver<()>>>,
+    /// How long a parcel the served device reads is, so an unlock reopens the
+    /// Library reading the same ones.
+    parcel_len: coffret_format::ParcelLen,
 }
 
 impl Served {
@@ -205,6 +208,27 @@ impl Served {
         .await
     }
 
+    /// A server over a device that maps the whole Library and reads parcels
+    /// `chunks` chunks long (spec: PK-19).
+    ///
+    /// What a case gets from more than one chunk per parcel is a page that
+    /// lies inside a parcel with chunks after it — the page is published once
+    /// its own chunk has arrived, while the parcel is still on its way.
+    pub async fn reading_parcels_of(chunks: u64) -> Self {
+        let len = std::num::NonZeroU64::new(SERVED_PARCEL_LEN.get() * chunks)
+            .expect("a parcel is at least one chunk long");
+        Self::mapping_with(
+            None,
+            false,
+            Allowance::generous(),
+            false,
+            coffret_format::ParcelLen::new(len),
+        )
+        .await
+        .started()
+        .await
+    }
+
     /// A server over a device that has joined the Library and never caught up.
     ///
     /// Its catalog stands at nothing, which is the state a device is in the
@@ -221,6 +245,16 @@ impl Served {
         packed: bool,
         allowance: Allowance,
         prompting: bool,
+    ) -> Self {
+        Self::mapping_with(prefix, packed, allowance, prompting, SERVED_PARCEL_LEN).await
+    }
+
+    async fn mapping_with(
+        prefix: Option<EntryPath>,
+        packed: bool,
+        allowance: Allowance,
+        prompting: bool,
+        parcel_len: coffret_format::ParcelLen,
     ) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
@@ -302,7 +336,14 @@ impl Served {
         // server.
         let catalog = Arc::new(RefusingIndex::around(index));
 
-        let library = opened(&reads, &catalog, &local_fs, spools.path(), SERVED_LIBRARY);
+        let library = opened(
+            &reads,
+            &catalog,
+            &local_fs,
+            spools.path(),
+            SERVED_LIBRARY,
+            parcel_len,
+        );
 
         let consent = Arc::new(ScriptedConsent::default());
         let state = ServerState::new("served".to_owned(), library)
@@ -334,6 +375,7 @@ impl Served {
             batches: AtomicUsize::new(0),
             consent,
             prompted,
+            parcel_len,
         }
     }
 
@@ -367,6 +409,7 @@ impl Served {
             &self.local_fs,
             self.spools.path(),
             library_id,
+            self.parcel_len,
         ))
     }
 
@@ -473,6 +516,18 @@ impl Served {
     }
 }
 
+/// The parcel length the served device reads with: one chunk at the size the
+/// encoder writes (spec: FM-6, PK-19).
+///
+/// The register's 32 MiB would make every Pack a case can afford one parcel;
+/// at one chunk per parcel, a Pack of a few mebibytes is a few parcels, and a
+/// case about where a fill stops between them has somewhere to stop.
+pub const SERVED_PARCEL_LEN: coffret_format::ParcelLen =
+    coffret_format::ParcelLen::new(match std::num::NonZeroU64::new(1024 * 1024) {
+        Some(len) => len,
+        None => panic!("one mebibyte is not zero"),
+    });
+
 /// The Library the served device opens, by the identity it was created with.
 const SERVED_LIBRARY: [u8; LibraryId::BYTE_LEN] = [0x11; LibraryId::BYTE_LEN];
 
@@ -484,6 +539,7 @@ fn opened(
     local_fs: &Arc<UnixFs>,
     spools: &Path,
     library_id: [u8; LibraryId::BYTE_LEN],
+    parcel_len: coffret_format::ParcelLen,
 ) -> OpenLibrary {
     OpenLibrary {
         store: Arc::clone(reads) as Arc<dyn ObjectStore>,
@@ -491,6 +547,8 @@ fn opened(
         local_fs: Arc::clone(local_fs),
         keys: keys(),
         spool: spools.join("served"),
+        parcel_dir: spools.join("served-parcels"),
+        parcel_len,
         library_id: LibraryId::from_bytes(library_id),
         epoch: MasterKeyEpoch::FIRST,
         provider: "s3",

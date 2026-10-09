@@ -12,17 +12,19 @@
 //! (spec: FM-2, FM-6), the meta section gives the entry table and the padding
 //! tail (spec: FM-4, FM-9), and between them chunk `k`'s message sits at
 //! `Header::LEN + meta_len + k * (chunk_size + tag)` and authenticates on its own
-//! (spec: FM-5, FM-7, FM-8). So the three steps here are: read the front
-//! ([`ContainerOutline`]), turn an Entry's extent into the chunks that cover it
+//! (spec: FM-5, FM-7, FM-8). So the steps here are: read the front
+//! ([`ContainerOutline`]), divide the chunk sequence into the parcels every
+//! read asks for whole and name the ones an Entry's extent overlaps
+//! ([`Parcels`], spec: PK-16, PK-19), each of which is a run of chunks
 //! ([`ChunkRun`]), and open exactly those ([`ChunkRunReader`]).
 //!
 //! Rounding an Entry out to chunk boundaries is not a convenience — a chunk is
 //! the smallest thing that authenticates, and coffret never releases plaintext
-//! it has not authenticated (spec: FM-1). What a range read cannot do is check
-//! the object's own hash, which is a claim about bytes it deliberately did not
-//! ask for; per-chunk authentication is the integrity gate for the bytes that do
+//! it has not authenticated (spec: FM-1). What a read of some parcels cannot do
+//! is check the object's own hash, which is a claim about bytes it did not ask
+//! for; per-chunk authentication is the integrity gate for the bytes that do
 //! arrive, and whatever the caller's catalog says about the Entry is the gate
-//! after that (spec: PK-16).
+//! after that (spec: PK-22).
 
 mod chunk_layout;
 
@@ -35,6 +37,11 @@ pub use chunk_run_reader::ChunkRunReader;
 mod container_outline;
 pub use container_outline::ContainerOutline;
 
+mod parcels;
+pub use parcels::Parcels;
+
+#[cfg(test)]
+mod parcel_tests;
 #[cfg(test)]
 mod rejection_tests;
 #[cfg(test)]

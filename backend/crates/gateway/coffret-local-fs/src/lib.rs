@@ -140,6 +140,10 @@ mod unix_destinations;
 
 mod unix_mapped_roots;
 
+// The parcels a fetch keeps beside the spool (spec: PK-21), written through the
+// spool's own writer.
+mod unix_parcel_files;
+
 // And the handles the three hand out: the reader a mapped file is read through,
 // the writer a spool file is written through, and — beside the descent, in
 // `unix_destinations` — the scratch a placement is written to and the flushed

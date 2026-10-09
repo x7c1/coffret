@@ -229,6 +229,89 @@ async fn a_fill_under_way_is_superseded_between_one_entry_and_the_next() {
     assert!(served.holds("books/page-001.png"));
 }
 
+// PK-21: a fill steps in parcels, and a folder armed under it is noticed on a
+// parcel boundary and never inside a parcel. The first page lies in parcel 0
+// and the second runs on into parcel 1, so after the first page the fill holds
+// parcel 0 for the second; Storage holds the next read after that one parcel,
+// the second folder is armed while it is held, and the fill's fetch of the
+// second page stops before it asks for parcel 1. What it read stays held, and
+// the run says what it placed.
+#[tokio::test]
+async fn a_fill_superseded_between_parcels_stops_there_and_keeps_what_it_read() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    let pages: [(&str, usize); 4] = [
+        ("scans/vol/000.jpg", 300 * 1024),
+        ("scans/vol/001.jpg", 1536 * 1024),
+        ("scans/vol/002.jpg", 400 * 1024),
+        ("scans/vol/003.jpg", 400 * 1024),
+    ];
+    for (index, (path, len)) in pages.iter().enumerate() {
+        served
+            .commit_elsewhere(path, &vec![0x40 + index as u8; *len])
+            .await;
+    }
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+    served.forget_reads();
+
+    served.hold_storage_after_parcels(1);
+    served.arm_fill("scans/vol");
+    // No sleep and no guess: the held read is counted as it arrives.
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+    served.arm_fill("albums");
+    served.release_storage();
+    served.fill_idle().await;
+
+    let outcomes: Vec<(String, String, String, String)> = logs
+        .at(Level::INFO)
+        .into_iter()
+        .filter(|event| event.message() == "a folder was brought over")
+        .map(|event| {
+            (
+                event.field("outcome"),
+                event.field("path_len"),
+                event.field("done"),
+                event.field("total"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        outcomes[0],
+        (
+            "superseded".to_owned(),
+            "scans/vol".len().to_string(),
+            "1".to_owned(),
+            "4".to_owned(),
+        ),
+        "the run that was left says so, and counts the one page it placed",
+    );
+    assert_eq!(outcomes[1].0, "done");
+    assert!(
+        logs.at(Level::INFO).into_iter().any(|event| {
+            event.message() == "a partial fetch finished" && event.field("verdict") == "cancelled"
+        }),
+        "the second page's own fetch was the one that stopped, between its parcels",
+    );
+
+    assert!(served.holds("scans/vol/000.jpg"));
+    assert!(!served.holds("scans/vol/001.jpg"));
+    assert_eq!(
+        served.parcel_reads(),
+        1,
+        "one parcel was read, whole, and the one after it never asked for",
+    );
+    let held = served.held_parcels().await;
+    assert_eq!(
+        held.iter().map(|parcel| parcel.index).collect::<Vec<_>>(),
+        [0],
+        "the parcel read before the fill was left is still held",
+    );
+    assert!(held[0].path.is_file(), "and its file is on the device");
+}
+
 // And the other half of that rule: a folder asked for by name waits its turn
 // rather than taking the running one's place. Both are brought over, in the
 // order they were asked for.

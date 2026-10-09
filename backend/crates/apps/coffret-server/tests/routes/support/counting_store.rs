@@ -13,8 +13,8 @@ use coffret_usecase::{
 /// One case is about a cost rather than an outcome: two browsers asking for one
 /// Entry at the same moment must fetch it once. Nothing a response carries
 /// proves that — both requests answer with the same bytes either way — so the
-/// case counts the reads instead, and a range read is what placing an Entry out
-/// of a Container costs (spec: PK-16).
+/// case counts the reads instead: the front of an object and the parcels an
+/// Entry overlaps are what placing it out of a Container costs (spec: PK-16).
 pub struct CountingStore {
     inner: Arc<dyn ObjectStore>,
     reads: Mutex<Vec<Option<Range<u64>>>>,
@@ -40,6 +40,16 @@ impl CountingStore {
     /// How many reads asked for a range of an object rather than all of it.
     pub fn ranged_reads(&self) -> usize {
         self.locked().iter().filter(|range| range.is_some()).count()
+    }
+
+    /// How many reads asked for a range longer than an object's front, which
+    /// is what a parcel read is (spec: PK-16, PK-19).
+    pub fn parcel_reads(&self) -> usize {
+        self.locked()
+            .iter()
+            .flatten()
+            .filter(|range| range.end - range.start > 64 * 1024)
+            .count()
     }
 
     fn locked(&self) -> std::sync::MutexGuard<'_, Vec<Option<Range<u64>>>> {

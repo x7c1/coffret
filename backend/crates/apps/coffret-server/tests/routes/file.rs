@@ -81,7 +81,7 @@ async fn a_placed_file_that_is_gone_is_declined_rather_than_fetched_again() {
 // background fill and a click landing on one Entry: every one of them answers
 // with the Entry, and the Container is read once (spec: PK-16).
 //
-// What one fetch costs is measured rather than assumed — a range read of one
+// What one fetch costs is measured rather than assumed — a parcel read of one
 // Entry is several reads of one object, and how many is the fetch's business
 // and not this case's. So the case places one Entry on its own first, in a
 // folder holding nothing else for the fill to go on with, and everything after
@@ -404,4 +404,317 @@ async fn a_query_path_with_a_shape_ep_2_excludes_is_a_bad_path() {
         message.contains("`.` or `..` component"),
         "the refusal names the component that made it one: {message}"
     );
+}
+
+/// Waits for `strokes` partial fetches to have finished, which is the one
+/// thing a reader's fetch does after its answer has gone: the event is written
+/// once the whole stroke is over — the parcel read to its end and kept, and
+/// the parcels nothing waits for let go (spec: PK-21).
+async fn strokes_finished(logs: &CapturedLogs, strokes: usize) {
+    eventually(&format!("{strokes} partial fetches finish"), || {
+        finished_strokes(logs) >= strokes
+    })
+    .await;
+}
+
+/// How many partial fetches have finished so far.
+fn finished_strokes(logs: &CapturedLogs) -> usize {
+    logs.at(Level::INFO)
+        .into_iter()
+        .filter(|event| event.message() == "a partial fetch finished")
+        .count()
+}
+
+/// Yields until `ready` holds, failing the case with `what` after thirty
+/// seconds rather than hanging it.
+async fn eventually(what: &str, mut ready: impl FnMut() -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !ready() {
+        assert!(std::time::Instant::now() < deadline, "{what}");
+        tokio::task::yield_now().await;
+    }
+}
+
+/// The one finding a kept parcel read again leaves in the work answer.
+fn unheld_finding() -> serde_json::Value {
+    serde_json::json!({
+        "path": null,
+        "message": "a part of a Container kept on this device was gone or damaged and was \
+                    read from Storage again",
+        "reason": "parcel_unheld",
+    })
+}
+
+// PK-16: a page is released as soon as the chunks covering it have arrived.
+// The served device reads parcels of two chunks, and the first page lies in
+// the first chunk of parcel 0 while the second page runs on from there into
+// parcel 1. Storage lets a chunk and a half of parcel 0 through and holds the
+// rest — and the file route has answered with the first page all the same,
+// while the parcel it came out of is still arriving.
+//
+// The rest of that read goes on behind the answer and keeps the parcel whole
+// (spec: PK-21): once Storage lets it go, the stroke finishes, and the second
+// page, asked for next, reads parcel 1 from Storage and parcel 0 from this
+// device.
+#[tokio::test]
+async fn a_page_is_answered_before_the_parcel_it_came_out_of_has_arrived() {
+    let served = Served::reading_parcels_of(2).await;
+    let logs = CapturedLogs::capture();
+    let first = vec![0x41; 300 * 1024];
+    let second = vec![0x42; 2048 * 1024];
+    served.commit_elsewhere("scans/vol1/000.jpg", &first).await;
+    served.commit_elsewhere("scans/vol2/000.jpg", &second).await;
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+    served.forget_reads();
+
+    served.hold_storage_within_parcel(1536 * 1024);
+    let answer = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        served.get("/api/file?path=scans/vol1/000.jpg"),
+    )
+    .await
+    .expect("the page is answered while the rest of its parcel is held");
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, first);
+    assert_eq!(
+        served.held_reads(),
+        1,
+        "the parcel's read is the one being held"
+    );
+    assert_eq!(
+        finished_strokes(&logs),
+        0,
+        "and the stroke it belongs to has not finished: the parcel is still arriving",
+    );
+
+    served.release_storage();
+    strokes_finished(&logs, 1).await;
+    let held = served.held_parcels().await;
+    assert_eq!(
+        held.iter().map(|parcel| parcel.index).collect::<Vec<_>>(),
+        [0],
+        "the parcel, read to its end behind the answer, is held for the second page",
+    );
+    assert!(held[0].path.is_file(), "and its file is on the device");
+
+    served.forget_reads();
+    let answer = served.get("/api/file?path=scans/vol2/000.jpg").await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, second);
+    assert_eq!(
+        served.parcel_reads(),
+        1,
+        "only parcel 1 is asked of Storage: parcel 0 is opened from this device",
+    );
+}
+
+// PK-21: a kept parcel whose file no longer authenticates is not held. The
+// fetch that meets it reads it again from Storage, and says so — and the one
+// place a person who only opens files hears it is the line of the fill that
+// opening the file armed.
+#[tokio::test]
+async fn a_kept_parcel_that_was_damaged_is_said_in_the_work_answer() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    let second = vec![0x42; 1536 * 1024];
+    served
+        .commit_elsewhere("scans/vol1/000.jpg", &[0x41; 300 * 1024])
+        .await;
+    served.commit_elsewhere("scans/vol2/000.jpg", &second).await;
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    // The first page leaves parcel 0 held for the second, which runs on into
+    // parcel 1.
+    assert_eq!(
+        served
+            .get("/api/file?path=scans/vol1/000.jpg")
+            .await
+            .status(),
+        200
+    );
+    strokes_finished(&logs, 1).await;
+    served.fill_idle().await;
+    let held = served.held_parcels().await;
+    assert_eq!(held.len(), 1, "parcel 0 is held: {held:?}");
+    std::fs::write(&held[0].path, b"not the parcel any more")
+        .expect("the kept parcel's file can be overwritten");
+
+    let answer = served.get("/api/file?path=scans/vol2/000.jpg").await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, second, "the page opens all the same");
+    strokes_finished(&logs, 2).await;
+    served.fill_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["fill"]["folder"], "scans/vol2");
+    assert_eq!(
+        work["fill"]["findings"],
+        serde_json::json!([unheld_finding()]),
+        "said once, with neither the Container nor a path on this device in it",
+    );
+}
+
+/// The second page of `scans/vol1`, which comes along with the first.
+const SECOND_PAGE: &[u8] = &[0x42; 1024 * 1024];
+
+/// Asks for the first page of `scans/vol1` with the kept parcel the second
+/// page runs on into damaged, and returns once the page is answered, the fill
+/// it armed has listed the second page as still to come, and Storage is
+/// holding the read of that parcel again — the rest of the page's stroke,
+/// going on behind the answer (spec: PK-16, PK-21).
+///
+/// Parcels are one chunk. The first page lies in parcel 0, the second runs on
+/// from it into parcel 1, and a page of another folder runs on from parcel 1
+/// into parcel 2. Opening that page first leaves parcel 1 held for the second
+/// page, and its file is then damaged. Opening the first page reads parcel 0
+/// from Storage and is answered from it; the second page comes with it, out of
+/// parcel 1 — which is met only after the answer, does not authenticate, and is
+/// asked of Storage again.
+async fn answered_ahead_of_a_damaged_parcel(served: &Served, logs: &CapturedLogs) {
+    let first = vec![0x41; 300 * 1024];
+    served.commit_elsewhere("scans/vol1/000.jpg", &first).await;
+    served
+        .commit_elsewhere("scans/vol1/001.jpg", SECOND_PAGE)
+        .await;
+    served
+        .commit_elsewhere("scans/vol2/000.jpg", &[0x43; 1024 * 1024])
+        .await;
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    assert_eq!(
+        served
+            .get("/api/file?path=scans/vol2/000.jpg")
+            .await
+            .status(),
+        200
+    );
+    strokes_finished(logs, 1).await;
+    served.fill_idle().await;
+    let held = served.held_parcels().await;
+    assert_eq!(
+        held.iter().map(|parcel| parcel.index).collect::<Vec<_>>(),
+        [1],
+        "parcel 1 is held for the second page",
+    );
+    std::fs::write(&held[0].path, b"not the parcel any more")
+        .expect("the kept parcel's file can be overwritten");
+
+    served.hold_storage_after_parcels(1);
+    let answer = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        served.get("/api/file?path=scans/vol1/000.jpg"),
+    )
+    .await
+    .expect("the page is answered before the damaged parcel is read again");
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, first);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let (_, work) = body_of(served.get("/api/work").await).await;
+        if work["fill"]["folder"] == "scans/vol1" && work["fill"]["total"] == 1 {
+            assert_eq!(
+                work["fill"]["findings"],
+                serde_json::json!([]),
+                "nothing was found not held by the time the page was answered",
+            );
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the fill lists the second page as still to come: {work}",
+        );
+        tokio::task::yield_now().await;
+    }
+    eventually("the parcel's second read is held", || {
+        served.held_reads() > 0
+    })
+    .await;
+}
+
+// PK-21: a kept parcel found not held after the reader was answered is said in
+// the work answer too. The fill the answer armed waits for the rest of that
+// stroke — its Entry is in the same Container — and is the run that hears of
+// the parcel, whichever of the two finishes first.
+#[tokio::test]
+async fn a_damaged_parcel_met_after_the_answer_is_said_in_the_work_answer() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    answered_ahead_of_a_damaged_parcel(&served, &logs).await;
+
+    served.release_storage();
+    strokes_finished(&logs, 2).await;
+    served.fill_idle().await;
+    assert!(
+        served.holds("scans/vol1/001.jpg"),
+        "the second page came along"
+    );
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["fill"]["folder"], "scans/vol1");
+    assert_eq!(work["fill"]["done"], 1);
+    assert_eq!(
+        work["fill"]["findings"],
+        serde_json::json!([unheld_finding()]),
+        "said once, by the fill the answer armed",
+    );
+}
+
+// The rest of a stroke that fails after its reader was answered is logged, and
+// leaves nothing behind it: the parcel it could not read again is not held,
+// the Entry that needed it is not placed, and the turns the stroke kept are
+// given back — so the next request for that Entry runs, and reads the parcel
+// whole (spec: PK-21).
+#[tokio::test]
+async fn the_rest_of_a_stroke_that_fails_after_the_answer_is_logged_and_let_go() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    answered_ahead_of_a_damaged_parcel(&served, &logs).await;
+
+    served.halt_storage();
+    served.release_storage();
+    let failed = || {
+        logs.at(Level::WARN).into_iter().find(|event| {
+            event
+                .message()
+                .starts_with("the rest of a parcel read failed")
+        })
+    };
+    eventually("the failure behind the answer is logged", || {
+        failed().is_some()
+    })
+    .await;
+    assert_eq!(
+        failed().expect("it was logged").field("operation"),
+        "fetch_entry"
+    );
+    served.fill_idle().await;
+    assert!(
+        !served.holds("scans/vol1/001.jpg"),
+        "the second page needed the parcel that did not arrive",
+    );
+    assert_eq!(
+        served
+            .held_parcels()
+            .await
+            .iter()
+            .map(|parcel| parcel.index)
+            .collect::<Vec<_>>(),
+        [0],
+        "the damaged parcel is not held, and the one read whole still is",
+    );
+
+    served.resume_storage();
+    let answer = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        served.get("/api/file?path=scans/vol1/001.jpg"),
+    )
+    .await
+    .expect("the turns the failed stroke kept were given back");
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, SECOND_PAGE);
+    logs.assert_free_of(&["scans", "vol1"]);
 }

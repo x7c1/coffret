@@ -49,6 +49,8 @@ const SERVER_KEY_FILE: &str = "server-key";
 const SERVER_LOCK_FILE: &str = "server.lock";
 /// The directory encrypted Containers wait in until they are uploaded.
 const SPOOL_DIRECTORY: &str = "spool";
+/// The directory the parcels a fetch read are kept in (spec: PK-21).
+const PARCEL_DIRECTORY: &str = "parcels";
 
 /// One Library's directory on this device, and the seven things in it.
 ///
@@ -204,6 +206,17 @@ impl LibraryDir {
     /// Where encrypted Containers wait until they are uploaded.
     pub fn spool_dir(&self) -> PathBuf {
         self.path.join(SPOOL_DIRECTORY)
+    }
+
+    /// Where the parcels a fetch read are kept until they have served their
+    /// purpose (spec: PK-21).
+    ///
+    /// Beside the spool and for the same reason: it is ciphertext this device
+    /// wrote and will read back, and it belongs to this Library and to nothing
+    /// in the folders the Library is mapped onto. Not made with the Library —
+    /// the first parcel a fetch keeps makes it.
+    pub fn parcel_dir(&self) -> PathBuf {
+        self.path.join(PARCEL_DIRECTORY)
     }
 
     /// Whether a whole Library of this name is on this device.
@@ -431,6 +444,10 @@ mod tests {
         assert_eq!(
             dir.spool_dir(),
             Path::new("/state/coffret/libraries/alpha/spool")
+        );
+        assert_eq!(
+            dir.parcel_dir(),
+            Path::new("/state/coffret/libraries/alpha/parcels")
         );
     }
 

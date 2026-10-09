@@ -15,8 +15,9 @@ export interface DerivedFrom {
  * What a Container's entry table records about one Entry (spec: FM-9).
  *
  * `offset` and `size` place the Entry against the Container's plaintext stream,
- * which is what lets a reader range-read a single Entry out of a Pack as a step
- * in fetching its Container — the fetch unit stays the whole Container.
+ * which is what lets a reader take a single Entry out of a Pack by reading only
+ * the parcels it overlaps (spec: PK-16, PK-19) — the fetch unit is the parcel,
+ * never the Entry.
  *
  * These are the values as of the moment the Container was written, which is why
  * the meta section spells the ones a rename could move `original_path`,

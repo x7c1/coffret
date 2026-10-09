@@ -7,9 +7,13 @@ use crate::index_conformance::fixtures::{
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 // The device-local half of the catalog, a module to each kind of row it keeps:
-// what this device materialized, where it maps the Library to, and the spools
-// it has announced. The cases that hold all three at once against a restore or
-// a replay stay here, beside the seed they share with the refusal cases.
+// what this device materialized, where it maps the Library to, the spools it
+// has announced, and the parcels it holds. The cases that hold all four at once
+// against a restore or a replay stay here, beside the seed they share with the
+// refusal cases.
+mod held_parcels;
+pub use held_parcels::a_held_parcel_is_recorded_until_it_is_let_go;
+
 mod local_entries;
 pub use local_entries::{
     a_file_left_behind_by_the_library_is_reported,
@@ -55,6 +59,20 @@ pub(super) async fn seed_device_state(index: &dyn Index) {
         .record_pending_row(pending(7, "batch-alpha"))
         .await
         .expect("recording a spool must succeed");
+    index
+        .hold_parcel(held_parcel())
+        .await
+        .expect("recording a held parcel must succeed");
+}
+
+/// The one held parcel the seed records (spec: PK-21).
+fn held_parcel() -> crate::device_state::HeldParcel {
+    crate::device_state::HeldParcel {
+        container_id: crate::index_conformance::fixtures::container_id(7),
+        index: 1,
+        plaintext: 1024..2048,
+        path: std::path::PathBuf::from("/state/parcels/7-1"),
+    }
 }
 
 /// Asserts that seeded device state is exactly as it was left.
@@ -82,6 +100,13 @@ pub(super) async fn assert_device_state_intact(index: &dyn Index) {
             .await
             .expect("reading the spools must succeed"),
         [pending(7, "batch-alpha")]
+    );
+    assert_eq!(
+        index
+            .held_parcels()
+            .await
+            .expect("reading the held parcels must succeed"),
+        [held_parcel()]
     );
 }
 

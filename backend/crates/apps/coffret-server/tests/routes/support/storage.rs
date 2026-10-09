@@ -51,6 +51,46 @@ impl Served {
         self.storage.hold();
     }
 
+    /// Lets `parcels` parcel reads through, and holds the next ranged read and
+    /// every read after it until [`release_storage`](Self::release_storage).
+    ///
+    /// What a case uses this for is a fetch it knows is between two parcels:
+    /// the next ranged read after a parcel is the front of the next Entry's
+    /// Container or the next parcel itself, and either is a boundary
+    /// (spec: PK-21).
+    pub fn hold_storage_after_parcels(&self, parcels: usize) {
+        self.storage.hold_after_parcels(parcels);
+    }
+
+    /// How many parcels were read since the fixture was built (spec: PK-16).
+    pub fn parcel_reads(&self) -> usize {
+        self.reads.parcel_reads()
+    }
+
+    /// Forgets what was read so far, so a case counts its own reads from here.
+    pub fn forget_reads(&self) {
+        self.reads.forget();
+    }
+
+    /// The parcels the served device holds (spec: PK-21).
+    pub async fn held_parcels(&self) -> Vec<coffret_usecase::device_state::HeldParcel> {
+        self.catalog
+            .held_parcels()
+            .await
+            .expect("asking the served catalog for its held parcels must succeed")
+    }
+
+    /// Lets the first `after` bytes of the next parcel read through, and holds
+    /// the rest of that parcel until [`release_storage`](Self::release_storage).
+    ///
+    /// What a case uses this for is a fetch it knows is inside a parcel: the
+    /// chunks before `after` have arrived and the ones after it have not, so a
+    /// page lying wholly in the first can be published and the parcel cannot be
+    /// kept whole (spec: PK-16, PK-21).
+    pub fn hold_storage_within_parcel(&self, after: u64) {
+        self.storage.hold_within_parcel(after);
+    }
+
     /// Lets the held read go.
     pub fn release_storage(&self) {
         self.storage.release();

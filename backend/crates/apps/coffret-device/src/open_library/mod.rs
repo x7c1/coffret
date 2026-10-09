@@ -13,6 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use coffret_format::ParcelLen;
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
 use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
@@ -50,6 +51,15 @@ pub struct OpenLibrary {
     pub keys: LibraryKeys,
     /// Where encrypted Containers wait until they are uploaded.
     pub spool: PathBuf,
+    /// Where the parcels a fetch read are kept (spec: PK-21).
+    pub parcel_dir: PathBuf,
+    /// How long a parcel is: the register's value, provisionally 32 MiB
+    /// (spec: PK-19).
+    ///
+    /// A field rather than the constant read where it is used, so that a test
+    /// driving a whole server can have a Pack of a few megabytes be several
+    /// parcels long.
+    pub parcel_len: ParcelLen,
     /// The Library this is (spec: FM-18).
     pub library_id: LibraryId,
     /// The Master Key epoch [`keys`](Self::keys) belongs to.

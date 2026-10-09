@@ -136,7 +136,7 @@ mod container_key;
 pub use container_key::generate_container_key;
 
 mod container_reader;
-pub use container_reader::{ChunkRun, ChunkRunReader, ContainerOutline};
+pub use container_reader::{ChunkRun, ChunkRunReader, ContainerOutline, Parcels};
 
 mod container_writer;
 pub use container_writer::ContainerWriter;
@@ -225,6 +225,9 @@ mod nonce;
 
 mod padme;
 pub use padme::padded_len;
+
+mod parcel_len;
+pub use parcel_len::{ParcelLen, PARCEL_LEN};
 
 mod purpose;
 pub use purpose::Purpose;

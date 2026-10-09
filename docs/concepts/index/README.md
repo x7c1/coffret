@@ -9,17 +9,28 @@ files without asking [Storage](../storage/) for every lookup.
 
 ## Mental Model
 
-The Index keeps two kinds of information with different recovery properties:
+The Index keeps three kinds of information with different recovery properties:
 
 | Part | What it records | After loss |
 | --- | --- | --- |
 | Cached Catalog | Current Containers, Entries, and the checkpoint reached | Reconstruct from intact control state |
 | Device-local records | Mappings, materializations, and pending work | Restore the Index from a backup of this device, or re-establish the records on this device |
+| Held parcels | Which parcels of which Containers this device keeps the ciphertext of | Nothing to recover: the parcels are read from Storage again when next wanted |
 
 A new device restores the Catalog and chooses its own mappings. Rebuilding
 only the cache preserves the existing device-local records. Losing the whole
 Index loses those local records too; Storage contains no copy of them
 (spec: CK-7, EP-9, EP-10, OC-2).
+
+A **held parcel** is a parcel of a Container's chunk sequence this device read
+and keeps on its own disk, beside the spool, so that reading a page a second
+time asks Storage for nothing. It is ciphertext kept for reading again rather
+than a record of anything: losing every held parcel costs only reads the
+provider can observe, never correctness. The Index records which parcels are
+held, since nothing else names the files; a parcel is let go once every Entry
+it covers that this device maps is present or witnessed absent, or by the
+device's next fetch, catch-up, or deletion after its Container has left the
+current set (spec: PK-19, PK-21).
 
 For a current Entry, **present** means this device recorded materializing it
 and has not witnessed its file go. **Remote** means every other current Entry:
@@ -73,6 +84,9 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - forget (a materialization record whose Entry left the Library, once its file
   has gone to the desktop's trash or from the disk)
 - complete (an interrupted commit's local records from its pending row)
+- hold (a parcel this device read, by recording it beside its ciphertext)
+- let go (of a held parcel whose mapped Entries are all present or witnessed
+  absent, or whose Container left the current set)
 - dispose (of a proven abandoned spool and uploaded object)
 - retain (pending work whose commit outcome is unknown)
 

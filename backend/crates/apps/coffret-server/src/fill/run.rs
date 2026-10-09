@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::time::Instant;
 
 use coffret_device::{EntryFetch, EntryPath, EntryState, Error, FetchError};
@@ -13,22 +14,25 @@ use super::{Declined, FillRun, FillStatus};
 /// Brings the rest of one folder over.
 ///
 /// The listing says which of the folder's files this device does not have
-/// (spec: EP-10), and each of them goes through the very same per-Entry
-/// single-flight fetch the routes use. That is the point of sharing that gate: a
-/// reader's prefetch, a second click and this can all ask for one Entry, and it
-/// is placed once rather than once per caller: one scratch inside the
-/// mapped folder, and one rename into place (spec: EP-11).
+/// (spec: EP-10), and the fill takes its steps in parcels rather than in
+/// Entries: for the next of them still not on the device it reads the parcels
+/// that Entry needs, through the very same per-Entry single-flight fetch the
+/// routes use, and every other Entry those parcels wholly cover is placed out
+/// of them on the way, with no read of its own (spec: PK-16, PK-21). That is
+/// the point of sharing that gate: a reader's prefetch, a second click and this
+/// can all ask for one Entry, and it is placed once rather than once per
+/// caller — one scratch inside the mapped folder, and one rename into place
+/// (spec: EP-11) — and a parcel is read once whoever asked for it.
 ///
-/// One Entry at a time, by range read, exactly as a click on it would be. A
-/// folder is often one Pack's worth of Entries, so bringing them over one at a
-/// time reads the front of one object once per Entry and catches the catalog up
-/// once per Entry too; coalescing the adjacent Entries of one Pack into a single
-/// read is the obvious next thing, and PK-16 makes it legitimate whenever it is
-/// measured to be worth doing — a range read is a step inside fetching the
-/// containing Container rather than a fetch unit of its own. It is deliberately
-/// not done here: this reuses the placement discipline unchanged, and the first
-/// shape of a fill should not be one that can place a file differently from the
-/// way a click on it would.
+/// What the run counts stays Entries — done out of the total, and those it
+/// declined — because that is what the person reading its line sees in the
+/// folder. An Entry placed alongside another is counted as it is placed, and
+/// not asked for again.
+///
+/// Another folder armed under the run supersedes it, and that is only ever
+/// noticed on a parcel boundary: between two Entries, and between two parcels
+/// of one, never inside a parcel (spec: PK-21). The parcels read before it
+/// stay held, so the folder picks up from them when somebody comes back.
 ///
 /// The run is this function's own value, published after every change. One
 /// worker runs at a time and nothing else writes a run while one does, so
@@ -77,38 +81,61 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     run.total = wanted.len();
     state.fills.publish(&mut run);
 
-    for path in wanted {
-        if state.fills.superseded() {
-            // Someone opened a file in another folder, and the fill follows them
-            // there rather than finishing the one they have left.
+    // The folder's Entries placed alongside an earlier one, counted when they
+    // were and so not asked for again.
+    let mut placed_alongside: BTreeSet<EntryPath> = BTreeSet::new();
+    let remaining: BTreeSet<&EntryPath> = wanted.iter().collect();
+    // Asked by the fetch between parcels, and by this loop between Entries:
+    // someone opened a file in another folder, and the fill follows them there
+    // rather than finishing the one they have left.
+    let superseded = || state.fills.superseded();
+
+    for path in &wanted {
+        if placed_alongside.contains(path) {
+            continue;
+        }
+        if superseded() {
             run.status = FillStatus::Superseded;
             return finish(state, run, started);
         }
         // The verdict about the Entry, and beside it what the fetch read of the
-        // committed Keyring on the way: every Entry's fetch reads the set
+        // committed Keyring on the way, the kept parcels it found not held,
+        // and what it placed besides: every Entry's fetch reads the set
         // afresh, and the run keeps one report of it for all of them.
         let fetched = state
             .fetches
-            .fetch(&library, path.clone())
+            .fetch_until(&library, path.clone(), &superseded)
             .await
             .map(|fetched| {
                 if let Some(found) = fetched.degraded {
                     run.read_keyring(found);
                 }
+                run.read_unheld(fetched.unheld);
+                for alongside in fetched.alongside {
+                    if remaining.contains(&alongside) && placed_alongside.insert(alongside) {
+                        run.done += 1;
+                    }
+                }
                 fetched.fetch
             });
         match fetched {
             Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => run.done += 1,
+            // Superseded between two parcels of this Entry: the parcels read so
+            // far stay held, and what they covered is already counted.
+            Ok(EntryFetch::Cancelled) => {
+                run.status = FillStatus::Superseded;
+                return finish(state, run, started);
+            }
             Ok(EntryFetch::Surfaced(surfaced)) => {
                 run.decline(
-                    &path,
+                    path,
                     Reported::recorded(&ApiError::declined(&surfaced), "fill"),
                 );
             }
             // A refusal about this one Entry, recorded like a declined verdict:
             // the next file is a separate question.
             Err(error) if is_about_one_entry(&error) => {
-                run.decline(&path, Reported::recorded(&ApiError::from(error), "fill"));
+                run.decline(path, Reported::recorded(&ApiError::from(error), "fill"));
             }
             Err(error) => {
                 run.stop(Reported::recorded(&ApiError::from(error), "fill"));

@@ -27,7 +27,12 @@ impl Served {
     /// leaves what it managed first up to the scheduler.
     pub fn arm_fill(&self, folder: &str) {
         let named = (!folder.is_empty()).then(|| entry_path(folder));
-        fill_folder(Arc::clone(&self.state), Folder::named(named), None);
+        fill_folder(
+            Arc::clone(&self.state),
+            Folder::named(named),
+            None,
+            Vec::new(),
+        );
     }
 
     /// Asks for a fill by name without going through a route.

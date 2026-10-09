@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
 use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow,
+    DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping, PendingRow,
 };
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
@@ -375,6 +375,25 @@ impl Index for SqliteIndex {
     async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
         self.read("reading the spools", device_state::pending_rows)
             .await
+    }
+
+    async fn hold_parcel(&self, parcel: HeldParcel) -> IndexResult<()> {
+        self.write("recording a held parcel", move |connection| {
+            device_state::hold_parcel(connection, &parcel)
+        })
+        .await
+    }
+
+    async fn held_parcels(&self) -> IndexResult<Vec<HeldParcel>> {
+        self.read("reading the held parcels", device_state::held_parcels)
+            .await
+    }
+
+    async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
+        self.write("letting go of a held parcel", move |connection| {
+            device_state::let_go_parcel(connection, container_id, index)
+        })
+        .await
     }
 }
 

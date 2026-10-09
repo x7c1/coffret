@@ -225,12 +225,16 @@ pub use join_library::{
     join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider,
 };
 
+mod kept_parcels;
+
 mod library_dir;
 pub use library_dir::{LibraryDir, STATE_DIRECTORY};
 
 // The three things both ways of putting a Library on this device write once its
 // Master Key and its place on Storage are decided.
 mod library_files;
+
+mod let_go_parcels;
 
 // Where one Entry's file belongs on this device, which is EP-9 asked of the use
 // case rather than answered again here.
@@ -398,7 +402,8 @@ pub use coffret_usecase::delete::{
 };
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{
-    EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, Surfaced,
+    Cancellation, EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, Publication, Surfaced,
+    UnheldParcel, UnheldReason,
 };
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, FreezePreview, SourceChange};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};

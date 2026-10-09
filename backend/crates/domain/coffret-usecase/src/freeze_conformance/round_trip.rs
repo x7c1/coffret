@@ -1,9 +1,15 @@
+use std::path::Path;
+
 use crate::entry_paths::entry_path;
-use crate::fetch::{fetch_folders, FetchRequest};
+use crate::fetch::{fetch_folders, FetchRequest, KeptParcels};
 use crate::freeze_conformance::fixtures::{
     at, filler, freeze, hash, keys, map, map_registered, policy, read, write, ROOMY_TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
+
+/// Where the fetching device would keep parcels. A folder fetch reads whole
+/// objects and keeps none, so the directory is never written (spec: PK-16).
+const PARCEL_DIR: &str = "/target-state/parcels";
 
 /// A folder one device froze arrives, byte for byte, in another device's folder.
 ///
@@ -16,10 +22,11 @@ use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 /// ID, and the object decodes to the files that were on the other device's disk
 /// (spec: RV-2, RV-3, KL-7, FM-14).
 ///
-/// It also pins what packing is *for*. The fetch unit is a whole Container
-/// however many of its Entries are wanted (spec: PK-16), so a folder held in a
-/// handful of Packs costs a handful of fetches rather than one per file — which
-/// is the object-count band the pack policy exists to hold.
+/// It also pins what packing is *for*. A folder fetch reads each Container it
+/// needs whole, every parcel at once, however many of its Entries are wanted
+/// (spec: PK-16), so a folder held in a handful of Packs costs a handful of
+/// fetches rather than one per file — which is the object-count band the pack
+/// policy exists to hold.
 pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) {
     let store = fixture.store();
     let keys = keys();
@@ -52,8 +59,15 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
     assert_eq!(frozen.frozen_entries(), files.len());
 
     let outcome = fetch_folders(
-        FetchRequest::new(store, fixture.target(), &keys, fixture.fs(), at(2))
-            .with_policy(policy()),
+        FetchRequest::new(
+            store,
+            fixture.target(),
+            &keys,
+            fixture.fs(),
+            KeptParcels::new(fixture.fs(), Path::new(PARCEL_DIR)),
+            at(2),
+        )
+        .with_policy(policy()),
     )
     .await
     .unwrap_or_else(|error| panic!("a fetch by a second device must succeed: {error}"));

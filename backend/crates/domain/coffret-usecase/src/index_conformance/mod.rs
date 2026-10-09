@@ -31,7 +31,8 @@ pub use commit::{
 mod device_state;
 pub use device_state::{
     a_file_left_behind_by_the_library_is_reported,
-    a_forgotten_row_is_gone_and_forgetting_twice_succeeds, a_mapping_is_kept_once_per_prefix,
+    a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
+    a_held_parcel_is_recorded_until_it_is_let_go, a_mapping_is_kept_once_per_prefix,
     a_mapping_round_trips_its_root_identity, a_materialization_keeps_the_hash_it_was_recorded_with,
     a_replay_leaves_device_state_alone, a_restore_leaves_device_state_alone,
     a_spool_is_recorded_until_its_row_is_cleared,
@@ -104,6 +105,7 @@ macro_rules! index_conformance {
             a_spool_is_recorded_until_its_row_is_cleared,
             a_spooling_row_becomes_spooled_when_its_file_completes,
             a_spooling_row_that_names_an_object_is_refused,
+            a_held_parcel_is_recorded_until_it_is_let_go,
             case_distinguishes_two_entry_paths,
             width_variants_are_two_entry_paths,
             a_prefix_covers_a_subtree_and_stops_at_the_separator,

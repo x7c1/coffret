@@ -5,21 +5,23 @@ use crate::commit::{catch_up, read_committed};
 use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
+use crate::fetch::parcel_read::let_go::let_go_departed;
+use crate::fetch::parcel_read::ParcelRead;
 use crate::fetch::reading::Reading;
 use crate::fetch::run::envelope;
 use crate::fetch::surfaced::Surfaced;
-use crate::fetch::{range_read, select, translate};
+use crate::fetch::{select, translate};
 use crate::progress::{Phase, Step};
 
-/// Makes one Entry available on this device, reading only the part of its
-/// Container that holds it.
+/// Makes one Entry available on this device, reading only the parcels of its
+/// Container that hold it.
 ///
 /// [`fetch_folders`](super::fetch_folders) is what makes a folder a copy of its
-/// part of the Library, and its unit is the whole Container however many Entries
-/// are wanted out of it (spec: PK-16). This is the other thing a reader wants: a
-/// page out of a book nobody has fetched yet, now, without waiting for the
-/// gigabyte around it. It is the same journey with the same gates and one step
-/// done differently — the Container is range-read rather than pulled.
+/// part of the Library, and it reads whole Containers — every parcel at once
+/// (spec: PK-16). This is the other thing a reader wants: a page out of a book
+/// nobody has fetched yet, now, without waiting for the gigabyte around it. It
+/// is the same journey with the same gates and one step done differently — the
+/// Container is read by its parcels rather than pulled whole.
 ///
 /// The steps, and the rule each answers to:
 ///
@@ -34,12 +36,15 @@ use crate::progress::{Phase, Step};
 /// 3. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6) and take the
 ///    envelope it maps this Entry's Container to. One it records as key-lost is
 ///    reported unreadable, exactly as a folder fetch reports it (spec: KL-7, KL-17).
-/// 4. **Range-read the Entry** (spec: FM-2, FM-5, FM-9, PK-16). A Container is
-///    self-describing, so its own front says where inside the plaintext stream
-///    the Entry sits, and the read is that front plus the chunks covering
-///    exactly that extent. The extent comes from the object's entry table
-///    rather than from the catalog; what the catalog answers for is the hash
-///    the plaintext is then held against (spec: CP-11).
+/// 4. **Read the Entry's parcels** (spec: FM-2, FM-5, FM-9, PK-16, PK-19,
+///    PK-21). A Container is self-describing, so its own front says where
+///    inside the plaintext stream the Entry sits and so which parcels it
+///    overlaps; the read is that front plus each of those parcels this device
+///    does not already hold, whole, and the parcels are kept. The extent comes
+///    from the object's entry table rather than from the catalog; what the
+///    catalog answers for is the hash the plaintext is then held against
+///    (spec: CP-11). The other Entries those parcels wholly cover come with it
+///    and are placed too, where this device would place them anyway.
 /// 5. **Place** (spec: EP-4, EP-10, EP-11, EP-13). Scratch, the Entry's
 ///    own modification time, the plaintext hash against what the catalog
 ///    records, rename, then marked present — the same discipline, because it is
@@ -51,23 +56,36 @@ use crate::progress::{Phase, Step};
 ///    [`fetch_folders`](super::fetch_folders) reports the same refusal once per
 ///    mapping and places into the device's others as usual.
 ///
-/// What it does *not* do is claim the Container. A range read cannot check the
-/// object's own hash — that is a claim about bytes it deliberately did not ask
-/// for — so the integrity gates here are per-chunk authentication for the bytes
-/// that arrive and the Entry's plaintext hash against the catalog before the
-/// file becomes visible (spec: FM-5, FM-8, CP-11, EP-11). The rest of the
-/// Container is as unfetched afterwards as it was before, and completing it is a
-/// later run's.
+/// What it does *not* do is claim the Container. A read of parcels cannot check
+/// the object's own hash — that is a claim about bytes it did not ask for — so
+/// the integrity gates here are per-chunk authentication for the bytes that
+/// arrive and each placed Entry's plaintext hash against the catalog before the
+/// file becomes visible (spec: FM-5, FM-8, CP-11, EP-11, PK-22). The parcels
+/// it did not read are as unread afterwards as they were before.
+///
+/// A caller that may stop wanting the Entry hands a
+/// [`Cancellation`](super::Cancellation) over, asked before each parcel is
+/// requested from Storage and never inside one; a cancelled run answers
+/// [`EntryFetch::Cancelled`] with the parcels it read still held (spec: PK-21).
+///
+/// A caller with a reader waiting hands a [`Publication`](super::Publication)
+/// over, told the moment the Entry is published (spec: PK-16). The run itself
+/// returns only once the whole stroke is done: every parcel it asked for read
+/// to its end and kept, the other Entries they cover placed, and the parcels
+/// nothing waits for any more let go (spec: PK-21).
 pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFetchOutcome> {
     let FetchEntryRequest {
         store,
         index,
         keys,
         destinations,
+        parcels,
         path,
         now,
         progress,
         policy,
+        cancellation,
+        publication,
     } = request;
 
     // The same phases a folder fetch says, in the same order, so a caller
@@ -76,6 +94,9 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     // longest part of the run.
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // A held parcel whose Container the catch-up took out of the current set
+    // serves nothing any more (spec: PK-21).
+    let_go_departed(index, &parcels).await?;
     let Some(checkpoint) = index.checkpoint().await? else {
         // A Library that has committed nothing holds no current Entry at all
         // (spec: CP-1, FM-13).
@@ -113,7 +134,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     .reported();
     let container_id = target.location.container_id;
     // One Container, counted as a folder fetch counts its Containers: said
-    // before the range read starts, so a caller has a line up while the read
+    // before the parcel read starts, so a caller has a line up while the read
     // travels, and again once the Entry is placed.
     progress.step(Step::new(Phase::Fetching, 0, 1));
     let Some(envelope) = envelope(&key_table, container_id)? else {
@@ -123,11 +144,11 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         progress.step(Step::new(Phase::Fetching, 1, 1));
         finished(&path, "key lost");
         return Ok(EntryFetchOutcome {
-            fetch: EntryFetch::Surfaced(Surfaced::KeyLost {
+            degraded,
+            ..EntryFetchOutcome::of(EntryFetch::Surfaced(Surfaced::KeyLost {
                 path: target.location.entry.path,
                 container_id,
-            }),
-            degraded,
+            }))
         });
     };
 
@@ -148,14 +169,30 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         destinations,
         listing: &caught.listing,
     };
-    let placement = range_read::read_entry(&reading, &summary, &envelope, &target).await?;
-    placement.publish(index, now).await?;
+    let read = ParcelRead {
+        reading: &reading,
+        kept: &parcels,
+        index,
+        now,
+        cancellation,
+        publication,
+        degraded,
+    };
+    let stroke = read.read_entry(&summary, &envelope, target).await?;
     progress.step(Step::new(Phase::Fetching, 1, 1));
 
-    finished(&path, "placed");
+    let fetch = if stroke.placed {
+        finished(&path, "placed");
+        EntryFetch::Placed
+    } else {
+        finished(&path, "cancelled");
+        EntryFetch::Cancelled
+    };
     Ok(EntryFetchOutcome {
-        fetch: EntryFetch::Placed,
+        fetch,
         degraded,
+        alongside: stroke.alongside,
+        unheld: stroke.unheld,
     })
 }
 

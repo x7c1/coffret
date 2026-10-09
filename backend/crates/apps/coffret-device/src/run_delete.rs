@@ -56,7 +56,12 @@ impl OpenLibrary {
             now,
         )
         .watched_by(progress);
-        Ok(delete_entries(request).await?)
+        let outcome = delete_entries(request).await?;
+        // The Containers the deletion removed or replaced are out of the
+        // current set, and so are any parcels this device kept of them
+        // (spec: PK-21).
+        self.let_go_parcels().await;
+        Ok(outcome)
     }
 
     /// Counts what [`delete`](Self::delete) would do with `selection`, naming

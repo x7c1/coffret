@@ -7,6 +7,7 @@ use crate::commit::{catch_up, read_committed};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::fetch_outcome::FetchOutcome;
 use crate::fetch::fetch_request::FetchRequest;
+use crate::fetch::parcel_read::let_go::{let_go_departed, let_go_parcels};
 use crate::fetch::placement::publish_all;
 use crate::fetch::reading::Reading;
 use crate::fetch::surfaced::Surfaced;
@@ -60,6 +61,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         index,
         keys,
         destinations,
+        parcels,
         prefix,
         now,
         progress,
@@ -71,6 +73,9 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // join replays the whole Journal before the first Container is asked for.
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // A held parcel whose Container the catch-up took out of the current set
+    // serves nothing any more (spec: PK-21).
+    let_go_departed(index, &parcels).await?;
 
     let mut outcome = FetchOutcome {
         fetched: Vec::new(),
@@ -183,6 +188,10 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
             .extend(publish_all(index, now, placed.placements).await?);
         progress.step(Step::new(Phase::Fetching, done + 1, total));
     }
+
+    // What this run placed may be the last Entry a held parcel was waiting for
+    // (spec: PK-21).
+    let_go_parcels(index, &parcels).await?;
 
     // The Entries came out grouped by Container, and a caller reading a list of
     // paths wants them in the order the Library puts them in (spec: EP-3).

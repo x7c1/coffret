@@ -67,7 +67,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     assert_eq!(
         outcome.containers.len(),
         2,
-        "the fetch unit is a whole Container (spec: PK-16)",
+        "a folder fetch reads each Container whole, once (spec: PK-16)",
     );
     assert_eq!(outcome.skipped, 0);
     assert!(

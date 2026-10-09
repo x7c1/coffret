@@ -12,8 +12,9 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use coffret_device::{
-    CommitError, ContainerId, EntryFetch, EntryPath, Error, FetchError, FetchOutcome, Finding,
-    FindingReason, Findings, IndexError, ProviderSettings, StorageError, SyncError, SyncOutcome,
+    CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryPath, Error, FetchError,
+    FetchOutcome, Finding, FindingReason, Findings, IndexError, ProviderSettings, StorageError,
+    SyncError, SyncOutcome,
 };
 
 use super::*;
@@ -171,20 +172,24 @@ fn a_key_lost_container_is_found_by_that_name() {
     );
 }
 
-// The one-Entry form's three answers, and the counts the text form prints for
-// each of them.
+// The one-Entry form's answers, the counts the text form prints for each of
+// them, and how many files came with the Entry out of the parcels it read
+// (spec: PK-16).
 #[test]
-fn a_fetch_of_one_entry_answers_which_of_its_three_answers_it_is() {
-    let answered = |fetched: &EntryFetch| {
-        serde_json::to_value(FetchedEntry::from(fetched)).expect("the answer is JSON")
+fn a_fetch_of_one_entry_answers_which_of_its_answers_it_is() {
+    let answered = |outcome: &EntryFetchOutcome| {
+        serde_json::to_value(FetchedEntry::from(outcome)).expect("the answer is JSON")
     };
     assert_eq!(
-        answered(&EntryFetch::Placed),
-        json!({ "entry": "placed", "fetched": 1, "skipped": 0 }),
+        answered(&EntryFetchOutcome {
+            alongside: vec![path("books/vol-1/002.jpg"), path("books/vol-1/003.jpg"),],
+            ..EntryFetchOutcome::of(EntryFetch::Placed)
+        }),
+        json!({ "entry": "placed", "fetched": 1, "skipped": 0, "alongside": 2 }),
     );
     assert_eq!(
-        answered(&EntryFetch::AlreadyPresent),
-        json!({ "entry": "already_present", "fetched": 0, "skipped": 1 }),
+        answered(&EntryFetchOutcome::of(EntryFetch::AlreadyPresent)),
+        json!({ "entry": "already_present", "fetched": 0, "skipped": 1, "alongside": 0 }),
     );
 }
 

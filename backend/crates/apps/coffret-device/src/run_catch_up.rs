@@ -18,21 +18,28 @@ impl OpenLibrary {
     /// replayed whole, and a catalog caught up under one folder would be a
     /// catalog standing at no committed state at all.
     ///
-    /// Nothing on this device's disk changes. Every Entry the run learns of is
+    /// Nothing in the mapped folders changes. Every Entry the run learns of is
     /// `remote` until something asks for its bytes (spec: EP-10), which is what
     /// makes this the cheap question — the control objects and nothing else.
+    /// The one thing on this device's disk it may touch is a kept parcel of a
+    /// Container the replay took out of the current set, which is let go
+    /// (spec: PK-21).
     pub async fn catch_up(&self) -> Result<CatchUpOutcome> {
         info!(
             operation = "catch_up",
             library = %self.library_id,
             "catching the catalog up with the Library's head"
         );
-        Ok(catch_up_catalog(CatchUpRequest::new(
+        let outcome = catch_up_catalog(CatchUpRequest::new(
             self.store.as_ref(),
             self.index.as_ref(),
             &self.keys,
         ))
-        .await?)
+        .await?;
+        // A Container the replay took out of the current set takes any parcel
+        // this device kept of it along (spec: PK-21).
+        self.let_go_parcels().await;
+        Ok(outcome)
     }
 }
 
@@ -81,6 +88,8 @@ mod tests {
             local_fs: local_fs(),
             keys: keys(),
             spool: std::env::temp_dir().join("coffret-a-catch-up-never-spools"),
+            parcel_dir: std::env::temp_dir().join("coffret-a-catch-up-keeps-no-parcel"),
+            parcel_len: coffret_format::PARCEL_LEN,
             library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
             epoch: MasterKeyEpoch::FIRST,
             provider: "s3",

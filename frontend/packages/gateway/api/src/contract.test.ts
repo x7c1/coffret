@@ -131,6 +131,7 @@ const FINDING_REASONS: Literals<FindingReason> = {
   root_on_another_filesystem: true,
   keyring_degraded: true,
   keyring_repaired: true,
+  parcel_unheld: true,
 };
 const FILL_STATUSES: Literals<FillStatus> = {
   filling: true,

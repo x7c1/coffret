@@ -39,8 +39,8 @@ impl<'a> ShorteningStore<'a> {
     /// and passes everything else through.
     ///
     /// A partial fetch reads an object's header and meta section before the
-    /// chunks covering one Entry, and the case is about the third read: a front
-    /// that came back short is refused before a chunk is aimed at.
+    /// parcels one Entry overlaps, and the case is about the third read: a front
+    /// that came back short is refused before a parcel is aimed at.
     pub(super) fn beyond(inner: &'a dyn ObjectStore, shortened: ObjectRef, from: u64) -> Self {
         Self {
             inner,

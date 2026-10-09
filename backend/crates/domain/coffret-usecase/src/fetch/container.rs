@@ -17,11 +17,13 @@ use crate::fetch::TRANSFER_BUFFER;
 
 /// Fetches one Container and writes every wanted Entry beside its destination.
 ///
-/// The fetch unit is the whole Container however many of its Entries are wanted
-/// (spec: PK-16), so this happens once per Container in a run and never once per
-/// Entry. The object is decoded as it arrives: nothing here holds more than a
-/// transfer buffer, and each wanted Entry's plaintext goes straight into a
-/// scratch beside where its file will be.
+/// A read of the whole object is every parcel of it at once, which PK-16 allows
+/// and a folder fetch wants: it happens once per Container in a run however
+/// many of its Entries are wanted, and never once per Entry. Nothing of it is
+/// kept as parcels, because every Entry it was read for is placed out of it.
+/// The object is decoded as it arrives: nothing here holds more than a transfer
+/// buffer, and each wanted Entry's plaintext goes straight into a scratch beside
+/// where its file will be.
 ///
 /// Three checks, in the order that keeps each one meaningful:
 ///

@@ -4,8 +4,9 @@
 //! the catalog of the whole Library, identical on every enrolled device and
 //! carried by an Index Snapshot. The other is this: how this device maps the
 //! Library onto its own folders (spec: EP-9), which Entries it has actually put
-//! on disk (spec: EP-10), and what it has spooled and uploaded but not yet
-//! committed (spec: OC-2).
+//! on disk (spec: EP-10), what it has spooled and uploaded but not yet
+//! committed (spec: OC-2), and which parcels of the Containers it read it still
+//! holds (spec: PK-21).
 //!
 //! None of it is ever uploaded, and a restore leaves all of it untouched
 //! (spec: CK-7). That separation is the point: a laptop mapping `albums/` and a
@@ -17,6 +18,9 @@ pub use batch_id::BatchId;
 
 mod device_time;
 pub use device_time::DeviceTime;
+
+mod held_parcel;
+pub use held_parcel::HeldParcel;
 
 mod local_entry;
 pub use local_entry::LocalEntry;

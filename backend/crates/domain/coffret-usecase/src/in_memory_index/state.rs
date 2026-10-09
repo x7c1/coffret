@@ -7,7 +7,8 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow, SpoolState,
+    DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow,
+    SpoolState,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -32,6 +33,9 @@ pub(super) struct State {
     mappings: BTreeMap<Option<EntryPath>, Mapping>,
     local_entries: BTreeMap<EntryPath, LocalEntry>,
     pending_rows: BTreeMap<ContainerId, PendingRow>,
+    /// The parcels this device holds, keyed and so ordered the way the port
+    /// answers for them (spec: PK-21).
+    held_parcels: BTreeMap<(ContainerId, u64), HeldParcel>,
 }
 
 impl State {
@@ -234,6 +238,19 @@ impl State {
 
     pub(super) fn pending_rows(&self) -> Vec<PendingRow> {
         self.pending_rows.values().cloned().collect()
+    }
+
+    pub(super) fn hold_parcel(&mut self, parcel: HeldParcel) {
+        self.held_parcels
+            .insert((parcel.container_id, parcel.index), parcel);
+    }
+
+    pub(super) fn held_parcels(&self) -> Vec<HeldParcel> {
+        self.held_parcels.values().cloned().collect()
+    }
+
+    pub(super) fn let_go_parcel(&mut self, container_id: ContainerId, index: u64) {
+        self.held_parcels.remove(&(container_id, index));
     }
 
     fn present(&self) -> impl Iterator<Item = &LocalEntry> {

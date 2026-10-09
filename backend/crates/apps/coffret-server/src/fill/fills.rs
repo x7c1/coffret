@@ -1,4 +1,4 @@
-use coffret_device::DegradedKeyring;
+use coffret_device::{DegradedKeyring, UnheldParcel};
 use tokio::sync::watch;
 
 use crate::folder::Folder;
@@ -81,19 +81,43 @@ impl Fills {
     /// Makes `folder` what is filled next, and says whether a worker has to be
     /// started for it. See [`Progress::arm`].
     ///
-    /// `heard` is what the fetch arming it found of the committed Keyring, which
-    /// the run that takes the arming up reports as its own (see
-    /// [`Progress::hear`]). In the same stroke as the arming, so that no run is
-    /// published in between that could take it for a folder it is not about.
-    pub(super) fn arm(&self, folder: Folder, heard: Option<DegradedKeyring>) -> bool {
+    /// `heard` is what the fetch arming it found of the committed Keyring, and
+    /// `unheld` the kept parcels it found not held, which the run that takes
+    /// the arming up reports as its own (see [`Progress::hear`] and
+    /// [`Progress::hear_unheld`]). In the same stroke as the arming, so that no
+    /// run is published in between that could take them for a folder they are
+    /// not about.
+    pub(super) fn arm(
+        &self,
+        folder: Folder,
+        heard: Option<DegradedKeyring>,
+        unheld: Vec<UnheldParcel>,
+    ) -> bool {
         let mut start = false;
         self.progress.send_modify(|progress| {
             start = progress.arm(folder);
             if let Some(found) = heard {
                 progress.hear(found);
             }
+            progress.hear_unheld(unheld);
         });
         start
+    }
+
+    /// Takes in the kept parcels the rest of a reader's fetch found not held,
+    /// after the reader was answered and the fill it armed was already under
+    /// way (see [`Progress::hear_unheld`]).
+    ///
+    /// Nothing is armed by it: the fetch that found them armed its fill when it
+    /// answered. The next run published takes them in — which in the ordinary
+    /// case is that fill, whose next fetch out of the same Container waited for
+    /// this one to end.
+    pub(crate) fn hear_unheld(&self, unheld: Vec<UnheldParcel>) {
+        if unheld.is_empty() {
+            return;
+        }
+        self.progress
+            .send_modify(|progress| progress.hear_unheld(unheld));
     }
 
     /// Puts `folder` at the back of the queue, and says whether a worker has to
@@ -144,6 +168,7 @@ impl Fills {
             if let Some(found) = progress.hand_over() {
                 run.read_keyring(found);
             }
+            run.read_unheld(progress.hand_over_unheld());
             progress.on_record = Some(FillRun {
                 run: progress.run(),
                 ..run.clone()
@@ -174,7 +199,7 @@ mod tests {
     #[test]
     fn abandoning_a_fill_tells_whoever_is_waiting_on_it() {
         let fills = Fills::new();
-        assert!(fills.arm(albums(), None));
+        assert!(fills.arm(albums(), None, Vec::new()));
         assert_eq!(fills.take_next(), Some(albums()));
 
         let mut watched = fills.progress.subscribe();
