@@ -21,6 +21,10 @@ mod folders;
 // changing it.
 mod inspecting;
 
+// What the fake's trash has taken, and the move that put it there
+// (spec: EP-15).
+mod trash;
+
 // What the fake says the filesystem under a mapped root is, and whether the
 // root is the one a mapping was recorded against (spec: EP-12, EP-13).
 mod roots;
@@ -75,6 +79,7 @@ pub(super) struct State {
     files: BTreeMap<PathBuf, FileNode>,
     others: BTreeSet<PathBuf>,
     identities: BTreeMap<PathBuf, RootIdentity>,
+    moved_to_trash: Vec<PathBuf>,
     script: Vec<Fault>,
     attempts: BTreeMap<u8, usize>,
 }

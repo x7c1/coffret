@@ -25,6 +25,14 @@ pub(super) enum Verdict {
     /// Not in the Library at all: an initial import, which a freeze builds a
     /// Pack from directly (spec: PK-7).
     New,
+    /// Not in the Library any more: this device materialized the path and the
+    /// Entry has left since (spec: EP-15).
+    ///
+    /// Never selected. Carrying it back in would undo the deletion, and what
+    /// becomes of the copy — the trash, or kept and reported — is the sync's to
+    /// decide, since only the sync reads it against what this device last made
+    /// it match.
+    Departed,
     /// Held by a one-file Container, which the Pack absorbs however the local
     /// file compares and whether or not the Container's key survives
     /// (spec: PK-1, PK-13).
@@ -53,7 +61,15 @@ pub(super) async fn judge(
     source: &SourceFile,
 ) -> FreezeResult<Verdict> {
     let Some(location) = index.entry_at(&source.path).await? else {
-        return Ok(Verdict::New);
+        let materialized = index
+            .local_entry_at(&source.path)
+            .await?
+            .is_some_and(|local| local.state == LocalEntryState::Present);
+        return Ok(if materialized {
+            Verdict::Departed
+        } else {
+            Verdict::New
+        });
     };
 
     // Packing a file this device never put there would propose replacing an
@@ -119,7 +135,7 @@ pub(super) async fn examine(
                 absorbs: Some(container_id),
             });
         }
-        Verdict::NotMaterialized => {}
+        Verdict::NotMaterialized | Verdict::Departed => {}
         // What is left to decide for a Pack-held Entry is whether the file
         // needs an update, because that is what may not be passed over
         // quietly (spec: PK-14).
@@ -141,6 +157,7 @@ pub(super) async fn examine(
                     size: source.size,
                     mtime: source.mtime,
                     at: now,
+                    hash: Some(location.entry.hash),
                 });
             } else {
                 survey.surfaced.push(NotFrozen::ModifiedInPack {

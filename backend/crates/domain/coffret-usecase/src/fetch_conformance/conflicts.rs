@@ -344,6 +344,120 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
     assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 
+/// An Entry whose place is inside a folder a desktop keeps its trash in,
+/// directly under the mapped root, is reported and nothing is placed there; the
+/// same name deeper down is an ordinary folder and is fetched into.
+///
+/// No scan enters such a folder (spec: EP-16), so a file placed there would be
+/// one this device's next sync never sees again — and, its record saying
+/// present, would read as deleted locally on every run after. Planted rather
+/// than synced for the reason the reserved case gives: no scan of this device
+/// produces such a path, but another device, or a build before the rule, can
+/// have committed one. Reported as the folder that stopped the place, on the
+/// posture EP-4 sets, and the rest of the run is placed.
+pub async fn a_place_in_a_desktop_trash_folder_is_surfaced_and_nothing_is_placed(
+    fixture: &FetchUnderTest,
+) {
+    let keys = keys();
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/spring.jpg",
+        HELD,
+    );
+    sync_source(fixture, &keys, 1).await;
+
+    for path in [IN_TRASH, IN_VOLUME_TRASH, BELOW_TOP] {
+        plant(
+            fixture.store(),
+            fixture.source(),
+            &keys,
+            Planted {
+                path,
+                content: b"what another device committed in a trash folder",
+                mtime: Mtime::from_unix_seconds(OLDER),
+                real: true,
+                actual_content: None,
+                meta_len: None,
+                short_by: None,
+            },
+        )
+        .await;
+    }
+
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
+        .await
+        .unwrap_or_else(|error| {
+            panic!("a fetch meeting a desktop trash folder must succeed: {error}")
+        });
+
+    let mut fetched = outcome.fetched.clone();
+    fetched.sort();
+    assert_eq!(
+        fetched,
+        vec![entry_path(BELOW_TOP), entry_path("albums/spring.jpg")],
+        "the ordinary Entries were placed, the one below the top included",
+    );
+    let mut surfaced = outcome.surfaced.clone();
+    surfaced.sort_by(|a, b| a.path().cmp(b.path()));
+    assert_eq!(
+        surfaced,
+        vec![
+            Surfaced::UnreachablePlace {
+                path: entry_path(IN_TRASH),
+                stopped_at: fixture.target_folder().join(".Trash-1000"),
+            },
+            Surfaced::UnreachablePlace {
+                path: entry_path(IN_VOLUME_TRASH),
+                stopped_at: fixture.target_folder().join(".Trashes"),
+            },
+        ],
+        "each is reported with the trash folder that stopped it",
+    );
+
+    for path in [IN_TRASH, IN_VOLUME_TRASH] {
+        assert!(
+            !exists(fixture.fs(), &fixture.target_folder().join(path)),
+            "nothing was placed in the desktop's trash, at {path}",
+        );
+        assert!(
+            fixture
+                .target()
+                .local_entry_at(&entry_path(path))
+                .await
+                .expect("asking the target catalog for a local row must succeed")
+                .is_none(),
+            "and no claim to have placed it (spec: EP-10)",
+        );
+    }
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
+}
+
+/// Where the trash case plants an Entry inside the freedesktop.org per-user
+/// trash at the mapped root's top.
+const IN_TRASH: &str = ".Trash-1000/files/a.jpg";
+
+/// And one inside the trash macOS keeps at a volume's top.
+const IN_VOLUME_TRASH: &str = ".Trashes/501/b.jpg";
+
+/// And the per-user name one folder down, which is the person's own.
+const BELOW_TOP: &str = "albums/.Trash-1000/c.jpg";
+
 /// The Entry Path the reserved case plants: the reserved name below an ordinary
 /// folder, which is where a check that only read the first component would miss
 /// it.

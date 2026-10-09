@@ -89,11 +89,12 @@ export function rowFill(
   }
   // A file the Library does not hold yet. There is no Entry to fetch, so a fill
   // has nothing to say about it — and the run that will carry it in says what it
-  // did in the status bar rather than row by row. Every file in this state is
-  // one the next sync or freeze of its folder sees as new, whether it was never
-  // in the Library or another device removed its Container; the sentence stops
-  // short of promising the Entry, because a name the run refuses is not taken
-  // in, and the run is what says so.
+  // did in the status bar rather than row by row. A file in this state was
+  // either never in the Library, and the next sync or freeze of its folder sees
+  // it as new, or is a copy this device kept of an Entry since deleted, which
+  // the next sync moves to the trash or keeps and reports instead (spec: EP-15);
+  // the sentence stops short of promising the Entry, because a name the run
+  // refuses is not taken in, and the run is what says so.
   if (file.state === 'added') {
     return {
       state: 'added',

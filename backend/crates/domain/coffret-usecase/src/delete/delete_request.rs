@@ -15,7 +15,8 @@ use crate::spool::Spool;
 /// wait for their commit, which Entries to delete, and the two values a device
 /// supplies rather than derives: what it calls this batch and what its clock
 /// says. No mapped folder: a deletion is a change to the Library, and what
-/// becomes of a local file that held a deleted Entry is a separate question.
+/// becomes of a local file that held a deleted Entry is the next sync's to
+/// decide, on this device as on every other (spec: EP-15).
 pub struct DeleteRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,

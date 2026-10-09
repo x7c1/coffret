@@ -155,6 +155,7 @@ async fn complete(
                 size: entry.extent.size(),
                 mtime: entry.mtime,
                 at: now,
+                hash: Some(entry.hash),
             })
             .await?;
     }

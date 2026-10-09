@@ -74,11 +74,16 @@ pub(super) async fn scan(
 
     let mut survey = Survey::default();
     for source in found.values() {
-        examine(index, roots, &kinds, now, source, &mut survey).await?;
+        // The mapping a file was found under is the one whose root it stands in,
+        // and its expected identity is what a move out of that root is held to
+        // (spec: EP-13).
+        let expected = walked
+            .iter()
+            .find(|root| root.mapping.local_root == source.root)
+            .and_then(|root| root.mapping.expected_root_id);
+        examine(index, roots, &kinds, now, source, expected, &mut survey).await?;
     }
-    survey
-        .surfaced
-        .extend(deletions(index, &walked, &found).await?);
+    deletions(index, &walked, &found, &mut survey).await?;
     survey.unavailable = unavailable_roots(&walked);
 
     // Counts only: a prefix is an Entry Path component and a local root is a
@@ -89,6 +94,8 @@ pub(super) async fn scan(
         candidates = survey.candidates.len(),
         unchanged = survey.unchanged,
         surfaced = survey.surfaced.len(),
+        departed = survey.departed.len(),
+        forgotten = survey.forgotten.len(),
         unavailable = survey.unavailable.len(),
         "scanned the mapped folders",
     );

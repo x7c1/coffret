@@ -327,6 +327,13 @@ pub use below_root_error::BelowRootError;
 mod standing;
 pub use standing::Standing;
 
+// A fourth capability over this device's own disk, beside the three above: the
+// desktop's own trash, which a file a deleted Entry left behind unedited goes
+// into rather than being deleted outright (spec: EP-15). It fails in the
+// destinations' `DescentError`, because it makes the same descent.
+mod local_trash;
+pub use local_trash::LocalTrash;
+
 // The mapped-roots capability's own contract, behind the same feature as the
 // spool capability's.
 #[cfg(feature = "conformance")]
@@ -372,12 +379,12 @@ mod refusing_index;
 #[cfg(any(test, feature = "conformance"))]
 pub use refusing_index::RefusingIndex;
 
-// And a disk to drive them against — the spool, the mapped folders, and the
-// places a local writer puts a file into alike, because one device has one of
-// them. It is the one of the three that can be told to fail at a chosen step:
-// what the flows promise around the local disk are promises about interruption
-// and about absence, and a real filesystem refuses nothing on request
-// (spec: OC-2, OC-8, EP-11, EP-12).
+// And a disk to drive them against — the spool, the mapped folders, the places
+// a local writer puts a file into, and the trash alike, because one device has
+// one of them. Of the three in-memory doubles, it is the one that can be told
+// to fail at a chosen step: what the flows promise around the local disk are
+// promises about interruption and about absence, and a real filesystem refuses
+// nothing on request (spec: OC-2, OC-8, EP-11, EP-12).
 #[cfg(any(test, feature = "conformance"))]
 mod in_memory_fs;
 #[cfg(any(test, feature = "conformance"))]
@@ -431,6 +438,10 @@ pub use retry::RetryPolicy;
 pub mod root_marker;
 
 pub mod scratch;
+
+// And the names a desktop keeps its trash under at the top of a volume a mapped
+// root may be: not coffret's, but never Library content either (spec: EP-16).
+pub mod trash_folders;
 
 // Where a Container waits between being encoded and being committed, as a
 // capability rather than as calls on a filesystem: what the flows promise about

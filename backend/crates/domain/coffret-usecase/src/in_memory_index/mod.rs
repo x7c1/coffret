@@ -120,6 +120,11 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
+    async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()> {
+        self.locked().forget_local_entry(path);
+        Ok(())
+    }
+
     async fn local_entry_at(&self, path: &EntryPath) -> IndexResult<Option<LocalEntry>> {
         Ok(self.locked().local_entry_at(path))
     }

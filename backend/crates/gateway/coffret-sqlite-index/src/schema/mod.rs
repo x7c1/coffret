@@ -7,18 +7,21 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::classify;
 
-/// Current layout. Version 8 adds the durable commit-attempt marker, and
-/// version 9 the marker saying whether a pending Container's Entries are files
-/// this device put into it.
-pub(crate) const SCHEMA_VERSION: i64 = 9;
+/// Current layout. Version 8 adds the durable commit-attempt marker, version 9
+/// the marker saying whether a pending Container's Entries are files this
+/// device put into it, and version 10 the content hash a materialized file was
+/// made to match.
+pub(crate) const SCHEMA_VERSION: i64 = 10;
 
-/// The device-local layout floor. Versions 7 and 8 have one explicit,
+/// The device-local layout floor. Versions 7, 8 and 9 have one explicit,
 /// transactional upgrade that preserves every row, treats old attempts as
-/// unknown, and takes every old row to name a Container built out of this
-/// device's own files — the only kind a build before version 9 could spool.
-/// Other unreadable device layouts are refused rather than discarded, because
-/// Storage cannot reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 9;
+/// unknown, takes every old pending row to name a Container built out of this
+/// device's own files — the only kind a build before version 9 could spool —
+/// and leaves every old materialization without a recorded hash, which is what
+/// a build before version 10 never wrote down. Other unreadable device layouts
+/// are refused rather than discarded, because Storage cannot reconstruct
+/// mappings, materializations, or provenance.
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 10;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -112,12 +115,17 @@ CREATE UNIQUE INDEX mappings_by_prefix ON mappings (ifnull(prefix, ''));
 CREATE TABLE local_entries (
     -- A row outlives the Entry it was made for: a path that leaves the Library
     -- keeps its row, which is what lets the file be reported rather than left
-    -- behind unnoticed (spec: EP-10). No foreign key, for that reason.
+    -- behind unnoticed (spec: EP-10). No foreign key, for that reason. `hash`
+    -- is the content hash of the Entry this device last made the file match,
+    -- which is what tells a file left as the Library had it from one edited
+    -- since, once the Entry itself has left the catalog (spec: EP-15); NULL only
+    -- on a row an older layout wrote, which never recorded one.
     path           TEXT PRIMARY KEY COLLATE BINARY,
     state          TEXT NOT NULL,
     observed_size  INTEGER NOT NULL,
     observed_mtime INTEGER NOT NULL,
-    observed_at    INTEGER NOT NULL
+    observed_at    INTEGER NOT NULL,
+    hash           BLOB
 ) STRICT;
 
 CREATE TABLE pending_rows (
@@ -159,7 +167,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7 | 8 => provenance::preserve_pending_provenance(connection),
+        7..=9 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }

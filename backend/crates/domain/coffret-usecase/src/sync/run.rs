@@ -1,11 +1,17 @@
+use std::sync::Arc;
+
 use coffret_model::Redacted;
 use tracing::{info, warn};
 
 use crate::commit::catch_up;
+use crate::index::Index;
+use crate::local_trash::LocalTrash;
 use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
+use crate::sync::departed::Departed;
 use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
+use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
 use crate::sync::sync_outcome::SyncOutcome;
 use crate::sync::sync_request::SyncRequest;
@@ -63,6 +69,13 @@ use crate::upload;
 /// unplugged disk must never read as the user having emptied the folder
 /// (spec: EP-12). The device's other mappings scan normally.
 ///
+/// A file this device materialized whose Entry has since left the Library is
+/// not carried back in as new (spec: EP-15). One that still holds what this
+/// device last made it match is moved to the desktop's trash and its row is
+/// forgotten; one that changed is kept and reported by every run; a move that
+/// is refused leaves the file and its row where they are, is reported with what
+/// refused it, and is tried again by the next run — and fails nothing else.
+///
 /// A run with nothing to upload commits nothing rather than committing an empty
 /// batch: a Journal record is a generation, and creating one for a batch that
 /// changes no Container would make every device replay a record that says
@@ -83,6 +96,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         keys,
         spool: local,
         roots,
+        trash,
         spool_dir,
         batch,
         now,
@@ -111,7 +125,19 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // none of its own to give: a folder's files are known once it has walked
     // them.
     progress.step(Step::begun(Phase::Scanning));
-    let survey = scan::scan(index, roots, births, now).await?;
+    let mut survey = scan::scan(index, roots, births, now).await?;
+
+    // Only now, with the scan over: every departed file stands under a root the
+    // walk could read (spec: EP-12), and the move holds that root against its
+    // mapping before it writes (spec: EP-13). Before the encoding, so that what
+    // went to the trash is settled whatever becomes of the batch.
+    for path in std::mem::take(&mut survey.forgotten) {
+        index.forget_local_entry(&path).await?;
+    }
+    for departed in std::mem::take(&mut survey.departed) {
+        let surfaced = move_departed_to_trash(index, trash, departed).await?;
+        survey.surfaced.push(surfaced);
+    }
     local.prepare_dir(&spool_dir).await?;
 
     // The scan has just said how much there is to do, and the encoding is the
@@ -223,6 +249,11 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // and neither may reach a diagnostic event.
         mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
+        moved_to_trash = outcome
+            .surfaced
+            .iter()
+            .filter(|one| matches!(one, Surfaced::MovedToTrash { .. }))
+            .count(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
@@ -241,4 +272,43 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         "a sync run finished",
     );
     Ok(outcome)
+}
+
+/// Moves one departed file to the trash, and says what became of it
+/// (spec: EP-15).
+///
+/// A refusal is a finding and not a failure: the file stays where it is with
+/// its row, so the next run finds it departed again and asks again, and the
+/// rest of this run goes on. Nothing here falls back on deleting the file. Only
+/// a failure to forget the row of a file that did go fails the run, since that
+/// is the catalog failing rather than the trash — and the next run, finding the
+/// row and no file, forgets it then.
+async fn move_departed_to_trash(
+    index: &dyn Index,
+    trash: &dyn LocalTrash,
+    departed: Departed,
+) -> SyncResult<Surfaced> {
+    let Departed { source, expected } = departed;
+    match trash
+        .move_to_trash(&source.root, expected.as_ref(), &source.relative)
+        .await
+    {
+        Ok(()) => {
+            index.forget_local_entry(&source.path).await?;
+            Ok(Surfaced::MovedToTrash { path: source.path })
+        }
+        Err(refused) => {
+            // What refused and of what kind, and nothing that names the file:
+            // the path stays in the finding, for whoever asked for the run.
+            warn!(
+                reason = %refused.redacted(),
+                "a deleted Entry's local file could not be moved to the trash; it is left in \
+                 place for the next run",
+            );
+            Ok(Surfaced::MoveToTrashRefused {
+                path: source.path,
+                cause: Arc::new(refused),
+            })
+        }
+    }
 }

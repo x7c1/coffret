@@ -27,6 +27,15 @@ never materialized here, or recorded absent. These states describe local
 availability; key-lost describes whether the Container can be decrypted, and
 locked describes whether the running Library holds its Master Key.
 
+A materialization record carries the content hash of the Entry the file was
+made to match, and it can outlive that Entry. Once the Entry leaves the
+Library, a record still saying present marks the file as departed, and the
+hash it carries is what tells an unedited file from an edited one, since the
+Entry's own hash leaves the cached Catalog with it. The device forgets the
+record once the file has gone to the desktop's trash or from the disk; a
+forgotten record is not an absent one, because it witnesses no deletion
+(spec: EP-15).
+
 A **spool** holds a new Container's ciphertext on this device. A **pending row**
 is its local provenance: which batch created it, where its spool and uploaded
 object are, whether spooling finished, and whether a commit may have been
@@ -61,6 +70,8 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - adopt (a checkpoint into an Index)
 - announce (a spool by recording its pending row)
 - mark (a recorded spool complete, or a materialized file present or absent)
+- forget (a materialization record whose Entry left the Library, once its file
+  has gone to the desktop's trash or from the disk)
 - complete (an interrupted commit's local records from its pending row)
 - dispose (of a proven abandoned spool and uploaded object)
 - retain (pending work whose commit outcome is unknown)

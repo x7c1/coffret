@@ -182,6 +182,9 @@ fn reason_name(reason: &FindingReason) -> &'static str {
         FindingReason::ForeignFile => "ForeignFile",
         FindingReason::LocallyChanged => "LocallyChanged",
         FindingReason::WitnessedDeletion => "WitnessedDeletion",
+        FindingReason::MovedToTrash => "MovedToTrash",
+        FindingReason::KeptEdited => "KeptEdited",
+        FindingReason::MoveToTrashRefused { .. } => "MoveToTrashRefused",
         FindingReason::UnreachablePlace { .. } => "UnreachablePlace",
         FindingReason::ReservedComponent => "ReservedComponent",
     }

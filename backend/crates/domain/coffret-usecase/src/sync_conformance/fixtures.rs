@@ -85,9 +85,10 @@ pub(crate) fn folder() -> &'static Path {
 
 /// One sync run against a store, a catalog, and the device's disk.
 ///
-/// The disk is handed to both halves of the request, because it is one disk: the
-/// spool it writes and the mapped folders it reads are two places in the same
-/// fake, the way they are two places on a device.
+/// The disk is handed to every part of the request that is about it, because it
+/// is one disk: the spool it writes, the mapped folders it reads and the trash
+/// it moves a departed file into are places in the same fake, the way they are
+/// places on a device.
 ///
 /// The store travels separately from the fixture because one case runs against
 /// a wrapper around it.
@@ -102,6 +103,7 @@ pub(super) fn request<'a>(
         store,
         index,
         keys,
+        fs,
         fs,
         fs,
         spool_dir(),
@@ -276,6 +278,7 @@ pub(super) async fn plant(
             size: content.len() as u64,
             mtime,
             at: at(0),
+            hash: Some(ContentHash::from_bytes(*blake3::hash(content).as_bytes())),
         }]);
     }
 

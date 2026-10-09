@@ -114,6 +114,7 @@ async fn hold(library: &OpenLibrary, path: &str) {
             size: 100,
             mtime: Mtime::from_unix_seconds(1_700_000_000),
             at: DeviceTime::from_unix_seconds(1_700_000_100),
+            hash: None,
         })
         .await
         .expect("a present observation is recorded");

@@ -9,7 +9,8 @@ use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::Row;
 
 use super::columns::{
-    container_id, entry_path, from_integer, integer, optional_entry_path, optional_text, text,
+    container_id, entry_path, from_integer, integer, optional_content_hash, optional_entry_path,
+    optional_text, text,
 };
 use crate::error::{classify, object_on_spooling_row, unreadable};
 
@@ -71,6 +72,7 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
             size: from_integer(row, "observed_size", OPERATION)?,
             mtime: Mtime::from_unix_seconds(integer(row, "observed_mtime", OPERATION)?),
             at: DeviceTime::from_unix_seconds(integer(row, "observed_at", OPERATION)?),
+            hash: optional_content_hash(row, "hash", OPERATION)?,
         },
         state: match text(row, "state", OPERATION)?.as_str() {
             "present" => LocalEntryState::Present,

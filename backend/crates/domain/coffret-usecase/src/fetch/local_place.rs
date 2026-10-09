@@ -10,6 +10,7 @@ use crate::device_state::{Mapping, RootMarkerId};
 use crate::mapped_roots::MappedRoots;
 use crate::source_reader::SourceReader;
 use crate::standing::Standing;
+use crate::trash_folders;
 use crate::{LocalIoError, MappedRelativeLocation};
 
 /// Where one Entry Path's file belongs on this device (spec: EP-9).
@@ -81,6 +82,20 @@ impl LocalPlace {
         let mut joined = self.root.clone();
         joined.push(self.relative.to_path_buf());
         joined
+    }
+
+    /// The folder directly under the mapped root this place stands in, where its
+    /// name is one a desktop keeps its trash under (spec: EP-16).
+    ///
+    /// Asked of the first component below the *root*, not of the Entry Path: a
+    /// top-level mapping's prefix is not a folder on this disk, so the folder
+    /// at the root's top is the first component past it.
+    pub(super) fn trash_folder(&self) -> Option<PathBuf> {
+        self.relative
+            .text_components()
+            .next()
+            .filter(|top| trash_folders::is_trash_folder(top))
+            .map(|top| self.root.join(top))
     }
 
     /// A reader over this mapped file, reached without following a descendant

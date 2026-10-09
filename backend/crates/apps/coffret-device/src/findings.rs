@@ -86,6 +86,20 @@ impl From<&SyncOutcome> for Findings {
                 path: path.clone(),
                 reason: FindingReason::DeletedLocally,
             },
+            Surfaced::MovedToTrash { path } => Finding::Surfaced {
+                path: path.clone(),
+                reason: FindingReason::MovedToTrash,
+            },
+            Surfaced::KeptEdited { path } => Finding::Surfaced {
+                path: path.clone(),
+                reason: FindingReason::KeptEdited,
+            },
+            Surfaced::MoveToTrashRefused { path, cause } => Finding::Surfaced {
+                path: path.clone(),
+                reason: FindingReason::MoveToTrashRefused {
+                    cause: cause.clone(),
+                },
+            },
         });
         let settled = outcome.settled.iter().cloned().map(Finding::Settled);
 

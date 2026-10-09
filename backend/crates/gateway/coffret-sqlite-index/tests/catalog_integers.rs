@@ -66,6 +66,7 @@ fn an_observation_past_the_range() -> LocalObservation {
         size: PAST_THE_RANGE,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_400),
+        hash: None,
     }
 }
 

@@ -197,6 +197,22 @@ pub trait Index: Send + Sync {
     /// the state and the time of looking change.
     async fn mark_absent(&self, path: &EntryPath, at: DeviceTime) -> IndexResult<()>;
 
+    /// Forgets this device's row for one Entry Path, so the path is outside its
+    /// scope again (spec: EP-10, EP-15).
+    ///
+    /// What becomes of the row of a file whose Entry has left the Library once
+    /// nothing of it is left on this device's disk either: the sync moved it to
+    /// the trash, or the person moved or removed it. Forgotten rather than marked
+    /// [`Absent`](crate::device_state::LocalEntryState::Absent), because absence
+    /// is a deletion this device witnessed of an Entry it materialized, and a
+    /// fetch declines to put such an Entry back (spec: EP-11) — an Entry another
+    /// device later adds at the same path is a different one, and this device
+    /// has witnessed nothing about it.
+    ///
+    /// Forgetting a row that is not there succeeds, so an interrupted run's
+    /// next pass simply forgets it again.
+    async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()>;
+
     /// What this device knows about the local file at one Entry Path, or `None`
     /// if it has never had one there.
     ///

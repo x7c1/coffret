@@ -190,6 +190,7 @@ pub(super) async fn sync_source(
             keys,
             fixture.fs(),
             fixture.fs(),
+            fixture.fs(),
             fixture.spool_dir(),
             BatchId::new(format!("sync-{run}")),
             at(run),

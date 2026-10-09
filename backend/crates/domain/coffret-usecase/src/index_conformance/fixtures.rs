@@ -167,6 +167,9 @@ pub(super) fn observation(text: &str, size: u64) -> LocalObservation {
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_500),
+        // What every writer records beside a materialization: the content the
+        // file was made to match (spec: EP-15).
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
     }
 }
 

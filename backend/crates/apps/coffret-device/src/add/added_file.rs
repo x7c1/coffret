@@ -7,12 +7,13 @@ use coffret_model::{EntryPath, Mtime};
 /// Container holding it, and no size or modification time the Library preserved
 /// (spec: FM-9) — what is here is what the filesystem answered a moment ago.
 ///
-/// Two things put a file in this state and they are the same state. One is a
-/// file just added to the folder, which the next sync will carry in; the other
-/// is a file whose Entry left the Library when another device removed the
-/// Container holding it, and which stays on disk to be reported rather than
-/// silently left behind (spec: EP-10). Neither is in the Library now, and the
-/// answer for both is the same: it is here, and the Library does not have it.
+/// Two things put a file in this state, and to this listing they are the same
+/// state. One is a file just added to the folder, which the next sync will carry
+/// in; the other is a file whose Entry left the Library while this device's copy
+/// stayed on disk — departed, which the next sync moves to the trash or, where
+/// the copy changed, keeps and reports rather than carrying back in
+/// (spec: EP-15). Neither is in the Library now, and the answer for both is the
+/// same: it is here, and the Library does not have it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddedFile {
     /// Its last path component, which is what it is called.

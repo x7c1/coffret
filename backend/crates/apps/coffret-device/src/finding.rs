@@ -187,6 +187,9 @@ impl Finding {
     /// Failed trash keeps its provenance for a later retry (spec: OC-2), and
     /// the next qualifying commit retries a checkpoint (spec: CK-8).
     ///
+    /// A deleted Entry's copy moved to the trash is work the run did, and the
+    /// person who wants it back knows where to look (spec: EP-15).
+    ///
     /// A degraded Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
     /// before it commits (spec: KL-13, KL-16), so a run that only reports one
@@ -195,7 +198,10 @@ impl Finding {
     pub fn needs_attention(&self) -> bool {
         !matches!(
             self,
-            Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
+            Self::Surfaced {
+                reason: FindingReason::MovedToTrash,
+                ..
+            } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::UntrashedRemoval { .. }
                 | Self::CheckpointFailed { .. }
                 | Self::DegradedKeyring { .. }
@@ -316,6 +322,13 @@ fn refusal_said(reason: &RootRefused) -> String {
 impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            // Said as what was done rather than as something left alone, since
+            // that is what it is (spec: EP-15): no "surfaced", and the reason
+            // already says where the copy went.
+            Self::Surfaced {
+                path,
+                reason: reason @ FindingReason::MovedToTrash,
+            } => write!(f, "{path}: {reason}"),
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
             Self::UnavailableRoot {
                 prefix,

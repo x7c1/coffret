@@ -139,17 +139,16 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
         emptied.unavailable.is_empty(),
         "the root is there and on the filesystem the mapping records",
     );
-    assert_eq!(
+    assert!(
+        matches!(
+            emptied.surfaced.as_slice(),
+            [
+                Surfaced::DeletedLocally { path: first },
+                Surfaced::DeletedLocally { path: second },
+            ] if *first == entry_path("spring.jpg") && *second == entry_path("summer.jpg")
+        ),
+        "an emptied folder reports every deletion, in Entry Path order: {:?}",
         emptied.surfaced,
-        vec![
-            Surfaced::DeletedLocally {
-                path: entry_path("spring.jpg"),
-            },
-            Surfaced::DeletedLocally {
-                path: entry_path("summer.jpg"),
-            },
-        ],
-        "an emptied folder reports every deletion, in Entry Path order",
     );
 
     remove_root(fixture, &root);
@@ -251,12 +250,13 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
     fixture.fs().remove_file(&remainder.join("notes.txt"));
 
     let third = sync(fixture, 3).await;
-    assert_eq!(
+    assert!(
+        matches!(
+            third.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("notes.txt")
+        ),
+        "the file the available mapping lost, and nothing from under the other prefix: {:?}",
         third.surfaced,
-        vec![Surfaced::DeletedLocally {
-            path: entry_path("notes.txt"),
-        }],
-        "the file the available mapping lost, and nothing from under the other prefix",
     );
     assert_eq!(third.unavailable.len(), 1);
 }
@@ -293,12 +293,13 @@ pub async fn a_mapping_recorded_afresh_clears_its_identity_and_reports_the_delet
         outcome.unavailable.is_empty(),
         "a mapping with no recorded identity is guarded by the missing-root check alone",
     );
-    assert_eq!(
+    assert!(
+        matches!(
+            outcome.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("spring.jpg")
+        ),
+        "the file that really is gone is reported: {:?}",
         outcome.surfaced,
-        vec![Surfaced::DeletedLocally {
-            path: entry_path("spring.jpg"),
-        }],
-        "the file that really is gone is reported",
     );
 }
 

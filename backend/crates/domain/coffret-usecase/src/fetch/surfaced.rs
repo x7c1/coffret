@@ -51,10 +51,12 @@ pub enum Surfaced {
     /// A folder on the way to the Entry's place is not a folder of the mapped
     /// root.
     ///
-    /// A symbolic link, or an ordinary file where a folder must be. What stands
-    /// past such a name is not this device's mapped folder, so no file written
-    /// through it would stand for the Entry Path and the descent stops rather
-    /// than answering through it (spec: EP-4, EP-11).
+    /// A symbolic link, an ordinary file where a folder must be, or a folder a
+    /// desktop keeps its trash in directly under the mapped root, which no scan
+    /// enters (spec: EP-16). What stands past such a name is not this device's
+    /// mapped folder, so no file written through it would stand for the Entry
+    /// Path and the descent stops rather than answering through it
+    /// (spec: EP-4, EP-11).
     ///
     /// A finding rather than a failure, because it is a fact about the shape of
     /// *this* device's disk and about one Entry: the device that committed the

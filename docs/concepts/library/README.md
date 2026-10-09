@@ -72,12 +72,12 @@ refuses the run. Findings have two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, degraded replicas | While a later run still observes the condition |
-| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint | As the result of that attempt; later attempts report their own results |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, degraded replicas, an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
+| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file moved to the desktop's trash | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
 leaving the reported conditions for attention (spec: PK-14, EP-10, EP-12,
-KL-15, OC-2, CK-8).
+EP-15, KL-15, OC-2, CK-8).
 
 ### Browsing surface
 
@@ -137,6 +137,8 @@ and has a window of its own for entering the Passphrase.
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
   the Library)
+- move (a departed file to the desktop's trash, during a sync) — never *trash*,
+  which is Storage's verb: a [Storage Object](../storage-object/) is trashed
 - spool (a Container's ciphertext to a local file before uploading it)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
@@ -212,17 +214,25 @@ and has a window of its own for entering the Passphrase.
   scope rather than missing, so holding part of a Library never removes or
   rewrites the rest (spec: EP-10).
   - A file merely **added** — standing in a mapped folder where no Entry of the
-    Library stands — is not materialized: this device holds no record of having
-    placed it, and a scan can report it only as new. There are two ways into
-    that state. The file may be new, so nothing has uploaded it and nothing has
-    fetched it; or its Entry left the Library — another device removed the
-    Container it lived in — while the file stayed on disk. Materialization is
-    of an Entry, so a file whose Entry left is not materialized either. Either
-    way it becomes materialized when a run carries it in, which is the only way
-    into the Library (spec: EP-10). A file a browser drops is added too. The
+    Library stands, and where this device holds no record of having placed
+    anything — is not materialized, and a scan can report it only as new
+    (spec: EP-10). It becomes materialized when a run carries it in, which is
+    the only way into the Library. A file a browser drops is added too. The
     device keeps a note of the drop so that the run carrying the file in
     records no birth time; that note is not a record of materialization
     (spec: EP-11).
+  - A file is **departed** when its Entry left the Library — this device or
+    another removed it — while the file this device materialized for it stayed
+    on disk. It is not added: the record says this device put it there, and
+    carrying it back in would undo the deletion, so no run uploads it. A sync
+    moves an **unedited** one — still holding what this device last made it
+    match — to the desktop's trash and forgets the record, so the path is
+    outside this device's scope again. An **edited** one is the person's change to a
+    file the Library no longer has: it stays where it is and every run reports
+    it, until the person moves it — elsewhere it is an ordinary added file — or
+    removes it. Telling the two apart takes the content hash this device
+    records whenever it materializes a file, because the Entry's own leaves the
+    Catalog with the Entry (spec: EP-15).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
@@ -384,8 +394,11 @@ and has a window of its own for entering the Passphrase.
   (spec: PK-10, KL-17). It is not undoable in the Library: a removed Container
   never comes back under its ID, and the provider's trash keeps its ciphertext
   only until it is purged — putting it back from there restores neither its
-  place in the Library nor its key (spec: CP-14, OC-6). What a device does
-  with its own local copy of a deleted Entry is a separate question.
+  place in the Library nor its key (spec: CP-14, OC-6). A device holding a
+  local copy of a deleted Entry moves it to the desktop's trash once it has
+  caught up, unless the copy changed since the device last made it match — then
+  it keeps it and says so — so the deletion reaches every device's disk without
+  any of them losing an edit (spec: EP-15).
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).

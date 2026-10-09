@@ -38,7 +38,12 @@
 //!    *candidate*, decided by hashing the plaintext and comparing it with the
 //!    current Entry's hash — equal content is a file that was touched and not
 //!    changed. A row this device materialized whose file is gone is a local
-//!    deletion. An Entry this device never materialized is outside its scope
+//!    deletion. A file standing where this device materialized an Entry that has
+//!    since left the Library is *departed* and never new (spec: EP-15): one that
+//!    still holds what this device last made it match goes to the desktop's
+//!    trash once the scan is over and its row is forgotten, one that changed
+//!    is kept and reported, and a row whose file is gone as well is forgotten
+//!    without a word. An Entry this device never materialized is outside its scope
 //!    and is never reported as modified or deleted, mapping or no mapping. A
 //!    mapping whose root the device cannot vouch for — one that is not there, or
 //!    one that is empty while standing on a filesystem the mapping does not
@@ -94,6 +99,8 @@
 //! step in it.
 
 mod candidate;
+
+mod departed;
 
 mod disposal;
 pub use disposal::Disposal;

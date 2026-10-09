@@ -23,9 +23,11 @@
 //!
 //! # What it does not touch
 //!
-//! Local files. A deletion changes the Library and nothing in a mapped folder;
-//! what a device does about a file whose Entry left the Library is a separate
-//! question. So the person is told only what leaves the Library.
+//! Local files. A deletion changes the Library and nothing in a mapped folder,
+//! so the person is told only what leaves the Library. What becomes of a file
+//! whose Entry left is the next sync's to decide, on this device and every other
+//! that holds one: an unedited copy goes to the desktop's trash and an edited
+//! one is kept and reported (spec: EP-15).
 
 mod delete_run;
 pub use delete_run::{DeleteRun, RefusedPack};

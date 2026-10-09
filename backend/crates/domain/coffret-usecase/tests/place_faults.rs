@@ -202,6 +202,7 @@ async fn library_of(paths: &[&str]) -> (InMemoryStore, Device) {
             &keys(),
             &source.fs,
             &source.fs,
+            &source.fs,
             SPOOL_DIR,
             BatchId::new("run-1"),
             at(1),
@@ -275,6 +276,7 @@ async fn sync(store: &InMemoryStore, index: &dyn Index, fs: &InMemoryFs) -> Sync
             store,
             index,
             &keys(),
+            fs,
             fs,
             fs,
             SPOOL_DIR,
@@ -1168,6 +1170,10 @@ impl Index for RefusingIndex<'_> {
 
     async fn mark_absent(&self, path: &EntryPath, at: DeviceTime) -> IndexResult<()> {
         self.inner.mark_absent(path, at).await
+    }
+
+    async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()> {
+        self.inner.forget_local_entry(path).await
     }
 
     async fn local_entry_at(&self, path: &EntryPath) -> IndexResult<Option<LocalEntry>> {

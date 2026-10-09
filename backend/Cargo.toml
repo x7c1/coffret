@@ -163,6 +163,12 @@ time = { version = "0.3", default-features = false, features = [
   "std",
 ] }
 tokio = { version = "1", features = ["full"] }
+# Moving a file a deleted Entry left on this device into the desktop's own
+# trash: the freedesktop.org Trash on Linux, the Finder's on macOS
+# (spec: EP-15). `chrono` is what writes the deletion date a freedesktop trash
+# lists a file by; the default set's other member is a Windows COM setting
+# coffret has no platform for.
+trash = { version = "5", default-features = false, features = ["chrono"] }
 tokio-util = { version = "0.7", features = ["io"] }
 # `ServiceExt::oneshot`, so a router can be driven as the service it is rather
 # than through a socket. Test support: nothing that ships reaches for it.

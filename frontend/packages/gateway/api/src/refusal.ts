@@ -156,9 +156,9 @@ export type PlacementReason =
  * declined fetch reported, and what a run's finding reports in its field of the
  * same name.
  *
- * The last two only a sync finds, so they arrive on a finding and never on a
+ * The last five only a sync finds, so they arrive on a finding and never on a
  * refusal: nothing a fetch does is declined over a file that changed inside a
- * Pack or one this device no longer has.
+ * Pack, one this device no longer has, or one whose Entry left the Library.
  */
 export type SurfacedFinding =
   | 'ForeignFile'
@@ -166,8 +166,9 @@ export type SurfacedFinding =
   | 'WitnessedDeletion'
   /**
    * A folder on the way to where the file belongs is not a folder of the mapped
-   * folder — a symbolic link, or an ordinary file standing where a folder must
-   * be. The rest of a run is unaffected: this is the shape of one folder.
+   * folder — a symbolic link, an ordinary file standing where a folder must
+   * be, or a folder the desktop keeps its trash in at the mapped folder's top.
+   * The rest of a run is unaffected: this is the shape of one folder.
    */
   | 'UnreachablePlace'
   | 'KeyLost'
@@ -185,7 +186,25 @@ export type SurfacedFinding =
   /** The file changed, and the Entry it changed from is inside a Pack. */
   | 'ChangedInPack'
   /** This device had the file and it is gone; the Library still holds it. */
-  | 'DeletedLocally';
+  | 'DeletedLocally'
+  /**
+   * The Entry this device had put there left the Library, and the file, still
+   * holding what this device last made it match, was moved to the desktop's
+   * trash. Work done: nobody has to act on it.
+   */
+  | 'MovedToTrash'
+  /**
+   * The Entry this device had put there left the Library, and the file changed
+   * since, so it is kept where it is — and never carried back in — until the
+   * person moves or removes it.
+   */
+  | 'KeptEdited'
+  /**
+   * The Entry this device had put there left the Library, and moving the file
+   * to the trash was refused — by the mapped folder, a folder on the way down,
+   * or the trash itself. It is left where it is, and the next sync tries again.
+   */
+  | 'MoveToTrashRefused';
 
 /**
  * What a placement under a folder this device has no folder for is told as

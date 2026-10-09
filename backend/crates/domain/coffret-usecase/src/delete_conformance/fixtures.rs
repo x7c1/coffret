@@ -113,6 +113,7 @@ pub(super) async fn sync_on(index: &dyn Index, fixture: &DeleteUnderTest, run: i
             &keys(),
             fixture.fs(),
             fixture.fs(),
+            fixture.fs(),
             fixture.spool_dir(),
             BatchId::new(format!("sync-{run}")),
             at(run),

@@ -24,9 +24,9 @@ impl OpenLibrary {
     /// (spec: PK-10, KL-17). The outcome says which, and a refusal is not an error:
     /// the rest of the deletion commits.
     ///
-    /// No mapped folder is touched. What becomes of a local file whose Entry
-    /// left the Library is a separate question, and this answers only what
-    /// leaves the Library.
+    /// No mapped folder is touched, and this answers only what leaves the
+    /// Library. What becomes of a local file whose Entry left is the next
+    /// sync's to decide (spec: EP-15).
     pub async fn delete(
         &self,
         selection: DeleteSelection,

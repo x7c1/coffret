@@ -84,6 +84,17 @@ fn every_finding() -> Vec<Finding> {
         surfaced(FindingReason::ReservedComponent),
         surfaced(FindingReason::ChangedInPack),
         surfaced(FindingReason::DeletedLocally),
+        surfaced(FindingReason::MovedToTrash),
+        surfaced(FindingReason::KeptEdited),
+        surfaced(FindingReason::MoveToTrashRefused {
+            cause: std::sync::Arc::new(coffret_device::DescentError::Io(
+                coffret_usecase::LocalIoError::new(
+                    coffret_usecase::LocalOperation::MovingToTrash,
+                    "/mnt/albums/a.jpg",
+                    std::io::Error::other("no trash on this volume"),
+                ),
+            )),
+        }),
         unavailable(RootUnavailable::Missing),
         unavailable(RootUnavailable::AnotherFilesystem),
         Found::RefusedRoot {

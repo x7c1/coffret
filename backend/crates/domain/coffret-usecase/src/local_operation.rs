@@ -63,6 +63,13 @@ pub enum LocalOperation {
     /// attempt at putting a Library on this device left, was being deleted
     /// (spec: OC-8, EP-11).
     Removing,
+    /// A file a deleted Entry left on this device unedited was being moved to
+    /// the desktop's own trash (spec: EP-15).
+    ///
+    /// Not [`Removing`](Self::Removing): nothing here is deleted outright, and a
+    /// person reading which of the two refused has a different place to look —
+    /// a volume without a trash is not a file that could not be deleted.
+    MovingToTrash,
     /// A lock was being taken on a file a device keeps for itself, so that one
     /// process at a time holds what that file stands for.
     ///
@@ -84,6 +91,7 @@ impl fmt::Display for LocalOperation {
             Self::Stamping => "stamped",
             Self::Renaming => "renamed",
             Self::Removing => "removed",
+            Self::MovingToTrash => "moved to the trash",
             Self::Locking => "locked",
         })
     }

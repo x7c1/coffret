@@ -456,6 +456,24 @@
           "surfaced": "DeletedLocally"
         },
         {
+          "message": "this file was deleted from the Library, and this device's unedited copy was moved to the trash",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "MovedToTrash"
+        },
+        {
+          "message": "this file was deleted from the Library, and this device's copy is kept because it changed; move or remove it to stop this report",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "KeptEdited"
+        },
+        {
+          "message": "this file was deleted from the Library, and moving this device's copy to the trash was refused; it is left in place, and the next sync tries again",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "MoveToTrashRefused"
+        },
+        {
           "message": "a folder this device maps is not there, so nothing in it was looked at",
           "path": null,
           "reason": "root_missing"
@@ -552,6 +570,24 @@
           "path": "albums/a.jpg",
           "reason": "surfaced",
           "surfaced": "DeletedLocally"
+        },
+        {
+          "message": "this file was deleted from the Library, and this device's unedited copy was moved to the trash",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "MovedToTrash"
+        },
+        {
+          "message": "this file was deleted from the Library, and this device's copy is kept because it changed; move or remove it to stop this report",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "KeptEdited"
+        },
+        {
+          "message": "this file was deleted from the Library, and moving this device's copy to the trash was refused; it is left in place, and the next sync tries again",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "MoveToTrashRefused"
         },
         {
           "message": "a folder this device maps is not there, so nothing in it was looked at",

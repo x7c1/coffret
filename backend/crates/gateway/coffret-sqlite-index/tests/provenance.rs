@@ -1,6 +1,8 @@
-use coffret_model::{ContainerId, ObjectRef};
+use coffret_model::{ContainerId, ContentHash, EntryPath, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
-use coffret_usecase::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
+use coffret_usecase::device_state::{
+    BatchId, DeviceTime, LocalEntryState, LocalObservation, PendingRow, SpoolState,
+};
 use coffret_usecase::{Index, IndexError};
 
 #[tokio::test]
@@ -38,7 +40,8 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
     connection
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
-             ALTER TABLE pending_rows DROP COLUMN materializes; PRAGMA user_version = 7;",
+             ALTER TABLE pending_rows DROP COLUMN materializes; \
+             ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -85,7 +88,8 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "ALTER TABLE pending_rows DROP COLUMN materializes; PRAGMA user_version = 8;",
+            "ALTER TABLE pending_rows DROP COLUMN materializes; \
+             ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -103,6 +107,45 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
             .await
             .unwrap(),
         [expected]
+    );
+}
+
+/// Layout 9 recorded no content hash beside a materialization. Its rows are
+/// kept, and read back with none, which is what makes a scan keep such a file
+/// rather than guess once it changed (spec: EP-15).
+#[tokio::test]
+async fn layout_9_materializations_are_kept_without_a_hash() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let observation = LocalObservation {
+        path: EntryPath::parse("albums/a.jpg").unwrap(),
+        size: 100,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        at: DeviceTime::from_unix_seconds(1_700_000_400),
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
+    };
+    index.mark_present(observation.clone()).await.unwrap();
+    drop(index);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("ALTER TABLE local_entries DROP COLUMN hash; PRAGMA user_version = 9;")
+        .unwrap();
+    drop(connection);
+
+    let reopened = SqliteIndex::open(&path).unwrap();
+    let row = reopened
+        .local_entry_at(&observation.path)
+        .await
+        .unwrap()
+        .expect("the materialization survives the upgrade");
+    assert_eq!(row.state, LocalEntryState::Present);
+    assert_eq!(
+        row.observation,
+        LocalObservation {
+            hash: None,
+            ..observation
+        }
     );
 }
 

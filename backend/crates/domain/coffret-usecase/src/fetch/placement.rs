@@ -329,6 +329,7 @@ impl<'a> Placement<'a> {
                 size: self.entry.extent.size(),
                 mtime: self.entry.mtime,
                 at: now,
+                hash: Some(self.entry.hash),
             })
             .await?;
 
