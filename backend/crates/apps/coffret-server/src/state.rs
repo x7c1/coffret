@@ -11,6 +11,7 @@ use crate::delete::Deletes;
 use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
+use crate::pending_rows::PendingRows;
 use crate::reconnect::{Consent, DriveConsent, Reconnects};
 use crate::refresh::{Catalog, Refreshes};
 use crate::server_id::ServerId;
@@ -124,10 +125,15 @@ pub struct ServerState {
     /// The fourth piece of background work, and device state in the sense the
     /// other three are. Apart from them because a deletion that rebuilds a Pack
     /// reads it whole and uploads its replacement (spec: PK-10), which is no
-    /// shorter than packing a book. It does wait for a running sync or freeze
-    /// before it starts, because the three own this device's pending rows in
-    /// turn (spec: OC-2).
+    /// shorter than packing a book.
     pub deletes: Deletes,
+    /// The one turn a sync, a freeze and a deletion take at this device's
+    /// pending rows, in the order they ask for it.
+    ///
+    /// The three own those rows for the whole of a run and a second owner is
+    /// refused rather than made to wait (spec: OC-2), so the three workers above
+    /// queue here rather than refusing each other. See [`PendingRows`].
+    pub pending_rows: PendingRows,
     /// What one request may bring, and how the room to take it is asked after.
     ///
     /// Here rather than in the Library, which puts no number on a file: these
@@ -181,6 +187,7 @@ impl ServerState {
             syncs: Syncs::new(),
             freezes: Freezes::new(),
             deletes: Deletes::new(),
+            pending_rows: PendingRows::new(),
             allowance: Allowance::generous(),
             catalog: Catalog::new(),
             refreshes: Refreshes::new(),

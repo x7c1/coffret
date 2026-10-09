@@ -17,8 +17,9 @@ pub type IndexResult<T> = std::result::Result<T, IndexError>;
 /// temporary ownership contention without advising that the whole file be lost.
 #[derive(Debug)]
 pub enum IndexError {
-    /// Another sync or freeze owns this device's pending rows. Retry after it
-    /// finishes; its in-flight ciphertext must not be reclaimed (spec: OC-2).
+    /// Another sync, freeze or deletion owns this device's pending rows. Retry
+    /// after it finishes; its in-flight ciphertext must not be reclaimed
+    /// (spec: OC-2).
     PendingRowsBusy {
         /// The lock implementation's refusal, kept for inspection.
         cause: Box<dyn error::Error + Send + Sync>,

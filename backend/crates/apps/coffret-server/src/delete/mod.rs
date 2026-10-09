@@ -17,9 +17,9 @@
 //! other three are.
 //!
 //! It does not run beside a sync or a freeze, though: all three own this
-//! device's pending rows for the whole of a run (spec: OC-2), so a deletion
-//! waits for the one running before it starts rather than being refused the
-//! rows.
+//! device's pending rows for the whole of a run (spec: OC-2), so each takes its
+//! turn at them on [`PendingRows`](crate::PendingRows) before it starts rather
+//! than being refused the rows.
 //!
 //! # What it does not touch
 //!

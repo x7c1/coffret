@@ -63,6 +63,11 @@ export type RefusalKind =
    * Library that has since moved. Unlike `server` it is something a person can
    * act on — running the same thing again catches up first and plans from the
    * Library as it now stands — and the message says so.
+   *
+   * Also what a run is refused with when another run — a sync or a freeze run
+   * from the command line, outside this server — owns this device's pending work:
+   * nothing was committed either, and the same run started again once that one
+   * finishes goes through. The message says which of the two it was.
    */
   | 'conflict'
   /**

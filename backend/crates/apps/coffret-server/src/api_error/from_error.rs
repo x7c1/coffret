@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use coffret_device::{
-    CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError,
-    SyncError, UnusableReplica,
+    CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, IndexError, Redacted,
+    StorageError, SyncError, UnusableReplica,
 };
 
 use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE, UNAUTHENTICATED};
@@ -285,12 +285,20 @@ fn listing_ran_past_its_cap(cause: String) -> ApiError {
 /// the run stopped. An object that did not arrive at Storage whole is
 /// `unverified` for the reason the fetch's mismatches are: what is at the far
 /// end is not the content this device named.
+///
+/// And one is drawn out of the Index's own failures: pending rows another run
+/// on this device owns (spec: OC-2). The Index answered, and said those rows
+/// were busy — it is not a catalog that could not be used, and it is answered
+/// with a refusal that says what to wait for ([`ApiError::pending_rows_busy`]).
 fn from_sync(cause: SyncError) -> ApiError {
     match cause {
         SyncError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         SyncError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
         SyncError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
+        SyncError::Index(IndexError::PendingRowsBusy { .. }) => {
+            ApiError::pending_rows_busy(cause.redacted())
         }
         SyncError::Index(_) => catalog_unusable(cause.redacted()),
         SyncError::Format(_)
@@ -323,12 +331,18 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// the stopped state whatever stopped it: a freeze that failed committed nothing
 /// (spec: CP-1), so every page is still sitting in the folder and eligible
 /// again.
+///
+/// Pending rows another run on this device owns are answered as the sync
+/// answers them ([`ApiError::pending_rows_busy`]), for its reason (spec: OC-2).
 fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
         FreezeError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FreezeError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
         FreezeError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
+        FreezeError::Index(IndexError::PendingRowsBusy { .. }) => {
+            ApiError::pending_rows_busy(cause.redacted())
         }
         FreezeError::Index(_) => catalog_unusable(cause.redacted()),
         FreezeError::Format(_)
@@ -354,12 +368,18 @@ fn from_freeze(cause: FreezeError) -> ApiError {
 /// (spec: KL-7), a Pack that could not be encoded. A deletion that failed
 /// committed nothing (spec: CP-1), so every Entry it named is still in the
 /// Library and the same request can be made again.
+///
+/// Pending rows another run on this device owns are answered as the sync
+/// answers them ([`ApiError::pending_rows_busy`]), for its reason (spec: OC-2).
 fn from_delete(cause: DeleteError) -> ApiError {
     match cause {
         DeleteError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         DeleteError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
         DeleteError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
+        DeleteError::Index(IndexError::PendingRowsBusy { .. }) => {
+            ApiError::pending_rows_busy(cause.redacted())
         }
         DeleteError::Index(_) => catalog_unusable(cause.redacted()),
         DeleteError::Format(_) | DeleteError::Io { .. } | DeleteError::UnmappedContainer { .. } => {

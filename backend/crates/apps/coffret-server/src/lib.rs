@@ -193,6 +193,9 @@ pub use launch::{Launch, Serving};
 mod lock;
 pub use lock::{lock_when_idle, UnlockPrompt};
 
+mod pending_rows;
+pub use pending_rows::PendingRows;
+
 mod refresh;
 pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Standing};
 

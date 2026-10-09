@@ -23,15 +23,16 @@ use super::{DeleteRun, DeleteStatus, Target};
 /// what it took, so the batch is committed or abandoned whole (spec: CP-1,
 /// DK-2), and a deletion armed after one stops here.
 ///
-/// It starts only once no sync and no freeze is running, and takes the keys
+/// It starts only once its turn at the pending rows has come — behind any sync,
+/// freeze or deletion that asked before it (spec: OC-2) — and takes the keys
 /// after that wait rather than before it, so the wait is not counted as
-/// somebody being here (spec: DK-4). See [`until_pending_rows_are_free`].
+/// somebody being here (spec: DK-4). See [`PendingRows`](crate::PendingRows).
 pub(super) async fn delete(state: &ServerState, target: Target) {
     let started = Instant::now();
     let selection = target.selection();
     let mut run = DeleteRun::starting(target);
 
-    until_pending_rows_are_free(state).await;
+    let _turn = state.pending_rows.take().await;
     let library = match state.unlocked() {
         Ok(library) => library,
         Err(refusal) => {
@@ -53,29 +54,6 @@ pub(super) async fn delete(state: &ServerState, target: Target) {
         }
     }
     finish(state, run, started);
-}
-
-/// Waits until neither a freeze nor a sync is running or waiting to run.
-///
-/// A deletion, a freeze and a sync each own this device's pending rows for the
-/// whole of their run (spec: OC-2), and a second owner is refused at once
-/// rather than made to wait — so a deletion started beside a freeze packing a
-/// book would stop as a server that could not answer, having committed nothing.
-/// Waiting here puts a confirmed deletion after the work already running, which
-/// is the order the person asked for them in.
-///
-/// Asked again after both waits, because a freeze can be armed while a sync is
-/// being waited for. A sync armed in the moment between this returning and the
-/// run taking the rows can still meet a deletion holding them; this narrows the
-/// two to one at a time on this server and does not make them one queue.
-async fn until_pending_rows_are_free(state: &ServerState) {
-    loop {
-        state.freezes.until_idle().await;
-        state.syncs.until_idle().await;
-        if !state.freezes.running() {
-            return;
-        }
-    }
 }
 
 /// Publishes what the deletion came to, and records it.

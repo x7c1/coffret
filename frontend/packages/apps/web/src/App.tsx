@@ -31,7 +31,7 @@ import {
 import { askToAdd, overBudgetLine } from './dropped';
 import { FileList } from './FileList';
 import { isPutAway, shownRuns } from './dismissed';
-import { addingLine, collectingLine, fillOfFolder, isFreezing, paced } from './fill';
+import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
@@ -49,6 +49,7 @@ import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
+import { waitsFor } from './turns';
 import { unmappedLine } from './unmapped';
 import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
@@ -994,10 +995,7 @@ export function App() {
                 fontSize: 13,
               }}
             >
-              {deletingLine(
-                deletion,
-                isFreezing(freeze) ? 'packing' : sync?.status === 'syncing' ? 'backup' : null,
-              )}
+              {deletingLine(deletion, waitsFor('deletion', { freeze, sync, deletion }))}
             </p>
           )}
           {notice !== null && (
@@ -1087,7 +1085,11 @@ export function App() {
         <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
       )}
       {deleteAsking !== null && (
-        <DeleteConfirm question={deleteAsking.question} onChoose={chooseDeleting} />
+        <DeleteConfirm
+          question={deleteAsking.question}
+          startsAfter={waitsFor('deletion', { freeze, sync, deletion: null })}
+          onChoose={chooseDeleting}
+        />
       )}
       <StatusBar
         library={library.state}
@@ -1096,6 +1098,7 @@ export function App() {
         fill={fill}
         sync={sync}
         freeze={freeze}
+        deletion={deletion}
         trouble={work.trouble}
         dismissed={work.dismissed}
         onDismiss={work.dismiss}

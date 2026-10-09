@@ -57,3 +57,17 @@ it('offers no Delete where nothing would be removed', () => {
   expect(screen.queryByText('Delete')).toBeNull();
   expect(screen.getByText('Close')).toBeTruthy();
 });
+
+// A sync or a freeze under way when the question is shown is what a deletion
+// confirmed now starts after, and the person is told so before saying yes
+// rather than from the progress line afterwards.
+it('says the deletion starts after the packing or backup under way', () => {
+  render(<DeleteConfirm question={ALBUMS} startsAfter="packing" onChoose={() => undefined} />);
+  expect(screen.getByRole('dialog').textContent).toContain(
+    'It starts after the packing under way finishes.',
+  );
+  cleanup();
+
+  render(<DeleteConfirm question={ALBUMS} startsAfter={null} onChoose={() => undefined} />);
+  expect(screen.getByRole('dialog').textContent).not.toContain('It starts after');
+});

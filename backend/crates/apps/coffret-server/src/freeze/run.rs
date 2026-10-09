@@ -43,6 +43,13 @@ pub(super) async fn freeze(state: &ServerState, book: Book) {
     let only = book.only.clone();
     let mut run = FreezeRun::starting(book);
 
+    // This device's pending rows are the freeze's for the whole run, and a
+    // sync or a deletion already running holds them: wait for the turn rather
+    // than being refused them (spec: OC-2). Before the keys, so the wait is
+    // not counted as somebody being here (spec: DK-4) and a lock that lands
+    // meanwhile stops this run below.
+    let _turn = state.pending_rows.take().await;
+
     // The keys, once, for the whole run, as the sync and the fill take them: a
     // lock that lands while a book is being packed leaves this holding what it
     // took, so the batch it is building is committed or abandoned whole

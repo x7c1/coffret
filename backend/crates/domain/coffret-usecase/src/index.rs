@@ -55,8 +55,9 @@ use crate::index_error::IndexResult;
 #[async_trait]
 pub trait Index: Send + Sync {
     /// Exclusively owns this device's pending rows until the returned guard is
-    /// dropped. Sync and freeze take this before reading or creating spools,
-    /// so settlement cannot reclaim another live run's data (spec: OC-2).
+    /// dropped. Sync, freeze and deletion take this before reading or creating
+    /// spools, so settlement cannot reclaim another live run's data
+    /// (spec: OC-2).
     /// Implementations must coordinate separate connections and processes.
     async fn own_pending_rows(&self) -> IndexResult<crate::PendingRowsGuard>;
 

@@ -79,6 +79,31 @@ impl Served {
         self.state.deletes.until_idle().await;
     }
 
+    /// Waits until `count` runs are queued for their turn at this device's
+    /// pending rows, behind the one holding them.
+    ///
+    /// No sleep and no guess: a run is counted as it asks for its turn, so a
+    /// case that arms one run after another and waits here between them has
+    /// put them in the queue in the order it armed them — rather than leaving
+    /// which worker asked first up to the scheduler.
+    ///
+    /// Bounded, because a run that never queues — one refused the rows rather
+    /// than waiting for them — is the regression this is there to catch, and a
+    /// case that hangs on it says nothing about why.
+    pub async fn until_queued(&self, count: usize) {
+        const PATIENCE: usize = 100_000;
+        for _ in 0..PATIENCE {
+            if self.state.pending_rows.waiting() >= count {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!(
+            "expected {count} runs queued for the pending rows, found {}",
+            self.state.pending_rows.waiting(),
+        );
+    }
+
     /// Watches for the idle interval, as the binary does beside the socket.
     ///
     /// The clock is the case's own: every case over this runs with time paused,

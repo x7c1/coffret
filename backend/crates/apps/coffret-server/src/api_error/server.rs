@@ -122,6 +122,39 @@ impl ApiError {
         .caused_by(cause)
     }
 
+    /// Another run owns this device's pending rows, and the use case refused
+    /// this one a second ownership of them (spec: OC-2).
+    ///
+    /// The server's own three flows take turns at those rows and never meet
+    /// this from each other, and no second server serves the Library on this
+    /// device (spec: LA-8), so what owns them is `coffret sync` or `coffret
+    /// freeze` on the command line, run in the same Library while the desktop
+    /// app serves it. Filed as `server` it would say the server
+    /// could not answer, which is false — the Index answered, and said the rows
+    /// were busy.
+    ///
+    /// `409 conflict`, and deliberately the kind a Library that moved
+    /// underneath a commit is: in both the run committed nothing (spec: CP-1),
+    /// what it ran into is a state that changes without this server doing
+    /// anything, and the same run started again once that is over goes
+    /// through. The explorer offers its retry from a stopped run unless what
+    /// stopped it is about this device rather than the run (`epoch`,
+    /// `locked`), and `conflict` is a kind it already offers it from — so the
+    /// refusal keeps that offer without a kind the explorer has never heard of.
+    /// Only the sentence differs, naming where the person can see what owns
+    /// the rows — the command line — in the words the sibling `conflict`
+    /// sentence uses for what happened and what running it again does.
+    pub(super) fn pending_rows_busy(cause: String) -> Self {
+        Self::plain(
+            StatusCode::CONFLICT,
+            CONFLICT,
+            "a sync or a freeze run from the command line owns this device's pending work, so \
+             nothing was changed — running it again goes through once that finishes"
+                .to_owned(),
+        )
+        .caused_by(cause)
+    }
+
     /// What arrived from Storage, or reached it, is not what the Library names
     /// or what this device sent: `502 unverified`.
     ///
