@@ -71,6 +71,7 @@ impl error::Error for Error {
                 .map(|cause| cause as &(dyn error::Error + 'static)),
             Self::Sync { cause } => Some(cause.as_ref()),
             Self::Freeze { cause } => Some(cause.as_ref()),
+            Self::Delete { cause } => Some(cause.as_ref()),
             Self::Fetch { cause } => Some(cause.as_ref()),
             Self::LocalPathNotResolved { cause }
             | Self::FileNotAdded { cause }

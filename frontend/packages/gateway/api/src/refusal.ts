@@ -3,7 +3,7 @@ import surfacedFindings from './surfaced-findings.json';
 /**
  * Which kind of refusal an answer is.
  *
- * The first twelve are the server's own, and the whole set is named here for the
+ * The first thirteen are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -57,6 +57,14 @@ export type RefusalKind =
    * offered beside it can only meet it again.
    */
   | 'epoch'
+  /**
+   * Another device changed the Library while this one was writing to it, so
+   * nothing was committed: a deletion, a freeze or a sync planned over a
+   * Library that has since moved. Unlike `server` it is something a person can
+   * act on — running the same thing again catches up first and plans from the
+   * Library as it now stands — and the message says so.
+   */
+  | 'conflict'
   /**
    * The server is locked, so nothing that needs the Master Key can be done: the
    * Passphrase is required, and the message says how to give it.
@@ -400,6 +408,7 @@ const KINDS: readonly string[] = [
   'declined',
   'refused_placement',
   'epoch',
+  'conflict',
   'locked',
   'storage',
   'unverified',
@@ -448,7 +457,7 @@ const FINDINGS: readonly string[] = surfacedFindings;
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * twelve: a caller matching on the union would then fall through every case.
+ * thirteen: a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';

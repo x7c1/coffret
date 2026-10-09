@@ -70,6 +70,15 @@ impl Served {
         self.state.freezes.until_idle().await;
     }
 
+    /// Waits for the background deletion to finish, whatever it came to.
+    ///
+    /// No sleep, and no polling: the route arms the deletion before it
+    /// answers, so a case that has had its `202` has already put the run on the
+    /// state it waits on here.
+    pub async fn delete_idle(&self) {
+        self.state.deletes.until_idle().await;
+    }
+
     /// Watches for the idle interval, as the binary does beside the socket.
     ///
     /// The clock is the case's own: every case over this runs with time paused,

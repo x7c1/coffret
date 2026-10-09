@@ -7,6 +7,7 @@ use tokio::time::Instant;
 
 use crate::allowance::Allowance;
 use crate::api_error::{ApiError, WayBack};
+use crate::delete::Deletes;
 use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
@@ -117,6 +118,16 @@ pub struct ServerState {
     /// file — and because a book being brought in must not be abandoned when
     /// something else is dropped.
     pub freezes: Freezes,
+    /// What is being deleted from the Library right now, and what the last
+    /// deletion came to.
+    ///
+    /// The fourth piece of background work, and device state in the sense the
+    /// other three are. Apart from them because a deletion that rebuilds a Pack
+    /// reads it whole and uploads its replacement (spec: PK-10), which is no
+    /// shorter than packing a book. It does wait for a running sync or freeze
+    /// before it starts, because the three own this device's pending rows in
+    /// turn (spec: OC-2).
+    pub deletes: Deletes,
     /// What one request may bring, and how the room to take it is asked after.
     ///
     /// Here rather than in the Library, which puts no number on a file: these
@@ -169,6 +180,7 @@ impl ServerState {
             fills: Fills::new(),
             syncs: Syncs::new(),
             freezes: Freezes::new(),
+            deletes: Deletes::new(),
             allowance: Allowance::generous(),
             catalog: Catalog::new(),
             refreshes: Refreshes::new(),

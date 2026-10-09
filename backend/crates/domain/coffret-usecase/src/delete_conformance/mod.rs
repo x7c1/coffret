@@ -32,7 +32,10 @@ pub use delete_under_test::DeleteUnderTest;
 mod fixtures;
 
 mod preview;
-pub use preview::a_preview_counts_what_the_deletion_then_does;
+pub use preview::{
+    a_preview_counts_what_the_deletion_then_does,
+    the_committed_keyring_names_the_packs_a_preview_refuses,
+};
 
 mod rebuild;
 pub use rebuild::{
@@ -83,6 +86,7 @@ macro_rules! delete_conformance {
             a_partial_deletion_of_a_key_lost_pack_is_refused,
             a_rebuild_whose_refresh_failed_is_completed_without_claiming_its_files,
             a_preview_counts_what_the_deletion_then_does,
+            the_committed_keyring_names_the_packs_a_preview_refuses,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

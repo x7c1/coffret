@@ -164,6 +164,7 @@ impl Redacted for Error {
             Self::NotALibraryFolder { .. } => "Device::NotALibraryFolder".to_owned(),
             Self::Sync { cause } => format!("Device::Sync: {}", cause.redacted()),
             Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
+            Self::Delete { cause } => format!("Device::Delete: {}", cause.redacted()),
             Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
             Self::LocalPathNotResolved { cause } => {
                 format!("Device::LocalPathNotResolved: {}", cause.redacted())

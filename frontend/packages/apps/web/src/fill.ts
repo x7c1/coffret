@@ -13,6 +13,7 @@
 import type {
   Catalog,
   DeclinedEntry,
+  Delete,
   DisplacedFill,
   DisplacedFreeze,
   Fill,
@@ -640,6 +641,10 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * asking takes no key, so it neither counts as somebody being here nor keeps
  * anything unlocked; what it costs is one loopback request at the interval for
  * as long as a tab stays open over a locked Library.
+ *
+ * A deletion running, or one waiting its turn, is about to take rows out of the
+ * folder on the screen, and the press that armed it is owed the sentence
+ * saying what left the Library.
  */
 export function shouldPoll(
   readerOpen: boolean,
@@ -649,9 +654,12 @@ export function shouldPoll(
   catalog: Catalog | null = null,
   reconnect: Reconnect | null = null,
   library: LibraryState | null = null,
+  deletion: Delete | null = null,
 ): boolean {
   return (
     library === 'locked' ||
+    deletion?.status === 'deleting' ||
+    (deletion?.waiting ?? 0) > 0 ||
     reconnect?.state === 'waiting' ||
     readerOpen ||
     isFilling(fill) ||

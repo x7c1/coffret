@@ -277,6 +277,10 @@ pub use referencing_passphrase::ReferencingPassphrase;
 mod run_catch_up;
 pub use run_catch_up::run_catch_up;
 
+// Deleting Entries from the Library, and counting a deletion before it is
+// asked for: methods on an open Library, for the explorer's server.
+mod run_delete;
+
 mod run_fetch;
 pub use run_fetch::run_fetch;
 
@@ -387,6 +391,10 @@ pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
     CommitError, CommitFailure, CommitOutcome, DegradedKeyring, KeyringRepair, RewrittenReplicas,
     UnrepairedReplica, UnusableReplica,
+};
+pub use coffret_usecase::delete::{
+    DeleteError, DeleteOutcome, DeletePreview, DeleteSelection, PackRefusal, RebuiltPack,
+    RefusedPack, Unverified,
 };
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{

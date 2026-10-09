@@ -418,6 +418,90 @@ interface FreezeQueue {
   displaced: DisplacedFreeze[];
 }
 
+/** Where a deletion stands. */
+export type DeleteStatus =
+  /** Armed, or deleting. */
+  | 'deleting'
+  /** It finished, whatever it was refused. */
+  | 'done'
+  /**
+   * It stopped short, and `stopped` says what stopped it. A deletion that
+   * stopped committed nothing: every file it named is still in the Library.
+   */
+  | 'stopped';
+
+/**
+ * Why a deletion left a Pack exactly as it was.
+ *
+ * Only a Pack that also holds files the deletion did not name can be refused —
+ * one whose every file is named is simply removed — because keeping the others
+ * means rebuilding it, and that is what could not happen.
+ */
+export type PackRefusalReason =
+  /** The Library has no key for the Pack, so nothing in it can be read back. */
+  | 'key_lost'
+  /** The Pack was read back and did not verify. */
+  | 'unverified';
+
+/**
+ * One Pack a deletion is, or would be, refused for: every file it holds — the
+ * named ones too — stays in the Library.
+ */
+export interface RefusedPack {
+  /** The named files that stay because their Pack does. */
+  spared: string[];
+  /** How many other files the Pack holds. */
+  kept: number;
+  /** Why, and `null` for a reason this client has not heard of. */
+  reason: PackRefusalReason | null;
+  /** The server's own sentence, written to be read by a person. */
+  message: string;
+}
+
+/**
+ * What the server is taking out of the Library on its own — `POST
+ * /api/delete` armed it, and this is that run's account of itself.
+ *
+ * The counts are outcomes and stay `0` until the batch commits; where the run
+ * has got to is `step`.
+ */
+export type Delete = DeleteOfItsOwn & Standing<DeleteStatus>;
+
+/** What one deletion came to, beside its status. */
+interface DeleteOfItsOwn {
+  /** Which run of the deletion this is, counted from the start of the server. */
+  run: number;
+  /** The folder it deletes, and `null` where it names files only. */
+  folder: string | null;
+  /** The files it names, in Entry Path order. */
+  paths: string[];
+  /** How many files left the Library, and `0` until it is over. */
+  entries: number;
+  /** How many bytes those files came to. */
+  bytes: number;
+  /** How many Containers were removed outright. */
+  removed: number;
+  /** How many Packs were rebuilt around the files they keep. */
+  rebuilt: number;
+  /** How many bytes the rebuilds read from Storage. */
+  rebuild_read: number;
+  /** How many bytes the rebuilt Packs weigh on Storage. */
+  rebuild_written: number;
+  /** The Packs it was refused for, with the named files each kept. */
+  refused: RefusedPack[];
+  /** Named files the Library held nothing at. */
+  missing: string[];
+  /** What its commit left for later, and the Keyring repairs it performed. */
+  findings: Finding[];
+  /**
+   * How far into the run the flow says it has got, and `null` before it has
+   * said and once the run is over.
+   */
+  step: Step | null;
+  /** How many deletions are waiting their turn behind this one. */
+  waiting: number;
+}
+
 /**
  * Which of the two states this device holds the Library in.
  *
@@ -525,6 +609,8 @@ export interface Work {
   sync: Sync | null;
   /** The latest freeze, running or finished, and `null` where none has run. */
   freeze: Freeze | null;
+  /** The latest deletion, running or finished, and `null` where none has run. */
+  delete: Delete | null;
   /**
    * The latest reconnect, waiting or ended, and `null` where none has run.
    *
@@ -664,6 +750,89 @@ export function previewFreeze(folder: string, signal?: AbortSignal): Promise<Fre
 }
 
 /**
+ * What a deletion names: a folder with everything under it, individual files,
+ * or both. The Library root as a whole is never one — the server refuses it.
+ */
+export interface DeleteTarget {
+  /** A folder, or `null` for none. */
+  folder: string | null;
+  /** Individual files, by Entry Path. */
+  paths: readonly string[];
+}
+
+/** The query a deletion is named by: `path` for the folder, `entry` per file. */
+function deleteUrl(target: DeleteTarget): string {
+  const params: [string, string][] = [];
+  if (target.folder !== null) {
+    params.push(['path', target.folder]);
+  }
+  for (const path of target.paths) {
+    params.push(['entry', path]);
+  }
+  return apiUrl('delete', params);
+}
+
+/**
+ * What deleting a folder or some files would do, counted before it is asked
+ * for — `GET /api/delete`.
+ *
+ * The run's own plan over the Library as it now stands, so what it counts is
+ * what {@link startDelete} of the same target does — give or take the Library
+ * moving in between, or a Pack that does not verify when the run reads it
+ * back.
+ */
+export interface DeletePreview {
+  /** The folder it would delete, and `null` where it names files only. */
+  folder: string | null;
+  /** The files it names, in Entry Path order. */
+  paths: string[];
+  /** How many files would leave the Library. */
+  entries: number;
+  /** How many bytes those files come to. */
+  bytes: number;
+  /** How many Containers would be removed outright. */
+  removed: number;
+  /** How many Packs would be rebuilt around the files they keep. */
+  rebuilt: number;
+  /** How many bytes those rebuilds read from Storage: each Pack whole. */
+  rebuild_read: number;
+  /** How many bytes the rebuilt Packs would weigh on Storage. */
+  rebuild_written: number;
+  /** The Packs it would be refused for, and why. */
+  refused: RefusedPack[];
+  /** Named files the Library holds nothing at. */
+  missing: string[];
+  /** Whether a deletion is already running, so this one would wait its turn. */
+  after_current: boolean;
+}
+
+/**
+ * Asks what deleting `target` would do, without arming anything.
+ *
+ * Refused where {@link startDelete} is: a locked Library, the Library root as
+ * a whole, and a target under which the Library holds nothing.
+ */
+export async function previewDelete(
+  target: DeleteTarget,
+  signal?: AbortSignal,
+): Promise<DeletePreview> {
+  const preview = await askedForJson<DeletePreview>(deleteUrl(target), signal);
+  return { ...preview, refused: preview.refused.map(refusedPackOf) };
+}
+
+/**
+ * Takes `target` out of the Library — `POST /api/delete`.
+ *
+ * What "Delete…" arms once the person has seen what {@link previewDelete}
+ * counted and said yes. It touches no file on this device. It answers with the
+ * work answer as it stands the moment the deletion is armed rather than
+ * waiting for it, which is why the caller goes on polling.
+ */
+export async function startDelete(target: DeleteTarget, signal?: AbortSignal): Promise<Work> {
+  return workOf(await askedForJson<unknown>(deleteUrl(target), signal, 'POST'));
+}
+
+/**
  * The work answer as the server sent it, before its refusals and findings are
  * read.
  *
@@ -680,6 +849,7 @@ interface WorkSent {
   fill: FillSent | null;
   sync: SyncSent | null;
   freeze: FreezeSent | null;
+  delete: DeleteSent | null;
   reconnect: Reconnect | null;
 }
 
@@ -694,6 +864,7 @@ type Sent<Run> = Omit<Run, 'status' | 'stopped' | 'declined' | 'findings' | 'dis
 type FillSent = Sent<FillOfItsOwn & FillQueue>;
 type SyncSent = Sent<SyncOfItsOwn>;
 type FreezeSent = Sent<FreezeOfItsOwn & FreezeQueue>;
+type DeleteSent = Sent<DeleteOfItsOwn>;
 
 /**
  * One work answer, read.
@@ -719,6 +890,7 @@ export function workOf(sent: unknown): Work {
     fill: work.fill === null ? null : fillOf(work.fill),
     sync: work.sync === null ? null : syncOf(work.sync),
     freeze: work.freeze === null ? null : freezeOf(work.freeze),
+    delete: work.delete === null ? null : deleteOf(work.delete),
     reconnect: work.reconnect,
   };
 }
@@ -800,6 +972,39 @@ function freezeOfItsOwn(run: FreezeSent): FreezeOfItsOwn {
     entries: run.entries,
     findings: (run.findings ?? []).map(findingOf),
     step: run.step,
+  };
+}
+
+const PACK_REFUSAL_REASONS: readonly string[] = ['key_lost', 'unverified'];
+
+/** One refused Pack, its reason narrowed as a refusal's is. */
+function refusedPackOf(sent: RefusedPack): RefusedPack {
+  return {
+    ...sent,
+    reason:
+      typeof sent.reason === 'string' && PACK_REFUSAL_REASONS.includes(sent.reason)
+        ? sent.reason
+        : null,
+  };
+}
+
+function deleteOf(run: DeleteSent): Delete {
+  return {
+    run: run.run,
+    folder: run.folder,
+    paths: run.paths,
+    entries: run.entries,
+    bytes: run.bytes,
+    removed: run.removed,
+    rebuilt: run.rebuilt,
+    rebuild_read: run.rebuild_read,
+    rebuild_written: run.rebuild_written,
+    refused: run.refused.map(refusedPackOf),
+    missing: run.missing,
+    findings: (run.findings ?? []).map(findingOf),
+    step: run.step,
+    waiting: run.waiting,
+    ...standingOf<DeleteStatus>(run),
   };
 }
 

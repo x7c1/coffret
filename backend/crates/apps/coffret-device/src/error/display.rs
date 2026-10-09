@@ -334,6 +334,7 @@ impl fmt::Display for Error {
             ),
             Self::Sync { .. } => f.write_str("the sync did not finish"),
             Self::Freeze { .. } => f.write_str("the freeze did not finish"),
+            Self::Delete { .. } => f.write_str("the deletion did not finish"),
             Self::Fetch { .. } => f.write_str("the fetch did not finish"),
             // What this device would do with the file is not in it, because
             // nothing here was going to do anything with one: the question was

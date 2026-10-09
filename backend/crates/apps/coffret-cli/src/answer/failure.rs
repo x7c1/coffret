@@ -166,10 +166,12 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         // the flow that met it says nothing more a script could use.
         Error::Sync { .. } if storage_below => "storage",
         Error::Freeze { .. } if storage_below => "storage",
+        Error::Delete { .. } if storage_below => "storage",
         Error::Fetch { .. } if storage_below => "storage",
         Error::CatchUp { .. } if storage_below => "storage",
         Error::Sync { .. } => "sync",
         Error::Freeze { .. } => "freeze",
+        Error::Delete { .. } => "delete",
         Error::Fetch { .. } => "fetch",
         Error::CatchUp { .. } => "catch_up",
         // The name the explorer's server gives the same refusal of a mapped

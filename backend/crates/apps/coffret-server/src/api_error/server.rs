@@ -4,7 +4,7 @@
 
 use axum::http::StatusCode;
 
-use super::{redact, ApiError, SERVER};
+use super::{redact, ApiError, CONFLICT, SERVER};
 
 impl ApiError {
     /// A local file this device believed it had could not be read.
@@ -90,6 +90,33 @@ impl ApiError {
             "this device has to be enrolled in the Library again: the Library's Master Key was \
              replaced, and this device holds only the one before it — enroll it again with the \
              new Recovery Code"
+                .to_owned(),
+        )
+        .caused_by(cause)
+    }
+
+    /// The Library moved underneath a batch while it was being assembled:
+    /// another device committed meanwhile, and either what this one planned no
+    /// longer fits what is current (spec: CP-7, CP-18) or it lost the commit
+    /// slot on every attempt it makes, every rebase clean (spec: CP-3, CP-4).
+    ///
+    /// Its own kind, because it is the one commit failure a person ends by
+    /// doing something rather than by reading the log: nothing was committed,
+    /// and running the same thing again catches up first and plans from the
+    /// Library as it now stands. Filed as `server` it would say nothing a
+    /// person could act on; filed as `storage` it would say Storage did not
+    /// answer, which is false — Storage answered, with another device's head.
+    ///
+    /// `409`, for the reason [`epoch`](Self::epoch) gives: what the request
+    /// conflicts with is the Library's current state. The sentence says what
+    /// happened and what to do, and names nothing the commit met — the paths
+    /// and Containers it collided over go to the log (spec: EL-1).
+    pub(super) fn conflict(cause: String) -> Self {
+        Self::plain(
+            StatusCode::CONFLICT,
+            CONFLICT,
+            "another device changed the Library meanwhile, so nothing was changed — running it \
+             again plans from the Library as it is now"
                 .to_owned(),
         )
         .caused_by(cause)

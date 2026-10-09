@@ -99,6 +99,15 @@ fn every_refusal() -> Vec<ApiError> {
                 generation: Generation::new(41).expect("a small generation is one"),
             })),
         }),
+        // `conflict`: a commit the Library moved underneath, as a sync meets it.
+        ApiError::from(Error::Sync {
+            cause: Box::new(coffret_device::SyncError::Commit(
+                CommitError::RemovalNotCurrent {
+                    container_ids: vec![container_id],
+                }
+                .into(),
+            )),
+        }),
         // `locked` twice: once as a server started from the command line says
         // it, and once as the desktop app's does. The kind is the same and
         // only the sentence differs, which is the whole of what the explorer

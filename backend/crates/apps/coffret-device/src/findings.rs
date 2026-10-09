@@ -1,6 +1,7 @@
 use std::error;
 
 use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, DegradedKeyring};
+use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
@@ -116,6 +117,25 @@ impl From<&FreezeOutcome> for Findings {
             surfaced
                 .chain(unavailable(&outcome.unavailable))
                 .chain(committed(outcome.commit.as_ref()))
+                .chain(repaired(outcome.commit.as_ref()))
+                .chain(degraded(outcome.degraded.as_ref()))
+                .collect(),
+        )
+    }
+}
+
+/// What a deletion still has to say beside its counts: what its commit left
+/// for later and the Keyring repairs it performed (spec: OC-6, KL-15).
+///
+/// The Packs it was refused for are not among these. They are the deletion's
+/// own answer — which named Entries stayed, and why — and a caller reads them
+/// off [`DeleteOutcome::refused`] beside the counts rather than as findings
+/// about the Library.
+impl From<&DeleteOutcome> for Findings {
+    fn from(outcome: &DeleteOutcome) -> Self {
+        Self(
+            committed(outcome.commit.as_ref())
+                .into_iter()
                 .chain(repaired(outcome.commit.as_ref()))
                 .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),

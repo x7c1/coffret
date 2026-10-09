@@ -15,6 +15,9 @@ use catalog_dto::CatalogDto;
 mod declined_dto;
 use declined_dto::DeclinedDto;
 
+mod delete_dto;
+use delete_dto::DeleteDto;
+
 mod displaced_fill_dto;
 use displaced_fill_dto::DisplacedFillDto;
 

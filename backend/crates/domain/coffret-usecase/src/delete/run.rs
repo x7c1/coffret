@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use coffret_model::{ContainerId, ContainerKeyStatus, EntryPath, KeyEnvelope, KeyTable, Redacted};
 use tracing::{info, warn};
 
@@ -7,6 +5,7 @@ use crate::commit::{catch_up, read_committed, DegradedReport};
 use crate::delete::delete_error::{DeleteError, DeleteResult};
 use crate::delete::delete_outcome::DeleteOutcome;
 use crate::delete::delete_request::DeleteRequest;
+use crate::delete::key_lost::lost;
 use crate::delete::pack_refusal::PackRefusal;
 use crate::delete::plan::{self, Partial};
 use crate::delete::rebuilt_pack::RebuiltPack;
@@ -235,16 +234,6 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         "a deletion finished",
     );
     Ok(outcome)
-}
-
-/// Which Containers of a key table carry a key-lost marker (spec: KL-7).
-fn lost(key_table: &KeyTable) -> BTreeSet<ContainerId> {
-    key_table
-        .elements()
-        .iter()
-        .filter(|element| element.key == ContainerKeyStatus::KeyLost)
-        .map(|element| element.container_id)
-        .collect()
 }
 
 /// The envelope the committed Keyring maps a Container to rebuild to, or `None`

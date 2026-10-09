@@ -13,6 +13,25 @@
     "parent": "/home/someone",
     "path": "/home/someone/coffret"
   },
+  "delete_preview": {
+    "after_current": false,
+    "bytes": 13,
+    "entries": 2,
+    "folder": null,
+    "missing": [
+      "books/gone.png"
+    ],
+    "paths": [
+      "albums/cover.png",
+      "books/gone.png",
+      "books/page-001.png"
+    ],
+    "rebuild_read": 0,
+    "rebuild_written": 0,
+    "rebuilt": 0,
+    "refused": [],
+    "removed": 2
+  },
   "folders": {
     "folders": [
       "albums",

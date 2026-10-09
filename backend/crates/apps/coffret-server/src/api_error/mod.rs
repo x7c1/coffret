@@ -52,6 +52,11 @@ pub(crate) use contract::held_to;
 /// their kinds exactly as it does on any other.
 pub(crate) const SERVER: &str = "server";
 
+/// The kind a commit the Library moved underneath travels as: another device
+/// committed meanwhile, and running the same thing again plans from the
+/// Library as it now stands.
+pub(crate) const CONFLICT: &str = "conflict";
+
 /// The kind Storage not coming through travels as, named here for the reason
 /// [`SERVER`] is.
 pub(crate) const STORAGE: &str = "storage";
@@ -98,8 +103,8 @@ pub struct ApiError {
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
     /// `unauthorized` (403), `no_such_entry` or `no_such_route` (404),
-    /// `declined`, `refused_placement` or `epoch` (409), `locked` (423),
-    /// `storage` or `unverified` (502), and `server` (500).
+    /// `declined`, `refused_placement`, `epoch` or `conflict` (409), `locked`
+    /// (423), `storage` or `unverified` (502), and `server` (500).
     ///
     /// `declined` and `refused_placement` are the two verdicts on a placement,
     /// in the Entry Path concept's words. `declined` is a fetch's verdict on one

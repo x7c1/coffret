@@ -157,6 +157,11 @@ pub use authorize::{Admission, SERVER_KEY_HEADER};
 
 mod classify;
 
+mod delete;
+pub use delete::{
+    delete_target, DeleteReport, DeleteRun, DeleteStatus, Deletes, RefusedPack, Target,
+};
+
 mod displaced;
 pub use displaced::Displaced;
 

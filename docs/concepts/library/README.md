@@ -122,12 +122,17 @@ and has a window of its own for entering the Passphrase.
   device maps, once the person has seen its preview
 - preview (a freeze of a folder: count what it would select and what it would
   leave out, by the freeze's own scan stopped before a file is read, changing
-  nothing)
+  nothing; a deletion: count what would leave the Library, the Containers it
+  would remove, the Packs it would rebuild with what rebuilding them reads and
+  writes, and the Packs it would be refused for, by the deletion's own plan,
+  changing nothing in the Library)
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
 - delete (Entries from the Library — named one by one, or as a folder and
   everything under it — by removing the Containers that hold nothing else and
-  rebuilding each [Pack](../pack/) that keeps other Entries around them)
+  rebuilding each [Pack](../pack/) that keeps other Entries around them) — from
+  the explorer's "Delete…" on a folder or on a file the Library holds, once the
+  person has seen its preview
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
@@ -142,7 +147,10 @@ and has a window of its own for entering the Passphrase.
   read from)
 - vouch (for itself, as the root — whether the folder standing there is the one
   whose [marker](../mapping/#definition) the mapping recorded)
-- refuse (to place into a mapped root that will not vouch for itself)
+- refuse (to place into a mapped root that will not vouch for itself; any step
+  a run cannot take safely, saying why — a freeze, a file that changed after
+  its survey; a deletion, a [Pack](../pack/) it cannot rebuild; a commit, when
+  another device committed underneath its batch)
 - surface (a file a run reports rather than silently skips)
 - remedy (a refusal, or a state a run keeps reporting, by the gesture its report
   names — renaming a folder, naming a different Entry Path, recording a mapping
@@ -381,6 +389,10 @@ and has a window of its own for entering the Passphrase.
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).
+- A run whose commit is refused because another device committed meanwhile
+  reports the refusal and leaves the Library as it was: no record of its batch
+  is created, and the batch is dropped. Running it again catches up first, so it
+  plans from the Library as that other commit left it (spec: CP-1, CP-4, CP-18).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation

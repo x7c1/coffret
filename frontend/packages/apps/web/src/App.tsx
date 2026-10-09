@@ -6,21 +6,32 @@ import {
   getFolders,
   getLibrary,
   getListing,
+  previewDelete,
   previewFreeze,
   refreshCatalog,
+  startDelete,
   startFreeze,
   startReconnect,
   type Added,
   type CatalogState,
+  type DeleteTarget,
   type LibraryState,
   type Mapped,
   type ReconnectState,
 } from '@coffret/api';
 
+import { DeleteConfirm } from './DeleteConfirm';
+import {
+  askToDelete,
+  deletedLine,
+  deletingLine,
+  targetName,
+  type DeleteQuestion,
+} from './deleteEntries';
 import { askToAdd, overBudgetLine } from './dropped';
 import { FileList } from './FileList';
 import { isPutAway, shownRuns } from './dismissed';
-import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
+import { addingLine, collectingLine, fillOfFolder, isFreezing, paced } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
@@ -113,6 +124,7 @@ export function App() {
   const fill = work.fill;
   const sync = work.sync;
   const freeze = work.freeze;
+  const deletion = work.deletion;
   const recheckWork = work.recheck;
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
@@ -652,6 +664,85 @@ export function App() {
     [askAboutPacking, follow],
   );
 
+  // "Delete…" on a row: what deleting that file or folder would take out of the
+  // Library is asked first and shown, and only Delete arms it — after which
+  // it is followed through the work answer, and its outcome is said in the
+  // notice area once it is over. Which of those steps the press came to is
+  // [`askToDelete`](./deleteEntries); a refusal of either request is said in
+  // the notice area too, since it answers a gesture made on a row.
+  const [deleteAsking, setDeleteAsking] = useState<{
+    question: DeleteQuestion;
+    answer: (remove: boolean) => void;
+  } | null>(null);
+  const askAboutDeleting = useCallback(
+    (question: DeleteQuestion) =>
+      new Promise<boolean>((resolve) => {
+        setDeleteAsking({
+          question,
+          answer: (remove) => {
+            setDeleteAsking(null);
+            resolve(remove);
+          },
+        });
+      }),
+    [],
+  );
+  const chooseDeleting = useCallback(
+    (remove: boolean) => deleteAsking?.answer(remove),
+    [deleteAsking],
+  );
+  // A second press while the first is still being counted is dropped, for the
+  // reason a second "Pack this folder…" is.
+  const deletePressed = useRef(false);
+  // Whether this tab has armed a deletion, which is what makes the end of one
+  // news here: a page that comes up to a deletion somebody else finished has
+  // nobody waiting on its sentence.
+  const deletedHere = useRef(false);
+  const deleteEntries = useCallback(
+    (target: DeleteTarget) => {
+      if (deletePressed.current) {
+        return;
+      }
+      deletePressed.current = true;
+      void askToDelete({
+        target,
+        preview: (asked) => previewDelete(asked),
+        ask: askAboutDeleting,
+        start: async (asked) => {
+          await startDelete(asked);
+          deletedHere.current = true;
+          follow();
+        },
+        refuse: (cause) => setNotice(`${targetName(target)} was not deleted — ${said(cause)}`),
+      }).finally(() => {
+        deletePressed.current = false;
+      });
+    },
+    [askAboutDeleting, follow],
+  );
+  // The end of a deletion this tab armed: the rows and the tree are asked
+  // again, since what left the Library leaves them, and what it came to is
+  // said once — by its run, so the same ending read twice is said once.
+  const deleted = deletion === null ? null : `${deletion.run}:${deletion.status}`;
+  // The run itself is read through a ref, so the effect below is keyed on the
+  // run and its status alone: every poll brings a fresh object for the same
+  // ending, and an effect keyed on that would reload the folder on each one.
+  const lastDeletion = useRef(deletion);
+  lastDeletion.current = deletion;
+  const announced = useRef<number | null>(null);
+  useEffect(() => {
+    const ended = lastDeletion.current;
+    if (deleted === null || ended === null || ended.status === 'deleting') {
+      return;
+    }
+    reloadListing();
+    reloadFolders();
+    if (deletedHere.current && announced.current !== ended.run) {
+      announced.current = ended.run;
+      setNotice(deletedLine(ended));
+    }
+  }, [deleted, reloadListing, reloadFolders]);
+
   // What this device calls the Library, which a drop too large for this route
   // names in the command that can carry it in instead.
   const libraryName = library.state.status === 'ready' ? library.state.value.name : null;
@@ -893,6 +984,22 @@ export function App() {
               reader is told rather than in the grey of the columns, because a
               gesture that was made and answered by nothing else is where a
               sentence has to be noticed to be of any use. */}
+          {deletion?.status === 'deleting' && (
+            <p
+              style={{
+                margin: 0,
+                padding: '8px 12px',
+                borderBottom: `1px solid ${COLOR.border}`,
+                color: COLOR.dim,
+                fontSize: 13,
+              }}
+            >
+              {deletingLine(
+                deletion,
+                isFreezing(freeze) ? 'packing' : sync?.status === 'syncing' ? 'backup' : null,
+              )}
+            </p>
+          )}
           {notice !== null && (
             <p
               style={{
@@ -954,6 +1061,7 @@ export function App() {
                 }
                 onMap={(prefix) => setMapping({ prefix })}
                 onPack={packFolder}
+                onDelete={deleteEntries}
               />
             )}
           </Region>
@@ -977,6 +1085,9 @@ export function App() {
       {asking !== null && <PackConfirm summary={asking.summary} onChoose={choose} />}
       {packAsking !== null && (
         <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
+      )}
+      {deleteAsking !== null && (
+        <DeleteConfirm question={deleteAsking.question} onChoose={chooseDeleting} />
       )}
       <StatusBar
         library={library.state}

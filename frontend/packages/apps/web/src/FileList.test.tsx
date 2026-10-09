@@ -55,6 +55,7 @@ function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
       onUnmapped={() => undefined}
       onMap={() => undefined}
       onPack={() => undefined}
+      onDelete={() => undefined}
     />,
   );
 }
@@ -157,6 +158,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   const onOpenFile = vi.fn();
   const onMap = vi.fn();
   const onPack = vi.fn();
+  const onDelete = vi.fn();
   const { container } = render(
     <FileList
       listing={shown}
@@ -174,6 +176,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
       onUnmapped={onUnmapped}
       onMap={onMap}
       onPack={onPack}
+      onDelete={onDelete}
     />,
   );
   // The element the drag handlers are on, which is the list as a whole.
@@ -181,7 +184,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   if (list === null) {
     throw new Error('the list draws an element');
   }
-  return { list, onUnmapped, onOpenFile, onMap, onPack };
+  return { list, onUnmapped, onOpenFile, onMap, onPack, onDelete };
 }
 
 afterEach(cleanup);
@@ -323,4 +326,35 @@ it('does not offer to pack an unmapped folder or the Library root', () => {
 // A path the Library holds nothing at is not a folder, and has nothing to pack.
 it('does not offer to pack a path the Library holds nothing at', () => {
   expect(draw(listing({ path: 'albums/typo', held: false }))).not.toContain('Pack this folder…');
+});
+
+// "Delete…" on a file row and on a folder row hands over what to delete — the
+// file by its Entry Path, the folder with everything under it — and opens
+// neither: the press is the button's and not the row's.
+it('offers to delete a file and a folder, and hands over which', () => {
+  const { onDelete, onOpenFile } = mount(
+    listing({ folders: [folder('2026', true)], files: [file('cover.png')] }),
+  );
+
+  fireEvent.click(screen.getByLabelText('delete cover.png'));
+  fireEvent.click(screen.getByLabelText('delete 2026'));
+
+  expect(onDelete.mock.calls).toEqual([
+    [{ folder: null, paths: ['albums/cover.png'] }],
+    [{ folder: 'albums/2026', paths: [] }],
+  ]);
+  expect(onOpenFile).not.toHaveBeenCalled();
+});
+
+// A deletion is of the Library and touches no file here, so it is offered in a
+// folder this device does not map too. A file only added here is not in the
+// Library at all, so it has nothing to delete.
+it('offers to delete what the Library holds, mapped here or not, and nothing else', () => {
+  const unmapped = draw(listing({ mapped: false, files: [file('cover.png')] }));
+  expect(unmapped).toContain('aria-label="delete cover.png"');
+
+  const added = draw(
+    listing({ files: [file('new.jpg', { state: 'added', container: null })] }),
+  );
+  expect(added).not.toContain('aria-label="delete new.jpg"');
 });

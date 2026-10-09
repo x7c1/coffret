@@ -5,6 +5,7 @@ use coffret_device::{
     CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced, UnusableReplica,
 };
 use coffret_model::{ContainerId, ContentHash, Generation};
+use coffret_usecase::delete::DeleteError;
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
@@ -632,7 +633,9 @@ fn an_activated_epoch_is_its_own_kind_from_every_flow() {
 // from every flow for the same reason.
 #[test]
 fn a_commit_verdict_is_answered_alike_from_every_flow() {
-    for (flow, refusal) in from_every_flow(|| CommitError::ConflictLimitReached { attempts: 8 }) {
+    for (flow, refusal) in from_every_flow(|| CommitError::UnmappedContainer {
+        container_id: ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]),
+    }) {
         assert_eq!(
             refusal.message(),
             "the server could not answer",
@@ -644,6 +647,52 @@ fn a_commit_verdict_is_answered_alike_from_every_flow() {
         generation: Generation::new(7).expect("a small generation is one"),
     }) {
         assert_eq!(wire(refusal), (502, "storage", None, None), "from a {flow}");
+    }
+}
+
+// CP-1, CP-18: a commit refused because another device changed the Library
+// meanwhile is a `conflict` from every flow that writes — the sync, the freeze
+// and the deletion — rather than the server that could not answer. Nothing was
+// committed, and running it again plans from the Library as it now stands,
+// which is what the sentence tells a person; what the commit collided over
+// stays in the log.
+#[test]
+fn a_library_that_moved_underneath_a_commit_is_a_conflict_from_every_flow() {
+    let conflicts: [fn() -> CommitError; 3] = [
+        || CommitError::RemovalNotCurrent {
+            container_ids: vec![ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN])],
+        },
+        || CommitError::EntryPathCollision {
+            path: entry_path("albums/spring.jpg"),
+        },
+        || CommitError::ConflictLimitReached { attempts: 8 },
+    ];
+    for commit in conflicts {
+        let mut refusals = from_every_flow(commit);
+        refusals.push((
+            "deletion",
+            ApiError::from(Error::Delete {
+                cause: Box::new(DeleteError::Commit(commit().into())),
+            }),
+        ));
+        for (flow, refusal) in refusals {
+            let said = refusal.message().to_owned();
+            assert_eq!(
+                wire(refusal),
+                (409, "conflict", None, None),
+                "from a {flow}"
+            );
+            assert!(
+                said.contains("another device changed the Library"),
+                "{said}"
+            );
+            assert!(said.contains("again"), "{said}");
+            assert!(!said.contains("  "), "one sentence, spaced as one: {said}");
+            assert!(
+                !said.contains("spring"),
+                "no Entry Path reaches the body: {said}"
+            );
+        }
     }
 }
 

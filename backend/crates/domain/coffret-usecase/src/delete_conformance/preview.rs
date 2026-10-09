@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::catch_up::{catch_up_catalog, CatchUpRequest};
-use crate::delete::{preview_delete, PackRefusal};
+use crate::delete::{committed_key_lost, preview_delete, PackRefusal};
 use crate::delete_conformance::delete_under_test::DeleteUnderTest;
 use crate::delete_conformance::fixtures::{
     current, delete, filler, freeze, lose_key, map, paths, sync, write,
@@ -124,4 +124,46 @@ pub async fn a_preview_counts_what_the_deletion_then_does(fixture: &DeleteUnderT
             .collect::<Vec<_>>(),
     );
     assert_eq!(preview.missing, outcome.missing);
+}
+
+/// KL-7, KL-17: the set a preview is handed is read off the committed
+/// Keyring the way the run reads it — after the run's own catch-up — so a
+/// preview given it names exactly the Packs the run would be refused for, and
+/// writes nothing to the Library on the way.
+pub async fn the_committed_keyring_names_the_packs_a_preview_refuses(fixture: &DeleteUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    map(fixture).await;
+
+    // Before anything is committed there is no Keyring and nothing lost.
+    let keys = super::fixtures::keys();
+    let policy = super::fixtures::policy();
+    assert_eq!(
+        committed_key_lost(store, index, &keys, &policy)
+            .await
+            .expect("an empty Library is read"),
+        BTreeSet::new(),
+    );
+
+    write(fixture, "albums/a.jpg", &filler(200, 1));
+    write(fixture, "albums/b.jpg", &filler(300, 2));
+    let readable = freeze(fixture, 1).await;
+    write(fixture, "comics/p.cbz", &filler(700, 6));
+    write(fixture, "comics/q.cbz", &filler(800, 7));
+    let key_lost = freeze(fixture, 2).await;
+    lose_key(store, index, key_lost).await;
+
+    let lost = committed_key_lost(store, index, &keys, &policy)
+        .await
+        .expect("the committed Keyring is read");
+    assert_eq!(lost, BTreeSet::from([key_lost]));
+    assert!(!lost.contains(&readable));
+
+    let preview = preview_delete(index, &paths(&["albums/a.jpg", "comics/p.cbz"]), &lost)
+        .await
+        .expect("a preview reads the catalog");
+    assert_eq!(preview.rebuilt, 1, "the readable Pack is rebuilt");
+    assert_eq!(preview.refused.len(), 1);
+    assert_eq!(preview.refused[0].container_id, key_lost);
+    assert!(matches!(preview.refused[0].reason, PackRefusal::KeyLost));
 }

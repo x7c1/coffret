@@ -18,6 +18,7 @@ use std::path::PathBuf;
 
 use coffret_model::EntryPath;
 use coffret_usecase::commit::CommitError;
+use coffret_usecase::delete::DeleteError;
 use coffret_usecase::fetch::{BelowRootError, DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::MalformedMarker;
@@ -569,6 +570,14 @@ pub enum Error {
         ///
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<FreezeError>,
+    },
+    /// A deletion did not finish, or its preview could not read the committed
+    /// Keyring it names the refused Packs from.
+    Delete {
+        /// What the flow reported.
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<DeleteError>,
     },
     /// A fetch did not finish.
     ///

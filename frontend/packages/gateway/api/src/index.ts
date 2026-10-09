@@ -1,13 +1,14 @@
 /**
  * What the explorer reads a Library through.
  *
- * The fifteen routes `coffret-server` answers, as typed calls: which Library
+ * The seventeen routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
  * looked, what the server is doing on its own — which carries whether it still
  * holds the Library open — the three calls that ask it to take that work up
  * again, the freeze among them also packing a folder somebody chose, the
- * question of what that freeze would pack, the one that renews the grant
+ * question of what that freeze would pack, the deletion of files or a folder
+ * and the question of what it would take out, the one that renews the grant
  * Storage stopped taking, the one that asks for a locked Library to be
  * unlocked, and the two that choose a folder on this device and map part of
  * the Library to it. The types are this package's word
@@ -20,13 +21,25 @@
  * knows how to ask.
  */
 
-export { getWork, previewFreeze, startFill, startFreeze, startSync } from './work';
+export {
+  getWork,
+  previewDelete,
+  previewFreeze,
+  startDelete,
+  startFill,
+  startFreeze,
+  startSync,
+} from './work';
 export type {
   Work,
   ByteCount,
   Catalog,
   CatalogState,
   DeclinedEntry,
+  Delete,
+  DeletePreview,
+  DeleteStatus,
+  DeleteTarget,
   DisplacedFill,
   DisplacedFreeze,
   Fill,
@@ -38,9 +51,11 @@ export type {
   FreezeStatus,
   LibraryState,
   NotStopped,
+  PackRefusalReason,
   Phase,
   Reconnect,
   ReconnectState,
+  RefusedPack,
   Step,
   Stopped,
   Sync,

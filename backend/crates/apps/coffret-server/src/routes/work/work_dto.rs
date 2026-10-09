@@ -2,17 +2,18 @@ use serde::Serialize;
 
 use crate::state::ServerState;
 
-use super::{CatalogDto, FillDto, FreezeDto, ReconnectDto, SyncDto};
+use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, ReconnectDto, SyncDto};
 
-/// What the server is doing on its own, which is three things — and the one
+/// What the server is doing on its own, which is four things — and the one
 /// thing it may have done to itself.
 ///
-/// A fill, a sync and a freeze. Everything else this server does it does because
-/// a request asked it to, and a request is answered rather than reported on;
-/// these three are the work nobody asked for — the rest of a folder being
-/// brought over behind a reader, files somebody dropped being carried into the
-/// Library, and a book somebody brought in being packed — so they are what there
-/// is to tell a browser about.
+/// A fill, a sync, a freeze and a deletion. Everything else this server does it
+/// does because a request asked it to, and a request is answered rather than
+/// reported on; these four are the work that goes on after the request that
+/// set it going has been answered — the rest of a folder being brought over
+/// behind a reader, files somebody dropped being carried into the Library, a
+/// book somebody brought in being packed, and files somebody chose being taken
+/// out of it — so they are what there is to tell a browser about.
 ///
 /// Side by side and not one after another: they are separate work over one
 /// Library, any of them can be running without the others, and a browser reads
@@ -65,6 +66,9 @@ pub struct WorkDto {
     pub(super) sync: Option<SyncDto>,
     /// The latest freeze, running or finished, and `null` where none has run.
     pub(super) freeze: Option<FreezeDto>,
+    /// The latest deletion, running or finished, and `null` where none has
+    /// run.
+    pub(super) delete: Option<DeleteDto>,
     /// The latest reconnect, waiting or ended, and `null` where none has run.
     ///
     /// Not work on the Library either, and here for the reason the catalog's
@@ -102,6 +106,7 @@ impl WorkDto {
             fill: state.fills.reported().as_ref().map(FillDto::of),
             sync: state.syncs.reported().as_ref().map(SyncDto::of),
             freeze: state.freezes.reported().as_ref().map(FreezeDto::of),
+            delete: state.deletes.reported().as_ref().map(DeleteDto::of),
             reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
         }
     }

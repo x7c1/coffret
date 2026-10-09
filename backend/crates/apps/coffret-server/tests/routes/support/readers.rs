@@ -145,6 +145,13 @@ pub fn freeze(work: &serde_json::Value) -> &serde_json::Value {
     freeze
 }
 
+/// What the work answer says about the deletion, which `POST /api/delete` arms.
+pub fn deletion(work: &serde_json::Value) -> &serde_json::Value {
+    let deletion = &work["delete"];
+    assert!(!deletion.is_null(), "a deletion has been armed: {work}");
+    deletion
+}
+
 /// Every row of `folder`, as `(name, state, container)`.
 pub async fn rows_of(served: &Served, folder: &str) -> Vec<(String, String, String)> {
     files(&listing_of(served, folder).await)

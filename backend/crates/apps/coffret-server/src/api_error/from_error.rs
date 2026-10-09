@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use coffret_device::{
-    CommitError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError, SyncError,
-    UnusableReplica,
+    CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError,
+    SyncError, UnusableReplica,
 };
 
 use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE, UNAUTHENTICATED};
@@ -46,6 +46,7 @@ impl From<Error> for ApiError {
             Error::LocalFileNotOpened { cause } => from_fetch(*cause),
             Error::Sync { cause } => from_sync(*cause),
             Error::Freeze { cause } => from_freeze(*cause),
+            Error::Delete { cause } => from_delete(*cause),
             Error::CatchUp { cause } => from_commit(&cause, cause.redacted()),
             // The verdict a single writer gets when the folder it was to place
             // into is not the folder the mapping was recorded against — a
@@ -102,13 +103,21 @@ impl From<Error> for ApiError {
 /// the control again will never clear it. [`ApiError::epoch`] says why it has
 /// the status it has.
 ///
+/// Three of the commit's own verdicts are `conflict`: the Library moved
+/// underneath the batch while it was being assembled. A path another device's
+/// commit claimed meanwhile, a removal another commit already made
+/// (spec: CP-18), and the slot lost to other devices on every attempt the
+/// commit makes, every rebase clean (spec: CP-4) — each says another device
+/// changed the Library, and the batch was not committed (spec: CP-1). Running
+/// the same thing again catches up first and plans from the Library as it now
+/// stands, so unlike the rest a person can do something about them, and the
+/// refusal says what ([`ApiError::conflict`]).
+///
 /// The rest are `500`. A catalog that would not take a record is this device's
-/// own. The commit's own verdicts — a slot lost too often, a Keyring left
-/// incomplete, a committed Keyring it could not repair (spec: KL-16), a path
-/// claimed twice, a removal another commit already made (spec: CP-18), a
-/// Container no catalog maps, a control value it assembled
-/// that the rules do not admit — are about what this device assembled or the
-/// state its commit met, and nothing a browser can do differently about; a
+/// own. The commit's other verdicts — a Keyring left incomplete, a committed
+/// Keyring it could not repair (spec: KL-16), a Container no catalog maps, a
+/// control value it assembled that the rules do not admit — are about what this
+/// device assembled, and nothing a browser can do differently about; a
 /// catch-up, which writes nothing, never reaches them at all. All of them travel
 /// to the log, where whoever is keeping the Library will read them, and none of
 /// them says anything further to a screen.
@@ -146,11 +155,11 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         CommitError::Index(_) => catalog_unusable(cause),
         CommitError::EntryPathCollision { .. }
         | CommitError::RemovalNotCurrent { .. }
-        | CommitError::UnmappedContainer { .. }
+        | CommitError::ConflictLimitReached { .. } => ApiError::conflict(cause),
+        CommitError::UnmappedContainer { .. }
         | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }
-        | CommitError::UnrepairedKeyring { .. }
-        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause),
+        | CommitError::UnrepairedKeyring { .. } => ApiError::server(cause),
     }
 }
 
@@ -328,6 +337,34 @@ fn from_freeze(cause: FreezeError) -> ApiError {
         | FreezeError::FoldedReservedName { .. }
         | FreezeError::PathCollision { .. }
         | FreezeError::SourceChanged { .. } => ApiError::server(cause.redacted()),
+    }
+}
+
+/// What a deletion's own failure comes back as.
+///
+/// The line the sync and the freeze draw, for their reason: Storage not
+/// answering is the failure a retry is offered from, and a commit's failure is
+/// classified as every commit's is ([`from_commit`]) — which is where a
+/// deletion planned over a Library another device changed meanwhile becomes a
+/// `conflict` rather than a server that could not answer. A rebuilt Pack whose
+/// object did not arrive whole is `unverified` for the reason a freeze's is.
+///
+/// Everything else is this device or this catalog: its spool, its catalog, a
+/// Container to rebuild that the committed Keyring says nothing about
+/// (spec: KL-7), a Pack that could not be encoded. A deletion that failed
+/// committed nothing (spec: CP-1), so every Entry it named is still in the
+/// Library and the same request can be made again.
+fn from_delete(cause: DeleteError) -> ApiError {
+    match cause {
+        DeleteError::Storage(ref storage) => from_storage(storage, cause.redacted()),
+        DeleteError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
+        DeleteError::TransferCorrupted { .. } => {
+            ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
+        DeleteError::Index(_) => catalog_unusable(cause.redacted()),
+        DeleteError::Format(_) | DeleteError::Io { .. } | DeleteError::UnmappedContainer { .. } => {
+            ApiError::server(cause.redacted())
+        }
     }
 }
 
