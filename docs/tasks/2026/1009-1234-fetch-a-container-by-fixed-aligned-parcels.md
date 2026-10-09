@@ -142,4 +142,4 @@ value of `S`.
 
 ### Before merge (verified outside the check command)
 
-- [ ] A read of `docs/spec/pack-construction/README.md` and the four concept docs in one sitting finds no sentence that still describes the Entry or the whole Container as the fetch unit — the merging session reads them and records what it checked
+- [x] A read of `docs/spec/pack-construction/README.md` and the four concept docs in one sitting finds no sentence that still describes the Entry or the whole Container as the fetch unit — the merging session reads them and records what it checked
