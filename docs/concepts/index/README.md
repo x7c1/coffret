@@ -22,6 +22,13 @@ only the cache preserves the existing device-local records. Losing the whole
 Index loses those local records too; Storage contains no copy of them
 (spec: CK-7, EP-9, EP-10, OC-2).
 
+The cached Catalog is as current as the device's last catch-up made it. An
+Index, and its cached Catalog, is **stale** when that catch-up finished and the
+Library's head has moved past it since, because another device committed.
+Nothing on this device knows that until a catch-up, or a read Storage refuses,
+shows it, so a stale Index answers as the Catalog stood when it was last caught
+up (spec: CK-9).
+
 A **held parcel** is a parcel of a Container's chunk sequence this device read
 and keeps on its own disk, beside the spool, so that reading a page a second
 time asks Storage for nothing. It is ciphertext kept for reading again rather
@@ -100,6 +107,17 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - Catch-up starts from the newer of the device's cached state and a valid
   checkpoint, then replays later Journal records without opening Containers
   (spec: CK-9, CP-11).
+- A read from a stale Index answers what the Index lists, which may be an
+  Entry's earlier version, while the Container holding it stays within reach:
+  readable while it is an untrashed removal, and after trash through a handle
+  this device already holds. A removal takes a Container out of the current
+  set while its object stays on Storage, so a reader keeps an answer while
+  another device commits (spec: OC-6, CP-1).
+  - Staleness surfaces as a refusal only once the object is out of reach:
+    trashed with no handle here naming it, or gone for good. The reader who
+    catches up — a server when the explorer asks, or the one catch-up a
+    served Entry fetch makes on such a refusal — sees the current version
+    (spec: CK-9, EP-5).
 - Concurrent readers and writers may share an Index; producers and settlement
   additionally coordinate ownership of pending work to preserve its provenance
   (spec: CK-13, OC-2).

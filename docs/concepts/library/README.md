@@ -275,9 +275,10 @@ and has a window of its own for entering the Passphrase.
     consent (spec: SA-8).
   - Joining changes nothing on Storage: the app folder, the
     [Keyring](../keyring/) and the Journal are already the Library's. The
-    joining device's Index holds nothing until its first sync or fetch catches
-    it up to the current state, which is the same catch-up any device makes
-    (spec: CK-9).
+    joining device's Index holds nothing until a run that catches up brings
+    it to the current state — the command line's `fetch`, a sync, a freeze,
+    or a server's catch-up as it starts or when the explorer asks for one —
+    which is the same catch-up any device makes (spec: CK-9).
   - A join asks whether the place it was given holds any head or
     [Index Snapshot](../index-snapshot/) of a Library, since one that has
     committed anything holds at least one of the two whatever `prune` has
@@ -386,6 +387,12 @@ and has a window of its own for entering the Passphrase.
   This device's cached Catalog is reported on the same terms: it is reported
   **behind** — its last catch-up did not finish, so it may lag the Library —
   exactly when the report carries what stopped that catch-up (spec: LA-12).
+  - Reported caught up says only that the last catch-up reached the head when
+    it finished. A cached Catalog that a later commit on another device has
+    left **stale** — its last catch-up finished, and the head has moved past it
+    since — is reported caught up, not behind, until a catch-up or a read
+    Storage refuses shows the move (see [Index](../index/#mental-model);
+    spec: LA-12, CK-9).
 - Findings report unresolved conditions and the results of work performed,
   using the lifetimes in the model above; a reported condition is never
   silently treated as backed up or repaired (spec: PK-14, KL-15).
