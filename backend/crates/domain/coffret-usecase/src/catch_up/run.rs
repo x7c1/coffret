@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use coffret_model::Generation;
 use tracing::info;
 
@@ -37,16 +39,25 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
         index,
         keys,
         policy,
+        memory,
     } = request;
 
     let from = head_of(index).await?;
     let entries_before = index.entries_under(None).await?.len();
 
-    catch_up(store, index, keys.control(), &policy.retry).await?;
+    let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    let to = head_of(index).await?;
+    if let Some(memory) = memory {
+        // Kept with the head it brought the catalog to, which is what makes it
+        // the listing of this catalog rather than of whatever is newer.
+        memory
+            .remember_listing(index, Arc::new(caught.listing), to)
+            .await?;
+    }
 
     let outcome = CatchUpOutcome {
         from,
-        to: head_of(index).await?,
+        to,
         entries_before,
         entries_after: index.entries_under(None).await?.len(),
     };

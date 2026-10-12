@@ -103,6 +103,16 @@
 //! call as [`FetchError::RefusedRoot`] rather than being reported and stepped
 //! over (spec: EP-13).
 //!
+//! A process that fetches many Entries over one catalog hands [`fetch_entry`] a
+//! [`FetchMemory`], and the catch-up is then the one step it skips: the run
+//! answers from the catalog as it stands, which its owner keeps current, and
+//! takes the listing, the committed key table and the Container's front from
+//! what the memory keeps wherever they are still true. Nothing in the spec asks
+//! a fetch to catch up first — CK-9 and RV-1 say how a catalog is caught up,
+//! not when — and a stale catalog shows itself, where it shows at all, as a
+//! refusal [`FetchError::may_mean_catalog_stale`] recognizes, for the owner to
+//! catch up and ask again.
+//!
 //! What holds over parcels is per-chunk authentication for the bytes that
 //! arrive (spec: FM-5, FM-8) and each placed Entry's plaintext hash against the
 //! catalog before the file becomes visible (spec: CP-11, EP-11). The object's
@@ -176,6 +186,9 @@ pub use entry_run::fetch_entry;
 
 mod fetch_error;
 pub use fetch_error::{FetchError, FetchResult};
+
+mod fetch_memory;
+pub use fetch_memory::FetchMemory;
 
 mod fetch_outcome;
 pub use fetch_outcome::FetchOutcome;

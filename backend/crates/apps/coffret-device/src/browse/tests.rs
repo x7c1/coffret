@@ -49,6 +49,7 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
         provider: "s3",
         grant: None,
         births: Default::default(),
+        fetch_memory: Default::default(),
     }
 }
 

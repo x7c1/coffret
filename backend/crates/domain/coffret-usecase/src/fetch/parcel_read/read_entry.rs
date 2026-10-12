@@ -22,10 +22,11 @@ impl ParcelRead<'_> {
     /// The steps, and the rule each answers to:
     ///
     /// 1. **The front** (spec: FM-2, FM-9, PK-16). Header and meta section, the
-    ///    same read for every Entry of the Container. The entry table places
-    ///    the Entry in the plaintext stream, and the chunk size divides the
-    ///    stream into parcels (spec: PK-19) — so which parcels to ask for is
-    ///    known before any chunk arrives.
+    ///    same read for every Entry of the Container — and so not read again
+    ///    where the run was handed a memory that keeps it (spec: PK-20). The
+    ///    entry table places the Entry in the plaintext stream, and the chunk
+    ///    size divides the stream into parcels (spec: PK-19) — so which
+    ///    parcels to ask for is known before any chunk arrives.
     /// 2. **What comes with it** (spec: PK-16, EP-10, EP-11). Every other Entry
     ///    of the Container lying wholly inside the parcels this read will have —
     ///    the ones it asks for and the ones the device already holds — and that
@@ -56,7 +57,16 @@ impl ParcelRead<'_> {
             .ok_or(FetchError::ContainerUnreachable { container_id })?;
         let key = unwrap_container_key(reading.keys.container_wrap(), &container_id, envelope)?;
         let object_len = summary.ciphertext_len.get();
-        let outline = front::front(reading.store, reading.retry, object, object_len, &key).await?;
+        let outline = front::outline(
+            reading.store,
+            reading.retry,
+            self.memory,
+            container_id,
+            object,
+            object_len,
+            &key,
+        )
+        .await?;
         let entry = outline
             .entry_at(target.path())
             .ok_or_else(|| FetchError::EntryMissing {

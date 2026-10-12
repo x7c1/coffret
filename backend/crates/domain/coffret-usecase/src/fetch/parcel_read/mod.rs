@@ -34,6 +34,7 @@ use crate::commit::DegradedKeyring;
 use crate::device_state::DeviceTime;
 use crate::fetch::cancellation::Cancellation;
 use crate::fetch::fetch_error::FetchError;
+use crate::fetch::fetch_memory::FetchMemory;
 use crate::fetch::kept_parcels::KeptParcels;
 use crate::fetch::publication::Publication;
 use crate::fetch::reading::Reading;
@@ -88,6 +89,9 @@ pub(super) struct ParcelRead<'r> {
     /// What the run read of the committed Keyring before the parcels, which
     /// goes with that news.
     pub(super) degraded: Option<DegradedKeyring>,
+    /// Where the Container's front is kept between runs, where it is
+    /// (spec: FM-2, PK-20).
+    pub(super) memory: Option<&'r FetchMemory>,
 }
 
 /// Whether [`translate::target_of`] refused an Entry for a reason no fetch

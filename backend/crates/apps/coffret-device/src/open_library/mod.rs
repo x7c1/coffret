@@ -16,6 +16,7 @@ use std::sync::Arc;
 use coffret_format::ParcelLen;
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
+use coffret_usecase::fetch::FetchMemory;
 use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
 
 use crate::drive_grant::DriveGrant;
@@ -87,4 +88,14 @@ pub struct OpenLibrary {
     /// the drop arms a moment later; [`UnknownBirths`] says what is forgotten
     /// with it.
     pub births: Arc<UnknownBirths>,
+    /// What this device's Entry fetches keep between them where they answer
+    /// from the catalog as it stands: the listing the last catch-up walked, the
+    /// committed key table, and the fronts of the Containers read
+    /// (see [`FetchMemory`]).
+    ///
+    /// Held here, beside the keys, because it goes when they do: a lock drops
+    /// the open Library and this with it, so a locked device holds no key table
+    /// and an unlocked one reads the Keyring again (spec: DK-2, DK-4). A
+    /// command line that fetches once never fills it.
+    pub fetch_memory: FetchMemory,
 }

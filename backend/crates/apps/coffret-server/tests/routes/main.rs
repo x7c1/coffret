@@ -24,6 +24,7 @@ mod mapping;
 mod reconnect;
 mod redaction;
 mod refresh;
+mod remembered;
 mod turns;
 mod upload;
 mod work;

@@ -1,14 +1,17 @@
 use std::ops::Range;
 
 use coffret_format::{ContainerOutline, Error as FormatError, Header};
-use coffret_model::{ContainerKey, ObjectRef};
+use coffret_model::{ContainerId, ContainerKey, ObjectRef};
+use tracing::debug;
 
 use crate::error::Result;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
+use crate::fetch::fetch_memory::FetchMemory;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
 
-/// The header and the meta section, read off the front of the object.
+/// The header and the meta section, read off the front of the object as it
+/// arrived, for [`outline`] to open.
 ///
 /// Two reads rather than one guess: the header's 32 plaintext bytes say how long
 /// the meta section behind them is, so the second read asks for exactly that
@@ -31,14 +34,44 @@ pub(super) async fn front(
     retry: &RetryPolicy,
     object: &ObjectRef,
     object_len: u64,
-    key: &ContainerKey,
-) -> FetchResult<ContainerOutline> {
+) -> FetchResult<Vec<u8>> {
     let mut front = ranged(store, retry, object, 0..Header::LEN as u64).await?;
     let front_len = ContainerOutline::prefix_len(&front)?;
     within_object(&(0..front_len), object_len)?;
     let meta = ranged(store, retry, object, Header::LEN as u64..front_len).await?;
     front.extend_from_slice(&meta);
-    Ok(ContainerOutline::open(&front, key)?)
+    Ok(front)
+}
+
+/// The same front, out of `memory` where it keeps this Container's, and read
+/// and kept there where it does not.
+///
+/// A Container object never changes once committed (spec: FM-2, CP-11), so the
+/// bytes kept are the object's own; they are opened under the key each time, as
+/// bytes read from Storage are. Kept only once they have opened, so a front
+/// that would not authenticate is read again rather than remembered.
+pub(super) async fn outline(
+    store: &dyn ObjectStore,
+    retry: &RetryPolicy,
+    memory: Option<&FetchMemory>,
+    container_id: ContainerId,
+    object: &ObjectRef,
+    object_len: u64,
+    key: &ContainerKey,
+) -> FetchResult<ContainerOutline> {
+    if let Some(kept) = memory.and_then(|memory| memory.front(container_id)) {
+        debug!(
+            container = %container_id,
+            "the Container's front is kept from an earlier fetch, so it is not read again",
+        );
+        return Ok(ContainerOutline::open(&kept, key)?);
+    }
+    let read = front(store, retry, object, object_len).await?;
+    let outline = ContainerOutline::open(&read, key)?;
+    if let Some(memory) = memory {
+        memory.remember_front(container_id, read.into());
+    }
+    Ok(outline)
 }
 
 /// Whether an extent of the object lies inside what the catalog records the

@@ -45,9 +45,11 @@ pub struct FillRun {
     /// where none did.
     ///
     /// One for the whole run however many Entries met it, as a flow of the
-    /// device's own says it once: each Entry's fetch reads the set afresh, and a
-    /// line per Entry would be one fact said as many times as the folder has
-    /// files. Where the reads disagree, `graver` says which one is kept.
+    /// device's own says it once: each Entry's fetch carries what the set it
+    /// opened was found to be, whether it read the set or the process kept it
+    /// from an earlier read, and a line per Entry would be one fact said as
+    /// many times as the folder has files. Where the reads disagree, `graver`
+    /// says which one is kept.
     pub degraded: Option<DegradedKeyring>,
     /// The kept parcels the run's reads — and the reader's fetch that armed it —
     /// found not held, each read again from Storage (spec: PK-21).

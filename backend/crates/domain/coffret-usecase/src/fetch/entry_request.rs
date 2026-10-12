@@ -4,6 +4,7 @@ use crate::commit::CommitPolicy;
 use crate::destinations::Destinations;
 use crate::device_state::DeviceTime;
 use crate::fetch::cancellation::Cancellation;
+use crate::fetch::fetch_memory::FetchMemory;
 use crate::fetch::kept_parcels::KeptParcels;
 use crate::fetch::never_cancelled::NEVER_CANCELLED;
 use crate::fetch::publication::Publication;
@@ -53,8 +54,9 @@ pub struct FetchEntryRequest<'a> {
     /// The decisions Storage does not make.
     ///
     /// A partial fetch commits nothing, so what it takes from the policy is
-    /// the [`RetryPolicy`](crate::RetryPolicy): the catch-up it starts with, the
-    /// committed Keyring it opens, and every range read it makes run under it.
+    /// the [`RetryPolicy`](crate::RetryPolicy): the catch-up it starts with
+    /// where it starts with one, the listing and the committed Keyring it reads,
+    /// and every range read it makes run under it.
     pub policy: CommitPolicy,
     /// Whether the caller still wants the rest, asked between parcels and never
     /// inside one (spec: PK-21). [`NEVER_CANCELLED`] is the default.
@@ -63,6 +65,17 @@ pub struct FetchEntryRequest<'a> {
     /// out of have finished arriving (spec: PK-16). [`UNHEEDED`] is the
     /// default.
     pub publication: &'a dyn Publication,
+    /// What the process keeps between Entry fetches, where it keeps anything.
+    ///
+    /// `None` is the default and the run of a process that fetches once: it
+    /// catches the catalog up first (spec: CK-9), lists Storage, reads the
+    /// committed Keyring and the Container's front, and keeps none of it.
+    /// `Some` is a process that fetches many Entries over one catalog and
+    /// keeps that catalog current itself: the run answers from the catalog as
+    /// it stands, without catching it up, and takes the listing, the key table
+    /// and the front from here wherever they are still true — reading only
+    /// what is not, and leaving what it read for the next run.
+    pub memory: Option<&'a FetchMemory>,
 }
 
 impl<'a> FetchEntryRequest<'a> {
@@ -89,6 +102,7 @@ impl<'a> FetchEntryRequest<'a> {
             policy: CommitPolicy::default(),
             cancellation: &NEVER_CANCELLED,
             publication: &UNHEEDED,
+            memory: None,
         }
     }
 
@@ -109,6 +123,13 @@ impl<'a> FetchEntryRequest<'a> {
     /// published (spec: PK-16).
     pub fn heard_by(mut self, publication: &'a dyn Publication) -> Self {
         self.publication = publication;
+        self
+    }
+
+    /// The same request, answering from the catalog as it stands and from what
+    /// `memory` keeps, rather than catching the catalog up first.
+    pub fn remembering(mut self, memory: &'a FetchMemory) -> Self {
+        self.memory = Some(memory);
         self
     }
 

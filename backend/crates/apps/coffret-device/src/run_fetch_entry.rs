@@ -1,9 +1,9 @@
 use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::fetch::{
-    fetch_entry, Cancellation, EntryFetchOutcome, FetchEntryRequest, Publication, NEVER_CANCELLED,
-    UNHEEDED,
+    fetch_entry, Cancellation, EntryFetchOutcome, FetchEntryRequest, FetchMemory, Publication,
+    NEVER_CANCELLED, UNHEEDED,
 };
-use coffret_usecase::Progress;
+use coffret_usecase::{Progress, UNWATCHED};
 use tracing::info;
 
 use crate::device_time::now;
@@ -41,6 +41,10 @@ impl OpenLibrary {
     /// caller that waits for the whole run passes [`UNHEEDED`]. Either way
     /// this returns once the whole run is done.
     ///
+    /// The catalog is caught up first, every time (spec: CK-9): this is the
+    /// fetch of a run that does one thing and ends, and keeps nothing for a
+    /// next one.
+    ///
     /// Nothing here keeps two callers asking for one Entry from both running it.
     /// A process that serves more than one reader wants
     /// [`EntryFetches`](crate::EntryFetches) around this, which is where that
@@ -52,29 +56,74 @@ impl OpenLibrary {
         cancellation: &dyn Cancellation,
         publication: &dyn Publication,
     ) -> Result<EntryFetchOutcome> {
+        self.fetch_one(path, progress, cancellation, publication, None)
+            .await
+    }
+
+    /// The same, answering from the catalog as it stands rather than catching
+    /// it up first, and keeping what it learns of Storage for the next one.
+    ///
+    /// What a process that fetches many Entries over one catalog runs, and
+    /// keeps current itself: it catches up as it starts and when somebody asks,
+    /// and each of those leaves the listing it walked in
+    /// [`fetch_memory`](Self::fetch_memory). A fetch then lists Storage, reads
+    /// the committed Keyring, and reads a Container's front only where nothing
+    /// kept there is still true (spec: KL-1, FM-2, PK-20). The one thing it
+    /// cannot see from here is a stale catalog, and where that shows at all,
+    /// what it looks like is a refusal
+    /// [`may_mean_catalog_stale`](coffret_usecase::fetch::FetchError::may_mean_catalog_stale):
+    /// it is the caller's to catch up and ask once more, because the caller is
+    /// who answers for how its catalog stands.
+    pub(crate) async fn fetch_entry_as_it_stands(
+        &self,
+        path: EntryPath,
+        cancellation: &dyn Cancellation,
+        publication: &dyn Publication,
+    ) -> Result<EntryFetchOutcome> {
+        self.fetch_one(
+            path,
+            &UNWATCHED,
+            cancellation,
+            publication,
+            Some(&self.fetch_memory),
+        )
+        .await
+    }
+
+    async fn fetch_one(
+        &self,
+        path: EntryPath,
+        progress: &dyn Progress,
+        cancellation: &dyn Cancellation,
+        publication: &dyn Publication,
+        memory: Option<&FetchMemory>,
+    ) -> Result<EntryFetchOutcome> {
         // The Entry Path is not in the event and never will be: it is the user's
         // own name for their file (spec: EL-1), and a log is not where that
         // goes.
         info!(
             operation = "fetch_entry",
             library = %self.library_id,
+            catalog = if memory.is_some() { "as it stands" } else { "caught up" },
             "fetching one Entry"
         );
-        Ok(fetch_entry(
-            FetchEntryRequest::new(
-                self.store.as_ref(),
-                self.index.as_ref(),
-                &self.keys,
-                self.local_fs.as_ref(),
-                self.kept_parcels(),
-                path,
-                now(),
-            )
-            .watched_by(progress)
-            .cancelled_by(cancellation)
-            .heard_by(publication),
+        let request = FetchEntryRequest::new(
+            self.store.as_ref(),
+            self.index.as_ref(),
+            &self.keys,
+            self.local_fs.as_ref(),
+            self.kept_parcels(),
+            path,
+            now(),
         )
-        .await?)
+        .watched_by(progress)
+        .cancelled_by(cancellation)
+        .heard_by(publication);
+        let request = match memory {
+            Some(memory) => request.remembering(memory),
+            None => request,
+        };
+        Ok(fetch_entry(request).await?)
     }
 }
 

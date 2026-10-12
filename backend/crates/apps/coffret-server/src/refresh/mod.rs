@@ -16,7 +16,9 @@
 //!
 //! Two places ask, and deliberately no third — besides the one a reconnect
 //! makes once a renewed grant lets Storage answer again, which is the refresh
-//! a person would otherwise have pressed next.
+//! a person would otherwise have pressed next, and the one an Entry fetch
+//! makes when the Container its catalog names turns out to be gone from
+//! Storage, which is a stale catalog showing itself.
 //!
 //! **As the server starts**, before anything is bound: what a first window shows
 //! is then the Library rather than whatever this device happened to know last
@@ -35,8 +37,14 @@
 //! no following of the remote head: the explorer's discipline is zero requests
 //! while nothing is happening, and a reader who wants to know what is new says
 //! so. Nothing about the Library's correctness rests on hearing about a commit
-//! promptly — a stale catalog is exactly what every flow's own catch-up fixes
-//! before it does anything (spec: CK-9).
+//! promptly — a stale catalog is exactly what every writing flow's own catch-up
+//! fixes before it does anything (spec: CK-9), and what an Entry fetch meets
+//! as a Container that is no longer there, which [`when_stale`] answers.
+//!
+//! Short of that one case, an Entry fetch does not catch up, and that is the
+//! point of these being the only places: a fetch answers from the catalog as it
+//! stands, and the listing each of these walks is kept for the fetches after
+//! it, so a reader turning pages costs Storage the parcels and nothing else.
 //!
 //! # One at a time
 //!
@@ -64,6 +72,8 @@ pub use refreshes::Refreshes;
 mod standing;
 pub use standing::{Catalog, Standing};
 
-// The one catch-up both of the two asks reach the Library through, and the line
-// it writes about itself.
+// The one catch-up every ask above reaches the Library through — the two, the
+// reconnect's and an Entry fetch's — and the line it writes about itself.
 mod run;
+
+pub(crate) mod when_stale;

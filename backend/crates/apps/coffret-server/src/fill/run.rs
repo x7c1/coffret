@@ -6,6 +6,7 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::folder::Folder;
+use crate::refresh::when_stale::fetch_caught_up_if_stale;
 use crate::reported::Reported;
 use crate::state::ServerState;
 
@@ -65,7 +66,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
 
     // A folder no mapping of this device reaches has nowhere to put a file, so
     // there is nothing here to bring over (spec: EP-9) — and asking anyway would
-    // be one catalog catch-up per file to be told so once per file. The explorer
+    // be one fetch per file to be told so once per file. The explorer
     // says this over the rows already, out of the listing itself.
     if !listing.mapped {
         run.status = FillStatus::Done;
@@ -98,26 +99,38 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             run.status = FillStatus::Superseded;
             return finish(state, run, started);
         }
-        // The verdict about the Entry, and beside it what the fetch read of the
+        // The verdict about the Entry, and beside it what the fetch knew of the
         // committed Keyring on the way, the kept parcels it found not held,
-        // and what it placed besides: every Entry's fetch reads the set
-        // afresh, and the run keeps one report of it for all of them.
-        let fetched = state
-            .fetches
-            .fetch_until(&library, path.clone(), &superseded)
-            .await
-            .map(|fetched| {
-                if let Some(found) = fetched.degraded {
-                    run.read_keyring(found);
+        // and what it placed besides: every Entry's fetch carries what the set
+        // was found to be, and the run keeps one report of it for all of them.
+        //
+        // A stale catalog is caught up once, and a catch-up that fails is about
+        // the Library rather than this Entry: the next Entry would meet it too.
+        let fetched = match fetch_caught_up_if_stale(state, || {
+            state
+                .fetches
+                .fetch_until(&library, path.clone(), &superseded)
+        })
+        .await
+        {
+            Ok(fetched) => fetched,
+            Err(refusal) => {
+                run.stop(Reported::recorded(&refusal, "fill"));
+                return finish(state, run, started);
+            }
+        };
+        let fetched = fetched.map(|fetched| {
+            if let Some(found) = fetched.degraded {
+                run.read_keyring(found);
+            }
+            run.read_unheld(fetched.unheld);
+            for alongside in fetched.alongside {
+                if remaining.contains(&alongside) && placed_alongside.insert(alongside) {
+                    run.done += 1;
                 }
-                run.read_unheld(fetched.unheld);
-                for alongside in fetched.alongside {
-                    if remaining.contains(&alongside) && placed_alongside.insert(alongside) {
-                        run.done += 1;
-                    }
-                }
-                fetched.fetch
-            });
+            }
+            fetched.fetch
+        });
         match fetched {
             Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => run.done += 1,
             // Superseded between two parcels of this Entry: the parcels read so

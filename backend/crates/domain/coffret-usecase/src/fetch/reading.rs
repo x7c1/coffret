@@ -25,7 +25,8 @@ pub(super) struct Reading<'a> {
     pub(super) keys: &'a LibraryKeys,
     /// Where on this device the Entries a read produces are placed.
     pub(super) destinations: &'a dyn Destinations,
-    /// The control objects the catch-up walked, for a Container the Index holds
-    /// no handle for.
+    /// The control objects the catch-up walked — or, for a run answering from
+    /// the catalog as it stands, the listing kept of the head it stands at —
+    /// for a Container the Index holds no handle for.
     pub(super) listing: &'a ControlListing,
 }

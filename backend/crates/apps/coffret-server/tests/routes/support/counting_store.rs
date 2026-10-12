@@ -8,16 +8,20 @@ use coffret_usecase::{
     UploadedObject,
 };
 
+use super::Asked;
+
 /// A store that records what was read of it, wrapped around the real one.
 ///
-/// One case is about a cost rather than an outcome: two browsers asking for one
-/// Entry at the same moment must fetch it once. Nothing a response carries
-/// proves that — both requests answer with the same bytes either way — so the
-/// case counts the reads instead: the front of an object and the parcels an
-/// Entry overlaps are what placing it out of a Container costs (spec: PK-16).
+/// Some cases are about a cost rather than an outcome: two browsers asking for
+/// one Entry at the same moment must fetch it once, and a second page out of a
+/// book must not ask Storage again for what the first already learned. Nothing
+/// a response carries proves either — the bytes are the same whatever was read
+/// — so those cases count the calls instead: the listing, a whole object (which
+/// is what a Keyring replica read is), and the ranges of a Container, which
+/// are its front and the parcels an Entry overlaps (spec: PK-16).
 pub struct CountingStore {
     inner: Arc<dyn ObjectStore>,
-    reads: Mutex<Vec<Option<Range<u64>>>>,
+    reads: Mutex<Vec<Asked>>,
 }
 
 impl CountingStore {
@@ -39,7 +43,10 @@ impl CountingStore {
 
     /// How many reads asked for a range of an object rather than all of it.
     pub fn ranged_reads(&self) -> usize {
-        self.locked().iter().filter(|range| range.is_some()).count()
+        self.locked()
+            .iter()
+            .filter(|asked| matches!(asked, Asked::Range(_)))
+            .count()
     }
 
     /// How many reads asked for a range longer than an object's front, which
@@ -47,12 +54,18 @@ impl CountingStore {
     pub fn parcel_reads(&self) -> usize {
         self.locked()
             .iter()
-            .flatten()
-            .filter(|range| range.end - range.start > 64 * 1024)
+            .filter(
+                |asked| matches!(asked, Asked::Range(range) if range.end - range.start > 64 * 1024),
+            )
             .count()
     }
 
-    fn locked(&self) -> std::sync::MutexGuard<'_, Vec<Option<Range<u64>>>> {
+    /// Every call counted so far, in the order it was made.
+    pub fn asked(&self) -> Vec<Asked> {
+        self.locked().clone()
+    }
+
+    fn locked(&self) -> std::sync::MutexGuard<'_, Vec<Asked>> {
         self.reads
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -78,11 +91,15 @@ impl ObjectStore for CountingStore {
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> StoreResult<ByteStream> {
-        self.locked().push(range.clone());
+        self.locked().push(match &range {
+            Some(range) => Asked::Range(range.clone()),
+            None => Asked::Whole,
+        });
         self.inner.get(object, range).await
     }
 
     async fn list(&self, page: Option<&PageToken>) -> StoreResult<ObjectPage> {
+        self.locked().push(Asked::Listed);
         self.inner.list(page).await
     }
 

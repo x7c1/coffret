@@ -32,6 +32,10 @@ async fn an_unmapped_entry_path_is_recorded_by_its_shape_and_not_by_its_name() {
     served
         .commit_elsewhere(SENTINEL_PATH, b"outside every mapping")
         .await;
+    // Learnt of the way a running server learns of anything another device
+    // committed: somebody asks what is new. A fetch answers from the catalog as
+    // it stands and does not catch it up by itself.
+    assert_eq!(served.post("/api/refresh").await.status(), 200);
     let logs = CapturedLogs::capture();
 
     let (status, refusal) =

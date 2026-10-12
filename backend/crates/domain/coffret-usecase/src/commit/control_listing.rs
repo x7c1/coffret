@@ -33,7 +33,7 @@ const MAX_PAGES: usize = 100_000;
 
 impl ControlListing {
     /// Walks the whole listing, page by page to its end.
-    pub(super) async fn read(store: &dyn ObjectStore, retry: &RetryPolicy) -> CommitResult<Self> {
+    pub(crate) async fn read(store: &dyn ObjectStore, retry: &RetryPolicy) -> CommitResult<Self> {
         let mut listing = Self::default();
         let mut token = None;
         let mut pages = 0;
