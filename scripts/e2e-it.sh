@@ -228,15 +228,13 @@ readonly FIXTURES="$ROOT/backend/target/release/coffret-fixtures"
 cd "$ROOT/frontend"
 pnpm --filter @coffret/web build
 
-# Idempotent: a browser already downloaded is left where it is. `--with-deps`
-# only where the machine is disposable — it installs system packages, which is
-# not something a target may do to somebody's own machine.
+# Idempotent: a browser already downloaded is left where it is. Only the
+# browser, never its system packages: installing those is not something a
+# target may do to somebody's own machine, and in CI the workflow installs them
+# in a step of its own before this runs, bounded so that a stalled apt mirror
+# fails that step rather than this one (see the e2e job in ci.yml).
 echo "--- making sure Chromium is here ---"
-if [ -n "${CI:-}" ]; then
-  pnpm --filter @coffret/e2e exec playwright install --with-deps chromium
-else
-  pnpm --filter @coffret/e2e exec playwright install chromium
-fi
+pnpm --filter @coffret/e2e exec playwright install chromium
 
 # ---------------------------------------------------------------------------
 # MinIO.
