@@ -26,6 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Every apt fetch gives up on a silent connection after 30 seconds and
+      # tries again, up to three times, so a stalled mirror costs this job a
+      # couple of minutes rather than the whole of the step's timeout. Written
+      # under apt.conf.d rather than passed as `-o` options so that it also
+      # reaches apt runs a tool makes (the e2e job's `playwright install-deps`).
+      - name: Bound apt's waits on the mirror
+        run: |
+          printf '%s\n' \
+            'Acquire::http::Timeout "30";' \
+            'Acquire::https::Timeout "30";' \
+            'Acquire::Retries "3";' \
+            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
+
       # The .deb archives are cached so a run normally installs from the cache
       # instead of the Ubuntu mirror, which can stall an install for many
       # minutes. Only the downloads are cached: `apt-get update` and
@@ -57,7 +70,8 @@ jobs:
             ${{ steps.apt-cache-key.outputs.prefix }}
 
       # A stalled mirror can hang `apt-get update`; fail fast instead of
-      # waiting out the job. A working run takes 1 to 8 minutes.
+      # waiting out the job. The retries above usually get past a stall, and
+      # this bounds the run when they do not. A working run takes 1 to 8 minutes.
       - name: Install system packages
         timeout-minutes: 15
         run: |
@@ -377,10 +391,30 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
 
-      # Chromium itself is installed by the target, idempotently and with the
-      # system packages a headless browser needs on a runner. On a cache hit the
-      # browser is already where Playwright looks and only those packages are
-      # installed; the download happens once per Playwright version.
+      # See the backend job: a stalled apt fetch is abandoned after 30 seconds
+      # and tried again. Before the step below, which is this job's only apt run.
+      - name: Bound apt's waits on the mirror
+        run: |
+          printf '%s\n' \
+            'Acquire::http::Timeout "30";' \
+            'Acquire::https::Timeout "30";' \
+            'Acquire::Retries "3";' \
+            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
+
+      # The system packages a headless Chromium needs on a runner, installed by
+      # apt. A step of its own, not part of the target, so that a stalled mirror
+      # fails here under its own bound instead of holding the journeys' step
+      # until the job is cancelled. A working run takes under a minute; the
+      # bound leaves room for a stall the retries get past.
+      - name: Install Chromium's system packages
+        timeout-minutes: 5
+        working-directory: frontend/packages/apps/e2e
+        run: pnpm exec playwright install-deps chromium
+
+      # Chromium itself is installed by the target, idempotently; its system
+      # packages come from the step above. On a cache hit the browser is already
+      # where Playwright looks and nothing is downloaded; the download happens
+      # once per Playwright version.
       - name: Journeys against MinIO
         run: make e2e-it
 
