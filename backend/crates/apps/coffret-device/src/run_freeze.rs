@@ -115,7 +115,9 @@ impl OpenLibrary {
             request = request.only(only);
         }
 
-        Ok(freeze_folder(request).await?)
+        let outcome = freeze_folder(request).await;
+        self.fetch_memory.forget_key_table();
+        Ok(outcome?)
     }
 
     /// Counts what [`freeze`](Self::freeze) would pack under `prefix`, among

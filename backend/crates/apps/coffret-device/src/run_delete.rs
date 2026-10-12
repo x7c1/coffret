@@ -56,7 +56,9 @@ impl OpenLibrary {
             now,
         )
         .watched_by(progress);
-        let outcome = delete_entries(request).await?;
+        let outcome = delete_entries(request).await;
+        self.fetch_memory.forget_key_table();
+        let outcome = outcome?;
         // The Containers the deletion removed or replaced are out of the
         // current set, and so are any parcels this device kept of them
         // (spec: PK-21).

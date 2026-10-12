@@ -28,7 +28,14 @@ use fronts::Fronts;
 ///   the next fetch lists again.
 /// - **The key table** is kept with the commitment it was read under, and only
 ///   handed back for that commitment (spec: KL-1). A catalog whose checkpoint
-///   names another Keyring has its fetch read that one.
+///   names another Keyring has its fetch read that one. Beside it is what the
+///   read found of the set. A repair puts replicas back under the same
+///   commitment (spec: KL-13, KL-14), so a table whose read found the set
+///   short is forgotten at the next catch-up, and any table once a write run
+///   of this process — where this device repairs — is over; the next fetch
+///   reads the set again and reports it short only if that read finds it so
+///   (spec: KL-15). A table read from a whole set is kept across a catch-up
+///   that leaves the commitment where it was.
 /// - **A Container's front** is kept by Container ID, within a bound on how many
 ///   and how many bytes, and forgotten once the Container leaves the current
 ///   set. A Container object never changes once committed (spec: FM-2, CP-11),
@@ -126,6 +133,37 @@ impl FetchMemory {
             .as_ref()
             .filter(|opened| &opened.commitment == commitment)
             .map(|opened| (Arc::clone(&opened.key_table), opened.degraded))
+    }
+
+    /// Forgets the key table where the read that produced it found the set
+    /// short, and keeps it where it found the set whole.
+    ///
+    /// What a catch-up does: it is where this process asks Storage what the
+    /// Library is now, and so where a repair another device made since is
+    /// learned of (spec: KL-13). The commitment a repair leaves is the one it
+    /// found, so the finding would otherwise outlive the condition it reports;
+    /// the next fetch reads the set again instead, and says it is short only if
+    /// it still is (spec: KL-15).
+    pub(crate) fn forget_degraded_key_table(&self) {
+        let mut kept = self.locked();
+        if kept
+            .keyring
+            .as_ref()
+            .is_some_and(|opened| opened.degraded.is_some())
+        {
+            kept.keyring = None;
+        }
+    }
+
+    /// Forgets the key table, whatever its read found of the set.
+    ///
+    /// What a write run of this process does once it is over: it examines the
+    /// committed set and repairs it before it commits (spec: KL-11, KL-13), and
+    /// a run that repaired and then failed leaves the commitment where it was
+    /// with the set whole again. The next fetch reads the set rather than
+    /// reporting a finding the run has made untrue (spec: KL-15).
+    pub fn forget_key_table(&self) {
+        self.locked().keyring = None;
     }
 
     /// Keeps the key table read under `commitment`, in place of any other.

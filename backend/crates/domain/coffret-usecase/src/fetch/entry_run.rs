@@ -273,7 +273,12 @@ async fn listed(
 /// a commitment names its set by digest, so a table read under it is the table
 /// every replica of it carries (spec: KL-1, KL-6). The finding that read made
 /// goes on this outcome too — the set is as short as it was — and is not said
-/// again in the log, where it has been said once already.
+/// again in the log, where it has been said once already. It is reported only
+/// until the set may have been repaired: a repair keeps the commitment
+/// (spec: KL-13, KL-14), so the memory forgets a table kept with that finding
+/// at the next catch-up and any table once a write run of this process is over,
+/// and the fetch after that reads the set again and reports it short only if
+/// that read finds it so (spec: KL-15).
 async fn key_table(
     store: &dyn ObjectStore,
     keys: &LibraryKeys,

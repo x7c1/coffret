@@ -44,7 +44,7 @@ impl OpenLibrary {
             batch = %batch,
             "syncing the mapped folders"
         );
-        Ok(sync_folders(
+        let outcome = sync_folders(
             SyncRequest::new(
                 self.store.as_ref(),
                 self.index.as_ref(),
@@ -59,7 +59,9 @@ impl OpenLibrary {
             .watched_by(progress)
             .knowing(&self.births),
         )
-        .await?)
+        .await;
+        self.fetch_memory.forget_key_table();
+        Ok(outcome?)
     }
 }
 
