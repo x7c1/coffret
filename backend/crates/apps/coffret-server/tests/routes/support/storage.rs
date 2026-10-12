@@ -151,7 +151,10 @@ impl Served {
     /// no device did it. The files still open (spec: RV-2), which is what lets
     /// a case over this ask what a reader is told rather than whether it can
     /// read.
-    pub async fn degrade_the_keyring(&self) {
+    ///
+    /// What was there is handed back, so a case can repair the set with
+    /// [`put_back`](Self::put_back) under the same commitment.
+    pub async fn degrade_the_keyring(&self) -> LostReplica {
         let checkpoint = self
             .filled
             .checkpoint()
@@ -172,6 +175,14 @@ impl Served {
         )
         .expect("a committed digest is a valid one")
         .to_string();
+        let bytes = self
+            .store
+            .get(&ObjectRef::new(name.clone()), None)
+            .await
+            .expect("the replica is on Storage")
+            .into_bytes()
+            .await
+            .expect("the replica reads whole");
         self.store
             .put(
                 &name,
@@ -179,5 +190,22 @@ impl Served {
             )
             .await
             .expect("the replica is overwritten");
+        LostReplica { name, bytes }
     }
+
+    /// Writes a replica [`degrade_the_keyring`](Self::degrade_the_keyring)
+    /// mangled back as it was, which is what a repair leaves: the set whole
+    /// again, under the commitment it already had (spec: KL-13, KL-14).
+    pub async fn put_back(&self, lost: LostReplica) {
+        self.store
+            .put(&lost.name, ByteStream::from(lost.bytes))
+            .await
+            .expect("the replica is written back");
+    }
+}
+
+/// A Keyring replica as it stood before a case mangled it.
+pub struct LostReplica {
+    name: String,
+    bytes: Vec<u8>,
 }

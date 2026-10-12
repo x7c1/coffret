@@ -53,6 +53,10 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
         memory
             .remember_listing(index, Arc::new(caught.listing), to)
             .await?;
+        // And this is where a repair made since is learned of, under a
+        // commitment that need not have moved: a finding that the set is short,
+        // kept from an earlier read, is not carried past it (spec: KL-13, KL-15).
+        memory.forget_degraded_key_table();
     }
 
     let outcome = CatchUpOutcome {

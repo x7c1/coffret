@@ -54,7 +54,10 @@ impl<'a> CatchUpRequest<'a> {
     }
 
     /// The same run, leaving the listing it walked in `memory`, with the head
-    /// it brought the catalog to (see [`FetchMemory`]).
+    /// it brought the catalog to (see [`FetchMemory`]). A key table kept from a
+    /// read that found the set short is forgotten there, so the next fetch
+    /// reads the set again rather than repeating a finding a repair may have
+    /// made untrue (spec: KL-15).
     pub fn remembering(mut self, memory: &'a FetchMemory) -> Self {
         self.memory = Some(memory);
         self

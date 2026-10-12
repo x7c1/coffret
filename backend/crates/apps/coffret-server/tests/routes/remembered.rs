@@ -15,7 +15,7 @@ use coffret_logging::testing::CapturedLogs;
 use serde_json::json;
 use tracing::Level;
 
-use crate::support::{bytes, json as body_of, Asked, Served};
+use crate::support::{bytes, fill, json as body_of, sync, Asked, Served};
 
 /// How many of the calls were whole-object reads, which is what reading a
 /// Keyring replica is.
@@ -285,4 +285,99 @@ async fn a_container_gone_from_a_current_catalog_is_refused_after_one_catch_up()
     );
 
     assert_eq!(catch_ups_for_a_fetch(&logs), 1, "{}", logs.text());
+}
+
+/// Whether the fill the last opened file armed says the Keyring is degraded,
+/// which is where a person who only opens files hears of it (spec: KL-15).
+async fn says_degraded(served: &Served) -> bool {
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    fill(&work)["findings"].as_array().is_some_and(|findings| {
+        findings
+            .iter()
+            .any(|finding| finding["reason"] == "keyring_degraded")
+    })
+}
+
+// A refresh that leaves the head where it was still leaves a whole set's key
+// table kept: nothing a catch-up learns makes a whole set short, so the saving
+// holds in the case that matters for reading (spec: KL-1).
+#[tokio::test]
+async fn a_refresh_that_advances_nothing_keeps_a_whole_sets_key_table() {
+    let served = two_containers().await;
+    open(&served, "solo/one.png", b"one").await;
+
+    let (status, refreshed) = body_of(served.post("/api/refresh").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(refreshed["advanced"], false);
+    served.forget_reads();
+
+    open(&served, "solo2/two.png", b"two").await;
+    let asked = served.asked();
+    assert_eq!(whole_reads(&asked), 0, "no Keyring read: {asked:?}");
+}
+
+// KL-15: a finding is reported while a read still observes the condition, and
+// no longer. The set is found short, then repaired elsewhere under the same
+// commitment — a repair rewrites replicas and leaves the head alone
+// (spec: KL-13, KL-14) — and a refresh is where this process learns of it. The
+// next fetch reads the Keyring again rather than repeating what the first read
+// found.
+#[tokio::test]
+async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
+    let served = two_containers().await;
+    let lost = served.degrade_the_keyring().await;
+    open(&served, "solo/one.png", b"one").await;
+    assert!(
+        says_degraded(&served).await,
+        "the first read finds it short"
+    );
+
+    served.put_back(lost).await;
+    let (status, refreshed) = body_of(served.post("/api/refresh").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(refreshed["advanced"], false, "a repair commits nothing");
+    served.forget_reads();
+
+    open(&served, "solo2/two.png", b"two").await;
+    let asked = served.asked();
+    assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
+    assert!(
+        !says_degraded(&served).await,
+        "and found whole, so not said short again",
+    );
+}
+
+// The repair this device makes itself: a sync examines the committed set and
+// repairs it before it commits (spec: KL-11, KL-13). Its commit is refused
+// after that, so the commitment stays where it was with the set whole again,
+// and the next fetch learns so by reading it rather than repeating the finding
+// the key table was kept with.
+#[tokio::test]
+async fn a_sync_that_repaired_the_set_stops_the_degraded_finding() {
+    let served = two_containers().await;
+    served.degrade_the_keyring().await;
+    open(&served, "solo/one.png", b"one").await;
+    assert!(
+        says_degraded(&served).await,
+        "the first read finds it short"
+    );
+
+    served.refuse_commits();
+    served.upload("albums", &[("late.jpg", b"late")]).await;
+    served.sync_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        sync(&work)["status"],
+        "stopped",
+        "the commit was refused after the repair: {work}",
+    );
+    served.forget_reads();
+
+    open(&served, "solo2/two.png", b"two").await;
+    let asked = served.asked();
+    assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
+    assert!(
+        !says_degraded(&served).await,
+        "and found whole, so not said short again",
+    );
 }

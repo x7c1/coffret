@@ -473,7 +473,10 @@ fn degraded_keyring() -> serde_json::Value {
 // replica as it reads the committed Keyring, and the next is opened under the
 // key table the process kept from that read, which carries the same finding;
 // the run says so once — as a finding beside its counts, which neither stops
-// it nor declines anything: the files still open (spec: RV-2).
+// it nor declines anything: the files still open (spec: RV-2). The kept
+// finding lasts only until the process next asks Storage what the Library is:
+// a catch-up or a write run of its own forgets it, and the fetch after that
+// reads the set again (see `remembered.rs`).
 #[tokio::test]
 async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
     let served = Served::library().await;
