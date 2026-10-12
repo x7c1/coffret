@@ -90,4 +90,4 @@ reading a Container's front ahead of the first request for it.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On a second device (debug log), opening an unfetched 300-page book: the debug log shows no listing call and no Keyring read for the second and later fetches in the same server. The time to the first page and the wait at a parcel boundary are recorded in the PR. The boundary wait comes down from about 3 s to about one parcel round trip
+- [x] On a second device (debug log), opening an unfetched 300-page book: the debug log shows no listing call and no Keyring read for the second and later fetches in the same server. The time to the first page and the wait at a parcel boundary are recorded in the PR. The boundary wait comes down from about 3 s to about one parcel round trip
