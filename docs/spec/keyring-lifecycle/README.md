@@ -85,6 +85,16 @@ Concept background: [Keyring](../../concepts/keyring/),
     over, it says loss there is not established, since the replica there may
     still be valid; a run that stepped over only such positions does not call
     the set degraded (KL-5).
+  - A run that opens its Containers under a key table its process kept from
+    an earlier read under the same Keyring commitment does not read the
+    Keyring again, and carries the finding that earlier read made. A finding
+    that the set was short is kept only until this process next catches up
+    or runs a write (sync, freeze, delete); either one forgets it, so the
+    next run reads the set again and reports only what that read finds.
+  - A repair keeps the commitment it had (KL-13, KL-14), so the commitment
+    alone cannot tell a repaired set from the one a short finding was about.
+    A key table read from a whole set may be reused across a catch-up that
+    leaves the commitment unchanged.
 - **KL-16.** If repair cannot complete — write failures, quota, permissions
   — the completeness gate holds unchanged: writes, `prune`, and Master Key
   rotation remain refused (KL-11), while reads and restore remain allowed
