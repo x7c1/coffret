@@ -85,6 +85,17 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
 
+      # As in ci.yml's backend job (see the comment there): a stalled apt
+      # fetch is abandoned after 30 seconds and tried again.
+      - name: Bound apt's waits on the mirror
+        if: runner.os == 'Linux'
+        run: |
+          printf '%s\n' \
+            'Acquire::http::Timeout "30";' \
+            'Acquire::https::Timeout "30";' \
+            'Acquire::Retries "3";' \
+            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
+
       # The apt archive cache, as in ci.yml's backend job (see the comment there).
       - name: Prepare the apt archive cache
         if: runner.os == 'Linux'
@@ -107,7 +118,8 @@ jobs:
             ${{ steps.apt-cache-key.outputs.prefix }}
 
       # A stalled mirror can hang `apt-get update`; fail fast instead of
-      # waiting out the job. A working run takes 1 to 8 minutes.
+      # waiting out the job. The retries above usually get past a stall, and
+      # this bounds the run when they do not. A working run takes 1 to 8 minutes.
       - name: Install system packages
         timeout-minutes: 15
         if: runner.os == 'Linux'
