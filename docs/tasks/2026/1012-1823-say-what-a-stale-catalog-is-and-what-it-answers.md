@@ -88,5 +88,5 @@ return `needs_review` and say why.
 
 ### Before merge (verified outside the check command)
 
-- [ ] The Japanese copies of the changed concept docs are regenerated from the PR head and pushed before merge, then re-pointed at the merge commit afterwards
+- [x] The Japanese copies of the changed concept docs are regenerated from the PR head and pushed before merge, then re-pointed at the merge commit afterwards
 
