@@ -64,4 +64,4 @@ configuration changes what they claim.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this pull request's own CI run, the e2e job passes, the new system-package step finishes within its timeout, and the backend job's apt step still installs everything it did before
+- [x] On this pull request's own CI run, the e2e job passes, the new system-package step finishes within its timeout, and the backend job's apt step still installs everything it did before
