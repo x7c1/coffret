@@ -393,6 +393,37 @@ impl FetchError {
             },
         }
     }
+
+    /// Whether this is what a run that answered from a stale catalog — one the
+    /// Library's head has moved past — meets, so that catching the catalog up
+    /// and asking again may answer differently.
+    ///
+    /// Two refusals, both about the Container the catalog placed the Entry in:
+    /// Storage saying it holds no such object, and no handle reaching it at
+    /// all. Another device that replaced that Container or removed it took it
+    /// out of the current set (spec: CP-1), and a catalog that has not replayed
+    /// that record still names it. The removal does not take the object away:
+    /// until some run trashes it, it is an untrashed removal still in the
+    /// listing (spec: OC-6), and trash takes it out of the listing but leaves a
+    /// handle already held reaching it. So a stale catalog with a handle for it
+    /// reads the Container as the catalog describes it and meets neither
+    /// refusal. They come once the object is out of reach: trashed with no
+    /// handle here naming it, or gone for good.
+    /// Every provider reports a missing object as [`Error::NotFound`] of
+    /// [`Missing::Object`](crate::Missing::Object), so this reads the same on
+    /// all of them.
+    ///
+    /// It is a reason to ask again once, not a verdict: a catalog at the head
+    /// that still meets either of them has met a Library that does not hold
+    /// what it says, and that answer is the one to report.
+    pub fn may_mean_catalog_stale(&self) -> bool {
+        matches!(
+            self,
+            Self::Storage(Error::NotFound {
+                missing: crate::Missing::Object(_),
+            }) | Self::ContainerUnreachable { .. }
+        )
+    }
 }
 
 impl fmt::Display for FetchError {

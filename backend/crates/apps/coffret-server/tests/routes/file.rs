@@ -219,6 +219,9 @@ async fn a_catalog_that_cannot_be_used_is_the_servers_own_failure_on_both_sides(
     let served = Served::library().await;
     let fetched = served.get("/api/file?path=albums/notes.txt").await;
     assert_eq!(fetched.status(), 200, "the file is on this device first");
+    // The fill that fetch armed is let finish first: it walks the same catalog,
+    // and one that met the refusal below would be a third record of it.
+    served.fill_idle().await;
     let logs = CapturedLogs::capture();
     served.refuse_the_catalog();
 
@@ -226,10 +229,15 @@ async fn a_catalog_that_cannot_be_used_is_the_servers_own_failure_on_both_sides(
     assert_eq!(status, 500, "reading a file that is here: {refusal}");
     assert_eq!(refusal["error"], "server");
 
-    let (status, refusal) = body_of(served.get("/api/file?path=albums/cover.png").await).await;
+    // Outside the folder that fill brought over, so still not on this device.
+    let (status, refusal) =
+        body_of(served.get("/api/file?path=albums/2026/spring.jpg").await).await;
     assert_eq!(status, 500, "opening one that is not: {refusal}");
     assert_eq!(refusal["error"], "server");
-    assert!(!served.holds("albums/cover.png"), "and nothing was placed");
+    assert!(
+        !served.holds("albums/2026/spring.jpg"),
+        "and nothing was placed"
+    );
 
     // What the log keeps is which layer failed, the same way both times.
     let recorded: Vec<String> = logs

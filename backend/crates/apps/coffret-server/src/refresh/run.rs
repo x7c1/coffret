@@ -10,9 +10,9 @@ use crate::state::ServerState;
 
 /// One catch-up, with nobody else replaying at the same time.
 ///
-/// Both callers reach the Library through here, so the turn is taken, the line
+/// Every caller reaches the Library through here, so the turn is taken, the line
 /// is written and how the catalog stands is recorded once however the run was
-/// asked for; `operation` is which of the two asked.
+/// asked for; `operation` is which of them asked.
 ///
 /// The standing is written here rather than by the callers because this is the
 /// only place that sees both ends of a replay — including the end that is not

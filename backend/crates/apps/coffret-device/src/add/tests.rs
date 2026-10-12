@@ -92,6 +92,7 @@ async fn device() -> Device {
         provider: "s3",
         grant: None,
         births: Default::default(),
+        fetch_memory: Default::default(),
     };
     Device {
         library,

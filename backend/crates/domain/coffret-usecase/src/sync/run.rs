@@ -34,7 +34,8 @@ use crate::upload;
 /// pending rows. An uncertain create outcome is retained until proven.
 ///
 /// The catch-up comes first and its failure fails the run, for the reason every
-/// other use case catches up before it reads the catalog: what the Index says
+/// other use case catches up before it reads the catalog, save an Entry fetch
+/// answering from a catalog its process keeps current: what the Index says
 /// about an Entry Path is an answer about the Library only where it stands at
 /// the Library's head. A scan over a catalog that stands behind it takes files
 /// the Library already holds for new ones — every file under the mappings, on a

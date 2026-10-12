@@ -1,4 +1,5 @@
 use crate::commit::CommitPolicy;
+use crate::fetch::FetchMemory;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
@@ -31,6 +32,13 @@ pub struct CatchUpRequest<'a> {
     /// that one field because the catch-up is the commit flow's own routine and
     /// speaks in the commit flow's terms, exactly as a fetch's request does.
     pub policy: CommitPolicy,
+    /// What a process keeps between its Entry fetches, where it keeps anything.
+    ///
+    /// A catch-up walks the Library's listing to reach its head, and that walk
+    /// is the very listing those fetches reach objects through; a process whose
+    /// fetches answer from the catalog as it stands is handed it here, rather
+    /// than having each of them list again. `None`, the default, keeps nothing.
+    pub memory: Option<&'a FetchMemory>,
 }
 
 impl<'a> CatchUpRequest<'a> {
@@ -41,6 +49,14 @@ impl<'a> CatchUpRequest<'a> {
             index,
             keys,
             policy: CommitPolicy::default(),
+            memory: None,
         }
+    }
+
+    /// The same run, leaving the listing it walked in `memory`, with the head
+    /// it brought the catalog to (see [`FetchMemory`]).
+    pub fn remembering(mut self, memory: &'a FetchMemory) -> Self {
+        self.memory = Some(memory);
+        self
     }
 }

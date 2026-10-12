@@ -76,6 +76,7 @@ mod tests {
             provider: "s3",
             grant: None,
             births: Default::default(),
+            fetch_memory: Default::default(),
         }
     }
 

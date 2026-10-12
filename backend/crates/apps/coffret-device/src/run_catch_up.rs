@@ -30,11 +30,12 @@ impl OpenLibrary {
             library = %self.library_id,
             "catching the catalog up with the Library's head"
         );
-        let outcome = catch_up_catalog(CatchUpRequest::new(
-            self.store.as_ref(),
-            self.index.as_ref(),
-            &self.keys,
-        ))
+        // The listing the replay walks is the one the fetches after it reach
+        // objects through, so it is left where they look for it.
+        let outcome = catch_up_catalog(
+            CatchUpRequest::new(self.store.as_ref(), self.index.as_ref(), &self.keys)
+                .remembering(&self.fetch_memory),
+        )
         .await?;
         // A Container the replay took out of the current set takes any parcel
         // this device kept of it along (spec: PK-21).
@@ -95,6 +96,7 @@ mod tests {
             provider: "s3",
             grant: None,
             births: Default::default(),
+            fetch_memory: Default::default(),
         }
     }
 

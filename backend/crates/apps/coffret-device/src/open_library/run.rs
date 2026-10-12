@@ -80,5 +80,6 @@ where
         provider: settings.provider.kind(),
         grant,
         births: Arc::default(),
+        fetch_memory: Default::default(),
     })
 }

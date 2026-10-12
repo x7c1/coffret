@@ -6,14 +6,13 @@
 //! next one, two tabs on one folder, a browser retrying a request it thinks
 //! stalled — all of them arrive as two requests for one Entry Path, overlapping.
 //!
-//! Both would run the whole flow. Both would catch the catalog up, read the
-//! committed Keyring, read the same parcels of the same Container, write a
-//! scratch, and rename onto one path — the second one over a file the
-//! first had already placed and marked present. Nothing is corrupted by that,
-//! because a rename is atomic and each file is fully verified before it happens
-//! (spec: EP-11); what is spent is the Container read twice, and what is
-//! confused is the device's own bookkeeping, which briefly says a file was
-//! materialized twice at one moment.
+//! Both would run the whole flow. Both would read the same parcels of the same
+//! Container, write a scratch, and rename onto one path — the second one over a
+//! file the first had already placed and marked present. Nothing is corrupted
+//! by that, because a rename is atomic and each file is fully verified before
+//! it happens (spec: EP-11); what is spent is the Container read twice, and
+//! what is confused is the device's own bookkeeping, which briefly says a file
+//! was materialized twice at one moment.
 //!
 //! So the second caller waits, and then asks the cheapest question there is:
 //! whether the file is there now. Where the first caller placed it, the second
@@ -35,6 +34,27 @@
 //! [`OpenLibrary`](crate::OpenLibrary): two Libraries open in one process have
 //! nothing to coordinate, and one Library open in two processes cannot be
 //! coordinated from here anyway.
+//!
+//! # What a fetch here does not ask Storage again
+//!
+//! A command line's fetch is the only one its run makes, so it catches the
+//! catalog up, lists Storage, reads the committed Keyring and its Container's
+//! front, and keeps none of it. A fetch here does not catch up at all: it
+//! answers from the catalog as it stands, which the process keeps current by
+//! catching up as it starts and when somebody asks what is new. It takes the
+//! listing, the committed key table and the fronts of the Containers it reads
+//! from [`OpenLibrary::fetch_memory`](crate::OpenLibrary::fetch_memory), and
+//! reads each again only where what is kept there is no longer true; that
+//! memory goes with the keys when the Library locks (spec: DK-2, DK-4). So a
+//! reader turning the pages of one book costs Storage the parcels and nothing
+//! else.
+//!
+//! A stale catalog still names a Container another device replaced or
+//! removed. While that object is within reach — listed until a run trashes
+//! it, and by a handle this device holds even after — the fetch answers with
+//! the Entry as that catalog shows it; once it is not, the fetch is refused,
+//! and that refusal comes back to the caller, who answers for how its catalog
+//! stands and so is the one to catch it up and ask once more.
 
 use std::sync::{Arc, Mutex};
 
@@ -42,7 +62,6 @@ use coffret_model::{ContainerId, EntryPath, Redacted};
 use coffret_usecase::fetch::{
     Cancellation, EntryFetch, EntryFetchOutcome, UnheldParcel, NEVER_CANCELLED, UNHEEDED,
 };
-use coffret_usecase::UNWATCHED;
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
@@ -140,7 +159,7 @@ impl EntryFetches {
                 // the request it serves is answered when the Entry is there,
                 // and a phase in between has nowhere to go.
                 let ran = library
-                    .fetch_entry(path, &UNWATCHED, &NEVER_CANCELLED, &publication)
+                    .fetch_entry_as_it_stands(path, &NEVER_CANCELLED, &publication)
                     .await;
                 if let Some(sender) = take(&answer) {
                     // Never published: the run's own end is the answer.
@@ -185,7 +204,7 @@ impl EntryFetches {
             return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
         }
         library
-            .fetch_entry(path, &UNWATCHED, cancellation, &UNHEEDED)
+            .fetch_entry_as_it_stands(path, cancellation, &UNHEEDED)
             .await
     }
 
@@ -193,11 +212,11 @@ impl EntryFetches {
     /// Container holding it, and takes both turns.
     async fn turns(&self, library: &OpenLibrary, path: &EntryPath) -> Result<Turns> {
         let path_turn = self.in_flight.take(path.clone()).await;
-        // The Container the catalog places the Entry in now. The run catches
-        // the catalog up before it reads, so this can name the Container an
-        // Entry has just left; what that costs is two runs over two Containers
-        // not taking turns, which is what this gate added and nothing it
-        // protects beyond.
+        // The Container the catalog places the Entry in now, which is the one
+        // the run reads: it answers from the same catalog. A catch-up landing
+        // between the two can still move the Entry; what that costs is two runs
+        // over two Containers not taking turns, which is what this gate added
+        // and nothing it protects beyond.
         let container = library
             .index
             .entry_at(path)

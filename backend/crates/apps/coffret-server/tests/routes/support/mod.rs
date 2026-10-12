@@ -45,6 +45,9 @@ mod consent;
 use consent::ScriptedConsent;
 pub use consent::CONSENT_PAGE;
 
+mod asked;
+pub use asked::Asked;
+
 mod counting_store;
 use counting_store::CountingStore;
 
@@ -554,6 +557,7 @@ fn opened(
         provider: "s3",
         grant: None,
         births: Default::default(),
+        fetch_memory: Default::default(),
     }
 }
 

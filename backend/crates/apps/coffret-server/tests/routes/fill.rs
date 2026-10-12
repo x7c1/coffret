@@ -231,18 +231,20 @@ async fn a_fill_under_way_is_superseded_between_one_entry_and_the_next() {
 
 // PK-21: a fill steps in parcels, and a folder armed under it is noticed on a
 // parcel boundary and never inside a parcel. The first page lies in parcel 0
-// and the second runs on into parcel 1, so after the first page the fill holds
-// parcel 0 for the second; Storage holds the next read after that one parcel,
-// the second folder is armed while it is held, and the fill's fetch of the
-// second page stops before it asks for parcel 1. What it read stays held, and
-// the run says what it placed.
+// and the second runs on through parcel 1 into parcel 2, so after the first
+// page the fill holds parcel 0 for the second. Its fetch of the second page
+// reads nothing but parcels — the Container's front is kept from the first —
+// so Storage holds back its read of parcel 1, the second folder is armed while
+// that read waits, and once parcel 1 has arrived whole the fetch stops before
+// it asks for parcel 2.
+// What it read stays held, and the run says what it placed.
 #[tokio::test]
 async fn a_fill_superseded_between_parcels_stops_there_and_keeps_what_it_read() {
     let served = Served::library().await;
     let logs = CapturedLogs::capture();
     let pages: [(&str, usize); 4] = [
         ("scans/vol/000.jpg", 300 * 1024),
-        ("scans/vol/001.jpg", 1536 * 1024),
+        ("scans/vol/001.jpg", 2560 * 1024),
         ("scans/vol/002.jpg", 400 * 1024),
         ("scans/vol/003.jpg", 400 * 1024),
     ];
@@ -300,16 +302,19 @@ async fn a_fill_superseded_between_parcels_stops_there_and_keeps_what_it_read() 
     assert!(!served.holds("scans/vol/001.jpg"));
     assert_eq!(
         served.parcel_reads(),
-        1,
-        "one parcel was read, whole, and the one after it never asked for",
+        2,
+        "two parcels were read, whole, and the one after them never asked for",
     );
     let held = served.held_parcels().await;
     assert_eq!(
         held.iter().map(|parcel| parcel.index).collect::<Vec<_>>(),
-        [0],
-        "the parcel read before the fill was left is still held",
+        [0, 1],
+        "the parcels read before the fill was left are still held",
     );
-    assert!(held[0].path.is_file(), "and its file is on the device");
+    assert!(
+        held.iter().all(|parcel| parcel.path.is_file()),
+        "and their files are on the device",
+    );
 }
 
 // And the other half of that rule: a folder asked for by name waits its turn
@@ -464,10 +469,11 @@ fn degraded_keyring() -> serde_json::Value {
 }
 
 // KL-15: replica loss is never silent, and the person it matters most for is
-// one who only reads. Every Entry a fill fetches reads the committed Keyring
-// afresh and steps over the same lost replica, and the run says so once — as
-// a finding beside its counts, which neither stops it nor declines anything:
-// the files still open (spec: RV-2).
+// one who only reads. The first Entry a fill fetches steps over the lost
+// replica as it reads the committed Keyring, and the next is opened under the
+// key table the process kept from that read, which carries the same finding;
+// the run says so once — as a finding beside its counts, which neither stops
+// it nor declines anything: the files still open (spec: RV-2).
 #[tokio::test]
 async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
     let served = Served::library().await;
@@ -486,7 +492,7 @@ async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
     assert_eq!(
         (fill["done"].as_u64(), fill["total"].as_u64()),
         (Some(2), Some(2)),
-        "both Entries were read through the replica after the lost one: {work}",
+        "both Entries were opened under the key table read past the lost replica: {work}",
     );
     assert_eq!(declined(fill), Vec::<(String, String)>::new());
     assert_eq!(

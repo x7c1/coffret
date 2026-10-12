@@ -1,7 +1,7 @@
 //! Storage and the catalog, as a case can take them away, give them back and
 //! count what reached them.
 
-use coffret_model::{ControlObjectName, ReplicaPosition};
+use coffret_model::{ControlObjectName, ObjectRef, ReplicaPosition};
 use coffret_usecase::{ByteStream, Index};
 
 use super::Served;
@@ -67,6 +67,12 @@ impl Served {
         self.reads.parcel_reads()
     }
 
+    /// Every listing page, whole object and range the served device asked
+    /// Storage for since reads were last forgotten, in order.
+    pub fn asked(&self) -> Vec<super::Asked> {
+        self.reads.asked()
+    }
+
     /// Forgets what was read so far, so a case counts its own reads from here.
     pub fn forget_reads(&self) {
         self.reads.forget();
@@ -113,6 +119,27 @@ impl Served {
     /// How many reads Storage was asked for and never answered.
     pub fn stalled_reads(&self) -> usize {
         self.storage.stalled_reads()
+    }
+
+    /// Removes from Storage, for good, the Container the served device's
+    /// catalog places the Entry at `path` in.
+    ///
+    /// What a stale catalog meets: another device replaced or removed the
+    /// Container holding the Entry, and it is gone by the time this device asks
+    /// for it. Purged rather than trashed, because a trashed object is still
+    /// the same object and may still be read by its handle; written behind the
+    /// served device's switch and counter, since no device asked for it.
+    pub async fn purge_served_container_of(&self, path: &str) {
+        let location = self
+            .catalog
+            .entry_at(&super::entry_path(path))
+            .await
+            .expect("the served catalog answers")
+            .expect("the served catalog places the Entry somewhere");
+        self.store
+            .purge(&ObjectRef::new(location.container_id.object_name()))
+            .await
+            .expect("the Container is purged");
     }
 
     /// Mangles the first replica of the Library's committed Keyring set, so

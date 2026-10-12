@@ -43,6 +43,7 @@ fn device() -> OpenLibrary {
         provider: "s3",
         grant: None,
         births: Default::default(),
+        fetch_memory: Default::default(),
     }
 }
 

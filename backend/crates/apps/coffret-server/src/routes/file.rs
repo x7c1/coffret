@@ -14,6 +14,7 @@ use crate::classify::classify;
 use crate::entry_query::PathQuery;
 use crate::fill::fill_folder;
 use crate::folder::Folder;
+use crate::refresh::when_stale::fetch_caught_up_if_stale;
 use crate::state::ServerState;
 
 /// `GET /api/file?path=<entry>`
@@ -89,13 +90,16 @@ pub async fn file(
     // Answered the moment the Entry is on disk, while the rest of the parcel it
     // came out of is still arriving (spec: PK-16). What that rest finds of kept
     // parcels not held goes to whichever fill takes it in.
-    let fetched = state
-        .fetches
-        .fetch(library.shared(), path.clone(), {
+    //
+    // A stale catalog is caught up once and the Entry asked for again, which is
+    // the one catch-up a fetch here ever makes.
+    let fetched = fetch_caught_up_if_stale(&state, || {
+        state.fetches.fetch(library.shared(), path.clone(), {
             let state = Arc::clone(&state);
             move |unheld| state.fills.hear_unheld(unheld)
         })
-        .await?;
+    })
+    .await??;
     match fetched.fetch {
         // This device did not have the file and does now, which says something
         // about the folder around it: whoever opened this one is going to open
@@ -123,7 +127,7 @@ pub async fn file(
         // person is told it is locked, which is already that something of the
         // Library is gone. The set stays short until a run that writes
         // examines and repairs it (spec: KL-13), so the next file opened that
-        // is placed reads it again and says it in the explorer; carrying it
+        // is placed meets it again and says it in the explorer; carrying it
         // here as well would take a second shape of refusal for a case that
         // only delays the news.
         EntryFetch::Surfaced(surfaced) => return Err(ApiError::declined(&surfaced)),
@@ -344,6 +348,7 @@ mod tests {
             provider: "s3",
             grant: None,
             births: Default::default(),
+            fetch_memory: Default::default(),
         }
     }
 
