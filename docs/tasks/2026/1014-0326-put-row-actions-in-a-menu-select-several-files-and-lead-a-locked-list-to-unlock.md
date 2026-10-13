@@ -10,7 +10,7 @@ check_command: 'make check && grep -rqE "<th[^>]*>Name</th>" frontend/packages/a
 assignee: null
 branch: task/1014-0326-put-row-actions-in-a-menu-select-several-files-and-lead-a-locked-list-to-unlock
 created_at: 2026-10-13T18:26:12Z
-updated_at: 2026-10-13T19:46:00Z
+updated_at: 2026-10-13T19:58:00Z
 ---
 
 # feat(explorer): put row actions behind a menu, delete several files at once, close the reader beside the image, and lead a locked list to unlock
@@ -129,14 +129,14 @@ since `App.tsx` has no render test of its own.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium through
+- [x] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium through
       `.tmp/agent/shot.mjs` or a one-off Playwright script): a row's `⋮`
       opens the menu; `Delete…` from it reaches the confirmation; selecting
       two pages of `lib/book-000` and deleting them removes both in one run
       (the status bar shows one deletion, the Pack is rebuilt once); a click
       beside the page image closes the reader and a click on the image does
       not
-- [ ] With the agent server started with `COFFRET_IDLE_MINUTES=1`, after the
+- [x] With the agent server started with `COFFRET_IDLE_MINUTES=1`, after the
       lock the listing region shows the refusal and an `unlock` button, and
       pressing it shows the server's answer (the CLI-started server refuses
       with `locked`, and the line says so) rather than the same refusal again
