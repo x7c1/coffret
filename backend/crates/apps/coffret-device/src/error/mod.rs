@@ -162,7 +162,9 @@ pub enum Error {
         /// What the format layer reported.
         cause: coffret_format::Error,
     },
-    /// The key material a new Library is built from could not be produced.
+    /// Key material could not be produced: what a new Library is built from,
+    /// an account's cache key, or the stored form a changed Passphrase
+    /// protects the Master Key with.
     ///
     /// The entropy source refused, or the Passphrase could not be derived from.
     /// Either way nothing was drawn and nothing was written.

@@ -84,7 +84,7 @@
 use std::fs;
 use std::sync::Arc;
 
-use coffret_format::{Purpose, PurposeKey, StoredMasterKey};
+use coffret_format::{Purpose, PurposeKey};
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::Passphrase;
 use google_drive_store::{StoredTokens, TokenCache};
@@ -265,7 +265,8 @@ async fn either_library_s_passphrase_opens_the_one_cache() {
     let drive = DriveStub::empty();
     create(&drive, "first", None).await;
     create(&drive, "second", None).await;
-    keep_under(OTHER_PASSPHRASE, "second");
+    crate::change_passphrase("second", pass(PASSPHRASE), pass(OTHER_PASSPHRASE))
+        .expect("the Library is kept under a Passphrase of its own");
 
     for (name, passphrase) in [("first", PASSPHRASE), ("second", OTHER_PASSPHRASE)] {
         open_library_through(&reach(&drive), name, pass(passphrase))
@@ -769,21 +770,6 @@ fn join_request(name: &str, folder_id: &str, account: Option<&str>) -> JoinLibra
         },
         referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
-}
-
-/// Keeps the Library called `name` under `passphrase` rather than the one it
-/// was created under, the way a Passphrase change leaves it (spec: DK-6).
-fn keep_under(passphrase: &'static [u8], name: &str) {
-    let dir = LibraryDir::resolve(name).expect("resolves");
-    let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
-        .expect("opens under the Passphrase it was created under");
-    let stored = StoredMasterKey::create(
-        &Passphrase::from_bytes(passphrase.to_vec()),
-        &unlocked.master_key,
-        unlocked.epoch,
-    )
-    .expect("the stored form is made");
-    StoredMasterKeyFile::write(&dir, &stored).expect("the stored form is written");
 }
 
 /// Lays the Library called `name` out as a build before accounts left it: a

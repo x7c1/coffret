@@ -70,9 +70,10 @@ is, through `make cli ARGS="init …"` or `make cli ARGS="join …"`;
 ## Production CLI operations
 
 The desktop app opens a Library and serves it; it does not offer the
-commands that create or change one: `init`, `join`, `authorize`, and `map`
-with a prefix. A person runs those on the production Library through
-`make cli`, naming the default state directory on the command line:
+commands that create or change one: `init`, `join`, `authorize`, `map`
+with a prefix, and `change-passphrase`. A person runs those on the
+production Library through `make cli`, naming the default state directory
+on the command line:
 
 ```bash
 make cli COFFRET_STATE_DIR="$HOME/.local/state/coffret" ARGS="…"

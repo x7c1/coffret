@@ -134,6 +134,15 @@ fn classified<'a>(
 
     let storage_below = chain.clone().any(|link| link.is::<StorageError>());
     for link in chain {
+        // A secret the shell did not give is the device layer's one line over
+        // the shell's own refusal, and the refusal is what a script acts on:
+        // an empty Passphrase and two that differ, or an empty Recovery Code
+        // and one too long, are put right differently, and the wrapper tells
+        // none of them apart. Only the refusal the wrapper carries is looked
+        // at, not one met elsewhere in the chain.
+        if let Some(refusal) = refusal_not_given(link) {
+            return Classified::kind(shell_kind(refusal));
+        }
         if let Some(error) = link.downcast_ref::<Error>() {
             return Classified::kind(device_kind(error, storage_below));
         }
@@ -151,6 +160,19 @@ fn classified<'a>(
         }
     }
     Classified::kind("other")
+}
+
+/// The shell's refusal `link` carries, where `link` is the device layer saying
+/// a Passphrase or a Recovery Code was not given.
+fn refusal_not_given<'a>(
+    link: &'a (dyn error::Error + 'static),
+) -> Option<&'a coffret_shell::Error> {
+    match link.downcast_ref::<Error>()? {
+        Error::PassphraseNotGiven { cause } | Error::RecoveryCodeNotGiven { cause } => {
+            cause.downcast_ref::<coffret_shell::Error>()
+        }
+        _ => None,
+    }
 }
 
 /// A device error by its variant, snake-cased.

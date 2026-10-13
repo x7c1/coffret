@@ -970,3 +970,159 @@ fn a_prefix_that_is_not_an_entry_path_is_refused_before_the_passphrase_is_asked(
         "nothing was asked of the Passphrase before the path was read:\n{said}"
     );
 }
+
+/// The Passphrase the `change-passphrase` cases change to.
+const CHANGED_PASSPHRASE: &str = "a passphrase this device chose later";
+
+/// Changes the Passphrase of `library` on `device`, giving `input` on standard
+/// input: the current Passphrase, then the new one.
+fn change_passphrase(device: &Device, library: &str, input: &str, json: bool) -> Output {
+    let mut arguments = vec![
+        "change-passphrase",
+        "--library",
+        library,
+        "--passphrase-stdin",
+    ];
+    if json {
+        arguments.insert(0, "--json");
+    }
+    device.run_with(&arguments, Some(input))
+}
+
+/// The bytes of `library`'s stored Master Key on `device`.
+fn stored_master_key(device: &Device, library: &str) -> Vec<u8> {
+    fs::read(device.libraries().join(library).join("master-key.cfmk"))
+        .expect("the stored Master Key must be readable")
+}
+
+// DK-6: the change re-protects this device's stored Master Key and leaves the
+// key itself alone, so the Recovery Code written out under the new Passphrase
+// is the one `init` printed. DK-5: the old Passphrase opens nothing any more,
+// and yields no code rather than a different one.
+#[test]
+fn a_changed_passphrase_opens_the_same_master_key_and_the_old_one_does_not() {
+    let device = Device::new();
+    let first = printed_code(&init_s3(&device, "rekeyed"));
+
+    let changed = change_passphrase(
+        &device,
+        "rekeyed",
+        &format!("{PASSPHRASE}\n{CHANGED_PASSPHRASE}"),
+        false,
+    );
+    succeeded(&changed, "change-passphrase");
+    let said = stderr(&changed);
+    assert!(
+        said.contains("changed on this device only"),
+        "the change says where it stopped: {said:?}"
+    );
+    assert!(
+        !said.contains(PASSPHRASE) && !said.contains(CHANGED_PASSPHRASE),
+        "neither Passphrase is ever said back: {said:?}"
+    );
+
+    let reopened = device.run_with(
+        &[
+            "recovery-code",
+            "--library",
+            "rekeyed",
+            "--passphrase-stdin",
+        ],
+        Some(CHANGED_PASSPHRASE),
+    );
+    succeeded(&reopened, "recovery-code under the new Passphrase");
+    assert_eq!(printed_code(&reopened), first);
+
+    let refused = device.run_with(
+        &[
+            "recovery-code",
+            "--library",
+            "rekeyed",
+            "--passphrase-stdin",
+        ],
+        Some(PASSPHRASE),
+    );
+    assert_eq!(code(&refused), 1, "the old Passphrase must open nothing");
+    assert!(
+        !stdout(&refused).contains(RECOVERY_CODE_PREFIX),
+        "nothing that looks like a code may be printed: {:?}",
+        stdout(&refused)
+    );
+}
+
+// DK-5: a wrong current Passphrase is refused by the stored form itself, and the
+// file it guards is left exactly as it was.
+#[test]
+fn a_wrong_current_passphrase_changes_nothing() {
+    let device = Device::new();
+    init_s3(&device, "kept");
+    let before = stored_master_key(&device, "kept");
+
+    let refused = change_passphrase(
+        &device,
+        "kept",
+        &format!("not the Passphrase\n{CHANGED_PASSPHRASE}"),
+        true,
+    );
+
+    assert_eq!(code(&refused), 1, "{}", stderr(&refused));
+    let answer: serde_json::Value =
+        serde_json::from_str(stdout(&refused).trim()).expect("--json answers one object");
+    assert_eq!(
+        answer["error"]["kind"], "master_key_not_unlocked",
+        "{answer}"
+    );
+    assert_eq!(stored_master_key(&device, "kept"), before);
+}
+
+// The new Passphrase is chosen the way `init` chooses one, so an empty line is
+// refused as it is there: the stored form would otherwise protect the Master
+// Key with nothing. Two differing entries at a prompt are the other refusal a
+// choice makes; there is no terminal here to type them at, so that one is
+// pinned where the two readings are compared, in `coffret-shell`, and its kind
+// in the answer module's own cases.
+#[test]
+fn an_empty_new_passphrase_changes_nothing() {
+    let device = Device::new();
+    init_s3(&device, "unprotected-later");
+    let before = stored_master_key(&device, "unprotected-later");
+
+    let refused = change_passphrase(
+        &device,
+        "unprotected-later",
+        &format!("{PASSPHRASE}\n"),
+        true,
+    );
+
+    assert_eq!(code(&refused), 1, "{}", stderr(&refused));
+    let answer: serde_json::Value =
+        serde_json::from_str(stdout(&refused).trim()).expect("--json answers one object");
+    assert_eq!(answer["error"]["kind"], "empty_passphrase", "{answer}");
+    assert_eq!(stored_master_key(&device, "unprotected-later"), before);
+}
+
+// The change never opens Storage, so it needs no
+// bucket that answers: a Library whose Storage cannot be reached at all still
+// has its Passphrase changed.
+#[test]
+fn a_change_never_reaches_storage() {
+    let device = Device::new();
+    init_s3(&device, "offline");
+    let settings = device.libraries().join("offline").join("settings.json");
+    let kept = fs::read_to_string(&settings).expect("the settings must be readable");
+    assert!(
+        kept.contains(stub_endpoint()),
+        "the settings name the bucket: {kept}"
+    );
+    // Port 9 is discard, which nothing on a test machine serves.
+    let pointed_nowhere = kept.replace(stub_endpoint(), "http://127.0.0.1:9");
+    fs::write(&settings, pointed_nowhere).expect("the settings must be writable");
+
+    let changed = change_passphrase(
+        &device,
+        "offline",
+        &format!("{PASSPHRASE}\n{CHANGED_PASSPHRASE}"),
+        false,
+    );
+    succeeded(&changed, "change-passphrase with Storage out of reach");
+}
