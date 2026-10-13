@@ -228,6 +228,37 @@ fn recovery_code_answers_the_code_init_answered() {
     );
 }
 
+// The Library and nothing else: neither Passphrase is ever in an answer.
+#[test]
+fn change_passphrase_answers_the_library() {
+    let device = Device::new();
+    created(&device, "rekeyed");
+
+    let output = device.run_with(
+        &[
+            "--json",
+            "change-passphrase",
+            "--library",
+            "rekeyed",
+            "--passphrase-stdin",
+        ],
+        Some(&format!("{PASSPHRASE}\na passphrase chosen later")),
+    );
+    succeeded(&output, "change-passphrase");
+    assert_eq!(
+        answer_logged(&output),
+        json!({
+            "version": 1,
+            "command": "change-passphrase",
+            "exit_status": 0,
+            "log": VARIES,
+            "answer": { "library": "rekeyed" },
+            "error": null,
+            "findings": [],
+        }),
+    );
+}
+
 #[test]
 fn map_and_mappings_answer_the_prefix_and_the_folder() {
     let device = Device::new();

@@ -33,10 +33,10 @@ pub enum Error {
         /// Which secret was being asked for.
         secret: Secret,
     },
-    /// The two readings of a Passphrase a Library was to be created under were
-    /// not the same.
+    /// The two readings of a Passphrase being chosen — for a Library to be
+    /// created or joined under, or kept under anew — were not the same.
     PassphrasesDiffer,
-    /// The Passphrase a Library was to be created under was empty.
+    /// The Passphrase being chosen was empty.
     EmptyPassphrase,
     /// What was entered for a Recovery Code was empty.
     EmptyRecoveryCode {
@@ -114,10 +114,10 @@ impl fmt::Display for Error {
                 write!(f, "standard input ended before a {secret} was given")
             }
             Self::PassphrasesDiffer => {
-                f.write_str("the two Passphrases are not the same; nothing was created")
+                f.write_str("the two Passphrases are not the same; nothing was written")
             }
             Self::EmptyPassphrase => {
-                f.write_str("an empty Passphrase protects nothing; nothing was created")
+                f.write_str("an empty Passphrase protects nothing; nothing was written")
             }
             Self::EmptyRecoveryCode {
                 from: Source::Terminal,
@@ -218,11 +218,11 @@ mod tests {
         );
         assert_eq!(
             said(Error::PassphrasesDiffer),
-            "the two Passphrases are not the same; nothing was created",
+            "the two Passphrases are not the same; nothing was written",
         );
         assert_eq!(
             said(Error::EmptyPassphrase),
-            "an empty Passphrase protects nothing; nothing was created",
+            "an empty Passphrase protects nothing; nothing was written",
         );
     }
 
