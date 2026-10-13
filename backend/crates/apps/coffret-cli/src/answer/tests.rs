@@ -377,6 +377,41 @@ fn flags_that_leave_a_provider_short_answer_flags_missing() {
     );
 }
 
+// A new Passphrase typed differently the second time at the prompt, as
+// `change-passphrase` meets it: no terminal reaches the built binary's cases,
+// so the kind it answers is pinned here over the refusal the shell hands the
+// device layer.
+#[test]
+fn two_differing_new_passphrases_answer_passphrases_differ() {
+    let error = Error::PassphraseNotGiven {
+        cause: Box::new(coffret_shell::Error::PassphrasesDiffer),
+    };
+
+    let answered = failed("change-passphrase", error);
+    assert_eq!(answered["command"], "change-passphrase", "{answered}");
+    assert_eq!(
+        answered["error"]["kind"], "passphrases_differ",
+        "{answered}"
+    );
+}
+
+// An empty Recovery Code, as `join` meets it: named after the shell's refusal
+// rather than the device layer's wrapper over it, as a refused Passphrase is.
+#[test]
+fn an_empty_recovery_code_answers_empty_recovery_code() {
+    let error = Error::RecoveryCodeNotGiven {
+        cause: Box::new(coffret_shell::Error::EmptyRecoveryCode {
+            from: coffret_shell::Source::StandardInput,
+        }),
+    };
+
+    let answered = failed("join", error);
+    assert_eq!(
+        answered["error"]["kind"], "empty_recovery_code",
+        "{answered}"
+    );
+}
+
 // A client secret variable set to an empty value: refused by name, in the
 // sentence that says what to do about it.
 #[test]

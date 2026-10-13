@@ -57,6 +57,7 @@ mod answer;
 use answer::{Document, Failure, Form, Ran};
 
 mod authorize;
+mod change_passphrase;
 mod consent;
 mod drive_client;
 mod fetch;
@@ -114,6 +115,18 @@ enum Command {
     Mappings(mappings::MappingsArgs),
     /// Print the Library's Recovery Code again
     RecoveryCode(LibraryArgs),
+    /// Keep this device's Master Key of the Library under a new Passphrase
+    ///
+    /// Asks for the current Passphrase, then for the new one. Only this
+    /// device's stored Master Key is protected anew: the Master Key itself is
+    /// unchanged, nothing on Storage is read or written, and every other device
+    /// keeps the Passphrase it has. Storage is never reached, so this works
+    /// offline and whatever became of the Library's grant.
+    ///
+    /// A server or the desktop app holding the Library open keeps the keys it
+    /// unlocked until it locks; its next unlock reads the stored Master Key
+    /// again, and takes the new Passphrase.
+    ChangePassphrase(change_passphrase::ChangePassphraseArgs),
     /// Carry the mapped folders into the Library
     Sync(LibraryArgs),
     /// Pack the eligible local files in a folder directly into Packs
@@ -133,6 +146,7 @@ impl Command {
             Self::Map(_) => "map",
             Self::Mappings(_) => "mappings",
             Self::RecoveryCode(_) => "recovery-code",
+            Self::ChangePassphrase(_) => "change-passphrase",
             Self::Sync(_) => "sync",
             Self::Freeze(_) => "freeze",
             Self::Fetch(_) => "fetch",
@@ -237,6 +251,7 @@ async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
         Command::Map(args) => map::run(args).await,
         Command::Mappings(args) => mappings::run(args, form).await,
         Command::RecoveryCode(args) => recovery_code::run(args, form),
+        Command::ChangePassphrase(args) => change_passphrase::run(args),
         Command::Sync(args) => sync::run(args, form).await,
         Command::Freeze(args) => freeze::run(args, form).await,
         Command::Fetch(args) => fetch::run(args, form).await,

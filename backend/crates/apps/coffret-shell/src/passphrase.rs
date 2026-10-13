@@ -36,7 +36,7 @@ pub fn entering(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Pas
     move || enter(from_stdin).map_err(not_given)
 }
 
-/// The same, for the Passphrase a Library is about to be created under.
+/// The same, for a Passphrase being chosen: the one a Library is created or joined under, or the one `change-passphrase` keeps it under.
 pub fn choosing(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Passphrase> {
     move || choose(from_stdin).map_err(not_given)
 }

@@ -65,7 +65,7 @@ impl fmt::Display for Error {
                 path.display()
             ),
             Self::KeyMaterial { .. } => {
-                f.write_str("the key material a new Library is built from could not be produced")
+                f.write_str("key material could not be produced; nothing was written")
             }
             // What the entropy source said is the value underneath, which a
             // shell showing the chain prints there; saying it inside this line

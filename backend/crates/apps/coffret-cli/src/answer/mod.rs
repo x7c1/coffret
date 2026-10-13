@@ -30,6 +30,9 @@ use coffret_device::{CommitOutcome, EntryPath};
 mod authorized;
 pub use authorized::Authorized;
 
+mod changed_passphrase;
+pub use changed_passphrase::ChangedPassphrase;
+
 mod created;
 pub use created::Created;
 
@@ -116,13 +119,15 @@ lines printed after it), and found and supported for \"unsupported_schema\".
 A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
-\"not_authorized\", \"unauthenticated\" or \"no_such_local_root\". What was
-typed wrongly and refused before the command ran is \"usage\", with
-command and log null. Refused once it has started: flags that leave a
-provider short are \"flags_missing\", and a client secret variable that
-is empty or not Unicode is \"empty_client_secret\" or
-\"client_secret_not_unicode\". \"other\" is a failure raised by nothing
-this command knows the kinds of.
+\"not_authorized\", \"unauthenticated\" or \"no_such_local_root\". A
+Passphrase or a Recovery Code refused as it was read is named after the
+refusal, e.g. \"empty_passphrase\", \"passphrases_differ\" or
+\"empty_recovery_code\". What was typed wrongly and refused before the
+command ran is \"usage\", with command and log null. Refused once it
+has started: flags that leave a provider short are \"flags_missing\",
+and a client secret variable that is empty or not Unicode is
+\"empty_client_secret\" or \"client_secret_not_unicode\". \"other\" is
+a failure raised by nothing this command knows the kinds of.
 
 answer, per command:
 
@@ -131,6 +136,7 @@ answer, per command:
   join           library, library_id, storage, account, consent_asked,
                  found_on_storage (\"the_library\" or \"nothing_yet\")
   recovery-code  library, recovery_code
+  change-passphrase  library
   authorize      consent_asked
   map            prefix, local_root, replaced, marker (\"written\",
                  \"adopted\" or \"reset\")
@@ -172,6 +178,8 @@ pub enum Answer {
     Joined(Joined),
     /// `recovery-code`.
     RecoveryCode(RecoveryCode),
+    /// `change-passphrase`.
+    ChangedPassphrase(ChangedPassphrase),
     /// `authorize`.
     Authorized(Authorized),
     /// `map`.

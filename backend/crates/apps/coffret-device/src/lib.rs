@@ -182,6 +182,9 @@ mod batch_id;
 mod browse;
 pub use browse::{ChildFolder, EntryState, FileRow, FolderListing};
 
+mod change_passphrase;
+pub use change_passphrase::change_passphrase;
+
 mod create_library;
 pub use create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
