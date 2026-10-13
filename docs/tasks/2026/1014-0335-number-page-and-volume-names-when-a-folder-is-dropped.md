@@ -10,7 +10,7 @@ check_command: 'make check && test -f frontend/packages/apps/web/src/renumber.te
 assignee: null
 branch: task/1014-0335-number-page-and-volume-names-when-a-folder-is-dropped
 created_at: 2026-10-13T18:35:00Z
-updated_at: 2026-10-13T21:40:00Z
+updated_at: 2026-10-13T21:45:00Z
 ---
 
 # feat(explorer): offer to number page and volume names when a folder is dropped
@@ -118,7 +118,7 @@ are sent without asking, as today, and are not numbered.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium with a
+- [x] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium with a
       one-off Playwright script that builds a fake folder drop the way
       `07-freeze.spec.ts` `dropFolderOnto` does): dropping a folder holding
       `vol1/king-#1.jpg … king-#12.jpg`, `vol2/…` and a `cover.png` with
