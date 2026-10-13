@@ -17,12 +17,17 @@
 // Packs that comes to is not said, because it is not the folder's to decide:
 // Packs are cut by the freeze's target size (spec: PK-3).
 //
+// The same question offers to number the pages and volumes of what was
+// dropped (see `renumber.ts`). The answer brings the two options back beside
+// the choice, and the drop is renumbered before it is sent either way.
+//
 // Kept free of DOM and of React so it is unit testable, as `dropped.ts` beside
 // it is.
 
 import { overdrawnBy, type Added, type Overdrawn } from '@coffret/api';
 
 import { size } from './humanize';
+import { renumber, type Numbering } from './renumber';
 
 /** One folder a drop carried, and what is in it at every depth. */
 export interface DroppedFolder {
@@ -48,6 +53,12 @@ export interface DropSummary {
 
 /** What the person answered. */
 export type Choice = 'pack' | 'one_by_one' | 'cancel';
+
+/**
+ * The answer as the drop acts on it: nothing at all, or how it is added and
+ * which of its names are numbered on the way.
+ */
+export type Answer = 'cancel' | { choice: Exclude<Choice, 'cancel'>; numbering: Numbering };
 
 /**
  * What the drop holds, or `null` where it holds no folder and nothing is asked.
@@ -142,10 +153,16 @@ export interface Choosing {
   files: readonly Added[];
   /** The folders the Library already has where the drop lands. */
   existing: readonly string[];
-  /** Asks the person what a drop holding a folder is added as. */
-  ask: (summary: DropSummary) => Promise<Choice>;
-  /** Sends the drop, as a Pack where `freeze` is true and one by one where not. */
-  send: (freeze: boolean) => Promise<void>;
+  /**
+   * Asks the person what a drop holding a folder is added as, showing what
+   * numbering `files` would come to.
+   */
+  ask: (summary: DropSummary, files: readonly Added[]) => Promise<Answer>;
+  /**
+   * Sends `files` — the drop's, under the paths they go up as — as a Pack where
+   * `freeze` is true and one by one where not.
+   */
+  send: (files: readonly Added[], freeze: boolean) => Promise<void>;
   /** Says why a drop that cannot be sent at all was not. */
   refuse: (overdrawn: Overdrawn) => void;
 }
@@ -163,7 +180,11 @@ export type Chosen = 'sent' | 'refused' | 'cancelled';
  *
  * Then a drop of files alone is sent one by one, as it always was, and one
  * holding a folder is asked about. The answer applies to the whole drop: every
- * folder in it, and the loose files beside them.
+ * folder in it, and the loose files beside them — which keep their names, since
+ * they are no folder's pages.
+ *
+ * The summary counts the files as dropped, and numbering changes none of what
+ * it counts: renaming moves no file in or out of a folder it names.
  */
 export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
   const overdrawn = overdrawnBy(choosing.files);
@@ -173,13 +194,13 @@ export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
   }
   const summary = summarize(choosing.files, choosing.existing);
   if (summary === null) {
-    await choosing.send(false);
+    await choosing.send(choosing.files, false);
     return 'sent';
   }
-  const choice = await choosing.ask(summary);
-  if (choice === 'cancel') {
+  const answer = await choosing.ask(summary, choosing.files);
+  if (answer === 'cancel') {
     return 'cancelled';
   }
-  await choosing.send(choice === 'pack');
+  await choosing.send(renumber(choosing.files, answer.numbering).files, answer.choice === 'pack');
   return 'sent';
 }

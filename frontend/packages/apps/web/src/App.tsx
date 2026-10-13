@@ -37,7 +37,7 @@ import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
 import { askToMake, foldersWith, pendingAfter, strandedFolders } from './newFolder';
-import { chooseAndAdd, type Choice, type DropSummary } from './packChoice';
+import { chooseAndAdd, type Answer, type Choice, type DropSummary } from './packChoice';
 import { PackConfirm } from './PackConfirm';
 import { askToPack, type PackQuestion } from './packFolder';
 import { PackFolderConfirm } from './PackFolderConfirm';
@@ -46,6 +46,7 @@ import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
 import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
+import type { Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
@@ -597,22 +598,27 @@ export function App() {
   // where its answer goes. `null` while nothing is being asked.
   const [asking, setAsking] = useState<{
     summary: DropSummary;
-    answer: (choice: Choice) => void;
+    files: readonly Added[];
+    answer: (choice: Choice, numbering: Numbering) => void;
   } | null>(null);
   const askAboutFolders = useCallback(
-    (summary: DropSummary) =>
-      new Promise<Choice>((resolve) => {
+    (summary: DropSummary, files: readonly Added[]) =>
+      new Promise<Answer>((resolve) => {
         setAsking({
           summary,
-          answer: (choice) => {
+          files,
+          answer: (choice, numbering) => {
             setAsking(null);
-            resolve(choice);
+            resolve(choice === 'cancel' ? 'cancel' : { choice, numbering });
           },
         });
       }),
     [],
   );
-  const choose = useCallback((choice: Choice) => asking?.answer(choice), [asking]);
+  const choose = useCallback(
+    (choice: Choice, numbering: Numbering) => asking?.answer(choice, numbering),
+    [asking],
+  );
 
   // "Pack this folder…": what a freeze of the folder would pack is asked first
   // and shown, and only Pack arms it — after which it is followed exactly as a
@@ -785,16 +791,16 @@ export function App() {
         return;
       }
       const folder = view.folder;
-      const send = (freeze: boolean) => {
-        setAdding(addingLine(files.length, folder));
+      const send = (sending: readonly Added[], freeze: boolean) => {
+        setAdding(addingLine(sending.length, folder));
         // How much of the request has gone, on the same line, as the browser
         // says it — paced, since it says it far more often than a line can be
         // read.
         const onProgress = paced((sent, total) =>
-          setAdding(addingLine(files.length, folder, { sent, total })),
+          setAdding(addingLine(sending.length, folder, { sent, total })),
         );
         return askToAdd({
-          ask: () => addFiles(folder, files, { freeze, onProgress }),
+          ask: () => addFiles(folder, sending, { freeze, onProgress }),
           notice: setNotice,
           reload: reloadListing,
           follow: work.follow,
@@ -804,11 +810,11 @@ export function App() {
       void chooseAndAdd({
         files,
         existing,
-        ask: (summary) => {
+        ask: (summary, asked) => {
           // The line saying the drop is being read stands down while the
           // question is up: the reading is over, and nothing is being sent.
           setAdding(null);
-          return askAboutFolders(summary);
+          return askAboutFolders(summary, asked);
         },
         send,
         refuse: (overdrawn) => setNotice(overBudgetLine(overdrawn, libraryName)),
@@ -1082,7 +1088,7 @@ export function App() {
       {mapping !== null && (
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
       )}
-      {asking !== null && <PackConfirm summary={asking.summary} onChoose={choose} />}
+      {asking !== null && <PackConfirm summary={asking.summary} files={asking.files} onChoose={choose} />}
       {packAsking !== null && (
         <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
       )}
