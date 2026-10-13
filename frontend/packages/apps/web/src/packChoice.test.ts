@@ -13,6 +13,7 @@ import {
   type Choice,
   type Choosing,
 } from './packChoice';
+import { NO_NUMBERING, type Numbering } from './renumber';
 
 /** One dropped file of `size` bytes at `path`, relative to the folder dropped onto. */
 function added(path: string, size = 10): Added {
@@ -70,22 +71,27 @@ describe('summarize', () => {
 });
 
 describe('chooseAndAdd', () => {
-  /** A drop that answers the question with `choice`, recording what it was asked. */
-  function choosing(files: Added[], choice: Choice = 'pack') {
+  /**
+   * A drop that answers the question with `choice` and `numbering`, recording
+   * what it was asked and the paths it sent.
+   */
+  function choosing(files: Added[], choice: Choice = 'pack', numbering: Numbering = NO_NUMBERING) {
     const order: string[] = [];
+    const sent: string[][] = [];
     const asking: Choosing = {
       files,
       existing: [],
       ask: vi.fn(async () => {
         order.push('asked');
-        return choice;
+        return choice === 'cancel' ? choice : { choice, numbering };
       }),
-      send: vi.fn(async (freeze: boolean) => {
+      send: vi.fn(async (sending: readonly Added[], freeze: boolean) => {
         order.push(freeze ? 'sent as a Pack' : 'sent one by one');
+        sent.push(sending.map((file) => file.path));
       }),
       refuse: vi.fn(),
     };
-    return { asking, order };
+    return { asking, order, sent };
   }
 
   it('asks about a drop holding a folder before anything is sent', async () => {
@@ -94,6 +100,7 @@ describe('chooseAndAdd', () => {
     expect(order).toEqual(['asked', 'sent as a Pack']);
     expect(asking.ask).toHaveBeenCalledWith(
       expect.objectContaining({ files: 4, folders: [expect.objectContaining({ files: 4 })] }),
+      asking.files,
     );
   });
 
@@ -109,12 +116,30 @@ describe('chooseAndAdd', () => {
   it('sends as a Pack or one by one as the person chose', async () => {
     const pack = choosing(book('BookX', 2), 'pack');
     await chooseAndAdd(pack.asking);
-    expect(pack.asking.send).toHaveBeenCalledWith(true);
+    expect(pack.asking.send).toHaveBeenCalledWith(expect.anything(), true);
 
     const loose = choosing(book('BookX', 2), 'one_by_one');
     await chooseAndAdd(loose.asking);
-    expect(loose.asking.send).toHaveBeenCalledWith(false);
+    expect(loose.asking.send).toHaveBeenCalledWith(expect.anything(), false);
   });
+
+  // The names are chosen in the question and the request is what carries
+  // them, whichever way the drop is added.
+  it.each(['pack', 'one_by_one'] as const)(
+    'sends the numbered paths when asked to, and the dropped ones when not (%s)',
+    async (choice) => {
+      const files = [added('BookX/king-#1.jpg'), added('BookX/king-#2.jpg'), added('BookX/cover.png')];
+
+      const numbered = choosing(files, choice, { pages: true, volumes: false });
+      expect(await chooseAndAdd(numbered.asking)).toBe('sent');
+      expect(numbered.asking.ask).toHaveBeenCalledWith(expect.anything(), files);
+      expect(numbered.sent).toEqual([['BookX/001.jpg', 'BookX/002.jpg', 'BookX/cover.png']]);
+
+      const asDropped = choosing(files, choice, NO_NUMBERING);
+      await chooseAndAdd(asDropped.asking);
+      expect(asDropped.sent).toEqual([files.map((file) => file.path)]);
+    },
+  );
 
   it('sends nothing when the question is cancelled', async () => {
     const { asking } = choosing(book('BookX', 2), 'cancel');

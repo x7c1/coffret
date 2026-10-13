@@ -238,7 +238,7 @@ export interface Adding {
  */
 export async function addFiles(
   folder: string,
-  files: Added[],
+  files: readonly Added[],
   adding: Adding = {},
 ): Promise<Upload> {
   const overdrawn = overdrawnBy(files);
