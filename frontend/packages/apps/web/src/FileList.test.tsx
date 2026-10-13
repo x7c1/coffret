@@ -38,7 +38,12 @@ function listing(over: Partial<Listing> = {}): Listing {
 }
 
 function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
-  return renderToStaticMarkup(
+  return renderToStaticMarkup(listOf(shown, madeHere, madeHereKnown));
+}
+
+/** The list drawn for `shown`, with every callback a no-op. */
+function listOf(shown: Listing, madeHere = false, madeHereKnown = true) {
+  return (
     <FileList
       listing={shown}
       fill={null}
@@ -56,7 +61,7 @@ function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
       onMap={() => undefined}
       onPack={() => undefined}
       onDelete={() => undefined}
-    />,
+    />
   );
 }
 
@@ -328,16 +333,28 @@ it('does not offer to pack a path the Library holds nothing at', () => {
   expect(draw(listing({ path: 'albums/typo', held: false }))).not.toContain('Pack this folder…');
 });
 
-// "Delete…" on a file row and on a folder row hands over what to delete — the
-// file by its Entry Path, the folder with everything under it — and opens
-// neither: the press is the button's and not the row's.
-it('offers to delete a file and a folder, and hands over which', () => {
+/** Opens the row's menu and chooses `Delete…` from it. */
+function deleteFromMenu(name: string) {
+  fireEvent.click(screen.getByLabelText(`actions for ${name}`));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+}
+
+// "Delete…" is in each row's menu rather than a button of its own on every
+// row, and hands over what to delete — the file by its Entry Path, the folder
+// with everything under it — opening neither: the presses are the menu's and
+// not the row's.
+it('offers to delete a file and a folder from their menus, and hands over which', () => {
   const { onDelete, onOpenFile } = mount(
     listing({ folders: [folder('2026', true)], files: [file('cover.png')] }),
   );
 
-  fireEvent.click(screen.getByLabelText('delete cover.png'));
-  fireEvent.click(screen.getByLabelText('delete 2026'));
+  expect(screen.getAllByLabelText('actions for cover.png')).toHaveLength(1);
+  expect(screen.getAllByLabelText('actions for 2026')).toHaveLength(1);
+  expect(screen.queryByLabelText('delete cover.png')).toBeNull();
+  expect(screen.queryByLabelText('delete 2026')).toBeNull();
+
+  deleteFromMenu('cover.png');
+  deleteFromMenu('2026');
 
   expect(onDelete.mock.calls).toEqual([
     [{ folder: null, paths: ['albums/cover.png'] }],
@@ -346,15 +363,127 @@ it('offers to delete a file and a folder, and hands over which', () => {
   expect(onOpenFile).not.toHaveBeenCalled();
 });
 
+// The menu goes on a click away from it and on Escape, as well as on a choice.
+it('closes the menu on a click away and on Escape', () => {
+  mount(listing({ files: [file('cover.png')] }));
+  const menu = screen.getByLabelText('actions for cover.png');
+
+  fireEvent.click(menu);
+  expect(screen.getByRole('menu')).toBeTruthy();
+  fireEvent.mouseDown(document.body);
+  expect(screen.queryByRole('menu')).toBeNull();
+
+  fireEvent.click(menu);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('menu')).toBeNull();
+});
+
 // A deletion is of the Library and touches no file here, so it is offered in a
 // folder this device does not map too. A file only added here is not in the
-// Library at all, so it has nothing to delete.
+// Library at all, so it has nothing to delete and nothing to pick out.
 it('offers to delete what the Library holds, mapped here or not, and nothing else', () => {
-  const unmapped = draw(listing({ mapped: false, files: [file('cover.png')] }));
-  expect(unmapped).toContain('aria-label="delete cover.png"');
+  mount(listing({ mapped: false, files: [file('cover.png')] }));
+  deleteFromMenu('cover.png');
+  expect(screen.getByLabelText('select cover.png')).toBeTruthy();
+  cleanup();
 
-  const added = draw(
-    listing({ files: [file('new.jpg', { state: 'added', container: null })] }),
-  );
-  expect(added).not.toContain('aria-label="delete new.jpg"');
+  mount(listing({ files: [file('new.jpg', { state: 'added', container: null })] }));
+  expect(screen.queryByLabelText('actions for new.jpg')).toBeNull();
+  expect(screen.queryByRole('menuitem')).toBeNull();
+  expect(screen.queryByLabelText('select new.jpg')).toBeNull();
+});
+
+// Folders are not picked out: the server takes one folder per deletion.
+it('offers no box on a folder row', () => {
+  mount(listing({ folders: [folder('2026', true)], files: [file('cover.png')] }));
+  expect(screen.queryByLabelText('select 2026')).toBeNull();
+});
+
+const three = listing({
+  folders: [folder('2026', true)],
+  files: [
+    file('p1.jpg'),
+    file('new.jpg', { state: 'added', container: null }),
+    file('p2.jpg'),
+    file('p3.jpg'),
+  ],
+});
+
+// Files picked out are deleted in one go, named in the listing's order rather
+// than the order they were picked in — and picking one opens nothing.
+it('deletes the files picked out together, in the listing order', () => {
+  const { onDelete, onOpenFile } = mount(three);
+  expect(screen.queryByText(/selected$/)).toBeNull();
+
+  fireEvent.click(screen.getByLabelText('select p3.jpg'));
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  expect(onOpenFile).not.toHaveBeenCalled();
+  expect(screen.getByText('2 selected')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Delete…' }));
+  expect(onDelete).toHaveBeenCalledWith({
+    folder: null,
+    paths: ['albums/p1.jpg', 'albums/p3.jpg'],
+  });
+  // Asking for the deletion takes the selection with it.
+  expect(screen.queryByText(/selected$/)).toBeNull();
+});
+
+// A click on the row away from its box still opens the file.
+it('still opens a file on a click away from its box', () => {
+  const { onOpenFile } = mount(three);
+  fireEvent.click(screen.getByTitle('p1.jpg'));
+  expect(onOpenFile).toHaveBeenCalledWith('albums/p1.jpg');
+});
+
+// A row with no box and no menu keeps those cells as part of the row: a click
+// on them opens the file as a click anywhere else on it does.
+it('opens a file from the empty cells of a row with nothing to pick or offer', () => {
+  const { onOpenFile } = mount(three);
+  const cells = screen.getByTitle('new.jpg').querySelectorAll('td');
+  fireEvent.click(cells[0]);
+  fireEvent.click(cells[cells.length - 1]);
+  expect(onOpenFile).toHaveBeenCalledTimes(2);
+  expect(onOpenFile).toHaveBeenCalledWith('albums/new.jpg');
+});
+
+it('picks every file from the header and clears them again', () => {
+  mount(three);
+  const every = screen.getByLabelText('select every file');
+
+  fireEvent.click(every);
+  expect(screen.getByText('3 selected')).toBeTruthy();
+  for (const name of ['p1.jpg', 'p2.jpg', 'p3.jpg']) {
+    expect((screen.getByLabelText(`select ${name}`) as HTMLInputElement).checked).toBe(true);
+  }
+
+  fireEvent.click(every);
+  expect(screen.queryByText(/selected$/)).toBeNull();
+});
+
+// A selection belongs to the folder it was made in, and holds only the files
+// the listing still has.
+it('lets the selection go when the folder changes or its files leave', () => {
+  const { rerender } = render(listOf(three));
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  fireEvent.click(screen.getByLabelText('select p2.jpg'));
+  expect(screen.getByText('2 selected')).toBeTruthy();
+
+  rerender(listOf({ ...three, files: [file('p2.jpg'), file('p3.jpg')] }));
+  expect(screen.getByText('1 selected')).toBeTruthy();
+
+  rerender(listOf({ ...three, path: 'albums/2026' }));
+  expect(screen.queryByText(/selected$/)).toBeNull();
+
+  // And coming back does not bring it back.
+  rerender(listOf(three));
+  expect(screen.queryByText(/selected$/)).toBeNull();
+});
+
+// The columns are named as headings rather than as words in a sentence.
+it('names its columns with a capital', () => {
+  const drawn = draw(listing({ files: [file('cover.png')] }));
+  for (const heading of ['Name', 'Size', 'Modified', 'State']) {
+    expect(drawn).toContain(`>${heading}</th>`);
+  }
 });

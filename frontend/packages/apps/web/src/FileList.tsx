@@ -18,6 +18,15 @@ import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
 import { packOffered, PACK_THIS_FOLDER } from './packFolder';
+import {
+  chosen,
+  everyToggled,
+  kept,
+  selectable,
+  selectedLine,
+  toggled,
+  type Selection,
+} from './selection';
 import { COLOR } from './theme';
 import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
 
@@ -159,13 +168,14 @@ export function FileList({
    */
   onPack: (folder: string) => void;
   /**
-   * "Delete…" was pressed on a row: ask what deleting that file or folder
-   * would take out of the Library, and arm the deletion if the person says so.
+   * "Delete…" was chosen from a row's menu, or pressed over the files picked
+   * out: ask what deleting that folder or those files would take out of the
+   * Library, and arm the deletion if the person says so.
    *
    * Offered on every folder row and on every file the Library holds, mapped
    * here or not — a deletion changes the Library and touches no file on this
    * device. Not on a file only added here: the Library has nothing of it to
-   * take out.
+   * take out, so it has no menu item and no box to pick it with.
    */
   onDelete: (target: DeleteTarget) => void;
 }) {
@@ -180,6 +190,25 @@ export function FileList({
   // selection of text or a link dropped here adds nothing (the drop says "that
   // drop carried no files"), and a line promising otherwise would be wrong.
   const [carriesFiles, setCarriesFiles] = useState(false);
+  // The files picked out for one deletion together (see
+  // [`selection`](./selection)). Held here rather than by the screen: nothing
+  // outside the list needs to know what is picked until a deletion names it.
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const picked = chosen(selection, listing);
+  const pickable = selectable(listing);
+  // A listing of another folder, or the same one asked again without some of
+  // the files, leaves the selection holding only what is still offered. Read
+  // through `chosen` above in the meantime, so no render shows a stale count.
+  useEffect(() => {
+    setSelection((held) => kept(held, listing));
+  }, [listing]);
+  // Whatever is picked goes the moment a deletion is asked for, from the
+  // selection or from a row: the rows it named are leaving, and a box left
+  // ticked over them would offer to delete them a second time.
+  const askToDelete = (target: DeleteTarget) => {
+    setSelection(null);
+    onDelete(target);
+  };
   const root = listing.path === '';
   const empty = listing.folders.length === 0 && listing.files.length === 0;
   // A path the Library names nothing at, as far as what is on hand goes. A
@@ -303,7 +332,7 @@ export function FileList({
               borderBottom: `1px solid ${COLOR.border}`,
             }}
           >
-            <button type="button" onClick={() => onPack(listing.path)} style={PACK_BUTTON}>
+            <button type="button" onClick={() => onPack(listing.path)} style={BAR_BUTTON}>
               {PACK_THIS_FOLDER}
             </button>
           </div>
@@ -319,15 +348,43 @@ export function FileList({
         )}
         {packing && <Packing />}
         {waitingForADrop && <WaitingForADrop />}
-        {/* While a drag is over the list, the line saying what letting go will
-            do. Laid over the rows under the banners rather than among them, for
+        {/* Laid over the rows under the banners rather than among them, for
             the reason the outline is drawn inside the list: a line that took up
-            room would shift every row under the pointer as the drag arrived. */}
-        {dragged && carriesFiles && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0 }}>
-            <DropBanner outcome={outcome} held={!nowhere} />
-          </div>
-        )}
+            room would shift every row under the pointer as it arrived. */}
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, pointerEvents: 'none' }}>
+          {/* While files are picked out, what they come to and the one
+              deletion of them all. Over the column headings while the list is
+              at its top — where the pointer that ticked the first box is about
+              to tick the next, so a row moving down under it would untick the
+              first instead — and leaving the box column clear, so the header's
+              box stays where it was to pick the rest or clear them. */}
+          {picked.length > 0 && (
+            <table style={TABLE}>
+              <tbody>
+                <tr>
+                  <td style={{ ...PICK, padding: '0 10px' }} />
+                  <td style={SELECTED_LINE}>
+                    <span>{selectedLine(picked.length)}</span>
+                    <button
+                      type="button"
+                      onClick={() => askToDelete({ folder: null, paths: picked })}
+                      style={{ ...BAR_BUTTON, marginLeft: 10 }}
+                    >
+                      {DELETE}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+          {/* While a drag is over the list, the line saying what letting go
+              will do. */}
+          {dragged && carriesFiles && (
+            <div style={{ pointerEvents: 'auto' }}>
+              <DropBanner outcome={outcome} held={!nowhere} />
+            </div>
+          )}
+        </div>
       </div>
       {empty ? (
         // A folder waiting for a drop has been told what it is for by the
@@ -354,15 +411,24 @@ export function FileList({
           </p>
         )
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <table style={TABLE}>
           <thead>
             <tr style={{ color: COLOR.dim, textAlign: 'left', fontSize: 12 }}>
+              <th style={{ ...HEAD, ...PICK }}>
+                {pickable.length > 0 && (
+                  <EveryBox
+                    picked={picked.length}
+                    of={pickable.length}
+                    onToggle={() => setSelection((held) => everyToggled(held, listing))}
+                  />
+                )}
+              </th>
               <th style={{ ...HEAD, width: 28 }} />
-              <th style={HEAD}>name</th>
-              <th style={{ ...HEAD, width: 100, textAlign: 'right' }}>size</th>
-              <th style={{ ...HEAD, width: 190 }}>modified</th>
-              <th style={{ ...HEAD, width: 90 }}>state</th>
-              <th style={{ ...HEAD, width: 76 }} />
+              <th style={HEAD}>Name</th>
+              <th style={{ ...HEAD, width: 100, textAlign: 'right' }}>Size</th>
+              <th style={{ ...HEAD, width: 210 }}>Modified</th>
+              <th style={{ ...HEAD, width: 90 }}>State</th>
+              <th style={{ ...HEAD, width: 40 }} />
             </tr>
           </thead>
           <tbody>
@@ -372,18 +438,24 @@ export function FileList({
                 icon="▸"
                 name={folder.name}
                 onActivate={() => onOpenFolder(folder.path)}
+                // No box: the server takes one folder per deletion, and a
+                // folder is deleted from its own row's menu.
+                pick={null}
               >
                 <td style={CELL} />
                 <td style={CELL} />
                 <td style={CELL}>
                   {!folder.mapped && <Chip color={COLOR.warn}>not here</Chip>}
                 </td>
-                <td style={CELL}>
-                  <DeleteButton
-                    name={folder.name}
-                    onPress={() => onDelete({ folder: folder.path, paths: [] })}
-                  />
-                </td>
+                <RowMenu
+                  name={folder.name}
+                  items={[
+                    {
+                      label: DELETE,
+                      onPress: () => askToDelete({ folder: folder.path, paths: [] }),
+                    },
+                  ]}
+                />
               </Row>
             ))}
             {listing.files.map((file) => (
@@ -408,6 +480,15 @@ export function FileList({
                       : () => onUnsupported(file)
                 }
                 offered={listing.mapped}
+                pick={
+                  deleteOffered(file)
+                    ? {
+                        picked: picked.includes(file.path),
+                        onToggle: () =>
+                          setSelection((held) => toggled(held, listing, file.path)),
+                      }
+                    : null
+                }
               >
                 <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
                   {size(file.size)}
@@ -416,14 +497,19 @@ export function FileList({
                 <td style={CELL}>
                   <StateChip file={file} folder={listing.path} fill={fill} />
                 </td>
-                <td style={CELL}>
-                  {deleteOffered(file) && (
-                    <DeleteButton
-                      name={file.name}
-                      onPress={() => onDelete({ folder: null, paths: [file.path] })}
-                    />
-                  )}
-                </td>
+                <RowMenu
+                  name={file.name}
+                  items={
+                    deleteOffered(file)
+                      ? [
+                          {
+                            label: DELETE,
+                            onPress: () => askToDelete({ folder: null, paths: [file.path] }),
+                          },
+                        ]
+                      : []
+                  }
+                />
               </Row>
             ))}
           </tbody>
@@ -470,6 +556,7 @@ function Row({
   selected,
   onActivate,
   offered = onActivate !== undefined,
+  pick,
   children,
 }: {
   icon: string;
@@ -490,6 +577,8 @@ function Row({
    * every other row does open.
    */
   offered?: boolean;
+  /** The row's box for picking it out, and `null` on a row that cannot be. */
+  pick: { picked: boolean; onToggle: () => void } | null;
   children: ReactNode;
 }) {
   // The row the reader was last opened at is brought back into view when the
@@ -511,6 +600,25 @@ function Row({
       title={name}
       style={selected === true ? { background: COLOR.selected } : undefined}
     >
+      {/* The whole cell is the box's, and a click anywhere in it stops there:
+          the row under it opens the file, and picking a file out is not
+          opening it. A row with no box keeps the cell as part of the row. */}
+      <td
+        style={{ ...CELL, ...PICK }}
+        onClick={pick !== null ? (event) => event.stopPropagation() : undefined}
+      >
+        {pick !== null && (
+          <label style={{ display: 'block', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              aria-label={`select ${name}`}
+              checked={pick.picked}
+              onChange={pick.onToggle}
+              style={{ margin: 0, cursor: 'pointer' }}
+            />
+          </label>
+        )}
+      </td>
       <td style={{ ...CELL, color: COLOR.dim, textAlign: 'center' }}>{icon}</td>
       <td style={{ ...CELL, color: dim === true ? COLOR.dim : COLOR.text }}>{name}</td>
       {children}
@@ -722,40 +830,181 @@ function Unmapped({
   );
 }
 
+/** One thing a row's menu offers. */
+interface MenuItem {
+  label: string;
+  onPress: () => void;
+}
+
 /**
- * One row's "Delete…".
+ * What a row offers besides opening, behind one "⋮".
  *
- * The click stops at the button: the row under it opens the file or the
- * folder, and a press meant to delete something must not also walk into it.
+ * A button per action on every row is a list of twenty rows showing twenty
+ * buttons, which is restless to look at for something pressed now and then;
+ * one quiet mark per row says the same and keeps the names the thing being
+ * read. The items are a list so that what a row offers can grow without the
+ * row changing shape. A row with nothing to offer draws no mark at all.
+ *
+ * The menu closes on a click anywhere outside it, on `Escape`, and on choosing
+ * an item. Every click inside it stops there: the row under it opens the file
+ * or the folder, and a press meant for the menu must not also walk into it.
  */
-function DeleteButton({ name, onPress }: { name: string; onPress: () => void }) {
+function RowMenu({ name, items }: { name: string; items: readonly MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const here = useRef<HTMLTableCellElement>(null);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const away = (event: MouseEvent) => {
+      if (!(event.target instanceof Node) || !here.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      aria-label={`delete ${name}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onPress();
-      }}
-      style={DELETE_BUTTON}
+    <td
+      ref={here}
+      // Not clipped like the other cells, since the menu hangs out of it.
+      style={{ ...CELL, overflow: 'visible', position: 'relative', textAlign: 'center' }}
+      // A row with nothing to offer keeps the cell as part of the row, so a
+      // click there opens it like a click anywhere else on it.
+      onClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
     >
-      {DELETE}
-    </button>
+      {items.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-label={`actions for ${name}`}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen((was) => !was)}
+            style={MENU_BUTTON}
+          >
+            ⋮
+          </button>
+          {open && (
+            <div role="menu" style={MENU}>
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    item.onPress();
+                  }}
+                  style={MENU_ITEM}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </td>
   );
 }
 
-const DELETE_BUTTON: CSSProperties = {
-  border: `1px solid ${COLOR.border}`,
+/**
+ * The header's box: ticked where every file that can be picked is, part-ticked
+ * where some are, and pressing it picks them all or clears them.
+ */
+function EveryBox({ picked, of, onToggle }: { picked: number; of: number; onToggle: () => void }) {
+  const box = useRef<HTMLInputElement>(null);
+  const some = picked > 0 && picked < of;
+  // Only settable from script: there is no attribute for it.
+  useEffect(() => {
+    if (box.current !== null) {
+      box.current.indeterminate = some;
+    }
+  }, [some]);
+  return (
+    <input
+      ref={box}
+      type="checkbox"
+      aria-label="select every file"
+      checked={picked === of}
+      onChange={onToggle}
+      style={{ margin: 0, cursor: 'pointer' }}
+    />
+  );
+}
+
+/**
+ * The rows' table, and the one the selection's line is laid out in over it:
+ * the same layout, so that the line's box column is exactly the rows'.
+ */
+const TABLE: CSSProperties = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' };
+
+/** The column the boxes stand in. */
+const PICK: CSSProperties = { width: 32, textAlign: 'center' };
+
+/** No taller than the column headings it stands over. */
+const SELECTED_LINE: CSSProperties = {
+  padding: '3px 10px',
+  background: COLOR.panel,
+  borderBottom: `1px solid ${COLOR.border}`,
+  color: COLOR.text,
+  fontSize: 12,
+  whiteSpace: 'nowrap',
+  pointerEvents: 'auto',
+};
+
+const MENU_BUTTON: CSSProperties = {
+  border: 'none',
   background: 'transparent',
   color: COLOR.dim,
   font: 'inherit',
-  fontSize: 11,
+  fontSize: 14,
+  lineHeight: 1,
   padding: '0 6px',
   borderRadius: 4,
   cursor: 'pointer',
 };
 
-const PACK_BUTTON: CSSProperties = {
+const MENU: CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  right: 6,
+  zIndex: 2,
+  minWidth: 120,
+  padding: '4px 0',
+  background: COLOR.panel,
+  border: `1px solid ${COLOR.border}`,
+  borderRadius: 4,
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
+  textAlign: 'left',
+};
+
+const MENU_ITEM: CSSProperties = {
+  display: 'block',
+  width: '100%',
+  border: 'none',
+  background: 'transparent',
+  color: COLOR.text,
+  font: 'inherit',
+  fontSize: 12,
+  padding: '4px 12px',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
+/** A button on one of the bars over the rows. */
+const BAR_BUTTON: CSSProperties = {
   border: `1px solid ${COLOR.border}`,
   background: 'transparent',
   color: COLOR.text,
