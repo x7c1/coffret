@@ -1,8 +1,8 @@
 use coffret_device::open_library as reopen;
 use coffret_server::Unlocked;
-use tauri::{AppHandle, State};
+use tauri::State;
 
-use super::{hide_window, EnteredPassphrase, Shell};
+use super::{refusal_evidence, refusal_line, EnteredPassphrase, Shell};
 
 /// Unlocks the Library this shell serves, in place, with `passphrase`: what the
 /// Passphrase window does in *unlock* mode (spec: DK-1).
@@ -14,13 +14,14 @@ use super::{hide_window, EnteredPassphrase, Shell};
 /// app's own window, and never by the server's routes or the explorer's page
 /// (spec: DK-1, DK-10, LA-3, LA-6).
 ///
-/// A refusal is answered with the sentence the device gives — the Passphrase
-/// does not open the Library, most often — and the window stays for another
-/// try. Success hides the window, which empties its field; the explorer hears
-/// of it in its next answer about what the server is doing.
+/// A refusal is answered with one line — the Passphrase does not open the
+/// Library, most often ([`refusal_line()`]) — with its log-safe rendering in
+/// the log ([`refusal_evidence()`]), and the window stays for another try.
+/// Success is answered and nothing more: the page asks for the window to be
+/// hidden once it has heard it ([`super::dismiss_window()`]), and the explorer
+/// hears of it in its next answer about what the server is doing.
 #[tauri::command]
 pub async fn unlock_library(
-    app: AppHandle,
     shell: State<'_, Shell>,
     passphrase: EnteredPassphrase,
 ) -> Result<(), String> {
@@ -30,10 +31,9 @@ pub async fn unlock_library(
     let served = shell
         .served()
         .cloned()
-        .ok_or("no Library is open in this app to unlock")?;
+        .ok_or("No Library is open in this app to unlock.")?;
     if served.holds_library() {
         // A press that waited behind the unlock that landed.
-        hide_window(&app);
         return Ok(());
     }
 
@@ -45,12 +45,16 @@ pub async fn unlock_library(
     let library = match reopened {
         Ok(Ok(library)) => library,
         Ok(Err(refused)) => {
-            tracing::info!("the Library could not be unlocked from the Passphrase window");
-            return Err(format!("{:#}", anyhow::Error::new(refused)));
+            let refused = anyhow::Error::new(refused);
+            tracing::warn!(
+                error = %refusal_evidence(&refused),
+                "the Library could not be unlocked from the Passphrase window"
+            );
+            return Err(refusal_line(&refused));
         }
         Err(panicked) => {
             tracing::error!(error = %panicked, "unlocking the Library stopped without an answer");
-            return Err("unlocking the Library stopped without an answer".to_owned());
+            return Err("Unlocking the Library stopped without an answer.".to_owned());
         }
     };
     match served.unlock(library) {
@@ -59,10 +63,12 @@ pub async fn unlock_library(
         }
         Ok(Unlocked::Already) => {}
         Err(refused) => {
-            tracing::warn!("the Library the Passphrase reopened is not the one being served");
-            return Err(format!("{refused:#}"));
+            tracing::warn!(
+                error = %refusal_evidence(&refused),
+                "the Library the Passphrase reopened is not the one being served"
+            );
+            return Err(refusal_line(&refused));
         }
     }
-    hide_window(&app);
     Ok(())
 }

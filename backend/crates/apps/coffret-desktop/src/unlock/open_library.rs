@@ -8,16 +8,20 @@ use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use super::{ask_for_passphrase, hide_window, EnteredPassphrase, Shell};
+use super::{ask_for_passphrase, refusal_evidence, refusal_line, EnteredPassphrase, Shell};
 use crate::{explorer, tray};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
 /// front of it, and opens the explorer in the default browser.
 ///
-/// What is answered to the page on a refusal is the whole chain the server
-/// would have printed — the Library is not on this device, the Passphrase does
-/// not open it, another server is serving it — so the person reads the same
-/// sentence here as on a terminal.
+/// What is answered to the page on a refusal is one line — the Passphrase does
+/// not open the Library, another server is serving it ([`refusal_line()`]) —
+/// and the log is told the failure's log-safe rendering, never the chain the
+/// server would have printed on a terminal ([`refusal_evidence()`]).
+///
+/// The window is left as it is: the page asks for it to be hidden once it has
+/// heard this answer, so the answer is never torn down by the hiding
+/// ([`super::dismiss_window()`]).
 #[tauri::command]
 pub async fn open_library(
     app: AppHandle,
@@ -44,7 +48,7 @@ pub async fn open_library(
             .idle_minutes
             .get()
             .copied()
-            .ok_or("the shell did not finish starting")?,
+            .ok_or("The shell did not finish starting.")?,
         unlock_prompt: Some(prompt),
     };
     let started = shell
@@ -54,12 +58,15 @@ pub async fn open_library(
     let (address, served) = match started {
         Ok(Ok(started)) => started,
         Ok(Err(refused)) => {
-            tracing::info!("a Library could not be opened from the Passphrase window");
-            return Err(format!("{refused:#}"));
+            tracing::warn!(
+                error = %refusal_evidence(&refused),
+                "a Library could not be opened from the Passphrase window"
+            );
+            return Err(refusal_line(&refused));
         }
         Err(panicked) => {
             tracing::error!(error = %panicked, "opening a Library stopped without an answer");
-            return Err("opening the Library stopped without an answer".to_owned());
+            return Err("Opening the Library stopped without an answer.".to_owned());
         }
     };
     // Nobody else sets them: the lock above is held by whoever reaches here.
@@ -74,7 +81,8 @@ pub async fn open_library(
         // explorer's own *unlock* and a second launch still are.
         tracing::error!(error = %format!("{error:#}"), "the tray icon could not be shown");
     }
-    hide_window(&app);
+    // The explorer is a process of its own and does not touch the window, so it
+    // may open before the page hears the answer.
     explorer::open(&app, address);
     Ok(())
 }
