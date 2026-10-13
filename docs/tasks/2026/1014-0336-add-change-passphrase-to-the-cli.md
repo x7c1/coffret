@@ -10,7 +10,7 @@ check_command: 'make check && grep -rq "change-passphrase" backend/crates/apps/c
 assignee: null
 branch: task/1014-0336-add-change-passphrase-to-the-cli
 created_at: 2026-10-13T18:36:00Z
-updated_at: 2026-10-13T23:58:00Z
+updated_at: 2026-10-14T00:02:00Z
 ---
 
 # feat(cli): add `change-passphrase`, which re-protects this device's Master Key under a new Passphrase
@@ -115,7 +115,7 @@ secret-bearing type is introduced.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library on this machine (`source .tmp/agent/env.sh`,
+- [x] On the agent's Library on this machine (`source .tmp/agent/env.sh`,
       `COFFRET_STATE_DIR` set to each of the two agent state directories in
       turn): both devices' Passphrases are changed to a new value;
       `.tmp/agent/up.sh 1` with the new value serves the Library and
