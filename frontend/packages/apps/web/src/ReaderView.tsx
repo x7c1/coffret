@@ -4,6 +4,7 @@ import { getFile } from '@coffret/api';
 
 import { drawnPages } from './drawn';
 import type { Page } from './pages';
+import { onPicture } from './picture';
 import { stepped } from './pages';
 import { prefetchTargets } from './prefetch';
 import { COLOR } from './theme';
@@ -25,7 +26,10 @@ type Shown =
  *
  * `←` and `→` move through the openable files of the folder — the rest are
  * stepped over, since there is nothing to show for them — and `Escape` or a
- * click goes back to the list with the file that was open still selected.
+ * click beside the page goes back to the list with the file that was open
+ * still selected. A click on the page itself does nothing: it is where the
+ * pointer rests while somebody reads, and a stray press there closing the
+ * reader would lose their place.
  *
  * A page this device does not have yet is fetched by the same request as any
  * other; what it costs is a placeholder while it is in flight, and a sentence
@@ -204,7 +208,7 @@ export function ReaderView({
         reconnect={reconnect}
       />
       <div style={{ padding: '10px 12px', fontSize: 12, color: COLOR.dim }}>
-        {page.name} ({at + 1}/{pages.length}) — ←/→ to turn, Esc to close
+        {page.name} ({at + 1}/{pages.length}) — ←/→ to turn, Esc or a click beside the page to close
       </div>
     </div>
   );
@@ -278,6 +282,22 @@ function Shows({
         <img
           src={shown.url}
           alt={name}
+          // The click stops here only where it lands on the page: the element
+          // is stretched to the reader and the page fitted inside it, and the
+          // bands either side are the overlay to anybody looking at them.
+          onClick={(event) => {
+            const picture = event.currentTarget;
+            if (
+              onPicture(
+                picture.getBoundingClientRect(),
+                { width: picture.naturalWidth, height: picture.naturalHeight },
+                event.clientX,
+                event.clientY,
+              )
+            ) {
+              event.stopPropagation();
+            }
+          }}
           style={{ flex: 1, minHeight: 0, maxWidth: '100%', objectFit: 'contain' }}
         />
       );

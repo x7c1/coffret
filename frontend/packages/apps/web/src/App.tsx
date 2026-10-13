@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   addFiles,
@@ -48,12 +48,13 @@ import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
+import { Region } from './Region';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { waitsFor } from './turns';
 import { unmappedLine } from './unmapped';
 import { useWork } from './useWork';
-import { said, useAsked, type Asked } from './useAsked';
+import { said, useAsked } from './useAsked';
 
 /**
  * The explorer's one screen: a folder tree, the current folder's children, and
@@ -273,6 +274,14 @@ export function App() {
       setUnlockAsking(false);
     });
   }, [prompting, recheckWork]);
+  // The one unlock the screen offers, wherever it is offered: the status bar's
+  // while the work answer says the Library is locked, and a region's wherever
+  // its own request was refused by the lock — whether or not that answer has
+  // been heard yet, so the two can stand at once and share one press.
+  const unlockOffer = useMemo(
+    () => ({ asking: unlockAsking, said: unlockSaid, refused: unlockRefused, ask: unlock }),
+    [unlockAsking, unlockSaid, unlockRefused, unlock],
+  );
   useEffect(() => {
     if (custody !== null && prompting.heard(custody, inFront())) {
       unlock();
@@ -946,7 +955,7 @@ export function App() {
             borderRight: `1px solid ${COLOR.border}`,
           }}
         >
-          <Region state={folders.state} onRetry={retry} reconnect={offer}>
+          <Region state={folders.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
             {() => (
               <FolderTree
                 folders={drawn}
@@ -1019,7 +1028,7 @@ export function App() {
               {notice}
             </p>
           )}
-          <Region state={listing.state} onRetry={retry} reconnect={offer}>
+          <Region state={listing.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
             {(shown) => (
               <FileList
                 listing={shown}
@@ -1120,67 +1129,10 @@ export function App() {
           ask: refresh,
         }}
         reconnect={offer}
-        locked={
-          custody === 'locked'
-            ? { asking: unlockAsking, said: unlockSaid, refused: unlockRefused, ask: unlock }
-            : null
-        }
+        locked={custody === 'locked' ? unlockOffer : null}
       />
     </div>
   );
-}
-
-/**
- * One region of the screen, in whichever of its three states it is in.
- *
- * Loading and failed are both states the screen can be left from, which is the
- * point of stating them: a request that failed says what the server said and
- * offers to ask again, rather than leaving the region saying "loading" for as
- * long as the tab is open.
- */
-function Region<T>({
-  state,
-  onRetry,
-  reconnect,
-  children,
-}: {
-  state: Asked<T>;
-  onRetry: () => void;
-  /** The reconnect offered where the refusal is a permission that ran out. */
-  reconnect: Offer | null;
-  children: (value: T) => ReactNode;
-}) {
-  switch (state.status) {
-    case 'loading':
-      return <p style={{ padding: 16, color: COLOR.dim }}>loading…</p>;
-    case 'failed':
-      return (
-        <div style={{ padding: 16 }}>
-          <p style={{ color: COLOR.refused }}>{state.message}</p>
-          {state.ranOut === true && reconnect !== null && (
-            <p style={{ color: COLOR.text, fontSize: 13 }}>
-              <ReconnectOffer offer={reconnect} />
-            </p>
-          )}
-          <button
-            onClick={onRetry}
-            style={{
-              border: `1px solid ${COLOR.border}`,
-              background: COLOR.panel,
-              color: COLOR.text,
-              font: 'inherit',
-              padding: '4px 12px',
-              borderRadius: 4,
-              cursor: 'pointer',
-            }}
-          >
-            try again
-          </button>
-        </div>
-      );
-    case 'ready':
-      return <>{children(state.value)}</>;
-  }
 }
 
 /**
