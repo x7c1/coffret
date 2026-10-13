@@ -65,7 +65,8 @@ fn main() {
         .manage(Shell::new(runtime))
         .invoke_handler(tauri::generate_handler![
             unlock::open_library,
-            unlock::unlock_library
+            unlock::unlock_library,
+            unlock::dismiss_window
         ])
         // Tauri panics on an error returned from here, so every failure is
         // reported (and exits 1) inside the hook instead.

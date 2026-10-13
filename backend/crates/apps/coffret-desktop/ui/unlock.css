@@ -4,14 +4,25 @@
   font-size: 14px;
 }
 
+html,
 body {
-  margin: 0;
-  padding: 20px;
+  height: 100%;
 }
 
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 16px 20px;
+}
+
+/* As tall as the window and no taller: the refusal's row takes what the
+   controls leave, so a long refusal scrolls inside the window instead of
+   pushing the form past its bottom edge. */
 form {
   display: grid;
-  gap: 6px;
+  gap: 4px;
+  height: 100%;
+  grid-template-rows: repeat(5, auto) minmax(1.4em, 1fr);
 }
 
 select,
@@ -30,8 +41,14 @@ button {
   justify-self: end;
 }
 
+/* A word with no spaces in it (a path, a name) breaks where it must rather
+   than running off the edge, and past four lines the refusal scrolls. */
 #refusal {
   margin: 4px 0 0;
   min-height: 1.4em;
+  max-height: 5.6em;
+  line-height: 1.4;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
   color: #c0392b;
 }

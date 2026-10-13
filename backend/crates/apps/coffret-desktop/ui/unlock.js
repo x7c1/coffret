@@ -9,9 +9,13 @@
 // and the one call is `unlock_library`, which unlocks it in place.
 //
 // Either way, what comes back on a refusal is the sentence to show, and the
-// Passphrase field is emptied whatever the answer. A dismissal is not an
-// answer, so the shell empties it too, by loading this page afresh whenever it
-// hides the window (`src/unlock/hide_window.rs`).
+// Passphrase field is emptied whatever the answer. On success this page asks
+// for the window to be hidden (`dismiss_window`) only once it has heard the
+// answer, and loads itself afresh only once that too is answered: a page
+// reloaded while a call waits tears the call down, and WebKitGTK sends it again
+// once the page is back — the Passphrase submitted twice. A dismissal is not an
+// answer, so when the window is closed the shell empties the field instead, by
+// loading this page afresh as it hides it (`src/unlock/hide_window.rs`).
 "use strict";
 
 const form = document.getElementById("unlock");
@@ -49,10 +53,18 @@ if (unlocking !== null) {
   }
 }
 
+// What the button says while the call it made is unanswered. Opening a Library
+// can take a while (the Passphrase is stretched, Storage is caught up with),
+// and a button that only greys out does not say the press landed.
+const idle = open.textContent;
+const pending = unlocking !== null ? "Unlocking…" : "Opening…";
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   open.disabled = true;
+  open.textContent = pending;
   refusal.textContent = "";
+  let opened = false;
   try {
     if (unlocking !== null) {
       await window.__TAURI__.core.invoke("unlock_library", {
@@ -64,11 +76,25 @@ form.addEventListener("submit", async (event) => {
         passphrase: passphrase.value,
       });
     }
+    opened = true;
   } catch (refused) {
     refusal.textContent = String(refused);
+    open.textContent = idle;
+    open.disabled = false;
     passphrase.focus();
   } finally {
     passphrase.value = "";
-    open.disabled = false;
+  }
+  if (opened) {
+    // The button stays disabled until the page is gone: a press while the
+    // window is still up would reach a Library already open, and the explorer
+    // would be opened a second time.
+    try {
+      await window.__TAURI__.core.invoke("dismiss_window");
+    } finally {
+      // Whether or not the window could be hidden: the fresh page is what
+      // drops this one's script state, the submitted string included.
+      window.location.reload();
+    }
   }
 });
