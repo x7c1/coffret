@@ -10,7 +10,7 @@ check_command: 'make check && ! grep -q "hide_window(" backend/crates/apps/coffr
 assignee: null
 branch: task/1014-0337-answer-the-passphrase-window-before-hiding-it-and-keep-a-refusal-readable
 created_at: 2026-10-13T18:37:00Z
-updated_at: 2026-10-14T02:20:00Z
+updated_at: 2026-10-14T02:24:00Z
 ---
 
 # fix(desktop): answer the Passphrase window before hiding it, and keep a refusal readable in it
@@ -109,7 +109,7 @@ reads nothing.
 
 ### Before merge (verified outside the check command)
 
-- [ ] `make desktop-dev-build` succeeds on this macOS machine, and the
+- [x] `make desktop-dev-build` succeeds on this macOS machine, and the
       development app started with `COFFRET_STATE_DIR` pointing at the agent's
       state directory shows its window and the Library in its list (an agent
       on this machine runs it; the window is only looked at, not operated)
