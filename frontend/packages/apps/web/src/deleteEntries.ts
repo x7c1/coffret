@@ -1,16 +1,20 @@
 // Taking a file or a folder out of the Library, asked first.
 //
-// Each folder row and each row of a file the Library holds offers "Delete…":
-// the server is asked what the deletion would take out and what it would
-// rebuild, that is shown, and only Delete arms it. Cancel arms nothing.
+// Each folder row and each row of a file the Library holds offers "Delete…"
+// in its menu, and the files picked out together offer one "Delete…" for all
+// of them: the server is asked what the deletion would take out and what it
+// would rebuild, that is shown, and only Delete arms it. Cancel arms nothing.
 //
 // What is shown is what leaves the Library, and nothing about this device's own
 // files: a deletion touches no mapped folder, so a file this device holds stays
 // where it is.
 //
-// The explorer has no multi-selection, so a deletion names one file or one
-// folder at a time; the server takes several files at once, and nothing here
-// would change if a selection named more.
+// A deletion names one folder, or any number of files: a row's menu names its
+// own, and the explorer's selection (see [`selection`](./selection)) names
+// every file picked out, so that a Pack holding several of them is rebuilt
+// once rather than once per file. Nothing here differs between one file and
+// many — the server takes several at once, and `targetName` words them as a
+// count.
 //
 // Kept free of DOM and of React so it is unit testable, as `packFolder.ts`
 // beside it is.
