@@ -549,3 +549,26 @@ it("opens the last row's menu upwards where there is no room below it", () => {
     measured.mockRestore();
   }
 });
+
+// The selection's line takes the headings' row over at the first tick, and the
+// rows under it must not move as it does: the pointer that ticked the first box
+// is about to tick the next. jsdom lays nothing out, so the row's height in
+// pixels cannot be measured here (a row's height is only the least it may be,
+// and a taller line in any cell grows it). What is asserted is what keeps the
+// two rows' lines alike: the same height and the same font size, given to the
+// row, so that the box's cell — the one cell both rows have — draws the same
+// line in each.
+it('gives the selection line the headings’ height and font size', () => {
+  const { list } = mount(three);
+  const row = () => list.querySelector('thead tr') as HTMLElement;
+  const headings = { height: row().style.height, fontSize: row().style.fontSize };
+  expect(headings.height).not.toBe('');
+  expect(headings.fontSize).not.toBe('');
+  const box = row().querySelector('th') as HTMLElement;
+  expect(box.style.fontSize).toBe('');
+
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  expect(row().contains(screen.getByText('1 selected'))).toBe(true);
+  expect({ height: row().style.height, fontSize: row().style.fontSize }).toEqual(headings);
+  expect((row().querySelector('th') as HTMLElement).style.fontSize).toBe('');
+});

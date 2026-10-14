@@ -400,7 +400,7 @@ export function FileList({
                   </th>
                 </tr>
               ) : (
-                <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left', fontSize: 12 }}>
+                <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
                   <th style={{ ...HEAD, ...PICK }}>
                     {pickable.length > 0 && (
                       <EveryBox
@@ -1023,8 +1023,14 @@ const PICK: CSSProperties = { width: 32, textAlign: 'center' };
  * The headings' row, at one height whether it holds the headings or the line a
  * selection is said on, so that nothing below it moves as the first box is
  * ticked.
+ *
+ * The height is only the least the row may be: a cell whose line is taller
+ * grows it. The font size is given here for both rows, not to the headings
+ * alone, for that reason: at the page's own size the box's cell in the
+ * selection's row drew a taller line and pushed every row down at the first
+ * tick.
  */
-const HEAD_ROW: CSSProperties = { height: 30, background: COLOR.ground };
+const HEAD_ROW: CSSProperties = { height: 30, fontSize: 12, background: COLOR.ground };
 
 /** The line a selection is said on, in the headings' row. */
 const SELECTED_LINE: CSSProperties = {
