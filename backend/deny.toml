@@ -18,7 +18,7 @@
 # real ones among them. What the narrowing costs is that those shims go
 # unchecked, which is the trade being made; what it must not cost is a crate
 # this workspace itself depends on behind a `cfg`. The one such dependency
-# today is the desktop shell's `glib`, for Linux, which is named below; one
+# today is the desktop app's `glib`, for Linux, which is named below; one
 # added for a platform not named below has to add that platform to this list
 # with it.
 targets = [
@@ -44,7 +44,7 @@ all-features = false
 # entry matches nothing, so a waiver cannot sit here unnoticed once it has
 # stopped applying.
 #
-# Both waivers below reach the tree through the desktop shell alone, and
+# Both waivers below reach the tree through the desktop app alone, and
 # through one thing in it: Tauri's Linux backend is built on the gtk-rs
 # bindings for GTK 3, whose last line is 0.18. The fixes are on lines that bind
 # GTK 4 instead, which Tauri does not use, so neither is a `cargo update` away;
@@ -136,7 +136,7 @@ exceptions = [
     # source is published under the AGPL regardless, and MPL-2.0 names the GPL
     # family as compatible (its section 3.3). Scoped to the crates that carry it
     # rather than allowed generally, because each arrives through the desktop
-    # shell's Tauri alone — the HTML and CSS parsing its configuration tooling
+    # app's Tauri alone — the HTML and CSS parsing its configuration tooling
     # does (`dom_query`) and the platform directory lookup (`dirs`) — and a new
     # one should be looked at rather than waved in.
     { crate = "cssparser", allow = ["MPL-2.0"] },

@@ -89,7 +89,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         surfaced: Vec::new(),
         refused: Vec::new(),
         key_lost: Vec::new(),
-        degraded: None,
+        short: None,
     };
 
     let Some(checkpoint) = index.checkpoint().await? else {
@@ -121,7 +121,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // Reported here and not held: a fetch writes nothing, so nothing later in
     // this run examines the set the key table came from. The finding goes on the
     // outcome as well, for whoever ran the fetch (spec: KL-15).
-    let (key_table, degraded) = read_committed(
+    let (key_table, short) = read_committed(
         store,
         keys.control(),
         &policy.retry,
@@ -130,7 +130,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     )
     .await?
     .reported();
-    outcome.degraded = degraded;
+    outcome.short = short;
     // What every Container of this run is read against, which does not change
     // between them.
     let reading = Reading {
@@ -271,7 +271,7 @@ fn finished(outcome: &FetchOutcome) {
         surfaced = outcome.surfaced.len(),
         refused_roots = outcome.refused.len(),
         key_lost = outcome.key_lost.len(),
-        keyring_degraded = outcome.degraded.is_some(),
+        keyring_short = outcome.short.is_some(),
         "a fetch run finished",
     );
 }

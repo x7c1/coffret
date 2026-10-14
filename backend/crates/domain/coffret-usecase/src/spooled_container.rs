@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::commit::{
     commit_batch, CommitError, CommitFailure, CommitOutcome, CommitPolicy, CommitRequest,
-    ControlKeys, DegradedReport, PreparedAddition, PreparedBatch,
+    ControlKeys, PreparedAddition, PreparedBatch, ShortReport,
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
@@ -142,7 +142,7 @@ impl SpooledContainer {
 /// supersedes travels on the upload itself, in
 /// [`replaces`](SpooledContainer::replaces), so a sync and a freeze pass none.
 ///
-/// `degraded` is the finding a caller's own read of the committed Keyring left,
+/// `short` is the finding a caller's own read of the committed Keyring left,
 /// for the commit to speak for where it examines that same set (spec: KL-15). A
 /// run that read nothing of the Keyring, or that ends here with nothing to
 /// commit, hands over nothing and the caller's guard says its piece itself.
@@ -159,7 +159,7 @@ pub(crate) async fn commit_spooled(
     now: DeviceTime,
     spooled: &[SpooledContainer],
     removals: &[ContainerId],
-    degraded: Option<&DegradedReport>,
+    short: Option<&ShortReport>,
     progress: &dyn Progress,
 ) -> Result<Option<CommitOutcome>, CommitFailure> {
     if spooled.is_empty() && removals.is_empty() {
@@ -186,7 +186,7 @@ pub(crate) async fn commit_spooled(
 
     let request = CommitRequest::new(store, index, keys, batch)
         .with_policy(policy.clone())
-        .speaking_for(degraded)
+        .speaking_for(short)
         .watched_by(progress);
     commit_batch(request).await.map(Some)
 }

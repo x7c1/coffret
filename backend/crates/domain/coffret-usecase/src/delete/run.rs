@@ -1,7 +1,7 @@
 use coffret_model::{ContainerId, ContainerKeyStatus, EntryPath, KeyEnvelope, KeyTable, Redacted};
 use tracing::{info, warn};
 
-use crate::commit::{catch_up, read_committed, DegradedReport};
+use crate::commit::{catch_up, read_committed, ShortReport};
 use crate::delete::delete_error::{DeleteError, DeleteResult};
 use crate::delete::delete_outcome::DeleteOutcome;
 use crate::delete::delete_request::DeleteRequest;
@@ -72,7 +72,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
 
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
-    let (key_table, degraded) = match index.checkpoint().await? {
+    let (key_table, short) = match index.checkpoint().await? {
         Some(checkpoint) => {
             let read = read_committed(
                 store,
@@ -82,7 +82,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
                 checkpoint.keyring(),
             )
             .await?;
-            (Some(read.key_table), read.degraded)
+            (Some(read.key_table), read.short)
         }
         // A Library that has committed nothing holds no Entry to delete
         // (spec: FM-13).
@@ -90,7 +90,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
     };
     // Said as the run ends, from wherever it ends, unless the commit's
     // examination of the same set speaks for it (spec: KL-15).
-    let degraded = DegradedReport::armed(degraded);
+    let short = ShortReport::armed(short);
     let key_lost = key_table.as_ref().map(lost).unwrap_or_default();
 
     let plan = plan::plan(index, &selection, &key_lost).await?;
@@ -165,7 +165,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         now,
         &spooled,
         &removed,
-        Some(&degraded),
+        Some(&short),
         progress,
     )
     .await?;
@@ -216,7 +216,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         refused,
         missing: plan.missing,
         commit,
-        degraded: degraded.unspoken(),
+        short: short.unspoken(),
     };
     info!(
         deleted = outcome.deleted.len(),
@@ -230,7 +230,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
             .commit
             .as_ref()
             .map_or(0, |commit| commit.untrashed.len()),
-        keyring_degraded = outcome.degraded.is_some(),
+        keyring_short = outcome.short.is_some(),
         "a deletion finished",
     );
     Ok(outcome)

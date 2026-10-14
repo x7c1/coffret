@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use coffret_model::{ContainerId, Generation, KeyTable, KeyringCommitment};
+use tracing::debug;
 
-use crate::commit::{ControlListing, DegradedKeyring};
+use crate::commit::{ControlListing, ShortKeyring};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
@@ -34,8 +35,11 @@ use fronts::Fronts;
 ///   short is forgotten at the next catch-up, and any table once a write run
 ///   of this process — where this device repairs — is over; the next fetch
 ///   reads the set again and reports it short only if that read finds it so
-///   (spec: KL-15). A table read from a whole set is kept across a catch-up
-///   that leaves the commitment where it was.
+///   (spec: KL-15). Every forget advances a generation a read of the set takes
+///   before it starts, and a table read under an older one is not kept, so a
+///   fetch that read the set before a repair cannot put the finding back after
+///   it. A table read from a whole set is kept across a catch-up that leaves
+///   the commitment where it was.
 /// - **A Container's front** is kept by Container ID, within a bound on how many
 ///   and how many bytes, and forgotten once the Container leaves the current
 ///   set. A Container object never changes once committed (spec: FM-2, CP-11),
@@ -65,8 +69,19 @@ pub struct FetchMemory {
 struct Kept {
     listing: Option<Listed>,
     keyring: Option<Opened>,
+    /// Advanced by every forget of the key table, whether or not one was kept.
+    forgotten: KeyTableGeneration,
     fronts: Fronts,
 }
+
+/// Which forgetting of the key table a read of the set began after.
+///
+/// A read takes it before it reads the replicas and hands it back with the
+/// table it read, and a table read under any but the latest is not kept: a
+/// forget landed while the read was under way, so what it found of the set may
+/// be what a repair has since made untrue (spec: KL-13, KL-15).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct KeyTableGeneration(u64);
 
 /// One listing, and the head the catalog stood at when it was taken.
 #[derive(Debug)]
@@ -80,7 +95,7 @@ struct Listed {
 struct Opened {
     commitment: KeyringCommitment,
     key_table: Arc<KeyTable>,
-    degraded: Option<DegradedKeyring>,
+    short: Option<ShortKeyring>,
 }
 
 impl FetchMemory {
@@ -127,12 +142,12 @@ impl FetchMemory {
     pub(crate) fn key_table_for(
         &self,
         commitment: &KeyringCommitment,
-    ) -> Option<(Arc<KeyTable>, Option<DegradedKeyring>)> {
+    ) -> Option<(Arc<KeyTable>, Option<ShortKeyring>)> {
         self.locked()
             .keyring
             .as_ref()
             .filter(|opened| &opened.commitment == commitment)
-            .map(|opened| (Arc::clone(&opened.key_table), opened.degraded))
+            .map(|opened| (Arc::clone(&opened.key_table), opened.short))
     }
 
     /// Forgets the key table where the read that produced it found the set
@@ -144,12 +159,17 @@ impl FetchMemory {
     /// found, so the finding would otherwise outlive the condition it reports;
     /// the next fetch reads the set again instead, and says it is short only if
     /// it still is (spec: KL-15).
-    pub(crate) fn forget_degraded_key_table(&self) {
+    ///
+    /// Advances the generation whether or not it forgets anything: a read
+    /// under way across the catch-up may be about to keep a finding of a short
+    /// set that a repair the catch-up learned of has made untrue.
+    pub(crate) fn forget_short_key_table(&self) {
         let mut kept = self.locked();
+        kept.forgotten.0 += 1;
         if kept
             .keyring
             .as_ref()
-            .is_some_and(|opened| opened.degraded.is_some())
+            .is_some_and(|opened| opened.short.is_some())
         {
             kept.keyring = None;
         }
@@ -162,21 +182,48 @@ impl FetchMemory {
     /// a run that repaired and then failed leaves the commitment where it was
     /// with the set whole again. The next fetch reads the set rather than
     /// reporting a finding the run has made untrue (spec: KL-15).
+    ///
+    /// And a fetch that read the set before the repair and is still on its
+    /// way does not put that finding back: the generation this advances is
+    /// past the one it read under, so what it hands back to be kept is not.
     pub fn forget_key_table(&self) {
-        self.locked().keyring = None;
+        let mut kept = self.locked();
+        kept.forgotten.0 += 1;
+        kept.keyring = None;
     }
 
-    /// Keeps the key table read under `commitment`, in place of any other.
+    /// The generation a read of the set begins under, taken before it reads
+    /// any replica and handed back to
+    /// [`remember_key_table`](Self::remember_key_table) with what it read.
+    pub(crate) fn key_table_generation(&self) -> KeyTableGeneration {
+        self.locked().forgotten
+    }
+
+    /// Keeps the key table read under `commitment`, in place of any other —
+    /// unless a forget landed since the read began at `read_under`.
+    ///
+    /// A table read before a forget is what the set was before whatever the
+    /// forget answers for, and a write run of this process forgets once it has
+    /// repaired the set (spec: KL-13). Kept, it would have the next fetch report
+    /// the set short after the repair made it whole (spec: KL-15); left, the
+    /// next fetch reads the set again. The table still serves the fetch that
+    /// read it, which is the caller's own business.
     pub(crate) fn remember_key_table(
         &self,
+        read_under: KeyTableGeneration,
         commitment: KeyringCommitment,
         key_table: Arc<KeyTable>,
-        degraded: Option<DegradedKeyring>,
+        short: Option<ShortKeyring>,
     ) {
-        self.locked().keyring = Some(Opened {
+        let mut kept = self.locked();
+        if kept.forgotten != read_under {
+            debug!("the key table was read before it was last forgotten, so it is not kept");
+            return;
+        }
+        kept.keyring = Some(Opened {
             commitment,
             key_table,
-            degraded,
+            short,
         });
     }
 
@@ -203,9 +250,13 @@ mod tests {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
-    use coffret_model::ContainerId;
+    use coffret_model::{ContainerId, Generation, KeyringCommitment};
 
     use super::FetchMemory;
+
+    fn commitment() -> KeyringCommitment {
+        KeyringCommitment::new(Generation::FIRST, 1, "beef").expect("a valid commitment")
+    }
 
     fn container(byte: u8) -> ContainerId {
         ContainerId::from_bytes([byte; ContainerId::BYTE_LEN])
@@ -226,5 +277,39 @@ mod tests {
 
         assert!(memory.front(container(1)).is_none());
         assert!(memory.front(container(2)).is_some());
+    }
+
+    // A write run forgets the key table once it has repaired the set
+    // (spec: KL-13), and a fetch that read the set before that and keeps what
+    // it read after would put the finding back (spec: KL-15). The table that
+    // read hands back is ignored; the next fetch reads the set again.
+    #[test]
+    fn a_table_read_before_the_last_forget_is_not_kept() {
+        let memory = FetchMemory::default();
+        let read_under = memory.key_table_generation();
+
+        memory.forget_key_table();
+        memory.remember_key_table(read_under, commitment(), Arc::default(), None);
+
+        assert!(memory.key_table_for(&commitment()).is_none());
+
+        // And a read that began after it is kept as before.
+        let read_under = memory.key_table_generation();
+        memory.remember_key_table(read_under, commitment(), Arc::default(), None);
+        assert!(memory.key_table_for(&commitment()).is_some());
+    }
+
+    // The catch-up's forget is one too, whether or not the table it finds is
+    // one it drops: a read under way across it may be about to keep a finding
+    // the catch-up has learned is no longer true.
+    #[test]
+    fn a_catch_up_advances_the_generation_too() {
+        let memory = FetchMemory::default();
+        let read_under = memory.key_table_generation();
+
+        memory.forget_short_key_table();
+        memory.remember_key_table(read_under, commitment(), Arc::default(), None);
+
+        assert!(memory.key_table_for(&commitment()).is_none());
     }
 }

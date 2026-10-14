@@ -1,10 +1,10 @@
 // The Passphrase window, in one of two modes.
 //
-// *Open*, as the shell starts: which Library to open, and its Passphrase. The
-// shell handed the list of Libraries over before this ran; the one call this
+// *Open*, as the app starts: which Library to open, and its Passphrase. The
+// app handed the list of Libraries over before this ran; the one call this
 // page makes is `open_library`.
 //
-// *Unlock*, once the Library being served has locked itself: the shell loads
+// *Unlock*, once the Library being served has locked itself: the app loads
 // this same page with `?unlock=<name>`, the list is fixed to that one Library,
 // and the one call is `unlock_library`, which unlocks it in place.
 //
@@ -14,7 +14,7 @@
 // answer, and loads itself afresh only once that too is answered: a page
 // reloaded while a call waits tears the call down, and WebKitGTK sends it again
 // once the page is back — the Passphrase submitted twice. A dismissal is not an
-// answer, so when the window is closed the shell empties the field instead, by
+// answer, so when the window is closed the app empties the field instead, by
 // loading this page afresh as it hides it (`src/unlock/hide_window.rs`).
 "use strict";
 

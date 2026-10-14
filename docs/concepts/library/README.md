@@ -72,7 +72,7 @@ refuses the run. Findings have two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, degraded replicas, an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
 | This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file moved to the desktop's trash | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
@@ -139,6 +139,12 @@ and has a window of its own for entering the Passphrase.
   the Library)
 - move (a departed file to the desktop's trash, during a sync) — never *trash*,
   which is Storage's verb: a [Storage Object](../storage-object/) is trashed
+- remove (a folder below a mapped root that a sync's moves to the trash
+  emptied, once every move is made) — never *delete*, which is the Library's
+  verb for Entries
+- take (the turn at this device's pending work, as a server's sync, freeze or
+  deletion does before it asks for the Library; a run armed while another holds
+  it waits for the holder)
 - spool (a Container's ciphertext to a local file before uploading it)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
@@ -236,7 +242,11 @@ and has a window of its own for entering the Passphrase.
     it, until the person moves it — elsewhere it is an ordinary added file — or
     removes it. Telling the two apart takes the content hash this device
     records whenever it materializes a file, because the Entry's own leaves the
-    Catalog with the Entry (spec: EP-15).
+    Catalog with the Entry (spec: EP-15). A folder below the mapped root that a
+    sync's moves to the trash leave with nothing at all in it is removed with
+    them, and each folder above it emptied in turn — never the mapped root, and
+    never a folder that was empty before the run or still holds anything
+    (spec: EP-15).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
@@ -343,7 +353,8 @@ and has a window of its own for entering the Passphrase.
   waiting run is reported as waiting for the holder (spec: LA-12). Across
   processes there is no queue: of a server's run and a sync or a freeze from
   the command line, whichever comes second is refused at once, as a conflict,
-  and goes through when it is run again after the other finishes.
+  and goes through when it is run again after the other finishes
+  (spec: LA-12).
 - A local writer writes its **scratch** — the file it fills before the rename
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a

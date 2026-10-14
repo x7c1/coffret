@@ -5,18 +5,18 @@ use coffret_server::ServerState;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 
-/// What the shell holds for the whole of the process.
-pub struct Shell {
+/// What the app holds for the whole of the process.
+pub struct Desktop {
     /// The runtime the server and the explorer's host run on.
     pub(super) runtime: Runtime,
     /// How long the Library stays open while nobody wants it, read once as
-    /// the shell starts.
+    /// the app starts.
     pub(super) idle_minutes: OnceLock<u64>,
     /// Taken for as long as one attempt at opening or unlocking a Library is
     /// under way, so that a second press of the button waits for the first
     /// rather than racing it for the Library's lock or for its keys.
     pub(super) opening: Mutex<()>,
-    /// Where the explorer is, once a Library is open. Set once: this shell
+    /// Where the explorer is, once a Library is open. Set once: this app
     /// serves one Library for as long as it runs.
     pub(super) explorer: OnceLock<SocketAddr>,
     /// What the server serves, once a Library is open: what an unlock in place
@@ -24,8 +24,8 @@ pub struct Shell {
     pub(super) served: OnceLock<Arc<ServerState>>,
 }
 
-impl Shell {
-    /// A shell with nothing open yet, running its servers on `runtime`.
+impl Desktop {
+    /// An app with nothing open yet, running its servers on `runtime`.
     pub fn new(runtime: Runtime) -> Self {
         Self {
             runtime,
@@ -36,7 +36,7 @@ impl Shell {
         }
     }
 
-    /// Records the idle interval the shell started with.
+    /// Records the idle interval the app started with.
     pub fn set_idle_minutes(&self, minutes: u64) {
         // Set once, by the one setup hook; a second call would be a second
         // setup, which Tauri does not run.
