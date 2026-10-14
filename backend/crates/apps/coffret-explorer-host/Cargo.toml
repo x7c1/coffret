@@ -13,17 +13,19 @@ publish.workspace = true
 # host answers a plain page saying the explorer is not in this binary.
 embed-web = ["dep:include_dir"]
 
-# The explorer's serving side, as a router a caller binds wherever it likes: the
-# page, and `/api` forwarded to the server with the key the server published. A
-# library beside the shells rather than a binary, because the process that will
-# bind it — the desktop app — starts the server too, and decides the port.
+# The explorer's serving side, as a router built around a socket its caller
+# bound: the page, `/auth` answered by the host itself, and `/api` forwarded to
+# the server with the key the server published, once a browser token admitted
+# it. A library beside the shells rather than a binary, because the process
+# that binds it — the desktop app — starts the server too, and decides the port.
 [dependencies]
 # Where a Library's directory is, and how a caller reads the key a server
 # published into it. Nothing below this crate is named directly: `make deps`
 # holds this crate to the same boundary as the other shells.
 coffret-device = { workspace = true }
 # The header name the server admits a caller by, taken from the crate that
-# reads it so that the two can never be spelled differently.
+# reads it so that the two can never be spelled differently, and the server's
+# own state, which says whether the Library it serves is locked.
 coffret-server = { workspace = true }
 
 axum = { workspace = true }
@@ -36,15 +38,25 @@ base64 = { workspace = true }
 futures-util = { workspace = true }
 # The operating system's CSPRNG, which every ticket and token is drawn from.
 getrandom = { workspace = true }
+# The connection the host answers on, configured to bound how much of a
+# request's head it reads and for how long (spec: LA-19).
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 include_dir = { workspace = true, optional = true }
 # The client `/api` is forwarded through. Already the workspace's HTTP client
 # (the Drive gateway's), and its `stream` feature is what carries a body through
 # in pieces rather than gathered: a drop onto a folder is tens of megabytes in
 # one request, and a file the explorer opens comes back the same way.
 reqwest = { workspace = true }
+# The JSON `/auth` reads and answers with.
+serde = { workspace = true }
+serde_json = { workspace = true }
 # The digest a ticket or a token is held as: never the credential itself
 # (spec: LA-20).
 sha2 = { workspace = true }
+# The accept loop the host answers in, and the deadline on reading a request to
+# `/auth` (spec: LA-19).
+tokio = { workspace = true }
 # A forwarded request that could not be sent, or an answer that broke off, is
 # met here and nowhere else; the person sees a `502`, and this says why.
 tracing = { workspace = true }
@@ -59,11 +71,11 @@ clap = { workspace = true }
 # The host's events read back as the log file would hold them, for the cases
 # that hold them to what an event may carry.
 coffret-logging = { workspace = true, features = ["testing"] }
-# The stub server answers with the headers it was sent, as JSON.
-serde_json = { workspace = true }
 # The key file a case's host reads, in a directory of the case's own.
 tempfile = { workspace = true }
-tokio = { workspace = true }
+# `test-util`, so that a case reaches the deadline on reading a request to
+# `/auth` by moving a paused clock rather than by waiting it out.
+tokio = { workspace = true, features = ["test-util"] }
 # `oneshot`, which drives the host's router as the service it is.
 tower = { workspace = true }
 # The example's diagnostics on its terminal: the host's warnings are events.

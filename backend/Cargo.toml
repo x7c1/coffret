@@ -97,6 +97,12 @@ getrandom = "0.4"
 glib = "0.18"
 hkdf = "0.13"
 http-body = "1"
+# The HTTP/1 server the explorer host answers on, already under axum, named
+# directly so that the host can bound what it reads of a request's head — its
+# size and how long it may take to arrive — which `axum::serve` does not expose
+# (spec: LA-19).
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
 # JPEG alone: the fixture generator encodes camera- and page-sized JPEGs and
 # reads nothing back. The default set adds every codec the crate has, and the
 # AVIF and EXR encoders among them bring their own dependency trees (rav1e,

@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use coffret_device::{LibraryDir, Passphrase};
+use coffret_explorer_host::credentials::{Credentials, SystemClock};
+use coffret_explorer_host::Config;
 use coffret_server::{Launch, ServerState, Serving, UnlockPrompt};
 use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
@@ -126,41 +128,46 @@ async fn serve(
          written to the Library; unlock it again from the explorer or from the tray icon."
     );
 
-    let host = coffret_explorer_host::router(coffret_explorer_host::Config::for_library(
-        server, &library,
-    ))?;
     // Loopback, for the reason the server's own socket is (spec: LA-1), and
     // any free port: nothing but this app ever needs to know the number, and
-    // it is the one that opens the browser on it.
+    // it is the one that opens the browser on it. Bound before the host is
+    // built, because the host answers only the authority it was built around,
+    // and that has to be the one actually bound (spec: LA-13).
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
         .context("nothing could listen for the explorer on 127.0.0.1")?;
     let address = listener
         .local_addr()
         .context("the address the explorer is served at could not be read")?;
+    // The handle that issues launch tickets stays with this app and is never
+    // handed to the host's routes (spec: LA-17). Nothing issues one yet, so
+    // the explorer's page loads but is admitted to no Library data.
+    let credentials = Credentials::new(Arc::new(SystemClock))
+        .context("the explorer's credentials could not be drawn")?;
+    let host = coffret_explorer_host::router(
+        &listener,
+        Config::for_library(server, &library, Arc::clone(&served)),
+        credentials.gate(),
+    )?;
     eprintln!("The explorer is at http://{address}/.");
 
-    let stopped = app.clone();
     tokio::spawn(async move {
         if let Err(error) = serving.serve().await {
-            stop(&stopped, "the server", &error);
+            stop(&app, &error);
         }
     });
-    tokio::spawn(async move {
-        if let Err(error) = axum::serve(listener, host).await {
-            stop(&app, "the explorer's host", &anyhow::Error::new(error));
-        }
-    });
+    // It answers for as long as the app runs, and tries again after a failure
+    // to accept rather than stopping.
+    tokio::spawn(coffret_explorer_host::serve(listener, host));
     Ok((address, served))
 }
 
-/// Ends the app because one of the two things it serves stopped.
+/// Ends the app because the server it serves stopped.
 ///
-/// An app whose server is gone has nothing to show, and one whose host is gone
-/// has nothing anybody can reach; either way the tray would be offering an
-/// explorer that is not there.
-fn stop(app: &AppHandle, what: &str, error: &anyhow::Error) {
-    eprintln!("{what} stopped: {error:#}");
-    tracing::error!("{what} stopped; coffret-desktop is ending");
+/// An app whose server is gone has nothing to show, and the tray would be
+/// offering an explorer that is not there.
+fn stop(app: &AppHandle, error: &anyhow::Error) {
+    eprintln!("the server stopped: {error:#}");
+    tracing::error!("the server stopped; coffret-desktop is ending");
     app.exit(1);
 }
