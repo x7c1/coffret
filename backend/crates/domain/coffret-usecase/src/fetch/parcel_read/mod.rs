@@ -94,10 +94,11 @@ pub(super) struct ParcelRead<'r> {
     pub(super) memory: Option<&'r FetchMemory>,
 }
 
-/// Whether [`translate::target_of`] refused an Entry for a reason no fetch
-/// ever places it under: unmapped, not current, a path no local file can stand
-/// for, or one colliding with another Entry's local path. Such an Entry is
-/// neither a companion nor waited for by a held parcel.
+/// Whether [`translate::target_of`](super::translate::target_of) refused an
+/// Entry for a reason no fetch ever places it under: unmapped, not current, a
+/// path no local file can stand for, or one colliding with another Entry's
+/// local path. Such an Entry is neither a companion nor waited for by a held
+/// parcel.
 fn never_placed(error: &FetchError) -> bool {
     matches!(
         error,

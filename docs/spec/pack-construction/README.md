@@ -155,13 +155,13 @@ Concept background: [Pack](../../concepts/pack/),
   - The front of the object — its header and meta section (FM-2) — is not part
     of any parcel. It is read on its own, is the same read for every Entry of
     the Container, and names no Entry.
-  - A range read holds what came back against the extent it asked for: an
-    answer of any other length — a provider that ignored the range and sent the
-    whole object, or one that stopped short — is refused rather than decoded,
-    and every chunk inside the range still authenticates on its own (FM-5,
-    FM-7, FM-8). A range the object's own plaintext stream does not reach names
-    no chunk and is refused as out of bounds rather than aimed at the end of
-    the object.
+  - A range read is one request for one byte range of the object. It checks
+    what came back against the extent it asked for: an answer of any other
+    length — a provider that ignored the range and sent the whole object, or
+    one that stopped short — is refused rather than decoded, and every chunk
+    inside the range still authenticates on its own (FM-5, FM-7, FM-8). A range
+    the object's own plaintext stream does not reach names no chunk and is
+    refused as out of bounds rather than aimed at the end of the object.
 - **PK-17.** One `freeze` invocation considers the files under the folders its
   request names. An update-eligible file (PK-11) outside them is outside the
   invocation's scope rather than one it passed over, and PK-14's surfacing

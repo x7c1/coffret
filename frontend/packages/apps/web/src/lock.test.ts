@@ -103,7 +103,8 @@ function returning() {
 // The way back. The Library locked under an open tab, everything it asked was
 // refused, and the Passphrase was given in the desktop app's own window. The
 // answer turning back to unlocked is where the tab asks everything again, so a
-// page that was refused comes back without anybody pressing *try again*.
+// page that was refused comes back without anybody asking for it again — the
+// locked page's one control is *unlock*, and the page does not wait on it.
 it('asks again when the answer turns from locked to unlocked', () => {
   expect(unlockLanded('locked', 'unlocked')).toBe(true);
 
