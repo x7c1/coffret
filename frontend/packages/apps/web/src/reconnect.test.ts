@@ -1,3 +1,5 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 
 import { Refusal, type Reconnecting, type ReconnectState } from '@coffret/api';
@@ -5,12 +7,17 @@ import { Refusal, type Reconnecting, type ReconnectState } from '@coffret/api';
 import {
   askToReconnect,
   consentLink,
+  flowOf,
   grantRenewed,
+  NO_TAB,
+  OPENED_ELSEWHERE,
+  openedElsewhere,
   offersReconnect,
   ranOut,
   reconnectLine,
   refusedAsRanOut,
 } from './reconnect';
+import { ReconnectOffer } from './ReconnectOffer';
 
 /** One press, with everything it reaches out to recorded. */
 function pressing(ask: () => Promise<Reconnecting>) {
@@ -108,17 +115,75 @@ it('reads a renewal landing as news once', () => {
   expect(grantRenewed('waiting', 'refused')).toBe(false);
 });
 
+// The name the work answer gives a waiting flow is the server's digest of its
+// page, and this side computes the same one over the page a press was answered
+// with. `c9ebbe11` is the name the gateway's `contract/work.json` carries for its
+// waiting sample, whose page is `https://consent.example/`: the two sides agree,
+// or no window's link ever matches its flow.
+it('names a consent page the way the server names its flow', () => {
+  expect(flowOf('')).toBe('811c9dc5');
+  expect(flowOf('https://consent.example/')).toBe('c9ebbe11');
+  expect(flowOf('https://consent.example/a')).not.toBe(flowOf('https://consent.example/b'));
+});
+
 // The page the press was answered with stays reachable as a link for as long
 // as the server is listening behind it, because a browser may have blocked the
 // tab the press opened and the button is gone while the flow waits.
 it('links to the consent page only while the flow waits on it', () => {
-  const at = (state: ReconnectState) => ({ state, message: `it is ${state}` });
   const page = 'https://consent.example/';
+  const at = (state: ReconnectState) =>
+    state === 'waiting'
+      ? { state, message: `it is ${state}`, flow: flowOf(page) }
+      : { state, message: `it is ${state}` };
 
   expect(consentLink(at('waiting'), page)).toBe(page);
   expect(consentLink(at('waiting'), null)).toBeNull();
   expect(consentLink(null, page)).toBeNull();
   for (const state of ['renewed', 'refused', 'timed_out', 'failed'] as const) {
     expect(consentLink(at(state), page)).toBeNull();
+    expect(openedElsewhere(at(state), page)).toBe(false);
   }
+  expect(openedElsewhere(at('waiting'), page)).toBe(false);
+  expect(openedElsewhere(at('waiting'), null)).toBe(false);
+});
+
+// One flow can end and another begin between two polls — a press in another
+// window — which reads `waiting` both times. The page this window was answered
+// with leads to a listener that has stopped by then, so the link to it goes,
+// and the line says the page now waiting was opened from another window; the
+// new page itself went to that window alone, and nothing here names it.
+it('drops the link once the flow waiting is not the one its page is on', () => {
+  const pressed = 'https://consent.example/a';
+  const other = 'https://consent.example/b';
+  const waiting = (page: string) => ({
+    state: 'waiting' as const,
+    message: 'it is waiting',
+    flow: flowOf(page),
+  });
+  const drawn = (page: string) =>
+    renderToStaticMarkup(
+      createElement(ReconnectOffer, {
+        offer: {
+          reconnect: waiting(page),
+          said: 'answer the consent page',
+          refused: null,
+          consentPage: pressed,
+          ask: () => undefined,
+        },
+      }),
+    );
+
+  expect(consentLink(waiting(pressed), pressed)).toBe(pressed);
+  expect(openedElsewhere(waiting(pressed), pressed)).toBe(false);
+  const before = drawn(pressed);
+  expect(before).toContain(`href="${pressed}"`);
+  expect(before).toContain(NO_TAB);
+  expect(before).not.toContain(OPENED_ELSEWHERE.replaceAll("'", '&#x27;'));
+
+  expect(consentLink(waiting(other), pressed)).toBeNull();
+  expect(openedElsewhere(waiting(other), pressed)).toBe(true);
+  const after = drawn(other);
+  expect(after).not.toContain(pressed);
+  expect(after).not.toContain(NO_TAB);
+  expect(after).toContain(OPENED_ELSEWHERE.replaceAll("'", '&#x27;'));
 });

@@ -545,6 +545,46 @@ async fn a_part_the_library_holds_inside_a_pack_is_refused_and_its_sibling_lands
     served.sync_idle().await;
 }
 
+// EP-16: the folder a desktop keeps its trash in directly under the mapped root
+// is no place to drop into, and the part is refused in its own words — the
+// folder is the desktop's trash, not a name coffret keeps — while a sibling
+// elsewhere in the same drop lands.
+#[tokio::test]
+async fn a_part_dropped_into_the_desktop_trash_is_refused_in_its_own_words() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    let (status, answer) = body_of(
+        served
+            .upload(
+                "",
+                &[(".Trash/x.jpg", b"binned"), ("albums/kept.jpg", b"in")],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer), ["albums/kept.jpg"]);
+    let refused = &answer["refused"][0];
+    assert_eq!(refused["name"], ".Trash/x.jpg");
+    assert_eq!(refused["error"], "declined");
+    assert_eq!(refused["reason"], "trash_folder");
+    let said = refused["message"]
+        .as_str()
+        .expect("a refusal carries a sentence");
+    assert!(said.contains("trash"), "{said}");
+    assert!(
+        !said.contains(".coffret"),
+        "the trash is not one of coffret's own names: {said}",
+    );
+    assert!(
+        !served.holds(".Trash/x.jpg"),
+        "nothing was written into the trash",
+    );
+    assert!(served.holds("albums/kept.jpg"));
+    served.sync_idle().await;
+}
+
 // EP-2: a part's own name is held to the same shape every other path on these
 // routes is, and a part that climbed out of the folder it was dropped on is
 // refused by the name it was sent under — there being no Entry Path to report it

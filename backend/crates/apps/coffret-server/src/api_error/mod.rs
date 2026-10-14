@@ -149,9 +149,11 @@ pub struct ApiError {
     /// `unmapped` for a folder this device has no folder for, and
     /// `pack_resident` for a file that would replace an Entry inside a Pack
     /// (spec: PK-10, PK-12), all three under `refused_placement`. A drop meets
-    /// `unmaterializable` and `reserved` under `declined` as well. Present
-    /// wherever the kind is `declined` or `refused_placement`, and the whole set
-    /// for the same reason.
+    /// `unmaterializable` and `reserved` under `declined` as well, and also
+    /// `trash_folder`, which only a drop meets: a file that would land in the
+    /// folder a desktop keeps its trash in directly under a mapped root
+    /// (spec: EP-16). Present wherever the kind is `declined` or
+    /// `refused_placement`, and the whole set for the same reason.
     ///
     /// And one that is not about a placement: `unauthenticated` under
     /// `storage`, for a credential Storage no longer takes — a grant that ran
@@ -183,9 +185,10 @@ pub struct ApiError {
     /// `KeyLost`, or `ReservedComponent`.
     ///
     /// Present where the reason is `surfaced` or `key_lost`, and absent where it
-    /// is `unmapped`, `unmaterializable`, `reserved`, `refused_root` or
-    /// `pack_resident` — refusals no finding stands behind, because each is
-    /// decided about the path or about a mapping rather than found at a place.
+    /// is `unmapped`, `unmaterializable`, `reserved`, `trash_folder`,
+    /// `refused_root` or `pack_resident` — refusals no finding stands behind,
+    /// because each is decided about the path or about a mapping rather than
+    /// found at a place.
     /// The set is named here for the reason the others are: it is what a browser
     /// telling one declined path from another branches on.
     surfaced: Option<&'static str>,

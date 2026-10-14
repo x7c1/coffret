@@ -453,6 +453,19 @@ fn from_fetch(cause: FetchError) -> ApiError {
              that does not carry the spelling",
             cause,
         ),
+        // A reason of its own rather than `reserved`, because that one's
+        // sentence is about names coffret keeps and this folder is the
+        // desktop's: its trash, which coffret keeps out of the Library
+        // (spec: EP-16). The folder's name stays out of the body the way any
+        // component of an Entry Path does, and the sentence names the shape of
+        // the names a desktop writes instead.
+        FetchError::TrashFolderComponent { .. } => ApiError::declined_as(
+            "trash_folder",
+            "that path lands in the folder the desktop keeps its trash in directly under a \
+             mapped root (`.Trash`, `.Trashes` or `.Trash-` and a number), which coffret \
+             keeps out of the Library: nothing in it is backed up",
+            cause,
+        ),
         FetchError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FetchError::ContainerUnreachable { .. } => storage_did_not_answer(cause.redacted()),
         FetchError::Commit(ref commit) => from_commit(commit, cause.redacted()),

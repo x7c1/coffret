@@ -1,10 +1,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Added } from '@coffret/api';
 
 import { PackConfirm } from './PackConfirm';
-import type { DropSummary } from './packChoice';
+import type { DropSummary, HeldFiles } from './packChoice';
 import { NO_NUMBERING } from './renumber';
 
 afterEach(() => {
@@ -106,4 +106,51 @@ it('remembers a ticked box for the next drop', () => {
   render(<PackConfirm summary={BOOK} files={FILES} onChoose={() => undefined} />);
   expect(screen.getByLabelText<HTMLInputElement>('Number the volume folders').checked).toBe(true);
   expect(screen.getByLabelText<HTMLInputElement>('Number the pages').checked).toBe(false);
+});
+
+// PK-10: where a dropped path already holds a file of the Library, the question
+// says so before anything is sent — how many are replaced, naming the first
+// few, and how many a Pack refuses. Where nothing collides it says no more than
+// it did.
+describe('what a drop onto a folder of the same name replaces', () => {
+  const EXISTING: DropSummary = { ...BOOK, folders: [{ ...BOOK.folders[0], exists: true }] };
+
+  it('says nothing more where no dropped path is held', () => {
+    const held: HeldFiles = new Map([['BookX/elsewhere.jpg', 'one-file']]);
+    render(<PackConfirm summary={EXISTING} files={FILES} held={held} onChoose={() => undefined} />);
+    const said = screen.getByRole('dialog').textContent ?? '';
+    expect(said).toContain('BookX already exists here');
+    expect(said).not.toContain('in this drop replace');
+    expect(said).not.toContain('refused, because');
+  });
+
+  it('names the files that replace one-file Entries', () => {
+    const held: HeldFiles = new Map([
+      ['BookX/cover.png', 'one-file'],
+      ['BookX/king01-#001.JPG', 'one-file'],
+    ]);
+    render(<PackConfirm summary={EXISTING} files={FILES} held={held} onChoose={() => undefined} />);
+    const said = screen.getByRole('dialog').textContent ?? '';
+    expect(said).toContain(
+      '2 files in this drop replace the files the Library already has at the same path: ' +
+        'BookX/king01-#001.JPG, BookX/cover.png',
+    );
+    expect(said).not.toContain('refused, because');
+  });
+
+  it('says how many a Pack refuses beside the ones replaced, for the paths the drop is sent under', () => {
+    const held: HeldFiles = new Map([
+      ['BookX/cover.png', 'one-file'],
+      ['BookX/001.jpg', 'pack'],
+      ['BookX/002.jpg', 'pack'],
+    ]);
+    render(<PackConfirm summary={EXISTING} files={FILES} held={held} onChoose={() => undefined} />);
+    expect(screen.getByRole('dialog').textContent).not.toContain('refused, because');
+
+    // Numbered, two pages land on paths a Pack holds.
+    fireEvent.click(screen.getByLabelText('Number the pages'));
+    const said = screen.getByRole('dialog').textContent ?? '';
+    expect(said).toContain('1 file in this drop replaces the file the Library already has');
+    expect(said).toContain('2 files are refused, because a Pack holds the file at that path');
+  });
 });
