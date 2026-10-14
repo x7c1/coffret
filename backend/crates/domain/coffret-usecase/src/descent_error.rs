@@ -15,9 +15,8 @@ use crate::root_refused::RootRefused;
 /// recorded and so the one that needs a word for a root that is not the recorded
 /// one. No other step holds a root that way — a look places nothing, and a
 /// placement's own calls are made against the folder that reach left open — so
-/// they fail in [`BelowRootError`](crate::BelowRootError) instead, which is
-/// these same two ways about the path without the two that only the root's own
-/// question raises.
+/// they fail in [`BelowRootError`] instead, which is these same two ways about
+/// the path without the two that only the root's own question raises.
 ///
 /// The two writers that share the capability each say what a refusal means in
 /// their own words, and a reach is made where there is no run to go on with —
@@ -27,8 +26,7 @@ use crate::root_refused::RootRefused;
 /// for both of them. Neither invents a second spelling for what the descent
 /// found (spec: EP-4). A folder fetch meets the same fence one call earlier,
 /// while its selection is deciding where it may write, and that call is a look:
-/// it answers in [`BelowRootError`](crate::BelowRootError), and the Entry is
-/// reported as
+/// it answers in [`BelowRootError`], and the Entry is reported as
 /// [`Surfaced::UnreachablePlace`](crate::fetch::Surfaced::UnreachablePlace) with
 /// the rest of the run placed.
 ///
@@ -226,11 +224,11 @@ impl From<BelowRootError> for DescentError {
     /// each of them as it stands rather than folding it into a refusal of its
     /// own. What the two say of themselves then differs by exactly one layer.
     /// [`Blocked`](Self::Blocked) is word for word the sentence
-    /// [`BelowRootError::Blocked`](crate::BelowRootError::Blocked) writes,
-    /// because a name that is not a folder of the mapped root is the same
-    /// verdict wherever the walk met it. [`Io`](Self::Io) has a sentence of its
-    /// own, because the layers are not the same place: this one is a step of a
-    /// descent, and the one it came from a step below a root already reached.
+    /// [`BelowRootError::Blocked`] writes, because a name that is not a folder
+    /// of the mapped root is the same verdict wherever the walk met it.
+    /// [`Io`](Self::Io) has a sentence of its own, because the layers are not
+    /// the same place: this one is a step of a descent, and the one it came
+    /// from a step below a root already reached.
     /// The [`LocalIoError`] under either travels untouched all the same, so what
     /// the disk said is never spelled a second time.
     fn from(refused: BelowRootError) -> Self {
