@@ -61,7 +61,8 @@ pub enum LocalOperation {
     /// A spool file whose Container was committed or abandoned, a scratch a
     /// local writer never published, or the staging directory an interrupted
     /// attempt at putting a Library on this device left, was being deleted
-    /// (spec: OC-8, EP-11).
+    /// (spec: OC-8, EP-11) — or a folder under a mapped root that a sync's
+    /// moves to the trash had left with nothing in it (spec: EP-15).
     Removing,
     /// A file a deleted Entry left on this device unedited was being moved to
     /// the desktop's own trash (spec: EP-15).

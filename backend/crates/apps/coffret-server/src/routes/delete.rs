@@ -189,7 +189,7 @@ pub(super) struct RefusedPackDto {
     /// `key_lost` or `unverified`.
     reason: &'static str,
     /// The sentence to show beside the files that stayed.
-    message: &'static str,
+    message: String,
 }
 
 impl RefusedPackDto {

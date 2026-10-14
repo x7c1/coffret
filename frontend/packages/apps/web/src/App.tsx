@@ -24,7 +24,8 @@ import { DeleteConfirm } from './DeleteConfirm';
 import {
   askToDelete,
   deletedLine,
-  targetName,
+  refusedNotice,
+  type DeleteNotice,
   type DeleteQuestion,
 } from './deleteEntries';
 import { askToAdd, overBudgetLine } from './dropped';
@@ -47,7 +48,7 @@ import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
-import { Region } from './Region';
+import { Region, TRY_AGAIN } from './Region';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { useRunReloads } from './runReloads';
@@ -74,7 +75,14 @@ export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
   const [fetching, setFetching] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // A deletion's notice may carry the target a *try again* beside it asks about
+  // again (see [`DeleteNotice`](./deleteEntries)); every other notice is a
+  // sentence alone, set through `setNotice`.
+  const [shownNotice, showNotice] = useState<DeleteNotice | null>(null);
+  const setNotice = useCallback(
+    (text: string | null) => showNotice(text === null ? null : { text, retry: null }),
+    [],
+  );
 
   // The back and forward buttons are the browser's, and this is all it takes to
   // honour them: wherever the URL says the screen is, is where it is.
@@ -685,16 +693,18 @@ export function App() {
     [deleteAsking],
   );
   // A second press while the first is still being counted is dropped, for the
-  // reason a second "Pack this folder…" is.
+  // reason a second "Pack this folder…" is. Whether this press was taken is
+  // returned, so a *try again* dropped this way leaves its notice standing to be
+  // pressed once that count is over, rather than clearing it for nothing.
   const deletePressed = useRef(false);
   // Whether this tab has armed a deletion, which is what makes the end of one
   // news here: a page that comes up to a deletion somebody else finished has
   // nobody waiting on its sentence.
   const deletedHere = useRef(false);
   const deleteEntries = useCallback(
-    (target: DeleteTarget) => {
+    (target: DeleteTarget): boolean => {
       if (deletePressed.current) {
-        return;
+        return false;
       }
       deletePressed.current = true;
       void askToDelete({
@@ -706,10 +716,11 @@ export function App() {
           deletedHere.current = true;
           follow();
         },
-        refuse: (cause) => setNotice(`${targetName(target)} was not deleted — ${said(cause)}`),
+        refuse: (cause) => showNotice(refusedNotice(target, cause, said(cause))),
       }).finally(() => {
         deletePressed.current = false;
       });
+      return true;
     },
     [askAboutDeleting, follow],
   );
@@ -732,7 +743,7 @@ export function App() {
     reloadFolders();
     if (deletedHere.current && announced.current !== ended.run) {
       announced.current = ended.run;
-      setNotice(deletedLine(ended));
+      showNotice(deletedLine(ended));
     }
   }, [deleted, reloadListing, reloadFolders]);
 
@@ -977,7 +988,7 @@ export function App() {
               reader is told rather than in the grey of the columns, because a
               gesture that was made and answered by nothing else is where a
               sentence has to be noticed to be of any use. */}
-          {notice !== null && (
+          {shownNotice !== null && (
             <p
               style={{
                 margin: 0,
@@ -987,7 +998,23 @@ export function App() {
                 fontSize: 13,
               }}
             >
-              {notice}
+              {shownNotice.text}
+              {shownNotice.retry !== null && (
+                <>
+                  {' '}
+                  <button
+                    onClick={() => {
+                      const again = shownNotice.retry;
+                      if (again !== null && deleteEntries(again)) {
+                        showNotice(null);
+                      }
+                    }}
+                    style={NOTICE_BUTTON}
+                  >
+                    {TRY_AGAIN}
+                  </button>
+                </>
+              )}
             </p>
           )}
           <Region state={listing.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
@@ -1108,3 +1135,14 @@ export function App() {
 function inFront(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
 }
+
+/** The *try again* a deletion's notice offers beside its sentence. */
+const NOTICE_BUTTON = {
+  border: `1px solid ${COLOR.border}`,
+  background: COLOR.panel,
+  color: COLOR.text,
+  font: 'inherit',
+  padding: '0 8px',
+  borderRadius: 4,
+  cursor: 'pointer',
+};

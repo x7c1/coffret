@@ -64,6 +64,54 @@ impl State {
         Ok(())
     }
 
+    /// Removes one folder below a vouched root if nothing at all is in it
+    /// (spec: EP-13, EP-15).
+    ///
+    /// The real one's order and answers: the root and its marker, every folder
+    /// on the way down, and then the folder itself, which is removed only where
+    /// nothing stands beneath it. A folder that is not there, or that holds
+    /// something, is `false`; a name on the way or at the folder that is not a
+    /// folder is the fence a symbolic link is on a real disk.
+    pub(in crate::in_memory_fs) fn remove_emptied_folder(
+        &mut self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError> {
+        if !self.is_dir(root) {
+            return Err(DescentError::Io(LocalIoError::new(
+                LocalOperation::Stating,
+                root,
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "the mapped root is not a folder here",
+                ),
+            )));
+        }
+        self.vouch(root, expected)?;
+
+        let mut folder = root.to_path_buf();
+        for step in relative.components() {
+            folder.push(step);
+            if self.is_dir(&folder) {
+                continue;
+            }
+            if self.holds(&folder) {
+                return Err(DescentError::Blocked { stopped_at: folder });
+            }
+            return Ok(false);
+        }
+        let inside = |held: &PathBuf| held.parent() == Some(folder.as_path());
+        let occupied = self.dirs.iter().any(inside)
+            || self.files.keys().any(inside)
+            || self.others.iter().any(inside);
+        if occupied {
+            return Ok(false);
+        }
+        self.dirs.remove(&folder);
+        Ok(true)
+    }
+
     /// Everything the fake's trash has taken, in the order it took it.
     pub(in crate::in_memory_fs) fn moved_to_trash(&self) -> Vec<PathBuf> {
         self.moved_to_trash.clone()

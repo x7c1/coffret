@@ -10,6 +10,7 @@ use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
 use crate::sync::departed::Departed;
 use crate::sync::disposal::Disposal;
+use crate::sync::emptied_folders::EmptiedFolders;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
@@ -135,10 +136,20 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     for path in std::mem::take(&mut survey.forgotten) {
         index.forget_local_entry(&path).await?;
     }
+    let mut emptied = EmptiedFolders::default();
     for departed in std::mem::take(&mut survey.departed) {
+        let root = departed.source.root.clone();
+        let expected = departed.expected;
+        let relative = departed.source.relative.clone();
         let surfaced = move_departed_to_trash(index, trash, departed).await?;
+        if matches!(surfaced, Surfaced::MovedToTrash { .. }) {
+            emptied.moved(&root, expected, &relative);
+        }
         survey.surfaced.push(surfaced);
     }
+    // Once every move is made, so a folder several departed files stood in is
+    // asked about after the last of them left it.
+    emptied.remove(trash).await;
     local.prepare_dir(&spool_dir).await?;
 
     // The scan has just said how much there is to do, and the encoding is the

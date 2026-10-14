@@ -59,4 +59,34 @@ pub trait LocalTrash: Send + Sync {
         expected: Option<&RootMarkerId>,
         relative: &MappedRelativeLocation,
     ) -> Result<(), DescentError>;
+
+    /// Removes the folder at `relative` below `root` if it holds nothing at
+    /// all, and answers whether it did.
+    ///
+    /// What a sync asks of each folder its moves to the trash may have emptied
+    /// (spec: EP-15). Only a folder with nothing in it is removed — no file, no
+    /// folder, no dotfile — and the check and the removal are one step, so a
+    /// file that arrives in between keeps the folder. A folder that still holds
+    /// something, or that is not there at all, is `Ok(false)`: neither is a
+    /// refusal. The sync still asks each folder above it, and the same check
+    /// decides each: one above a folder that stayed holds it and stays too.
+    /// The root itself is never asked about; `relative` names at least one
+    /// folder below it.
+    ///
+    /// The same descent as [`move_to_trash`](Self::move_to_trash), for the
+    /// same reason: removing a folder is a write into the mapped folder.
+    ///
+    /// # Errors
+    ///
+    /// The vocabulary [`move_to_trash`](Self::move_to_trash) answers in, with
+    /// [`Removing`](crate::LocalOperation::Removing) where the step was the
+    /// removal itself; a name on the way down or at `relative` that is not a
+    /// real folder — a symbolic link among them — is
+    /// [`DescentError::Blocked`], and is never followed.
+    async fn remove_emptied_folder(
+        &self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError>;
 }

@@ -102,6 +102,9 @@ mod candidate;
 
 mod departed;
 
+// The folders a run's moves to the trash emptied (spec: EP-15).
+mod emptied_folders;
+
 mod disposal;
 pub use disposal::Disposal;
 

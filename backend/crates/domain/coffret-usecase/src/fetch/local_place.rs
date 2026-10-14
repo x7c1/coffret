@@ -91,11 +91,16 @@ impl LocalPlace {
     /// top-level mapping's prefix is not a folder on this disk, so the folder
     /// at the root's top is the first component past it.
     pub(super) fn trash_folder(&self) -> Option<PathBuf> {
+        self.trash_folder_name().map(|top| self.root.join(top))
+    }
+
+    /// The same folder's name alone, which a drop refused for landing in it
+    /// names as the component to change (spec: EP-16).
+    pub fn trash_folder_name(&self) -> Option<&str> {
         self.relative
             .text_components()
             .next()
             .filter(|top| trash_folders::is_trash_folder(top))
-            .map(|top| self.root.join(top))
     }
 
     /// A reader over this mapped file, reached without following a descendant

@@ -59,6 +59,12 @@ struct Device {
 }
 
 async fn device() -> Device {
+    device_mapped_at(None).await
+}
+
+/// The same device, with its one mapping standing for the Library folder
+/// `prefix` rather than the Library root (spec: EP-9).
+async fn device_mapped_at(prefix: Option<&str>) -> Device {
     let held = TempDir::new().expect("a temporary directory must be available");
     let root = held.path().join("mapped");
     let elsewhere = held.path().join("elsewhere");
@@ -72,7 +78,7 @@ async fn device() -> Device {
     let expected = register_root(&root);
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping::new(None, root.clone()).expecting(expected))
+        .set_mapping(Mapping::new(prefix.map(entry_path), root.clone()).expecting(expected))
         .await
         .expect("recording a mapping must succeed");
 
@@ -581,6 +587,96 @@ async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
         1,
         "and the folder holds what it held: the management area and nothing else",
     );
+}
+
+/// A folder a desktop keeps its trash in at the top of the mapped root is
+/// neither listed nor dropped into, and the refusal is the one the scratch
+/// prefix gets (spec: EP-16).
+///
+/// A scan never enters such a folder, so a file dropped there would sit in the
+/// mapped folder and never be carried in, and a folder named in the listing
+/// would offer a place nothing in it belongs to. Only at the top of the root:
+/// the same name deeper down is the person's own folder.
+#[tokio::test]
+async fn a_desktop_trash_folder_at_the_top_of_the_root_is_kept_out() {
+    let device = device().await;
+    std::fs::create_dir_all(device.root.join(".Trash").join("files"))
+        .expect("making a folder must succeed");
+    std::fs::write(device.root.join(".Trash").join("spring.jpg"), DROPPED)
+        .expect("writing a file must succeed");
+    std::fs::create_dir_all(device.root.join("albums").join(".Trash"))
+        .expect("making a folder must succeed");
+
+    let listed = device
+        .library
+        .added_locally(None)
+        .await
+        .expect("reading the mapped root must succeed");
+    assert_eq!(
+        listed.folders,
+        ["albums"],
+        "the trash folder at the top of the root is not named",
+    );
+    let inside = device
+        .library
+        .added_locally(Some(&entry_path(".Trash")))
+        .await
+        .expect("a trash folder is an empty answer and not a refusal");
+    assert!(
+        inside.is_empty(),
+        "nothing in the trash is an addition: {inside:?}"
+    );
+    let deeper = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect("reading a mapped folder must succeed");
+    assert_eq!(
+        deeper.folders,
+        [".Trash"],
+        "the same name deeper down is the person's"
+    );
+
+    let refused = drop_file(&device.library, ".Trash/x.jpg")
+        .await
+        .expect_err("an upload into a trash folder must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        (".Trash/x.jpg".to_owned(), ".Trash".to_owned()),
+    );
+    assert!(
+        !device.root.join(".Trash").join("x.jpg").exists(),
+        "nothing was written into the trash",
+    );
+    drop_file(&device.library, "albums/.Trash/x.jpg")
+        .await
+        .expect("a folder of that name deeper down takes a drop");
+}
+
+/// Under a mapping that stands for a Library folder, the trash folder is still
+/// the first component under the *root*: the prefix is no folder on this disk
+/// (spec: EP-9, EP-16).
+#[tokio::test]
+async fn under_a_mapping_prefix_the_trash_folder_is_the_first_component_under_the_root() {
+    let device = device_mapped_at(Some("lib")).await;
+    std::fs::create_dir_all(device.root.join(".Trashes")).expect("making a folder must succeed");
+    std::fs::create_dir_all(device.root.join("albums")).expect("making a folder must succeed");
+
+    let listed = device
+        .library
+        .added_locally(Some(&entry_path("lib")))
+        .await
+        .expect("reading the mapped root must succeed");
+    assert_eq!(listed.folders, ["albums"]);
+
+    let refused = drop_file(&device.library, "lib/.Trashes/x.jpg")
+        .await
+        .expect_err("an upload into a trash folder must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        ("lib/.Trashes/x.jpg".to_owned(), ".Trashes".to_owned()),
+    );
+    assert!(!device.root.join(".Trashes").join("x.jpg").exists());
 }
 
 /// Nothing under the device's own management area is listed as a local file.

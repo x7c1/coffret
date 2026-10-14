@@ -981,7 +981,7 @@ it('gives the line to whichever run finished last', () => {
   expect(added).not.toContain('packed');
 
   const deleted = draw({ freeze, sync, deletion, finished: ['delete', 'sync', 'freeze'] });
-  expect(deleted).toContain(deletedLine(deletion) ?? 'a deletion line');
+  expect(deleted).toContain(deletedLine(deletion)?.text ?? 'a deletion line');
   expect(deleted).not.toContain('added 1 file');
   // And it is put away like any other finished run's line, which gives the
   // line back to the one that finished before it.

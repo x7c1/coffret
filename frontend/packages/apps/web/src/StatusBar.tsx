@@ -630,7 +630,9 @@ function lineOf(flow: TurnTaker, turns: Turns): { text: string; colour: string }
       if (run === null) {
         return null;
       }
-      const text = run.status === 'deleting' ? deletingLine(run, waits) : deletedLine(run);
+      // The bar has no *try again* beside it, so it takes the sentence alone.
+      const text =
+        run.status === 'deleting' ? deletingLine(run, waits) : (deletedLine(run)?.text ?? null);
       return shown(
         text,
         toneOf(run.status, run.findings.length + run.refused.length + run.missing.length),
