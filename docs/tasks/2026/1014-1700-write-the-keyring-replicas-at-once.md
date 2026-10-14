@@ -74,6 +74,6 @@ Tests:
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (Drive), freeze one 300-page book and compare the
+- [x] On the agent's Library (Drive), freeze one 300-page book and compare the
       time from the first replica write to the head write in the server or
       CLI log with the earlier measurement (about 7 s for three replicas)
