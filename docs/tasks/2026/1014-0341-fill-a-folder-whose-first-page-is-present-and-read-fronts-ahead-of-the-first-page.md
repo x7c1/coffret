@@ -119,7 +119,7 @@ so the fixture matches the answer's shape.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library, second device (`.tmp/agent/up.sh 2`, headless
+- [x] On the agent's Library, second device (`.tmp/agent/up.sh 2`, headless
       Chromium): with `lib/book-000` not yet read, list the folder, wait two
       seconds, open page one, and the server log shows one parcel read and
       no front read for that open; open page one of a folder whose first
