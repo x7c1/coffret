@@ -24,9 +24,10 @@
 //!    post-commit Container set, write every replica, and read every one of
 //!    them back: no commit happens until that candidate set is complete
 //!    (spec: CP-8, CP-9, KL-2, KL-14).
-//! 5. **Commit.** Reserve the slots, re-read the head, and consume the commit
-//!    slot with the Journal record. Creating that object is the batch's commit
-//!    point (spec: CP-1, CP-2, CP-3, CP-16).
+//! 5. **Commit.** Reserve the two slots the new record carries, re-read the
+//!    head, and consume the commit slot that head carries with the Journal
+//!    record. Creating that object is the batch's commit point
+//!    (spec: CP-1, CP-2, CP-3, CP-15, CP-16).
 //! 6. **Rebase on a conflict.** A consumed slot is a normal outcome, not a
 //!    failure: the flow catches up onto the new head and starts again, capped at
 //!    [`CommitPolicy::attempts`] (spec: CP-4, CP-7).

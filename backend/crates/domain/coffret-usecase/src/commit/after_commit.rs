@@ -17,6 +17,7 @@ use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
 use crate::commit::untrashed_removal::UntrashedRemoval;
 use crate::commit_slot::CommitSlot;
+use crate::control_head::ControlHead;
 use crate::error::Error;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -87,20 +88,24 @@ pub(super) async fn trash_removals(
 /// the newest checkpoint. A Snapshot is not written after every commit — a
 /// commit pays for its own batch, never for the whole Library's Index.
 ///
-/// It goes into the one slot the record reserved for it and nowhere else
-/// (spec: CK-10, CP-15). Losing that conditional create is not a failure: two
-/// Snapshots of one head are the same checkpoint, so a valid Snapshot of this
-/// head already there answers it (spec: CK-11). Anything else at the slot is
-/// reported and neither overwritten nor written under another name, because a
-/// second name for one head would leave readers two checkpoints to choose
-/// between.
+/// It goes into the one slot the record carries for it and nowhere else
+/// (spec: CK-10, CP-15): the identifier in the record's `snapshot_slot` where
+/// the Storage mints identifiers, and the name `idx-<generation>` re-derived
+/// from the record's generation where it does not. Consuming what the record
+/// carries, rather than a reservation of this device's own, is what makes every
+/// device that checkpoints this head aim at one object.
+///
+/// Losing that conditional create is not a failure: two Snapshots of one head
+/// are the same checkpoint, so a valid Snapshot of this head already there
+/// answers it (spec: CK-11). Anything else at the slot is reported and neither
+/// overwritten nor written under another name, because a second name for one
+/// head would leave readers two checkpoints to choose between.
 pub(super) async fn write_checkpoint(
     store: &dyn ObjectStore,
     index: &dyn Index,
     keys: &ControlKeys,
     policy: &CommitPolicy,
     record: &JournalRecord,
-    slot: &CommitSlot,
     newest_checkpoint: Option<Generation>,
 ) -> CheckpointOutcome {
     let uncovered = match newest_checkpoint {
@@ -118,7 +123,8 @@ pub(super) async fn write_checkpoint(
         return CheckpointOutcome::NotDue;
     }
 
-    match checkpoint(store, index, keys, policy, record, slot).await {
+    let slot = ControlHead::at(record.generation()).snapshot_slot(record.snapshot_slot());
+    match checkpoint(store, index, keys, policy, record, &slot).await {
         Ok(outcome) => outcome,
         Err(cause) => {
             warn!(

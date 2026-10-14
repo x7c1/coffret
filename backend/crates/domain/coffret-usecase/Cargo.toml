@@ -15,7 +15,8 @@ publish.workspace = true
 # `Index`, `sync_conformance` for the folder sync over those two plus the
 # mapped folders, `freeze_conformance` for packing those folders into Packs
 # instead, and `fetch_conformance` for the journey back — together with the
-# `InMemoryStore`, `InMemoryIndex`, and `InMemoryFs` they run against. Off by
+# `InMemoryStore`, `InMemoryIndex`, and `InMemoryFs` they run against, and the
+# `InMemoryMintingStore` the commit suite runs against once more. Off by
 # default: only a gateway's test target needs them, and a shipping binary
 # should not carry the contract tests of the ports and capabilities it uses.
 conformance = []

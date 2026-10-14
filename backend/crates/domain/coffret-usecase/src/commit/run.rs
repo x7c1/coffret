@@ -145,8 +145,16 @@ async fn attempt_until_committed(
 
         super::pending_provenance::mark_attempt(index, &batch).await?;
 
-        let Attempted::Committed(landed) =
-            journal::commit(store, keys, &policy, &caught, commitment, &batch).await?
+        let Attempted::Committed(landed) = journal::commit(
+            store,
+            keys,
+            &policy,
+            &caught,
+            committed.as_ref(),
+            commitment,
+            &batch,
+        )
+        .await?
         else {
             debug!(
                 attempt,
@@ -173,7 +181,6 @@ async fn attempt_until_committed(
             keys,
             &policy,
             &landed.record,
-            &landed.snapshot_slot,
             caught.newest_checkpoint,
         )
         .await;
