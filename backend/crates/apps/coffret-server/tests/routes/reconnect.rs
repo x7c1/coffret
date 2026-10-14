@@ -141,6 +141,36 @@ async fn a_locked_server_refuses_a_reconnect() {
     assert_eq!(served.consent.asked(), 0);
 }
 
+// A Library on S3 reaches its Storage through no grant, so there is nothing a
+// consent page could renew. The explorer offers no reconnect for one, and a
+// press that reaches the route anyway is refused as a conflict with the
+// Library's own Storage — with no flow started, and nothing on record for the
+// page to wait on.
+#[tokio::test]
+async fn a_library_on_s3_has_nothing_to_reconnect() {
+    let served = Served::on_s3().await;
+
+    let (status, refusal) = body_of(served.post("/api/reconnect").await).await;
+    assert_eq!(status, 409, "{refusal}");
+    assert_eq!(refusal["error"], "bad_request");
+    assert!(
+        refusal.get("reason").is_none(),
+        "no reason a page could offer a gesture from: {refusal}",
+    );
+    assert!(
+        refusal["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("nothing to reconnect")),
+        "{refusal}",
+    );
+    assert_eq!(served.consent.asked(), 0, "no consent flow was started");
+    assert_eq!(
+        work(&served).await["reconnect"],
+        Value::Null,
+        "nothing reconnected or waiting",
+    );
+}
+
 // A flow waiting on its consent page is work over the Library's keys, so the
 // idle interval does not run out under it (spec: DK-4) — a person who switched
 // to the consent tab is somebody being here. And it holds them only while it

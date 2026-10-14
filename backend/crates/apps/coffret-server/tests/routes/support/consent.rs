@@ -14,6 +14,12 @@ pub const CONSENT_PAGE: &str = "https://consent.example/?state=the-flows-own";
 /// coming back to the loopback listener, the token endpoint's answer and the
 /// grant cached. What it keeps is the shape the server relies on — the page is
 /// shown before the flow waits, and the flow ends exactly once, however it ends.
+///
+/// And the one decision the shipped flow makes before any of that: a Library
+/// that reaches its Storage through no grant has no flow to start. The shipped
+/// flow reads that from the Library's Drive grant, which only opening a real
+/// account builds; here it is read from the provider the Library says it is
+/// on, which is Drive exactly where a grant is held.
 #[derive(Default)]
 pub struct ScriptedConsent {
     asked: AtomicUsize,
@@ -43,9 +49,12 @@ impl ScriptedConsent {
 impl Consent for ScriptedConsent {
     fn ask(
         &self,
-        _library: &OpenLibrary,
+        library: &OpenLibrary,
         show: Box<dyn FnOnce(&str) + Send>,
     ) -> Option<ConsentFlow> {
+        if library.provider != "drive" {
+            return None;
+        }
         self.asked.fetch_add(1, Ordering::SeqCst);
         let (ending, ended) = oneshot::channel();
         *self

@@ -151,6 +151,9 @@ pub struct Served {
     /// How long a parcel the served device reads is, so an unlock reopens the
     /// Library reading the same ones.
     parcel_len: coffret_format::ParcelLen,
+    /// Which provider the served Library says it is on, so an unlock reopens
+    /// it on the same one.
+    provider: &'static str,
 }
 
 impl Served {
@@ -226,6 +229,23 @@ impl Served {
             Allowance::generous(),
             false,
             coffret_format::ParcelLen::new(len),
+            SERVED_PROVIDER,
+        )
+        .await
+        .started()
+        .await
+    }
+
+    /// A server over a device that maps the whole Library, with the Library on
+    /// S3 rather than Drive, so it holds no grant a reconnect could renew.
+    pub async fn on_s3() -> Self {
+        Self::mapping_with(
+            None,
+            false,
+            Allowance::generous(),
+            false,
+            SERVED_PARCEL_LEN,
+            "s3",
         )
         .await
         .started()
@@ -249,7 +269,15 @@ impl Served {
         allowance: Allowance,
         prompting: bool,
     ) -> Self {
-        Self::mapping_with(prefix, packed, allowance, prompting, SERVED_PARCEL_LEN).await
+        Self::mapping_with(
+            prefix,
+            packed,
+            allowance,
+            prompting,
+            SERVED_PARCEL_LEN,
+            SERVED_PROVIDER,
+        )
+        .await
     }
 
     async fn mapping_with(
@@ -258,6 +286,7 @@ impl Served {
         allowance: Allowance,
         prompting: bool,
         parcel_len: coffret_format::ParcelLen,
+        provider: &'static str,
     ) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
@@ -346,6 +375,7 @@ impl Served {
             spools.path(),
             SERVED_LIBRARY,
             parcel_len,
+            provider,
         );
 
         let consent = Arc::new(ScriptedConsent::default());
@@ -379,6 +409,7 @@ impl Served {
             consent,
             prompted,
             parcel_len,
+            provider,
         }
     }
 
@@ -413,6 +444,7 @@ impl Served {
             self.spools.path(),
             library_id,
             self.parcel_len,
+            self.provider,
         ))
     }
 
@@ -531,6 +563,13 @@ pub const SERVED_PARCEL_LEN: coffret_format::ParcelLen =
         None => panic!("one mebibyte is not zero"),
     });
 
+/// The provider the served Library is on, unless a case says otherwise.
+///
+/// Drive, because only a Drive Library holds a grant a reconnect could renew;
+/// [`ScriptedConsent`] stands in for that grant, since a `DriveGrant` is only
+/// ever built by opening a real account.
+const SERVED_PROVIDER: &str = "drive";
+
 /// The Library the served device opens, by the identity it was created with.
 const SERVED_LIBRARY: [u8; LibraryId::BYTE_LEN] = [0x11; LibraryId::BYTE_LEN];
 
@@ -543,6 +582,7 @@ fn opened(
     spools: &Path,
     library_id: [u8; LibraryId::BYTE_LEN],
     parcel_len: coffret_format::ParcelLen,
+    provider: &'static str,
 ) -> OpenLibrary {
     OpenLibrary {
         store: Arc::clone(reads) as Arc<dyn ObjectStore>,
@@ -554,7 +594,7 @@ fn opened(
         parcel_len,
         library_id: LibraryId::from_bytes(library_id),
         epoch: MasterKeyEpoch::FIRST,
-        provider: "s3",
+        provider,
         grant: None,
         births: Default::default(),
         fetch_memory: Default::default(),

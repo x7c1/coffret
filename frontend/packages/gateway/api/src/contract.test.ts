@@ -868,7 +868,7 @@ it('reads every other answer the server sends through its type', () => {
   expect(uploadOf(answers.uploads.written)).toEqual(uploads.written);
   expect(uploadOf(answers.uploads.refused)).toEqual(uploads.refused);
 
-  expect(library.provider).toBe('s3');
+  expect(library.provider).toBe('drive');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
   expect(reconnecting.url.length).toBeGreaterThan(0);
