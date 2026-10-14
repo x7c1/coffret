@@ -1,6 +1,6 @@
 //! The explorer's host on a port of its own, in front of a server that is
-//! already running: what the desktop app will do in-process, runnable today
-//! against `make dev`'s server.
+//! already running: what the desktop app does in-process, runnable against
+//! `make dev`'s server.
 //!
 //! ```text
 //! make web-dist
@@ -17,13 +17,20 @@
 //! directory, whose key the server under `make dev` does not accept. The path
 //! printed as this starts is the file it reads, to set beside the one the server
 //! printed.
+//!
+//! The host admits a browser only by a browser token, which a page gets by
+//! exchanging a launch ticket the process that owns the host issues
+//! (spec: LA-17). This example issues none, so its page loads but reads no
+//! Library data.
 
 use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
 use coffret_device::LibraryDir;
-use coffret_explorer_host::{router, Config};
+use coffret_explorer_host::credentials::{Credentials, SystemClock};
+use coffret_explorer_host::{router, serve, Config, KeyFile, LibraryLock};
 
 #[derive(Parser)]
 struct Args {
@@ -38,6 +45,17 @@ struct Args {
     port: u16,
 }
 
+/// A server in another process, whose lock this one cannot see: the host
+/// forwards as though it were unlocked, and the server's own custody of the
+/// keys refuses what a locked Library cannot answer.
+struct InAnotherProcess;
+
+impl LibraryLock for InAnotherProcess {
+    fn is_locked(&self) -> bool {
+        false
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // What the host says about a request it could not forward, a key file it
@@ -49,19 +67,26 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let library =
         LibraryDir::resolve(&args.library).context("resolving the Library's directory")?;
-    let config = Config::for_library(args.server, &library);
+    let key_file = library.server_key_file();
     println!(
         "/api goes to http://{}, with the key at {}",
-        config.server,
-        config.key_file.display()
+        args.server,
+        key_file.display()
     );
-    let host = router(config)?;
+    let config = Config {
+        server: args.server,
+        key: Arc::new(KeyFile(key_file)),
+        lock: Arc::new(InAnotherProcess),
+    };
 
+    // Bound first, so that the host is built around the address it is on.
     let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, args.port))
         .await
         .context("binding the explorer's port")?;
     let address = listener.local_addr()?;
+    let credentials = Credentials::new(Arc::new(SystemClock))?;
+    let host = router(&listener, config, credentials.gate())?;
     println!("The explorer is at http://{address}/");
-    axum::serve(listener, host).await?;
+    serve(listener, host).await;
     Ok(())
 }

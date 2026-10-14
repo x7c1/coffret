@@ -30,15 +30,22 @@ pub(super) struct State {
     host: String,
     generation: u64,
     /// In the order they were issued, so that the front is the oldest.
-    tickets: VecDeque<Held>,
+    tickets: VecDeque<HeldTicket>,
     sessions: Vec<HeldSession>,
     next_session: u64,
     rate: RateLimit,
 }
 
-struct Held {
+struct HeldTicket {
     digest: Digest,
     expires_at: Instant,
+}
+
+/// How many tickets and sessions a host holds.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Held {
+    pub(super) tickets: usize,
+    pub(super) sessions: usize,
 }
 
 struct HeldSession {
@@ -74,7 +81,7 @@ impl State {
         while self.tickets.len() >= TICKET_CAP {
             self.tickets.pop_front();
         }
-        self.tickets.push_back(Held {
+        self.tickets.push_back(HeldTicket {
             digest: ticket.digest(),
             expires_at: now + TICKET_LIFETIME,
         });
@@ -159,6 +166,15 @@ impl State {
     pub(super) fn retire(&mut self) {
         self.revoke_all();
         self.generation += 1;
+    }
+
+    /// How many tickets are live and how many sessions are held, as of the
+    /// last transition: the counts an event about one may carry (spec: EL-1).
+    pub(super) fn held(&self) -> Held {
+        Held {
+            tickets: self.tickets.len(),
+            sessions: self.sessions.len(),
+        }
     }
 
     /// Forgets every ticket and session that has expired by `now`.

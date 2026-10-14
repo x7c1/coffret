@@ -36,8 +36,6 @@ coffret-server = { workspace = true }
 coffret-shell = { workspace = true }
 
 anyhow = { workspace = true }
-# The router the explorer's host answers through, served on a port of its own.
-axum = { workspace = true }
 # The Passphrase the window's call carries, read straight into the type that
 # wipes it rather than into a `String` first (spec: DK-7).
 serde = { workspace = true }

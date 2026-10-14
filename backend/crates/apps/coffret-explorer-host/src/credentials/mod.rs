@@ -25,6 +25,11 @@
 //!
 //! Nothing here knows HTTP. What each outcome is answered with is the
 //! router's to decide.
+//!
+//! Every transition that changes what admits is recorded as an event by its
+//! kind and the counts it left — never a ticket, a token or either one's
+//! digest (spec: EL-1). A refused exchange or authentication is recorded by
+//! the router, which knows what it answered.
 
 mod clock;
 pub use clock::Clock;
@@ -101,6 +106,33 @@ impl Shared {
             }
         }
     }
+
+    /// [`State::revoke_all`], recorded as a revocation for `reason`.
+    fn revoke_all(&self, reason: &'static str) {
+        let mut state = self.lock();
+        let before = state.held();
+        state.revoke_all();
+        revoked(reason, before);
+    }
+
+    /// [`State::retire`], recorded as a revocation for `reason`.
+    fn retire(&self, reason: &'static str) {
+        let mut state = self.lock();
+        let before = state.held();
+        state.retire();
+        revoked(reason, before);
+    }
+}
+
+/// Records that every ticket and session in `before` was discarded.
+fn revoked(reason: &'static str, before: state::Held) {
+    tracing::info!(
+        kind = "revocation",
+        reason,
+        revoked_sessions = before.sessions,
+        spent_tickets = before.tickets,
+        "every session was revoked and every launch ticket spent",
+    );
 }
 
 /// The handle the app that owns the host holds: the one that issues tickets.
@@ -136,13 +168,20 @@ impl Credentials {
     /// expired to make room.
     pub fn issue_ticket(&self) -> Result<LaunchTicket, NotDrawn> {
         let now = self.shared.clock.now();
-        self.shared.lock().issue_ticket(now)
+        let mut state = self.shared.lock();
+        let ticket = state.issue_ticket(now)?;
+        tracing::info!(
+            kind = "issue",
+            live_tickets = state.held().tickets,
+            "a launch ticket was issued",
+        );
+        Ok(ticket)
     }
 
     /// Ends every session, and spends every ticket not yet exchanged
     /// (spec: LA-18).
     pub fn revoke_all(&self) {
-        self.shared.lock().revoke_all();
+        self.shared.revoke_all("app");
     }
 
     /// Discards every ticket and session and starts the next generation: what
@@ -150,7 +189,7 @@ impl Credentials {
     /// Library it serves changes, and when it fails closed (spec: LA-15,
     /// LA-18).
     pub fn retire(&self) {
-        self.shared.lock().retire();
+        self.shared.retire("app");
     }
 
     /// The current generation's public name.

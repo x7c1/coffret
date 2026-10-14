@@ -1,4 +1,5 @@
-//! The explorer's serving side, as a router a caller binds wherever it likes.
+//! The explorer's serving side: a router built around a socket its caller
+//! bound, and the loop that answers on it.
 //!
 //! The explorer is a page, and a page cannot reach the server that answers with
 //! the Library on its own: the server admits a caller only by a key it drew as
@@ -10,23 +11,24 @@
 //! forwards `/api` to the server with the key attached. A process here can read
 //! the file; the browser never sees what is in it.
 //!
-//! This is the twin of the proxy the explorer's dev server runs
-//! (`frontend/packages/apps/web/vite.config.ts`), in Rust, so that running the
-//! explorer needs neither node nor a checkout. What it does to a request is what
-//! that proxy does, and [`router`] says each step and why.
+//! Reaching this host is no more authorization than reaching the server is
+//! (spec: LA-2). A browser is admitted by a browser token of the host's own,
+//! never by the server key, and [`credentials`] holds those tokens and the
+//! one-time launch tickets they are exchanged for (spec: LA-14, LA-17, LA-18).
+//! What a request passes before anything is done with it is [`router`]'s to
+//! say.
 //!
 //! The page itself is compiled in under the `embed-web` feature. Without it —
 //! the default, so that a build never needs the frontend built first — every
-//! path outside `/api` answers a short plain page saying so.
-//!
-//! Reaching this host is no more authorization than reaching the server is: a
-//! browser is admitted by a browser token of the host's own, never by the
-//! server key, and [`credentials`] holds those tokens and the one-time launch
-//! tickets they are exchanged for (spec: LA-14, LA-17, LA-18).
+//! page path answers a short plain page saying so.
 //!
 //! The explorer is deliberately not served from the server's own port: the
 //! server would then be answering its own page without a key, and every request
 //! has to be authorized before any route sees it (spec: LA-2).
+
+mod answer_headers;
+mod auth;
+mod authority;
 
 mod config;
 pub use config::Config;
@@ -36,43 +38,85 @@ pub mod credentials;
 mod error;
 pub use error::Error;
 
+mod fences;
 mod forward;
+mod host;
+
+mod key_file;
+pub use key_file::KeyFile;
+
+mod key_source;
+pub use key_source::KeySource;
+
+mod library_lock;
+pub use library_lock::LibraryLock;
+
 mod page;
+mod refusal;
+
+mod serve;
+pub use serve::serve;
 
 use std::sync::Arc;
+use std::time::Duration;
 
+use axum::middleware::{from_fn, from_fn_with_state};
 use axum::routing::any;
 use axum::Router;
+use tokio::net::TcpListener;
 
+use authority::Authority;
+use credentials::Gate;
 use forward::Forwarder;
+use host::Host;
 
-/// The router a caller binds: `/api` and everything under it forwarded to the
-/// server, and every other path answered with the explorer's page.
+/// How long reading a request to `/auth` may take, and reading any request's
+/// head (spec: LA-19).
+pub(crate) const READ_DEADLINE: Duration = Duration::from_secs(5);
+
+/// The router for a host whose listener is `listener`, standing in front of
+/// what `config` names and admitting browsers through `gate`.
 ///
-/// What a forwarded request is, against the one that arrived:
+/// Built from the address `listener` actually bound, which has to be
+/// `127.0.0.1`, and from nothing a request says: that address is the only
+/// `Host` the router answers and its origin the only `Origin` (spec: LA-13).
+/// Taking the listener rather than an address is what keeps a caller from
+/// building a router around an address nothing bound; serve it on that same
+/// listener with [`serve`].
 ///
-/// - the method, the path and the query unchanged, and the body streamed rather
-///   than gathered, in both directions;
-/// - any key the caller sent removed, and the key in [`Config::key_file`] set in
-///   its place — read afresh on every request, because a server that was
-///   started again drew a new one (spec: LA-4) and this host outlives it. A file
-///   that cannot be read forwards no key at all, and the server's refusal is
-///   what the person sees: it is the server's to say, not this host's to invent;
-/// - `Host` naming the server, which refuses any other (spec: LA-5);
-/// - `Origin` rewritten to the server's only where it is this host's own, so
-///   that the explorer's own requests are the server's own, and a page on any
-///   other site still arrives as what it is and is refused;
-/// - hop-by-hop headers dropped, in both directions; everything else, the
-///   `Sec-Fetch-*` headers among them, as it came.
+/// What a request passes, in this order, before anything is done with it:
 ///
-/// A redirect the server answers with is handed back rather than followed. A
-/// server that is not answering is a `502` naming its address, so that the half
-/// that is wrong is plain from the page.
-pub fn router(config: Config) -> Result<Router, Error> {
-    let forwarder = Arc::new(Forwarder::new(config).map_err(Error)?);
-    Ok(Router::new()
+/// 1. on every path, headers within their bound and the fixed `Host`;
+/// 2. under `/api` and `/auth`, an `Origin` and a `Sec-Fetch-Site`, where a
+///    browser sent them, that say the host's own page made it;
+/// 3. under `/api`, a browser token of the current generation, and a Library
+///    that is unlocked or a request that unlocks it.
+///
+/// Only then is a request under `/api` forwarded (spec: LA-14). `/auth` is
+/// answered here and never forwarded (spec: LA-16), and every other path is
+/// the explorer's page.
+pub fn router(listener: &TcpListener, config: Config, gate: Gate) -> Result<Router, Error> {
+    let authority = Authority::of(listener.local_addr().map_err(Error::Unbound)?)?;
+    let forwarder = Forwarder::new(&config).map_err(Error::Client)?;
+    let host = Arc::new(Host {
+        authority,
+        gate,
+        lock: config.lock,
+        forwarder,
+    });
+
+    // `/api/` as well as the wildcard, which matches no empty rest: every path
+    // under `/api` is behind the fences, one no route answers included.
+    let api = Router::new()
         .route("/api", any(forward::forward))
+        .route("/api/", any(forward::forward))
         .route("/api/{*rest}", any(forward::forward))
-        .with_state(forwarder)
-        .fallback(page::serve))
+        .layer(from_fn_with_state(Arc::clone(&host), fences::admit));
+    Ok(api
+        .merge(auth::routes())
+        .layer(from_fn_with_state(Arc::clone(&host), fences::same_origin))
+        .fallback(page::serve)
+        .layer(from_fn_with_state(Arc::clone(&host), fences::fixed_host))
+        .layer(from_fn(answer_headers::answer_headers))
+        .with_state(host))
 }
