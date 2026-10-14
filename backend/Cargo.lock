@@ -1447,6 +1447,7 @@ dependencies = [
  "axum",
  "clap",
  "coffret-device",
+ "coffret-logging",
  "coffret-server",
  "futures-util",
  "include_dir",

@@ -44,6 +44,9 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 # The example's arguments, parsed the way the binaries parse theirs.
 clap = { workspace = true }
+# The host's events read back as the log file would hold them, for the cases
+# that hold them to what an event may carry.
+coffret-logging = { workspace = true, features = ["testing"] }
 # The stub server answers with the headers it was sent, as JSON.
 serde_json = { workspace = true }
 # The key file a case's host reads, in a directory of the case's own.
