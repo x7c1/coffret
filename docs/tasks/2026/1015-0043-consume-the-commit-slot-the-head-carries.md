@@ -103,10 +103,10 @@ consumed and why (CP-2, CP-3, CP-15).
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent Library (Google Drive, `coffret-agent`), a sync commits and
+- [x] On the agent Library (Google Drive, `coffret-agent`), a sync commits and
       the new `head-<g+1>` object on Drive has the identifier the previous
       head's `next_commit_slot` named
-- [ ] On the agent Library, two devices (`coffret-agent` and
+- [x] On the agent Library, two devices (`coffret-agent` and
       `coffret-agent-2`) committing on one head leave exactly one
       `head-<g+1>`, and both batches are visible after a catch-up
 - [ ] A read-only listing of the agent Library and the user's development
