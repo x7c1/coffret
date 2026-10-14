@@ -32,11 +32,12 @@ pub(crate) struct FaultyStore<'a> {
 
 /// What the wrapper does differently.
 enum Fault {
-    /// Answers the write of one Keyring replica without storing anything.
+    /// Answers the write of some Keyring replica positions without storing
+    /// anything.
     ///
     /// A provider that acknowledged a write and lost the object: the flow reads
     /// every replica back precisely because that is possible (spec: KL-2, CP-8).
-    SwallowReplica(u16),
+    SwallowReplicas(Vec<u16>),
     /// Refuses the conditional create of a control head, permanently.
     ///
     /// The batch's Keyring candidate is already on Storage when this lands, so
@@ -58,7 +59,7 @@ enum Fault {
     RefuseTrash,
     /// Refuses the write of one Keyring replica, permanently.
     ///
-    /// The other half of [`SwallowReplica`](Self::SwallowReplica): that one is a
+    /// The other half of [`SwallowReplicas`](Self::SwallowReplicas): that one is a
     /// write that was acknowledged and lost, this one a write that was never
     /// accepted. A repair meets it first, because it writes before the candidate
     /// generation does (spec: KL-11, KL-16).
@@ -74,9 +75,14 @@ enum Fault {
 impl<'a> FaultyStore<'a> {
     /// Loses the write of one Keyring replica.
     pub(super) fn swallowing_replica(inner: &'a dyn ObjectStore, replica: u16) -> Self {
+        Self::swallowing_replicas(inner, &[replica])
+    }
+
+    /// Loses the writes of several Keyring replica positions.
+    pub(super) fn swallowing_replicas(inner: &'a dyn ObjectStore, replicas: &[u16]) -> Self {
         Self {
             inner,
-            fault: Fault::SwallowReplica(replica),
+            fault: Fault::SwallowReplicas(replicas.to_vec()),
         }
     }
 
@@ -172,7 +178,9 @@ fn is_snapshot(name: &str) -> bool {
 #[async_trait]
 impl ObjectStore for FaultyStore<'_> {
     async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
-        if matches!(self.fault, Fault::SwallowReplica(index) if is_replica(name, index)) {
+        if matches!(&self.fault, Fault::SwallowReplicas(indices)
+            if indices.iter().any(|&index| is_replica(name, index)))
+        {
             // Acknowledged and not stored, which is the whole point.
             return Ok(UploadedObject {
                 object_ref: ObjectRef::new(name),
