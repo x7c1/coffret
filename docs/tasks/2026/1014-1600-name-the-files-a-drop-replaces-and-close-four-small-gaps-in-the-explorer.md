@@ -97,7 +97,7 @@ code why it cannot be asserted).
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (Playwright Chromium): dropping a folder whose
+- [x] On the agent's Library (Playwright Chromium): dropping a folder whose
       name matches an existing folder shows the replacement count and names
       before anything is sent; scrolling the list leaves the first row fully
       visible under the selection row (screenshot; the look is the user's to
