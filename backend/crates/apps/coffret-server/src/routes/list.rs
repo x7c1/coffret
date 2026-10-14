@@ -8,6 +8,7 @@ use serde::Serialize;
 use crate::api_error::ApiError;
 use crate::classify::classify;
 use crate::entry_query::PathQuery;
+use crate::fronts_ahead::read_fronts_ahead;
 use crate::state::ServerState;
 use crate::timestamp::iso8601;
 
@@ -137,6 +138,10 @@ struct FileDto {
 /// the subtree, and what is standing in it already — are questions about a path
 /// the Library has never held, and a page bringing a book into a folder it has
 /// just made has no other way to ask them.
+///
+/// The answer reads nothing of Storage. What a listing of a mapped folder does
+/// set going is a read of the fronts of its Containers, after it and apart
+/// from it — see [`fronts_ahead`](crate::fronts_ahead).
 pub async fn list(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
@@ -145,6 +150,14 @@ pub async fn list(
     let folder = query.folder()?;
     let listing = library.list(folder.as_ref()).await?;
     let added = library.added_locally(folder.as_ref()).await?;
+    // Somebody looking at a folder this device can fetch into is about to
+    // open something in it, so the fronts of its Containers are read now, in
+    // the background, and the first page opened costs its parcel alone. Set
+    // going here and never awaited: the answer is the catalog's, and nothing
+    // read from Storage goes into it.
+    if listing.mapped {
+        read_fronts_ahead(Arc::clone(&state), folder.clone());
+    }
 
     Ok(Json(ListingDto {
         path: listing

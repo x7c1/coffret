@@ -10,8 +10,13 @@
 //! # Implicit, and one at a time
 //!
 //! There is no download button, and this is not one. What arms a fill is a
-//! `GET /api/file` that had to fetch — the verdict was a placement rather than
-//! `AlreadyPresent` — and the folder holding that Entry is what gets filled.
+//! `GET /api/file` in a folder this device does not wholly have: one that had
+//! to fetch — the verdict was a placement rather than `AlreadyPresent` — or one
+//! answered from disk while some other Entry of its folder is not here and no
+//! fill has ended on that folder in this process. The folder holding that
+//! Entry is what gets filled. A page answered from a folder wholly here arms
+//! nothing. What a run that ended — done, or stopped by Storage — left missing
+//! is what it declined or could not reach, and the retry is what takes it up.
 //! `POST /api/fill` exists for what the implicit trigger cannot reach: taking a
 //! folder up again after it was left unfinished.
 //!
@@ -51,6 +56,9 @@ pub use fill_run::FillRun;
 
 mod declined;
 pub use declined::Declined;
+
+mod ended_fills;
+pub(crate) use ended_fills::EndedFills;
 
 mod fill_folder;
 pub use fill_folder::{fill_folder, queue_folder};

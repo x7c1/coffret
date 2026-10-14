@@ -44,7 +44,7 @@ use crate::index::Index;
 
 mod companions;
 
-mod front;
+pub(super) mod front;
 
 mod herald;
 

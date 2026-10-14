@@ -55,6 +55,15 @@ impl Served {
         self.state.fills.until_idle().await;
     }
 
+    /// Waits for the fronts a listing set going to be read, whatever that
+    /// came to.
+    ///
+    /// No sleep, and no polling: a listing counts its reads before it answers,
+    /// so a case that has had its listing back waits here for that listing's.
+    pub async fn fronts_idle(&self) {
+        self.state.fronts.until_idle().await;
+    }
+
     /// Arms a freeze without going through a route.
     ///
     /// Two of these back to back, with nothing awaited in between, is a second

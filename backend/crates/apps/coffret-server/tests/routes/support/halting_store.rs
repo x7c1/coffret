@@ -72,6 +72,11 @@ pub struct HaltingStore {
     /// Whether the rest of a parcel read is waiting, and what wakes it — a
     /// watch for the reason [`held`](Self::held) is one.
     tail_held: watch::Sender<bool>,
+    /// Whether the next whole-object read is held, where a case asked for that.
+    hold_whole: AtomicBool,
+    /// Whether that read is waiting, and what wakes it — apart from
+    /// [`held`](Self::held), so every other read goes on being answered.
+    whole_held: watch::Sender<bool>,
 }
 
 /// A ranged read longer than this is a parcel; the front of an object is a
@@ -95,6 +100,8 @@ impl HaltingStore {
             parcel_reads: AtomicUsize::new(0),
             hold_within: AtomicU64::new(u64::MAX),
             tail_held: watch::channel(false).0,
+            hold_whole: AtomicBool::new(false),
+            whole_held: watch::channel(false).0,
         }
     }
 
@@ -147,8 +154,21 @@ impl HaltingStore {
     pub fn release(&self) {
         self.hold_after.store(usize::MAX, Ordering::SeqCst);
         self.hold_within.store(u64::MAX, Ordering::SeqCst);
+        self.hold_whole.store(false, Ordering::SeqCst);
         self.held.send_replace(false);
         self.tail_held.send_replace(false);
+        self.whole_held.send_replace(false);
+    }
+
+    /// Holds the next whole-object read until [`release`](Self::release), and
+    /// answers every other read as usual.
+    ///
+    /// A whole-object read is what reading a Keyring replica is, so what a case
+    /// gets from it is a fetch stopped inside its read of the set while
+    /// another run goes on reading and writing around it.
+    pub fn hold_next_whole_read(&self) {
+        self.whole_held.send_replace(true);
+        self.hold_whole.store(true, Ordering::SeqCst);
     }
 
     /// Answers the next parcel read with its first `after` bytes, and holds
@@ -230,6 +250,15 @@ impl ObjectStore for HaltingStore {
             }
             if asked.end - asked.start > PARCEL_SIZED {
                 self.parcel_reads.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        if range.is_none() && self.hold_whole.swap(false, Ordering::SeqCst) {
+            self.held_reads.fetch_add(1, Ordering::SeqCst);
+            let mut waiting = self.whole_held.subscribe();
+            while *waiting.borrow_and_update() {
+                if waiting.changed().await.is_err() {
+                    break;
+                }
             }
         }
         let mut waiting = self.held.subscribe();
