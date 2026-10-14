@@ -704,6 +704,12 @@ async fn the_rest_of_a_stroke_that_fails_after_the_answer_is_logged_and_let_go()
         !served.holds("scans/vol1/001.jpg"),
         "the second page needed the parcel that did not arrive",
     );
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["fill"]["findings"],
+        serde_json::json!([unheld_finding()]),
+        "the damaged parcel met before the failure is still said: {work}",
+    );
     assert_eq!(
         served
             .held_parcels()
@@ -725,4 +731,122 @@ async fn the_rest_of_a_stroke_that_fails_after_the_answer_is_logged_and_let_go()
     assert_eq!(answer.status(), 200);
     assert_eq!(bytes(answer).await, SECOND_PAGE);
     logs.assert_free_of(&["scans", "vol1"]);
+}
+
+// The rest of a stroke that panics after its reader was answered is in the log
+// as an error under the fetch's own operation, with no Entry Path in it, and
+// the turns it held go back as it unwinds — so the next request for an Entry of
+// that Container runs (spec: PK-21, EL-1).
+#[tokio::test]
+async fn the_rest_of_a_stroke_that_panics_after_the_answer_is_logged_and_let_go() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    answered_ahead_of_a_damaged_parcel(&served, &logs).await;
+
+    served.panic_next_storage_read();
+    served.release_storage();
+    let panicked = || {
+        logs.at(Level::ERROR).into_iter().find(|event| {
+            event
+                .message()
+                .starts_with("the rest of a parcel read panicked")
+        })
+    };
+    eventually("the panic behind the answer is logged", || {
+        panicked().is_some()
+    })
+    .await;
+    assert_eq!(
+        panicked().expect("it was logged").field("operation"),
+        "fetch_entry"
+    );
+    served.fill_idle().await;
+
+    for (path, content) in [
+        ("scans/vol1/000.jpg", vec![0x41; 300 * 1024]),
+        ("scans/vol1/001.jpg", SECOND_PAGE.to_vec()),
+    ] {
+        let answer = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            served.get(&format!("/api/file?path={path}")),
+        )
+        .await
+        .expect("the turns the panicked stroke kept were given back");
+        assert_eq!(answer.status(), 200);
+        assert_eq!(bytes(answer).await, content);
+    }
+    logs.assert_free_of(&["scans", "vol1"]);
+}
+
+// PK-21: the work answer counts the parcels this device keeps and the bytes
+// their files take, from the rows and a stat of each file — nothing before a
+// fetch, and what a fetch left behind after it. Starting up again sweeps a
+// parcel file no row names out of the directory, and the count is unchanged
+// by it, since it was never counted.
+#[tokio::test]
+async fn the_work_answer_counts_the_kept_parcels_and_startup_sweeps_strays() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    served
+        .commit_elsewhere("scans/vol1/000.jpg", &[0x41; 300 * 1024])
+        .await;
+    served
+        .commit_elsewhere("scans/vol1/001.jpg", SECOND_PAGE)
+        .await;
+    served
+        .commit_elsewhere("scans/vol2/000.jpg", &[0x43; 1024 * 1024])
+        .await;
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["kept_parcels"],
+        serde_json::json!({ "count": 0, "bytes": 0 }),
+        "nothing is kept before anything is fetched: {work}",
+    );
+
+    assert_eq!(
+        served
+            .get("/api/file?path=scans/vol2/000.jpg")
+            .await
+            .status(),
+        200
+    );
+    strokes_finished(&logs, 1).await;
+    served.fill_idle().await;
+    let held = served.held_parcels().await;
+    assert!(!held.is_empty(), "the fetch left a parcel behind");
+    let bytes: u64 = held
+        .iter()
+        .map(|parcel| {
+            std::fs::metadata(&parcel.path)
+                .expect("a held parcel's file is there")
+                .len()
+        })
+        .sum();
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["kept_parcels"],
+        serde_json::json!({ "count": held.len(), "bytes": bytes }),
+    );
+
+    let dir = held[0]
+        .path
+        .parent()
+        .expect("a parcel file is in a directory");
+    let stray = dir.join("deadbeef-0.parcel");
+    std::fs::write(&stray, b"a parcel nothing names").expect("a stray can be planted");
+    served.start_up().await;
+    assert!(!stray.exists(), "the stray parcel file is swept at startup");
+    assert!(held[0].path.exists(), "and the held one stays");
+    let swept = logs
+        .at(Level::INFO)
+        .into_iter()
+        .find(|event| event.message().starts_with("discarded the parcel files"))
+        .expect("the sweep says what it discarded");
+    assert_eq!(swept.number("parcels"), 1);
+    let (_, again) = body_of(served.get("/api/work").await).await;
+    assert_eq!(again["kept_parcels"], work["kept_parcels"]);
+    logs.assert_free_of(&["deadbeef", "scans"]);
 }

@@ -33,8 +33,11 @@ impl<'h> Herald<'h> {
         }
     }
 
-    /// Takes in a kept parcel found not held.
+    /// Takes in a kept parcel found not held, and tells the caller of it at
+    /// once: a run that fails after this returns none of what it found, and
+    /// the caller is the one left holding the account (spec: PK-21).
     pub(super) fn unheld(&self, parcel: UnheldParcel) {
+        self.publication.unheld(&parcel);
         self.locked().push(parcel);
     }
 

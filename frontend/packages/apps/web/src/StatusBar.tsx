@@ -4,6 +4,7 @@ import type {
   DisplacedFreeze,
   Fill,
   Freeze,
+  KeptParcels,
   Library,
   Sync,
   TurnTaker,
@@ -28,6 +29,7 @@ import {
 } from './fill';
 import { deletedLine, deletingLine } from './deleteEntries';
 import { latestFirst, TIED } from './finished';
+import { size } from './humanize';
 import { ranOut } from './ranOut';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { ASKING } from './refresh';
@@ -68,6 +70,7 @@ import type { Asked } from './useAsked';
  */
 export function StatusBar({
   library,
+  kept,
   fetching,
   adding,
   fill,
@@ -87,6 +90,11 @@ export function StatusBar({
   locked,
 }: {
   library: Asked<Library>;
+  /**
+   * The parcels this device keeps for the Library, and `null` where the
+   * server has not said — before its first answer, and while it is locked.
+   */
+  kept: KeptParcels | null;
   fetching: string | null;
   /** The drop whose files are still being written into the folder, if one is. */
   adding: string | null;
@@ -259,6 +267,11 @@ export function StatusBar({
       <span style={library.status === 'failed' ? { color: COLOR.refused } : undefined}>
         {named(library)}
       </span>
+      {/* Beside the Library's name because it is about the Library on this
+          device rather than about anything happening: the parcels a reader's
+          fetches read and kept, which nothing else on this page would ever
+          mention, and which grow by a parcel or two for every book opened. */}
+      {kept !== null && kept.count > 0 && <span>{keptLine(kept)}</span>}
       {/* The per-file line is what the candidates above fall through to, and not
           something shown beside them: it is the reader waiting on the page in
           front of it — the browser's own request lifecycle, which is all the
@@ -780,4 +793,10 @@ function named(library: Asked<Library>): string {
     case 'failed':
       return library.message;
   }
+}
+
+/** The parcels kept, as the bar says them: `3 parcels kept, 96.0 MB`. */
+function keptLine(kept: KeptParcels): string {
+  const parcels = kept.count === 1 ? 'parcel' : 'parcels';
+  return `${kept.count} ${parcels} kept, ${size(kept.bytes)}`;
 }

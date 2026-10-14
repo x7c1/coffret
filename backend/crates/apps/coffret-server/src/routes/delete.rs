@@ -47,7 +47,7 @@ pub async fn delete(
 ) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     let target = armable(&state, &query).await?;
     delete_target(Arc::clone(&state), target);
-    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }
 
 /// `GET /api/delete?path=<folder>` or `GET /api/delete?entry=<path>&entry=…`

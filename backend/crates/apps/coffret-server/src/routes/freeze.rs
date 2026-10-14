@@ -56,7 +56,7 @@ pub async fn freeze(
 ) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     let book = armable(&state, query).await?;
     freeze_folder(Arc::clone(&state), book);
-    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }
 
 /// `GET /api/freeze?path=<folder>`

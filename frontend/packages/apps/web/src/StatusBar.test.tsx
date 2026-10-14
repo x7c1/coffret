@@ -7,6 +7,7 @@ import type {
   DisplacedFreeze,
   Fill,
   Freeze,
+  KeptParcels,
   Refused,
   Sync,
   TurnTaker,
@@ -180,6 +181,7 @@ function forgot(queue: Queue, folders: readonly string[]): Dismissed {
 }
 
 function draw({
+  kept = null,
   adding = null,
   fill = null,
   sync = null,
@@ -192,6 +194,7 @@ function draw({
   reconnect = null,
   locked = null,
 }: {
+  kept?: KeptParcels | null;
   adding?: string | null;
   fill?: Fill | null;
   sync?: Sync | null;
@@ -210,6 +213,7 @@ function draw({
         status: 'ready',
         value: { name: 'Home', library_id: 'library-id', provider: 'Storage' },
       }}
+      kept={kept}
       fetching={null}
       adding={adding}
       fill={fill}
@@ -230,6 +234,18 @@ function draw({
     />,
   );
 }
+
+// The parcels a reader's fetches kept are said beside the Library's name, with
+// the disk they take, because nothing else on the page says the directory they
+// are in exists; and nothing is said while none are kept (spec: PK-21).
+it('says how many parcels are kept and how much disk they take', () => {
+  expect(draw({ kept: { count: 3, bytes: 96_000_000 } })).toContain('3 parcels kept, 96.0 MB');
+  expect(draw({ kept: { count: 1, bytes: 33_554_432 } })).toContain('1 parcel kept, 33.6 MB');
+
+  for (const kept of [{ count: 0, bytes: 0 }, null]) {
+    expect(draw({ kept })).not.toContain('kept');
+  }
+});
 
 // The failure two books in one session reaches. A freeze Storage stopped is
 // followed by the next book off the queue, and the run that stopped is then not

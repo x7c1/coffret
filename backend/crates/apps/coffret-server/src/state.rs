@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::ensure;
-use coffret_device::{EntryFetches, OpenLibrary};
+use coffret_device::{EntryFetches, KeptTally, OpenLibrary};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
@@ -336,6 +336,20 @@ impl ServerState {
     /// which asks it before offering a Passphrase window nobody needs.
     pub fn holds_library(&self) -> bool {
         self.custody.holds()
+    }
+
+    /// How many parcels this device keeps for the Library and how many bytes
+    /// they take, and `None` while it is locked or where they could not be
+    /// counted (spec: PK-21).
+    ///
+    /// Asked of the open Library without a key handle, for the reason
+    /// [`holds_library`](Self::holds_library) takes none: the work answer that
+    /// carries this is polled, and a poll is not somebody being here
+    /// (spec: DK-4). It holds the Library for the length of a read of the rows
+    /// and a stat of each file, and no longer. A failure is said in the log by
+    /// the Library, and answered here as nothing.
+    pub(crate) async fn kept_tally(&self) -> Option<KeptTally> {
+        self.custody.unlocked()?.kept_tally().await
     }
 
     /// The Library this is, for the one route that answers while locked.

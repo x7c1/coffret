@@ -1074,6 +1074,7 @@ export function App() {
       )}
       <StatusBar
         library={library.state}
+        kept={work.kept}
         fetching={fetching}
         adding={adding}
         fill={fill}

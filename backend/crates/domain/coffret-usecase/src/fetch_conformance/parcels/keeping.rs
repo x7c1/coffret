@@ -4,7 +4,10 @@ use crate::catch_up::{catch_up_catalog, CatchUpRequest};
 use crate::delete::{delete_entries, DeleteRequest, DeleteSelection};
 use crate::device_state::BatchId;
 use crate::entry_paths::entry_path;
-use crate::fetch::{let_go_parcels, EntryFetch, UnheldParcel, UnheldReason};
+use crate::fetch::{
+    let_go_parcels, sweep_unnamed_parcels, tally_kept_parcels, EntryFetch, KeptTally, UnheldParcel,
+    UnheldReason,
+};
 use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{at, entry_at, exists, keys, map, policy, read};
@@ -259,6 +262,61 @@ pub async fn letting_go_after_a_catch_up_drops_the_parcels_of_a_departed_contain
         fixture.fs().files_beneath(fixture.parcel_dir()).is_empty(),
         "the replaced Pack's parcel file went with its row",
     );
+}
+
+/// A parcel file no row names — what a letting go that ran beside a fetch
+/// leaves, having dropped a row before the fetch wrote its file — is discarded
+/// by the sweep the Library is opened with, and a held parcel's file stays
+/// (spec: PK-21, OC-2). What is kept is then counted from the rows alone.
+pub async fn a_parcel_file_no_row_names_is_discarded_at_open(fixture: &FetchUnderTest) {
+    let keys = keys();
+    let book = a_book(fixture, &keys, ["books/atlas/vol1", "books/atlas/vol2"]).await;
+    map_the_root(fixture).await;
+    fetch_page(fixture.store(), fixture, &keys, book.page(2), 2).await;
+    let kept = held_rows(fixture, book.container_id).await;
+    assert_eq!(kept.len(), 1);
+
+    let stray = fixture
+        .parcel_dir()
+        .join(format!("{}-3.parcel", book.container_id));
+    let not_a_parcel = fixture.parcel_dir().join("notes.txt");
+    fixture.fs().write_file(&stray, b"a parcel nothing names");
+    fixture.fs().write_file(&not_a_parcel, b"somebody else's");
+
+    let discarded = sweep_unnamed_parcels(fixture.target(), &fixture.parcels())
+        .await
+        .unwrap_or_else(|error| panic!("sweeping the parcel directory must succeed: {error}"));
+    assert_eq!(discarded, 1, "the one parcel file no row names");
+    assert!(
+        !exists(fixture.fs(), &stray),
+        "the stray parcel file is gone"
+    );
+    assert!(
+        exists(fixture.fs(), &kept[0].path),
+        "the held parcel's file stays"
+    );
+    assert!(
+        exists(fixture.fs(), &not_a_parcel),
+        "a file no parcel could be is not the sweep's to remove",
+    );
+    assert_eq!(held_rows(fixture, book.container_id).await, kept);
+
+    let tally = tally_kept_parcels(fixture.target(), fixture.fs())
+        .await
+        .unwrap_or_else(|error| panic!("counting the kept parcels must succeed: {error}"));
+    let len = read(fixture.fs(), &kept[0].path).len() as u64;
+    assert_eq!(
+        tally,
+        KeptTally {
+            count: 1,
+            bytes: len
+        }
+    );
+
+    let again = sweep_unnamed_parcels(fixture.target(), &fixture.parcels())
+        .await
+        .unwrap_or_else(|error| panic!("sweeping the parcel directory must succeed: {error}"));
+    assert_eq!(again, 0, "nothing is left to discard");
 }
 
 /// A kept parcel whose file is gone, or no longer authenticates, is not held:

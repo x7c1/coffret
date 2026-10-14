@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::Path;
 
 use async_trait::async_trait;
@@ -26,11 +27,16 @@ use crate::spool_writer::SpoolWriter;
 /// made to lose a file between two calls leaves that untested.
 ///
 /// The [`Index`](crate::Index) records which parcels are held, and that record
-/// is the only handle on what is in the directory: nothing lists it. The row is
-/// written before the file is created, the precedent the spool sets
-/// (spec: OC-2), so no parcel ciphertext this device keeps is ever unaccounted
-/// for, and a row whose file is short or missing is the case the fetch already
-/// meets as "not held".
+/// is the handle on what is in the directory: a fetch reads a parcel by the row
+/// naming it and never by finding its file. The row is written before the file
+/// is created, the precedent the spool sets (spec: OC-2), and a row whose file
+/// is short or missing is the case the fetch already meets as "not held".
+///
+/// What row-first order cannot rule out is a file no row names, which a
+/// letting go that runs beside a fetch can leave. The directory is
+/// [`list`](Self::list)ed only to discard those, by
+/// [`sweep_unnamed_parcels`](crate::fetch::sweep_unnamed_parcels) before a
+/// server serves anything (spec: PK-21).
 ///
 /// **A file that is already gone is a successful [`discard`](Self::discard)**,
 /// and a file that is not there is `None` from [`reader`](Self::reader) rather
@@ -60,6 +66,15 @@ pub trait ParcelFiles: Send + Sync {
         &self,
         path: &Path,
     ) -> Result<Option<Box<dyn AsyncRead + Send + Unpin>>, LocalIoError>;
+
+    /// The names of the files in the parcel directory, in no particular order.
+    ///
+    /// A directory that is not there lists nothing: a device that has never
+    /// kept a parcel has not made it.
+    async fn list(&self, dir: &Path) -> Result<Vec<OsString>, LocalIoError>;
+
+    /// How long the parcel file at `path` is, or `None` where no file is there.
+    async fn size(&self, path: &Path) -> Result<Option<u64>, LocalIoError>;
 
     /// Removes one parcel file, the parcel having been let go.
     ///

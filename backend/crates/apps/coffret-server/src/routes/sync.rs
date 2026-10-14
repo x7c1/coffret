@@ -35,5 +35,5 @@ pub async fn sync(
     // reason it gives (spec: DK-2).
     state.unlocked()?;
     arm_sync(Arc::clone(&state));
-    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }

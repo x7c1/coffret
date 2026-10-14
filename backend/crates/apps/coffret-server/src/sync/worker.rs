@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tracing::warn;
+
 use crate::state::ServerState;
 
 use super::run;
@@ -35,6 +37,13 @@ struct Leaving<'a>(&'a Syncs);
 impl Drop for Leaving<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
+            // Said here, beside the state it puts back, because the panic itself
+            // reaches nothing but the default hook's line on standard error, and
+            // the log is what a person reads to tell one failure from another.
+            warn!(
+                operation = "sync",
+                "the sync worker panicked; the sync it was running is put back as stopped",
+            );
             self.0.abandon();
         }
     }
@@ -94,5 +103,25 @@ mod tests {
         let latest = syncs.reported().expect("an armed sync is on record");
         assert_eq!(latest.status, SyncStatus::Stopped(Reported::unfinished()));
         assert!(syncs.arm(), "and the next arming starts a worker again");
+    }
+
+    // The panic is in the log beside the run it put back, under the worker's
+    // own operation, so a person reading it can tell the stopped run from one
+    // Storage refused.
+    #[test]
+    fn a_worker_that_panics_says_so_in_the_log() {
+        let logs = coffret_logging::testing::CapturedLogs::capture();
+        let syncs = Syncs::new();
+        assert!(syncs.arm());
+
+        let unwound = catch_unwind(AssertUnwindSafe(|| {
+            let _leaving = Leaving(&syncs);
+            assert!(syncs.take_next());
+            panic!("the job panics");
+        }));
+        assert!(unwound.is_err());
+
+        let event = logs.only(tracing::Level::WARN);
+        assert_eq!(event.field("operation"), "sync");
     }
 }

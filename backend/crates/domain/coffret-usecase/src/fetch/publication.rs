@@ -1,4 +1,5 @@
 use crate::fetch::entry_fetch::EntryFetchOutcome;
+use crate::fetch::unheld_parcel::UnheldParcel;
 
 /// Whoever asked for an Entry hearing that it is on disk, before the parcels
 /// it came out of have finished arriving.
@@ -21,12 +22,27 @@ use crate::fetch::entry_fetch::EntryFetchOutcome;
 /// before it. The run's own answer is the whole account, and a caller that
 /// returns from here owes the rest of the run a place to finish.
 ///
+/// It also hears each kept parcel the run finds not held, as the run meets it
+/// (see [`unheld`](Self::unheld)), which is what lets a caller that returned
+/// at the publication still say every such parcel when the rest of the run
+/// fails: the run's own answer is then a refusal, and carries none of them.
+///
 /// A trait over a plain callback for the reason
 /// [`Cancellation`](super::Cancellation) is one: the caller knows what to do
 /// with the news, and the fetch has no business knowing.
 pub trait Publication: Send + Sync {
     /// The Entry asked for has just been published.
     fn published(&self, outcome: &EntryFetchOutcome);
+
+    /// A kept parcel was just found not held, and is being read again
+    /// (spec: PK-21).
+    ///
+    /// Called once per such parcel, in the order they are met, before or after
+    /// the publication alike — and whether or not the run goes on to succeed,
+    /// since a parcel that did not arrive whole is said however the rest of the
+    /// run ends. A caller that waits for the run's own answer finds the same
+    /// parcels on it where the run succeeds, and has nothing to do here.
+    fn unheld(&self, _parcel: &UnheldParcel) {}
 }
 
 impl<F> Publication for F

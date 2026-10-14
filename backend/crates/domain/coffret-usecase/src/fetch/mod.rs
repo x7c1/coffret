@@ -122,7 +122,9 @@
 //! [`KeptParcels`] is where the parcels are kept and how long one is, and
 //! [`let_go_parcels`] is the letting go a run that changed the current set
 //! without reading a parcel — a deletion, a catch-up — calls afterwards
-//! (spec: PK-21).
+//! (spec: PK-21). [`sweep_unnamed_parcels`] discards the parcel files no row
+//! names, once, as a server opens the Library, and [`tally_kept_parcels`] says
+//! how many parcels the device keeps and how many bytes they take.
 //!
 //! [`fetch_folders`] and [`fetch_entry`] are the whole of the public surface
 //! that moves bytes. The steps are private because none of them is a state a
@@ -199,6 +201,9 @@ pub use fetch_request::FetchRequest;
 mod kept_parcels;
 pub use kept_parcels::KeptParcels;
 
+mod kept_tally;
+pub use kept_tally::{tally_kept_parcels, KeptTally};
+
 mod local_place;
 pub use local_place::LocalPlace;
 
@@ -252,6 +257,9 @@ pub use unheld_parcel::UnheldParcel;
 
 mod unheld_reason;
 pub use unheld_reason::UnheldReason;
+
+mod unnamed_parcels;
+pub use unnamed_parcels::sweep_unnamed_parcels;
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.

@@ -32,3 +32,31 @@ async fn fixture() -> Option<FetchUnderTest> {
 }
 
 coffret_usecase::fetch_conformance!(fixture().await);
+
+// The sweep at open says how many parcel files it discarded, in one line, so a
+// person reading the log can tell a device that had ciphertext nothing named
+// from one that had none (spec: PK-21). The line carries the count and neither
+// a Container nor a path on this device (spec: EL-1).
+#[tokio::test]
+async fn the_sweep_at_open_logs_how_many_parcel_files_it_discarded() {
+    let logs = coffret_logging::testing::CapturedLogs::capture();
+    let fixture = fixture()
+        .await
+        .expect("the in-memory fixture is always there");
+    coffret_usecase::fetch_conformance::a_parcel_file_no_row_names_is_discarded_at_open(&fixture)
+        .await;
+
+    let swept: Vec<_> = logs
+        .at(tracing::Level::INFO)
+        .into_iter()
+        .filter(|event| event.message().starts_with("discarded the parcel files"))
+        .collect();
+    assert_eq!(
+        swept.len(),
+        1,
+        "one line for the one sweep that discarded anything"
+    );
+    assert_eq!(swept[0].field("operation"), "sweep_parcels");
+    assert_eq!(swept[0].number("parcels"), 1);
+    logs.assert_free_of(&[".parcel", "books"]);
+}

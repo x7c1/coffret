@@ -65,8 +65,14 @@ use coffret_usecase::fetch::{
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
 
+mod answered;
+use answered::{take, watch, Answer, Answered};
+
 mod gates;
 use gates::{Gates, Turn};
+
+mod listener;
+use listener::Listener;
 
 use crate::browse::EntryState;
 use crate::error::{Error, Result};
@@ -84,12 +90,6 @@ struct Turns {
     _path: Turn<EntryPath>,
     _container: Option<Turn<ContainerId>>,
 }
-
-/// Where a reader's fetch is answered from: the moment its Entry is published,
-/// or the run's own end where it never is.
-///
-/// Whichever comes first takes the sender, so the reader is answered once.
-type Answer = Mutex<Option<oneshot::Sender<Result<EntryFetchOutcome>>>>;
 
 impl EntryFetches {
     /// Nothing in flight.
@@ -113,11 +113,11 @@ impl EntryFetches {
     /// goes on in a task of its own, which keeps this Entry's and its
     /// Container's turns until it ends. So a second caller for the same
     /// Container still waits for the whole of it, and finds what it placed. A
-    /// refusal the rest meets is logged and goes no further: the reader has
-    /// its file, and a parcel that did not arrive whole is not held, so it is
-    /// read again whole by whoever wants it next (spec: PK-21). The kept
-    /// parcels the rest finds not held go to `later`, which is called once
-    /// with them where there are any.
+    /// refusal the rest meets is logged and goes no further, and so is a panic:
+    /// the reader has its file, and a parcel that did not arrive whole is not
+    /// held, so it is read again whole by whoever wants it next (spec: PK-21).
+    /// The kept parcels the rest finds not held go to `later` however the rest
+    /// ends, short of a panic; it is called once with them where there are any.
     ///
     /// The task holds the Library open until it ends, as any piece of work
     /// that took the keys finishes with them however a lock lands (spec:
@@ -139,48 +139,30 @@ impl EntryFetches {
 
         let (sender, answered) = oneshot::channel();
         let answer: Arc<Answer> = Arc::new(Mutex::new(Some(sender)));
-        let run = tokio::spawn({
-            let answer = Arc::clone(&answer);
-            async move {
-                let _turns = turns;
-                // How many kept parcels found not held went out with the
-                // answer, so `later` hears of the rest and of none twice.
-                let told = Mutex::new(0usize);
-                let publication = |outcome: &EntryFetchOutcome| {
-                    if let Some(sender) = take(&answer) {
-                        *told.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) =
-                            outcome.unheld.len();
-                        // A reader that stopped waiting has nobody to hand
-                        // this to, and the run goes on regardless.
-                        let _ = sender.send(Ok(outcome.clone()));
-                    }
-                };
-                // Nothing watches a reader's fetch, and nothing cancels it:
-                // the request it serves is answered when the Entry is there,
-                // and a phase in between has nowhere to go.
-                let ran = library
-                    .fetch_entry_as_it_stands(path, &NEVER_CANCELLED, &publication)
-                    .await;
-                if let Some(sender) = take(&answer) {
-                    // Never published: the run's own end is the answer.
-                    let _ = sender.send(ran);
-                    return;
-                }
-                let told = told
-                    .into_inner()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                finished_after_answer(ran, told, later);
+        let listener = Listener::new(Arc::clone(&answer));
+        let run = tokio::spawn(async move {
+            let _turns = turns;
+            // Nothing watches a reader's fetch, and nothing cancels it: the
+            // request it serves is answered when the Entry is there, and a
+            // phase in between has nowhere to go.
+            let ran = library
+                .fetch_entry_as_it_stands(path, &NEVER_CANCELLED, &listener)
+                .await;
+            if let Some(sender) = take(&listener.answer) {
+                // Never published: the run's own end is the answer.
+                let _ = sender.send(Answered::Ran(ran));
+                return;
             }
+            finished_after_answer(ran, listener.found_after_answer(), later);
         });
+        tokio::spawn(watch(run, answer));
 
         match answered.await {
-            Ok(answer) => answer,
-            // The sender is only ever dropped unsent by a task that panicked,
-            // and the panic is the account of it.
-            Err(_) => match run.await {
-                Err(failed) if failed.is_panic() => std::panic::resume_unwind(failed.into_panic()),
-                _ => unreachable!("a fetch task that ended answers before it does"),
-            },
+            Ok(Answered::Ran(ran)) => ran,
+            // The panic is the account of it, and it goes on where it would
+            // have gone had the run been this call's own.
+            Ok(Answered::Panicked(payload)) => std::panic::resume_unwind(payload),
+            Err(_) => unreachable!("the watcher answers a fetch whose run never did"),
         }
     }
 
@@ -265,39 +247,27 @@ async fn already_present(library: &OpenLibrary, path: &EntryPath) -> Result<bool
     Ok(false)
 }
 
-/// Takes the one sender, where nobody has yet.
-fn take(answer: &Answer) -> Option<oneshot::Sender<Result<EntryFetchOutcome>>> {
-    // A send is all anybody does with what is behind it, so a panic there left
-    // the sender or nothing, and either is still the answer's state.
-    answer
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .take()
-}
-
 /// Says what the rest of a run answered at its Entry's publication came to.
 ///
-/// Nobody is waiting on it: the reader has its file. A refusal is logged,
-/// because it is the one account of a parcel that is now not held; the Entry
-/// Path stays out of it (spec: EL-1). The kept parcels found not held after the
-/// answer go to `later`, the ones before it having gone with the answer.
-fn finished_after_answer<F>(ran: Result<EntryFetchOutcome>, told: usize, later: F)
+/// Nobody is waiting on it: the reader has its file. The kept parcels found
+/// not held after the answer go to `later` however the rest ended, the ones
+/// before it having gone with the answer (spec: PK-21). A refusal is logged
+/// too, because it is the one account of a parcel that is now not held; the
+/// Entry Path stays out of it (spec: EL-1).
+fn finished_after_answer<F>(ran: Result<EntryFetchOutcome>, found: Vec<UnheldParcel>, later: F)
 where
     F: FnOnce(Vec<UnheldParcel>),
 {
-    match ran {
-        Ok(mut outcome) => {
-            let unheld = outcome.unheld.split_off(told.min(outcome.unheld.len()));
-            if !unheld.is_empty() {
-                later(unheld);
-            }
-        }
-        Err(error) => warn!(
+    if !found.is_empty() {
+        later(found);
+    }
+    if let Err(error) = ran {
+        warn!(
             operation = "fetch_entry",
             error = %error.redacted(),
             "the rest of a parcel read failed after its Entry was answered; \
              what did not arrive whole is not held",
-        ),
+        );
     }
 }
 

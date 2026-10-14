@@ -25,6 +25,7 @@ use crate::object_store::ObjectStore;
 mod keeping;
 pub use keeping::{
     a_kept_parcel_that_is_gone_or_damaged_is_read_again_with_a_finding,
+    a_parcel_file_no_row_names_is_discarded_at_open,
     a_parcel_is_let_go_once_every_entry_it_covers_is_present,
     a_parcel_is_let_go_once_the_entries_it_waits_for_are_witnessed_absent,
     a_parcel_is_not_kept_for_an_entry_this_device_does_not_map,

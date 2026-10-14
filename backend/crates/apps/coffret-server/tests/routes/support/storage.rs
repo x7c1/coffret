@@ -26,6 +26,12 @@ impl Served {
         self.storage.halt();
     }
 
+    /// Makes the next Storage read panic, once (see
+    /// [`HaltingStore::panic_next_read`](super::HaltingStore::panic_next_read)).
+    pub fn panic_next_storage_read(&self) {
+        self.storage.panic_next_read();
+    }
+
     /// Gives it back.
     pub fn resume_storage(&self) {
         self.storage.resume();

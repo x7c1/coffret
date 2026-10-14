@@ -42,5 +42,5 @@ pub async fn fill(
     state.unlocked()?;
     let folder = Folder::named(query.folder()?);
     queue_folder(Arc::clone(&state), folder);
-    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }

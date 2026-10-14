@@ -7,6 +7,7 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": null,
     "library": "locked",
     "reconnect": null,
     "server": "contract-server",
@@ -54,6 +55,10 @@
         "books/vol-2"
       ],
       "waits": true
+    },
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
     },
     "library": "unlocked",
     "reconnect": null,
@@ -106,6 +111,10 @@
       "waiting": [],
       "waits": false
     },
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -137,6 +146,10 @@
       "stopped": null,
       "waiting": [],
       "waits": false
+    },
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
     },
     "library": "unlocked",
     "reconnect": null,
@@ -175,6 +188,10 @@
     },
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -235,6 +252,10 @@
     },
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -270,6 +291,10 @@
     },
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -284,6 +309,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -311,6 +340,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -338,6 +371,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -365,6 +402,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -544,6 +585,10 @@
       "stopped": null,
       "waiting": [],
       "waits": false
+    },
+    "kept_parcels": {
+      "bytes": 96000000,
+      "count": 3
     },
     "library": "unlocked",
     "reconnect": null,
@@ -759,6 +804,10 @@
       "waiting": [],
       "waits": false
     },
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -803,6 +852,10 @@
       "waiting": []
     },
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
@@ -821,6 +874,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": {
       "message": "waiting for Google's consent page to be answered in the tab that opened",
@@ -842,6 +899,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": {
       "message": "Google Drive's permission for this device was renewed",
@@ -863,6 +924,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": {
       "message": "the consent page was declined, so Google Drive's permission was not renewed",
@@ -884,6 +949,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": {
       "message": "the consent page was not answered in time, so Google Drive's permission was not renewed",
@@ -905,6 +974,10 @@
     "delete": null,
     "fill": null,
     "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
     "library": "unlocked",
     "reconnect": {
       "message": "Google Drive's permission could not be renewed — the server's log says why",

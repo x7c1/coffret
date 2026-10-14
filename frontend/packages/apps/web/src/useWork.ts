@@ -10,6 +10,7 @@ import {
   type Delete,
   type Fill,
   type Freeze,
+  type KeptParcels,
   type LibraryState,
   type Reconnect,
   type Sync,
@@ -89,6 +90,11 @@ export function useWork(readerOpen: boolean): {
    */
   catalog: Catalog | null;
   /**
+   * The parcels this device keeps for the Library, and `null` until an answer
+   * has said or while the Library is locked.
+   */
+  kept: KeptParcels | null;
+  /**
    * How the last reconnect stands, and `null` until an answer has said one
    * ran.
    */
@@ -139,6 +145,7 @@ export function useWork(readerOpen: boolean): {
   const [finished, setFinished] = useState(NOTHING_FINISHED);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [kept, setKept] = useState<KeptParcels | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
@@ -178,6 +185,7 @@ export function useWork(readerOpen: boolean): {
     setFinished((before) => finishedAfter(before, work));
     setLibrary(work.library);
     setCatalog(work.catalog);
+    setKept(work.kept_parcels);
     setReconnect(work.reconnect);
     // What this tab has put away is put away with one server, and every answer
     // says which one gave it. A name that has changed is a process that was
@@ -430,6 +438,7 @@ export function useWork(readerOpen: boolean): {
     finished: finished.order,
     library,
     catalog,
+    kept,
     reconnect,
     trouble: standing,
     retry,

@@ -405,8 +405,8 @@ pub use coffret_usecase::delete::{
 };
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{
-    Cancellation, EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, Publication, Surfaced,
-    UnheldParcel, UnheldReason,
+    Cancellation, EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, KeptTally, Publication,
+    Surfaced, UnheldParcel, UnheldReason,
 };
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, FreezePreview, SourceChange};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
