@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use coffret_model::{ContainerId, ContainerKeyStatus, KeyTable, Redacted};
 use tracing::{info, warn};
 
-use crate::commit::{catch_up, read_committed, ControlKeys, DegradedKeyring, DegradedReport};
+use crate::commit::{catch_up, read_committed, ControlKeys, ShortKeyring, ShortReport};
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::freeze_outcome::FreezeOutcome;
 use crate::freeze::freeze_request::FreezeRequest;
@@ -104,14 +104,14 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
 
     let _pending_owner = index.own_pending_rows().await?;
 
-    let KeyringFindings { key_lost, degraded } =
+    let KeyringFindings { key_lost, short } =
         read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
     // The read's finding, from here to wherever this run ends. Said as the
     // guard goes out of scope — by the last line of the run or by any `?`
     // before it — unless the commit's examination of the same generation has
     // spoken for it (spec: KL-11, KL-15). One word about a set found short, on
     // every path the run can take.
-    let degraded = DegradedReport::armed(degraded);
+    let short = ShortReport::armed(short);
     // The scan is what produces the count the packing phase reports, so it has
     // none of its own to give: a folder's files are known once it has walked
     // them.
@@ -171,7 +171,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         now,
         &spooled,
         &[],
-        Some(&degraded),
+        Some(&short),
         progress,
     )
     .await?;
@@ -211,7 +211,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         commit,
         // Whatever the commit's examination did not speak for, which is all of
         // it where the run had nothing to commit (spec: KL-15).
-        degraded: degraded.unspoken(),
+        short: short.unspoken(),
     };
     info!(
         packs = outcome.packs.len(),
@@ -226,7 +226,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
-        keyring_degraded = outcome.degraded.is_some(),
+        keyring_short = outcome.short.is_some(),
         "a freeze run finished",
     );
     Ok(outcome)
@@ -249,9 +249,9 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
 /// local file is simply new — and no set to find short either.
 ///
 /// The other half is the degradation, which the run holds in a
-/// [`DegradedReport`] and says on its way out — from whichever line it leaves
+/// [`ShortReport`] and says on its way out — from whichever line it leaves
 /// by — unless the commit's examination of the same generation has spoken for
-/// it: see [`KeyringFindings`] and [`DegradedKeyring`].
+/// it: see [`KeyringFindings`] and [`ShortKeyring`].
 async fn read_keyring(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -271,7 +271,7 @@ async fn read_keyring(
     let read = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
     Ok(KeyringFindings {
         key_lost: lost(&read.key_table),
-        degraded: read.degraded,
+        short: read.short,
     })
 }
 
@@ -286,7 +286,7 @@ struct KeyringFindings {
     /// The Containers the committed Keyring records no key for (spec: KL-7).
     key_lost: BTreeSet<ContainerId>,
     /// The degradation the read found, where it found one.
-    degraded: Option<DegradedKeyring>,
+    short: Option<ShortKeyring>,
 }
 
 /// Which Containers of a key table carry a key-lost marker (spec: KL-7).

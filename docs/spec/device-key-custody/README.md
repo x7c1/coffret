@@ -54,6 +54,20 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     it is let go — so work that outlasts the interval defers the lock rather
     than meeting it. A request that needs no key is not activity, since an open
     window asking what a device is doing is not a person at the keyboard.
+  - Work a request starts that goes on after the request is answered takes
+    its own hold on the unlocked Master Key, and once it holds the key a lock
+    that lands meanwhile does not end it: the work finishes on what it holds,
+    and only what is asked after the lock is refused (DK-2). Whether that work
+    is activity depends on what it is. A sync, freeze, deletion, or fill a
+    request arms is a piece of work of its own, and its span counts from the
+    moment it takes the key to the moment it lets it go, as any keyed
+    operation's does. It takes the key when it starts rather than when it is
+    armed — a sync, freeze, or deletion only once it has its turn at the
+    pending work (LA-12) — so the wait before then is not activity, and a lock
+    that lands during it stops the run before it does anything (DK-2). The
+    rest of a reader's fetch — the parcel still being read behind an Entry
+    already released — is the tail of a request already answered: it holds the
+    key until it ends and does not defer the lock.
   - A device that has locked itself says so when asked what it is doing, so
     that a window left open over what it decrypted can give up that plaintext
     rather than hold it until its next request is refused. Asking remains no

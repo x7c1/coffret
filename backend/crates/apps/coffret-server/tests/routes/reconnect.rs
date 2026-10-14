@@ -74,9 +74,17 @@ async fn a_grant_that_ran_out_is_renewed_and_the_catalog_caught_up_without_a_res
         "a second press while the flow waits answers with the same page",
     );
     assert_eq!(served.consent.asked(), 1, "and starts no second flow");
+    let waiting = work(&served).await;
     assert!(
-        work(&served).await["reconnect"].get("url").is_none(),
+        waiting["reconnect"].get("url").is_none(),
         "the page goes back to whoever pressed, and to nobody polling",
+    );
+    // What a poll is told instead names the flow by its page, so the window
+    // that pressed can tell its page is still the one waited on.
+    assert_eq!(
+        waiting["reconnect"]["flow"], "b93e5694",
+        "the waiting flow is named by its page's digest, the same one the explorer \
+         computes over the page it was answered with: {waiting}",
     );
 
     // The person consents: the grant is cached, and Storage takes it.
@@ -85,6 +93,10 @@ async fn a_grant_that_ran_out_is_renewed_and_the_catalog_caught_up_without_a_res
 
     let renewed = once_ended(&served).await;
     assert_eq!(renewed["reconnect"]["state"], "renewed", "{renewed}");
+    assert!(
+        renewed["reconnect"].get("flow").is_none(),
+        "a flow that has ended is waited on no longer, and names none: {renewed}",
+    );
     assert_eq!(
         renewed["catalog"],
         json!({ "state": "caught_up", "stopped": null }),
@@ -139,6 +151,36 @@ async fn a_locked_server_refuses_a_reconnect() {
     assert_eq!(status, 423, "{refusal}");
     assert_eq!(refusal["error"], "locked");
     assert_eq!(served.consent.asked(), 0);
+}
+
+// A Library on S3 reaches its Storage through no grant, so there is nothing a
+// consent page could renew. The explorer offers no reconnect for one, and a
+// press that reaches the route anyway is refused as a conflict with the
+// Library's own Storage — with no flow started, and nothing on record for the
+// page to wait on.
+#[tokio::test]
+async fn a_library_on_s3_has_nothing_to_reconnect() {
+    let served = Served::on_s3().await;
+
+    let (status, refusal) = body_of(served.post("/api/reconnect").await).await;
+    assert_eq!(status, 409, "{refusal}");
+    assert_eq!(refusal["error"], "bad_request");
+    assert!(
+        refusal.get("reason").is_none(),
+        "no reason a page could offer a gesture from: {refusal}",
+    );
+    assert!(
+        refusal["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("nothing to reconnect")),
+        "{refusal}",
+    );
+    assert_eq!(served.consent.asked(), 0, "no consent flow was started");
+    assert_eq!(
+        work(&served).await["reconnect"],
+        Value::Null,
+        "nothing reconnected or waiting",
+    );
 }
 
 // A flow waiting on its consent page is work over the Library's keys, so the

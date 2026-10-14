@@ -197,7 +197,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             key_lost: Vec::new(),
-            degraded: None,
+            short: None,
         }
     }
 
@@ -285,7 +285,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             key_lost: Vec::new(),
-            degraded: None,
+            short: None,
         };
         assert_eq!(summary(&outcome), ["fetched 1, containers 0, skipped 0"]);
     }

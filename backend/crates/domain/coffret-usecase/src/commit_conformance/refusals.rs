@@ -3,7 +3,9 @@ use coffret_model::{ContainerKind, Generation};
 use crate::commit::{commit_batch, CommitError, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
 use crate::commit_conformance::faulty_store::FaultyStore;
-use crate::commit_conformance::fixtures::{container_id, control_keys, path, prepared, request};
+use crate::commit_conformance::fixtures::{
+    container_id, control_keys, path, prepared, request, request_under, triplicate,
+};
 use crate::commit_conformance::library::{mapped, Library};
 use crate::error::Error;
 use crate::generations::generation;
@@ -70,6 +72,83 @@ pub async fn a_missing_keyring_replica_stops_the_commit(fixture: &CommitUnderTes
         !Library::read(store).await.holds_any("head-"),
         "no Journal record is created while the candidate is incomplete",
     );
+}
+
+/// Where several replicas fail to read back, the commit names the lowest of
+/// them, and writes no head (spec: CP-8, KL-2).
+///
+/// The replicas are written and read back together, so which failure Storage
+/// answered first is a matter of timing. The error is not: it names the lowest
+/// position that failed, so the same Library fails the same way however the
+/// requests interleaved.
+pub async fn the_lowest_missing_replica_is_the_one_reported(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let faulty = FaultyStore::swallowing_replicas(store, &[2, 1]);
+    let keys = control_keys();
+
+    let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
+    let result = commit_batch(request_under(
+        &faulty,
+        fixture.index(),
+        &keys,
+        batch,
+        triplicate(),
+    ))
+    .await;
+
+    match result.map_err(|failure| *failure.error) {
+        Err(CommitError::IncompleteKeyring {
+            generation,
+            replica,
+            ..
+        }) => {
+            assert_eq!(generation, Generation::FIRST);
+            assert_eq!(replica, 1, "the failure names the lowest replica missing");
+        }
+        other => panic!("expected an incomplete candidate Keyring, got {other:?}"),
+    }
+    assert!(
+        !Library::read(store).await.holds_any("head-"),
+        "no Journal record is created while the candidate is incomplete",
+    );
+}
+
+/// A replica write Storage refuses stops the commit before its head, wherever
+/// in the set the refused position is (spec: CP-1, CP-8).
+///
+/// The writes go out together, so the refused one may be answered before or
+/// after the others land. Either way the commit has no complete candidate to
+/// select, and the head chain stays where it was.
+pub async fn a_refused_replica_write_stops_the_commit_before_its_head(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let keys = control_keys();
+
+    for position in [0, 2] {
+        let refusing = FaultyStore::refusing_replica_writes(store, position);
+        let batch =
+            PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
+        let result = commit_batch(request_under(
+            &refusing,
+            fixture.index(),
+            &keys,
+            batch,
+            triplicate(),
+        ))
+        .await
+        .map_err(|failure| *failure.error);
+
+        assert!(
+            matches!(
+                result,
+                Err(CommitError::Storage(Error::PermissionDenied { .. }))
+            ),
+            "expected the refused write of replica {position} to stop the commit, got {result:?}",
+        );
+        assert!(
+            !Library::read(store).await.holds_any("head-"),
+            "a commit whose replica {position} was refused creates no Journal record",
+        );
+    }
 }
 
 /// An interrupted commit leaves the head where it was, and the next run commits

@@ -41,9 +41,9 @@ impl KeyHandle {
     /// A reader's fetch is answered the moment its Entry is placed, and the rest
     /// of the parcel it came out of is read by a task of its own (see
     /// [`EntryFetches::fetch`](coffret_device::EntryFetches::fetch)). That task
-    /// holds the keys until it ends, as this handle would (spec: DK-2), and it
-    /// is not somebody being here: it is the tail of a request that has already
-    /// been answered, so it marks no span (spec: DK-4).
+    /// holds the keys until it ends, so a lock does not cut it short, and as the
+    /// tail of a request already answered it marks no span: it does not defer
+    /// the lock (spec: DK-4, on work that outlives the request that started it).
     pub(crate) fn shared(&self) -> Arc<OpenLibrary> {
         Arc::clone(&self.library)
     }

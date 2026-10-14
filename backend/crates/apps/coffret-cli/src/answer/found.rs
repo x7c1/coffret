@@ -47,7 +47,7 @@ enum Facts {
         settlement: &'static str,
     },
     /// A committed Keyring read with replicas missing.
-    DegradedKeyring {
+    ShortKeyring {
         generation: u64,
         replicas: u16,
         lost: u16,
@@ -116,14 +116,17 @@ impl From<&Finding> for Found {
                     container_id: container_id.to_string(),
                 },
             ),
-            Finding::DegradedKeyring {
+            Finding::ShortKeyring {
                 generation,
                 replicas,
                 lost,
                 unfetched,
             } => (
+                // The kind predates the finding's name and stays, because
+                // scripts read it. It names what a reader is told where the
+                // read established a loss: the set is degraded (spec: KL-5).
                 "degraded_keyring",
-                Facts::DegradedKeyring {
+                Facts::ShortKeyring {
                     generation: generation.get(),
                     replicas: *replicas,
                     lost: *lost,

@@ -151,7 +151,7 @@ workflow:
 
 ## Desktop bundles
 
-Every Release carries unsigned bundles of the desktop shell
+Every Release carries unsigned bundles of the desktop app
 (`backend/crates/apps/coffret-desktop`), built by
 `.github/workflows/bundle.yml`:
 
@@ -260,9 +260,7 @@ the checks run normally.
    **Workflows: Read and write** if a release PR may carry changes to files
    under `.github/workflows/` — and add it as the Actions secret
    `RELEASE_PAT`.
-2. In the repository's Actions settings, allow GitHub Actions to create and
-   approve pull requests.
-3. Optionally, add `validate-title` to the required checks of `main`.
+2. Optionally, add `validate-title` to the required checks of `main`.
 
 Until `RELEASE_PAT` exists, `Create Release PR` ends green with a notice
 saying the secret is missing and that no release PR was made. There is no

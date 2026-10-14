@@ -59,8 +59,7 @@ pub enum Error {
     /// Usually one object, and then the name is carried; but a listing, the
     /// configured bucket or folder, and a provider endpoint can all answer this
     /// way too, and none of those has a name a diagnostic may keep. Which of
-    /// them it was is [`Missing`](crate::Missing) rather than a sentence in a
-    /// name field.
+    /// them it was is [`Missing`] rather than a sentence in a name field.
     NotFound {
         /// What the operation asked for and Storage does not hold.
         missing: Missing,
@@ -551,14 +550,14 @@ impl Redacted for Error {
     ///
     /// The variants rendered as their message are the ones whose every field
     /// is an opaque value — an object name coffret or the provider minted, a
-    /// count, a digest — or, for [`NotFound`](Self::NotFound), a
-    /// [`Missing`](crate::Missing) whose kinds other than an object are fixed
-    /// words. A gateway raising one of them still owes it that the name inside
-    /// says only what coffret or the provider minted: never a local path, never
-    /// the bucket or the prefix somebody configured, never any name a person
-    /// chose. No identity is prepended to those messages: every one of them
-    /// says what it is about in so many words, and whatever wraps this has
-    /// already said which of its own variants held it.
+    /// count, a digest — or, for [`NotFound`](Self::NotFound), a [`Missing`]
+    /// whose kinds other than an object are fixed words. A gateway raising one
+    /// of them still owes it that the name inside says only what coffret or
+    /// the provider minted: never a local path, never the bucket or the prefix
+    /// somebody configured, never any name a person chose. No identity is
+    /// prepended to those messages: every one of them says what it is about in
+    /// so many words, and whatever wraps this has already said which of its
+    /// own variants held it.
     ///
     /// Two more are rendered rather than quoted. [`Io`](Self::Io) is this
     /// machine's own failure, and a gateway may have folded a message naming a

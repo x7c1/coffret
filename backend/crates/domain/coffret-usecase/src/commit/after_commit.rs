@@ -8,6 +8,7 @@ use coffret_model::{
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
+use crate::commit::checkpoint_failure::CheckpointFailure;
 use crate::commit::checkpoint_outcome::CheckpointOutcome;
 use crate::commit::commit_error::{CommitError, CommitResult, ControlObjectFault};
 use crate::commit::commit_policy::CommitPolicy;
@@ -126,7 +127,7 @@ pub(super) async fn write_checkpoint(
                 "the commit stands, but its checkpoint was not written",
             );
             CheckpointOutcome::Failed {
-                cause: Box::new(cause),
+                cause: CheckpointFailure::of_checkpoint_write(cause),
             }
         }
     }

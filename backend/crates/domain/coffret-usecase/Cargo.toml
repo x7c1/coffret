@@ -35,6 +35,10 @@ coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
+# `join_all`, which a commit sends its Keyring replicas out with: no rule orders
+# them, so they go to Storage at once and are read back at once (spec: KL-2,
+# KL-14). `alloc` is the feature that carries it.
+futures-util = { workspace = true, features = ["alloc"] }
 # What both directions hash with: the plaintext of a local file, to tell a
 # changed file from a touched one and to tell a fetched Entry from what the
 # catalog names, and the ciphertext of a Container, which is the value FM-15

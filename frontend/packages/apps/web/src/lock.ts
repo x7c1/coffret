@@ -61,7 +61,9 @@ export function lockLanded(before: LibraryState | null, now: LibraryState): bool
  * The mirror of {@link lockLanded}, and news on the same terms: the change and
  * not the state. A page that was told `locked` and is now told `unlocked` has
  * been refused everything since, and asks it all again — the listing, the tree,
- * and the page the reader was on — without anybody pressing *try again*.
+ * and the page the reader was on — on the answer alone, without anybody
+ * asking for the page again: the locked page's one control is *unlock*, and
+ * the page does not wait on it.
  *
  * A first answer of `unlocked` is not news. The page came up to an open
  * Library and asked its questions already; asking them all again would be this

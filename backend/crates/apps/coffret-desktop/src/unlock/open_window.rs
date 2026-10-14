@@ -1,12 +1,12 @@
 use anyhow::Context;
 use tauri::{App, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-use super::{hide, Shell, WINDOW_LABEL};
+use super::{hide, Desktop, WINDOW_LABEL};
 
 /// Opens the Passphrase window on `libraries`.
 ///
 /// The names are handed to the page before its own script runs, as a frozen
-/// list, so the page asks the shell for nothing but the one thing it is for.
+/// list, so the page asks the app for nothing but the one thing it is for.
 pub fn open_window(app: &App, libraries: &[String]) -> anyhow::Result<()> {
     let names =
         serde_json::to_string(libraries).context("the Library names could not be encoded")?;
@@ -21,17 +21,17 @@ pub fn open_window(app: &App, libraries: &[String]) -> anyhow::Result<()> {
         .build()
         .context("the Passphrase window could not be opened")?;
 
-    // Closing it once a Library is served hides it instead. It is the shell's
+    // Closing it once a Library is served hides it instead. It is the app's
     // one window, and closing the last window ends the process — which would
     // be the server and its explorer gone because somebody dismissed the
     // Passphrase window shown for an unlock. Hidden the way every other hiding
     // is, so whatever was typed and not submitted goes with the page. Before
     // then, closing it is how somebody declines to open anything, and it ends
-    // the shell as it always has.
+    // the app as it always has.
     let hidden = window.clone();
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
-            if hidden.app_handle().state::<Shell>().explorer().is_some() {
+            if hidden.app_handle().state::<Desktop>().explorer().is_some() {
                 api.prevent_close();
                 hide(&hidden);
             }
