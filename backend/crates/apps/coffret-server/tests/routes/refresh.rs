@@ -28,6 +28,14 @@ async fn starting_up_catches_the_catalog_up_with_the_library() {
 
     served.start_up().await;
 
+    // Counted before the folder is listed: a listing reads the fronts of the
+    // folder's Containers ahead of a page being opened, which is the listing's
+    // doing and not the catch-up's.
+    assert_eq!(
+        served.ranged_reads(),
+        0,
+        "a catch-up opens no Container: a record carries what the ones it adds hold",
+    );
     let (_, listed) = body_of(served.get("/api/folders").await).await;
     assert_eq!(
         listed,
@@ -37,11 +45,6 @@ async fn starting_up_catches_the_catalog_up_with_the_library() {
     assert!(
         states(&listing).iter().all(|(_, state)| state == "remote"),
         "the catalog knows them and this device has none of them: {listing}",
-    );
-    assert_eq!(
-        served.ranged_reads(),
-        0,
-        "a catch-up opens no Container: a record carries what the ones it adds hold",
     );
     assert!(!served.holds("albums/cover.png"), "and places no file");
 }
