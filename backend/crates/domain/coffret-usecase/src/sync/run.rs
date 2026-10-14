@@ -117,11 +117,24 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // joined that is the whole Journal. It is the first minutes of the run and
     // nothing else would say a word during them.
     progress.step(Step::begun(Phase::CatchingUp));
-    catch_up(store, index, keys.control(), &policy.retry).await?;
+    let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
 
     // The settle announces its own phase, and only where there are rows to
-    // settle.
-    let settled = settle::settle(store, index, local, &policy, now, progress).await?;
+    // settle. It reads the slots an interrupted batch attempted through the
+    // listing the catch-up has just walked (spec: OC-3).
+    let settled = settle::settle(
+        settle::SettleStorage {
+            store,
+            keys: keys.control(),
+            caught: &caught,
+        },
+        index,
+        local,
+        &policy,
+        now,
+        progress,
+    )
+    .await?;
 
     // The scan is what produces the count the packing phase reports, so it has
     // none of its own to give: a folder's files are known once it has walked

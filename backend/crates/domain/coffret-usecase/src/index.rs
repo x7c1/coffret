@@ -6,7 +6,8 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping, PendingRow,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
+    PendingRow,
 };
 use crate::index_error::IndexResult;
 
@@ -268,22 +269,45 @@ pub trait Index: Send + Sync {
     async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()>;
 
     /// Records that a commit is about to send the Journal record naming these
-    /// Containers, marking each one's pending row
-    /// [`commit_attempted`](PendingRow::commit_attempted) (spec: OC-2, OC-3).
+    /// Containers into `slot`, marking each one's pending row
+    /// [`commit_attempted`](PendingRow::commit_attempted) and recording `slot`
+    /// against the batch of every row it marks (spec: OC-2, OC-3).
     ///
-    /// All or nothing: either every named row is marked or, on an error, none
-    /// is. The rows of one batch are marked together because a later settle
-    /// judges each row on its own, and a batch left half-marked would have it keep
-    /// the marked rows as of unknown outcome while it discards the unmarked
-    /// ones as never sent — although no create was sent for any of them.
+    /// All or nothing: either every named row is marked and the slot recorded
+    /// or, on an error, none of it is. The rows of one batch are marked together
+    /// because a later settle judges each row on its own, and a batch left
+    /// half-marked would have it keep the marked rows as of unknown outcome
+    /// while it discards the unmarked ones as never sent — although no create
+    /// was sent for any of them. The slot is recorded in the same write because
+    /// a marked row whose slot is missing could never be proven
+    /// (spec: OC-3), and a slot recorded for rows left unmarked would say a
+    /// create was about to be sent when none was.
+    ///
+    /// A slot already recorded for the batch is kept rather than recorded twice,
+    /// and every other slot it holds stays: a batch that rebases (spec: CP-4)
+    /// attempts one slot per attempt, and the proof needs every one of them.
     ///
     /// An update and not an upsert, for the reason
     /// [`mark_spooled`](Self::mark_spooled) is one: a Container with no row
-    /// changes nothing rather than failing.
-    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()>;
+    /// changes nothing rather than failing, and records no slot.
+    async fn mark_commit_attempted(
+        &self,
+        container_ids: &[ContainerId],
+        slot: &AttemptedSlot,
+    ) -> IndexResult<()>;
+
+    /// Every commit slot recorded against `batch`, ordered by generation and
+    /// then by identifier (spec: OC-2, OC-3).
+    ///
+    /// Empty for a batch that never attempted a commit, and equally for one
+    /// whose rows were marked before slots were recorded at all — which is the
+    /// missing evidence OC-2 tells settlement to read as uncertain. What a batch
+    /// recorded goes when the last of its pending rows does.
+    async fn attempted_slots(&self, batch: &BatchId) -> IndexResult<Vec<AttemptedSlot>>;
 
     /// Drops the pending row for one Container, its batch having committed or
-    /// been abandoned.
+    /// been abandoned, and the slots its batch recorded with the batch's last
+    /// row.
     ///
     /// Dropping one that is not there succeeds, so an interrupted cleanup is
     /// simply run again (spec: OC-8).

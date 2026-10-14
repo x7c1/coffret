@@ -18,7 +18,10 @@ use crate::committed_batch::CommittedBatch;
 /// (spec: EP-6), repair the committed Keyring if it has lost replicas
 /// (spec: KL-11, KL-13), write and verify the Keyring generation the commit will
 /// select (spec: CP-8, KL-2), and consume the head's commit slot with the Journal
-/// record (spec: CP-2, CP-3). Creating that object is the commit point: before
+/// record (spec: CP-2, CP-3) — having first recorded beside the batch's pending
+/// rows that a create into that slot is about to be sent, which is what a later
+/// settle reads to prove the batch did or did not commit there (spec: OC-2,
+/// OC-3). Creating that object is the commit point: before
 /// it the batch has changed nothing, and after it the batch's additions and
 /// removals are part of the current Container set, never partially (spec: CP-1).
 ///
@@ -143,18 +146,18 @@ async fn attempt_until_committed(
         let commitment =
             keyring::replicate(store, index, keys, &policy, &examined, &batch, committing).await?;
 
-        super::pending_provenance::mark_attempt(index, &batch).await?;
+        let Some(aim) = journal::aim(store, &policy, &caught, committed.as_ref()).await? else {
+            debug!(
+                attempt,
+                "the catalog moved past the head this attempt caught up to; retrying"
+            );
+            continue;
+        };
 
-        let Attempted::Committed(landed) = journal::commit(
-            store,
-            keys,
-            &policy,
-            &caught,
-            committed.as_ref(),
-            commitment,
-            &batch,
-        )
-        .await?
+        super::pending_provenance::mark_attempt(index, &batch, &aim.attempted()).await?;
+
+        let Attempted::Committed(landed) =
+            journal::commit(store, keys, &policy, aim, commitment, &batch).await?
         else {
             debug!(
                 attempt,

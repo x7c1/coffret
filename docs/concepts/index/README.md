@@ -65,13 +65,14 @@ forgotten record is not an absent one, because it witnesses no deletion
 A **spool** holds a new Container's ciphertext on this device. A **pending row**
 is its local provenance: which batch created it, where its spool and uploaded
 object are, whether spooling finished, and whether a commit may have been
-attempted. Settlement uses that evidence to distinguish work it can reclaim,
-work whose interrupted refresh it can complete, and work it must retain.
+attempted and, for its batch, at which commit slots. Settlement uses that
+evidence to distinguish work it can reclaim, work whose interrupted refresh it
+can complete, and work it must retain.
 
 | Settlement evidence | Action |
 | --- | --- |
-| An abandoned batch proven never attempted | Dispose of its spool and uploaded object |
-| A completed spool whose Container is current | Complete this device's materialization records |
+| An abandoned batch proven never attempted, or an attempted one whose every recorded commit slot holds another record | Dispose of its spool and uploaded object |
+| A completed spool whose Container is current, or named by the record at a slot its batch attempted | Complete this device's materialization records |
 | An attempted or unknown commit, without proof of abandonment | Retain the ciphertext and provenance |
 
 Only a run with exclusive ownership of this device's pending work may settle

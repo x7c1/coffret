@@ -1,6 +1,7 @@
 use coffret_model::ObjectRef;
 
-use crate::device_state::{PendingRow, SpoolState};
+use crate::device_state::{AttemptedSlot, BatchId, PendingRow, SpoolState};
+use crate::generations::generation;
 use crate::index_conformance::fixtures::{container_id, pending, spooling};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 use crate::index_error::IndexError;
@@ -195,8 +196,9 @@ pub async fn a_batch_is_marked_attempted_together(fixture: &IndexUnderTest) {
         pending(3, "batch-beta"),
     ];
 
+    let slot = AttemptedSlot::new(generation(4), None);
     index
-        .mark_commit_attempted(&[container_id(1), container_id(2), container_id(9)])
+        .mark_commit_attempted(&[container_id(1), container_id(2), container_id(9)], &slot)
         .await
         .expect("marking a batch attempted must succeed");
     assert_eq!(
@@ -209,11 +211,11 @@ pub async fn a_batch_is_marked_attempted_together(fixture: &IndexUnderTest) {
     );
 
     index
-        .mark_commit_attempted(&[container_id(1), container_id(2)])
+        .mark_commit_attempted(&[container_id(1), container_id(2)], &slot)
         .await
         .expect("marking a batch attempted again must succeed");
     index
-        .mark_commit_attempted(&[])
+        .mark_commit_attempted(&[], &AttemptedSlot::new(generation(9), None))
         .await
         .expect("marking an empty batch must succeed");
     assert_eq!(
@@ -224,4 +226,95 @@ pub async fn a_batch_is_marked_attempted_together(fixture: &IndexUnderTest) {
         expected,
         "repeating the mark changes nothing",
     );
+    assert_eq!(
+        slots(index, "batch-alpha").await,
+        [slot],
+        "the slot is recorded once for the batch it marked",
+    );
+    assert!(
+        slots(index, "batch-beta").await.is_empty(),
+        "a batch none of whose rows were named records no slot",
+    );
+}
+
+/// A batch records every commit slot it attempted, and they go with its last
+/// row (spec: OC-2, OC-3).
+///
+/// A batch that rebases (spec: CP-4) attempts one slot per attempt, and a
+/// settle that proves it did not commit needs every one of them, so a later
+/// slot is recorded beside the earlier ones rather than over them — in both of
+/// the forms a slot takes, the minted identifier and the name alone
+/// (spec: CP-2). The slots belong to the batch rather than to one row, so they
+/// outlive every row but the last, and once no row of the batch is left nothing
+/// is there to settle and they go too.
+pub async fn a_batch_keeps_every_slot_it_attempted_until_its_last_row_goes(
+    fixture: &IndexUnderTest,
+) {
+    let index = fixture.index();
+    for row in [
+        pending(1, "batch-alpha"),
+        pending(2, "batch-alpha"),
+        pending(3, "batch-beta"),
+    ] {
+        index
+            .record_pending_row(row)
+            .await
+            .expect("recording a spool must succeed");
+    }
+    let first = AttemptedSlot::new(generation(4), Some("minted-for-4".to_owned()));
+    let rebased = AttemptedSlot::new(generation(6), None);
+    let beta = AttemptedSlot::new(generation(5), Some("minted-for-5".to_owned()));
+
+    let alpha = [container_id(1), container_id(2)];
+    for slot in [&rebased, &first] {
+        index
+            .mark_commit_attempted(&alpha, slot)
+            .await
+            .expect("marking a batch attempted must succeed");
+    }
+    index
+        .mark_commit_attempted(&[container_id(3)], &beta)
+        .await
+        .expect("marking a batch attempted must succeed");
+
+    assert_eq!(
+        slots(index, "batch-alpha").await,
+        [first.clone(), rebased.clone()],
+        "every slot a batch attempted is kept, by generation",
+    );
+    assert_eq!(
+        slots(index, "batch-beta").await,
+        std::slice::from_ref(&beta)
+    );
+
+    index
+        .clear_pending_row(container_id(1))
+        .await
+        .expect("clearing a spool must succeed");
+    assert_eq!(
+        slots(index, "batch-alpha").await,
+        [first, rebased],
+        "a batch with a row left keeps its slots",
+    );
+
+    index
+        .clear_pending_row(container_id(2))
+        .await
+        .expect("clearing a spool must succeed");
+    assert!(
+        slots(index, "batch-alpha").await.is_empty(),
+        "the slots go with the batch's last row",
+    );
+    assert_eq!(
+        slots(index, "batch-beta").await,
+        [beta],
+        "another batch's slots stay",
+    );
+}
+
+async fn slots(index: &dyn crate::Index, batch: &str) -> Vec<AttemptedSlot> {
+    index
+        .attempted_slots(&BatchId::new(batch))
+        .await
+        .expect("reading the attempted slots must succeed")
 }

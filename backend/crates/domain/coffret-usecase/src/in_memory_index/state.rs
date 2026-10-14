@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{
     ContainerId, ContainerSummary, ControlObjectName, EntryLocation, EntryPath, IndexCheckpoint,
@@ -7,8 +7,8 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow,
-    SpoolState,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
+    Mapping, PendingRow, SpoolState,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -33,6 +33,9 @@ pub(super) struct State {
     mappings: BTreeMap<Option<EntryPath>, Mapping>,
     local_entries: BTreeMap<EntryPath, LocalEntry>,
     pending_rows: BTreeMap<ContainerId, PendingRow>,
+    /// The commit slots each batch with pending rows attempted (spec: OC-2),
+    /// ordered the way the port answers for them.
+    attempted_slots: BTreeMap<BatchId, BTreeSet<AttemptedSlot>>,
     /// The parcels this device holds, keyed and so ordered the way the port
     /// answers for them (spec: PK-21).
     held_parcels: BTreeMap<(ContainerId, u64), HeldParcel>,
@@ -102,7 +105,7 @@ impl State {
             self.mark_present(observation);
         }
         for container_id in uploaded {
-            self.pending_rows.remove(&container_id);
+            self.clear_pending_row(container_id);
         }
         Ok(())
     }
@@ -232,19 +235,45 @@ impl State {
         }
     }
 
-    /// Marks the rows of a batch whose commit is about to be sent, all under the
-    /// one lock, so no reader sees part of the batch marked. A Container with no
-    /// row changes nothing.
-    pub(super) fn mark_commit_attempted(&mut self, container_ids: &[ContainerId]) {
+    /// Marks the rows of a batch whose commit is about to be sent into `slot`,
+    /// and records the slot against the batch of every row it marks, all under
+    /// the one lock, so no reader sees part of the batch marked or a marked row
+    /// without its slot. A Container with no row changes nothing.
+    pub(super) fn mark_commit_attempted(
+        &mut self,
+        container_ids: &[ContainerId],
+        slot: &AttemptedSlot,
+    ) {
         for container_id in container_ids {
             if let Some(pending) = self.pending_rows.get_mut(container_id) {
                 pending.commit_attempted = true;
+                self.attempted_slots
+                    .entry(pending.batch.clone())
+                    .or_default()
+                    .insert(slot.clone());
             }
         }
     }
 
+    pub(super) fn attempted_slots(&self, batch: &BatchId) -> Vec<AttemptedSlot> {
+        self.attempted_slots
+            .get(batch)
+            .map(|slots| slots.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Drops one row, and the slots of its batch with the batch's last row.
     pub(super) fn clear_pending_row(&mut self, container_id: ContainerId) {
-        self.pending_rows.remove(&container_id);
+        let Some(removed) = self.pending_rows.remove(&container_id) else {
+            return;
+        };
+        if !self
+            .pending_rows
+            .values()
+            .any(|pending| pending.batch == removed.batch)
+        {
+            self.attempted_slots.remove(&removed.batch);
+        }
     }
 
     pub(super) fn pending_rows(&self) -> Vec<PendingRow> {

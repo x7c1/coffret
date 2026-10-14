@@ -1,64 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, EntryMetadata, Redacted};
-use tracing::{debug, info, warn};
+use coffret_model::{ContainerId, EntryMetadata};
+use tracing::info;
 
-use crate::commit::CommitPolicy;
 use crate::device_state::{DeviceTime, LocalObservation, PendingRow};
 use crate::index::Index;
-use crate::object_store::ObjectStore;
-use crate::progress::{Phase, Progress, Step};
 use crate::spool::Spool;
-use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
-
-/// Settles interrupted work while the caller exclusively owns pending rows.
-/// A current Container completes its refresh. A row whose commit was never
-/// attempted may be disposed of; uncertain attempts keep both the ciphertext
-/// and its provenance, even when catch-up found no record (spec: OC-1, OC-3).
-pub(super) async fn settle(
-    store: &dyn ObjectStore,
-    index: &dyn Index,
-    spool: &dyn Spool,
-    policy: &CommitPolicy,
-    now: DeviceTime,
-    progress: &dyn Progress,
-) -> SyncResult<Vec<Settled>> {
-    // What this run is about to commit is not among these: a row is written just
-    // before the spool file it names and dropped by the commit's own refresh
-    // (spec: OC-2), so what is here belongs to a run that ended before that.
-    let pending = index.pending_rows().await?;
-    if pending.is_empty() {
-        return Ok(Vec::new());
-    }
-    progress.step(Step::begun(Phase::Settling));
-
-    let current: BTreeSet<ContainerId> = index
-        .containers_under(None)
-        .await?
-        .into_iter()
-        .map(|container| container.id)
-        .collect();
-    let mut landed = materialized(index, &pending, &current).await?;
-
-    let mut settled = Vec::with_capacity(pending.len());
-    for row in pending {
-        settled.push(if completes(&row, &current) {
-            let entries = landed.remove(&row.container_id);
-            complete(index, spool, now, row, entries).await?
-        } else if row.commit_attempted {
-            warn!(container = %row.container_id, batch = %row.batch,
-                "retained a Container whose commit outcome is unknown");
-            Settled::Retained {
-                container_id: row.container_id,
-            }
-        } else {
-            dispose(store, index, spool, policy, row).await?
-        });
-    }
-    Ok(settled)
-}
 
 /// Whether one row is the commit-landed-refresh-did-not case rather than
 /// something to reclaim.
@@ -76,7 +25,7 @@ pub(super) async fn settle(
 /// [`materialized`] has to pick out exactly the rows the loop will complete —
 /// two spellings of that could drift into a walk that gathers Entries nothing
 /// consumes, or a completion with no Entries to record.
-fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
+pub(super) fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
     row.state.is_spooled() && current.contains(&row.container_id)
 }
 
@@ -106,7 +55,7 @@ fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
 /// One walk of the current Entries answers every completion, and it is walked at
 /// all only where there is one to answer: the whole listing is not a hot path
 /// when the ordinary run leaves this function unreached.
-async fn materialized(
+pub(super) async fn materialized(
     index: &dyn Index,
     pending: &[PendingRow],
     current: &BTreeSet<ContainerId>,
@@ -135,12 +84,12 @@ async fn materialized(
 /// (spec: OC-7).
 ///
 /// The object is the Library's and is left exactly where it is. Everything else
-/// the interrupted refresh would have done is done here: the Entries the
-/// Container holds are marked present, stamped with this run's clock because the
+/// the interrupted refresh would have done is done here: the `entries` it is
+/// handed, if any, are marked present, stamped with this run's clock because the
 /// moment the earlier run looked is not recorded anywhere (spec: EP-10), and the
 /// spool and the row go because a committed Container is no longer a candidate
 /// for cleanup (spec: OC-2).
-async fn complete(
+pub(super) async fn complete(
     index: &dyn Index,
     spool: &dyn Spool,
     now: DeviceTime,
@@ -171,57 +120,5 @@ async fn complete(
     Ok(Settled::Completed {
         container_id: row.container_id,
         entries: entries.len(),
-    })
-}
-
-/// Disposes only of provenance proven abandoned before any commit attempt.
-/// The caller holds exclusive ownership, so no live producer can resume it.
-async fn dispose(
-    store: &dyn ObjectStore,
-    index: &dyn Index,
-    spool: &dyn Spool,
-    policy: &CommitPolicy,
-    row: PendingRow,
-) -> SyncResult<Settled> {
-    spool.discard(&row.spool_path).await?;
-
-    let disposal = match row.state.object_ref() {
-        Some(object) => match policy.retry.run("trash", || store.trash(object)).await {
-            Ok(()) => {
-                info!(
-                    container = %row.container_id,
-                    batch = %row.batch,
-                    "trashed a Container an interrupted run uploaded and never committed",
-                );
-                Disposal::Trashed
-            }
-            // Retain the row on refusal: it remains the proof that makes
-            // retrying this cleanup safe (spec: OC-2, OC-3).
-            Err(error) => {
-                warn!(
-                    container = %row.container_id,
-                    batch = %row.batch,
-                    reason = %error.redacted(),
-                    "an abandoned Container is still in Storage",
-                );
-                Disposal::LeftInStorage { cause: error }
-            }
-        },
-        None => {
-            debug!(
-                container = %row.container_id,
-                batch = %row.batch,
-                "an interrupted run's spool never left the device",
-            );
-            Disposal::NeverUploaded
-        }
-    };
-
-    if !matches!(disposal, Disposal::LeftInStorage { .. }) {
-        index.clear_pending_row(row.container_id).await?;
-    }
-    Ok(Settled::Disposed {
-        container_id: row.container_id,
-        disposal,
     })
 }

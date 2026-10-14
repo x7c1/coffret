@@ -13,6 +13,9 @@
 //! desktop mapping `books/` restore the same catalog from one Snapshot and keep
 //! their own answers to "where is it on disk" and "did I ever have it".
 
+mod attempted_slot;
+pub use attempted_slot::AttemptedSlot;
+
 mod batch_id;
 pub use batch_id::BatchId;
 

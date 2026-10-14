@@ -13,4 +13,6 @@ mod columns;
 pub(crate) use columns::{kind_text, spool_state_text, state_text, to_integer};
 
 mod device;
-pub(crate) use device::{held_parcel, local_entry, mapping, pending_row, refused_mapping};
+pub(crate) use device::{
+    attempted_slot, held_parcel, local_entry, mapping, pending_row, refused_mapping,
+};
