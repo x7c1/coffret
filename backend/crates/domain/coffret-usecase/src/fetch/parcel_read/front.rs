@@ -50,7 +50,7 @@ pub(super) async fn front(
 /// bytes kept are the object's own; they are opened under the key each time, as
 /// bytes read from Storage are. Kept only once they have opened, so a front
 /// that would not authenticate is read again rather than remembered.
-pub(super) async fn outline(
+pub(in crate::fetch) async fn outline(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
     memory: Option<&FetchMemory>,

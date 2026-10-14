@@ -54,7 +54,7 @@ pub struct Finding {
     /// reported it, and a mapped folder that is not the one its mapping was
     /// recorded against is `refused_root` either way. The five a refusal never
     /// carries are a run's own — a mapped root it could not vouch for is not
-    /// something a request is declined over (spec: EP-12), a degraded Keyring
+    /// something a request is declined over (spec: EP-12), a short Keyring
     /// is read through rather than refused (spec: RV-2), a repaired one is
     /// work a run did (spec: KL-13), and a kept parcel not held was read again
     /// from Storage rather than refused over (spec: PK-21). The whole set is
@@ -133,16 +133,20 @@ impl Finding {
             // Library and not about one Entry, and no counts or generation in
             // the sentence, for the reason a mapping stays out of the ones
             // above: the terminal is where the particulars are said.
-            Finding::DegradedKeyring { lost, .. } => Some(Self {
+            Finding::ShortKeyring { lost, .. } => Some(Self {
                 path: None,
-                message: degraded_keyring(*lost > 0).to_owned(),
+                message: short_keyring(*lost > 0).to_owned(),
+                // The reason predates the finding's name and stays, because
+                // the explorer's contract reads it. It names what the explorer
+                // shows where the run established a loss: the set is degraded
+                // (spec: KL-5).
                 reason: "keyring_degraded",
                 surfaced: None,
             }),
-            // Shown for the reason a degraded one is, and in the words the
+            // Shown for the reason a short one is, and in the words the
             // terminal says it in: KL-15 says a repair performed is never
             // silent, and one sentence for both shells means a person who met
-            // it in one reads the same news in the other. Unlike a degraded
+            // it in one reads the same news in the other. Unlike a short
             // Keyring's, the sentence names the generation and counts the
             // replicas put back — both numbers, neither a path nor a name, so
             // nothing of the person's crosses here (spec: EL-1).
@@ -152,7 +156,7 @@ impl Finding {
                 reason: "keyring_repaired",
                 surfaced: None,
             }),
-            // Shown although nothing is left to do, for the reason a degraded
+            // Shown although nothing is left to do, for the reason a short
             // Keyring is: PK-21 says it is said, the second read is one the
             // provider observes, and a person who only opens files hears of a
             // disk that changed under the device nowhere else. No path, and
@@ -201,7 +205,7 @@ const UNHELD_PARCEL: &str =
 /// be reporting a loss a transient fault made up. Either way the files still
 /// open (spec: RV-2), and the next run that writes to the Library deals with it
 /// before it commits (spec: KL-13, KL-16).
-fn degraded_keyring(established: bool) -> &'static str {
+fn short_keyring(established: bool) -> &'static str {
     if established {
         "the Library's Keyring is degraded: some of its replicas are missing or unreadable. \
          Files still open, and the next run that writes to the Library repairs it"
@@ -362,7 +366,9 @@ mod tests {
     use std::num::NonZeroUsize;
     use std::path::{Path, PathBuf};
 
-    use coffret_device::{Disposal, Generation, Settled, StorageError, UnheldReason};
+    use coffret_device::{
+        CheckpointFailure, Disposal, Generation, Settled, StorageError, UnheldReason,
+    };
     use coffret_model::ContainerId;
 
     use super::*;
@@ -514,20 +520,24 @@ mod tests {
             },
         };
         let checkpoint = coffret_device::Finding::CheckpointFailed {
-            cause: "the provider is unavailable".to_owned(),
+            cause: CheckpointFailure::Storage(StorageError::Rejected {
+                status: 503,
+                detail: "the provider is unavailable".to_owned(),
+                source: None,
+            }),
         };
 
         assert!(Finding::of(&untrashed).is_none());
         assert!(Finding::of(&checkpoint).is_none());
     }
 
-    // A degraded Keyring reaches the explorer, and is said as loss only where
+    // A short Keyring reaches the explorer, and is said as loss only where
     // the run established one (spec: KL-15). Neither sentence names the
     // generation or a count: those are the terminal's to say.
     #[test]
-    fn a_degraded_keyring_is_shown_and_said_as_loss_only_where_established() {
+    fn a_short_keyring_is_shown_and_said_as_loss_only_where_established() {
         let shown = |lost, unfetched| {
-            Finding::of(&coffret_device::Finding::DegradedKeyring {
+            Finding::of(&coffret_device::Finding::ShortKeyring {
                 generation: Generation::FIRST,
                 replicas: 3,
                 lost,
@@ -676,13 +686,13 @@ mod tests {
             Finding::RefusedRoot { .. } => Some(Finding::KeyLostContainer {
                 container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
             }),
-            Finding::KeyLostContainer { .. } => Some(Finding::DegradedKeyring {
+            Finding::KeyLostContainer { .. } => Some(Finding::ShortKeyring {
                 generation: Generation::FIRST,
                 replicas: 3,
                 lost: 1,
                 unfetched: 0,
             }),
-            Finding::DegradedKeyring { .. } => Some(Finding::KeyringRepaired {
+            Finding::ShortKeyring { .. } => Some(Finding::KeyringRepaired {
                 generation: Generation::FIRST,
                 rewritten: NonZeroUsize::MIN,
             }),

@@ -487,3 +487,88 @@ it('names its columns with a capital', () => {
     expect(drawn).toContain(`>${heading}</th>`);
   }
 });
+
+// The line a selection is said on and the line a drag brings up take their own
+// room in the sticky block over the rows, rather than being laid over whatever
+// is under it — which, once the list had scrolled, was the top of the first row
+// in view. jsdom lays nothing out, so how far one box reaches over another
+// cannot be measured here; what is asserted is the structure that makes an
+// overlap impossible: neither line is positioned out of the flow, the selection
+// line stands in the headings' own row, and both are in the sticky block rather
+// than in the rows' table.
+it('says a selection and a drag in the sticky block rather than over the first row', () => {
+  const { list } = mount(three);
+  const sticky = list.firstElementChild as HTMLElement;
+  expect(sticky.style.position).toBe('sticky');
+
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  const line = screen.getByText('1 selected');
+  expect(sticky.contains(line)).toBe(true);
+  expect(line.closest('thead')).not.toBeNull();
+  expect(screen.getByTitle('p1.jpg').closest('table')?.contains(line)).toBe(false);
+
+  fireEvent.dragEnter(list, carryingFiles);
+  const band = screen.getByText(TAKEN);
+  expect(sticky.contains(band)).toBe(true);
+
+  for (const drawn of list.querySelectorAll<HTMLElement>('*')) {
+    if (drawn.getAttribute('role') !== 'menu') {
+      expect(drawn.style.position, drawn.outerHTML.slice(0, 80)).not.toBe('absolute');
+    }
+  }
+});
+
+// A menu on the last row of a list scrolled to its end has no room below it,
+// and hangs above the mark instead of being cut off by the scroll area.
+it("opens the last row's menu upwards where there is no room below it", () => {
+  const { list } = mount(three);
+  const rect = (top: number, height: number) =>
+    ({ top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top }) as DOMRect;
+  const measured = vi
+    .spyOn(Element.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: Element) {
+      if (this === list) {
+        return rect(0, 300);
+      }
+      if (this.getAttribute('role') === 'menu') {
+        return rect(0, 60);
+      }
+      // A row's menu cell: the last one sits at the bottom of the area.
+      return this.closest('tr')?.getAttribute('title') === 'p3.jpg' ? rect(270, 28) : rect(40, 28);
+    });
+  try {
+    fireEvent.click(screen.getByLabelText('actions for p1.jpg'));
+    expect(screen.getByRole('menu').style.top).toBe('100%');
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    fireEvent.click(screen.getByLabelText('actions for p3.jpg'));
+    const menu = screen.getByRole('menu');
+    expect(menu.style.bottom).toBe('100%');
+    expect(menu.style.top).toBe('');
+  } finally {
+    measured.mockRestore();
+  }
+});
+
+// The selection's line takes the headings' row over at the first tick, and the
+// rows under it must not move as it does: the pointer that ticked the first box
+// is about to tick the next. jsdom lays nothing out, so the row's height in
+// pixels cannot be measured here (a row's height is only the least it may be,
+// and a taller line in any cell grows it). What is asserted is what keeps the
+// two rows' lines alike: the same height and the same font size, given to the
+// row, so that the box's cell — the one cell both rows have — draws the same
+// line in each.
+it('gives the selection line the headings’ height and font size', () => {
+  const { list } = mount(three);
+  const row = () => list.querySelector('thead tr') as HTMLElement;
+  const headings = { height: row().style.height, fontSize: row().style.fontSize };
+  expect(headings.height).not.toBe('');
+  expect(headings.fontSize).not.toBe('');
+  const box = row().querySelector('th') as HTMLElement;
+  expect(box.style.fontSize).toBe('');
+
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  expect(row().contains(screen.getByText('1 selected'))).toBe(true);
+  expect({ height: row().style.height, fontSize: row().style.fontSize }).toEqual(headings);
+  expect((row().querySelector('th') as HTMLElement).style.fontSize).toBe('');
+});

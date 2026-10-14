@@ -132,6 +132,12 @@
 //! file written and not marked present is one no later run would recognize as
 //! this device's own.
 //!
+//! [`read_fronts`] is the one step taken early on its own: a Container's front
+//! is the same read whichever Entry is wanted, names none of them, and is only
+//! kept in a [`FetchMemory`] — so a process can read the fronts of a folder's
+//! Containers as somebody lists it, and the fetch after that reads parcels
+//! alone (spec: FM-2, PK-16, PK-20). It places nothing.
+//!
 //! [`local_path_of`] and [`local_place_of`] expose step 2 for a single Entry,
 //! and move nothing. The first answers where a file belongs for display and
 //! collision checks; the second keeps the mapped root and validated relative
@@ -197,6 +203,12 @@ pub use fetch_outcome::FetchOutcome;
 
 mod fetch_request;
 pub use fetch_request::FetchRequest;
+
+mod fronts_ahead;
+pub use fronts_ahead::read_fronts;
+
+mod fronts_request;
+pub use fronts_request::FrontsRequest;
 
 mod kept_parcels;
 pub use kept_parcels::KeptParcels;

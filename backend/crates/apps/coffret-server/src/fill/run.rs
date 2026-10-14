@@ -120,7 +120,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             }
         };
         let fetched = fetched.map(|fetched| {
-            if let Some(found) = fetched.degraded {
+            if let Some(found) = fetched.short {
                 run.read_keyring(found);
             }
             run.read_unheld(fetched.unheld);
@@ -201,6 +201,7 @@ fn is_about_one_entry(error: &Error) -> bool {
         // sentence a person reads rather than how far the refusal reaches.
         | FetchError::ReservedComponent { .. }
         | FetchError::FoldedReservedComponent { .. }
+        | FetchError::TrashFolderComponent { .. }
         | FetchError::LocalPathCollision { .. }
         | FetchError::UnstampableMtime { .. }
         | FetchError::EntryNotCurrent { .. } => true,

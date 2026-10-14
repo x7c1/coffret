@@ -496,14 +496,14 @@ async fn next_generation(
 /// The key table is what the caller asked for; the finding beside it is what the
 /// walk noticed on the way, and it is carried rather than written down here so
 /// that the caller decides when — and whether — the run says it. See
-/// [`DegradedKeyring`], and [`DegradedReport`] for what a caller that goes on
+/// [`ShortKeyring`], and [`ShortReport`] for what a caller that goes on
 /// to write holds it in.
 pub(crate) struct ReadKeyring {
     /// The key table the committed generation holds (spec: KL-6).
     pub(crate) key_table: KeyTable,
     /// The set the key table came from, where the walk had to step over a
     /// position to reach it.
-    pub(crate) degraded: Option<DegradedKeyring>,
+    pub(crate) short: Option<ShortKeyring>,
 }
 
 impl ReadKeyring {
@@ -514,16 +514,21 @@ impl ReadKeyring {
     /// finding comes back as well, for the run's outcome to carry to whoever
     /// asked for it — a log line is what somebody reads afterwards, and the
     /// person who ran the flow is owed it on the spot (spec: KL-15).
-    pub(crate) fn reported(self) -> (KeyTable, Option<DegradedKeyring>) {
-        if let Some(degraded) = &self.degraded {
-            degraded.report();
+    pub(crate) fn reported(self) -> (KeyTable, Option<ShortKeyring>) {
+        if let Some(short) = &self.short {
+            short.report();
         }
-        (self.key_table, self.degraded)
+        (self.key_table, self.short)
     }
 }
 
 /// A committed Keyring set a read had to step over positions of to reach a
-/// valid replica (spec: KL-5, KL-15).
+/// valid replica: the set is short, to that read, at every position it found
+/// no valid replica (spec: KL-5, KL-15).
+///
+/// Short rather than degraded, because a run knows the set only through what it
+/// read. Degraded is the set's own state, and a finding says it only where the
+/// read established a loss (see [`established`](Self::established)).
 ///
 /// Carried out of the read rather than logged inside it, because a run that
 /// goes on to write examines the same generation in its commit, and that
@@ -546,14 +551,14 @@ impl ReadKeyring {
 /// The counts are floors rather than tallies: the replicas above the one that
 /// answered are never fetched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DegradedKeyring {
+pub struct ShortKeyring {
     generation: Generation,
     replicas: u16,
     lost: u16,
     unfetched: u16,
 }
 
-impl DegradedKeyring {
+impl ShortKeyring {
     /// A finding about `generation`'s set of `replicas`, where the walk found
     /// `lost` positions lost and `unfetched` more Storage did not hand over.
     ///
@@ -647,9 +652,9 @@ impl DegradedKeyring {
 /// the read found short is by then not the committed set at all. KL-5 is a
 /// statement about the committed set, and what became of a superseded
 /// generation's replicas is orphan cleanup's question (spec: CK-9, KL-12).
-pub(crate) struct DegradedReport {
+pub(crate) struct ShortReport {
     /// The finding, where the read made one.
-    found: Option<DegradedKeyring>,
+    found: Option<ShortKeyring>,
     /// Whether something else in the run has spoken for it.
     ///
     /// An atomic rather than a `Cell` because the disarming happens inside the
@@ -658,9 +663,9 @@ pub(crate) struct DegradedReport {
     spoken_for: AtomicBool,
 }
 
-impl DegradedReport {
+impl ShortReport {
     /// The finding a read left, waiting to be said.
-    pub(crate) fn armed(found: Option<DegradedKeyring>) -> Self {
+    pub(crate) fn armed(found: Option<ShortKeyring>) -> Self {
         Self {
             found,
             spoken_for: AtomicBool::new(false),
@@ -683,7 +688,7 @@ impl DegradedReport {
     /// two channels, one for the person who ran the flow and one for the log.
     /// Where the commit's examination spoke, its own account travels instead
     /// (the repair on the commit outcome, or the refusal), and this is `None`.
-    pub(crate) fn unspoken(&self) -> Option<DegradedKeyring> {
+    pub(crate) fn unspoken(&self) -> Option<ShortKeyring> {
         if self.spoken_for.load(Ordering::Relaxed) {
             return None;
         }
@@ -691,7 +696,7 @@ impl DegradedReport {
     }
 }
 
-impl Drop for DegradedReport {
+impl Drop for ShortReport {
     fn drop(&mut self) {
         if let Some(found) = self.unspoken() {
             found.report();
@@ -727,7 +732,7 @@ impl Drop for DegradedReport {
 /// (spec: KL-15). It is handed back rather than written here, because a
 /// caller that goes on to commit has an examination of the same generation in
 /// the same run and that examination says its own piece: see
-/// [`DegradedKeyring`].
+/// [`ShortKeyring`].
 ///
 /// Crate-visible, for the reason [`catch_up`](super::catch_up()) is: reading the
 /// committed Keyring is not the commit's alone. A fetch reads it to open the
@@ -767,8 +772,8 @@ pub(crate) async fn read_committed(
             Ok(key_table) => {
                 return Ok(ReadKeyring {
                     key_table,
-                    degraded: (lost > 0 || unfetched > 0).then(|| {
-                        DegradedKeyring::new(
+                    short: (lost > 0 || unfetched > 0).then(|| {
+                        ShortKeyring::new(
                             commitment.generation(),
                             commitment.replica_count(),
                             lost,

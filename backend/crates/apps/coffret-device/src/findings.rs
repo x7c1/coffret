@@ -1,13 +1,13 @@
 use std::error;
 
-use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, DegradedKeyring};
+use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, ShortKeyring};
 use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, UnavailableRoot};
 
-use crate::finding::{chained, Finding};
+use crate::finding::Finding;
 use crate::finding_reason::FindingReason;
 
 /// What a run that succeeded still has to be read for.
@@ -132,7 +132,7 @@ impl From<&FreezeOutcome> for Findings {
                 .chain(unavailable(&outcome.unavailable))
                 .chain(committed(outcome.commit.as_ref()))
                 .chain(repaired(outcome.commit.as_ref()))
-                .chain(degraded(outcome.degraded.as_ref()))
+                .chain(short(outcome.short.as_ref()))
                 .collect(),
         )
     }
@@ -151,7 +151,7 @@ impl From<&DeleteOutcome> for Findings {
             committed(outcome.commit.as_ref())
                 .into_iter()
                 .chain(repaired(outcome.commit.as_ref()))
-                .chain(degraded(outcome.degraded.as_ref()))
+                .chain(short(outcome.short.as_ref()))
                 .collect(),
         )
     }
@@ -173,7 +173,7 @@ impl From<&FetchOutcome> for Findings {
                 .map(declined)
                 .chain(refused(&outcome.refused))
                 .chain(key_lost)
-                .chain(degraded(outcome.degraded.as_ref()))
+                .chain(short(outcome.short.as_ref()))
                 .collect(),
         )
     }
@@ -194,7 +194,7 @@ impl From<&EntryFetchOutcome> for Findings {
             entry
                 .into_iter()
                 .chain(outcome.unheld.iter().map(Finding::from))
-                .chain(degraded(outcome.degraded.as_ref()))
+                .chain(short(outcome.short.as_ref()))
                 .collect(),
         )
     }
@@ -232,7 +232,7 @@ impl Findings {
 /// The findings for the committed Keyring generations a commit repaired, one
 /// each, and none where it repaired nothing (spec: KL-13, KL-15).
 ///
-/// Last among a run's findings, beside a degraded Keyring, because it is about
+/// Last among a run's findings, beside a short Keyring, because it is about
 /// the Library rather than about anything the run was asked to do: a screen
 /// with room for one finding shows one somebody has to act on first. One per
 /// generation, because a run that repaired a set and then rebased onto another
@@ -248,7 +248,7 @@ fn repaired(commit: Option<&CommitOutcome>) -> impl Iterator<Item = Finding> + '
 ///
 /// Last among a run's findings, because it is about the Library rather than
 /// about anything the run was asked to do.
-fn degraded(found: Option<&DegradedKeyring>) -> Option<Finding> {
+fn short(found: Option<&ShortKeyring>) -> Option<Finding> {
     found.map(Finding::from)
 }
 
@@ -291,7 +291,7 @@ fn committed(commit: Option<&CommitOutcome>) -> Vec<Finding> {
         });
     let checkpoint = match &commit.checkpoint {
         CheckpointOutcome::Failed { cause } => Some(Finding::CheckpointFailed {
-            cause: chained(cause.as_ref()),
+            cause: cause.clone(),
         }),
         CheckpointOutcome::NotDue
         | CheckpointOutcome::Written { .. }
@@ -332,7 +332,7 @@ mod tests {
         ContainerId, Generation, JournalRecord, KeyringCommitment, MasterKeyEpoch,
     };
     use coffret_usecase::commit::{
-        CommitError, KeyringRepair, RewrittenReplicas, UntrashedRemoval,
+        CheckpointFailure, CommitError, KeyringRepair, RewrittenReplicas, UntrashedRemoval,
     };
     use coffret_usecase::sync::{Disposal, Settled, SyncError};
     use coffret_usecase::{root_marker, Error as StorageError, RootRefused, RootUnavailable};
@@ -505,7 +505,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             key_lost: Vec::new(),
-            degraded: None,
+            short: None,
         };
 
         assert!(Findings::from(&outcome).is_empty());
@@ -606,11 +606,11 @@ mod tests {
             record,
             attempts: 1,
             checkpoint: CheckpointOutcome::Failed {
-                cause: Box::new(CommitError::Storage(StorageError::Rejected {
+                cause: CheckpointFailure::Storage(StorageError::Rejected {
                     status: 503,
                     detail: "the provider is unavailable".to_owned(),
                     source: None,
-                })),
+                }),
             },
             untrashed: vec![UntrashedRemoval {
                 container_id: untrashed,
@@ -660,22 +660,27 @@ mod tests {
                  and any later run may trash it"
             ),
         );
+        // What stopped the checkpoint is said in its redacted form: the Storage
+        // status, and nothing the provider said with it (spec: EL-1).
+        assert_eq!(
+            rendered[2],
+            "checkpoint not written (Checkpoint::Storage: Storage::Rejected(status=503)): the \
+             commit stands, and the next qualifying commit writes the checkpoint",
+        );
         assert!(
-            rendered[2].starts_with("checkpoint not written ("),
+            !rendered[2].contains("the provider is unavailable"),
             "{}",
             rendered[2],
         );
+        // And it stays a value a caller can match on.
         assert!(
-            rendered[2].ends_with(
-                "): the commit stands, and the next qualifying commit writes the checkpoint"
+            matches!(
+                findings.iter().nth(2),
+                Some(Finding::CheckpointFailed {
+                    cause: CheckpointFailure::Storage(StorageError::Rejected { status: 503, .. }),
+                })
             ),
-            "{}",
-            rendered[2],
-        );
-        assert!(
-            rendered[2].contains("the provider is unavailable"),
-            "the line carries what stopped it: {}",
-            rendered[2],
+            "{findings:?}",
         );
     }
 
@@ -692,7 +697,7 @@ mod tests {
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             commit: Some(unfinished_commit(container_id)),
-            degraded: None,
+            short: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -728,7 +733,7 @@ mod tests {
             }],
             refused: Vec::new(),
             key_lost: vec![container_id],
-            degraded: None,
+            short: None,
         };
 
         let rendered: Vec<String> = Findings::from(&outcome)
@@ -763,7 +768,7 @@ mod tests {
             }],
             refused: Vec::new(),
             key_lost: Vec::new(),
-            degraded: None,
+            short: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -797,7 +802,7 @@ mod tests {
                 reason: RootRefused::MarkerMismatch,
             }],
             key_lost: Vec::new(),
-            degraded: None,
+            short: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -902,8 +907,8 @@ mod tests {
 
     /// A read that stepped over positions of the committed set, as each run's
     /// outcome carries it.
-    fn degraded_keyring(lost: u16, unfetched: u16) -> DegradedKeyring {
-        DegradedKeyring::new(Generation::FIRST, 3, lost, unfetched)
+    fn short_keyring(lost: u16, unfetched: u16) -> ShortKeyring {
+        ShortKeyring::new(Generation::FIRST, 3, lost, unfetched)
     }
 
     // A fetch, one Entry's fetch and a freeze that committed nothing each tell
@@ -911,7 +916,7 @@ mod tests {
     // turns the exit status over it: the reads went on, and the next run that
     // commits repairs the set (spec: KL-5, KL-15, RV-2).
     #[test]
-    fn a_degraded_keyring_is_reported_by_every_run_that_read_it_and_needs_no_attention() {
+    fn a_short_keyring_is_reported_by_every_run_that_read_it_and_needs_no_attention() {
         let fetch = FetchOutcome {
             fetched: vec![entry_path("albums/kept.jpg")],
             containers: Vec::new(),
@@ -920,10 +925,10 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             key_lost: Vec::new(),
-            degraded: Some(degraded_keyring(1, 0)),
+            short: Some(short_keyring(1, 0)),
         };
         let entry = EntryFetchOutcome {
-            degraded: Some(degraded_keyring(1, 0)),
+            short: Some(short_keyring(1, 0)),
             ..EntryFetchOutcome::of(EntryFetch::Placed)
         };
         let freeze = FreezeOutcome {
@@ -934,7 +939,7 @@ mod tests {
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             commit: None,
-            degraded: Some(degraded_keyring(1, 0)),
+            short: Some(short_keyring(1, 0)),
         };
 
         for findings in [
@@ -946,7 +951,7 @@ mod tests {
             assert!(
                 matches!(
                     found[..],
-                    [Finding::DegradedKeyring {
+                    [Finding::ShortKeyring {
                         lost: 1,
                         unfetched: 0,
                         replicas: 3,
@@ -963,10 +968,10 @@ mod tests {
     // replicas Storage merely did not hand over is not called degraded
     // (spec: KL-15).
     #[test]
-    fn a_degraded_keyring_is_said_as_loss_only_where_a_loss_is_established() {
+    fn a_short_keyring_is_said_as_loss_only_where_a_loss_is_established() {
         let said = |lost, unfetched| {
             Findings::from(&EntryFetchOutcome {
-                degraded: Some(degraded_keyring(lost, unfetched)),
+                short: Some(short_keyring(lost, unfetched)),
                 ..EntryFetchOutcome::of(EntryFetch::Placed)
             })
             .iter()
@@ -1035,7 +1040,7 @@ mod tests {
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             commit: Some(repaired()),
-            degraded: None,
+            short: None,
         };
 
         for findings in [Findings::from(&sync), Findings::from(&freeze)] {

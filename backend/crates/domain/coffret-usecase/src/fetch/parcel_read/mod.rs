@@ -30,7 +30,7 @@ use std::ops::Range;
 
 use coffret_model::{EntryMetadata, EntryPath};
 
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::device_state::DeviceTime;
 use crate::fetch::cancellation::Cancellation;
 use crate::fetch::fetch_error::FetchError;
@@ -44,7 +44,7 @@ use crate::index::Index;
 
 mod companions;
 
-mod front;
+pub(super) mod front;
 
 mod herald;
 
@@ -88,16 +88,17 @@ pub(super) struct ParcelRead<'r> {
     pub(super) publication: &'r dyn Publication,
     /// What the run read of the committed Keyring before the parcels, which
     /// goes with that news.
-    pub(super) degraded: Option<DegradedKeyring>,
+    pub(super) short: Option<ShortKeyring>,
     /// Where the Container's front is kept between runs, where it is
     /// (spec: FM-2, PK-20).
     pub(super) memory: Option<&'r FetchMemory>,
 }
 
-/// Whether [`translate::target_of`] refused an Entry for a reason no fetch
-/// ever places it under: unmapped, not current, a path no local file can stand
-/// for, or one colliding with another Entry's local path. Such an Entry is
-/// neither a companion nor waited for by a held parcel.
+/// Whether [`translate::target_of`](super::translate::target_of) refused an
+/// Entry for a reason no fetch ever places it under: unmapped, not current, a
+/// path no local file can stand for, or one colliding with another Entry's
+/// local path. Such an Entry is neither a companion nor waited for by a held
+/// parcel.
 fn never_placed(error: &FetchError) -> bool {
     matches!(
         error,

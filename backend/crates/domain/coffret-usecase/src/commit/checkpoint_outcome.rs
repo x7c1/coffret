@@ -1,6 +1,6 @@
 use coffret_model::ControlObjectName;
 
-use crate::commit::commit_error::CommitError;
+use crate::commit::checkpoint_failure::CheckpointFailure;
 
 /// What the checkpoint policy did after a commit (spec: CK-8, CK-10, CK-11).
 ///
@@ -34,6 +34,6 @@ pub enum CheckpointOutcome {
     /// rather than retried here.
     Failed {
         /// What stopped it.
-        cause: Box<CommitError>,
+        cause: CheckpointFailure,
     },
 }

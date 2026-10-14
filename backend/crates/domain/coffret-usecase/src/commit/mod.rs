@@ -66,6 +66,9 @@ pub(crate) use catch_up::catch_up;
 #[cfg(test)]
 mod catch_up_tests;
 
+mod checkpoint_failure;
+pub use checkpoint_failure::CheckpointFailure;
+
 mod checkpoint_outcome;
 pub use checkpoint_outcome::CheckpointOutcome;
 
@@ -118,8 +121,8 @@ mod keyring;
 // guard a caller that goes on to write holds it in until either its own
 // exit or the commit's examination says it, so that one run says one word about
 // one set (spec: KL-5, KL-15).
-pub use keyring::DegradedKeyring;
-pub(crate) use keyring::{read_committed, DegradedReport};
+pub use keyring::ShortKeyring;
+pub(crate) use keyring::{read_committed, ShortReport};
 
 mod keyring_repair;
 pub use keyring_repair::KeyringRepair;
