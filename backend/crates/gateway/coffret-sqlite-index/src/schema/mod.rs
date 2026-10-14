@@ -10,19 +10,22 @@ use crate::error::classify;
 /// Current layout. Version 8 adds the durable commit-attempt marker, version 9
 /// the marker saying whether a pending Container's Entries are files this
 /// device put into it, version 10 the content hash a materialized file was
-/// made to match, and version 11 the parcels this device holds (spec: PK-21).
-pub(crate) const SCHEMA_VERSION: i64 = 11;
+/// made to match, version 11 the parcels this device holds (spec: PK-21), and
+/// version 12 the commit slots a batch attempted (spec: OC-2, OC-3).
+pub(crate) const SCHEMA_VERSION: i64 = 12;
 
-/// The device-local layout floor. Versions 7 to 10 have one explicit,
+/// The device-local layout floor. Versions 7 to 11 have one explicit,
 /// transactional upgrade that preserves every row, treats old attempts as
 /// unknown, takes every old pending row to name a Container built out of this
 /// device's own files — the only kind a build before version 9 could spool —
 /// leaves every old materialization without a recorded hash, which is what a
-/// build before version 10 never wrote down, and starts with no parcel held,
-/// which is what a build before version 11 never kept. Other unreadable device
-/// layouts are refused rather than discarded, because Storage cannot
+/// build before version 10 never wrote down, starts with no parcel held, which
+/// is what a build before version 11 never kept, and records no commit slot for
+/// any batch, which is what a build before version 12 never kept — so an old
+/// attempt stays one whose outcome is unknown (spec: OC-2). Other unreadable
+/// device layouts are refused rather than discarded, because Storage cannot
 /// reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 11;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 12;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -172,6 +175,30 @@ CREATE TABLE held_parcels (
 ) STRICT;
 "#;
 
+/// The table of attempted commit slots, which layout 12 added to the
+/// device-local group.
+///
+/// Apart from the rest of that group because the upgrade from an older layout
+/// lays it out on its own (spec: OC-2).
+pub(crate) const ATTEMPTED_SLOTS_DDL: &str = r#"
+CREATE TABLE attempted_slots (
+    -- A commit slot a batch's Journal create was about to consume, written in
+    -- the same transaction that marks the batch's pending rows attempted, so
+    -- one is never there without the other (spec: OC-2). What a settle reads
+    -- back to prove the batch did not commit there (spec: OC-3). `generation`
+    -- names the slot `head-<generation>`; `provider_id` is the identifier
+    -- Storage minted for it, NULL where the name is the slot (spec: CP-2). No
+    -- foreign key: `batch` is not unique in `pending_rows`, and a batch's slots
+    -- go with its last row instead.
+    batch       TEXT NOT NULL,
+    generation  INTEGER NOT NULL,
+    provider_id TEXT
+) STRICT;
+
+CREATE UNIQUE INDEX attempted_slots_by_batch
+    ON attempted_slots (batch, generation, ifnull(provider_id, ''));
+"#;
+
 /// Brings a connection to the layout this build works in.
 ///
 /// A file with no layout at all gets one; a file already at this version is left
@@ -191,7 +218,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7..=10 => provenance::preserve_device_state(connection),
+        7..=11 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }
@@ -231,6 +258,9 @@ fn create(connection: &Connection) -> IndexResult<()> {
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(HELD_PARCELS_DDL)
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute_batch(ATTEMPTED_SLOTS_DDL)
         .map_err(classify(OPERATION))?;
     connection
         .pragma_update(None, "user_version", SCHEMA_VERSION)

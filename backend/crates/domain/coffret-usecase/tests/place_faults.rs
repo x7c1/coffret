@@ -40,7 +40,8 @@ use coffret_model::{
 };
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow, RootMarkerId,
+    AttemptedSlot, BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow,
+    RootMarkerId,
 };
 use coffret_usecase::fetch::{fetch_folders, FetchError, FetchOutcome, FetchRequest, KeptParcels};
 use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
@@ -1200,8 +1201,16 @@ impl Index for RefusingIndex<'_> {
         self.inner.mark_spooled(container_id).await
     }
 
-    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
-        self.inner.mark_commit_attempted(container_ids).await
+    async fn mark_commit_attempted(
+        &self,
+        container_ids: &[ContainerId],
+        slot: &AttemptedSlot,
+    ) -> IndexResult<()> {
+        self.inner.mark_commit_attempted(container_ids, slot).await
+    }
+
+    async fn attempted_slots(&self, batch: &BatchId) -> IndexResult<Vec<AttemptedSlot>> {
+        self.inner.attempted_slots(batch).await
     }
 
     async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {

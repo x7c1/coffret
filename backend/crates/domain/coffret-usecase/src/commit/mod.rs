@@ -62,7 +62,7 @@ mod after_commit;
 mod candidate;
 
 mod catch_up;
-pub(crate) use catch_up::catch_up;
+pub(crate) use catch_up::{catch_up, CaughtUp};
 
 #[cfg(test)]
 mod catch_up_tests;
@@ -127,6 +127,12 @@ pub(crate) use keyring::{read_committed, ShortReport};
 
 mod keyring_repair;
 pub use keyring_repair::KeyringRepair;
+
+// Reading back a commit slot a batch recorded, which is how settling proves a
+// batch of unknown outcome did not commit (spec: OC-3).
+mod slot_occupant;
+pub(crate) use slot_occupant::read as read_slot_occupant;
+pub(crate) use slot_occupant::SlotOccupant;
 
 mod prepared_addition;
 pub use prepared_addition::PreparedAddition;

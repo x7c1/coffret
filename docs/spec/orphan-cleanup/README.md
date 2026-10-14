@@ -33,13 +33,33 @@ Concept background: [Journal](../../concepts/journal/),
     their whole execution. A competing run is refused before reading or
     reclaiming those rows, because another live producer may still use them.
   - Before a Journal create can reach Storage, its additions' pending rows
-    durably record that a commit may have been attempted. Uncertain attempts
-    retain their ciphertext and provenance; a legacy row without this evidence
-    is treated as uncertain. Failed trash retains its proof for a later retry.
+    durably record that a commit may have been attempted, and the batch
+    durably records the commit slot that create is about to consume (CP-2), in
+    the same all-or-nothing write: there is never a marked row without its
+    slot, or a slot without its marked rows. A batch that rebases (CP-4)
+    records each slot it attempts, so it can hold several. Uncertain attempts
+    retain their ciphertext and provenance until OC-3 proves them; a legacy row
+    without this evidence, or one whose batch recorded no slot, is treated as
+    uncertain. Failed trash retains its proof for a later retry.
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not
   proof. *(Form: test)*
+  - An authenticated different writer's record is an authenticated control
+    object at the attempted slot that does not name the row's Container among
+    its additions. A Container ID is never reused (CP-14), so such a record
+    cannot be this batch's, whichever device wrote it, a later run of this
+    device included. An activation Index Snapshot at the slot is a different
+    successor and qualifies as well. A record at the slot that does name the
+    Container is proof the batch committed there, and the row is completed
+    (OC-7) rather than reclaimed. That holds even where a later record has
+    since removed the Container, and then none of its Entries is recorded as
+    materialized, since none of them is current (EP-10).
+  - The proof needs every slot the batch recorded (OC-2), since any one of them
+    may be where its create landed. A slot that is empty, cannot be read or
+    authenticated, or holds a record that is gone — pruned, or deleted with its
+    epoch — is not proof, and the row is retained. A row whose batch recorded
+    no slot is retained.
 - **OC-4.** A suspected orphan without that provenance is retained and may be
   reported for manual review; recovery never deletes it merely because no
   reachable Journal record or checkpoint mentions it. *(Form: test)*

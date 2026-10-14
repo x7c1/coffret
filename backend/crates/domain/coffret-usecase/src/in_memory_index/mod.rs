@@ -7,7 +7,9 @@ use coffret_model::{
 };
 
 use crate::committed_batch::CommittedBatch;
-use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow};
+use crate::device_state::{
+    AttemptedSlot, BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow,
+};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
@@ -147,9 +149,17 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
-    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
-        self.locked().mark_commit_attempted(container_ids);
+    async fn mark_commit_attempted(
+        &self,
+        container_ids: &[ContainerId],
+        slot: &AttemptedSlot,
+    ) -> IndexResult<()> {
+        self.locked().mark_commit_attempted(container_ids, slot);
         Ok(())
+    }
+
+    async fn attempted_slots(&self, batch: &BatchId) -> IndexResult<Vec<AttemptedSlot>> {
+        Ok(self.locked().attempted_slots(batch))
     }
 
     async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {

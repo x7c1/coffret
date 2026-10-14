@@ -5,7 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
 use coffret_usecase::device_state::{
-    DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping, PendingRow,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
+    PendingRow,
 };
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
@@ -365,10 +366,23 @@ impl Index for SqliteIndex {
         .await
     }
 
-    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
+    async fn mark_commit_attempted(
+        &self,
+        container_ids: &[ContainerId],
+        slot: &AttemptedSlot,
+    ) -> IndexResult<()> {
         let container_ids = container_ids.to_vec();
+        let slot = slot.clone();
         self.write("marking a commit attempted", move |connection| {
-            device_state::mark_commit_attempted(connection, &container_ids)
+            device_state::mark_commit_attempted(connection, &container_ids, &slot)
+        })
+        .await
+    }
+
+    async fn attempted_slots(&self, batch: &BatchId) -> IndexResult<Vec<AttemptedSlot>> {
+        let batch = batch.clone();
+        self.read("reading the attempted commit slots", move |connection| {
+            device_state::attempted_slots(connection, &batch)
         })
         .await
     }

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use coffret_model::{Mtime, ObjectRef};
+use coffret_model::{Generation, Mtime, ObjectRef};
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation, Mapping,
-    PendingRow, RootIdentity, RootMarkerId, SpoolState,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
+    Mapping, PendingRow, RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::Row;
@@ -12,7 +12,7 @@ use super::columns::{
     container_id, entry_path, from_integer, integer, optional_content_hash, optional_entry_path,
     optional_text, text,
 };
-use crate::error::{classify, object_on_spooling_row, unreadable};
+use crate::error::{classify, object_on_spooling_row, unreadable, unreadable_model};
 
 /// One row of `mappings`.
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
@@ -106,6 +106,16 @@ pub(crate) fn pending_row(row: &Row<'_>) -> IndexResult<PendingRow> {
         created_at: DeviceTime::from_unix_seconds(integer(row, "created_at", OPERATION)?),
         state: spool_state(row, OPERATION)?,
     })
+}
+
+/// One row of `attempted_slots` (spec: OC-2).
+pub(crate) fn attempted_slot(row: &Row<'_>) -> IndexResult<AttemptedSlot> {
+    const OPERATION: &str = "reading an attempted commit slot";
+    Ok(AttemptedSlot::new(
+        Generation::new(from_integer(row, "generation", OPERATION)?)
+            .map_err(unreadable_model(OPERATION))?,
+        optional_text(row, "provider_id", OPERATION)?,
+    ))
 }
 
 /// The state column and the object handle beside it, read as the one value

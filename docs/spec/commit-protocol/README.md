@@ -144,4 +144,5 @@ Concept background: [Journal](../../concepts/journal/),
     like any upload whose batch did not commit (OC-2, OC-3): a batch refused on
     its first attempt has recorded no commit attempt and is disposed of by the
     next `sync`, and one refused on a rebase after losing the slot has, and is
-    retained.
+    retained until every slot it recorded is proven taken by another record,
+    then disposed of (OC-3).

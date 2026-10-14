@@ -1,7 +1,7 @@
 use coffret_usecase::IndexResult;
 use rusqlite::{Connection, TransactionBehavior};
 
-use super::{stamp, unsupported, HELD_PARCELS_DDL, SCHEMA_VERSION};
+use super::{stamp, unsupported, ATTEMPTED_SLOTS_DDL, HELD_PARCELS_DDL, SCHEMA_VERSION};
 use crate::error::classify;
 
 /// Adds the columns an older device-local layout lacks without losing any
@@ -17,7 +17,10 @@ use crate::error::classify;
 /// later leaves the Library is then judged by its length and modification time
 /// alone (spec: EP-15). Layouts 7 to 10 kept no parcel, so the table of held
 /// parcels starts empty, which is a device holding nothing it read
-/// (spec: PK-21). The transaction leaves either complete layout after
+/// (spec: PK-21). Layouts 7 to 11 recorded no commit slot, so the table of
+/// attempted slots starts empty, and a row they marked attempted stays one
+/// whose outcome is unknown: nothing says where its create may have landed
+/// (spec: OC-2, OC-3). The transaction leaves either complete layout after
 /// interruption.
 pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<()> {
     const OPERATION: &str = "preserving device state from an older layout";
@@ -26,7 +29,7 @@ pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<
         .map_err(classify(OPERATION))?;
     let found = match stamp(&transaction)? {
         SCHEMA_VERSION => return Ok(()),
-        found @ 7..=10 => found,
+        found @ 7..=11 => found,
         found => return Err(unsupported(found)),
     };
     if found == 7 {
@@ -43,8 +46,13 @@ pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<
             .execute_batch("ALTER TABLE local_entries ADD COLUMN hash BLOB;")
             .map_err(classify(OPERATION))?;
     }
+    if found <= 10 {
+        transaction
+            .execute_batch(HELD_PARCELS_DDL)
+            .map_err(classify(OPERATION))?;
+    }
     transaction
-        .execute_batch(HELD_PARCELS_DDL)
+        .execute_batch(ATTEMPTED_SLOTS_DDL)
         .map_err(classify(OPERATION))?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)

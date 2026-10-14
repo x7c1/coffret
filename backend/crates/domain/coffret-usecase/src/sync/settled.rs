@@ -12,22 +12,25 @@ pub enum Settled {
         /// The Container whose commit outcome is uncertain.
         container_id: ContainerId,
     },
-    /// The Container is current, so the interrupted commit's device-local
-    /// bookkeeping was completed rather than reclaimed (spec: OC-7).
+    /// The Container's batch committed — the Container is current, or a record
+    /// at a slot its batch attempted names it — so the interrupted commit's
+    /// device-local bookkeeping was completed rather than reclaimed
+    /// (spec: OC-3, OC-7).
     ///
     /// The object is the Library's and is left where it is, the spool is gone
     /// because the Container it holds is committed, and the files this device
-    /// materialized while producing the batch are marked present
-    /// (spec: EP-10).
+    /// materialized while producing the batch are marked present where the
+    /// Container is still current (spec: EP-10).
     Completed {
         /// The Container whose commit landed.
         container_id: ContainerId,
         /// How many of its current Entries this device now records as present.
         entries: usize,
     },
-    /// Nothing committed the Container, so what its batch left on this device
-    /// was disposed of, and its object on Storage with it unless Storage refused
-    /// the trash (spec: OC-2, OC-3).
+    /// Nothing committed the Container — its batch never attempted a commit,
+    /// or every slot it attempted holds another record — so what its batch
+    /// left on this device was disposed of, and its object on Storage with it
+    /// unless Storage refused the trash (spec: OC-2, OC-3).
     ///
     Disposed {
         /// The Container the abandoned spool was for.

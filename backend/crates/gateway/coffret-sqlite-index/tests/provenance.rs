@@ -1,7 +1,8 @@
-use coffret_model::{ContainerId, ContentHash, EntryPath, Mtime, ObjectRef};
+use coffret_model::{ContainerId, ContentHash, EntryPath, Generation, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, HeldParcel, LocalEntryState, LocalObservation, PendingRow, SpoolState,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntryState, LocalObservation, PendingRow,
+    SpoolState,
 };
 use coffret_usecase::{Index, IndexError};
 
@@ -42,7 +43,7 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
             "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
              ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             PRAGMA user_version = 7;",
+             DROP TABLE attempted_slots; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -91,7 +92,7 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             PRAGMA user_version = 8;",
+             DROP TABLE attempted_slots; PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -133,7 +134,7 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
     connection
         .execute_batch(
             "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             PRAGMA user_version = 9;",
+             DROP TABLE attempted_slots; PRAGMA user_version = 9;",
         )
         .unwrap();
     drop(connection);
@@ -173,7 +174,9 @@ async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("DROP TABLE held_parcels; PRAGMA user_version = 10;")
+        .execute_batch(
+            "DROP TABLE held_parcels; DROP TABLE attempted_slots; PRAGMA user_version = 10;",
+        )
         .unwrap();
     drop(connection);
 
@@ -228,13 +231,67 @@ async fn distinct_index_files_do_not_share_pending_ownership() {
     let _second_owner = second.own_pending_rows().await.unwrap();
 }
 
-/// A batch whose marking fails partway is left with no row marked (spec: OC-2,
-/// OC-3).
+/// Layout 11 recorded no commit slot. An attempted row it holds is kept as it
+/// was and reads back with no slot for its batch, which is the missing evidence
+/// a settle retains it for (spec: OC-2, OC-3); and the batch records slots from
+/// then on.
+#[tokio::test]
+async fn layout_11_attempts_are_kept_with_no_slot() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let row = PendingRow {
+        container_id: ContainerId::from_bytes([11; 16]),
+        spool_path: dir.path().join("spool"),
+        batch: BatchId::new("interrupted"),
+        created_at: DeviceTime::from_unix_seconds(1),
+        state: SpoolState::Spooled(Some(ObjectRef::new("uploaded"))),
+        commit_attempted: true,
+        materializes: true,
+    };
+    index.record_pending_row(row.clone()).await.unwrap();
+    drop(index);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("DROP TABLE attempted_slots; PRAGMA user_version = 11;")
+        .unwrap();
+    drop(connection);
+
+    let reopened = SqliteIndex::open(&path).unwrap();
+    assert_eq!(
+        reopened.pending_rows().await.unwrap(),
+        std::slice::from_ref(&row)
+    );
+    assert!(reopened
+        .attempted_slots(&row.batch)
+        .await
+        .unwrap()
+        .is_empty());
+
+    let slot = AttemptedSlot::new(Generation::new(3).unwrap(), Some("minted".to_owned()));
+    reopened
+        .mark_commit_attempted(&[row.container_id], &slot)
+        .await
+        .unwrap();
+    drop(reopened);
+    assert_eq!(
+        SqliteIndex::open(&path)
+            .unwrap()
+            .attempted_slots(&row.batch)
+            .await
+            .unwrap(),
+        [slot]
+    );
+}
+
+/// A batch whose marking fails partway is left with no row marked and no slot
+/// recorded (spec: OC-2, OC-3).
 ///
-/// A trigger refuses the second row's update, so the first row's has already
-/// run inside the transaction when the write fails. What a later settle reads
-/// must still be one answer for the whole batch: every row unmarked, which is
-/// true, since a commit whose marking failed sends no create.
+/// A trigger refuses the second row's update, so the first row's mark and its
+/// slot have already been written inside the transaction when the write fails.
+/// What a later settle reads must still be one answer for the whole batch:
+/// every row unmarked and no slot, which is true, since a commit whose marking
+/// failed sends no create.
 #[tokio::test]
 async fn a_batch_marked_attempted_partway_is_left_unmarked() {
     let dir = tempfile::tempdir().unwrap();
@@ -263,8 +320,9 @@ async fn a_batch_marked_attempted_partway_is_left_unmarked() {
         .unwrap();
 
     let ids: Vec<_> = rows.iter().map(|row| row.container_id).collect();
+    let slot = AttemptedSlot::new(Generation::new(5).unwrap(), None);
     assert!(matches!(
-        index.mark_commit_attempted(&ids).await,
+        index.mark_commit_attempted(&ids, &slot).await,
         Err(IndexError::Backend { .. })
     ));
     assert_eq!(
@@ -272,4 +330,55 @@ async fn a_batch_marked_attempted_partway_is_left_unmarked() {
         rows,
         "the first row's mark must be rolled back with the rest"
     );
+    assert!(
+        index
+            .attempted_slots(&BatchId::new("one-batch"))
+            .await
+            .unwrap()
+            .is_empty(),
+        "the slot recorded beside the first row's mark must be rolled back with it"
+    );
+}
+
+/// A slot recorded without the rows it was for is rolled back too (spec: OC-2).
+///
+/// Here the trigger refuses the slot rather than a mark, after every row has
+/// been marked: the rows must come back unmarked, since a marked row whose slot
+/// is missing could never be proven not to have committed (spec: OC-3).
+#[tokio::test]
+async fn a_batch_whose_slot_cannot_be_recorded_is_left_unmarked() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let row = PendingRow {
+        container_id: ContainerId::from_bytes([4; 16]),
+        spool_path: dir.path().join("spool"),
+        batch: BatchId::new("one-batch"),
+        created_at: DeviceTime::from_unix_seconds(1),
+        state: SpoolState::Spooled(Some(ObjectRef::new("uploaded"))),
+        commit_attempted: false,
+        materializes: true,
+    };
+    index.record_pending_row(row.clone()).await.unwrap();
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER refuse_the_slot BEFORE INSERT ON attempted_slots \
+             BEGIN SELECT RAISE(ABORT, 'interrupted before the slot was recorded'); END;",
+        )
+        .unwrap();
+
+    let slot = AttemptedSlot::new(Generation::new(5).unwrap(), None);
+    assert!(matches!(
+        index
+            .mark_commit_attempted(&[row.container_id], &slot)
+            .await,
+        Err(IndexError::Backend { .. })
+    ));
+    assert_eq!(index.pending_rows().await.unwrap(), [row]);
+    assert!(index
+        .attempted_slots(&BatchId::new("one-batch"))
+        .await
+        .unwrap()
+        .is_empty());
 }

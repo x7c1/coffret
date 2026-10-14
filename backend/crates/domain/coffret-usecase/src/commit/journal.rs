@@ -15,6 +15,7 @@ use crate::commit::control_object;
 use crate::commit::prepared_batch::PreparedBatch;
 use crate::commit_slot::CommitSlot;
 use crate::control_head::ControlHead;
+use crate::device_state::AttemptedSlot;
 use crate::error::Error;
 use crate::object_store::ObjectStore;
 
@@ -33,7 +34,33 @@ pub(super) struct Committed {
     pub(super) record: JournalRecord,
 }
 
-/// Consumes the current head's commit slot with the batch's Journal record.
+/// The slot one attempt is about to consume, and the two its record will carry.
+///
+/// Deciding it is split from creating into it so that the batch can durably
+/// record which slot it attempts before the create can reach Storage
+/// (spec: OC-2): the slot is what a later settle reads back to prove the batch
+/// did not commit there (spec: OC-3).
+pub(super) struct Aim {
+    /// The generation the record takes, `head-<generation>` being its name.
+    generation: Generation,
+    /// The head it succeeds, or `None` for a Library's first record.
+    prev: Option<Generation>,
+    /// The slot the record is created into.
+    commit_slot: CommitSlot,
+    /// The slot reserved for the record's own successor (spec: CP-2).
+    next_commit_slot: CommitSlot,
+    /// The slot reserved for the record's ordinary checkpoint (spec: CK-10).
+    snapshot_slot: CommitSlot,
+}
+
+impl Aim {
+    /// What the batch records before the create (spec: OC-2).
+    pub(super) fn attempted(&self) -> AttemptedSlot {
+        AttemptedSlot::consuming(self.generation, &self.commit_slot)
+    }
+}
+
+/// Decides the slot this attempt consumes: the one the current head carries.
 ///
 /// The slot consumed is the one the head carries (spec: CP-2): of the writers
 /// that start from one head exactly one succeeds because every one of them aims
@@ -56,20 +83,21 @@ pub(super) struct Committed {
 /// slot is not in that Storage's form is refused rather than consumed
 /// (see [`carried_slot`]).
 ///
-/// The head is re-read immediately before the create (spec: CP-16). A later
+/// The head is re-read here, immediately before the create (spec: CP-16):
+/// nothing but recording the slot comes between this and [`commit`]. A later
 /// epoch's rotation permanently deletes old-epoch control objects, which on a
 /// name-keyed Storage frees the key of a slot already consumed; without the
 /// re-read a writer that woke long after its epoch ended could create a
 /// successor into a position the Library has moved past.
-pub(super) async fn commit(
+///
+/// `None` says this attempt has no slot to consume and the next one catches up
+/// afresh (spec: CP-4). Nothing has been created either way.
+pub(super) async fn aim(
     store: &dyn ObjectStore,
-    keys: &ControlKeys,
     policy: &CommitPolicy,
     caught: &CaughtUp,
     standing: Option<&IndexCheckpoint>,
-    keyring: KeyringCommitment,
-    batch: &PreparedBatch,
-) -> CommitResult<Attempted> {
+) -> CommitResult<Option<Aim>> {
     let (generation, prev) = match caught.head {
         Some(current) => (current.generation().next()?, Some(current.generation())),
         None => (Generation::FIRST, None),
@@ -82,20 +110,51 @@ pub(super) async fn commit(
     let commit_slot = match caught.head {
         Some(current) => {
             let Some(slot) = carried_slot(current, standing, mints)? else {
-                return Ok(Attempted::Conflict);
+                return Ok(None);
             };
             require_head(store, policy, &caught.listing, current).await?;
             slot
         }
         // A Library that has committed nothing has no head to carry a slot, so
         // its first record is created into a slot reserved here, under the name
-        // generation 0 takes (spec: FM-13).
+        // generation 0 takes (spec: FM-13). Where Storage mints identifiers that
+        // reservation is this writer's own, so what it records of the slot
+        // (spec: OC-2) can only ever read back as its own record or as nothing.
         None => {
             store
                 .reserve_create(&ControlObjectName::head(Generation::FIRST).to_string())
                 .await?
         }
     };
+
+    Ok(Some(Aim {
+        generation,
+        prev,
+        commit_slot,
+        next_commit_slot,
+        snapshot_slot,
+    }))
+}
+
+/// Consumes the slot [`aim`] decided with the batch's Journal record.
+///
+/// The batch has recorded the slot by now (spec: OC-2), so whatever becomes of
+/// the create, a later settle knows where to look for it (spec: OC-3).
+pub(super) async fn commit(
+    store: &dyn ObjectStore,
+    keys: &ControlKeys,
+    policy: &CommitPolicy,
+    aim: Aim,
+    keyring: KeyringCommitment,
+    batch: &PreparedBatch,
+) -> CommitResult<Attempted> {
+    let Aim {
+        generation,
+        prev,
+        commit_slot,
+        next_commit_slot,
+        snapshot_slot,
+    } = aim;
 
     // The additions arrive in the order the batch spooled them and the removals
     // in the order the Containers they supersede turned up, so the record is put

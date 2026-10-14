@@ -88,7 +88,14 @@ pub use uncertain_commit::{
     a_live_producer_keeps_exclusive_ownership,
     a_lost_response_and_withheld_head_never_authorize_trash,
     an_uncertain_commit_retains_its_ciphertext_and_provenance,
-    another_writers_head_does_not_prove_an_uncertain_attempt,
+};
+
+mod attempted_slots;
+pub use attempted_slots::{
+    a_rebased_attempt_is_disposed_only_once_every_slot_is_proven,
+    a_record_at_an_attempted_slot_naming_the_container_completes_it,
+    an_attempt_whose_slot_another_writer_took_is_disposed,
+    an_empty_or_vanished_slot_proves_nothing,
 };
 
 mod interruption;
@@ -146,6 +153,8 @@ pub use stale_removal::a_replacement_for_a_removed_container_is_refused;
 
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
+
+mod unanswered;
 
 mod unmapped;
 pub use unmapped::a_device_that_maps_nothing_is_told_apart_from_a_folder_with_nothing_new;
@@ -212,7 +221,10 @@ macro_rules! sync_conformance {
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,
             an_uncertain_commit_retains_its_ciphertext_and_provenance,
-            another_writers_head_does_not_prove_an_uncertain_attempt,
+            an_attempt_whose_slot_another_writer_took_is_disposed,
+            a_rebased_attempt_is_disposed_only_once_every_slot_is_proven,
+            a_record_at_an_attempted_slot_naming_the_container_completes_it,
+            an_empty_or_vanished_slot_proves_nothing,
             a_live_producer_keeps_exclusive_ownership,
             a_lost_response_and_withheld_head_never_authorize_trash,
             an_abandoned_container_storage_will_not_trash_is_left_in_storage,

@@ -1,12 +1,12 @@
-//! The four tables that never leave this device.
+//! The five tables that never leave this device.
 //!
 //! Nothing here is ever part of an Index Snapshot (spec: CK-7), and nothing the
 //! Library-wide operations do reaches these tables.
 
 use coffret_model::{ContainerId, EntryPath, ObjectRef};
 use coffret_usecase::device_state::{
-    DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow,
-    RootIdentity, RootMarkerId, SpoolState,
+    AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
+    Mapping, PendingRow, RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -247,29 +247,61 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
 }
 
 /// Marks the pending rows of a batch whose Journal record is about to be sent
+/// into `slot`, and records the slot against the batch of every row it marks
 /// (spec: OC-2, OC-3).
 ///
-/// One `UPDATE` per Container, all inside the caller's transaction: a failure on
-/// any of them rolls back the ones before it, so the batch is marked whole or
-/// not at all. Like [`mark_spooled`], an update and not an upsert.
+/// One `UPDATE` and one `INSERT` per Container, all inside the caller's
+/// transaction: a failure on any of them rolls back the ones before it, so the
+/// batch is marked whole with its slot recorded, or not at all. Like
+/// [`mark_spooled`], an update and not an upsert: the `INSERT` selects the
+/// batch from the row it has just marked, so a Container with no row records
+/// nothing either. A slot already recorded for the batch is left as it is.
 pub(crate) fn mark_commit_attempted(
     connection: &Connection,
     container_ids: &[ContainerId],
+    slot: &AttemptedSlot,
 ) -> IndexResult<()> {
     const OPERATION: &str = "marking a commit attempted";
-    let mut statement = connection
+    let generation = rows::to_integer(OPERATION, "generation", slot.generation().get())?;
+    let mut mark = connection
         .prepare_cached("UPDATE pending_rows SET commit_attempted = 1 WHERE container_id = ?1")
         .map_err(classify(OPERATION))?;
+    let mut record = connection
+        .prepare_cached(
+            "INSERT OR IGNORE INTO attempted_slots (batch, generation, provider_id)
+             SELECT batch, ?2, ?3 FROM pending_rows WHERE container_id = ?1",
+        )
+        .map_err(classify(OPERATION))?;
     for container_id in container_ids {
-        statement
-            .execute(params![container_id.as_bytes().as_slice()])
+        let container_id = container_id.as_bytes().as_slice();
+        mark.execute(params![container_id])
+            .map_err(classify(OPERATION))?;
+        record
+            .execute(params![container_id, generation, slot.provider_id()])
             .map_err(classify(OPERATION))?;
     }
     Ok(())
 }
 
+/// Every commit slot recorded against one batch, by generation and then by
+/// identifier (spec: OC-2, OC-3).
+pub(crate) fn attempted_slots(
+    connection: &Connection,
+    batch: &BatchId,
+) -> IndexResult<Vec<AttemptedSlot>> {
+    collect(
+        connection,
+        "SELECT * FROM attempted_slots WHERE batch = ?1 \
+         ORDER BY generation, ifnull(provider_id, '')",
+        params![batch.as_str()],
+        "reading the attempted commit slots",
+        rows::attempted_slot,
+    )
+}
+
 /// Drops the pending row for one Container, its batch having committed or been
-/// abandoned.
+/// abandoned, and the slots its batch recorded once no row of the batch is
+/// left.
 ///
 /// Dropping one that is not there is a no-op, so an interrupted cleanup is
 /// simply run again (spec: OC-8).
@@ -277,12 +309,20 @@ pub(crate) fn clear_pending_row(
     connection: &Connection,
     container_id: ContainerId,
 ) -> IndexResult<()> {
+    const OPERATION: &str = "clearing a spool";
     connection
         .execute(
             "DELETE FROM pending_rows WHERE container_id = ?1",
             params![container_id.as_bytes().as_slice()],
         )
-        .map_err(classify("clearing a spool"))?;
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute(
+            "DELETE FROM attempted_slots \
+             WHERE batch NOT IN (SELECT batch FROM pending_rows)",
+            [],
+        )
+        .map_err(classify(OPERATION))?;
     Ok(())
 }
 
