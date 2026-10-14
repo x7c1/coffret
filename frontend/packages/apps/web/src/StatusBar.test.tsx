@@ -1,7 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 
-import type { DisplacedFill, DisplacedFreeze, Fill, Freeze, Refused, Sync } from '@coffret/api';
+import type {
+  Delete,
+  DisplacedFill,
+  DisplacedFreeze,
+  Fill,
+  Freeze,
+  Refused,
+  Sync,
+  TurnTaker,
+} from '@coffret/api';
 
 import {
   NOTHING_DISMISSED,
@@ -14,6 +23,7 @@ import { RAN_OUT } from './reconnect';
 import type { Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { LOCKED, StatusBar, UNLOCK, type UnlockOffer } from './StatusBar';
+import { deletedLine } from './deleteEntries';
 import { addingLine } from './fill';
 import { COLOR } from './theme';
 
@@ -93,6 +103,7 @@ function syncing(over: Over<Sync> = {}): Sync {
   return {
     run: 1,
     step: null,
+    waits: false,
     status: 'stopped',
     added: 0,
     findings: [],
@@ -105,6 +116,7 @@ function freezing(over: Over<Freeze> = {}): Freeze {
   return {
     run: 1,
     step: null,
+    waits: false,
     waiting: [],
     discarded: [],
     displaced: [],
@@ -133,6 +145,30 @@ function displacedFreeze(over: Partial<Omit<DisplacedFreeze, 'status'>> = {}): D
   };
 }
 
+/** A deletion of one file, done unless a case says otherwise. */
+function deleting(over: Over<Delete> = { status: 'done', stopped: null }): Delete {
+  return {
+    run: 1,
+    folder: null,
+    paths: ['albums/a.jpg'],
+    entries: 1,
+    bytes: 2_000_000,
+    removed: 1,
+    rebuilt: 0,
+    rebuild_read: 0,
+    rebuild_written: 0,
+    refused: [],
+    missing: [],
+    findings: [],
+    step: null,
+    waits: false,
+    waiting: 0,
+    status: 'stopped',
+    stopped: STORAGE,
+    ...over,
+  };
+}
+
 /** The lines of those runs put away, and nothing else. */
 function read(runs: Partial<Record<Flow, number>>): Dismissed {
   return { ...NOTHING_DISMISSED, runs: { ...NOTHING_DISMISSED.runs, ...runs } };
@@ -148,6 +184,9 @@ function draw({
   fill = null,
   sync = null,
   freeze = null,
+  deletion = null,
+  turn = null,
+  finished = [],
   dismissed = NOTHING_DISMISSED,
   trouble = null,
   reconnect = null,
@@ -157,6 +196,9 @@ function draw({
   fill?: Fill | null;
   sync?: Sync | null;
   freeze?: Freeze | null;
+  deletion?: Delete | null;
+  turn?: TurnTaker | null;
+  finished?: readonly TurnTaker[];
   dismissed?: Dismissed;
   trouble?: Trouble | null;
   reconnect?: Offer | null;
@@ -173,6 +215,9 @@ function draw({
       fill={fill}
       sync={sync}
       freeze={freeze}
+      deletion={deletion}
+      turn={turn}
+      finished={finished}
       trouble={trouble}
       dismissed={dismissed}
       onDismiss={() => undefined}
@@ -409,6 +454,26 @@ it('lets the fill through once a finished sync line has been put away', () => {
   const after = draw({ sync, fill, dismissed: read({ sync: 1 }) });
   expect(after).not.toContain('albums/holiday.jpg');
   expect(after).toContain('bringing over 1/2 in albums');
+});
+
+// A result with nothing to report is not worth reading over a fill somebody is
+// waiting on: it gives way while the fill moves and takes the line back once
+// the fill is over. One that found something keeps the line, as above.
+it('lets a moving fill over a finished result with nothing to report', () => {
+  const sync = syncing({ status: 'done', stopped: null, added: 2 });
+  const moving = filling({ status: 'filling', done: 1, total: 2, stopped: null });
+
+  const during = draw({ sync, fill: moving, finished: ['sync'] });
+  expect(during).toContain('bringing over 1/2 in albums');
+  expect(during).not.toContain('added 2 files');
+  expect(during).not.toContain('>dismiss<');
+
+  const after = draw({
+    sync,
+    fill: filling({ status: 'done', done: 2, total: 2, stopped: null }),
+    finished: ['sync'],
+  });
+  expect(after).toContain('added 2 files to the Library');
 });
 
 // Offered from a run that is over and from nowhere else: a line about work
@@ -762,6 +827,19 @@ it('offers a reconnect beside a run a permission that ran out stopped', () => {
   expect(html).toContain('>reconnect</button>');
 });
 
+// A deletion's line is on the bar too, and the permission running out stops it
+// as it stops the others: its sentence says why, so the button stands beside it.
+it('offers a reconnect beside a deletion a permission that ran out stopped', () => {
+  const html = draw({
+    deletion: deleting({ status: 'stopped', stopped: RAN_OUT_REFUSAL }),
+    finished: ['delete'],
+    reconnect: offered(),
+  });
+
+  expect(html).toContain('was not deleted');
+  expect(html).toContain('>reconnect</button>');
+});
+
 // And the press of a second attempt the permission refused is the same: the
 // refusal line stands, and the reconnect after it.
 it('offers a reconnect beside a press the permission refused', () => {
@@ -884,4 +962,82 @@ it('shows how far a drop has been sent, and then the packing that follows it', (
   expect(before).not.toContain('>dismiss<');
 
   expect(draw({ freeze })).toContain('packing book-000');
+});
+
+// The bar says the latest thing that happened rather than the highest-ranked
+// flow: a Pack made, then a file added one by one, then a file deleted — each
+// result takes the line from the one before it, where a fixed order of flows
+// left `packed …` standing over every later add and delete.
+it('gives the line to whichever run finished last', () => {
+  const freeze = freezing({ status: 'done', stopped: null, packs: 1, entries: 12 });
+  const sync = syncing({ status: 'done', stopped: null, added: 1 });
+  const deletion = deleting();
+
+  const packed = draw({ freeze, finished: ['freeze'] });
+  expect(packed).toContain('packed');
+
+  const added = draw({ freeze, sync, finished: ['sync', 'freeze'] });
+  expect(added).toContain('added 1 file to the Library');
+  expect(added).not.toContain('packed');
+
+  const deleted = draw({ freeze, sync, deletion, finished: ['delete', 'sync', 'freeze'] });
+  expect(deleted).toContain(deletedLine(deletion) ?? 'a deletion line');
+  expect(deleted).not.toContain('added 1 file');
+  // And it is put away like any other finished run's line, which gives the
+  // line back to the one that finished before it.
+  expect(deleted).toContain('>dismiss<');
+  const putAway = draw({
+    freeze,
+    sync,
+    deletion,
+    finished: ['delete', 'sync', 'freeze'],
+    dismissed: read({ delete: 1 }),
+  });
+  expect(putAway).toContain('added 1 file to the Library');
+});
+
+// The run holding the turn is the one moving, and leads a run waiting for it —
+// which says whom it waits for once the holder has given the line up.
+it('puts the run holding the turn before a run waiting for it', () => {
+  const deletion = deleting({
+    status: 'deleting',
+    stopped: null,
+    step: { phase: 'committing', done: 1, total: 2, bytes: null },
+  });
+  const sync = syncing({ status: 'syncing', stopped: null, waits: true });
+
+  const html = draw({ sync, deletion, turn: 'delete' });
+  expect(html).toContain('deleting');
+  expect(html).toContain('committing 1/2');
+  expect(html).not.toContain('backing up');
+  expect(html).not.toContain('>dismiss<');
+
+  // And a waiting run that has the line says whom it waits for.
+  const book = freezing({ status: 'freezing', stopped: null, waits: true });
+  expect(draw({ freeze: book, turn: 'delete' })).toContain(
+    'packing books/one — waiting for the deletion under way to finish',
+  );
+});
+
+// A run the server says is waiting, and the holder that has said no step yet:
+// the holder leads and is not called waiting, and the waiting run's clause
+// names the holder rather than the other way round.
+it('says a waiting run waits for the holder and never the other way round', () => {
+  const book = freezing({ status: 'freezing', stopped: null, waits: true });
+  const sync = syncing({ status: 'syncing', stopped: null, waits: false });
+
+  const html = draw({ freeze: book, sync, turn: 'sync' });
+  expect(html).toContain('backing up what was added…');
+  expect(html).not.toContain('waiting for');
+
+  // Once the sync is over the book holds the turn, and nothing says waiting.
+  const moving = freezing({ status: 'freezing', stopped: null, waits: false });
+  const after = draw({
+    freeze: moving,
+    sync: syncing({ status: 'done', stopped: null, added: 1 }),
+    turn: 'freeze',
+    finished: ['sync'],
+  });
+  expect(after).toContain('packing books/one');
+  expect(after).not.toContain('waiting for');
 });

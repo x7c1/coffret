@@ -24,7 +24,6 @@ import { DeleteConfirm } from './DeleteConfirm';
 import {
   askToDelete,
   deletedLine,
-  deletingLine,
   targetName,
   type DeleteQuestion,
 } from './deleteEntries';
@@ -51,7 +50,8 @@ import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { Region } from './Region';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
-import { waitsFor } from './turns';
+import { useRunReloads } from './runReloads';
+import { heldBy } from './turns';
 import { unmappedLine } from './unmapped';
 import { useWork } from './useWork';
 import { said, useAsked } from './useAsked';
@@ -128,6 +128,7 @@ export function App() {
   const sync = work.sync;
   const freeze = work.freeze;
   const deletion = work.deletion;
+  const turn = work.turn;
   const recheckWork = work.recheck;
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
@@ -443,35 +444,9 @@ export function App() {
     }
   }, [progress, reloadListing]);
 
-  // And the same for the sync, for the same reason: the rows an added file has
-  // are the folder's own answer about it, and the moment the sync commits they
-  // become ordinary Entry rows. Which is why this watches the status and not the
-  // count — a sync reports what it did when it has done it.
-  const syncing = sync?.status ?? null;
-  useEffect(() => {
-    if (syncing !== null) {
-      reloadListing();
-    }
-  }, [syncing, reloadListing]);
-
-  // And the freeze, which is the same again with the tree added: a book that
-  // committed is the first Entry under a folder made here, and until that
-  // commit the Library has no such folder to name. So the tree is asked again
-  // too, and the folder stops being this screen's own the moment the server
-  // answers with it.
-  //
-  // The folder is in the key beside the status, the way a fill's count is. A
-  // freeze is of one folder, so the second book of a session that was over
-  // before the first poll of it would otherwise read `done` after `done` and
-  // ask for nothing — leaving its pages saying "not in Library" and its folder
-  // dimmed until something else happened to reload them.
-  const packing = freeze === null ? null : `${freeze.folder}:${freeze.status}`;
-  useEffect(() => {
-    if (packing !== null) {
-      reloadListing();
-      reloadFolders();
-    }
-  }, [packing, reloadListing, reloadFolders]);
+  // And the sync and the freeze, whose commits change the rows and can make a
+  // folder — see [`useRunReloads`](./runReloads).
+  useRunReloads(sync, freeze, reloadListing, reloadFolders);
 
   // And a catch-up landing, which is the largest of these: every folder's answer
   // comes out of the catalog, so one that reached the Library's head has changed
@@ -1002,19 +977,6 @@ export function App() {
               reader is told rather than in the grey of the columns, because a
               gesture that was made and answered by nothing else is where a
               sentence has to be noticed to be of any use. */}
-          {deletion?.status === 'deleting' && (
-            <p
-              style={{
-                margin: 0,
-                padding: '8px 12px',
-                borderBottom: `1px solid ${COLOR.border}`,
-                color: COLOR.dim,
-                fontSize: 13,
-              }}
-            >
-              {deletingLine(deletion, waitsFor('deletion', { freeze, sync, deletion }))}
-            </p>
-          )}
           {notice !== null && (
             <p
               style={{
@@ -1104,7 +1066,9 @@ export function App() {
       {deleteAsking !== null && (
         <DeleteConfirm
           question={deleteAsking.question}
-          startsAfter={waitsFor('deletion', { freeze, sync, deletion: null })}
+          // A deletion holding the turn is said by the question itself, from
+          // the preview's own word that one is running already.
+          startsAfter={turn === 'delete' ? null : heldBy(turn)}
           onChoose={chooseDeleting}
         />
       )}
@@ -1116,6 +1080,8 @@ export function App() {
         sync={sync}
         freeze={freeze}
         deletion={deletion}
+        turn={turn}
+        finished={work.finished}
         trouble={work.trouble}
         dismissed={work.dismissed}
         onDismiss={work.dismiss}

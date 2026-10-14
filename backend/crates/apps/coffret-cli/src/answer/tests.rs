@@ -60,6 +60,15 @@ fn deleted(literal: &str) -> Finding {
     }
 }
 
+/// A file deleted from the Library whose unedited copy here went to the trash,
+/// as a sync settles it.
+fn moved(literal: &str) -> Finding {
+    Finding::Surfaced {
+        path: path(literal),
+        reason: FindingReason::MovedToTrash,
+    }
+}
+
 // A sync that carried files and surfaced one: the counts, the head it did not
 // commit, and the finding by its path and reason beside the line the text form
 // prints for it — and the exit status that finding turns.
@@ -75,7 +84,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
         settled: Vec::new(),
         commit: None,
     };
-    let findings = Findings::assembled([deleted("albums/a.jpg")]);
+    let findings = Findings::assembled([deleted("albums/a.jpg"), moved("albums/b.jpg")]);
     let ran = Ran::found(
         crate::report::findings(&findings, Form::Json),
         Answer::Synced(Synced::from(&outcome)),
@@ -103,6 +112,15 @@ fn a_sync_answers_its_counts_and_its_findings() {
                 "said": "surfaced albums/a.jpg: this device had it and it is gone from disk",
                 "path": "albums/a.jpg",
                 "reason": "DeletedLocally",
+            }, {
+                // Said as what was done, under a kind word of its own, so a
+                // script splitting `said` finds one on every finding.
+                "kind": "surfaced",
+                "needs_attention": false,
+                "said": "moved albums/b.jpg: it was deleted from the Library, and this \
+                         device's unedited copy was moved to the trash",
+                "path": "albums/b.jpg",
+                "reason": "MovedToTrash",
             }],
         }),
     );

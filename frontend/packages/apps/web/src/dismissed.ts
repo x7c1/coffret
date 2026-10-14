@@ -2,7 +2,7 @@
 // unit testable.
 //
 // The status bar has room for one line and an order of precedence among the
-// three flows, and the lines a finished run leaves are the ones with nothing to
+// flows, and the lines a finished run leaves are the ones with nothing to
 // end them: a sync that carried files in and found something keeps its sentence
 // for as long as the tab is open, and every fill's progress afterwards is drawn
 // underneath it. The findings are worth saying — they are the only place a
@@ -40,10 +40,10 @@
 // keeps every one of these.) So every answer says which process gave it, and a
 // name that has changed empties all of this: see `servedBy`.
 
-import type { Fill, Freeze, Sync } from '@coffret/api';
+import type { Delete, Fill, Freeze, Sync } from '@coffret/api';
 
-/** Which of the three flows a line belongs to. */
-export type Flow = 'fill' | 'sync' | 'freeze';
+/** Which of the four flows a line belongs to. */
+export type Flow = 'fill' | 'sync' | 'freeze' | 'delete';
 
 /**
  * Which of the two flows that keep a queue a lost folder belongs to.
@@ -103,7 +103,7 @@ export interface Dismissed {
 /** Nothing put away, which is where every tab starts. */
 export const NOTHING_DISMISSED: Dismissed = {
   server: null,
-  runs: { fill: 0, sync: 0, freeze: 0 },
+  runs: { fill: 0, sync: 0, freeze: 0, delete: 0 },
   folders: { fill: [], freeze: [] },
 };
 
@@ -214,7 +214,7 @@ export function shownRuns<R extends { folder: string }>(
 export function isPutAway(
   dismissed: Dismissed,
   flow: Flow,
-  run: Fill | Sync | Freeze | null,
+  run: Fill | Sync | Freeze | Delete | null,
 ): boolean {
   return run !== null && run.run <= dismissed.runs[flow];
 }
@@ -230,11 +230,14 @@ export function isPutAway(
  * part of its folder: nothing is going to take it up again on its own, so its
  * line is as final as a finished one's.
  */
-export function canPutAway(run: Fill | Sync | Freeze | null): run is Fill | Sync | Freeze {
+export function canPutAway(
+  run: Fill | Sync | Freeze | Delete | null,
+): run is Fill | Sync | Freeze | Delete {
   return (
     run !== null &&
     run.status !== 'filling' &&
     run.status !== 'syncing' &&
-    run.status !== 'freezing'
+    run.status !== 'freezing' &&
+    run.status !== 'deleting'
   );
 }

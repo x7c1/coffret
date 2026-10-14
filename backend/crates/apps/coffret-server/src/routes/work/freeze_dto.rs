@@ -1,10 +1,11 @@
 use serde::Serialize;
 
-use crate::freeze::FreezeRun;
+use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
+use crate::pending_rows::TurnTaker;
 use crate::routes::RefusalDto;
 
-use super::{named_folders, DisplacedFreezeDto, FindingDto, StepDto};
+use super::{named_folders, waits, DisplacedFreezeDto, FindingDto, StepDto};
 
 #[derive(Serialize)]
 pub(super) struct FreezeDto {
@@ -34,6 +35,14 @@ pub(super) struct FreezeDto {
     /// the counts above are outcomes and stay `0` until the batch commits, and
     /// this is the run moving while it builds it.
     step: Option<StepDto>,
+    /// Whether the run is waiting for its turn at the pending rows: true from
+    /// the moment it is on record until it holds the turn, and false once it
+    /// does and once it is over.
+    ///
+    /// Not what the field below is about: those are books queued behind this
+    /// one in the freeze's own queue, and this is the run on record waiting
+    /// for a sync or a deletion to give the rows back.
+    waits: bool,
     /// The books waiting their turn behind this one, oldest first.
     ///
     /// The names and not the length, because the length is the least of it: a
@@ -71,7 +80,7 @@ pub(super) struct FreezeDto {
 impl FreezeDto {
     /// The whole of what the flow has to say: the run on record, with the queue's
     /// two lists and the runs it took the record from beside it.
-    pub(super) fn of(latest: &Latest<FreezeRun>) -> Self {
+    pub(super) fn of(latest: &Latest<FreezeRun>, turn: Option<TurnTaker>) -> Self {
         let run = &latest.on_record;
         Self {
             run: run.run,
@@ -81,6 +90,11 @@ impl FreezeDto {
             entries: run.entries,
             findings: run.findings.iter().map(FindingDto::of).collect(),
             step: run.step.as_ref().map(StepDto::of),
+            waits: waits(
+                matches!(run.status, FreezeStatus::Freezing),
+                TurnTaker::Freeze,
+                turn,
+            ),
             waiting: named_folders(&latest.waiting),
             discarded: named_folders(&latest.discarded),
             displaced: latest

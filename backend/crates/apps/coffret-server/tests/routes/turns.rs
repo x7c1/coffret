@@ -47,11 +47,58 @@ async fn inside_storage(served: &Served) {
     }
 }
 
-/// Asserts that `run` is said to be armed and not yet moving: its flow's own
-/// status, and no step — what the explorer reads as waiting for its turn.
+/// Asserts that `run` is said to be armed and waiting for its turn: its flow's
+/// own status, no step, and `waits` — which is what the explorer reads, rather
+/// than guessing from the missing step.
 fn waiting(run: &Value, status: &str) {
     assert_eq!(run["status"], status, "{run}");
     assert_eq!(run["step"], Value::Null, "{run}");
+    assert_eq!(run["waits"], true, "{run}");
+}
+
+// The work answer says whose turn it is and who waits for it, so a browser
+// never has to infer either from a missing step: a deletion inside Storage
+// holds the turn and a drop's sync behind it waits; a sync that has the turn
+// does not wait; and with nothing running nobody holds it.
+#[tokio::test]
+async fn the_work_answer_says_who_holds_the_turn_and_who_waits() {
+    let served = Served::library().await;
+    served.hold_storage();
+
+    let (status, _) = body_of(served.post("/api/delete?entry=albums/cover.png").await).await;
+    assert_eq!(status, 202);
+    inside_storage(&served).await;
+    served.upload("albums", &[("late.jpg", b"late")]).await;
+    served.until_queued(1).await;
+    let (_, queued) = body_of(served.get("/api/work").await).await;
+    assert_eq!(queued["turn"], "delete", "{queued}");
+    waiting(sync(&queued), "syncing");
+    assert_eq!(deletion(&queued)["waits"], false, "{queued}");
+
+    served.release_storage();
+    served.delete_idle().await;
+    served.sync_idle().await;
+
+    // A second drop, with nothing ahead of it, holds the turn as soon as its
+    // worker takes it up — and is held inside Storage with it.
+    let held = served.held_reads();
+    served.hold_storage();
+    served.upload("albums", &[("later.jpg", b"later")]).await;
+    while served.held_reads() == held {
+        tokio::task::yield_now().await;
+    }
+    let (_, running) = body_of(served.get("/api/work").await).await;
+    assert_eq!(running["turn"], "sync", "{running}");
+    assert_eq!(sync(&running)["status"], "syncing", "{running}");
+    assert_eq!(sync(&running)["waits"], false, "{running}");
+    assert_eq!(deletion(&running)["waits"], false, "{running}");
+
+    served.release_storage();
+    served.sync_idle().await;
+    let (_, idle) = body_of(served.get("/api/work").await).await;
+    assert_eq!(idle["turn"], Value::Null, "{idle}");
+    assert_eq!(sync(&idle)["status"], "done", "{idle}");
+    assert_eq!(sync(&idle)["waits"], false, "{idle}");
 }
 
 // A file dropped while a book is packed arms a sync, which waits for the book

@@ -333,6 +333,17 @@ and has a window of its own for entering the Passphrase.
     OC-3, OC-7).
   - Failed trash keeps the pending provenance so it can be retried safely;
     removing already absent local leftovers is idempotent (spec: OC-2, OC-8).
+- A sync, a freeze and a deletion each own this device's pending work for the
+  whole of a run, and a competing run is refused (spec: OC-2). Within one
+  server the three take **turns** instead: a run armed while another holds the
+  pending work waits, and the turns go in the order the runs ask for them — a
+  run asks as its flow takes it up, which for a flow already running is once
+  the run before it in that flow has finished. What the server reports of its
+  running work says which run holds the turn and which runs wait, and a
+  waiting run is reported as waiting for the holder (spec: LA-12). Across
+  processes there is no queue: of a server's run and a sync or a freeze from
+  the command line, whichever comes second is refused at once, as a conflict,
+  and goes through when it is run again after the other finishes.
 - A local writer writes its **scratch** — the file it fills before the rename
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a

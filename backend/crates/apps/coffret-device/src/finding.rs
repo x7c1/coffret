@@ -358,12 +358,14 @@ impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             // Said as what was done rather than as something left alone, since
-            // that is what it is (spec: EP-15): no "surfaced", and the reason
-            // already says where the copy went.
+            // that is what it is (spec: EP-15): "moved" and not "surfaced" — and
+            // not "trashed" either, which is Storage's verb for an object.
+            // Still a kind word first, as every other finding has, because the
+            // line is read by scripts that split on it.
             Self::Surfaced {
                 path,
                 reason: reason @ FindingReason::MovedToTrash,
-            } => write!(f, "{path}: {reason}"),
+            } => write!(f, "moved {path}: {reason}"),
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
             Self::UnavailableRoot {
                 prefix,

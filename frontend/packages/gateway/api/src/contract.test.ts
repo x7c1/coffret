@@ -48,6 +48,7 @@ import type {
   Stopped,
   Sync,
   SyncStatus,
+  TurnTaker,
 } from './work';
 import { workOf } from './work';
 import workAnswers from './contract/work.json';
@@ -142,6 +143,7 @@ const FILL_STATUSES: Literals<FillStatus> = {
 const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped: true };
 const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
 const DELETE_STATUSES: Literals<DeleteStatus> = { deleting: true, done: true, stopped: true };
+const TURN_TAKERS: Literals<TurnTaker> = { sync: true, freeze: true, delete: true };
 const PACK_REFUSAL_REASONS: Literals<PackRefusalReason> = { key_lost: true, unverified: true };
 const PHASES: Literals<Phase> = {
   catching_up: true,
@@ -387,12 +389,21 @@ function displacedFill(value: unknown, where: string): DisplacedFill {
 }
 
 function sync(value: unknown, where: string): Sync {
-  const fields = object(value, where, ['run', 'status', 'added', 'findings', 'step', 'stopped']);
+  const fields = object(value, where, [
+    'run',
+    'status',
+    'added',
+    'findings',
+    'step',
+    'waits',
+    'stopped',
+  ]);
   return {
     run: number(fields.run, `${where}.run`),
     added: number(fields.added, `${where}.added`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
+    waits: boolean(fields.waits, `${where}.waits`),
     ...standing(SYNC_STATUSES, fields, where),
   };
 }
@@ -406,6 +417,7 @@ function freeze(value: unknown, where: string): Freeze {
     'entries',
     'findings',
     'step',
+    'waits',
     'waiting',
     'discarded',
     'displaced',
@@ -418,6 +430,7 @@ function freeze(value: unknown, where: string): Freeze {
     entries: number(fields.entries, `${where}.entries`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
+    waits: boolean(fields.waits, `${where}.waits`),
     waiting: folders(fields.waiting, `${where}.waiting`),
     discarded: folders(fields.discarded, `${where}.discarded`),
     displaced: list(fields.displaced, `${where}.displaced`, displacedFreeze),
@@ -473,6 +486,7 @@ function deletion(value: unknown, where: string): Delete {
     'missing',
     'findings',
     'step',
+    'waits',
     'waiting',
     'stopped',
   ]);
@@ -490,6 +504,7 @@ function deletion(value: unknown, where: string): Delete {
     missing: folders(fields.missing, `${where}.missing`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
+    waits: boolean(fields.waits, `${where}.waits`),
     waiting: number(fields.waiting, `${where}.waiting`),
     ...standing(DELETE_STATUSES, fields, where),
   };
@@ -524,6 +539,7 @@ function work(value: unknown, where: string): Work {
     'server',
     'library',
     'catalog',
+    'turn',
     'fill',
     'sync',
     'freeze',
@@ -534,6 +550,7 @@ function work(value: unknown, where: string): Work {
     server: string(fields.server, `${where}.server`),
     library: one(LIBRARY_STATES, fields.library, `${where}.library`),
     catalog: catalog(fields.catalog, `${where}.catalog`),
+    turn: nullable(fields.turn, (value) => one(TURN_TAKERS, value, `${where}.turn`)),
     fill: nullable(fields.fill, (value) => fill(value, `${where}.fill`)),
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),
     freeze: nullable(fields.freeze, (value) => freeze(value, `${where}.freeze`)),
@@ -682,11 +699,20 @@ it('reads every work answer the server sends through the Work type', () => {
     read.some((answer) => answer.freeze?.step?.bytes != null),
     'a freeze sending a Pack, with how many bytes of it have gone',
   ).toBe(true);
+  expect(
+    read.some((answer) => answer.turn === null),
+    'an answer in which nobody holds the turn',
+  ).toBe(true);
+  expect(
+    read.some((answer) => answer.freeze?.waits === true || answer.sync?.waits === true),
+    'a run waiting for its turn behind the one holding it',
+  ).toBe(true);
   for (const table of [
     FILL_STATUSES,
     SYNC_STATUSES,
     FREEZE_STATUSES,
     DELETE_STATUSES,
+    TURN_TAKERS,
     PACK_REFUSAL_REASONS,
     PHASES,
     CATALOG_STATES,
@@ -886,7 +912,7 @@ it('says the unmapped sentence in the server’s words', () => {
 // catalog.
 it('rejects a status and a refusal that do not go together', () => {
   const storage = { error: 'storage', message: 'the Library’s Storage did not answer' };
-  const run = { run: 1, added: 0, findings: [], step: null };
+  const run = { run: 1, added: 0, findings: [], step: null, waits: false };
 
   expect(() => sync({ ...run, status: 'stopped', stopped: null }, 'sync')).toThrow(
     /says nothing about what stopped it/,

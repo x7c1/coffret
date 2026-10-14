@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Delete, Freeze, Sync } from '@coffret/api';
 
-import { waitingClause, waitsFor } from './turns';
+import { heldBy, waitingClause, waitsFor } from './turns';
 
 const MOVING = { phase: 'uploading', done: 1, total: 2, bytes: null } as const;
 
@@ -10,6 +10,7 @@ function syncing(over: Partial<Sync> = {}): Sync {
   return {
     run: 1,
     step: null,
+    waits: false,
     status: 'syncing',
     added: 0,
     findings: [],
@@ -22,6 +23,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
   return {
     run: 1,
     step: null,
+    waits: false,
     waiting: [],
     discarded: [],
     displaced: [],
@@ -50,6 +52,7 @@ function deleting(over: Partial<Delete> = {}): Delete {
     missing: [],
     findings: [],
     step: null,
+    waits: false,
     waiting: 0,
     status: 'deleting',
     stopped: null,
@@ -58,42 +61,68 @@ function deleting(over: Partial<Delete> = {}): Delete {
 }
 
 describe('what a run waiting its turn waits for', () => {
-  it('names the other flow under way, never its own', () => {
-    const turns = { freeze: freezing(), sync: syncing(), deletion: deleting() };
-    expect(waitsFor('sync', { ...turns, deletion: null })).toBe('packing');
-    expect(waitsFor('freeze', { ...turns, deletion: null })).toBe('backup');
-    expect(waitsFor('deletion', { ...turns, freeze: null })).toBe('backup');
-    expect(waitsFor('sync', { ...turns, freeze: null })).toBe('deletion');
+  it('names the flow holding the turn, as the server says it', () => {
+    const turns = {
+      freeze: freezing({ waits: true }),
+      sync: syncing({ waits: true }),
+      deletion: deleting(),
+    };
+    expect(waitsFor('sync', { ...turns, turn: 'delete' })).toBe('deletion');
+    expect(waitsFor('freeze', { ...turns, turn: 'delete' })).toBe('deletion');
+    expect(waitsFor('delete', { ...turns, turn: 'delete' })).toBeNull();
+    expect(
+      waitsFor('delete', { ...turns, deletion: deleting({ waits: true }), turn: 'sync' }),
+    ).toBe('backup');
+    expect(waitsFor('sync', { ...turns, turn: 'freeze' })).toBe('packing');
   });
 
-  it('names nothing where nothing else is under way', () => {
-    expect(waitsFor('sync', { freeze: null, sync: syncing(), deletion: null })).toBeNull();
+  // The window the guess read backwards in: a run that has taken the turn and
+  // not said a step yet. The server says it is not waiting, and that is the
+  // whole of the answer — whatever else is running beside it.
+  it('reports no wait for a run the server says is not waiting, step or no step', () => {
+    const turns = {
+      turn: 'sync' as const,
+      freeze: freezing({ waits: true }),
+      sync: syncing({ waits: false, step: null }),
+      deletion: deleting({ status: 'done', stopped: null }),
+    };
+    expect(waitsFor('sync', turns)).toBeNull();
+    expect(waitsFor('freeze', turns)).toBe('backup');
+  });
+
+  it('never infers from a step', () => {
+    // A waiting run with a step is still waiting, and a holder with none is
+    // still the holder.
+    const turns = {
+      turn: 'delete' as const,
+      freeze: null,
+      sync: syncing({ waits: true, step: MOVING }),
+      deletion: deleting({ step: null }),
+    };
+    expect(waitsFor('sync', turns)).toBe('deletion');
+    expect(waitsFor('delete', turns)).toBeNull();
+  });
+
+  it('says nothing where nobody holds the turn', () => {
     expect(
-      waitsFor('freeze', {
-        freeze: freezing(),
-        sync: syncing({ status: 'done' }),
-        deletion: deleting({ status: 'done' }),
+      waitsFor('sync', {
+        turn: null,
+        freeze: null,
+        sync: syncing({ waits: true }),
+        deletion: null,
       }),
     ).toBeNull();
   });
 
-  // Of two others under way, one is itself waiting: the one holding the turn
-  // is the one that has said how far it has got.
-  it('names the one that is moving where two others are under way', () => {
-    const deletionMoving = {
-      freeze: freezing(),
-      sync: syncing(),
-      deletion: deleting({ step: MOVING }),
-    };
-    expect(waitsFor('freeze', deletionMoving)).toBe('deletion');
-    const syncMoving = {
-      freeze: freezing(),
-      sync: syncing({ step: MOVING }),
-      deletion: deleting(),
-    };
-    expect(waitsFor('deletion', syncMoving)).toBe('backup');
-    const noneMoving = { freeze: freezing(), sync: syncing(), deletion: deleting() };
-    expect(waitsFor('deletion', noneMoving)).toBe('packing');
+  it('says nothing for a flow with no run on record', () => {
+    expect(waitsFor('freeze', { turn: 'sync', freeze: null, sync: syncing(), deletion: null }))
+      .toBeNull();
+  });
+
+  it('names whoever holds the turn for a run not armed yet', () => {
+    expect(heldBy('delete')).toBe('deletion');
+    expect(heldBy('freeze')).toBe('packing');
+    expect(heldBy(null)).toBeNull();
   });
 
   it('says it as one clause for every line', () => {
