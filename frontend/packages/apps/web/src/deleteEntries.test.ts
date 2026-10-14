@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Delete, DeletePreview } from '@coffret/api';
+import { Refusal, type Delete, type DeletePreview } from '@coffret/api';
 
 import {
   askToDelete,
@@ -8,6 +8,7 @@ import {
   deleteOffered,
   deletingLine,
   questionOf,
+  refusedNotice,
   type DeleteQuestion,
   type Deleting,
 } from './deleteEntries';
@@ -194,14 +195,16 @@ describe('the lines a deletion stands under', () => {
           missing: ['albums/gone.jpg'],
         }),
       ),
-    ).toBe(
-      '📁 albums — 12 files, 340.0 MB removed from the Library; 2 Packs rebuilt; ' +
+    ).toEqual({
+      text:
+        '📁 albums — 12 files, 340.0 MB removed from the Library; 2 Packs rebuilt; ' +
         'page-002.jpg stays in the Library — the Library has no key for the Pack holding them; ' +
         'not in the Library: gone.jpg',
-    );
+      retry: null,
+    });
   });
 
-  it('says a stopped one in the server’s words, a conflict among them', () => {
+  it('says a stopped one in the server’s words, and offers a conflict again', () => {
     expect(
       deletedLine(
         run({
@@ -214,6 +217,47 @@ describe('the lines a deletion stands under', () => {
           },
         }),
       ),
-    ).toBe('📁 albums was not deleted — another device changed the Library meanwhile');
+    ).toEqual({
+      text: '📁 albums was not deleted — another device changed the Library meanwhile',
+      retry: { folder: 'albums', paths: [] },
+    });
+  });
+
+  it('offers nothing again for a stop that asking again would only meet once more', () => {
+    expect(
+      deletedLine(
+        run({
+          status: 'stopped',
+          stopped: {
+            kind: 'epoch',
+            message: 'enroll this device again',
+            reason: null,
+            surfaced: null,
+          },
+        }),
+      ),
+    ).toEqual({ text: '📁 albums was not deleted — enroll this device again', retry: null });
+  });
+});
+
+describe('refusedNotice', () => {
+  const target = { folder: null, paths: ['albums/a.jpg'] };
+
+  it('offers a conflict again, for the same target', () => {
+    const conflict = new Refusal('conflict', 409, 'another device changed the Library meanwhile');
+    expect(refusedNotice(target, conflict, conflict.message)).toEqual({
+      text: 'a.jpg was not deleted — another device changed the Library meanwhile',
+      retry: { folder: null, paths: ['albums/a.jpg'] },
+    });
+  });
+
+  it('offers nothing again for any other refusal', () => {
+    const server = new Refusal('server', 500, 'the server could not finish that');
+    expect(refusedNotice(target, server, server.message)).toEqual({
+      text: 'a.jpg was not deleted — the server could not finish that',
+      retry: null,
+    });
+    const stray = new Error('not a refusal');
+    expect(refusedNotice(target, stray, 'the explorer could not finish that').retry).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::{local_folder_for, FetchError};
-use coffret_usecase::{root_marker, scratch, FolderEntryKind, MappedRoots};
+use coffret_usecase::{root_marker, scratch, trash_folders, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
 use super::{AddedFile, LocalAdditions};
@@ -45,6 +45,10 @@ impl OpenLibrary {
     /// Entry Path (spec: EP-1): a sync reports it rather than backing it up, and
     /// reporting it twice in two vocabularies would put a row on a screen that
     /// nothing can be done with.
+    ///
+    /// At the top of a mapped root alone, the folders a desktop keeps its trash
+    /// in are left out too (spec: EP-16): a scan never enters one, so nothing in
+    /// it is an addition, and a folder inside one answers empty.
     ///
     /// A folder no mapping of this device reaches has no files of its own here,
     /// and neither has one whose mapped folder does not exist — a device that has
@@ -113,6 +117,15 @@ impl OpenLibrary {
         let Some(directory) = translated else {
             return Ok(LocalAdditions::default());
         };
+        // A folder inside a desktop's trash holds nothing a sync carries in, and
+        // nothing may be dropped there (spec: EP-16).
+        if directory
+            .relative()
+            .and_then(|relative| relative.text_components().next())
+            .is_some_and(trash_folders::is_trash_folder)
+        {
+            return Ok(LocalAdditions::default());
+        }
         // What the Library holds one level down: the Entries standing in the
         // folder itself, and the child folders the Entries deeper down imply
         // (spec: EP-2). A name in either set is the Library's to list, not this.
@@ -161,6 +174,14 @@ impl OpenLibrary {
             // `.coffret` inside a mapped folder is stepped over as surely as
             // the folder holding this device's own marker (spec: EP-11, EP-14).
             if scratch::is_scratch(&name) || root_marker::is_management_area(&name) {
+                continue;
+            }
+            // A folder a desktop keeps its trash in, at the top of the mapped
+            // root alone: the one place a desktop puts one, and the scan's own
+            // test of the same name (spec: EP-16). The top of the *root*, not of
+            // the Library — under a top-level mapping the root's top is a folder
+            // one level below the Library's.
+            if directory.relative().is_none() && trash_folders::is_trash_folder(&name) {
                 continue;
             }
             // A name a directory listing returns holds no separator, is never

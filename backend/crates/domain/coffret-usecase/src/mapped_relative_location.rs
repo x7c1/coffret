@@ -38,6 +38,18 @@ impl MappedRelativeLocation {
         Self { components }
     }
 
+    /// The folder this location stands in, or `None` where that folder is the
+    /// mapped root itself.
+    pub fn parent(&self) -> Option<Self> {
+        let (_, above) = self.components.split_last()?;
+        if above.is_empty() {
+            return None;
+        }
+        Some(Self {
+            components: above.to_vec(),
+        })
+    }
+
     /// The component spellings, in descent order.
     pub fn components(&self) -> impl Iterator<Item = &OsStr> {
         self.components.iter().map(OsString::as_os_str)

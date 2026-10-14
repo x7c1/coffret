@@ -16,6 +16,10 @@
 //! of the person's moved to their own trash rather than deleted, which is the
 //! least any race here can do; it is said so that nobody reads the descent as
 //! the whole of the guarantee.
+//!
+//! The folders those moves empty are removed here too, and without that
+//! interval: the folder is removed relative to the handle the descent opened,
+//! so nothing between the walk and the removal is resolved again.
 
 use std::ffi::OsStr;
 use std::io;
@@ -27,6 +31,7 @@ use coffret_usecase::{
     DescentError, LocalIoError, LocalOperation, LocalTrash, MappedRelativeLocation,
 };
 use rustix::fs::{AtFlags, FileType, Mode, OFlags};
+use rustix::io::Errno;
 
 use crate::unix_destinations::{blocking, descent, refusal, vouch};
 use crate::unix_fs::UnixFs;
@@ -53,6 +58,67 @@ impl LocalTrash for UnixFs {
             })
         })
         .await
+    }
+
+    async fn remove_emptied_folder(
+        &self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError> {
+        let owned = root.to_path_buf();
+        let expected = expected.copied();
+        let relative = relative.clone();
+        blocking(LocalOperation::Removing, root, move || {
+            remove_if_empty(&owned, expected.as_ref(), &relative)
+        })
+        .await
+    }
+}
+
+/// Walks to the folder that holds the one at `relative` and removes that one
+/// relative to the open handle, if nothing at all is in it.
+///
+/// `unlinkat` with `AT_REMOVEDIR` is the whole of the check and the removal in
+/// one step: the kernel refuses a folder with anything in it, so a file that
+/// arrives after the run's moves keeps the folder, and it refuses a symbolic
+/// link standing at the name rather than following it.
+fn remove_if_empty(
+    root: &Path,
+    expected: Option<&RootMarkerId>,
+    relative: &MappedRelativeLocation,
+) -> Result<bool, DescentError> {
+    let mut directory =
+        descent::open_root(root).map_err(|cause| refusal(root, LocalOperation::Stating, cause))?;
+    vouch::vouch(&directory, root, expected)?;
+
+    let components: Vec<&OsStr> = relative.components().collect();
+    let (name, folders) = components
+        .split_last()
+        .expect("a folder below a mapped root names at least itself");
+    let mut at = root.to_path_buf();
+    for step in folders {
+        at.push(step);
+        directory = match rustix::fs::openat(
+            &directory,
+            *step,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        ) {
+            Ok(entered) => entered,
+            // A folder on the way that is gone took the one below it along.
+            Err(Errno::NOENT) => return Ok(false),
+            Err(cause) => return Err(refusal(&at, LocalOperation::Stating, cause).into()),
+        };
+    }
+
+    at.push(name);
+    match rustix::fs::unlinkat(&directory, *name, AtFlags::REMOVEDIR) {
+        Ok(()) => Ok(true),
+        // Something is in it, which is the one answer that keeps a folder; or
+        // it is not there at all, which leaves nothing to remove.
+        Err(Errno::NOTEMPTY | Errno::EXIST | Errno::NOENT) => Ok(false),
+        Err(cause) => Err(refusal(&at, LocalOperation::Removing, cause).into()),
     }
 }
 

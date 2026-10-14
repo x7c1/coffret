@@ -79,6 +79,44 @@ async fn delete(fixture: &SyncUnderTest, index: &dyn Index, path: &str, run: i64
     assert_eq!(outcome.removed.len(), 1, "the Entry's Container is removed");
 }
 
+/// Takes the folder `path` and everything under it out of the Library, the way
+/// deleting a folder from the explorer does.
+async fn delete_folder(fixture: &SyncUnderTest, path: &str, run: i64) {
+    let keys = keys();
+    let outcome = delete_entries(
+        DeleteRequest::new(
+            fixture.store(),
+            fixture.index(),
+            &keys,
+            fixture.fs(),
+            spool_dir(),
+            DeleteSelection::folder(entry_path(path)),
+            BatchId::new(format!("delete-{run}")),
+            at(run),
+        )
+        .with_policy(policy()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("deleting {path} must succeed: {error}"));
+    assert!(
+        !outcome.removed.is_empty(),
+        "the folder's Containers are removed"
+    );
+}
+
+/// Uploads every named file through a first sync and returns where each stands
+/// on disk.
+async fn all_materialized(fixture: &SyncUnderTest, files: &[(&str, &[u8])]) -> Vec<PathBuf> {
+    map_registered(fixture).await;
+    let paths: Vec<PathBuf> = files
+        .iter()
+        .map(|(name, content)| write(fixture.fs(), fixture.folder(), name, content))
+        .collect();
+    let first = sync(fixture, 1).await;
+    assert_eq!(first.added.len(), files.len(), "every file is carried in");
+    paths
+}
+
 /// Uploads one file through a first sync and returns where it stands on disk.
 async fn materialized(fixture: &SyncUnderTest, name: &str, content: &[u8]) -> PathBuf {
     map_registered(fixture).await;
@@ -368,6 +406,96 @@ pub async fn a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_ba
         outcome.surfaced.is_empty(),
         "nothing in the trash is any of the run's business: {:?}",
         outcome.surfaced,
+    );
+}
+
+/// A folder the run's moves to the trash left with nothing in it is removed,
+/// and so is each folder above it they emptied, up to but never including the
+/// mapped root (spec: EP-15).
+pub async fn the_folders_the_moves_to_the_trash_emptied_are_removed(fixture: &SyncUnderTest) {
+    all_materialized(
+        fixture,
+        &[
+            ("album/sub/a.jpg", b"the first file"),
+            ("album/sub/b.jpg", b"the second file"),
+            ("album/c.jpg", b"the third file"),
+            ("d.jpg", b"a file beside the folder"),
+        ],
+    )
+    .await;
+    delete_folder(fixture, "album", 2).await;
+
+    let outcome = sync(fixture, 3).await;
+
+    uploaded_nothing(&outcome);
+    let (moved, _, _) = departed(&outcome);
+    assert_eq!(moved.len(), 3, "the folder's files went to the trash");
+    let root = fixture.folder();
+    assert!(
+        !fixture.fs().holds(&root.join("album/sub")),
+        "the emptied folder is removed"
+    );
+    assert!(
+        !fixture.fs().holds(&root.join("album")),
+        "and the folder above it, which it emptied in turn"
+    );
+    assert!(fixture.fs().holds(root), "the mapped root is never removed");
+    assert!(fixture.fs().holds(&root.join("d.jpg")));
+}
+
+/// A folder that still holds a file the run did not move — an edited copy
+/// kept where it was — stays, and so does every folder above it (spec: EP-15).
+pub async fn a_folder_that_still_holds_an_edited_copy_stays(fixture: &SyncUnderTest) {
+    let paths = all_materialized(
+        fixture,
+        &[
+            ("album/sub/a.jpg", b"the first file"),
+            ("album/sub/b.jpg", b"the second file"),
+        ],
+    )
+    .await;
+    delete_folder(fixture, "album", 2).await;
+    let edited = &paths[1];
+    fixture
+        .fs()
+        .write_file(edited, b"what the person wrote since");
+    touch(fixture.fs(), edited, NEWER);
+
+    let outcome = sync(fixture, 3).await;
+
+    let (moved, kept, _) = departed(&outcome);
+    assert_eq!(moved, [&entry_path("album/sub/a.jpg")]);
+    assert_eq!(kept, [&entry_path("album/sub/b.jpg")]);
+    assert!(
+        fixture.fs().holds(edited),
+        "the edited copy is where it was"
+    );
+    assert!(fixture.fs().holds(&fixture.folder().join("album/sub")));
+    assert!(fixture.fs().holds(&fixture.folder().join("album")));
+}
+
+/// A folder that was already empty before the run held nothing the run moved,
+/// so it stays — and keeps the folder it stands in, which still holds it
+/// (spec: EP-15).
+pub async fn a_folder_empty_before_the_run_stays(fixture: &SyncUnderTest) {
+    all_materialized(fixture, &[("album/a.jpg", b"the file's bytes")]).await;
+    let root = fixture.folder();
+    fixture.fs().create_dir(&root.join("empty"));
+    fixture.fs().create_dir(&root.join("album/later"));
+    delete(fixture, fixture.index(), "album/a.jpg", 2).await;
+
+    let outcome = sync(fixture, 3).await;
+
+    let (moved, _, _) = departed(&outcome);
+    assert_eq!(moved, [&entry_path("album/a.jpg")]);
+    assert!(
+        fixture.fs().holds(&root.join("empty")),
+        "a folder empty before the run is not the run's to remove"
+    );
+    assert!(fixture.fs().holds(&root.join("album/later")));
+    assert!(
+        fixture.fs().holds(&root.join("album")),
+        "and the folder holding one is not empty"
     );
 }
 

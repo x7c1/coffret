@@ -200,7 +200,7 @@
       "refused": [
         {
           "kept": 2,
-          "message": "the Library has no key for the Pack holding them, so the files packed beside them cannot be carried into a rebuilt one — the Pack is left as it is",
+          "message": "the Library has no key for the Pack holding it, so the files packed beside it cannot be carried into a rebuilt one — the Pack is left as it is",
           "reason": "key_lost",
           "spared": [
             "books/vol-1/page-002.jpg"
@@ -208,7 +208,7 @@
         },
         {
           "kept": 2,
-          "message": "the Pack holding them did not verify when it was read back, so no rebuilt one was written — the Pack is left as it is",
+          "message": "the Pack holding it did not verify when it was read back, so no rebuilt one was written — the Pack is left as it is",
           "reason": "unverified",
           "spared": [
             "books/vol-1/page-002.jpg"
