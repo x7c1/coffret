@@ -10,7 +10,7 @@ check_command: 'make check && grep -q "no row" docs/spec/pack-construction/READM
 assignee: null
 branch: task/1014-0340-say-what-a-parcel-read-left-behind-and-show-what-is-kept
 created_at: 2026-10-13T18:40:00Z
-updated_at: 2026-10-14T04:15:02Z
+updated_at: 2026-10-14T04:20:31Z
 ---
 
 # fix(fetch): say what a parcel read left behind, sweep parcel files no row names, and show what is kept
@@ -127,7 +127,7 @@ is zero; the number formatter the bar already uses for bytes applies.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 2` on the second device,
+- [x] On the agent's Library (`.tmp/agent/up.sh 2` on the second device,
       headless Chromium): opening one page of `lib/book-000` leaves one
       parcel under `~/.local/state/coffret-agent-2/libraries/agent/parcels/`,
       the status bar says `1 parcel kept` with its size, and a stray
