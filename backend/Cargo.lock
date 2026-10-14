@@ -1598,6 +1598,7 @@ dependencies = [
  "coffret-logging",
  "coffret-model",
  "coffret-usecase",
+ "futures-util",
  "getrandom 0.4.3",
  "md-5",
  "tokio",

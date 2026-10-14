@@ -181,6 +181,9 @@ pub use finding::Finding;
 mod folder;
 pub use folder::Folder;
 
+mod fronts_ahead;
+pub use fronts_ahead::FrontsAhead;
+
 mod freeze;
 pub use freeze::{freeze_folder, Book, FreezeRun, FreezeStatus, Freezes};
 

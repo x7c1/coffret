@@ -28,7 +28,7 @@ use coffret_logging::testing::CapturedLogs;
 use coffret_model::{
     ControlObjectName, KeyringCommitment, MasterKey, MasterKeyEpoch, ObjectRef, ReplicaPosition,
 };
-use coffret_usecase::commit::{CommitError, CommitPolicy, DegradedKeyring};
+use coffret_usecase::commit::{CommitError, CommitPolicy, ShortKeyring};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingRow, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, Disposal, Settled, SyncError, SyncOutcome, SyncRequest};
@@ -401,7 +401,7 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
 /// that answers: a set missing a position above the one that answered is a set
 /// this read never looks at.
 #[tokio::test]
-async fn a_freeze_stopped_before_the_commit_still_reports_a_degraded_keyring() {
+async fn a_freeze_stopped_before_the_commit_still_reports_a_short_keyring() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
     let committed = device
         .freeze(1)
@@ -471,7 +471,7 @@ async fn a_freeze_stopped_before_the_commit_still_reports_a_degraded_keyring() {
 /// reading the log afterwards sees a set that was repaired rather than a set
 /// said both to await a repair and to have had one.
 #[tokio::test]
-async fn a_freeze_that_reaches_its_commit_reports_a_degraded_keyring_once_from_the_examination() {
+async fn a_freeze_that_reaches_its_commit_reports_a_short_keyring_once_from_the_examination() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
     let committed = device
         .freeze(1)
@@ -493,7 +493,7 @@ async fn a_freeze_that_reaches_its_commit_reports_a_degraded_keyring_once_from_t
         .expect("a freeze over a degraded set repairs it and commits");
     assert!(packed.commit.is_some(), "the second file was committed");
     assert_eq!(
-        packed.degraded, None,
+        packed.short, None,
         "the commit's repair is the account the caller gets, and the read's finding is not \
          handed over beside it",
     );
@@ -609,7 +609,7 @@ async fn an_examination_that_finds_no_replica_leaves_the_read_to_say_the_set_is_
 /// it examines or repairs the set its read found short. The person who ran it
 /// is told on the outcome, and the run is otherwise the ordinary empty one.
 #[tokio::test]
-async fn a_freeze_that_commits_nothing_reports_a_degraded_keyring_on_its_outcome() {
+async fn a_freeze_that_commits_nothing_reports_a_short_keyring_on_its_outcome() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
     let committed = committed_keyring(&device).await;
     lose_replica(&device.store, &committed, 0).await;
@@ -622,8 +622,8 @@ async fn a_freeze_that_commits_nothing_reports_a_degraded_keyring_on_its_outcome
 
     assert!(outcome.commit.is_none(), "there was nothing to commit");
     assert_eq!(
-        outcome.degraded,
-        Some(DegradedKeyring::new(
+        outcome.short,
+        Some(ShortKeyring::new(
             committed.generation(),
             committed.replica_count(),
             1,

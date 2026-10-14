@@ -1,4 +1,4 @@
-use coffret_device::{DegradedKeyring, UnheldParcel};
+use coffret_device::{ShortKeyring, UnheldParcel};
 
 use crate::finding::Finding;
 use crate::folder::Folder;
@@ -50,7 +50,7 @@ pub struct FillRun {
     /// from an earlier read, and a line per Entry would be one fact said as
     /// many times as the folder has files. Where the reads disagree, `graver`
     /// says which one is kept.
-    pub degraded: Option<DegradedKeyring>,
+    pub short: Option<ShortKeyring>,
     /// The kept parcels the run's reads — and the reader's fetch that armed it —
     /// found not held, each read again from Storage (spec: PK-21).
     pub unheld: Vec<UnheldParcel>,
@@ -66,14 +66,14 @@ impl FillRun {
             total: 0,
             done: 0,
             declined: Vec::new(),
-            degraded: None,
+            short: None,
             unheld: Vec::new(),
         }
     }
 
     /// Takes in what one read found of the committed Keyring.
-    pub(super) fn read_keyring(&mut self, found: DegradedKeyring) {
-        self.degraded = Some(graver(self.degraded, found));
+    pub(super) fn read_keyring(&mut self, found: ShortKeyring) {
+        self.short = Some(graver(self.short, found));
     }
 
     /// Takes in the kept parcels one read found not held.
@@ -90,7 +90,7 @@ impl FillRun {
     /// (spec: KL-13, KL-16), and a parcel not held was read again on the spot
     /// (spec: PK-21).
     pub fn findings(&self) -> Vec<Finding> {
-        self.degraded
+        self.short
             .iter()
             .map(coffret_device::Finding::from)
             .chain(self.unheld.iter().map(coffret_device::Finding::from))
@@ -105,7 +105,7 @@ impl FillRun {
 /// hand over, which the next read may fetch perfectly well (spec: KL-15);
 /// between two of the same weight the first one stands, so a report does not
 /// change under a reader for nothing.
-pub(super) fn graver(kept: Option<DegradedKeyring>, found: DegradedKeyring) -> DegradedKeyring {
+pub(super) fn graver(kept: Option<ShortKeyring>, found: ShortKeyring) -> ShortKeyring {
     match kept {
         Some(kept) if kept.established() || !found.established() => kept,
         _ => found,

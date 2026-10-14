@@ -24,7 +24,7 @@
 //! that record names (spec: CP-10, KL-1, KL-2), and a checkpoint under the one
 //! name its head gives it (spec: CK-10).
 //!
-//! Eight of the cases need Storage to misbehave, in six ways — a replica that
+//! Ten of the cases need Storage to misbehave, in six ways — a replica that
 //! never arrives, a head that refuses the create, a snapshot slot a sibling
 //! reached first, a provider that will not move anything to the trash, one that
 //! refuses a replica write, one that holds a replica and will not hand it
@@ -43,6 +43,11 @@
 //! commits merely started together collide or do not depending on how the
 //! runtime interleaves them, and a suite that started two writers at once
 //! would pass either way; this puts the collision where it can be asserted.
+//!
+//! One case wraps that store to hold each Keyring replica request until the
+//! whole set is in flight, because what it asserts is that a commit sends its
+//! replicas together: a commit that sent them one after another would land all
+//! the same, only slower, and nothing it returns would say so.
 //!
 //! Two progress cases wrap that store to note what the run had said each time
 //! a commit sent it an object, because a commit that reported every step at
@@ -82,6 +87,8 @@ pub(crate) mod faulty_store;
 
 mod fixtures;
 
+mod gathering_store;
+
 mod happy_path;
 pub use happy_path::{
     a_commit_makes_the_batch_the_current_state, a_removal_leaves_the_current_set_and_is_trashed,
@@ -107,8 +114,10 @@ mod racing_store;
 mod refusals;
 pub use refusals::{
     a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,
+    a_refused_replica_write_stops_the_commit_before_its_head,
     an_interrupted_commit_leaves_the_head_unchanged,
     an_untrashed_removal_reports_what_storage_refused,
+    the_lowest_missing_replica_is_the_one_reported,
 };
 
 mod repair;
@@ -123,6 +132,9 @@ pub use repair::{
     an_unfetchable_replica_stops_the_commit_unrewritten, an_unreadable_replica_is_replaced,
     two_devices_repairing_one_position_both_commit,
 };
+
+mod replica_overlap;
+pub use replica_overlap::a_commit_writes_and_reads_back_its_replicas_at_once;
 
 mod rival_index;
 
@@ -174,6 +186,8 @@ macro_rules! commit_conformance {
             a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
             a_rebased_batch_whose_removals_are_current_commits,
             a_missing_keyring_replica_stops_the_commit,
+            the_lowest_missing_replica_is_the_one_reported,
+            a_refused_replica_write_stops_the_commit_before_its_head,
             an_interrupted_commit_leaves_the_head_unchanged,
             an_untrashed_removal_reports_what_storage_refused,
             a_lost_replica_is_rewritten_before_the_next_commit,
@@ -193,6 +207,7 @@ macro_rules! commit_conformance {
             a_snapshot_slot_taken_by_a_sibling_converges,
             a_commit_is_seen_part_way_in_the_objects_it_stores,
             a_commit_that_rebases_counts_again_from_nothing,
+            a_commit_writes_and_reads_back_its_replicas_at_once,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

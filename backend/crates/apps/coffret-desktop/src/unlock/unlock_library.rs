@@ -2,9 +2,9 @@ use coffret_device::open_library as reopen;
 use coffret_server::Unlocked;
 use tauri::State;
 
-use super::{refusal_evidence, refusal_line, EnteredPassphrase, Shell};
+use super::{refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
 
-/// Unlocks the Library this shell serves, in place, with `passphrase`: what the
+/// Unlocks the Library this app serves, in place, with `passphrase`: what the
 /// Passphrase window does in *unlock* mode (spec: DK-1).
 ///
 /// The Library is reopened the way it was opened at launch — the device crate's
@@ -22,13 +22,13 @@ use super::{refusal_evidence, refusal_line, EnteredPassphrase, Shell};
 /// hears of it in its next answer about what the server is doing.
 #[tauri::command]
 pub async fn unlock_library(
-    shell: State<'_, Shell>,
+    desktop: State<'_, Desktop>,
     passphrase: EnteredPassphrase,
 ) -> Result<(), String> {
     let passphrase = passphrase.into_passphrase();
 
-    let _turn = shell.opening.lock().await;
-    let served = shell
+    let _turn = desktop.opening.lock().await;
+    let served = desktop
         .served()
         .cloned()
         .ok_or("No Library is open in this app to unlock.")?;
@@ -38,7 +38,7 @@ pub async fn unlock_library(
     }
 
     let name = served.name.clone();
-    let reopened = shell
+    let reopened = desktop
         .runtime
         .spawn(async move { reopen(&name, move || Ok(passphrase)).await })
         .await;

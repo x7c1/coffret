@@ -1,6 +1,6 @@
 use coffret_model::ContainerId;
 
-use crate::commit::{CommitOutcome, DegradedKeyring};
+use crate::commit::{CommitOutcome, ShortKeyring};
 use crate::freeze::frozen_pack::FrozenPack;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::unavailable_root::UnavailableRoot;
@@ -85,10 +85,10 @@ pub struct FreezeOutcome {
     /// there. A run that committed nothing reached no examination, and this is
     /// the only place its caller hears of the set — degraded where a loss is
     /// established, and otherwise not known to be (see
-    /// [`DegradedKeyring::established`]). Nothing about the run is undone by
+    /// [`ShortKeyring::established`]). Nothing about the run is undone by
     /// it, and the next run that commits repairs the set first
     /// (spec: KL-13, KL-16).
-    pub degraded: Option<DegradedKeyring>,
+    pub short: Option<ShortKeyring>,
 }
 
 impl FreezeOutcome {

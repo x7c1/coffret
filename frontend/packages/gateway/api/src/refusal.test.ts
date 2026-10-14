@@ -103,6 +103,7 @@ it('reads every placement reason the server can send', async () => {
     'unmapped',
     'unmaterializable',
     'reserved',
+    'trash_folder',
     'refused_root',
     'surfaced',
     'key_lost',

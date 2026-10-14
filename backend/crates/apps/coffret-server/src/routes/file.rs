@@ -5,7 +5,9 @@ use axum::body::Body;
 use axum::extract::{Query, State};
 use axum::http::{header, HeaderValue};
 use axum::response::Response;
-use coffret_device::{EntryFetch, EntryPath, EntryState, Error, FetchError, LocalFile, Redacted};
+use coffret_device::{
+    EntryFetch, EntryPath, EntryState, Error, FetchError, LocalFile, OpenLibrary, Redacted,
+};
 use futures_util::{stream, TryStreamExt};
 use tracing::{info, warn};
 
@@ -60,7 +62,10 @@ pub async fn file(
 
     if library.state_of(&path).await? == EntryState::Present {
         match library.open_local_file(&path).await {
-            Ok(Some(file)) => return Ok(served(&path, file, "present")),
+            Ok(Some(file)) => {
+                fill_unless_whole(&state, &library, &path).await?;
+                return Ok(served(&path, file, "present"));
+            }
             // The row says this device placed the file and the file is not
             // there now. That is a finding rather than a failure, and the fetch
             // below is what states it — as `LocallyChanged`, a pending local
@@ -104,9 +109,10 @@ pub async fn file(
         // This device did not have the file and does now, which says something
         // about the folder around it: whoever opened this one is going to open
         // its neighbours. So the rest of the folder is brought over in the
-        // background from here — a fetch having been necessary is the whole of
-        // the signal, because fetching is implicit and there is no button that
-        // asks for it.
+        // background from here, because fetching is implicit and there is no
+        // button that asks for it. A fetch having been necessary is one way
+        // the folder shows it is not wholly here; a page that was here already
+        // in a folder that is not is the other (see `fill_unless_whole`).
         //
         // A file is what this answers with, so what the fetch read of the
         // committed Keyring on the way, and the kept parcels it found not held
@@ -114,12 +120,19 @@ pub async fn file(
         // this Entry again, and its line is where a person who only opens
         // files hears of them (spec: KL-15, PK-21). A fetch another caller had
         // already made read nothing, and has nothing to carry.
-        EntryFetch::Placed => fill_folder(
-            Arc::clone(&state),
-            Folder::holding(&path),
-            fetched.degraded,
-            fetched.unheld,
-        ),
+        //
+        // The run on record is noted before it is armed over: arming with
+        // nothing running replaces a finished run on the record, and a page of
+        // that folder answered from disk later must still know it ended.
+        EntryFetch::Placed => {
+            state.ended_fills.note(&state.fills);
+            fill_folder(
+                Arc::clone(&state),
+                Folder::holding(&path),
+                fetched.short,
+                fetched.unheld,
+            )
+        }
         EntryFetch::AlreadyPresent => {}
         // A declined Entry arms nothing, and what its fetch read of the Keyring
         // stays in the line the run wrote to the log. Only a locked one read it
@@ -151,6 +164,41 @@ pub async fn file(
         ))
     })?;
     Ok(served(&path, file, "fetched"))
+}
+
+/// Arms the fill of the folder holding `path` where some Entry in it is not on
+/// this device and no fill has ended on it yet, for a page that was answered
+/// from disk.
+///
+/// A page opened in a folder that is not wholly here is the signal, whether or
+/// not that page had to be fetched. Two books sharing a Pack is the case that
+/// needs this half of it: the second book's first page is often placed out of
+/// the parcel the first book's last page was read from, so opening that book
+/// fetches nothing — and a fill armed only by a fetch would leave the reader
+/// waiting at the first page that is not here (spec: PK-16).
+///
+/// Not on every page turned, though: a folder a run has ended on arms nothing
+/// here, for the reason [`EndedFills`](crate::fill::EndedFills) gives
+/// (spec: EP-11).
+///
+/// The same fill a placement arms, with nothing to carry: no fetch ran, so
+/// nothing of the Keyring was read and no kept parcel was found unheld. A
+/// folder wholly here, the common case, arms nothing; the catalog is asked
+/// only where no fill has ended on the folder.
+async fn fill_unless_whole(
+    state: &Arc<ServerState>,
+    library: &OpenLibrary,
+    path: &EntryPath,
+) -> Result<(), ApiError> {
+    let folder = Folder::holding(path);
+    state.ended_fills.note(&state.fills);
+    if state.ended_fills.has_ended(&folder) {
+        return Ok(());
+    }
+    if !library.wholly_present(folder.listed()).await? {
+        fill_folder(Arc::clone(state), folder, None, Vec::new());
+    }
+    Ok(())
 }
 
 /// Whether a refusal to open the placed file is the row having outlived the
@@ -313,7 +361,6 @@ mod tests {
     use std::io;
     use std::sync::Arc;
 
-    use coffret_device::OpenLibrary;
     use coffret_local_fs::UnixFs;
     use coffret_logging::testing::CapturedLogs;
     use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};

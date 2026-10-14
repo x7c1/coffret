@@ -14,8 +14,8 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use coffret_device::{
-    ByteCount, DegradedKeyring, FindingReason, Generation, KeptTally, Phase, RootRefused,
-    RootUnavailable, Step, Surfaced as DeviceSurfaced, UnheldParcel, UnheldReason,
+    ByteCount, FindingReason, Generation, KeptTally, Phase, RootRefused, RootUnavailable,
+    ShortKeyring, Step, Surfaced as DeviceSurfaced, UnheldParcel, UnheldReason,
 };
 use coffret_model::ContainerId;
 
@@ -108,13 +108,13 @@ fn every_finding() -> Vec<Finding> {
         Found::KeyLostContainer {
             container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
         },
-        Found::DegradedKeyring {
+        Found::ShortKeyring {
             generation: Generation::FIRST,
             replicas: 3,
             lost: 1,
             unfetched: 0,
         },
-        Found::DegradedKeyring {
+        Found::ShortKeyring {
             generation: Generation::FIRST,
             replicas: 3,
             lost: 0,
@@ -161,7 +161,7 @@ fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
         total: 3,
         done: 1,
         declined: Vec::new(),
-        degraded: None,
+        short: None,
         unheld: Vec::new(),
     }
 }
@@ -378,7 +378,7 @@ fn every_answer() -> Vec<WorkDto> {
         Standing::CaughtUp,
         Some(alone(FillRun {
             declined: declined.clone(),
-            degraded: Some(DegradedKeyring::new(Generation::FIRST, 3, 1, 0)),
+            short: Some(ShortKeyring::new(Generation::FIRST, 3, 1, 0)),
             unheld: vec![UnheldParcel {
                 container_id: ContainerId::from_bytes([8; ContainerId::BYTE_LEN]),
                 index: 2,
@@ -421,7 +421,7 @@ fn every_answer() -> Vec<WorkDto> {
             displaced: vec![Displaced {
                 run: FillRun {
                     declined,
-                    degraded: Some(DegradedKeyring::new(Generation::FIRST, 3, 0, 1)),
+                    short: Some(ShortKeyring::new(Generation::FIRST, 3, 0, 1)),
                     ..fill(4, "albums", FillStatus::Stopped(storage()))
                 },
                 stopped: storage(),

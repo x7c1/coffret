@@ -1,9 +1,9 @@
 use tauri::{AppHandle, Manager, Url};
 
-use super::{bring_forward, Shell, UNLOCK_QUERY, WINDOW_LABEL};
+use super::{bring_forward, Desktop, UNLOCK_QUERY, WINDOW_LABEL};
 
 /// Puts the Passphrase window in front in *unlock* mode, for the Library this
-/// shell serves — what the server's prompt and the tray's *Unlock…* both do
+/// app serves — what the server's prompt and the tray's *Unlock…* both do
 /// once the Library has locked (spec: DK-1).
 ///
 /// The mode is a query on the window's own page rather than a second page:
@@ -17,8 +17,8 @@ use super::{bring_forward, Shell, UNLOCK_QUERY, WINDOW_LABEL};
 /// asking that arrives after another unlock already landed has nothing left to
 /// ask for.
 pub fn ask_for_passphrase(app: &AppHandle) {
-    let shell = app.state::<Shell>();
-    let Some(served) = shell.served() else {
+    let desktop = app.state::<Desktop>();
+    let Some(served) = desktop.served() else {
         tracing::warn!("the Passphrase was asked for again before a Library was open");
         return;
     };

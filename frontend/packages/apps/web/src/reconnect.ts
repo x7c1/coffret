@@ -63,7 +63,49 @@ export async function askToReconnect(pressing: Pressing): Promise<void> {
 export const NO_TAB = 'no tab opened? open the consent page';
 
 /**
+ * What stands where the link was, once the flow waiting is not the one this
+ * window's press was answered with: a press in another window started it, and
+ * its page went to that window alone.
+ */
+export const OPENED_ELSEWHERE =
+  "Google's consent page now waiting was opened from another window; answer it there";
+
+/**
+ * The name the work answer gives a flow waiting on `page`: the 32-bit FNV-1a
+ * digest of the page's UTF-8 bytes, as eight lowercase hex digits.
+ *
+ * The server computes the same digest over the page it waits on, and the work
+ * answer carries that rather than the page, which goes only to the window that
+ * pressed. Held to the server's by the waiting sample in the gateway's
+ * `contract/work.json`, whose page is `https://consent.example/`.
+ */
+export function flowOf(page: string): string {
+  let digest = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(page)) {
+    digest = Math.imul(digest ^ byte, 0x01000193);
+  }
+  return (digest >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Whether the flow waiting is the one on `page`, the consent page this window's
+ * own press was answered with.
+ *
+ * The state alone cannot say: one flow can end and another begin between two
+ * polls — a press in another window — which reads `waiting` both times, and the
+ * page this window holds then leads to a listener that has stopped.
+ */
+function waitsOn(reconnect: Reconnect | null, page: string | null): page is string {
+  return reconnect?.state === 'waiting' && page !== null && reconnect.flow === flowOf(page);
+}
+
+/**
  * The consent page to link to beside the line, or `null` where there is none.
+ *
+ * Only the page this window's own press was answered with, and only while the
+ * flow waiting is the one on it (see `waitsOn`): a flow another window started
+ * waits behind a page this one was never handed, and the old page would send
+ * an answer to nobody.
  *
  * The page is opened once the server has answered, which is after the click
  * that asked for it, and a browser that blocks a tab opened outside a gesture
@@ -74,7 +116,15 @@ export const NO_TAB = 'no tab opened? open the consent page';
  * server is still listening behind for exactly as long as the flow waits.
  */
 export function consentLink(reconnect: Reconnect | null, page: string | null): string | null {
-  return reconnect?.state === 'waiting' ? page : null;
+  return waitsOn(reconnect, page) ? page : null;
+}
+
+/**
+ * Whether the link this window drew has been dropped because the flow waiting
+ * is another window's, which is when [`OPENED_ELSEWHERE`] stands in its place.
+ */
+export function openedElsewhere(reconnect: Reconnect | null, page: string | null): boolean {
+  return reconnect?.state === 'waiting' && page !== null && !waitsOn(reconnect, page);
 }
 
 /** Whether the button is offered, which is whenever no flow is waiting. */

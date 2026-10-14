@@ -2,7 +2,7 @@ use tauri::WebviewWindow;
 
 /// Hides `window` and loads its page afresh, which empties the Passphrase field.
 ///
-/// The hidings the shell takes on its own come through here — a dismissal once
+/// The hidings the app takes on its own come through here — a dismissal once
 /// a Library is served — so that nothing typed stays in a page nobody is
 /// looking at. The page empties the field itself after every submission, but a
 /// dismissal is not a submission: without this, what somebody typed and then

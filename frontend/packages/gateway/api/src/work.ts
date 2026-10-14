@@ -595,6 +595,15 @@ export interface Reconnect {
   state: ReconnectState;
   /** The server's own sentence, written to be read by a person. */
   message: string;
+  /**
+   * The waiting flow's name, present while the state is `waiting` and absent
+   * once the flow has ended: a digest of its consent page, which gives the page
+   * to no window that does not already hold it. One flow can end and another
+   * begin between two polls, which reads `waiting` both times — this is what
+   * tells the two apart, for a window comparing it with the digest of the page
+   * its own press was answered with.
+   */
+  flow?: string;
 }
 
 /**

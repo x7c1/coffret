@@ -1,6 +1,6 @@
 use coffret_model::EntryPath;
 
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::unheld_parcel::UnheldParcel;
 
@@ -59,7 +59,7 @@ pub struct EntryFetchOutcome {
     /// The finding about the committed Keyring, where the run read one and had
     /// to step over a position of it. `None` where it read no Keyring at all —
     /// the Entry was already here, or declined before the envelope mattered.
-    pub degraded: Option<DegradedKeyring>,
+    pub short: Option<ShortKeyring>,
     /// The other Entries placed out of the parcels the run read or held, in
     /// stream order (spec: PK-16).
     ///
@@ -77,7 +77,7 @@ impl EntryFetchOutcome {
     pub fn of(fetch: EntryFetch) -> Self {
         Self {
             fetch,
-            degraded: None,
+            short: None,
             alongside: Vec::new(),
             unheld: Vec::new(),
         }

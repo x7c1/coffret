@@ -56,10 +56,12 @@ impl OpenLibrary {
     /// it up. The refusal names the component, because that is the part of the
     /// path there is anything to do about (spec: EP-4).
     ///
-    /// The same refusal where the file would land in a folder a desktop keeps
-    /// its trash in — `.Trash`, `.Trashes`, `.Trash-<digits>` — standing
-    /// directly under the mapped root, which a scan never enters either
-    /// (spec: EP-16).
+    /// The same `Error::FileNotAdded` carrying `TrashFolderComponent` where the
+    /// file would land in a folder a desktop keeps its trash in — `.Trash`,
+    /// `.Trashes`, `.Trash-<digits>` — standing directly under the mapped root,
+    /// which a scan never enters either (spec: EP-16). Its own verdict rather
+    /// than `ReservedComponent`, because the folder is the desktop's rather
+    /// than a name coffret keeps, and the sentence a person reads says so.
     ///
     /// The same `Error::FileNotAdded` carrying `FoldedReservedComponent`
     /// where a component only folds to the management area's name under ASCII
@@ -130,7 +132,7 @@ impl OpenLibrary {
         // not a folder on this disk.
         if let Some(component) = place.trash_folder_name() {
             return Err(Error::FileNotAdded {
-                cause: Box::new(FetchError::ReservedComponent {
+                cause: Box::new(FetchError::TrashFolderComponent {
                     path: path.clone(),
                     component: component.to_owned(),
                 }),
