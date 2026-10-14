@@ -33,7 +33,10 @@
 //! as [`Reconnect`]: waiting, renewed, refused by the person, unanswered, or
 //! failed. It is this process's own account and nothing in it is a secret: no
 //! token, no code, and not even the URL — that goes back only to the request
-//! that asked for it.
+//! that asked for it. A waiting flow is named instead by a digest of its page,
+//! from which a window that pressed can tell whether the page it was answered
+//! with is still the one waited on, and a window that did not cannot recover
+//! the page.
 
 use coffret_device::Unrenewed;
 

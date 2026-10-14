@@ -23,8 +23,8 @@ jobs:
     # - pull_request: only react to title edits (changes.title.from != null)
     #   on an open PR labelled `release`, so body-only edits and bot
     #   self-edits don't recurse.
-    # - workflow_dispatch: only on main, since a new release branch is cut
-    #   from the commit that was checked out.
+    # - workflow_dispatch: only on main, since the job runs the script from the
+    #   ref that was dispatched (the script itself always builds from main).
     if: |
       (github.event_name == 'push' &&
         !startsWith(github.event.head_commit.message, 'Release v')) ||

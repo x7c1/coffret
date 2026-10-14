@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 
 import type {
   Added,
@@ -266,13 +273,16 @@ export function FileList({
   const offersPack = packOffered(listing) && !unheld;
   return (
     <div
+      // What a row's menu measures the room below it against (see `RowMenu`).
+      data-scroll-area=""
       style={{
         flex: 1,
         overflow: 'auto',
         minWidth: 0,
-        // Inside the outline rather than around it, so that nothing on the
-        // screen moves when a drag arrives: an outline that took up room would
-        // shift every row under the pointer at the moment of dropping.
+        // Inside the outline rather than around it, so that the outline moves
+        // nothing on the screen when a drag arrives: one that took up room
+        // would shift the list itself, edges and all. The drop line does move
+        // the rows down, for the reason given at the sticky block below.
         //
         // A folder that would not take this drop is outlined too, and in the
         // refused colour. The answer to "will this take my files" is worth
@@ -348,22 +358,37 @@ export function FileList({
         )}
         {packing && <Packing />}
         {waitingForADrop && <WaitingForADrop />}
-        {/* Laid over the rows under the banners rather than among them, for
-            the reason the outline is drawn inside the list: a line that took up
-            room would shift every row under the pointer as it arrived. */}
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, pointerEvents: 'none' }}>
-          {/* While files are picked out, what they come to and the one
-              deletion of them all. Over the column headings while the list is
-              at its top — where the pointer that ticked the first box is about
-              to tick the next, so a row moving down under it would untick the
-              first instead — and leaving the box column clear, so the header's
-              box stays where it was to pick the rest or clear them. */}
-          {picked.length > 0 && (
-            <table style={TABLE}>
-              <tbody>
-                <tr>
-                  <td style={{ ...PICK, padding: '0 10px' }} />
-                  <td style={SELECTED_LINE}>
+        {/* While a drag is over the list, the line saying what letting go
+            will do. It takes its own room in the block rather than being laid
+            over what is under it: laid over, it covered the top of whichever
+            row was first in view once the list had scrolled. The rows move
+            down by its height as a drag arrives, which costs nothing, since
+            what takes the drop is the whole list and not the row under the
+            pointer. */}
+        {dragged && carriesFiles && <DropBanner outcome={outcome} held={!nowhere} />}
+        {/* The column headings stay with the banners, so that the line a
+            selection is said on can stand in for them without covering a row:
+            the headings are the one thing on the list it may hide. */}
+        {!empty && (
+          <table style={TABLE}>
+            <Columns />
+            <thead>
+              {picked.length > 0 ? (
+                // While files are picked out, what they come to and the one
+                // deletion of them all — in the headings' own row and at its
+                // height, so that no row moves under the pointer that ticked
+                // the first box and is about to tick the next. The box column
+                // is left as it was, so the header's box stays where it was to
+                // pick the rest or clear them.
+                <tr style={HEAD_ROW}>
+                  <th style={{ ...HEAD, ...PICK }}>
+                    <EveryBox
+                      picked={picked.length}
+                      of={pickable.length}
+                      onToggle={() => setSelection((held) => everyToggled(held, listing))}
+                    />
+                  </th>
+                  <th colSpan={6} style={SELECTED_LINE}>
                     <span>{selectedLine(picked.length)}</span>
                     <button
                       type="button"
@@ -372,19 +397,30 @@ export function FileList({
                     >
                       {DELETE}
                     </button>
-                  </td>
+                  </th>
                 </tr>
-              </tbody>
-            </table>
-          )}
-          {/* While a drag is over the list, the line saying what letting go
-              will do. */}
-          {dragged && carriesFiles && (
-            <div style={{ pointerEvents: 'auto' }}>
-              <DropBanner outcome={outcome} held={!nowhere} />
-            </div>
-          )}
-        </div>
+              ) : (
+                <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
+                  <th style={{ ...HEAD, ...PICK }}>
+                    {pickable.length > 0 && (
+                      <EveryBox
+                        picked={picked.length}
+                        of={pickable.length}
+                        onToggle={() => setSelection((held) => everyToggled(held, listing))}
+                      />
+                    )}
+                  </th>
+                  <th style={HEAD} />
+                  <th style={HEAD}>Name</th>
+                  <th style={{ ...HEAD, textAlign: 'right' }}>Size</th>
+                  <th style={HEAD}>Modified</th>
+                  <th style={HEAD}>State</th>
+                  <th style={HEAD} />
+                </tr>
+              )}
+            </thead>
+          </table>
+        )}
       </div>
       {empty ? (
         // A folder waiting for a drop has been told what it is for by the
@@ -412,25 +448,7 @@ export function FileList({
         )
       ) : (
         <table style={TABLE}>
-          <thead>
-            <tr style={{ color: COLOR.dim, textAlign: 'left', fontSize: 12 }}>
-              <th style={{ ...HEAD, ...PICK }}>
-                {pickable.length > 0 && (
-                  <EveryBox
-                    picked={picked.length}
-                    of={pickable.length}
-                    onToggle={() => setSelection((held) => everyToggled(held, listing))}
-                  />
-                )}
-              </th>
-              <th style={{ ...HEAD, width: 28 }} />
-              <th style={HEAD}>Name</th>
-              <th style={{ ...HEAD, width: 100, textAlign: 'right' }}>Size</th>
-              <th style={{ ...HEAD, width: 210 }}>Modified</th>
-              <th style={{ ...HEAD, width: 90 }}>State</th>
-              <th style={{ ...HEAD, width: 40 }} />
-            </tr>
-          </thead>
+          <Columns />
           <tbody>
             {listing.folders.map((folder) => (
               <Row
@@ -848,10 +866,25 @@ interface MenuItem {
  * The menu closes on a click anywhere outside it, on `Escape`, and on choosing
  * an item. Every click inside it stops there: the row under it opens the file
  * or the folder, and a press meant for the menu must not also walk into it.
+ *
+ * It hangs below the mark, and above it where the list has no room below for
+ * it and more above — the last rows of a list scrolled to its end, where a
+ * menu hung below would be cut off by the bottom of the scroll area. Decided
+ * once it is drawn and before it is painted, since its height is what is
+ * measured.
  */
 function RowMenu({ name, items }: { name: string; items: readonly MenuItem[] }) {
   const [open, setOpen] = useState(false);
+  const [upward, setUpward] = useState(false);
   const here = useRef<HTMLTableCellElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || here.current === null || menu.current === null) {
+      setUpward(false);
+      return;
+    }
+    setUpward(opensUpward(here.current, menu.current));
+  }, [open]);
   useEffect(() => {
     if (!open) {
       return;
@@ -896,7 +929,7 @@ function RowMenu({ name, items }: { name: string; items: readonly MenuItem[] }) 
             ⋮
           </button>
           {open && (
-            <div role="menu" style={MENU}>
+            <div ref={menu} role="menu" style={upward ? MENU_UPWARD : MENU}>
               {items.map((item) => (
                 <button
                   key={item.label}
@@ -917,6 +950,20 @@ function RowMenu({ name, items }: { name: string; items: readonly MenuItem[] }) 
       )}
     </td>
   );
+}
+
+/**
+ * Whether a menu hung below `cell` would run past the bottom of the scroll area
+ * the list is in, where there is more room above the cell than below it.
+ */
+function opensUpward(cell: HTMLElement, menu: HTMLElement): boolean {
+  const area = cell.closest('[data-scroll-area]') ?? document.documentElement;
+  const bounds = area.getBoundingClientRect();
+  const at = cell.getBoundingClientRect();
+  const height = menu.getBoundingClientRect().height;
+  const below = bounds.bottom - at.bottom;
+  const above = at.top - bounds.top;
+  return height > below && above > below;
 }
 
 /**
@@ -945,23 +992,56 @@ function EveryBox({ picked, of, onToggle }: { picked: number; of: number; onTogg
 }
 
 /**
- * The rows' table, and the one the selection's line is laid out in over it:
- * the same layout, so that the line's box column is exactly the rows'.
+ * The rows' table, and the headings' one over it in the sticky block: the same
+ * layout and the same {@link Columns}, so that the two line up column for
+ * column although they are two tables.
  */
 const TABLE: CSSProperties = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' };
+
+/**
+ * The widths of the columns, given to both tables: the box, the icon, the name
+ * (the rest of the width), the size, the time, the state, and the menu.
+ */
+function Columns() {
+  return (
+    <colgroup>
+      <col style={{ width: 32 }} />
+      <col style={{ width: 28 }} />
+      <col />
+      <col style={{ width: 100 }} />
+      <col style={{ width: 210 }} />
+      <col style={{ width: 90 }} />
+      <col style={{ width: 40 }} />
+    </colgroup>
+  );
+}
 
 /** The column the boxes stand in. */
 const PICK: CSSProperties = { width: 32, textAlign: 'center' };
 
-/** No taller than the column headings it stands over. */
+/**
+ * The headings' row, at one height whether it holds the headings or the line a
+ * selection is said on, so that nothing below it moves as the first box is
+ * ticked.
+ *
+ * The height is only the least the row may be: a cell whose line is taller
+ * grows it. The font size is given here for both rows, not to the headings
+ * alone, for that reason: at the page's own size the box's cell in the
+ * selection's row drew a taller line and pushed every row down at the first
+ * tick.
+ */
+const HEAD_ROW: CSSProperties = { height: 30, fontSize: 12, background: COLOR.ground };
+
+/** The line a selection is said on, in the headings' row. */
 const SELECTED_LINE: CSSProperties = {
-  padding: '3px 10px',
+  padding: '0 10px',
   background: COLOR.panel,
   borderBottom: `1px solid ${COLOR.border}`,
   color: COLOR.text,
   fontSize: 12,
+  fontWeight: 'normal',
+  textAlign: 'left',
   whiteSpace: 'nowrap',
-  pointerEvents: 'auto',
 };
 
 const MENU_BUTTON: CSSProperties = {
@@ -989,6 +1069,9 @@ const MENU: CSSProperties = {
   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
   textAlign: 'left',
 };
+
+/** The same menu, hung above the mark where there is no room below it. */
+const MENU_UPWARD: CSSProperties = { ...MENU, top: undefined, bottom: '100%' };
 
 const MENU_ITEM: CSSProperties = {
   display: 'block',

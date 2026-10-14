@@ -42,6 +42,21 @@ fn catch_ups_for_a_fetch(logs: &CapturedLogs) -> usize {
         .count()
 }
 
+/// Which refusal each of those catch-ups was made for, out of the line the
+/// fetch writes before it: `not_found` where Storage said it holds no such
+/// object, `unreachable` where no handle reached it.
+fn stale_refusals(logs: &CapturedLogs) -> Vec<String> {
+    logs.at(Level::INFO)
+        .into_iter()
+        .filter(|event| {
+            event
+                .message()
+                .starts_with("the Container the catalog names is out of")
+        })
+        .map(|event| event.field("refusal"))
+        .collect()
+}
+
 /// Opens one file and waits for the fill it arms, so that what a case counts
 /// next is its own.
 async fn open(served: &Served, path: &str, content: &[u8]) {
@@ -241,6 +256,7 @@ async fn a_container_gone_from_storage_is_caught_up_with_once_and_read_where_it_
     served.fill_idle().await;
 
     assert_eq!(catch_ups_for_a_fetch(&logs), 1, "{}", logs.text());
+    assert_eq!(stale_refusals(&logs), ["not_found"], "{}", logs.text());
     let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
         work["catalog"],
@@ -263,6 +279,7 @@ async fn a_container_gone_with_its_entry_answers_that_the_entry_is_not_current()
     assert_eq!(refusal["error"], "no_such_entry");
 
     assert_eq!(catch_ups_for_a_fetch(&logs), 1, "{}", logs.text());
+    assert_eq!(stale_refusals(&logs), ["not_found"], "{}", logs.text());
     let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(work["catalog"]["state"], "caught_up", "{work}");
 }
@@ -285,11 +302,12 @@ async fn a_container_gone_from_a_current_catalog_is_refused_after_one_catch_up()
     );
 
     assert_eq!(catch_ups_for_a_fetch(&logs), 1, "{}", logs.text());
+    assert_eq!(stale_refusals(&logs), ["not_found"], "{}", logs.text());
 }
 
-/// Whether the fill the last opened file armed says the Keyring is degraded,
+/// Whether the fill the last opened file armed says the Keyring is short,
 /// which is where a person who only opens files hears of it (spec: KL-15).
-async fn says_degraded(served: &Served) -> bool {
+async fn says_short(served: &Served) -> bool {
     let (_, work) = body_of(served.get("/api/work").await).await;
     fill(&work)["findings"].as_array().is_some_and(|findings| {
         findings
@@ -323,14 +341,11 @@ async fn a_refresh_that_advances_nothing_keeps_a_whole_sets_key_table() {
 // next fetch reads the Keyring again rather than repeating what the first read
 // found.
 #[tokio::test]
-async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
+async fn a_refresh_after_a_repair_elsewhere_stops_the_short_finding() {
     let served = two_containers().await;
     let lost = served.degrade_the_keyring().await;
     open(&served, "solo/one.png", b"one").await;
-    assert!(
-        says_degraded(&served).await,
-        "the first read finds it short"
-    );
+    assert!(says_short(&served).await, "the first read finds it short");
 
     served.put_back(lost).await;
     let (status, refreshed) = body_of(served.post("/api/refresh").await).await;
@@ -342,7 +357,7 @@ async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
     let asked = served.asked();
     assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
     assert!(
-        !says_degraded(&served).await,
+        !says_short(&served).await,
         "and found whole, so not said short again",
     );
 }
@@ -353,14 +368,11 @@ async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
 // and the next fetch learns so by reading it rather than repeating the finding
 // the key table was kept with.
 #[tokio::test]
-async fn a_sync_that_repaired_the_set_stops_the_degraded_finding() {
+async fn a_sync_that_repaired_the_set_stops_the_short_finding() {
     let served = two_containers().await;
     served.degrade_the_keyring().await;
     open(&served, "solo/one.png", b"one").await;
-    assert!(
-        says_degraded(&served).await,
-        "the first read finds it short"
-    );
+    assert!(says_short(&served).await, "the first read finds it short");
 
     served.refuse_commits();
     served.upload("albums", &[("late.jpg", b"late")]).await;
@@ -377,7 +389,161 @@ async fn a_sync_that_repaired_the_set_stops_the_degraded_finding() {
     let asked = served.asked();
     assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
     assert!(
-        !says_degraded(&served).await,
+        !says_short(&served).await,
         "and found whole, so not said short again",
+    );
+}
+
+// A sync repairs the set and forgets the key table while a fetch that read the
+// set before the repair is still on its way (spec: KL-13). What that fetch read
+// is not kept when it gets there, so it does not put the finding back: the
+// next fetch reads the set again and finds it whole (spec: KL-15).
+#[tokio::test]
+async fn a_fetch_overlapping_a_repairing_sync_does_not_bring_the_degraded_finding_back() {
+    let served = two_containers().await;
+    served.degrade_the_keyring().await;
+
+    // The fetch's read of the set waits inside Storage while the sync runs
+    // around it, examining and repairing the set and then refused its commit
+    // so the commitment stays where it was.
+    served.hold_next_whole_read();
+    let (answer, ()) = tokio::join!(served.get("/api/file?path=solo/one.png"), async {
+        while served.held_reads() == 0 {
+            tokio::task::yield_now().await;
+        }
+        served.refuse_commits();
+        served.upload("albums", &[("late.jpg", b"late")]).await;
+        served.sync_idle().await;
+        served.release_storage();
+    });
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, b"one");
+    served.fill_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        sync(&work)["status"],
+        "stopped",
+        "the commit was refused after the repair: {work}",
+    );
+    served.forget_reads();
+
+    open(&served, "solo2/two.png", b"two").await;
+    let asked = served.asked();
+    assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
+    assert!(
+        !says_short(&served).await,
+        "and found whole, so not said short again",
+    );
+}
+
+// A listing of a folder this device can fetch into reads the fronts of the
+// Containers its Entries live in, so the first Entry opened after it costs its
+// parcel and nothing else: no header, and no meta section (spec: FM-2, PK-16).
+#[tokio::test]
+async fn after_a_listing_the_first_entry_of_its_container_reads_its_parcel_alone() {
+    let served = two_containers().await;
+
+    let (status, _) = body_of(served.get("/api/list?path=solo").await).await;
+    assert_eq!(status, 200);
+    served.fronts_idle().await;
+    let listed = served.asked();
+    assert_eq!(whole_reads(&listed), 1, "the Keyring: {listed:?}");
+    assert_eq!(
+        listed.iter().filter(|asked| asked.is_header()).count(),
+        1,
+        "{listed:?}"
+    );
+    assert_eq!(
+        listed.iter().filter(|asked| asked.is_meta()).count(),
+        1,
+        "{listed:?}"
+    );
+    assert!(
+        !listed.iter().any(Asked::is_parcel),
+        "a listing reads no parcel: {listed:?}",
+    );
+    served.forget_reads();
+
+    open(&served, "solo/one.png", b"one").await;
+    let asked = served.asked();
+    assert_eq!(asked.len(), 1, "one read and no more: {asked:?}");
+    assert!(asked[0].is_parcel(), "and it is the parcel: {asked:?}");
+}
+
+// The fronts a listing would read are kept already, so a second listing of
+// the folder asks Storage for nothing at all.
+#[tokio::test]
+async fn a_listing_of_a_folder_whose_fronts_are_kept_reads_nothing_from_storage() {
+    let served = Served::library().await;
+    for (index, path) in ["scans/vol/000.jpg", "scans/vol/001.jpg"]
+        .into_iter()
+        .enumerate()
+    {
+        served
+            .commit_elsewhere(path, &vec![0x40 + index as u8; 64 * 1024])
+            .await;
+    }
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    assert_eq!(served.get("/api/list?path=scans/vol").await.status(), 200);
+    served.fronts_idle().await;
+    served.forget_reads();
+
+    assert_eq!(served.get("/api/list?path=scans/vol").await.status(), 200);
+    served.fronts_idle().await;
+    assert_eq!(served.asked(), [], "nothing asked of Storage");
+}
+
+// The listing is the catalog's answer and does not wait for what it set going:
+// with every read of Storage held, it is answered all the same, and the fronts
+// are read once Storage answers again.
+#[tokio::test]
+async fn a_listing_answers_without_waiting_for_its_front_reads() {
+    let served = two_containers().await;
+    served.hold_storage();
+
+    let (status, listing) = body_of(served.get("/api/list?path=solo").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(listing["files"][0]["state"], "remote", "{listing}");
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+
+    served.release_storage();
+    served.fronts_idle().await;
+    served.forget_reads();
+    open(&served, "solo/one.png", b"one").await;
+    let asked = served.asked();
+    assert_eq!(asked.len(), 1, "the parcel alone: {asked:?}");
+}
+
+// A folder of loose files is a Container per file, and a listing of one reads
+// the fronts of the first few in listing order rather than every one: a round
+// of requests per file for a folder nobody may open anything in.
+#[tokio::test]
+async fn a_listing_reads_the_fronts_of_a_bounded_number_of_containers() {
+    let served = Served::library().await;
+    let loose = coffret_device::FRONTS_PER_LISTING + 1;
+    for index in 0..loose {
+        served
+            .commit_elsewhere(&format!("loose/{index:03}.txt"), &[0x40 + index as u8])
+            .await;
+    }
+    served.start_up().await;
+    served.forget_reads();
+
+    assert_eq!(served.get("/api/list?path=loose").await.status(), 200);
+    served.fronts_idle().await;
+    let listed = served.asked();
+    assert_eq!(
+        listed.iter().filter(|asked| asked.is_header()).count(),
+        coffret_device::FRONTS_PER_LISTING,
+        "{listed:?}",
+    );
+    assert_eq!(
+        listed.iter().filter(|asked| asked.is_meta()).count(),
+        coffret_device::FRONTS_PER_LISTING,
+        "{listed:?}",
     );
 }

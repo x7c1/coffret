@@ -1,6 +1,6 @@
 use coffret_model::{ContainerId, EntryPath};
 
-use crate::commit::{CommitOutcome, DegradedKeyring};
+use crate::commit::{CommitOutcome, ShortKeyring};
 use crate::delete::rebuilt_pack::RebuiltPack;
 use crate::delete::refused_pack::RefusedPack;
 
@@ -42,7 +42,7 @@ pub struct DeleteOutcome {
     pub commit: Option<CommitOutcome>,
     /// The committed Keyring set the run's read had to step over a position
     /// of, where nothing later in the run spoke for it (spec: KL-15).
-    pub degraded: Option<DegradedKeyring>,
+    pub short: Option<ShortKeyring>,
 }
 
 impl DeleteOutcome {

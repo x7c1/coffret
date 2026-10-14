@@ -103,6 +103,12 @@ impl Served {
         self.storage.hold_within_parcel(after);
     }
 
+    /// Holds the next whole-object read — a Keyring replica — until
+    /// [`release_storage`](Self::release_storage), and answers every other.
+    pub fn hold_next_whole_read(&self) {
+        self.storage.hold_next_whole_read();
+    }
+
     /// Lets the held read go.
     pub fn release_storage(&self) {
         self.storage.release();

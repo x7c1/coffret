@@ -113,7 +113,7 @@ impl ParcelRead<'_> {
             alongside: Vec::new(),
             unheld: Vec::new(),
         };
-        let herald = Herald::new(self.publication, self.degraded);
+        let herald = Herald::new(self.publication, self.short);
         let mut read_from_storage = 0u64;
         let padding_start = outline.plaintext_len() - outline.pad_len();
 

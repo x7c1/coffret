@@ -3,7 +3,7 @@ use std::sync::Arc;
 use coffret_model::{EntryPath, IndexCheckpoint, KeyTable, KeyringCommitment};
 use tracing::{debug, info};
 
-use crate::commit::{catch_up, read_committed, ControlListing, DegradedKeyring};
+use crate::commit::{catch_up, read_committed, ControlListing, ShortKeyring};
 use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -150,7 +150,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
     };
 
-    let (key_table, degraded) = key_table(
+    let (key_table, short) = key_table(
         store,
         keys,
         &policy.retry,
@@ -171,7 +171,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         progress.step(Step::new(Phase::Fetching, 1, 1));
         finished(&path, "key lost");
         return Ok(EntryFetchOutcome {
-            degraded,
+            short,
             ..EntryFetchOutcome::of(EntryFetch::Surfaced(Surfaced::KeyLost {
                 path: target.location.entry.path,
                 container_id,
@@ -203,7 +203,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         now,
         cancellation,
         publication,
-        degraded,
+        short,
         memory,
     };
     let stroke = read.read_entry(&summary, &envelope, target).await?;
@@ -218,7 +218,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     };
     Ok(EntryFetchOutcome {
         fetch,
-        degraded,
+        short,
         alongside: stroke.alongside,
         unheld: stroke.unheld,
     })
@@ -241,7 +241,7 @@ enum Catalog<'a> {
 /// kept for the next run. Listing is not catching up: the catalog stays where
 /// it is, and the listing serves only as the handles the objects it names are
 /// reached by (spec: FM-3, FM-12).
-async fn listed(
+pub(super) async fn listed(
     store: &dyn ObjectStore,
     index: &dyn Index,
     retry: &RetryPolicy,
@@ -277,27 +277,37 @@ async fn listed(
 /// until the set may have been repaired: a repair keeps the commitment
 /// (spec: KL-13, KL-14), so the memory forgets a table kept with that finding
 /// at the next catch-up and any table once a write run of this process is over,
-/// and the fetch after that reads the set again and reports it short only if
-/// that read finds it so (spec: KL-15).
-async fn key_table(
+/// and does not keep a table whose read began before either of those forgets;
+/// the fetch after that reads the set again and reports it short only if that
+/// read finds it so (spec: KL-15).
+pub(super) async fn key_table(
     store: &dyn ObjectStore,
     keys: &LibraryKeys,
     retry: &RetryPolicy,
     listing: &ControlListing,
     commitment: &KeyringCommitment,
     memory: Option<&FetchMemory>,
-) -> FetchResult<(Arc<KeyTable>, Option<DegradedKeyring>)> {
+) -> FetchResult<(Arc<KeyTable>, Option<ShortKeyring>)> {
     if let Some(kept) = memory.and_then(|memory| memory.key_table_for(commitment)) {
         return Ok(kept);
     }
-    let (key_table, degraded) = read_committed(store, keys.control(), retry, listing, commitment)
+    // Taken before the replicas are read, so that a write run of this process
+    // repairing the set while this read is under way leaves what it found
+    // unkept rather than put back after the repair forgot it (spec: KL-15).
+    let read_under = memory.map(FetchMemory::key_table_generation);
+    let (key_table, short) = read_committed(store, keys.control(), retry, listing, commitment)
         .await?
         .reported();
     let key_table = Arc::new(key_table);
-    if let Some(memory) = memory {
-        memory.remember_key_table(commitment.clone(), Arc::clone(&key_table), degraded);
+    if let (Some(memory), Some(read_under)) = (memory, read_under) {
+        memory.remember_key_table(
+            read_under,
+            commitment.clone(),
+            Arc::clone(&key_table),
+            short,
+        );
     }
-    Ok((key_table, degraded))
+    Ok((key_table, short))
 }
 
 /// Records what one partial fetch came to.

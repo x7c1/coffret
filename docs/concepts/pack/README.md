@@ -104,10 +104,11 @@ the Entry count — decides `freeze` eligibility.
   parcels its Entries overlap (spec: PK-16).
   - A reader wanting one page of an unfetched book does not wait for the
     gigabyte around it: only the parcels that page overlaps are read, and the
-    page is released as soon as its own chunks have arrived. Those parcels stay
-    on the device, so the pages beside it that share them are already there
-    and are never asked of Storage again; the rest of the Pack, outside the
-    parcels read, is still unfetched (spec: PK-16, PK-21).
+    page is released as soon as its own chunks have arrived. An Entry the
+    device maps that lies wholly inside the parcels read for that page is
+    placed alongside it, in the same fetch, and is never asked of Storage;
+    those parcels stay on the device, and the rest of the Pack, outside them,
+    is still unfetched (spec: PK-16, PK-21).
 - Deleting Entries examines every Pack holding one of them, however many that
   is, since Pack path ranges overlap (spec: PK-8, PK-9). A Pack left with
   nothing is removed; one that keeps Entries is rebuilt by read-modify-replace,

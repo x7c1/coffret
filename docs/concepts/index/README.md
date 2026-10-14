@@ -41,7 +41,11 @@ device's next fetch, catch-up, or deletion after its Container has left the
 current set (spec: PK-19, PK-21). When a server opens the Library, before it
 serves anything, any parcel file in the directory that no row names is
 discarded; that sweep only removes what the Index does not name, and never adds
-a row.
+a row. A parcel the record says is held whose file is gone, or no longer
+authenticates as that parcel, is **unheld**: it was not held after all. The
+device reads the parcel whole from Storage again and says so, rather than in
+silence, because that second read is one the provider observes (spec: PK-20,
+PK-21).
 
 For a current Entry, **present** means this device recorded materializing it
 and has not witnessed its file go. **Remote** means every other current Entry:
@@ -98,6 +102,8 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - hold (a parcel this device read, by recording it beside its ciphertext)
 - let go (of a held parcel whose mapped Entries are all present or witnessed
   absent, or whose Container left the current set)
+- discard (a parcel file no row names, as a server opens the Library, before it
+  serves anything)
 - dispose (of a proven abandoned spool and uploaded object)
 - retain (pending work whose commit outcome is unknown)
 

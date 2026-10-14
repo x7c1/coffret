@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use coffret_device::{DegradedKeyring, UnheldParcel};
+use coffret_device::{ShortKeyring, UnheldParcel};
 
 use crate::folder::Folder;
 use crate::state::ServerState;
@@ -24,7 +24,7 @@ use super::worker;
 pub fn fill_folder(
     state: Arc<ServerState>,
     folder: Folder,
-    heard: Option<DegradedKeyring>,
+    heard: Option<ShortKeyring>,
     unheld: Vec<UnheldParcel>,
 ) {
     if state.fills.arm(folder, heard, unheld) {

@@ -37,7 +37,15 @@ import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
 import { askToMake, foldersWith, pendingAfter, strandedFolders } from './newFolder';
-import { chooseAndAdd, type Answer, type Choice, type DropSummary } from './packChoice';
+import {
+  chooseAndAdd,
+  heldUnder,
+  NOTHING_HELD,
+  type Answer,
+  type Choice,
+  type DropSummary,
+  type HeldFiles,
+} from './packChoice';
 import { PackConfirm } from './PackConfirm';
 import { askToPack, type PackQuestion } from './packFolder';
 import { PackFolderConfirm } from './PackFolderConfirm';
@@ -591,14 +599,16 @@ export function App() {
   const [asking, setAsking] = useState<{
     summary: DropSummary;
     files: readonly Added[];
+    held: HeldFiles;
     answer: (choice: Choice, numbering: Numbering) => void;
   } | null>(null);
   const askAboutFolders = useCallback(
-    (summary: DropSummary, files: readonly Added[]) =>
+    (summary: DropSummary, files: readonly Added[], held: HeldFiles) =>
       new Promise<Answer>((resolve) => {
         setAsking({
           summary,
           files,
+          held,
           answer: (choice, numbering) => {
             setAsking(null);
             resolve(choice === 'cancel' ? 'cancel' : { choice, numbering });
@@ -770,10 +780,8 @@ export function App() {
   // holding a folder is asked about — a Pack, the files one by one, or nothing.
   // The folders the Library already has here are what the question checks a
   // dropped folder's name against.
-  const existing = useMemo(
-    () => (listing.state.status === 'ready' ? listing.state.value.folders.map((f) => f.name) : []),
-    [listing.state],
-  );
+  const landing = listing.state.status === 'ready' ? listing.state.value : null;
+  const existing = useMemo(() => (landing === null ? [] : landing.folders.map((f) => f.name)), [landing]);
   const add = useCallback(
     (files: Added[]) => {
       if (files.length === 0) {
@@ -805,17 +813,28 @@ export function App() {
       void chooseAndAdd({
         files,
         existing,
-        ask: (summary, asked) => {
+        // What the question names as replaced or refused. A listing that
+        // could not be had leaves the question saying what it always said —
+        // the rule, without the names — rather than holding the drop up: the
+        // sending itself refuses a Pack's file part by part either way.
+        held: (dropped) =>
+          landing === null || landing.path !== folder
+            ? Promise.resolve(NOTHING_HELD)
+            : heldUnder(landing, dropped, (path) => getListing(path)).catch((refused: unknown) => {
+                console.warn('the explorer could not list where a drop lands', refused);
+                return NOTHING_HELD;
+              }),
+        ask: (summary, asked, held) => {
           // The line saying the drop is being read stands down while the
           // question is up: the reading is over, and nothing is being sent.
           setAdding(null);
-          return askAboutFolders(summary, asked);
+          return askAboutFolders(summary, asked, held);
         },
         send,
         refuse: (overdrawn) => setNotice(overBudgetLine(overdrawn, libraryName)),
       }).finally(() => setAdding(null));
     },
-    [view.folder, existing, askAboutFolders, work, reloadListing, libraryName],
+    [view.folder, landing, existing, askAboutFolders, work, reloadListing, libraryName],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -1086,7 +1105,14 @@ export function App() {
       {mapping !== null && (
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
       )}
-      {asking !== null && <PackConfirm summary={asking.summary} files={asking.files} onChoose={choose} />}
+      {asking !== null && (
+        <PackConfirm
+          summary={asking.summary}
+          files={asking.files}
+          held={asking.held}
+          onChoose={choose}
+        />
+      )}
       {packAsking !== null && (
         <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
       )}

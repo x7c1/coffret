@@ -1,6 +1,6 @@
 use coffret_model::{ContainerId, EntryPath};
 
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::fetch::surfaced::Surfaced;
 use crate::refused_root::RefusedRoot;
 
@@ -74,5 +74,5 @@ pub struct FetchOutcome {
     /// of it. Not something the run left undone: the read went on (spec: RV-2),
     /// and the next run that commits repairs the set before it commits
     /// (spec: KL-13, KL-16). `None` where the run read no Keyring at all.
-    pub degraded: Option<DegradedKeyring>,
+    pub short: Option<ShortKeyring>,
 }

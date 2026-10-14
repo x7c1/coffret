@@ -7,6 +7,12 @@
 // is one colour rather than four hex codes that drifted.
 
 export const COLOR = {
+  /**
+   * The ground, as `index.html` paints the page: named here for what is drawn
+   * over rows scrolling under it — the file list's column headings — which has
+   * to be filled with it rather than left clear.
+   */
+  ground: '#111',
   /** The tree and the status bar, a shade off the ground. */
   panel: '#181818',
   /** The folder being listed, and the row the reader was last opened at. */

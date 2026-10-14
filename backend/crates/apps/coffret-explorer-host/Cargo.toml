@@ -16,7 +16,7 @@ embed-web = ["dep:include_dir"]
 # The explorer's serving side, as a router a caller binds wherever it likes: the
 # page, and `/api` forwarded to the server with the key the server published. A
 # library beside the shells rather than a binary, because the process that will
-# bind it — the desktop shell — starts the server too, and decides the port.
+# bind it — the desktop app — starts the server too, and decides the port.
 [dependencies]
 # Where a Library's directory is, and how a caller reads the key a server
 # published into it. Nothing below this crate is named directly: `make deps`

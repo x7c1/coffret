@@ -111,9 +111,10 @@ export type RefusalKind =
  *
  * One vocabulary across the kinds that carry it. A fetch's `declined`
  * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `key_lost`,
- * and a drop meets `unmaterializable` and `reserved` the same way. A
- * `refused_placement` carries `refused_root`, `unmapped` for a drop or a
- * freeze under a folder this device has no folder for, and `pack_resident`,
+ * and a drop meets `unmaterializable` and `reserved` the same way, and also
+ * `trash_folder`, which only a drop meets. A `refused_placement` carries
+ * `refused_root`, `unmapped` for a drop or a freeze under a folder this device
+ * has no folder for, and `pack_resident`,
  * which is a drop's alone: the Library holds an Entry at that path inside a
  * Pack, and coffret cannot replace one of those yet — so the file is refused
  * rather than written where no sync could carry it in.
@@ -136,6 +137,14 @@ export type PlacementReason =
    * folder that was asked for rather than in the path itself.
    */
   | 'reserved'
+  /**
+   * A drop's alone: the file would land in the folder a desktop keeps its trash
+   * in directly under a mapped root (`.Trash`, `.Trashes`, `.Trash-` and a
+   * number). That folder is the desktop's rather than coffret's, and coffret
+   * keeps it out of the Library: no scan enters it, so nothing placed there
+   * would ever be backed up.
+   */
+  | 'trash_folder'
   /**
    * A folder this device maps is not the folder its mapping was recorded
    * against — a copied disk, a mount that came back different — so nothing was
@@ -172,8 +181,8 @@ export type SurfacedFinding =
   /**
    * A folder on the way to where the file belongs is not a folder of the mapped
    * folder — a symbolic link, an ordinary file standing where a folder must
-   * be, or a folder the desktop keeps its trash in at the mapped folder's top.
-   * The rest of a run is unaffected: this is the shape of one folder.
+   * be, or a folder the desktop keeps its trash in directly under the mapped
+   * root. The rest of a run is unaffected: this is the shape of one folder.
    */
   | 'UnreachablePlace'
   | 'KeyLost'
@@ -443,6 +452,7 @@ const REASONS: readonly string[] = [
   'unmapped',
   'unmaterializable',
   'reserved',
+  'trash_folder',
   'refused_root',
   'surfaced',
   'key_lost',

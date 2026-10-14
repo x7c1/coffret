@@ -48,7 +48,7 @@ jobs:
             'Acquire::Retries "3";' \
             | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
 
-      # What the workspace's desktop shell links against, as CI's backend job
+      # What the workspace's desktop app links against, as CI's backend job
       # installs it. Uncached here: this runs once a week and blocks nobody.
       # A stalled mirror can hang `apt-get update`; fail fast instead of
       # waiting out the job. The retries above usually get past a stall, and

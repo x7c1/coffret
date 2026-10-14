@@ -69,6 +69,7 @@ function answer(fill: Fill | null): Work {
     server: 'one-process',
     library: 'unlocked',
     catalog: { state: 'caught_up', stopped: null },
+    kept_parcels: null,
     turn: null,
     fill,
     sync: null,

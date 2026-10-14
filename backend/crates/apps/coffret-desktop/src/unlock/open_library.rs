@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use super::{ask_for_passphrase, refusal_evidence, refusal_line, EnteredPassphrase, Shell};
+use super::{ask_for_passphrase, refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
 use crate::{explorer, tray};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
@@ -25,14 +25,14 @@ use crate::{explorer, tray};
 #[tauri::command]
 pub async fn open_library(
     app: AppHandle,
-    shell: State<'_, Shell>,
+    desktop: State<'_, Desktop>,
     name: String,
     passphrase: EnteredPassphrase,
 ) -> Result<(), String> {
     let passphrase = passphrase.into_passphrase();
 
-    let _turn = shell.opening.lock().await;
-    if let Some(address) = shell.explorer() {
+    let _turn = desktop.opening.lock().await;
+    if let Some(address) = desktop.explorer() {
         // A press that waited behind the one that opened the Library.
         explorer::open(&app, address);
         return Ok(());
@@ -44,14 +44,14 @@ pub async fn open_library(
     let launch = Launch {
         library: name,
         port: 0,
-        idle_minutes: shell
+        idle_minutes: desktop
             .idle_minutes
             .get()
             .copied()
-            .ok_or("The shell did not finish starting.")?,
+            .ok_or("The app did not finish starting.")?,
         unlock_prompt: Some(prompt),
     };
-    let started = shell
+    let started = desktop
         .runtime
         .spawn(serve(app.clone(), launch, passphrase))
         .await;
@@ -70,9 +70,9 @@ pub async fn open_library(
         }
     };
     // Nobody else sets them: the lock above is held by whoever reaches here.
-    let _ = shell.served.set(served);
-    let _ = shell.explorer.set(address);
-    shell.runtime.spawn(answer_prompts(app.clone(), asked));
+    let _ = desktop.served.set(served);
+    let _ = desktop.explorer.set(address);
+    desktop.runtime.spawn(answer_prompts(app.clone(), asked));
 
     if let Err(error) = tray::show(&app) {
         // The explorer is open regardless, and a second launch reaches it
@@ -106,7 +106,7 @@ async fn answer_prompts(app: AppHandle, mut asked: mpsc::Receiver<()>) {
 /// Opens the Library, binds the explorer's host in front of it, and starts
 /// both answering. Returns where the explorer is, and what the server serves.
 ///
-/// Run on the shell's own runtime, because what it binds is served there.
+/// Run on the app's own runtime, because what it binds is served there.
 async fn serve(
     app: AppHandle,
     launch: Launch,
@@ -130,7 +130,7 @@ async fn serve(
         server, &library,
     ))?;
     // Loopback, for the reason the server's own socket is (spec: LA-1), and
-    // any free port: nothing but this shell ever needs to know the number, and
+    // any free port: nothing but this app ever needs to know the number, and
     // it is the one that opens the browser on it.
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
@@ -154,9 +154,9 @@ async fn serve(
     Ok((address, served))
 }
 
-/// Ends the shell because one of the two things it serves stopped.
+/// Ends the app because one of the two things it serves stopped.
 ///
-/// A shell whose server is gone has nothing to show, and one whose host is gone
+/// An app whose server is gone has nothing to show, and one whose host is gone
 /// has nothing anybody can reach; either way the tray would be offering an
 /// explorer that is not there.
 fn stop(app: &AppHandle, what: &str, error: &anyhow::Error) {

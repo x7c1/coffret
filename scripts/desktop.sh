@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# The desktop shell: building it, installing it, and running the development
+# The desktop app: building it, installing it, and running the development
 # build of it. The Makefile's `desktop*` targets call this; each builds the
-# explorer first (`make web-dist`), since the shell carries the built page in
+# explorer first (`make web-dist`), since the app carries the built page in
 # its binary.
 #
 #   scripts/desktop.sh build       bundle the installed app under
@@ -28,11 +28,11 @@
 # (docs/guides/environments.md) and which `dev` refuses to run without.
 #
 # tauri-build declares `rerun-if-env-changed=TAURI_CONFIG`, so switching between
-# the development build and a plain one (`make check`) rebuilds the shell rather
+# the development build and a plain one (`make check`) rebuilds the app rather
 # than reusing a binary with the other identifier.
 #
 # On Linux both builds link with the system's C compiler, /usr/bin/cc, whatever
-# PATH puts first. The shell loads the distribution's GTK and WebKitGTK, so it
+# PATH puts first. The app loads the distribution's GTK and WebKitGTK, so it
 # must be loaded by the distribution's dynamic loader; a compiler from a Nix
 # profile, say, would make the binary ask for Nix's loader, which does not read
 # the host's library cache and so never finds the libraries GTK itself needs.

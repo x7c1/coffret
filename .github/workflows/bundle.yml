@@ -1,6 +1,6 @@
 name: Bundle
 
-# Builds the unsigned desktop bundles of the Tauri shell
+# Builds the unsigned desktop bundles of the Tauri app
 # (backend/crates/apps/coffret-desktop). Called by the Release workflow with a
 # release tag, it attaches them to that Release; on pull requests and manual
 # runs it uploads them as workflow artifacts. See docs/guides/release.md
@@ -40,7 +40,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
-      # The system libraries the shell (Tauri v2: WebKitGTK 4.1, GTK 3, the
+      # The system libraries the app (Tauri v2: WebKitGTK 4.1, GTK 3, the
       # app-indicator and SVG libraries) links against on Linux — the list the
       # backend job in ci.yml installs. Also part of their cache key.
       APT_PACKAGES: >-
@@ -177,7 +177,7 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      # The shell compiles the explorer's build output in through its
+      # The app compiles the explorer's build output in through its
       # `embed-web` feature, so the explorer is built first, as
       # `make desktop-build` does.
       - name: Build the explorer

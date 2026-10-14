@@ -22,9 +22,11 @@ use crate::recorded_progress::Recording;
 /// What makes the count worth having is that it moves while the commit is
 /// still going, which the recording alone cannot show — a commit that said
 /// every step at the end would record the same list. So the store notes what
-/// the run had said each time an object was sent: the first replica goes out
-/// with nothing stored yet, each one after it with the replicas before it
-/// counted, and the head with every replica counted and itself not.
+/// the run had said each time an object was sent. The replicas go out together
+/// (spec: KL-2, KL-14), so how many of them a replica is sent after is up to
+/// the order Storage answers in and is not asserted. What is asserted is that
+/// every replica is sent before the head, and that the head goes out with every
+/// replica counted and itself not.
 pub async fn a_commit_is_seen_part_way_in_the_objects_it_stores(fixture: &CommitUnderTest) {
     let keys = control_keys();
     Library::upload_container(fixture.store(), container_id(1)).await;
@@ -38,22 +40,28 @@ pub async fn a_commit_is_seen_part_way_in_the_objects_it_stores(fixture: &Commit
     .await
     .expect("a watched commit into an empty Library must succeed");
 
-    let committing = |done| Some(Step::new(Phase::Committing, done, 4));
+    let committing = |done| Step::new(Phase::Committing, done, 4);
+    let seen = store.seen();
+    let [replicas @ .., head] = &seen[..] else {
+        panic!("a commit sends objects, got none");
+    };
+    assert_eq!(replicas.len(), 3, "three replicas are sent, got {seen:?}");
+    for replica in replicas {
+        assert!(
+            matches!(replica, Seen::Replica(Some(step))
+                if step.phase == Phase::Committing && step.done < 3),
+            "every replica goes out before the head, while some replica is still \
+             uncounted, got {seen:?}",
+        );
+    }
     assert_eq!(
-        store.seen(),
-        [
-            Seen::Replica(committing(0)),
-            Seen::Replica(committing(1)),
-            Seen::Replica(committing(2)),
-            Seen::Head(committing(3)),
-        ],
-        "each object goes out with the ones before it counted and itself not",
+        *head,
+        Seen::Head(Some(committing(3))),
+        "the head goes out with every replica counted and itself not",
     );
     assert_eq!(
         watching.steps(),
-        [0, 1, 2, 3, 4]
-            .map(|done| Step::new(Phase::Committing, done, 4))
-            .to_vec(),
+        [0, 1, 2, 3, 4].map(committing).to_vec(),
         "a commit counts from nothing to every object it stored, one at a time",
     );
 }

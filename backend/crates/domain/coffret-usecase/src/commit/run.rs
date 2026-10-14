@@ -105,7 +105,7 @@ async fn attempt_until_committed(
         policy,
         batch,
         progress,
-        degraded,
+        short,
     } = request;
     let committing = Committing::under(&policy, progress);
 
@@ -128,7 +128,7 @@ async fn attempt_until_committed(
                 // examination has spoken — see [`spoke`] — and the caller's
                 // guard goes quiet; otherwise the guard stays armed and its
                 // drop speaks instead.
-                if let Some(report) = degraded {
+                if let Some(report) = short {
                     if spoke(&examined) {
                         report.examined();
                     }

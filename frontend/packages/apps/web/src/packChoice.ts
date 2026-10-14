@@ -17,6 +17,13 @@
 // Packs that comes to is not said, because it is not the folder's to decide:
 // Packs are cut by the freeze's target size (spec: PK-3).
 //
+// Where a dropped path already holds a file of the Library, the question says
+// so by name before anything is sent: which files replace a one-file Entry,
+// and how many are refused because a Pack holds them. What the Library holds
+// there is read from the listing the explorer already has of the folder the
+// drop lands in, and from one listing more for each folder under it that the
+// drop also carries — never a whole subtree the drop does not reach.
+//
 // The same question offers to number the pages and volumes of what was
 // dropped (see `renumber.ts`). The answer brings the two options back beside
 // the choice, and the drop is renumbered before it is sent either way.
@@ -24,7 +31,13 @@
 // Kept free of DOM and of React so it is unit testable, as `dropped.ts` beside
 // it is.
 
-import { overdrawnBy, type Added, type Overdrawn } from '@coffret/api';
+import {
+  overdrawnBy,
+  type Added,
+  type ContainerKind,
+  type Listing,
+  type Overdrawn,
+} from '@coffret/api';
 
 import { size } from './humanize';
 import { renumber, type Numbering } from './renumber';
@@ -142,6 +155,137 @@ export function choiceLabels(summary: DropSummary): Record<Choice, string> {
   };
 }
 
+/**
+ * The files the Library holds where a drop lands, keyed by their path relative
+ * to the folder dropped onto, and what holds each: a Container of its own or a
+ * Pack. Only Entries are here: a file standing on disk that the Library holds
+ * no Entry for is not one the Library has, so a drop over it replaces nothing
+ * of the Library's.
+ */
+export type HeldFiles = ReadonlyMap<string, ContainerKind>;
+
+/** What a drop lands on where nothing is known to be held there. */
+export const NOTHING_HELD: HeldFiles = new Map();
+
+/** How many of a drop's files land where the Library already holds one. */
+export interface Collisions {
+  /** The paths that replace a one-file Entry, in the drop's order. */
+  replaced: string[];
+  /** The paths a Pack holds, which are refused rather than replaced (spec: PK-10). */
+  refused: string[];
+}
+
+/** How many names the replacement line spells out before it counts the rest. */
+const NAMED_REPLACEMENTS = 5;
+
+/**
+ * Which of `files` — under the paths they will be sent as — land on a file the
+ * Library holds, and which of those a Pack holds.
+ */
+export function collisionsOf(files: readonly Added[], held: HeldFiles): Collisions {
+  const replaced: string[] = [];
+  const refused: string[] = [];
+  for (const { path } of files) {
+    const kind = held.get(path);
+    if (kind === 'one-file') {
+      replaced.push(path);
+    } else if (kind === 'pack') {
+      refused.push(path);
+    }
+  }
+  return { replaced, refused };
+}
+
+/**
+ * What the question says of the files that replace one-file Entries, naming
+ * the first few, or `null` where none does.
+ */
+export function replacesLine(collisions: Collisions): string | null {
+  const { replaced } = collisions;
+  if (replaced.length === 0) {
+    return null;
+  }
+  const named = replaced.slice(0, NAMED_REPLACEMENTS).join(', ');
+  const more = replaced.length - NAMED_REPLACEMENTS;
+  const verb = replaced.length === 1 ? 'replaces the file' : 'replace the files';
+  return (
+    `${count(replaced.length)} in this drop ${verb} the Library already has at the same ` +
+    `path: ${named}${more > 0 ? `, and ${more} more` : ''}`
+  );
+}
+
+/**
+ * What the question says of the files a Pack holds at their path, or `null`
+ * where there are none.
+ */
+export function refusedLine(collisions: Collisions): string | null {
+  const { refused } = collisions;
+  if (refused.length === 0) {
+    return null;
+  }
+  const verb = refused.length === 1 ? 'is' : 'are';
+  return `${count(refused.length)} ${verb} refused, because a Pack holds the file at that path`;
+}
+
+/** Every numbering the question can be answered with. */
+const EVERY_NUMBERING: readonly Numbering[] = [
+  { pages: false, volumes: false },
+  { pages: true, volumes: false },
+  { pages: false, volumes: true },
+  { pages: true, volumes: true },
+];
+
+/** `folder` joined to a path relative to it; the Library root is the empty string. */
+function under(folder: string, relative: string): string {
+  return folder === '' ? relative : `${folder}/${relative}`;
+}
+
+/**
+ * What the Library holds at the paths a drop may be sent under, read from the
+ * listing of the folder it lands in and from more listings of the folders
+ * under it that the drop carries.
+ *
+ * Which paths those are depends on the numbering the question is answered
+ * with, so every numbering it can be answered with is asked about: a folder is
+ * listed where any of them puts a dropped file under it. That stays within the
+ * folders the drop itself names, so a drop onto a large Library lists a few
+ * folders rather than walking it.
+ */
+export async function heldUnder(
+  landing: Listing,
+  files: readonly Added[],
+  list: (folder: string) => Promise<Listing>,
+): Promise<HeldFiles> {
+  // The folders, relative to the landing folder, that some answer sends a file
+  // into.
+  const reached = new Set<string>();
+  for (const numbering of EVERY_NUMBERING) {
+    for (const { path } of renumber(files, numbering).files) {
+      for (let cut = path.indexOf('/'); cut !== -1; cut = path.indexOf('/', cut + 1)) {
+        reached.add(path.slice(0, cut));
+      }
+    }
+  }
+  const held = new Map<string, ContainerKind>();
+  const prefix = landing.path === '' ? '' : `${landing.path}/`;
+  const read = (listing: Listing): string[] => {
+    for (const file of listing.files) {
+      if (file.container !== null && file.path.startsWith(prefix)) {
+        held.set(file.path.slice(prefix.length), file.container);
+      }
+    }
+    return listing.folders
+      .map((folder) => folder.path.slice(prefix.length))
+      .filter((relative) => reached.has(relative));
+  };
+  let next = read(landing);
+  while (next.length > 0) {
+    const listings = await Promise.all(next.map((relative) => list(under(landing.path, relative))));
+    next = listings.flatMap(read);
+  }
+  return held;
+}
+
 /** `1 file`, `80 files`. */
 function count(files: number): string {
   return files === 1 ? '1 file' : `${files} files`;
@@ -154,10 +298,17 @@ export interface Choosing {
   /** The folders the Library already has where the drop lands. */
   existing: readonly string[];
   /**
-   * Asks the person what a drop holding a folder is added as, showing what
-   * numbering `files` would come to.
+   * What the Library holds at the paths `files` may be sent under — see
+   * {@link heldUnder} — asked once the drop is known to hold a folder
+   * and before the question goes up.
    */
-  ask: (summary: DropSummary, files: readonly Added[]) => Promise<Answer>;
+  held: (files: readonly Added[]) => Promise<HeldFiles>;
+  /**
+   * Asks the person what a drop holding a folder is added as, showing what
+   * numbering `files` would come to and which of them replace or are refused
+   * by what is `held`.
+   */
+  ask: (summary: DropSummary, files: readonly Added[], held: HeldFiles) => Promise<Answer>;
   /**
    * Sends `files` — the drop's, under the paths they go up as — as a Pack where
    * `freeze` is true and one by one where not.
@@ -197,7 +348,8 @@ export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
     await choosing.send(choosing.files, false);
     return 'sent';
   }
-  const answer = await choosing.ask(summary, choosing.files);
+  const held = await choosing.held(choosing.files);
+  const answer = await choosing.ask(summary, choosing.files, held);
   if (answer === 'cancel') {
     return 'cancelled';
   }

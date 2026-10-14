@@ -4,12 +4,17 @@ import type { Added } from '@coffret/api';
 
 import {
   choiceLabels,
+  collisionsOf,
   existsLine,
   folderLine,
   looseLine,
+  NOTHING_HELD,
   questionOf,
+  refusedLine,
+  replacesLine,
   type Choice,
   type DropSummary,
+  type HeldFiles,
 } from './packChoice';
 import { recall, remember } from './remembered';
 import {
@@ -47,6 +52,13 @@ const REMEMBERED = {
  * only the files this drop carries — a replaced one among them — never the
  * other files already in that folder (spec: PK-17).
  *
+ * Where the Library already holds a file at a path the drop is sent under, the
+ * question says so by name: how many files replace a one-file Entry, the first
+ * few of them spelled out, and how many a Pack holds and so are refused. The
+ * paths are the ones the drop will be sent under, so ticking a box below that
+ * renames them changes what is said here too. Where nothing collides, nothing
+ * more is said.
+ *
  * Below the answers, two boxes offer to number the pages and the volume
  * folders of what was dropped, off unless the last drop ticked them. Ticking
  * one shows what it would rename before anything is chosen, because a rename
@@ -59,11 +71,14 @@ const REMEMBERED = {
 export function PackConfirm({
   summary,
   files,
+  held = NOTHING_HELD,
   onChoose,
 }: {
   summary: DropSummary;
   /** The drop's files as dropped, which the preview is worked out from. */
   files: readonly Added[];
+  /** What the Library holds where the drop lands, by path relative to it. */
+  held?: HeldFiles;
   onChoose: (choice: Choice, numbering: Numbering) => void;
 }) {
   const [numbering, setNumbering] = useState<Numbering>(() => ({
@@ -86,7 +101,11 @@ export function PackConfirm({
     return () => window.removeEventListener('keydown', closing);
   }, [onChoose, numbering]);
 
-  const groups = useMemo(() => renumber(files, numbering).groups, [files, numbering]);
+  const renumbered = useMemo(() => renumber(files, numbering), [files, numbering]);
+  const groups = renumbered.groups;
+  const collisions = useMemo(() => collisionsOf(renumbered.files, held), [renumbered, held]);
+  const replaces = replacesLine(collisions);
+  const refused = refusedLine(collisions);
 
   const labels = choiceLabels(summary);
   const question = questionOf(summary);
@@ -140,6 +159,10 @@ export function PackConfirm({
         {summary.loose > 0 && (
           <p style={{ margin: 0, color: COLOR.dim }}>{looseLine(summary)}</p>
         )}
+        {replaces !== null && (
+          <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
+        )}
+        {refused !== null && <p style={{ margin: 0, color: COLOR.warn }}>{refused}</p>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button type="button" autoFocus onClick={() => answer('pack')} style={CHOICE}>
             {labels.pack}
