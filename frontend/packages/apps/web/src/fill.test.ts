@@ -78,6 +78,7 @@ function syncing(over: Over<Sync> = {}): Sync {
   return {
     run: 1,
     step: null,
+    waits: false,
     status: 'syncing',
     added: 0,
     findings: [],
@@ -90,6 +91,7 @@ function freezing(over: Over<Freeze> = {}): Freeze {
   return {
     run: 1,
     step: null,
+    waits: false,
     waiting: [],
     discarded: [],
     displaced: [],
@@ -616,10 +618,21 @@ it('gives the rows the run that is about their folder', () => {
   expect(fillOfFolder(null, [], 'albums')).toBeNull();
 });
 
-it('says what a sync is doing, and says nothing once it is over', () => {
+// A finished sync with nothing to report says what it carried in: the bar's
+// line is the latest thing that happened, and a sync that said nothing left it
+// to a Pack made before it.
+it('says what a sync is doing, and how many files it added once it is over', () => {
   expect(syncLine(syncing())).toBe('backing up what was added…');
   expect(syncLine(null)).toBeNull();
-  expect(syncLine(syncing({ status: 'done', added: 2 }))).toBeNull();
+  expect(syncLine(syncing({ status: 'done', stopped: null, added: 2 }))).toBe(
+    'added 2 files to the Library',
+  );
+  expect(syncLine(syncing({ status: 'done', stopped: null, added: 1 }))).toBe(
+    'added 1 file to the Library',
+  );
+  expect(syncLine(syncing({ status: 'done', stopped: null, added: 0 }))).toBe(
+    'everything added is in the Library',
+  );
 });
 
 // PK-14: a run that returns Ok has not necessarily backed everything up, and
@@ -1018,22 +1031,32 @@ it('keeps polling while a reconnect waits on its consent page, and only then', (
   expect(shouldPoll(false, null, null, null, null, null)).toBe(false);
 });
 
-// A sync or a freeze armed while one of the other two flows is under way waits
-// its turn at this device's pending work, and its line says what it waits for
+// A sync or a freeze armed while one of the other two flows holds the turn
+// waits for it at this device's pending work, and its line says what it waits for
 // rather than standing still as if stuck — in the same words a deletion's line
 // uses, since one helper picks them for all three.
 it('says what a sync or a freeze waiting its turn is waiting for', () => {
   const book = freezing({ step: { phase: 'packing', done: 3, total: 10, bytes: null } });
   const backup = syncing({ step: { phase: 'uploading', done: 1, total: 2, bytes: null } });
 
-  const behindBook = waitsFor('sync', { freeze: book, sync: syncing(), deletion: null });
+  const behindBook = waitsFor('sync', {
+    turn: 'freeze',
+    freeze: book,
+    sync: syncing({ waits: true }),
+    deletion: null,
+  });
   expect(syncLine(syncing(), behindBook)).toBe(
     'backing up what was added — waiting for the packing under way to finish',
   );
   expect(syncLine(syncing(), 'deletion')).toBe(
     'backing up what was added — waiting for the deletion under way to finish',
   );
-  const behindBackup = waitsFor('freeze', { freeze: freezing(), sync: backup, deletion: null });
+  const behindBackup = waitsFor('freeze', {
+    turn: 'sync',
+    freeze: freezing({ waits: true }),
+    sync: backup,
+    deletion: null,
+  });
   expect(freezeLine(freezing(), behindBackup)).toBe(
     'packing books/vol-1 — waiting for the backup under way to finish',
   );
@@ -1044,7 +1067,7 @@ it('says what a sync or a freeze waiting its turn is waiting for', () => {
 
   // A run with nothing to wait for, or one already moving, says what it says
   // without the clause.
-  const alone = waitsFor('sync', { freeze: null, sync: syncing(), deletion: null });
+  const alone = waitsFor('sync', { turn: 'sync', freeze: null, sync: syncing(), deletion: null });
   expect(syncLine(syncing(), alone)).toBe('backing up what was added…');
   expect(syncLine(backup, 'packing')).toBe('backing up what was added — sending 1/2…');
 });

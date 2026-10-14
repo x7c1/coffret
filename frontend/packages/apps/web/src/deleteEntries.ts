@@ -206,8 +206,8 @@ export function refusedNotice(target: DeleteTarget, cause: unknown, said: string
 }
 
 /**
- * What the confirmation says where a sync or a freeze is under way: the
- * deletion confirmed now starts after it.
+ * What the confirmation says where another run holds the turn at this
+ * device's pending work: the deletion confirmed now starts after it.
  */
 export function startsAfterLine(waits: Exclude<WaitsFor, null>): string {
   return `It starts after the ${waits} under way finishes.`;
@@ -218,10 +218,11 @@ export function startsAfterLine(waits: Exclude<WaitsFor, null>): string {
  * it has got.
  *
  * A deletion takes its turn at this device's pending work behind any sync,
- * freeze or deletion armed before it, so one with no step yet while another is
- * under way is waiting for it — said, in the words [`waitsFor`](./turns.ts)
- * picks for every line, so a line that stays put while a book is packed reads
- * as waiting rather than stuck.
+ * freeze or deletion armed before it, and one the server says is waiting for
+ * its turn says so — in the words [`waitsFor`](./turns.ts) picks for every
+ * line, so a line that stays put while a book is packed reads as waiting
+ * rather than stuck. It stands in the status bar beside the other two flows'
+ * lines, ranked as they are.
  */
 export function deletingLine(run: Delete, waits: WaitsFor = null): string {
   const name = targetName(run);

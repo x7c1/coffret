@@ -7,6 +7,7 @@ use axum::extract::State;
 use axum::Json;
 
 use crate::folder::Folder;
+use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 mod catalog_dto;
@@ -55,6 +56,16 @@ fn named_folders(folders: &[Folder]) -> Vec<String> {
         .iter()
         .map(|folder| folder.as_str().to_owned())
         .collect()
+}
+
+/// Whether a run of `flow` that is `running` is waiting for its turn at the
+/// pending rows, with `turn` holding them.
+///
+/// From the moment the run is on record until it holds the turn — which is
+/// every running run but the holder's own. Within one flow there is only ever
+/// one run on record running, so the holder's flow is the holder's run.
+fn waits(running: bool, flow: TurnTaker, turn: Option<TurnTaker>) -> bool {
+    running && turn != Some(flow)
 }
 
 /// `GET /api/work`

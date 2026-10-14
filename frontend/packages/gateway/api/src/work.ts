@@ -338,6 +338,13 @@ interface SyncOfItsOwn {
    * said and once the run is over.
    */
   step: Step | null;
+  /**
+   * Whether the run is waiting for its turn at this device's pending work:
+   * true from the moment it is on record until it holds the turn, and false
+   * once it does and once it is over. A run with no step that is not waiting
+   * has taken the turn and not said how far it has got yet.
+   */
+  waits: boolean;
 }
 
 /** Where a freeze of one folder stands. */
@@ -398,6 +405,16 @@ interface FreezeOfItsOwn {
 
 /** The freeze's queue, which is the flow's rather than any one run's. */
 interface FreezeQueue {
+  /**
+   * Whether the run on record is waiting for its turn at this device's pending
+   * work, behind a sync or a deletion: true from the moment it is on record
+   * until it holds the turn, and false once it does and once it is over.
+   *
+   * The queue's and not the run's own, because a displaced run is over and
+   * waits for nothing; and not the list below, which is books queued behind
+   * this one in the freeze's own queue.
+   */
+  waits: boolean;
   /**
    * The books waiting their turn behind this one, oldest first.
    *
@@ -506,7 +523,17 @@ interface DeleteOfItsOwn {
    * said and once the run is over.
    */
   step: Step | null;
-  /** How many deletions are waiting their turn behind this one. */
+  /**
+   * Whether the run is waiting for its turn at this device's pending work:
+   * true from the moment it is on record until it holds the turn, and false
+   * once it does and once it is over. A run with no step that is not waiting
+   * has taken the turn and not said how far it has got yet.
+   */
+  waits: boolean;
+  /**
+   * How many deletions are waiting their turn behind this one, in the
+   * deletion's own queue — which is not what `waits` says.
+   */
   waiting: number;
 }
 
@@ -570,6 +597,12 @@ export interface Reconnect {
   message: string;
 }
 
+/**
+ * One of the three flows that take turns at this device's pending work, in the
+ * word the work answer names it by.
+ */
+export type TurnTaker = 'sync' | 'freeze' | 'delete';
+
 /** What the server is doing on its own — `GET /api/work`. */
 export interface Work {
   /**
@@ -611,6 +644,18 @@ export interface Work {
    * has to be told apart from a Library nobody has looked at yet.
    */
   catalog: Catalog;
+  /**
+   * Which flow's run holds this device's pending work right now, and `null`
+   * where nobody does.
+   *
+   * A sync, a freeze and a deletion take turns at that work in the order their
+   * runs ask for it, and a run waiting for its turn is on record as running
+   * with no step — exactly as one that has just taken it is. So the server
+   * says which is which: each run's `waits`, and this for whom they wait. A
+   * page that guessed from the missing step could have two runs each claim to
+   * be waiting for the other.
+   */
+  turn: TurnTaker | null;
   /** The latest fill, running or finished, and `null` where none has run. */
   fill: Fill | null;
   /** The latest sync, running or finished, and `null` where none has run. */
@@ -854,6 +899,7 @@ interface WorkSent {
   server: string;
   library: LibraryState;
   catalog: { state: CatalogState; stopped: unknown };
+  turn: TurnTaker | null;
   fill: FillSent | null;
   sync: SyncSent | null;
   freeze: FreezeSent | null;
@@ -895,6 +941,7 @@ export function workOf(sent: unknown): Work {
     server: work.server,
     library: work.library,
     catalog: catalogOf(work.catalog),
+    turn: work.turn,
     fill: work.fill === null ? null : fillOf(work.fill),
     sync: work.sync === null ? null : syncOf(work.sync),
     freeze: work.freeze === null ? null : freezeOf(work.freeze),
@@ -954,6 +1001,7 @@ function syncOf(sync: SyncSent): Sync {
     added: sync.added,
     findings: (sync.findings ?? []).map(findingOf),
     step: sync.step,
+    waits: sync.waits,
     ...standingOf<SyncStatus>(sync),
   };
 }
@@ -961,6 +1009,7 @@ function syncOf(sync: SyncSent): Sync {
 function freezeOf(freeze: FreezeSent): Freeze {
   return {
     ...freezeOfItsOwn(freeze),
+    waits: freeze.waits,
     waiting: freeze.waiting,
     discarded: freeze.discarded,
     displaced: (freeze.displaced ?? []).map((run) => displacedFreezeOf(run as FreezeSent)),
@@ -1011,6 +1060,7 @@ function deleteOf(run: DeleteSent): Delete {
     missing: run.missing,
     findings: (run.findings ?? []).map(findingOf),
     step: run.step,
+    waits: run.waits,
     waiting: run.waiting,
     ...standingOf<DeleteStatus>(run),
   };

@@ -60,6 +60,7 @@ export type {
   Stopped,
   Sync,
   SyncStatus,
+  TurnTaker,
 } from './work';
 export { browseFolders } from './browse';
 export type { Browsed, BrowsedFolder } from './browse';

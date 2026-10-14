@@ -6,6 +6,7 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::finding::Finding;
+use crate::pending_rows::TurnTaker;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
@@ -48,7 +49,7 @@ pub(super) async fn freeze(state: &ServerState, book: Book) {
     // than being refused them (spec: OC-2). Before the keys, so the wait is
     // not counted as somebody being here (spec: DK-4) and a lock that lands
     // meanwhile stops this run below.
-    let _turn = state.pending_rows.take().await;
+    let _turn = state.pending_rows.take(TurnTaker::Freeze).await;
 
     // The keys, once, for the whole run, as the sync and the fill take them: a
     // lock that lands while a book is being packed leaves this holding what it

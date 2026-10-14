@@ -5,6 +5,7 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::finding::Finding;
+use crate::pending_rows::TurnTaker;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
@@ -32,7 +33,7 @@ pub(super) async fn delete(state: &ServerState, target: Target) {
     let selection = target.selection();
     let mut run = DeleteRun::starting(target);
 
-    let _turn = state.pending_rows.take().await;
+    let _turn = state.pending_rows.take(TurnTaker::Delete).await;
     let library = match state.unlocked() {
         Ok(library) => library,
         Err(refusal) => {

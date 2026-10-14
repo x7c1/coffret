@@ -69,9 +69,12 @@ function answer(fill: Fill | null): Work {
     server: 'one-process',
     library: 'unlocked',
     catalog: { state: 'caught_up', stopped: null },
+    turn: null,
     fill,
     sync: null,
     freeze: null,
+    delete: null,
+    reconnect: null,
   };
 }
 

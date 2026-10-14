@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, ReconnectDto, SyncDto};
@@ -60,6 +61,16 @@ pub struct WorkDto {
     pub(super) library: &'static str,
     /// How this device's catalog stands with the Library.
     pub(super) catalog: CatalogDto,
+    /// Which flow's run holds this device's pending rows right now — `sync`,
+    /// `freeze` or `delete` — and `null` where nobody does.
+    ///
+    /// The three take turns at those rows, in the order their runs ask for
+    /// them, and a run waiting for its turn is on record as running with no
+    /// step, exactly as one that has just taken it is. Said here because a
+    /// browser cannot tell the two apart on its own: guessing, it can have two
+    /// runs each claim to be waiting for the other. Each run's own `waits` says
+    /// whether it is one of those waiting, and this is whom it waits for.
+    pub(super) turn: Option<&'static str>,
     /// The latest fill, running or finished, and `null` where none has run.
     pub(super) fill: Option<FillDto>,
     /// The latest sync, running or finished, and `null` where none has run.
@@ -94,7 +105,12 @@ impl WorkDto {
     /// threw away, or a run still `done` beside a queue that has already been
     /// taken up, which is a browser told there is nothing left to follow at the
     /// moment the next run starts.
+    ///
+    /// The turn is read once, before the runs, and every run's `waits` is
+    /// measured against that one reading: read per run, a turn handed over
+    /// between two reads could leave two runs each saying the other holds it.
     pub fn of(state: &ServerState) -> Self {
+        let turn = state.pending_rows.holder();
         Self {
             server: state.server().to_owned(),
             library: if state.holds_library() {
@@ -103,10 +119,23 @@ impl WorkDto {
                 "locked"
             },
             catalog: CatalogDto::of(&state.catalog.standing()),
+            turn: turn.map(TurnTaker::as_str),
             fill: state.fills.reported().as_ref().map(FillDto::of),
-            sync: state.syncs.reported().as_ref().map(SyncDto::of),
-            freeze: state.freezes.reported().as_ref().map(FreezeDto::of),
-            delete: state.deletes.reported().as_ref().map(DeleteDto::of),
+            sync: state
+                .syncs
+                .reported()
+                .as_ref()
+                .map(|run| SyncDto::of(run, turn)),
+            freeze: state
+                .freezes
+                .reported()
+                .as_ref()
+                .map(|latest| FreezeDto::of(latest, turn)),
+            delete: state
+                .deletes
+                .reported()
+                .as_ref()
+                .map(|report| DeleteDto::of(report, turn)),
             reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
         }
     }

@@ -6,6 +6,7 @@ import type {
   Freeze,
   Library,
   Sync,
+  TurnTaker,
 } from '@coffret/api';
 
 import {
@@ -25,12 +26,14 @@ import {
   stoppedLine,
   syncLine,
 } from './fill';
+import { deletedLine, deletingLine } from './deleteEntries';
+import { latestFirst, TIED } from './finished';
 import { ranOut } from './ranOut';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { ASKING } from './refresh';
 import { offeredAgain, offersAgain, retryable, type Pressed, type Trouble } from './retry';
 import { COLOR } from './theme';
-import { waitsFor } from './turns';
+import { runOf, waitsFor, type Turns } from './turns';
 import type { Asked } from './useAsked';
 
 /**
@@ -71,6 +74,8 @@ export function StatusBar({
   sync,
   freeze,
   deletion,
+  turn,
+  finished,
   trouble,
   dismissed,
   onDismiss,
@@ -91,12 +96,19 @@ export function StatusBar({
   sync: Sync | null;
   /** What the server is packing into the Library on its own, if anything. */
   freeze: Freeze | null;
-  /**
-   * What the server is deleting from the Library, if anything — which the bar
-   * draws no line for, and reads only to say what a sync or a freeze waiting
-   * its turn is waiting for.
-   */
+  /** What the server is deleting from the Library, if anything. */
   deletion: Delete | null;
+  /**
+   * Which flow's run holds this device's pending work, and `null` where nobody
+   * does — the run whose line leads, and the one a waiting run waits for.
+   */
+  turn: TurnTaker | null;
+  /**
+   * The sync, the freeze and the deletion whose runs are over, the most
+   * recently finished first: the order the bar gives their results the line
+   * in. A flow missing from it ranks after the ones in it.
+   */
+  finished: readonly TurnTaker[];
   /**
    * The press that was refused and what refused it, if one was.
    *
@@ -161,13 +173,21 @@ export function StatusBar({
     );
   }
 
-  // One line for what is in flight, and there is an order to who takes it. The
-  // drop's own line comes first, because it is the only one about a request this
-  // page is still making; the freeze and the sync it arms take over from it, and
-  // are put above the fill because they are what somebody just asked for by
-  // dropping. The freeze leads the sync because it is the larger of the two: a
-  // book takes minutes where a photograph takes a moment, and the two are never
-  // armed by one drop.
+  // One line for what is in flight, and there is an order to who takes it —
+  // by what is happening now rather than by which flow it is:
+  //
+  // 1. the drop's own line, because it is the only one about a request this
+  //    page is still making;
+  // 2. the run that holds the turn at this device's pending work, which is
+  //    the one moving;
+  // 3. a run waiting for its turn, saying for whom;
+  // 4. the result of whichever run finished last — a Pack made, files added
+  //    one by one, files deleted — so that each run's result takes the line
+  //    from the one before it rather than a finished freeze's `packed …`
+  //    standing over every later add and delete;
+  // 5. then the fill, and the notices about runs and folders nothing is on any
+  //    more — except that a fill still moving goes above a result that has
+  //    nothing to report, which takes the line back once the fill is over.
   //
   // Each candidate carries the colour it is drawn in, because the colour belongs
   // to whoever the line belongs to: a line about the sync drawn in red because a
@@ -179,12 +199,13 @@ export function StatusBar({
   // that went on holding the place of a sentence nobody wants would buy
   // nothing. The order is unchanged — it is the same candidates, minus the ones
   // somebody has finished reading. The offers of a second attempt are made from
-  // these same three, so a line put away takes its offer with it: a bare "bring
+  // these same runs, so a line put away takes its offer with it: a bare "bring
   // over again" standing where no sentence says what failed is a button with
   // nothing behind it.
   const freezeShown = isPutAway(dismissed, 'freeze', freeze) ? null : freeze;
   const syncShown = isPutAway(dismissed, 'sync', sync) ? null : sync;
   const fillShown = isPutAway(dismissed, 'fill', fill) ? null : fill;
+  const deletionShown = isPutAway(dismissed, 'delete', deletion) ? null : deletion;
   // And the same for the two lists of lost folders, which are put away by name
   // rather than by run: they are nobody's run. A folder put away takes its
   // button with it, because the line and the buttons beside it are one notice.
@@ -197,61 +218,39 @@ export function StatusBar({
   // outside the Library, whatever the book after it did.
   const booksStopped = shownRuns(dismissed, 'freeze', freeze?.displaced ?? []);
   const foldersStopped = shownRuns(dismissed, 'fill', fill?.displaced ?? []);
-  // What each of the three flows that take turns at the pending work is doing,
-  // so a sync or a freeze waiting for its turn says what it waits for.
-  const turns = { freeze, sync, deletion };
-  const line =
-    shown(adding, COLOR.text) ??
-    shown(
-      freezeLine(freezeShown, waitsFor('freeze', turns)),
-      toneOf(freeze?.status, freeze?.findings.length ?? 0),
-    ) ??
-    shown(
-      syncLine(syncShown, waitsFor('sync', turns)),
-      toneOf(sync?.status, sync?.findings.length ?? 0),
-    ) ??
-    shown(
-      fillLine(fillShown),
-      toneOf(fill?.status, (fill?.declined.length ?? 0) + (fill?.findings.length ?? 0)),
-    ) ??
-    // Then the runs that stopped and had the record taken from them, in the
-    // refusal colour their own line is drawn in while they are the run on
-    // record: nothing about them changed when the next folder started, and it
-    // is the same sentence. Below the three above because those are about work
-    // the server is on now or ended last; above the two below because these ran
-    // and got part way, where a discarded folder is one nothing ever started on.
-    shown(stoppedBooksLine(booksStopped), COLOR.refused) ??
-    shown(stoppedLine(foldersStopped), COLOR.refused) ??
-    // Last, because these are the only candidates about no run at all: the
-    // folders a worker that ended without an answer threw away. They stand
-    // where a line would stand once the run that died has had its say and been
-    // put away, so that the news outlives the sentence it arrived beside. The
-    // book queue leads, for the reason the freeze's own line leads the fill's.
-    shown(discardedBooksLine(booksLost), COLOR.warn) ??
-    shown(discardedLine(foldersLost), COLOR.warn);
-  // What the line on the screen belongs to, so that the one dismiss button
-  // beside it puts away the line a person is actually reading. The drop's own
-  // line belongs to nothing that outlives it — it is over when the request is —
-  // so it takes none.
-  const dismissable = whoseLine(adding, freezeShown, syncShown, fillShown, {
+  // The line on the screen and what it belongs to, chosen together so that the
+  // one dismiss button beside it puts away the line a person is actually
+  // reading.
+  const line = barLine({
+    adding,
+    turns: { turn, freeze: freezeShown, sync: syncShown, deletion: deletionShown },
+    finished,
+    fill: fillShown,
     booksStopped,
     foldersStopped,
     booksLost,
     foldersLost,
   });
+  const dismissable = line?.dismissable ?? null;
   // And the red line, with the button it answers named in it. It is read off
   // the same two runs the offers above are drawn from, so that the words it
   // names the press by are the words of a button standing on the bar.
   const refusal = refusalLine(trouble, fillShown, freezeShown);
   // And whether any refusal the bar is showing is the permission running out —
-  // the press it refused, or a run it stopped. One Storage outage stops all
-  // three runs together, so one offer stands for all of them.
+  // the press it refused, or a run it stopped. One Storage outage stops every
+  // run under way together, the deletion's among them now that its line is on
+  // the bar, so one offer stands for all of them.
   const expired =
     reconnect !== null &&
     (trouble?.ranOut === true ||
-      [freezeShown, syncShown, fillShown, ...booksStopped, ...foldersStopped].some(
-        (run) => run?.status === 'stopped' && ranOut(run.stopped),
-      ));
+      [
+        freezeShown,
+        syncShown,
+        fillShown,
+        deletionShown,
+        ...booksStopped,
+        ...foldersStopped,
+      ].some((run) => run?.status === 'stopped' && ranOut(run.stopped)));
   return (
     <footer style={FOOTER}>
       {/* A refusal standing where the Library's name goes is not another dim
@@ -447,59 +446,199 @@ function discardedBooks(freeze: Freeze | null): readonly string[] {
   return freeze?.discarded ?? [];
 }
 
+/** The line the bar draws, the colour it is drawn in, and what it belongs to. */
+interface BarLine {
+  text: string;
+  colour: string;
+  /**
+   * What the dismiss button beside it puts away, and `null` where the line
+   * belongs to nothing that can be: the drop's own line, and any run still
+   * going.
+   */
+  dismissable: Dismissable | null;
+}
+
 /**
- * Which flow the line now on the bar belongs to, or `null` where the line
- * belongs to no run that can be put away.
+ * The one line the bar draws, chosen by what is happening now: the drop's own
+ * line, then the run holding the turn, then a run waiting for it, then the
+ * result of whichever run finished last, then the fill and the notices about
+ * runs and folders nothing is on any more. A fill still moving goes above a
+ * result with nothing to report.
  *
- * Read the same way the line itself is chosen, and it has to be: a dismiss
+ * The line and its dismissal are chosen in one walk, and have to be: a dismiss
  * button that named a different run from the sentence beside it would put away
  * a line nobody is looking at and leave the one they are.
+ *
+ * The runs handed in are the ones still shown — a run whose line was put away
+ * is `null` here — so a dismissal gives the line to whatever ranks after it.
  */
-function whoseLine(
-  adding: string | null,
-  freeze: Freeze | null,
-  sync: Sync | null,
-  fill: Fill | null,
-  beside: {
-    booksStopped: readonly DisplacedFreeze[];
-    foldersStopped: readonly DisplacedFill[];
-    booksLost: readonly string[];
-    foldersLost: readonly string[];
-  },
-): Dismissable | null {
+function barLine({
+  adding,
+  turns,
+  finished,
+  fill,
+  booksStopped,
+  foldersStopped,
+  booksLost,
+  foldersLost,
+}: {
+  adding: string | null;
+  turns: Turns;
+  finished: readonly TurnTaker[];
+  fill: Fill | null;
+  booksStopped: readonly DisplacedFreeze[];
+  foldersStopped: readonly DisplacedFill[];
+  booksLost: readonly string[];
+  foldersLost: readonly string[];
+}): BarLine | null {
   if (adding !== null) {
-    return null;
+    return { text: adding, colour: COLOR.text, dismissable: null };
   }
-  if (freezeLine(freeze) !== null) {
-    return canPutAway(freeze) ? { kind: 'line', flow: 'freeze' } : null;
+  // The run holding the turn, with its step. A holder whose run is already
+  // over — the moment between its ending and its giving the turn back — is a
+  // finished run, and takes its place among those below.
+  const holder = turns.turn;
+  if (holder !== null && isRunning(runOf(holder, turns))) {
+    const held = lineOf(holder, turns);
+    if (held !== null) {
+      return { ...held, dismissable: null };
+    }
   }
-  if (syncLine(sync) !== null) {
-    return canPutAway(sync) ? { kind: 'line', flow: 'sync' } : null;
+  // Then a run waiting for its turn, saying for whom.
+  for (const flow of TIED) {
+    if (flow !== holder && isRunning(runOf(flow, turns))) {
+      const waiting = lineOf(flow, turns);
+      if (waiting !== null) {
+        return { ...waiting, dismissable: null };
+      }
+    }
   }
-  if (fillLine(fill) !== null) {
-    return canPutAway(fill) ? { kind: 'line', flow: 'fill' } : null;
-  }
-  // The four that are about no run the bar is drawing a line for. Every one of
-  // them is over — a run that stopped is not going to be taken up again on its
-  // own, and a lost folder never started — and without this they are the one
-  // kind of notice a person cannot put away: the offer stands, with its
-  // buttons, for as long as the server runs.
+  const filling = fillLine(fill);
+  const fillShown: BarLine | null =
+    filling === null
+      ? null
+      : {
+          text: filling,
+          colour: toneOf(
+            fill?.status,
+            (fill?.declined.length ?? 0) + (fill?.findings.length ?? 0),
+          ),
+          dismissable: canPutAway(fill) ? { kind: 'line', flow: 'fill' } : null,
+        };
+  // Then the latest result. Walked in the order the runs finished, so one put
+  // away gives the line to the one that finished before it.
   //
-  // By name and not by run, including for the two that are runs: see
+  // A moving fill is a person waiting on a file they opened, so a result that
+  // went as asked would otherwise stand over its progress until dismissed. One
+  // that found something, or stopped, keeps the line over the fill, because it
+  // is the only place a person is told their file was not backed up. `toneOf`
+  // draws a finished run in the plain colour exactly where it has nothing to
+  // report.
+  for (const flow of latestFirst(finished)) {
+    const run = runOf(flow, turns);
+    const result = canPutAway(run) ? lineOf(flow, turns) : null;
+    if (result !== null) {
+      const quiet = run?.status === 'done' && result.colour === COLOR.text;
+      if (quiet && fill?.status === 'filling' && fillShown !== null) {
+        return fillShown;
+      }
+      return { ...result, dismissable: { kind: 'line', flow } };
+    }
+  }
+  if (fillShown !== null) {
+    return fillShown;
+  }
+  // Then the runs that stopped and had the record taken from them, in the
+  // refusal colour their own line is drawn in while they are the run on
+  // record: nothing about them changed when the next folder started, and it is
+  // the same sentence. Below the runs above because those are about work the
+  // server is on now or ended last; above the two below because these ran and
+  // got part way, where a discarded folder is one nothing ever started on.
+  //
+  // Every one of these is over — a run that stopped is not going to be taken
+  // up again on its own, and a lost folder never started — and without a
+  // dismissal they are the one kind of notice a person cannot put away: the
+  // offer stands, with its buttons, for as long as the server runs. By name
+  // and not by run, including for the two that are runs: see
   // [`Dismissable`](./dismissed).
-  if (stoppedBooksLine(beside.booksStopped) !== null) {
-    return { kind: 'stopped', queue: 'freeze', folders: folderNames(beside.booksStopped) };
+  const stoppedBooks = stoppedBooksLine(booksStopped);
+  if (stoppedBooks !== null) {
+    return {
+      text: stoppedBooks,
+      colour: COLOR.refused,
+      dismissable: { kind: 'stopped', queue: 'freeze', folders: folderNames(booksStopped) },
+    };
   }
-  if (stoppedLine(beside.foldersStopped) !== null) {
-    return { kind: 'stopped', queue: 'fill', folders: folderNames(beside.foldersStopped) };
+  const stoppedFolders = stoppedLine(foldersStopped);
+  if (stoppedFolders !== null) {
+    return {
+      text: stoppedFolders,
+      colour: COLOR.refused,
+      dismissable: { kind: 'stopped', queue: 'fill', folders: folderNames(foldersStopped) },
+    };
   }
-  if (discardedBooksLine(beside.booksLost) !== null) {
-    return { kind: 'discarded', queue: 'freeze', folders: beside.booksLost };
+  // Last, because these are the only candidates about no run at all: the
+  // folders a worker that ended without an answer threw away. They stand where
+  // a line would stand once the run that died has had its say and been put
+  // away, so that the news outlives the sentence it arrived beside. The book
+  // queue leads, for the reason the freeze leads the ties above.
+  const lostBooks = discardedBooksLine(booksLost);
+  if (lostBooks !== null) {
+    return {
+      text: lostBooks,
+      colour: COLOR.warn,
+      dismissable: { kind: 'discarded', queue: 'freeze', folders: booksLost },
+    };
   }
-  if (discardedLine(beside.foldersLost) !== null) {
-    return { kind: 'discarded', queue: 'fill', folders: beside.foldersLost };
+  const lostFolders = discardedLine(foldersLost);
+  if (lostFolders !== null) {
+    return {
+      text: lostFolders,
+      colour: COLOR.warn,
+      dismissable: { kind: 'discarded', queue: 'fill', folders: foldersLost },
+    };
   }
   return null;
+}
+
+/** Whether a run is on record and still going. */
+function isRunning(run: Freeze | Sync | Delete | null): boolean {
+  return run !== null && !canPutAway(run);
+}
+
+/**
+ * The line of the run of `flow` on record, running or over, and the colour it
+ * is drawn in — or `null` where it has none.
+ *
+ * A deletion's line is its progress while it runs and what it came to once it
+ * is over, so all three turn-taking flows say what they are doing in the one
+ * place.
+ */
+function lineOf(flow: TurnTaker, turns: Turns): { text: string; colour: string } | null {
+  const waits = waitsFor(flow, turns);
+  switch (flow) {
+    case 'freeze': {
+      const run = turns.freeze;
+      return shown(freezeLine(run, waits), toneOf(run?.status, run?.findings.length ?? 0));
+    }
+    case 'sync': {
+      const run = turns.sync;
+      return shown(syncLine(run, waits), toneOf(run?.status, run?.findings.length ?? 0));
+    }
+    case 'delete': {
+      const run = turns.deletion;
+      if (run === null) {
+        return null;
+      }
+      // The bar has no *try again* beside it, so it takes the sentence alone.
+      const text =
+        run.status === 'deleting' ? deletingLine(run, waits) : (deletedLine(run)?.text ?? null);
+      return shown(
+        text,
+        toneOf(run.status, run.findings.length + run.refused.length + run.missing.length),
+      );
+    }
+  }
 }
 
 /** The folders a set of runs is about, which is what a dismissal of them holds. */
