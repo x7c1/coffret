@@ -10,7 +10,7 @@ check_command: 'make check && grep -rq "turn" docs/concepts/library/README.md'
 assignee: null
 branch: task/1014-0338-say-which-run-holds-the-turn-and-keep-the-status-bar-current
 created_at: 2026-10-13T18:38:00Z
-updated_at: 2026-10-14T05:30:00Z
+updated_at: 2026-10-14T05:34:00Z
 ---
 
 # feat(server,explorer): say which run holds the turn, and keep the status bar on the latest run
@@ -139,7 +139,7 @@ is missing for it beside `findings.rs:373`.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium): drop
+- [x] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium): drop
       a book as a Pack, then add one file one by one, then delete it; after
       each run the status bar shows that run's result; while a deletion runs,
       a dropped book's line says it waits for the deletion and, once the
