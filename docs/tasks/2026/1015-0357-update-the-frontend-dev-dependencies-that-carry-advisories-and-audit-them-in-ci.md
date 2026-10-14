@@ -61,6 +61,6 @@ as a person's Libraries and should not carry known advisories.
 
 ### Before merge (verified outside the check command)
 
-- [ ] `pnpm audit` in `frontend/` reports no advisory outside the reasoned
+- [x] `pnpm audit` in `frontend/` reports no advisory outside the reasoned
       allowances, and the PR lists each allowance with its reason
-- [ ] The new CI audit step ran on the PR and passed
+- [x] The new CI audit step ran on the PR and passed
