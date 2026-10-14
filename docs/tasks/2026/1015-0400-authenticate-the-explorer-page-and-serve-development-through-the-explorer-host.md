@@ -118,9 +118,9 @@ the explorer host instead of Vite's proxy.
 
 ### Before merge (verified outside the check command)
 
-- [ ] CI's `e2e` job passes on the PR, running every journey through the
+- [x] CI's `e2e` job passes on the PR, running every journey through the
       development host
-- [ ] On this Linux machine, `make dev` on a development Library prints a
+- [x] On this Linux machine, `make dev` on a development Library prints a
       launch file; opening it in Chrome (deb) lists the Library, opens a book
       and takes a drop; reloading the tab keeps working; a second tab opened
       by typing the URL shows the no-token message
