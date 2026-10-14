@@ -6,5 +6,6 @@ export default defineConfig({
     // a response and the shape of a refusal, neither of which needs a DOM.
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    setupFiles: ['./src/page.testing.ts'],
   },
 });

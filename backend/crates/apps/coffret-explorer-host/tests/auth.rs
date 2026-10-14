@@ -265,9 +265,12 @@ async fn a_server_that_stopped_revokes_every_session() {
 
     let answer = get(&host, "/api/list", &token).await;
     assert_eq!(answer.status(), StatusCode::BAD_GATEWAY);
-    let body = support::text_of(answer).await;
-    assert!(body.contains(&gone.to_string()), "{body}");
-    assert!(body.contains("not answering"), "{body}");
+    let body = json_of(answer).await;
+    // The word that tells the page its session went with the server.
+    assert_eq!(body["error"], "server_unavailable");
+    let message = body["message"].as_str().expect("a sentence");
+    assert!(message.contains(&gone.to_string()), "{message}");
+    assert!(message.contains("not answering"), "{message}");
 
     let (status, _) = error_of(get(&host, "/api/list", &token).await).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);

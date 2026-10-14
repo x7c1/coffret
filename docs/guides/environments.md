@@ -93,16 +93,46 @@ follows it to `logs` beside the Libraries. Two things first:
 
 | Target | What it does |
 |---|---|
-| `make dev` | The server for `LIBRARY` under the development state directory, and the explorer's dev server at `http://localhost:5173/`, which reads the checkout's source as it changes |
+| `make dev` | The server for `LIBRARY` under the development state directory, a build of the explorer in watch mode, and the development host serving that build at `http://127.0.0.1:5173/` in front of the server; it prints the launch file to open the explorer by |
 | `make cli ARGS="…"` | The command line, built in release, against the development state directory unless `COFFRET_STATE_DIR` is given |
-| `make down` | Stops the pair `make dev` started for `LIBRARY`; `make down dev` is the restart that a Library which has locked itself after idling needs |
+| `make down` | Stops the three `make dev` started for `LIBRARY`; `make down dev` is the restart that a Library which has locked itself after idling needs |
 | `make desktop-build` | Builds the explorer, then bundles the desktop app under `backend/target/release/bundle/` (a `.deb` on Linux, `Coffret.app` and a `.dmg` on macOS) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, then the debug desktop app as the development app |
 | `make desktop-dev` | `make desktop-dev-build`, then runs it over the Libraries under the development state directory |
 
 `make server` and `make web` are the two halves of `make dev` in the
-foreground, and take the same variables.
+foreground, and take the same variables; `WEB_PORT` moves the explorer's port.
+
+## The explorer in development
+
+The explorer reaches a server through the explorer host in every mode, and
+development is no exception: there is no dev server of the frontend's own, no
+proxy in its build configuration, and no hot reload. `make web` (and `make
+dev`) run `vite build --watch`, which rewrites
+`frontend/packages/apps/web/dist` as the source changes, and
+`coffret-explorer-dev`, which serves that directory from disk through the same
+host the desktop app runs — the same fences, and the same browser tokens. A
+change is picked up by reloading the tab once the build has written it.
+
+The host admits a browser only by a browser token, which the page gets by
+exchanging the one-time ticket in a **launch file**: an owner-only HTML page
+under the Library's directory (`explorer-launch/explorer.html`) that refreshes
+to the explorer with the ticket in the address's fragment. The host prints its
+path once it has seen the server. Open that file in the browser — `make dev`
+prints the path once all three are up, and `.tmp/dev/<LIBRARY>/host.log` holds it
+too. The address typed by hand shows a page saying the tab holds no session.
+
+The host keeps the file ready: it writes it again once its ticket has been used
+or is about to expire, and writes a fresh one — ending every tab's session —
+when the server is started again, since a server of another run is not the one
+those tabs' sessions were issued under. While the server is stopped there is no
+file at all. A tab ends its own session by its *Disconnect this tab* control,
+too.
+
+What the development host cannot see is whether the server's Library is locked,
+since the server is another process: it forwards as though it were unlocked,
+and the server's own locked refusal is what the explorer shows.
 
 ## The desktop app
 

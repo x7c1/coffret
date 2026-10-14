@@ -30,13 +30,19 @@ export COFFRET_LOG_DIR ?= $(COFFRET_STATE_DIR)/logs
 # directory's business, and COFFRET_STATE_DIR above is what moves that.
 LIBRARY ?= main
 
-# The loopback port `server` listens on and `web` proxies /api to. Given to
+# The loopback port `server` listens on and `web` forwards /api to. Given to
 # both, so a second server beside the first is reached by passing the same
 # value to each. It has to serve another Library, since one Library is served
 # by one server at a time and a second one over it is refused. For example:
 #   make server LIBRARY=second PORT=9999
-#   make web LIBRARY=second PORT=9999
+#   make web LIBRARY=second PORT=9999 WEB_PORT=5174
 PORT ?= 8787
+
+# The loopback port `web` and `dev` serve the explorer on, through the
+# development host. Fixed rather than chosen by the operating system, so that
+# the address stays put across restarts; a second pair beside the first needs
+# one of its own.
+WEB_PORT ?= 5173
 
 # Parameters for the fixture generator below. The sizes are the camera-sized
 # ones the reader benchmark wants; a caller that only needs files, not decode
@@ -177,6 +183,10 @@ s3-store-it:
 # What the command line said is in .tmp/e2e/transcript.log; the server's output
 # and both binaries' own logs are under .tmp/e2e/logs/; and Playwright's trace
 # for a journey that failed is under .tmp/e2e/playwright/.
+#
+# The browser stage reaches the explorer the way a person does: through the
+# development host, which admits a browser only by the launch file it writes.
+# Each journey opens that file; nothing here turns authentication off.
 #
 # COFFRET_E2E_MINIO_PORT, COFFRET_E2E_SERVER_PORT and COFFRET_E2E_WEB_PORT move
 # the three ports it binds, for a machine where one of them is taken.
@@ -465,45 +475,60 @@ fixtures:
 server:
 	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY) --port $(PORT)
 
-## web: run the frontend dev server at http://localhost:5173 (proxies /api to the coffret server on PORT)
+## web: build the explorer in watch mode and serve it at http://127.0.0.1:5173 through the development host, in front of the server on PORT (WEB_PORT moves it)
 #
-# The server answers nobody who cannot show the key it drew as it started, and
-# the proxy in front of the explorer reads that key off this device — so the
-# browser never holds it. Which Library's key that is comes from LIBRARY, the
-# same variable `make server` takes, and from COFFRET_STATE_DIR, set at the top
-# as it is for `server`. This target does `cd`, so a COFFRET_STATE_DIR given in
-# the environment has to be absolute here:
+# Two processes: a build of the explorer in watch mode, in the background with
+# its output in .tmp/dev/<LIBRARY>/build.log, which rewrites
+# frontend/packages/apps/web/dist whenever a file it is built from changes,
+# and `coffret-explorer-dev` in the foreground, which serves that directory and
+# forwards /api to the server with the key the server drew as it started. The
+# host is the one browser entrance, as the desktop app's is: there is no dev
+# server of the frontend's own and no hot reload, and a change is picked up by
+# reloading the tab once the build has written it.
 #
-#   COFFRET_STATE_DIR=$PWD/.tmp/drive-round-trip/state make web LIBRARY=second
+# The host admits a browser only by a browser token, which the page gets by
+# exchanging the ticket in the launch file the host writes and prints the path
+# of: open that file in the browser. The address typed by hand shows a page
+# saying so. The host writes the file again once its ticket is used, and afresh,
+# ending every tab's session, when the server is started again. Which Library's
+# key it reads comes from LIBRARY, the same variable `make server` takes, and
+# from COFFRET_STATE_DIR, set at the top as it is for `server`. A relative
+# COFFRET_STATE_DIR given in the environment means a directory under the
+# repository root, as it does for `server`:
+#
+#   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make web LIBRARY=second
 .PHONY: web
 web:
-	cd frontend && COFFRET_LIBRARY=$(LIBRARY) COFFRET_PORT=$(PORT) pnpm --filter @coffret/web dev
+	./scripts/dev.sh web $(LIBRARY) $(PORT) $(WEB_PORT)
 
 ## web-dist: build the explorer into frontend/packages/apps/web/dist
 #
 # What coffret-explorer-host's `embed-web` feature compiles into the binary: that
 # feature reads this output at build time, so a build with it fails until this
-# has run. The explorer's dev server and `vite preview` do not need it.
+# has run. `web` and `dev` write the same directory with a build of their own,
+# in watch mode, and serve it from disk.
 .PHONY: web-dist
 web-dist:
 	cd frontend && pnpm --filter @coffret/web build
 
-## dev: start the server for LIBRARY and the explorer's dev server in front of it, both in the background
+## dev: start the server for LIBRARY, the explorer's build in watch mode and the development host in front of the server, all in the background
 #
 # What `make server` and `make web` do, from one command and with the terminal
-# given back once both answer: each goes to the background with its output under
-# .tmp/dev/<LIBRARY>/, and the command prints where to open the explorer. The
-# Passphrase is still asked for, by the server itself, on this terminal. `down`
-# stops the pair, so `make down dev` is the restart — which is what a Library
-# that has locked itself after idling needs, since the server is started afresh
-# to unlock it. It is that one line once LIBRARY is set in
+# given back once all three answer: each goes to the background with its
+# output under .tmp/dev/<LIBRARY>/, and the command prints the launch file to
+# open the explorer by. The Passphrase is still asked for, by the server
+# itself, on this terminal. `down` stops all three, so `make down dev` is the
+# restart — which is what a Library that has locked itself after idling needs,
+# since the server is started afresh to unlock it, and the host then writes a
+# fresh launch file to open again. It is that one line once LIBRARY is set in
 # ~/.config/coffret/local.mk (`LIBRARY := books`), which is what the overrides
-# at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`,
-# so this serves a Library under the development state directory; the installed
-# desktop app serves the production Library (docs/guides/environments.md).
+# at the top are for. PORT, WEB_PORT and COFFRET_STATE_DIR mean what they do
+# for `server` and `web`, so this serves a Library under the development state
+# directory; the installed desktop app serves the production Library
+# (docs/guides/environments.md).
 .PHONY: dev
 dev:
-	./scripts/dev.sh up $(LIBRARY) $(PORT)
+	./scripts/dev.sh up $(LIBRARY) $(PORT) $(WEB_PORT)
 
 ## desktop-build: build the explorer, then bundle the desktop app under backend/target/release/bundle/ without installing it (one-time: `cargo install tauri-cli --version '^2' --locked`)
 #
@@ -531,7 +556,7 @@ desktop-dev-build: web-dist
 desktop-dev: desktop-dev-build
 	./scripts/desktop.sh dev
 
-## down: stop the server and the explorer's dev server that `dev` started for LIBRARY
+## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
 down:
 	./scripts/dev.sh down $(LIBRARY)
@@ -553,12 +578,13 @@ cli:
 
 ## deps: assert the layer boundaries both halves of the repository rest on
 #
-# Five things, all of which a compiler happily accepts and none of which anyone
+# Six things, all of which a compiler happily accepts and none of which anyone
 # notices going wrong: coffret-model growing a dependency, one gateway reaching
 # into another instead of meeting at the port, an app binary reaching past
 # coffret-device for the domain, the explorer naming a route the server no
-# longer serves, and the web app talking to that server itself instead of
-# through the gateway package that holds the wire contract.
+# longer serves, the web app talking to that server itself instead of through
+# the gateway package that holds the wire contract, and the frontend's build
+# configuration growing an entrance of its own in front of the server.
 #
 # The model's list is short and deliberately not empty: NFC is an invariant of
 # `EntryPath` (spec: EP-1), which takes the Unicode composition tables, and
@@ -572,9 +598,11 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 
 # The two shells over coffret-device — the command line and the explorer's
 # server — plus coffret-shell, which both of them start through,
-# coffret-explorer-host, which serves the explorer in front of that server, and
+# coffret-explorer-host, which serves the explorer in front of that server,
 # coffret-desktop, which starts the server and the host in one installed app,
-# and what none of the five may name directly. Every flow a shell drives is a
+# and coffret-explorer-dev, which serves the explorer's build on disk through
+# the host in front of a server already running, and what none of the six may
+# name directly. Every flow a shell drives is a
 # call on coffret-device, so any shell can be replaced without a flow moving
 # with it. A gateway or a use case named here would be a decision the other
 # shells then have to make again, and differently. The remaining crates under
@@ -589,7 +617,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # it. Dev-dependencies are outside `--edges normal` and so outside this: a case
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
-APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop
+APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop coffret-explorer-dev
 APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps
@@ -643,6 +671,17 @@ deps:
 	if [ -n "$$raw" ]; then \
 		echo "the web app must reach coffret-server through @coffret/api, and asks it directly:"; \
 		echo "$$raw"; \
+		exit 1; \
+	fi
+# The explorer host is the one browser entrance in every mode, and the only
+# thing that holds the server's key on the page's behalf. A proxy in the
+# frontend's build configuration, or a read of the key file there, would be a
+# second entrance holding a credential.
+	@second=$$(grep -nE 'proxy *[:=]|ProxyOptions|server-key|SERVER_KEY|readFileSync|x-coffret-key' \
+		frontend/packages/apps/web/vite.config.ts || true); \
+	if [ -n "$$second" ]; then \
+		echo "vite.config.ts must read no key and define no proxy: the explorer host is the one entrance"; \
+		echo "$$second"; \
 		exit 1; \
 	fi
 

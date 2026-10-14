@@ -16,7 +16,7 @@
 // started, so every folder the earlier journeys walked was on the screen because
 // of a startup catch-up.
 
-import { chip, expect, row, setting, shot, test } from './journey';
+import { chip, expect, row, setting, shot, openExplorer, test } from './journey';
 import { commitElsewhere } from './uploader';
 
 /** What the other device commits while nothing here is listening. */
@@ -30,8 +30,12 @@ test('come back to a Library another device has moved on', async ({ page, coffre
   await commitElsewhere(setting, `${setting.album}/${ADDED}`, setting.restartFile);
   await shot(page, '01-committed-while-nothing-was-listening');
 
+  // A server of another run, so the explorer's host ended every session issued
+  // under the last one and wrote a launch file for this one, which is what gives
+  // the tab a session again (spec: LA-18).
   await coffret.start();
-  await page.reload();
+  await openExplorer(page, { afterRestart: true });
+  await page.goto(`/#path=${setting.album}`);
 
   // No button pressed and nothing polled: the server caught the catalog up as it
   // opened the Library, so the first listing it answers is the Library as it is.

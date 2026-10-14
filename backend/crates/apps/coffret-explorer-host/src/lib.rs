@@ -20,7 +20,11 @@
 //!
 //! The page itself is compiled in under the `embed-web` feature. Without it —
 //! the default, so that a build never needs the frontend built first — every
-//! page path answers a short plain page saying so.
+//! page path answers a short plain page saying so. A development host serves
+//! it from the build output on disk instead ([`PageSource`]).
+//!
+//! The ticket a browser exchanges reaches it through a file only the owner's
+//! account can read, which [`launch_file`] writes (spec: LA-21).
 //!
 //! The explorer is deliberately not served from the server's own port: the
 //! server would then be answering its own page without a key, and every request
@@ -48,10 +52,18 @@ pub use key_file::KeyFile;
 mod key_source;
 pub use key_source::KeySource;
 
+#[cfg(unix)]
+pub mod launch_file;
+
 mod library_lock;
 pub use library_lock::LibraryLock;
 
 mod page;
+use page::Page;
+
+mod page_source;
+pub use page_source::PageSource;
+
 mod refusal;
 
 mod serve;
@@ -60,7 +72,7 @@ pub use serve::serve;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::middleware::{from_fn, from_fn_with_state};
+use axum::middleware::from_fn_with_state;
 use axum::routing::any;
 use axum::Router;
 use tokio::net::TcpListener;
@@ -103,6 +115,7 @@ pub fn router(listener: &TcpListener, config: Config, gate: Gate) -> Result<Rout
         gate,
         lock: config.lock,
         forwarder,
+        page: Page::new(&config.page),
     });
 
     // `/api/` as well as the wildcard, which matches no empty rest: every path
@@ -117,6 +130,9 @@ pub fn router(listener: &TcpListener, config: Config, gate: Gate) -> Result<Rout
         .layer(from_fn_with_state(Arc::clone(&host), fences::same_origin))
         .fallback(page::serve)
         .layer(from_fn_with_state(Arc::clone(&host), fences::fixed_host))
-        .layer(from_fn(answer_headers::answer_headers))
+        .layer(from_fn_with_state(
+            Arc::clone(&host),
+            answer_headers::answer_headers,
+        ))
         .with_state(host))
 }

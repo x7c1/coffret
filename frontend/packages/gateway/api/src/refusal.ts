@@ -8,10 +8,17 @@ import surfacedFindings from './surfaced-findings.json';
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
  *
- * The last two are this client's, minted where no answer of the server's shape
- * arrived at all. They are kept in the same union so that everything a caller
- * has to handle is one type: a page that has to say why it is empty does not
- * care whether the sentence came from the server or from here.
+ * The next seven are the explorer host's, which answers in front of the server
+ * in the same shape: the page's session, the host's own limits, and a server
+ * it could not reach (spec: LA-14, LA-15, LA-17, LA-18). The host's other
+ * refusals are of requests this client never sends, and read as
+ * `unrecognized`.
+ *
+ * The last three are this client's, minted where no answer of the server's
+ * shape arrived at all, or where one did and was let go of. They are kept in
+ * the same union so that everything a caller has to handle is one type: a page
+ * that has to say why it is empty does not care whether the sentence came from
+ * the server or from here.
  */
 export type RefusalKind =
   | 'bad_path'
@@ -94,6 +101,33 @@ export type RefusalKind =
   | 'unverified'
   | 'server'
   /**
+   * The host holds no session for this page: its token is missing, unknown,
+   * expired or revoked, or of a generation of the host that has ended
+   * (spec: LA-14, LA-18). The page lets its token go and says how the explorer
+   * is opened.
+   */
+  | 'authentication_required'
+  /**
+   * The host knows the Library is locked, and answers nothing but the status a
+   * page needs and the request that unlocks it (spec: LA-14). The session
+   * still stands; the page shows the locked state and asks the host's session
+   * route, rather than the server, when it is unlocked.
+   */
+  | 'library_locked'
+  /**
+   * The server behind the host stopped, or is a server of another run, and
+   * every session went with it (spec: LA-15). The page lets its token go.
+   */
+  | 'server_unavailable'
+  /** A request the host could not hand to the server, which ended no session. */
+  | 'bad_gateway'
+  /** The host holds as many sessions as it may (spec: LA-18). */
+  | 'session_limit'
+  /** Too many exchanges at once (spec: LA-17). */
+  | 'rate_limited'
+  /** The request named an address or an origin that is not the host's own (spec: LA-13). */
+  | 'origin_refused'
+  /**
    * The request got no answer here: nothing is listening, the network went, or
    * the transfer broke while the body was still going up — which is
    * not proof the server never answered. Every `fetch` that rejects becomes
@@ -103,7 +137,13 @@ export type RefusalKind =
    */
   | 'unreachable'
   /** Something answered, and it was not one of the shapes above. */
-  | 'unrecognized';
+  | 'unrecognized'
+  /**
+   * An answer that arrived after the session it was asked under ended, or
+   * after the Library locked under it, and was let go of rather than handed
+   * on: whatever it carries belongs to a page that is no longer on the screen.
+   */
+  | 'withdrawn';
 
 /**
  * Which way a placement was declined or refused, where one was — and, under
@@ -313,6 +353,14 @@ export function isRefusal(thrown: unknown): thrown is Refusal {
 }
 
 /**
+ * Whether something thrown is a refusal because the Library is locked, as the
+ * server says it or as the host in front of it does.
+ */
+export function isLockedRefusal(thrown: unknown): thrown is Refusal {
+  return isRefusal(thrown) && (thrown.kind === 'locked' || thrown.kind === 'library_locked');
+}
+
+/**
  * The refusal one non-2xx answer stands for.
  *
  * It never throws, whatever came back. A body that is not the server's JSON is
@@ -446,6 +494,13 @@ const KINDS: readonly string[] = [
   'storage',
   'unverified',
   'server',
+  'authentication_required',
+  'library_locked',
+  'server_unavailable',
+  'bad_gateway',
+  'session_limit',
+  'rate_limited',
+  'origin_refused',
 ];
 
 const REASONS: readonly string[] = [
@@ -491,7 +546,8 @@ const FINDINGS: readonly string[] = surfacedFindings;
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * thirteen: a caller matching on the union would then fall through every case.
+ * kinds above: a caller matching on the union would then fall through every
+ * case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';

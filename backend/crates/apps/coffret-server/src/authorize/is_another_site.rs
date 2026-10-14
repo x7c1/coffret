@@ -15,8 +15,8 @@ impl Admission {
     /// belongs to another site.
     ///
     /// `Origin` is measured against this server's own, which is what the page
-    /// the explorer is served from reaches it as: the dev and preview servers
-    /// proxy `/api` here, and each rewrites the `Origin` of a request its own
+    /// the explorer is served from reaches it as: the explorer host
+    /// forwards `/api` here, and rewrites the `Origin` of a request its own
     /// page made and leaves every other one as it found it.
     pub(super) fn is_another_site(&self, headers: &HeaderMap) -> bool {
         let elsewhere = match text(headers, ORIGIN.as_str()) {

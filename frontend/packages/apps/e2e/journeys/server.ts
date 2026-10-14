@@ -7,10 +7,10 @@
 // Library's name, the port, and the credentials the Library's Storage is
 // reached with, all of which arrive through the environment.
 //
-// One port, kept across a restart. The explorer is served by `vite preview`
-// which is aimed at the server once, when it starts, so a server that came back
-// on a port the operating system chose would be a server the page could no
-// longer reach — and those journeys would be proving the wrong thing.
+// One port, kept across a restart. The explorer is served by the development
+// host, which is aimed at the server once, when it starts, so a server that
+// came back on a port the operating system chose would be a server the page
+// could no longer reach — and those journeys would be proving the wrong thing.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
@@ -61,7 +61,7 @@ export class CoffretServer {
     this.environment = environment;
   }
 
-  /** Where a page reaches it, which is what the vite proxy is aimed at. */
+  /** Where it answers, which is what the explorer's host is aimed at. */
   get url(): string {
     return `http://127.0.0.1:${this.environment.serverPort}`;
   }

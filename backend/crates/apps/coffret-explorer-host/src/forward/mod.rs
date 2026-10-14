@@ -11,6 +11,8 @@ use key_pin::KeyPin;
 use key_pin::KeyProblem;
 
 mod not_answering;
+#[cfg(test)]
+pub(crate) use not_answering::answer as not_answering_answer;
 use not_answering::not_answering;
 
 mod remove_hop_by_hop;

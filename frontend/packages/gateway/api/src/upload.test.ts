@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
+import { TOKEN } from './page.testing';
+
+import { dropToken, onSessionEnding } from './credential';
 import { isRefusal } from './refusal';
 import { addFiles, isOverBudget, uploadOf, type Added } from './upload';
 import uploadBudget from './upload-budget.json';
@@ -43,6 +46,8 @@ class FakeRequest extends Listeners {
   url: string | null = null;
   body: unknown = undefined;
   responseType = '';
+  /** What a browser's request starts at, before the upload says otherwise. */
+  withCredentials = true;
   status = 0;
   responseText = '';
   aborted = false;
@@ -260,7 +265,8 @@ it('sends the drop as it always did, and says how much of it has gone', async ()
   const request = FakeRequest.only();
   expect(request.method).toBe('POST');
   expect(request.url).toBe('/api/upload?path=books%2Fvol-1&freeze=true');
-  expect(request.headers).toEqual({});
+  expect(request.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+  expect(request.withCredentials).toBe(false);
   expect(request.body).toBeInstanceOf(FormData);
   const body = request.body as FormData;
   // Each file under its own modification time, which the server stamps the
@@ -434,4 +440,35 @@ it('narrows each refused part as a refused request is narrowed', () => {
       },
     ],
   });
+});
+
+// LA-14: a drop refused because the session ended is said to have ended it,
+// and is not sent again.
+it('says a refused drop ended the session, and sends it once', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+  const heard: string[] = [];
+  const stop = onSessionEnding((ending) => heard.push(ending));
+  try {
+    const added = settled(addFiles('books', pages()));
+    FakeRequest.only().answer(
+      401,
+      JSON.stringify({ error: 'authentication_required', message: 'no session' }),
+    );
+    const thrown = await added;
+    expect(isRefusal(thrown) && thrown.kind).toBe('authentication_required');
+    expect(heard).toEqual(['ended']);
+    expect(FakeRequest.made).toHaveLength(1);
+  } finally {
+    stop();
+  }
+});
+
+// An answer to a drop that arrives after the session ended is let go of.
+it('lets go of a drop answered after the session ended', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+  const added = settled(addFiles('books', pages()));
+  dropToken();
+  FakeRequest.only().answer(200, JSON.stringify({ added: [], refused: [] }));
+  const thrown = await added;
+  expect(isRefusal(thrown) && thrown.kind).toBe('withdrawn');
 });

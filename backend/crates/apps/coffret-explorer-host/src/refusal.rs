@@ -176,3 +176,6 @@ fn carries_body(headers: &HeaderMap) -> bool {
         .is_some_and(|length| length.trim() != "0");
     declared || headers.contains_key(TRANSFER_ENCODING)
 }
+
+#[cfg(test)]
+mod contract;

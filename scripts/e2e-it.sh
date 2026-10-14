@@ -16,6 +16,10 @@
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
 #      seven journeys through the built explorer and photographs each checkpoint.
+#      The explorer is served by the development host, `coffret-explorer-dev`,
+#      which admits a browser only by a browser token, exactly as the desktop
+#      app's host does: each journey opens the launch file the host wrote, as a
+#      person would, and nothing turns that off for a test.
 #
 # Nothing is left behind but the pictures. MinIO is started here and removed on
 # the way out, `.tmp/e2e/` is made again on every run, and no state carries from
@@ -70,10 +74,10 @@ MINIO_PORT="${COFFRET_E2E_MINIO_PORT:-19010}"
 IMAGE="${COFFRET_E2E_MINIO_IMAGE:-docker.io/alpine/minio@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4}"
 
 # Fixed rather than asked of the operating system, and that is not laziness: the
-# explorer is served by `vite preview`, which is aimed at the server once when
-# it starts, and two of the journeys kill the server and start it again. A
+# explorer is served by the development host, which is aimed at the server once
+# when it starts, and two of the journeys kill the server and start it again. A
 # server that came back on a port the operating system chose would be one the
-# page could no longer reach.
+# host could no longer reach.
 SERVER_PORT="${COFFRET_E2E_SERVER_PORT:-18787}"
 WEB_PORT="${COFFRET_E2E_WEB_PORT:-14173}"
 
@@ -220,10 +224,11 @@ echo
 
 echo "--- building the binaries and the explorer ---"
 cd "$ROOT/backend"
-cargo build --release -p coffret-cli -p coffret-server -p coffret-fixtures
+cargo build --release -p coffret-cli -p coffret-server -p coffret-fixtures -p coffret-explorer-dev
 readonly COFFRET="$ROOT/backend/target/release/coffret"
 readonly SERVER="$ROOT/backend/target/release/coffret-server"
 readonly FIXTURES="$ROOT/backend/target/release/coffret-fixtures"
+readonly HOST="$ROOT/backend/target/release/coffret-explorer-dev"
 
 cd "$ROOT/frontend"
 pnpm --filter @coffret/web build
@@ -443,7 +448,7 @@ readonly API="http://127.0.0.1:${SERVER_PORT}/api"
 
 # The server answers nobody who cannot show the key it drew as it started, and
 # it writes that key into the Library's own directory, readable by this account
-# and no other. This stage reads it off the disk exactly as the explorer's proxy
+# and no other. This stage reads it off the disk exactly as the explorer's host
 # does.
 readonly SERVER_KEY_FILE="$JOINER_STATE/libraries/$JOINER/server-key"
 
@@ -732,17 +737,17 @@ stop_server
 echo
 echo "--- stage 2: seven journeys in Chromium ---"
 # The outage journey kills the server, and so does the one that starts it again
-# over a Library another device has moved on. For as long as it is down the vite
-# proxy in front of the explorer prints a stack trace for every request the page
-# makes. They land in the middle of a passing run, between one journey's tick and
-# the next, and a run that prints `Error: connect ECONNREFUSED` is worth telling
-# somebody about before they read it as the run going wrong.
-echo "Two of them take the server away on purpose. While it is gone the proxy"
-echo "the explorer is served behind prints a connection error for every request"
-echo "the page makes, and those errors are those journeys working."
+# over a Library another device has moved on. The host in front of the explorer
+# logs a warning for each request it could not forward while the server is down,
+# into its log under $LOG_DIR, and ends every tab's session; the journeys then
+# open the launch file it writes for the server's next run.
+echo "Two of them take the server away on purpose, and open the explorer again"
+echo "through the launch file the host writes once it is back."
 echo
 cd "$ROOT/frontend"
 COFFRET_E2E_SERVER_BIN="$SERVER" \
+  COFFRET_E2E_HOST_BIN="$HOST" \
+  COFFRET_E2E_LAUNCH_DIR="$WORK/launch" \
   COFFRET_E2E_STATE_DIR="$JOINER_STATE" \
   COFFRET_E2E_LIBRARY="$JOINER" \
   COFFRET_E2E_LOG_DIR="$LOG_DIR" \
