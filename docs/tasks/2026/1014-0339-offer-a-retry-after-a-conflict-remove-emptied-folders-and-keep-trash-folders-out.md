@@ -10,7 +10,7 @@ check_command: 'make check && grep -q "emptied" docs/spec/entry-path/README.md'
 assignee: null
 branch: task/1014-0339-offer-a-retry-after-a-conflict-remove-emptied-folders-and-keep-trash-folders-out
 created_at: 2026-10-13T18:39:00Z
-updated_at: 2026-10-14T08:20:00Z
+updated_at: 2026-10-14T08:24:00Z
 ---
 
 # fix(delete,sync): offer a retry after a conflict, remove the folders a deletion emptied, and keep desktop trash folders out of the listing and the drop
@@ -106,7 +106,7 @@ Add the cases to `coffret-device/src/add/tests.rs`.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium):
+- [x] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium):
       delete `lib/album-000` from the explorer, run `coffret sync` on the
       same device, and `.tmp/agent/root/album-000/` (the mapping `lib` → `.tmp/agent/root`) is gone while
       `.tmp/agent/root/` remains; create `.tmp/agent/root/.Trash/` and
