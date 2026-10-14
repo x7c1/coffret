@@ -109,6 +109,6 @@ consumed and why (CP-2, CP-3, CP-15).
 - [x] On the agent Library, two devices (`coffret-agent` and
       `coffret-agent-2`) committing on one head leave exactly one
       `head-<g+1>`, and both batches are visible after a catch-up
-- [ ] A read-only listing of the agent Library and the user's development
+- [x] A read-only listing of the agent Library and the user's development
       Library (`coffret-dev`) shows whether any `head-*` name already appears
       twice; any found is reported in the PR, not repaired
