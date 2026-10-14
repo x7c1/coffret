@@ -232,6 +232,17 @@ impl State {
         }
     }
 
+    /// Marks the rows of a batch whose commit is about to be sent, all under the
+    /// one lock, so no reader sees part of the batch marked. A Container with no
+    /// row changes nothing.
+    pub(super) fn mark_commit_attempted(&mut self, container_ids: &[ContainerId]) {
+        for container_id in container_ids {
+            if let Some(pending) = self.pending_rows.get_mut(container_id) {
+                pending.commit_attempted = true;
+            }
+        }
+    }
+
     pub(super) fn clear_pending_row(&mut self, container_id: ContainerId) {
         self.pending_rows.remove(&container_id);
     }

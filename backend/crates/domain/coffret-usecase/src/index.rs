@@ -267,6 +267,21 @@ pub trait Index: Send + Sync {
     /// flow never announced.
     async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()>;
 
+    /// Records that a commit is about to send the Journal record naming these
+    /// Containers, marking each one's pending row
+    /// [`commit_attempted`](PendingRow::commit_attempted) (spec: OC-2, OC-3).
+    ///
+    /// All or nothing: either every named row is marked or, on an error, none
+    /// is. The rows of one batch are marked together because a later settle
+    /// judges each row on its own, and a batch left half-marked would have it keep
+    /// the marked rows as of unknown outcome while it discards the unmarked
+    /// ones as never sent — although no create was sent for any of them.
+    ///
+    /// An update and not an upsert, for the reason
+    /// [`mark_spooled`](Self::mark_spooled) is one: a Container with no row
+    /// changes nothing rather than failing.
+    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()>;
+
     /// Drops the pending row for one Container, its batch having committed or
     /// been abandoned.
     ///

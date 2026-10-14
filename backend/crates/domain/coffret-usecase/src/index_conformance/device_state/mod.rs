@@ -27,7 +27,7 @@ pub use mappings::{a_mapping_is_kept_once_per_prefix, a_mapping_round_trips_its_
 
 mod pending_rows;
 pub use pending_rows::{
-    a_spool_is_recorded_until_its_row_is_cleared,
+    a_batch_is_marked_attempted_together, a_spool_is_recorded_until_its_row_is_cleared,
     a_spooling_row_becomes_spooled_when_its_file_completes,
     a_spooling_row_that_names_an_object_is_refused,
 };

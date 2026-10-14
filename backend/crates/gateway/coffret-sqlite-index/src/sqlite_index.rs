@@ -365,6 +365,14 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
+        let container_ids = container_ids.to_vec();
+        self.write("marking a commit attempted", move |connection| {
+            device_state::mark_commit_attempted(connection, &container_ids)
+        })
+        .await
+    }
+
     async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
         self.write("clearing a spool", move |connection| {
             device_state::clear_pending_row(connection, container_id)

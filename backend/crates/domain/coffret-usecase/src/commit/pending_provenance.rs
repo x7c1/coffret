@@ -1,25 +1,23 @@
 use super::{CommitError, PreparedBatch};
 use crate::Index;
-use std::collections::BTreeSet;
 
 /// Persist uncertainty before a Journal create can reach Storage (spec: OC-3).
-/// A failure here sends no create. Even a partial marker update therefore errs
-/// on the side of retaining data. The producer holds the pending-row guard.
+/// A failure here sends no create. The producer holds the pending-row guard.
+///
+/// The batch's rows are marked in one write, every one of them or none (see
+/// [`Index::mark_commit_attempted`]): a batch left half-marked by an
+/// interruption here would keep the marked half's spool files and Storage
+/// objects forever, although no create was ever sent for them.
 pub(super) async fn mark_attempt(
     index: &dyn Index,
     batch: &PreparedBatch,
 ) -> Result<(), CommitError> {
-    let additions: BTreeSet<_> = batch
+    let additions: Vec<_> = batch
         .additions
         .iter()
         .map(|addition| addition.addition.container().id)
         .collect();
-    for mut row in index.pending_rows().await? {
-        if additions.contains(&row.container_id) {
-            row.commit_attempted = true;
-            index.record_pending_row(row).await?;
-        }
-    }
+    index.mark_commit_attempted(&additions).await?;
 
     Ok(())
 }

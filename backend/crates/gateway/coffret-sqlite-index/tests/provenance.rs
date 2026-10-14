@@ -227,3 +227,49 @@ async fn distinct_index_files_do_not_share_pending_ownership() {
     let _first_owner = first.own_pending_rows().await.unwrap();
     let _second_owner = second.own_pending_rows().await.unwrap();
 }
+
+/// A batch whose marking fails partway is left with no row marked (spec: OC-2,
+/// OC-3).
+///
+/// A trigger refuses the second row's update, so the first row's has already
+/// run inside the transaction when the write fails. What a later settle reads
+/// must still be one answer for the whole batch: every row unmarked, which is
+/// true, since a commit whose marking failed sends no create.
+#[tokio::test]
+async fn a_batch_marked_attempted_partway_is_left_unmarked() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let row = |seed: u8| PendingRow {
+        container_id: ContainerId::from_bytes([seed; 16]),
+        spool_path: dir.path().join(format!("spool-{seed}")),
+        batch: BatchId::new("one-batch"),
+        created_at: DeviceTime::from_unix_seconds(1),
+        state: SpoolState::Spooled(Some(ObjectRef::new(format!("uploaded-{seed}")))),
+        commit_attempted: false,
+        materializes: true,
+    };
+    let rows = [row(1), row(2), row(3)];
+    for row in &rows {
+        index.record_pending_row(row.clone()).await.unwrap();
+    }
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER refuse_the_second_mark BEFORE UPDATE OF commit_attempted \
+             ON pending_rows WHEN old.container_id = X'02020202020202020202020202020202' \
+             BEGIN SELECT RAISE(ABORT, 'interrupted partway through the batch'); END;",
+        )
+        .unwrap();
+
+    let ids: Vec<_> = rows.iter().map(|row| row.container_id).collect();
+    assert!(matches!(
+        index.mark_commit_attempted(&ids).await,
+        Err(IndexError::Backend { .. })
+    ));
+    assert_eq!(
+        index.pending_rows().await.unwrap(),
+        rows,
+        "the first row's mark must be rolled back with the rest"
+    );
+}
