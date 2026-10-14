@@ -45,6 +45,6 @@ rebuilds the branch from `origin/main` and keeps working as before.
 
 ### Before merge (verified outside the check command)
 
-- [ ] In a scratch clone: check out `pull/247/merge`, run the two new lines,
+- [x] In a scratch clone: check out `pull/247/merge`, run the two new lines,
       then `generate_changelog`; the output has no `Release v` line (it has
       one without them)
