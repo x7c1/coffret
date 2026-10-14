@@ -113,9 +113,9 @@ cleared by a separate one-off script.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent Library (Google Drive), a sync killed right after its rows
+- [x] On the agent Library (Google Drive), a sync killed right after its rows
       are marked attempted leaves rows with a recorded slot; after the other
       device commits on that head, the next sync on the first device disposes
       of them (trash, spool, rows) and exits without needing attention
-- [ ] On the agent Library, the 45 rows retained before this change (no
+- [x] On the agent Library, the 45 rows retained before this change (no
       recorded slot) are still retained, and reported as before
