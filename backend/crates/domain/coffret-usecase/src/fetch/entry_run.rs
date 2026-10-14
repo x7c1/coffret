@@ -3,7 +3,7 @@ use std::sync::Arc;
 use coffret_model::{EntryPath, IndexCheckpoint, KeyTable, KeyringCommitment};
 use tracing::{debug, info};
 
-use crate::commit::{catch_up, read_committed, ControlListing, DegradedKeyring};
+use crate::commit::{catch_up, read_committed, ControlListing, ShortKeyring};
 use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -150,7 +150,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
     };
 
-    let (key_table, degraded) = key_table(
+    let (key_table, short) = key_table(
         store,
         keys,
         &policy.retry,
@@ -171,7 +171,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         progress.step(Step::new(Phase::Fetching, 1, 1));
         finished(&path, "key lost");
         return Ok(EntryFetchOutcome {
-            degraded,
+            short,
             ..EntryFetchOutcome::of(EntryFetch::Surfaced(Surfaced::KeyLost {
                 path: target.location.entry.path,
                 container_id,
@@ -203,7 +203,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         now,
         cancellation,
         publication,
-        degraded,
+        short,
         memory,
     };
     let stroke = read.read_entry(&summary, &envelope, target).await?;
@@ -218,7 +218,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     };
     Ok(EntryFetchOutcome {
         fetch,
-        degraded,
+        short,
         alongside: stroke.alongside,
         unheld: stroke.unheld,
     })
@@ -287,7 +287,7 @@ pub(super) async fn key_table(
     listing: &ControlListing,
     commitment: &KeyringCommitment,
     memory: Option<&FetchMemory>,
-) -> FetchResult<(Arc<KeyTable>, Option<DegradedKeyring>)> {
+) -> FetchResult<(Arc<KeyTable>, Option<ShortKeyring>)> {
     if let Some(kept) = memory.and_then(|memory| memory.key_table_for(commitment)) {
         return Ok(kept);
     }
@@ -295,7 +295,7 @@ pub(super) async fn key_table(
     // repairing the set while this read is under way leaves what it found
     // unkept rather than put back after the repair forgot it (spec: KL-15).
     let read_under = memory.map(FetchMemory::key_table_generation);
-    let (key_table, degraded) = read_committed(store, keys.control(), retry, listing, commitment)
+    let (key_table, short) = read_committed(store, keys.control(), retry, listing, commitment)
         .await?
         .reported();
     let key_table = Arc::new(key_table);
@@ -304,10 +304,10 @@ pub(super) async fn key_table(
             read_under,
             commitment.clone(),
             Arc::clone(&key_table),
-            degraded,
+            short,
         );
     }
-    Ok((key_table, degraded))
+    Ok((key_table, short))
 }
 
 /// Records what one partial fetch came to.

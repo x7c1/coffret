@@ -27,7 +27,7 @@ impl Scratch for Placement<'_> {
 /// An attempt's scratch, discarded on drop unless the attempt disarms it.
 ///
 /// A guard rather than a discard written at each exit, for the reason
-/// [`DegradedReport`](crate::commit::DegradedReport) is one: an attempt leaves
+/// [`ShortReport`](crate::commit::ShortReport) is one: an attempt leaves
 /// by every `?` and every early return it contains, through either of its two
 /// error channels — Storage's and the Library's — and each of them has to leave
 /// nothing behind. So the scratch goes when this is dropped, from wherever the

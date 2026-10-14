@@ -72,7 +72,7 @@ refuses the run. Findings have two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, degraded replicas, an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
 | This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file moved to the desktop's trash | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while

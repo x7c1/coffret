@@ -129,7 +129,7 @@ pub async fn file(
             fill_folder(
                 Arc::clone(&state),
                 Folder::holding(&path),
-                fetched.degraded,
+                fetched.short,
                 fetched.unheld,
             )
         }

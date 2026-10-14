@@ -460,7 +460,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
 }
 
 /// The one finding a fill carries, as the work answer says it.
-fn degraded_keyring() -> serde_json::Value {
+fn short_keyring() -> serde_json::Value {
     json!([{
         "path": null,
         "message": "the Library's Keyring is degraded: some of its replicas are missing or \
@@ -502,7 +502,7 @@ async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
     assert_eq!(declined(fill), Vec::<(String, String)>::new());
     assert_eq!(
         fill["findings"],
-        degraded_keyring(),
+        short_keyring(),
         "once for the run, although both of its fetches met it: {work}",
     );
 }
@@ -513,7 +513,7 @@ async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
 // at all — and what the opened file's fetch stepped over is still what its line
 // says, because it is the only line a person who opened that file reads.
 #[tokio::test]
-async fn opening_a_file_behind_a_degraded_keyring_says_so_on_the_fill_it_arms() {
+async fn opening_a_file_behind_a_short_keyring_says_so_on_the_fill_it_arms() {
     let served = Served::library().await;
     served.degrade_the_keyring().await;
 
@@ -529,7 +529,7 @@ async fn opening_a_file_behind_a_degraded_keyring_says_so_on_the_fill_it_arms() 
         fill["total"], 0,
         "nothing left in the folder to fetch: {work}"
     );
-    assert_eq!(fill["findings"], degraded_keyring(), "{work}");
+    assert_eq!(fill["findings"], short_keyring(), "{work}");
 }
 
 // Two books in one Pack: the first page of the second lies in the parcel the

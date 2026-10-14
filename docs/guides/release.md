@@ -151,7 +151,7 @@ workflow:
 
 ## Desktop bundles
 
-Every Release carries unsigned bundles of the desktop shell
+Every Release carries unsigned bundles of the desktop app
 (`backend/crates/apps/coffret-desktop`), built by
 `.github/workflows/bundle.yml`:
 

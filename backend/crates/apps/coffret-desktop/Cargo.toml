@@ -1,6 +1,6 @@
 [package]
 name = "coffret-desktop"
-description = "Coffret's desktop shell: starts the server in-process and opens the explorer in the system browser"
+description = "Coffret's desktop app: starts the server in-process and opens the explorer in the system browser"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -47,7 +47,7 @@ tauri = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 tauri-plugin-opener = { workspace = true }
 tauri-plugin-single-instance = { workspace = true }
-# The runtime the server and the host run on, owned by the shell for its whole
+# The runtime the server and the host run on, owned by the app for its whole
 # life rather than borrowed from Tauri's.
 tokio = { workspace = true }
 tracing = { workspace = true }

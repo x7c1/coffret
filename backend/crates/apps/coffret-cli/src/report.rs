@@ -244,8 +244,8 @@ fn findings_said(findings: &Findings) -> (Vec<String>, Report) {
 #[cfg(test)]
 mod tests {
     use coffret_device::{
-        CommitError, ContainerId, CreationStep, Disposal, Finding, Generation, KeyringRepair,
-        RewrittenReplicas, Settled, StorageError, SyncError, UnrepairedReplica,
+        CheckpointFailure, CommitError, ContainerId, CreationStep, Disposal, Finding, Generation,
+        KeyringRepair, RewrittenReplicas, Settled, StorageError, SyncError, UnrepairedReplica,
     };
 
     use super::*;
@@ -319,7 +319,11 @@ mod tests {
                 cause: trash_refusal(),
             },
             Finding::CheckpointFailed {
-                cause: "the provider is unavailable".to_owned(),
+                cause: CheckpointFailure::Storage(StorageError::Rejected {
+                    status: 503,
+                    detail: "the provider is unavailable".to_owned(),
+                    source: None,
+                }),
             },
         ]);
 
@@ -363,21 +367,21 @@ mod tests {
         assert_eq!(lines.len(), 2);
     }
 
-    // A run that read a degraded committed Keyring and repaired nothing says
+    // A run that read a short committed Keyring and repaired nothing says
     // so, and exits as it would without it: its reads went on, and the next run
     // that commits repairs the set (spec: KL-15, RV-2). Both ways the finding
     // is said — a loss the read established, and replicas Storage merely did
     // not hand over.
     #[test]
-    fn a_degraded_keyring_is_said_and_exits_zero() {
+    fn a_short_keyring_is_said_and_exits_zero() {
         let found = Findings::assembled([
-            Finding::DegradedKeyring {
+            Finding::ShortKeyring {
                 generation: Generation::FIRST,
                 replicas: 3,
                 lost: 1,
                 unfetched: 0,
             },
-            Finding::DegradedKeyring {
+            Finding::ShortKeyring {
                 generation: Generation::FIRST,
                 replicas: 3,
                 lost: 0,

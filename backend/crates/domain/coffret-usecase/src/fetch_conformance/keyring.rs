@@ -1,4 +1,4 @@
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_entry, fetch_folders, EntryFetch, Surfaced};
 use crate::fetch_conformance::counting_store::CountingStore;
@@ -159,8 +159,8 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
         "a fetch reads a degraded set and repairs nothing (spec: KL-13, KL-16, RV-2)",
     );
     assert_eq!(
-        outcome.degraded,
-        Some(DegradedKeyring::new(
+        outcome.short,
+        Some(ShortKeyring::new(
             committed.generation(),
             committed.replica_count(),
             1,
@@ -171,14 +171,14 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     );
 }
 
-/// A run of one Entry over a degraded Keyring tells its caller so (spec: KL-5,
+/// A run of one Entry over a short Keyring tells its caller so (spec: KL-5,
 /// KL-15).
 ///
 /// The same set a folder fetch reads through above, met by a reader who opens
 /// one file. Such a reader never writes, so nothing they do repairs the set or
 /// examines it — and the outcome of the run they asked for is the only place
 /// they are told. The Entry is placed all the same (spec: RV-2).
-pub async fn an_entry_fetch_over_a_degraded_keyring_says_so(fixture: &FetchUnderTest) {
+pub async fn an_entry_fetch_over_a_short_keyring_says_so(fixture: &FetchUnderTest) {
     let keys = keys();
     map(
         fixture.source(),
@@ -222,8 +222,8 @@ pub async fn an_entry_fetch_over_a_degraded_keyring_says_so(fixture: &FetchUnder
 
     assert_eq!(fetched.fetch, EntryFetch::Placed);
     assert_eq!(
-        fetched.degraded,
-        Some(DegradedKeyring::new(
+        fetched.short,
+        Some(ShortKeyring::new(
             committed.generation(),
             committed.replica_count(),
             1,

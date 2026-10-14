@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath, Generation};
-use coffret_usecase::commit::{DegradedKeyring, KeyringRepair};
+use coffret_usecase::commit::{CheckpointFailure, KeyringRepair, ShortKeyring};
 use coffret_usecase::fetch::{UnheldParcel, UnheldReason};
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
@@ -111,7 +111,7 @@ pub enum Finding {
     /// `unfetched` what Storage would not hand over, about which nothing is
     /// known — so a finding with no position lost does not say the set is
     /// degraded, only that whether it is was not established.
-    DegradedKeyring {
+    ShortKeyring {
         /// The committed generation whose set the read walked.
         generation: Generation,
         /// How many replicas its commitment declares (spec: KL-2).
@@ -185,12 +185,12 @@ pub enum Finding {
     /// and the records it would have covered stay replayable until the next
     /// qualifying commit writes one.
     CheckpointFailed {
-        /// What stopped it, as its whole chain renders.
+        /// What stopped it, as the commit's outcome carries it.
         ///
-        /// A sentence rather than the error itself, because the commit's error is
-        /// not a value a finding can be copied with; what a person reads of it is
-        /// the sentence, and the variant is what a caller decides from.
-        cause: String,
+        /// Rendered in its redacted form: a Storage status or a control-object
+        /// name is all of it a person needs, and nothing a provider said
+        /// crosses into the sentence (spec: EL-1).
+        cause: CheckpointFailure,
     },
 }
 
@@ -209,7 +209,7 @@ impl Finding {
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
     ///
-    /// A degraded Keyring is said and not escalated for the same reason: the
+    /// A short Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
     /// before it commits (spec: KL-13, KL-16), so a run that only reports one
     /// exits as it would without it. A repaired one even less so: it is work the
@@ -223,7 +223,7 @@ impl Finding {
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::UntrashedRemoval { .. }
                 | Self::CheckpointFailed { .. }
-                | Self::DegradedKeyring { .. }
+                | Self::ShortKeyring { .. }
                 | Self::KeyringRepaired { .. }
                 | Self::UnheldParcel { .. }
         )
@@ -233,13 +233,13 @@ impl Finding {
 /// The finding a read that stepped over a position of the committed Keyring set
 /// makes of it (spec: KL-5, KL-15).
 ///
-/// What every run that carries a [`DegradedKeyring`] on its outcome reports it
+/// What every run that carries a [`ShortKeyring`] on its outcome reports it
 /// as, and what a caller that runs several such reads under one flow of its
 /// own — one Entry at a time, say — reports it as too, so the two never say it
 /// in different words.
-impl From<&DegradedKeyring> for Finding {
-    fn from(found: &DegradedKeyring) -> Self {
-        Self::DegradedKeyring {
+impl From<&ShortKeyring> for Finding {
+    fn from(found: &ShortKeyring) -> Self {
+        Self::ShortKeyring {
             generation: found.generation(),
             replicas: found.replicas(),
             lost: found.lost(),
@@ -459,7 +459,7 @@ impl fmt::Display for Finding {
                  Storage, and any later run may trash it",
                 chained(cause),
             ),
-            Self::DegradedKeyring {
+            Self::ShortKeyring {
                 generation,
                 replicas,
                 lost,

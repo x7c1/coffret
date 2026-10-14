@@ -1,6 +1,6 @@
 use crate::commit::commit_policy::CommitPolicy;
 use crate::commit::control_keys::ControlKeys;
-use crate::commit::keyring::DegradedReport;
+use crate::commit::keyring::ShortReport;
 use crate::commit::prepared_batch::PreparedBatch;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -43,7 +43,7 @@ pub struct CommitRequest<'a> {
     /// Nothing the commit decides turns on it: the examination reads the set
     /// itself. It is here only so that the run's one word about a set found
     /// short comes from the walk that also repairs it (spec: KL-15).
-    pub(crate) degraded: Option<&'a DegradedReport>,
+    pub(crate) short: Option<&'a ShortReport>,
 }
 
 impl<'a> CommitRequest<'a> {
@@ -62,7 +62,7 @@ impl<'a> CommitRequest<'a> {
             policy: CommitPolicy::default(),
             batch,
             progress: &UNWATCHED,
-            degraded: None,
+            short: None,
         }
     }
 
@@ -84,8 +84,8 @@ impl<'a> CommitRequest<'a> {
     /// A run that gets as far as examining that set says what it found and
     /// what it put back, so the finding is spoken for there and the caller's
     /// guard stays silent (spec: KL-11, KL-15).
-    pub(crate) fn speaking_for(mut self, degraded: Option<&'a DegradedReport>) -> Self {
-        self.degraded = degraded;
+    pub(crate) fn speaking_for(mut self, short: Option<&'a ShortReport>) -> Self {
+        self.short = short;
         self
     }
 }

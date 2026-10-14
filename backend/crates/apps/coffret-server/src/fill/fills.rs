@@ -1,4 +1,4 @@
-use coffret_device::{DegradedKeyring, UnheldParcel};
+use coffret_device::{ShortKeyring, UnheldParcel};
 use tokio::sync::watch;
 
 use crate::folder::Folder;
@@ -90,7 +90,7 @@ impl Fills {
     pub(super) fn arm(
         &self,
         folder: Folder,
-        heard: Option<DegradedKeyring>,
+        heard: Option<ShortKeyring>,
         unheld: Vec<UnheldParcel>,
     ) -> bool {
         let mut start = false;

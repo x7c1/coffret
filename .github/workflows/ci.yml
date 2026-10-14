@@ -17,7 +17,7 @@ jobs:
         working-directory: backend
     env:
       # The apt packages this job installs; also part of their cache key. The
-      # workspace includes the desktop shell (Tauri v2), which links WebKitGTK
+      # workspace includes the desktop app (Tauri v2), which links WebKitGTK
       # 4.1, GTK 3, the app-indicator library its tray icon needs, and the SVG
       # library, so a build of the workspace needs their development files.
       APT_PACKAGES: >-
