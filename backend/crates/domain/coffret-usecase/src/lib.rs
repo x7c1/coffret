@@ -126,8 +126,11 @@
 //! fetch, or a deletion over them — means. `InMemoryStore`, `InMemoryIndex`,
 //! and `InMemoryFs` are what to drive them — and the crate's own cases —
 //! against without a provider, a container, or a file. This crate runs all ten
-//! suites against those three. None of the thirteen is linked here, because
-//! they are not in the documentation this crate builds without that feature.
+//! suites against those three, and the commit suite once more — all but its
+//! two races over a Library's first record — against `InMemoryMintingStore`,
+//! which mints identifiers the way Google Drive does.
+//! None of the fourteen is linked here, because they are not in the
+//! documentation this crate builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -377,6 +380,15 @@ pub use in_memory_index::InMemoryIndex;
 mod in_memory_store;
 #[cfg(any(test, feature = "conformance"))]
 pub use in_memory_store::InMemoryStore;
+
+// And its counterpart in the other shape a provider takes, minting the
+// identifier an object is created under rather than keying it by name: the
+// shape in which a commit slot excludes only if every writer consumes the one
+// its head carries (spec: CP-2, CP-3).
+#[cfg(any(test, feature = "conformance"))]
+mod in_memory_minting_store;
+#[cfg(any(test, feature = "conformance"))]
+pub use in_memory_minting_store::InMemoryMintingStore;
 
 // And a catalog that can be made to stop saying what this device maps, for the
 // cases over every door that asks — above this crate as well as in it, which is

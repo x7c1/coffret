@@ -1,4 +1,4 @@
-use coffret_model::{ContainerKind, Generation, JournalRecord};
+use coffret_model::{ContainerKind, ControlObjectName, Generation, JournalRecord};
 
 use crate::commit::{catch_up, commit_batch, CommitError, CommitOutcome, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
@@ -150,6 +150,86 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
                 .expect("asking the Index for a path must succeed")
                 .is_some(),
             "the rebased device catalogs both commits",
+        );
+    }
+}
+
+/// Two writers that start from one committed head leave exactly one successor
+/// of it, and both batches end up in the Journal (spec: CP-2, CP-3, CP-4,
+/// CP-15).
+///
+/// The case above puts its collision at the Library's first record, where
+/// there is no head yet and the slot is the one generation 0 takes. This one
+/// puts it one link further, at the slot a committed head carries, which is
+/// where the exclusion depends on what each writer consumes: on a Storage that
+/// mints identifiers a writer that reserved a slot of its own would be handed
+/// an identifier nobody else aims at, both creates would succeed, and the
+/// Library would hold two `head-1` objects of which a reader keeps one. Every
+/// writer has to consume the slot the head carries — the pre-minted identifier
+/// in its `next_commit_slot`, or the re-derived name where names identify
+/// objects — so that exactly one of them succeeds and the other rebases.
+pub async fn two_writers_on_one_head_leave_one_successor(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let keys = control_keys();
+
+    for seed in 1..=3 {
+        Library::upload_container(store, container_id(seed)).await;
+    }
+
+    let seed = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["seed/s.txt"])]);
+    let head = commit_batch(request(store, fixture.index(), &keys, seed))
+        .await
+        .expect("the first commit is uncontested and must succeed");
+    assert_eq!(head.record.generation(), Generation::FIRST);
+
+    // Both devices start from head 0: this one stands there already, and the
+    // rival catches up to it inside its own commit, at the moment this one
+    // reaches the create of head 1.
+    let rival_batch =
+        PreparedBatch::adding(vec![prepared(2, ContainerKind::OneFile, &["albums/a.jpg"])]);
+    let racing = RacingStore::letting_in(store, fixture.other(), &keys, rival_batch);
+    let batch = PreparedBatch::adding(vec![prepared(3, ContainerKind::OneFile, &["books/b.png"])]);
+    let outcome = commit_batch(request(&racing, fixture.index(), &keys, batch))
+        .await
+        .expect("losing the slot is a rebase, not a failure");
+
+    assert_eq!(
+        outcome.attempts, 2,
+        "the rival consumed the slot head 0 carries, so the first attempt lost it",
+    );
+    assert_eq!(outcome.record.generation(), generation(2));
+    assert_eq!(outcome.record.prev(), Some(generation(1)));
+
+    let library = Library::read(store).await;
+    for generation in [Generation::FIRST, generation(1), generation(2)] {
+        assert_eq!(
+            library.count(&ControlObjectName::head(generation)),
+            1,
+            "one head at generation {generation}, and no second successor beside it",
+        );
+    }
+    let rival = library.record(store, generation(1)).await;
+    assert_eq!(rival.prev(), Some(Generation::FIRST));
+    assert_eq!(rival.additions().len(), 1);
+    assert_eq!(rival.additions()[0].container().id, container_id(2));
+    assert_eq!(library.record(store, generation(2)).await, outcome.record);
+
+    let keyring = library.keyring(store, outcome.record.keyring()).await;
+    assert_eq!(
+        mapped(&keyring),
+        vec![container_id(1), container_id(2), container_id(3)],
+        "both batches are part of the current set (spec: CP-1, KL-7)",
+    );
+
+    let index = fixture.index();
+    for text in ["seed/s.txt", "albums/a.jpg", "books/b.png"] {
+        assert!(
+            index
+                .entry_at(&path(text))
+                .await
+                .expect("asking the Index for a path must succeed")
+                .is_some(),
+            "the rebased device catalogs every commit, {text} among them",
         );
     }
 }

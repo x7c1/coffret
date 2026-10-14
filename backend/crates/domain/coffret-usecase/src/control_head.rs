@@ -4,15 +4,17 @@ use crate::commit_slot::CommitSlot;
 use crate::error::Result;
 use crate::object_store::ObjectStore;
 
-/// The head of a Library's control-head chain, as far as reserving from it
-/// needs it.
+/// The head of a Library's control-head chain, as far as reserving the slots
+/// it carries and consuming them need it.
 ///
 /// Every authenticated control head — a Journal record, or the Index Snapshot
 /// that activated the current epoch — determines exactly one next commit slot
-/// and exactly one place its ordinary checkpoint goes (spec: CP-2, CK-10). Both
-/// follow from the head's generation alone, so this type is that generation and
-/// the two derivations, and it knows nothing about what a commit or a checkpoint
-/// contains.
+/// and exactly one place its ordinary checkpoint goes (spec: CP-2, CK-10). Their
+/// names follow from the head's generation alone, and on a Storage that mints
+/// identifiers the head record carries the identifier each was reserved as; so
+/// this type is that generation, the two derivations, and the pairing of each
+/// name with what the record carries. It knows nothing about what a commit or a
+/// checkpoint contains.
 ///
 /// The derivations are here, above the port, rather than inside an adapter,
 /// because they are the reason the exclusion works: a store sees bytes and
@@ -49,18 +51,65 @@ impl ControlHead {
         ControlObjectName::index_snapshot(self.generation)
     }
 
-    /// Reserves the slot this head's successor is committed into.
+    /// The slot this head carries for its successor, as a commit consumes it
+    /// (spec: CP-2, CP-3, CP-15).
+    ///
+    /// `carried` is what the head record persists in `next_commit_slot`: the
+    /// identifier Storage minted for the successor where the Storage mints
+    /// identifiers, and nothing where names identify objects. Either way the
+    /// name is re-derived here from the generation rather than read from
+    /// anywhere, so the slot is consumed only under `head-<generation + 1>`
+    /// (spec: CP-15). Every writer that starts from this head derives the same
+    /// slot from the same record, which is the whole of the exclusion: on a
+    /// Storage that mints identifiers only the carried one is common to them,
+    /// and a slot reserved afresh would be one writer's alone.
+    ///
+    /// Whether `carried` is in the form the Storage at hand consumes is the
+    /// caller's to check: this type knows generations and names, not which
+    /// kind of Storage a head was written to.
+    pub fn commit_slot(&self, carried: Option<&str>) -> Result<CommitSlot> {
+        Ok(carried_in(self.successor_name()?, carried))
+    }
+
+    /// The slot this head carries for its ordinary Index Snapshot, as a
+    /// checkpoint consumes it (spec: CK-10, CP-15).
+    ///
+    /// `carried` is the head record's `snapshot_slot`, read the same way as
+    /// [`commit_slot`](Self::commit_slot) reads `next_commit_slot`, and the name
+    /// is re-derived as `idx-<generation>`.
+    pub fn snapshot_slot(&self, carried: Option<&str>) -> CommitSlot {
+        carried_in(self.snapshot_name(), carried)
+    }
+
+    /// Reserves a fresh slot for this head's successor, for the head record to
+    /// carry.
+    ///
+    /// This is what a writer does for the record it is about to create — that
+    /// record hands out its own successor's slot (spec: CP-2) — and never what
+    /// it does to find the slot it consumes: on a Storage that mints
+    /// identifiers each reservation is a fresh identifier, so a writer that
+    /// consumed one would be aiming at a slot no other writer knows of.
     pub async fn reserve_commit_slot(&self, store: &dyn ObjectStore) -> Result<CommitSlot> {
         store
             .reserve_create(&self.successor_name()?.to_string())
             .await
     }
 
-    /// Reserves the slot this head's ordinary Index Snapshot is written into.
+    /// Reserves a fresh slot for this head's ordinary Index Snapshot, for the
+    /// head record to carry (spec: CK-10).
     pub async fn reserve_snapshot_slot(&self, store: &dyn ObjectStore) -> Result<CommitSlot> {
         store
             .reserve_create(&self.snapshot_name().to_string())
             .await
+    }
+}
+
+/// The slot a head carries under `name`: the minted identifier it persisted,
+/// or the name alone where it persisted none (spec: CP-2).
+fn carried_in(name: ControlObjectName, carried: Option<&str>) -> CommitSlot {
+    match carried {
+        Some(id) => CommitSlot::provider_id(name.to_string(), id),
+        None => CommitSlot::by_name(name.to_string()),
     }
 }
 

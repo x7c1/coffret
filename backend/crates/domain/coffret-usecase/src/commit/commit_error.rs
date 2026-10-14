@@ -355,6 +355,25 @@ pub enum ControlObjectFault {
         /// The generation the header states.
         found: Generation,
     },
+    /// It is the head a commit would succeed, and it carries no commit slot
+    /// where this Storage mints the identifier a successor is created under.
+    ///
+    /// The head is what carries the one slot every writer starting from it
+    /// aims at (spec: CP-2), and on a Storage that mints identifiers that slot
+    /// is the pre-minted identifier in its `next_commit_slot`. Minting a fresh
+    /// one in its place would give each writer a slot of its own, so two of
+    /// them could both succeed the head (spec: CP-3); the commit is refused
+    /// instead.
+    NoCommitSlot,
+    /// It is the head a commit would succeed, and it carries a minted
+    /// identifier as its commit slot where this Storage identifies objects by
+    /// name.
+    ///
+    /// Where names identify objects the head persists nothing in
+    /// `next_commit_slot` and the slot is the successor's name, re-derived when
+    /// it is consumed (spec: CP-2, CP-15). An identifier there was minted by
+    /// some other Storage, and this one cannot create under it.
+    MintedCommitSlot,
 }
 
 impl fmt::Display for CommitError {
@@ -658,6 +677,14 @@ impl fmt::Display for ControlObjectFault {
             Self::GenerationMismatch { found } => {
                 write!(f, "its header stands at generation {found}")
             }
+            Self::NoCommitSlot => f.write_str(
+                "it carries no commit slot, and this Storage mints the identifier its \
+                 successor is created under",
+            ),
+            Self::MintedCommitSlot => f.write_str(
+                "it carries a minted identifier as its commit slot, and this Storage \
+                 identifies objects by name",
+            ),
         }
     }
 }
@@ -779,6 +806,8 @@ impl Redacted for ControlObjectFault {
             Self::GenerationMismatch { found } => {
                 format!("Control::GenerationMismatch(found={found})")
             }
+            Self::NoCommitSlot => "Control::NoCommitSlot".to_owned(),
+            Self::MintedCommitSlot => "Control::MintedCommitSlot".to_owned(),
         }
     }
 }

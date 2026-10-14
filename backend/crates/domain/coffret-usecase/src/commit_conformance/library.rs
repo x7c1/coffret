@@ -23,6 +23,10 @@ use crate::object_store::ObjectStore;
 /// through the format layer with keys derived independently of the flow.
 pub(super) struct Library {
     handles: BTreeMap<String, ObjectRef>,
+    /// How many live objects Storage listed under each name. One, everywhere a
+    /// Library is sound; a store that mints identifiers does not make names
+    /// unique, so this is what a case reads to find out that it was not.
+    listed: BTreeMap<String, usize>,
 }
 
 /// How many pages a listing may take before the suite calls Storage broken.
@@ -32,6 +36,7 @@ impl Library {
     /// Walks the whole listing.
     pub(super) async fn read(store: &dyn ObjectStore) -> Self {
         let mut handles = BTreeMap::new();
+        let mut listed = BTreeMap::new();
         let mut token = None;
         let mut pages = 0;
         loop {
@@ -40,12 +45,13 @@ impl Library {
                 .await
                 .expect("listing a store must succeed");
             for object in page.objects {
+                *listed.entry(object.name.clone()).or_insert(0) += 1;
                 handles.insert(object.name, object.object_ref);
             }
             token = page.next;
             pages += 1;
             if token.is_none() {
-                return Self { handles };
+                return Self { handles, listed };
             }
             assert!(
                 pages < MAX_PAGES,
@@ -69,6 +75,11 @@ impl Library {
         self.handles.contains_key(&container_id.object_name())
     }
 
+    /// How many live objects Storage lists under one name.
+    pub(super) fn count(&self, name: &ControlObjectName) -> usize {
+        self.listed.get(&name.to_string()).copied().unwrap_or(0)
+    }
+
     /// Whether Storage still lists an object under one name.
     pub(super) fn holds(&self, name: &ControlObjectName) -> bool {
         self.handles.contains_key(&name.to_string())
@@ -86,6 +97,16 @@ impl Library {
         self.handles
             .get(&spelling)
             .unwrap_or_else(|| panic!("{spelling:?} must be in Storage"))
+            .clone()
+    }
+
+    /// The handle Storage listed under one name, given as it is listed, which
+    /// the case expects to be there.
+    #[cfg(test)]
+    pub(super) fn handle_named(&self, name: &str) -> ObjectRef {
+        self.handles
+            .get(name)
+            .unwrap_or_else(|| panic!("{name:?} must be in Storage"))
             .clone()
     }
 

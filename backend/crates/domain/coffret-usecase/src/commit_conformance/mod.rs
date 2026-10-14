@@ -38,7 +38,7 @@
 //! committed set has lost and no others, a complete set costs no write at all,
 //! and a repair that may not go ahead writes over nothing (spec: KL-13, KL-16).
 //!
-//! Five other cases wrap that store to let a rival device commit first, at the
+//! Seven other cases wrap that store to let a rival device commit first, at the
 //! exact moment the writer under test reaches the create of its record. Two
 //! commits merely started together collide or do not depending on how the
 //! runtime interleaves them, and a suite that started two writers at once
@@ -64,6 +64,9 @@
 //! that only test targets pay for it.
 
 use coffret_model::ControlObjectName;
+
+#[cfg(test)]
+mod carried_slot_tests;
 
 mod checkpoint_failure;
 mod refused_checkpoint;
@@ -106,7 +109,7 @@ mod race;
 pub use race::{
     a_refused_replay_no_checkpoint_explains_is_reported,
     a_writer_that_loses_the_slot_rebases_onto_the_new_head, two_replays_of_one_catalog_converge,
-    two_writers_agree_on_one_head_chain,
+    two_writers_agree_on_one_head_chain, two_writers_on_one_head_leave_one_successor,
 };
 
 mod racing_store;
@@ -172,6 +175,19 @@ fn is_head(name: &str) -> bool {
 /// ```ignore
 /// coffret_usecase::commit_conformance!(my_fixture().await);
 /// ```
+///
+/// The `@cases` form takes the same argument followed by `=>` and a list of
+/// case names, and declares only those. It is for a run that cannot hold every
+/// case, such as `InMemoryMintingStore`'s, which leaves out the two races over
+/// a Library's first record; a case added to the suite is not in such a run
+/// until it is added to that list as well.
+///
+/// ```ignore
+/// coffret_usecase::commit_conformance!(@cases my_fixture().await =>
+///     a_commit_makes_the_batch_the_current_state,
+///     two_writers_on_one_head_leave_one_successor,
+/// );
+/// ```
 #[macro_export]
 macro_rules! commit_conformance {
     ($setup:expr) => {
@@ -180,6 +196,7 @@ macro_rules! commit_conformance {
             a_removal_leaves_the_current_set_and_is_trashed,
             two_writers_agree_on_one_head_chain,
             a_writer_that_loses_the_slot_rebases_onto_the_new_head,
+            two_writers_on_one_head_leave_one_successor,
             two_replays_of_one_catalog_converge,
             a_refused_replay_no_checkpoint_explains_is_reported,
             a_colliding_entry_path_is_refused_before_any_write,
