@@ -308,6 +308,23 @@ and has a window of its own for entering the Passphrase.
   - A server key belongs to one running server: a new one is drawn at every
     start, so a key that leaked, or a key file a killed server left behind,
     admits nobody once that server is gone (spec: LA-4).
+  - The explorer's page never holds the server key, nor any cryptographic
+    key. It is served by the **explorer host**, a process of the desktop app
+    that forwards the page's requests to the server with the server key
+    attached, and the page shows the host a **browser token** of its own
+    instead. The page gets that token by exchanging a one-time **launch
+    ticket**, which the app hands it through a file only the owner's account
+    can read, whenever the app opens the explorer; the person does nothing
+    more than open it (spec: LA-15, LA-17, LA-21).
+    - A browser token lets a page do everything the explorer can do, for one
+      Library, until the token expires, is revoked, or the host restarts
+      (spec: LA-18). It is no narrower than that: there are no read-only
+      tokens and no roles. It is not a key either — it unlocks nothing, and a
+      locked Library stays locked to a page holding one until the
+      Passphrase is entered in the app's own window.
+    - A tab holding no token — a bookmark, a typed address, a session that
+      ended — reads nothing of the Library, and says to open the explorer
+      from the app (spec: LA-21).
   - One server at a time serves a Library on a device, and a second start is
     refused rather than taking the first one's place: a second server would
     publish its key over the first one's, leaving that one running and

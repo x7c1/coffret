@@ -20,7 +20,12 @@ state.
   filename, a device-local Library name, a device-local account name,
   plaintext file content, a
   cryptographic key, a Passphrase, a Recovery Code, or a token or other bearer
-  credential. An event is a record an operation leaves behind as a side
+  credential — the server key, the explorer host's browser tokens and launch
+  tickets (LA-20), and a Storage grant among them. An event about
+  authentication carries a kind, a fixed reason and counts, and never a
+  ticket, a token or either one's digest, an `Authorization` header, the query
+  or fragment of a URL, or the path of the file a ticket was delivered in
+  (LA-21). An event is a record an operation leaves behind as a side
   effect: whoever invoked the operation did not ask for it and does not receive
   it, and that record is what this rule binds. A person-facing refusal is a
   response to the operation that person invoked, and naming what was refused is

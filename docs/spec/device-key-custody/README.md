@@ -29,8 +29,9 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     running server that has locked may be unlocked in place, but only with
     the Passphrase taken from a prompt that does not echo (DK-10). Two
     surfaces are told apart here: the explorer's page in the system browser,
-    which never takes or carries a secret (the server key and every secret
-    stay off it, LA-3, LA-6), and the desktop app's own window, a page the
+    which never takes or carries a key or a Passphrase (the server key stays
+    off it, LA-3, LA-6, and what it holds instead is a browser token, LA-15),
+    and the desktop app's own window, a page the
     app itself ships and renders, which is the one surface that takes the
     Passphrase. The prompt is that window, not the explorer's page.
     Whatever brings the window forward — a press of *unlock*, the tray, or

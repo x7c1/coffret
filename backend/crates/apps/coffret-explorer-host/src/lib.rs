@@ -19,12 +19,19 @@
 //! the default, so that a build never needs the frontend built first — every
 //! path outside `/api` answers a short plain page saying so.
 //!
+//! Reaching this host is no more authorization than reaching the server is: a
+//! browser is admitted by a browser token of the host's own, never by the
+//! server key, and [`credentials`] holds those tokens and the one-time launch
+//! tickets they are exchanged for (spec: LA-14, LA-17, LA-18).
+//!
 //! The explorer is deliberately not served from the server's own port: the
 //! server would then be answering its own page without a key, and every request
 //! has to be authorized before any route sees it (spec: LA-2).
 
 mod config;
 pub use config::Config;
+
+pub mod credentials;
 
 mod error;
 pub use error::Error;
