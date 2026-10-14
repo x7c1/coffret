@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use coffret_format::{
     decode_keyring, encode_control_object, encode_keyring, keyring_set_digest,
@@ -9,6 +9,7 @@ use coffret_model::{
     ContainerId, ControlObjectKind, ControlObjectName, Generation, KeyTable, KeyringCommitment,
     KeyringElement, ObjectRef, ReplicaPosition,
 };
+use futures_util::future::join_all;
 use tracing::{debug, warn};
 
 use crate::byte_stream::ByteStream;
@@ -102,10 +103,13 @@ impl Examined {
 /// fails. A provider that refuses one write will likely refuse the next, but a
 /// set left one replica short is strictly better for the next run than one left
 /// two short, and the writes are cheap next to the reads this walk already made.
-/// What the refusal carries is the first position that could not be completed —
-/// the rest are in `needed` beside it, and the positions this walk did put back
-/// are in `rewritten`, because a repair that stopped is still a repair
-/// performed and there is no outcome left to report it on (spec: KL-15).
+/// The reads go out together and so do the repairs, for the reasons
+/// [`replicate`] gives for the candidate set; the verdicts are still taken in
+/// position order. What the refusal carries is the first position that could
+/// not be completed — the rest are in `needed` beside it, and the positions this
+/// walk did put back are in `rewritten`, because a repair that stopped is still
+/// a repair performed and there is no outcome left to report it on
+/// (spec: KL-15).
 pub(super) async fn examine(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
@@ -114,28 +118,31 @@ pub(super) async fn examine(
     commitment: &KeyringCommitment,
 ) -> CommitResult<Examined> {
     let generation = commitment.generation();
-    let mut held: Option<KeyTable> = None;
-    let mut walked: Vec<Walked> = Vec::new();
+    let names = (0..commitment.replica_count())
+        .map(|index_of| replica_name(commitment, index_of))
+        .collect::<CommitResult<Vec<_>>>()?;
 
-    for index_of in 0..commitment.replica_count() {
-        let name = replica_name(commitment, index_of)?;
-        let Some(object) = listing.handle(&name.to_string()) else {
-            walked.push(Walked::at(
-                index_of,
-                name,
-                Found::Lost(UnusableReplica::Absent),
-            ));
-            continue;
-        };
-        let read = read_replica(
+    // Every position is read at once: the walk is a full one whatever answers,
+    // so nothing a read finds decides whether the next is made.
+    let reads = join_all(names.iter().map(|name| async move {
+        let object = listing
+            .handle(&name.to_string())
+            .ok_or(UnusableReplica::Absent)?;
+        read_replica(
             store,
             keys,
             &policy.retry,
-            &name,
+            name,
             object,
             commitment.set_digest(),
         )
-        .await;
+        .await
+    }))
+    .await;
+
+    let mut held: Option<KeyTable> = None;
+    let mut walked: Vec<Walked> = Vec::new();
+    for (index_of, (name, read)) in (0u16..).zip(names.into_iter().zip(reads)) {
         walked.push(match read {
             Ok(key_table) => {
                 held.get_or_insert(key_table);
@@ -168,9 +175,12 @@ pub(super) async fn examine(
     let mut needed = Vec::new();
     let mut stopped: Option<(u16, UnrepairedReplica)> = None;
 
-    for position in walked {
+    // The outcomes are taken in position order, so the refusal names the same
+    // position however the writes interleaved.
+    let payload = &payload;
+    let repairs = join_all(walked.into_iter().map(|position| async move {
         let refusal = match position.found {
-            Found::Valid => continue,
+            Found::Valid => return None,
             Found::Unfetchable(error) => Some(UnrepairedReplica::Unfetchable(error)),
             Found::Lost(_) => rewrite(
                 store,
@@ -178,17 +188,22 @@ pub(super) async fn examine(
                 &policy.retry,
                 &position.name,
                 commitment.set_digest(),
-                &payload,
+                payload,
             )
             .await
             .err(),
         };
+        Some((position.index_of, refusal))
+    }))
+    .await;
+
+    for (index_of, refusal) in repairs.into_iter().flatten() {
         match refusal {
             Some(cause) => {
-                needed.push(position.index_of);
-                stopped.get_or_insert((position.index_of, cause));
+                needed.push(index_of);
+                stopped.get_or_insert((index_of, cause));
             }
-            None => rewritten.push(position.index_of),
+            None => rewritten.push(index_of),
         }
     }
 
@@ -338,8 +353,23 @@ fn replica_name(commitment: &KeyringCommitment, index_of: u16) -> CommitResult<C
 /// (spec: KL-2, CP-8), and what has already been written stays an uncommitted
 /// candidate, which selects nothing (spec: KL-3).
 ///
-/// Each replica is reported to `committing` as it lands (see
-/// [`Phase::Committing`](crate::Phase::Committing)).
+/// The replicas are written all at once and read back all at once, because no
+/// rule orders them. What CP-8 asks is that a complete set be written and
+/// verified before the Journal commit, and completeness is which positions are
+/// present rather than the order they arrived in (spec: KL-2). A replica's name
+/// fixes its content, so a write made unconditionally, or twice, is harmless
+/// (spec: KL-14). And an interrupted write leaves a partial candidate whatever
+/// subset of it landed, which nothing selects and orphan cleanup treats as it
+/// treats any other (spec: KL-3, KL-5, CP-9, KL-12, OC-2). Writing one after
+/// another bought nothing for that and cost a round trip per replica.
+///
+/// The head still waits for every one of them: this returns only once every
+/// position has been read back valid, and the commitment it returns is what the
+/// head is written from (spec: CP-1, CP-8, CP-10). Where several positions
+/// fail, the error names the lowest of them.
+///
+/// Each replica is reported to `committing` as it lands, in the order they
+/// land (see [`Phase::Committing`](crate::Phase::Committing)).
 ///
 /// What the committed generation held, and which number this one takes, are
 /// [`examine`]'s to say: the walk that reads the committed set is also the one
@@ -359,26 +389,41 @@ pub(super) async fn replicate(
     let digest = keyring_set_digest(&key_table)?;
     let payload = encode_keyring(&key_table, keys.master_key_epoch())?;
 
-    let mut written: Vec<(ControlObjectName, ObjectRef)> = Vec::new();
-    for index_of in 0..policy.replica_count {
-        let replica = ReplicaPosition::new(index_of, policy.replica_count)?;
-        let name = ControlObjectName::keyring_replica(generation, &digest, replica)?;
-        let stored = write_replica(store, keys, &policy.retry, &name, &payload).await?;
-        written.push((name, stored));
-        committing.replicas_stored(written.len());
-    }
+    let names = (0..policy.replica_count)
+        .map(|index_of| {
+            let replica = ReplicaPosition::new(index_of, policy.replica_count)?;
+            Ok(ControlObjectName::keyring_replica(
+                generation, &digest, replica,
+            )?)
+        })
+        .collect::<CommitResult<Vec<_>>>()?;
 
-    for (index_of, (name, object)) in written.iter().enumerate() {
-        // The cast cannot lose: the loop above ran `replica_count` times, which
-        // is a `u16`.
-        let index_of = index_of as u16;
-        read_replica(store, keys, &policy.retry, name, object, &digest)
-            .await
-            .map_err(|cause| CommitError::IncompleteKeyring {
-                generation,
-                replica: index_of,
-                cause,
-            })?;
+    // Every write is made, even past one that fails: the futures are driven to
+    // the end together, and what is reported is the lowest position that
+    // failed, so the error does not depend on which write Storage answered
+    // first.
+    let stored = AtomicUsize::new(0);
+    let writes = join_all(names.iter().map(|name| async {
+        let object = write_replica(store, keys, &policy.retry, name, &payload).await?;
+        committing.replicas_stored(stored.fetch_add(1, Ordering::Relaxed) + 1);
+        Ok::<_, CommitError>(object)
+    }))
+    .await;
+    let written = writes.into_iter().collect::<CommitResult<Vec<_>>>()?;
+
+    let reads = join_all(
+        names
+            .iter()
+            .zip(&written)
+            .map(|(name, object)| read_replica(store, keys, &policy.retry, name, object, &digest)),
+    )
+    .await;
+    for (index_of, read) in (0u16..).zip(reads) {
+        read.map_err(|cause| CommitError::IncompleteKeyring {
+            generation,
+            replica: index_of,
+            cause,
+        })?;
     }
 
     debug!(
