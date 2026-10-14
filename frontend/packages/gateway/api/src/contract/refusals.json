@@ -68,6 +68,14 @@
   {
     "body": {
       "error": "declined",
+      "message": "that path lands in the folder the desktop keeps its trash in directly under a mapped root (`.Trash`, `.Trashes` or `.Trash-` and a number), which coffret keeps out of the Library: nothing in it is backed up",
+      "reason": "trash_folder"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
       "message": "a file this device did not put there stands where this Entry belongs",
       "reason": "surfaced",
       "surfaced": "ForeignFile"

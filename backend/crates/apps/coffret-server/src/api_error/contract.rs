@@ -62,6 +62,10 @@ fn every_refusal() -> Vec<ApiError> {
             path: entry_path("albums/.coffret/root"),
             component: ".coffret".to_owned(),
         }),
+        fetch(FetchError::TrashFolderComponent {
+            path: entry_path(".Trash/spring.jpg"),
+            component: ".Trash".to_owned(),
+        }),
     ];
     // Every finding a declined fetch can name, which is `key_lost` beside
     // `KeyLost` and `surfaced` beside every other.

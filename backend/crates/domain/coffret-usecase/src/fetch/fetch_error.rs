@@ -220,6 +220,29 @@ pub enum FetchError {
         /// (spec: EL-1).
         component: String,
     },
+    /// A file was to be placed inside a folder a desktop keeps its trash in —
+    /// `.Trash`, `.Trashes`, `.Trash-<digits>` — standing directly under the
+    /// mapped root (spec: EP-16).
+    ///
+    /// Its own verdict beside [`ReservedComponent`](Self::ReservedComponent),
+    /// because that one's sentence is about names coffret keeps for itself and
+    /// this folder is not coffret's: it is the desktop's trash, which coffret
+    /// keeps out of the Library. A scan never enters it, so a file placed there
+    /// would sit in the mapped folder and never be carried in.
+    ///
+    /// The verdict a drop gets. A folder fetch meets the same folder as a place
+    /// it cannot reach and reports it as
+    /// [`Surfaced::UnreachablePlace`](super::Surfaced::UnreachablePlace).
+    TrashFolderComponent {
+        /// The path that lands in it.
+        path: EntryPath,
+        /// The trash folder's name, as the first component under the mapped
+        /// root.
+        ///
+        /// A component of an Entry Path, so it reaches a person in the message
+        /// and never a diagnostic event (spec: EL-1).
+        component: String,
+    },
     /// The mapped root a file was to go into is not the root the mapping was
     /// recorded against (spec: EP-13).
     ///
@@ -515,6 +538,15 @@ impl fmt::Display for FetchError {
                  where it is one of yours, or name a path that does not carry the spelling",
                 path.as_str(),
             ),
+            // Not the reserved sentence: the folder is the desktop's rather than
+            // coffret's, and what it says is why nothing goes into it.
+            Self::TrashFolderComponent { path, component } => write!(
+                f,
+                "the Entry Path {:?} lands in {component:?}, the folder the desktop keeps its \
+                 trash in directly under a mapped root: coffret keeps the trash out of the \
+                 Library and no sync carries what is in it, so nothing was placed",
+                path.as_str(),
+            ),
             // The refusal's own sentence, which names the folder to look at, the
             // mapping the gesture is to be aimed at, and the gesture — said by
             // the value rather than here, because the refusal a device raises
@@ -593,6 +625,7 @@ impl error::Error for FetchError {
             | Self::UnstampableMtime { .. }
             | Self::ReservedComponent { .. }
             | Self::FoldedReservedComponent { .. }
+            | Self::TrashFolderComponent { .. }
             | Self::LocalPathCollision { .. }
             | Self::ContainerUnreachable { .. }
             | Self::CiphertextMismatch { .. }
@@ -659,6 +692,12 @@ impl Redacted for FetchError {
             // does, and so does the path it came out of.
             Self::FoldedReservedComponent { path, .. } => format!(
                 "Fetch::FoldedReservedComponent(path_len={})",
+                path.as_str().len()
+            ),
+            // The trash folder's name is a component of the path, so it stays
+            // out with the path.
+            Self::TrashFolderComponent { path, .. } => format!(
+                "Fetch::TrashFolderComponent(path_len={})",
                 path.as_str().len()
             ),
             // Which shape the wrong folder took, which is the whole of what an
@@ -847,6 +886,26 @@ mod tests {
             error.redacted(),
             "Fetch::FoldedReservedComponent(path_len=20)",
         );
+    }
+
+    // EP-16: a drop into the desktop's trash folder is told so in its own
+    // words — the folder is the desktop's, not a name coffret keeps — and the
+    // event holds neither the folder's name nor the path.
+    #[test]
+    fn a_trash_folder_component_names_the_trash_and_not_coffret_s_own_names() {
+        let error = FetchError::TrashFolderComponent {
+            path: entry_path(".Trash/spring.jpg"),
+            component: ".Trash".to_owned(),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains(".Trash\""), "{said}");
+        assert!(said.contains("trash"), "{said}");
+        assert!(
+            !said.contains("keeps for itself") && !said.contains(".coffret"),
+            "the trash is not one of coffret's own names: {said}",
+        );
+        assert_eq!(error.redacted(), "Fetch::TrashFolderComponent(path_len=17)");
     }
 
     // An integrity verdict is worth reading, and reading one means knowing

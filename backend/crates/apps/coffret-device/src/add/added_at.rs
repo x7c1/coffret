@@ -20,7 +20,9 @@ impl OpenLibrary {
     /// mapping reaches the path, or no local file can stand for it (spec: EP-9);
     /// a component of the name is coffret's own — its scratch (spec: EP-11) or
     /// its management area (spec: EP-14) — so nothing under it is a local file of
-    /// this device's, whatever stands there; the mapped root the path falls
+    /// this device's, whatever stands there; the path lands in a folder a
+    /// desktop keeps its trash in at the top of the mapped root, which a scan
+    /// never enters (spec: EP-16); the mapped root the path falls
     /// under is unavailable, or the disk does not answer about it — a root this
     /// device cannot reach says nothing about the Library rather than saying the
     /// file under it is gone (spec: EP-12); or nothing is there at all.
@@ -100,6 +102,14 @@ impl OpenLibrary {
             }
             Err(cause) => return Err(Error::local_files_not_read(cause)),
         };
+        // A folder a desktop keeps its trash in, at the top of the mapped root:
+        // nothing in it is a local file of this device's, which is what
+        // `added_locally` says of the same folder (spec: EP-16). Asked of the
+        // place rather than of the path, because a top-level mapping's prefix
+        // is not a folder on this disk.
+        if place.trash_folder_name().is_some() {
+            return Ok(None);
+        }
         let standing = match place.look(self.local_fs.as_ref()).await {
             Ok(standing) => standing,
             // A folder the descent would not pass through, and a disk that

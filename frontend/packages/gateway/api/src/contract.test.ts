@@ -98,6 +98,7 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   unmapped: true,
   unmaterializable: true,
   reserved: true,
+  trash_folder: true,
   refused_root: true,
   surfaced: true,
   key_lost: true,
@@ -536,11 +537,17 @@ function keptParcels(value: unknown, where: string): KeptParcels {
 }
 
 function reconnect(value: unknown, where: string): Reconnect {
-  const fields = object(value, where, ['state', 'message']);
-  return {
-    state: one(RECONNECT_STATES, fields.state, `${where}.state`),
-    message: string(fields.message, `${where}.message`),
-  };
+  const fields = object(value, where, ['state', 'message'], ['flow']);
+  const state = one(RECONNECT_STATES, fields.state, `${where}.state`);
+  const message = string(fields.message, `${where}.message`);
+  // A waiting flow's name, and none once it has ended.
+  if (state === 'waiting') {
+    return { state, message, flow: string(fields.flow, `${where}.flow`) };
+  }
+  if ('flow' in fields) {
+    throw new Error(`${where}: a reconnect that is ${state} names a flow`);
+  }
+  return { state, message };
 }
 
 function work(value: unknown, where: string): Work {

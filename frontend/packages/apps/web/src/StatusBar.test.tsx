@@ -889,7 +889,7 @@ it('withholds the button while a consent page waits and offers it again after', 
   const waiting = draw({
     fill: stopped,
     reconnect: offered({
-      reconnect: { state: 'waiting', message: 'waiting for the consent page' },
+      reconnect: { state: 'waiting', message: 'waiting for the consent page', flow: 'c9ebbe11' },
       consentPage: 'https://consent.example/',
     }),
   });

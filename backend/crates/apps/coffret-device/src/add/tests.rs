@@ -160,6 +160,24 @@ fn refused_reserved(error: Error) -> (String, String) {
     }
 }
 
+/// The Entry Path and the trash folder a refusal about a desktop's trash names.
+///
+/// Beside [`refused_reserved`] rather than folded into it, for the reason
+/// [`refused_folded`] is: the trash is the desktop's and not a name coffret
+/// keeps, so which verdict was raised is what decides the sentence
+/// (spec: EP-16).
+fn refused_trash(error: Error) -> (String, String) {
+    match error {
+        Error::FileNotAdded { cause } => match *cause {
+            FetchError::TrashFolderComponent { path, component } => {
+                (path.as_str().to_owned(), component)
+            }
+            other => panic!("the upload must be refused as into the trash, and was {other:?}"),
+        },
+        other => panic!("the upload must be refused as into the trash, and was {other:?}"),
+    }
+}
+
 /// The Entry Path and the component a refusal about a *folded* spelling names.
 ///
 /// Beside [`refused_reserved`] and not folded into it, because which of the two
@@ -590,8 +608,8 @@ async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
 }
 
 /// A folder a desktop keeps its trash in at the top of the mapped root is
-/// neither listed nor dropped into, and the refusal is the one the scratch
-/// prefix gets (spec: EP-16).
+/// neither listed nor dropped into, and the refusal is one of its own rather
+/// than the one coffret's reserved names get (spec: EP-16).
 ///
 /// A scan never enters such a folder, so a file dropped there would sit in the
 /// mapped folder and never be carried in, and a folder named in the listing
@@ -641,7 +659,7 @@ async fn a_desktop_trash_folder_at_the_top_of_the_root_is_kept_out() {
         .await
         .expect_err("an upload into a trash folder must be refused");
     assert_eq!(
-        refused_reserved(refused),
+        refused_trash(refused),
         (".Trash/x.jpg".to_owned(), ".Trash".to_owned()),
     );
     assert!(
@@ -651,6 +669,62 @@ async fn a_desktop_trash_folder_at_the_top_of_the_root_is_kept_out() {
     drop_file(&device.library, "albums/.Trash/x.jpg")
         .await
         .expect("a folder of that name deeper down takes a drop");
+}
+
+/// A file standing in a desktop's trash folder at the top of the mapped root is
+/// not opened as a local file, which is what the listing beside it already says
+/// of the folder; the same name deeper down is the person's (spec: EP-16).
+#[tokio::test]
+async fn a_file_in_a_desktop_trash_folder_is_not_opened_as_a_local_file() {
+    let device = device().await;
+    std::fs::create_dir_all(device.root.join(".Trash")).expect("making a folder must succeed");
+    std::fs::write(device.root.join(".Trash").join("x.jpg"), DROPPED)
+        .expect("writing a file must succeed");
+    std::fs::create_dir_all(device.root.join("albums").join(".Trash"))
+        .expect("making a folder must succeed");
+    std::fs::write(
+        device.root.join("albums").join(".Trash").join("x.jpg"),
+        DROPPED,
+    )
+    .expect("writing a file must succeed");
+
+    let read = device
+        .library
+        .added_at(&entry_path(".Trash/x.jpg"))
+        .await
+        .expect("a file in the trash is an empty answer and not a refusal");
+    assert!(
+        read.is_none(),
+        "nothing in the trash is a local file, and one of {} bytes was answered",
+        read.map_or(0, |file| file.len()),
+    );
+    let deeper = device
+        .library
+        .added_at(&entry_path("albums/.Trash/x.jpg"))
+        .await
+        .expect("reading a local file must succeed");
+    assert!(
+        deeper.is_some(),
+        "the same name deeper down is the person's"
+    );
+}
+
+/// Under a mapping that stands for a Library folder, the trash folder that is
+/// kept out of a read is the first component under the *root* (spec: EP-9,
+/// EP-16).
+#[tokio::test]
+async fn under_a_mapping_prefix_a_file_in_the_trash_folder_is_not_opened() {
+    let device = device_mapped_at(Some("lib")).await;
+    std::fs::create_dir_all(device.root.join(".Trashes")).expect("making a folder must succeed");
+    std::fs::write(device.root.join(".Trashes").join("x.jpg"), DROPPED)
+        .expect("writing a file must succeed");
+
+    let read = device
+        .library
+        .added_at(&entry_path("lib/.Trashes/x.jpg"))
+        .await
+        .expect("a file in the trash is an empty answer and not a refusal");
+    assert!(read.is_none());
 }
 
 /// Under a mapping that stands for a Library folder, the trash folder is still
@@ -673,7 +747,7 @@ async fn under_a_mapping_prefix_the_trash_folder_is_the_first_component_under_th
         .await
         .expect_err("an upload into a trash folder must be refused");
     assert_eq!(
-        refused_reserved(refused),
+        refused_trash(refused),
         ("lib/.Trashes/x.jpg".to_owned(), ".Trashes".to_owned()),
     );
     assert!(!device.root.join(".Trashes").join("x.jpg").exists());

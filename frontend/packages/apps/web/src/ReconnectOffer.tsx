@@ -4,6 +4,8 @@ import {
   consentLink,
   NO_TAB,
   offersReconnect,
+  OPENED_ELSEWHERE,
+  openedElsewhere,
   RAN_OUT,
   reconnectLine,
   RECONNECTING,
@@ -18,7 +20,11 @@ export interface Offer {
   said: string | null;
   /** What refused the last press, and `null` where none was. */
   refused: string | null;
-  /** The consent page the last press was answered with, and `null` once its flow stops waiting. */
+  /**
+   * The consent page the last press was answered with, and `null` once its flow
+   * stops waiting. The link stands on it only while the work answer names the
+   * flow on it as the one waiting (see [`consentLink`](./reconnect)).
+   */
   consentPage: string | null;
   /** Presses the button. */
   ask: () => void;
@@ -37,10 +43,14 @@ export interface Offer {
  * The button is not offered while a flow waits. The consent page is already
  * open, and what to do is answer it; the line beside where the button was says
  * so, and a link to the same page stands after it for a browser that did not
- * open the tab (see [`consentLink`](./reconnect)).
+ * open the tab (see [`consentLink`](./reconnect)) — unless the flow waiting is
+ * one another window started, whose page this one was never handed, and then
+ * the line says so instead.
  */
 export function ReconnectOffer({ offer }: { offer: Offer }) {
-  const line = offer.refused ?? reconnectLine(offer.reconnect) ?? offer.said;
+  const elsewhere = openedElsewhere(offer.reconnect, offer.consentPage);
+  const line =
+    offer.refused ?? (elsewhere ? OPENED_ELSEWHERE : reconnectLine(offer.reconnect)) ?? offer.said;
   const link = consentLink(offer.reconnect, offer.consentPage);
   return (
     <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

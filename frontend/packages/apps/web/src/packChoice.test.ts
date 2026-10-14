@@ -1,17 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Added } from '@coffret/api';
+import type { Added, ContainerKind, Listing } from '@coffret/api';
 
 import {
   choiceLabels,
   chooseAndAdd,
+  collisionsOf,
   existsLine,
   folderLine,
+  heldUnder,
   looseLine,
+  NOTHING_HELD,
   questionOf,
+  refusedLine,
+  replacesLine,
   summarize,
   type Choice,
   type Choosing,
+  type HeldFiles,
 } from './packChoice';
 import { NO_NUMBERING, type Numbering } from './renumber';
 
@@ -81,6 +87,7 @@ describe('chooseAndAdd', () => {
     const asking: Choosing = {
       files,
       existing: [],
+      held: vi.fn(async () => NOTHING_HELD),
       ask: vi.fn(async () => {
         order.push('asked');
         return choice === 'cancel' ? choice : { choice, numbering };
@@ -101,12 +108,25 @@ describe('chooseAndAdd', () => {
     expect(asking.ask).toHaveBeenCalledWith(
       expect.objectContaining({ files: 4, folders: [expect.objectContaining({ files: 4 })] }),
       asking.files,
+      NOTHING_HELD,
     );
+  });
+
+  // What the Library holds where the drop lands is looked up before the
+  // question goes up, and handed to it.
+  it('hands the question what the Library holds where the drop lands', async () => {
+    const { asking } = choosing(book('BookX', 2));
+    const held: HeldFiles = new Map([['BookX/page-0.jpg', 'one-file']]);
+    asking.held = vi.fn(async () => held);
+    await chooseAndAdd(asking);
+    expect(asking.held).toHaveBeenCalledWith(asking.files);
+    expect(asking.ask).toHaveBeenCalledWith(expect.anything(), asking.files, held);
   });
 
   it('sends a drop of files alone one by one without asking', async () => {
     const { asking, order } = choosing([added('cover.png')]);
     expect(await chooseAndAdd(asking)).toBe('sent');
+    expect(asking.held).not.toHaveBeenCalled();
     expect(asking.ask).not.toHaveBeenCalled();
     expect(order).toEqual(['sent one by one']);
   });
@@ -132,7 +152,7 @@ describe('chooseAndAdd', () => {
 
       const numbered = choosing(files, choice, { pages: true, volumes: false });
       expect(await chooseAndAdd(numbered.asking)).toBe('sent');
-      expect(numbered.asking.ask).toHaveBeenCalledWith(expect.anything(), files);
+      expect(numbered.asking.ask).toHaveBeenCalledWith(expect.anything(), files, NOTHING_HELD);
       expect(numbered.sent).toEqual([['BookX/001.jpg', 'BookX/002.jpg', 'BookX/cover.png']]);
 
       const asDropped = choosing(files, choice, NO_NUMBERING);
@@ -158,5 +178,124 @@ describe('chooseAndAdd', () => {
     expect(asking.refuse).toHaveBeenCalledWith(
       expect.objectContaining({ budget: 'part', name: 'BookX/huge.tif' }),
     );
+  });
+});
+
+/** What the Library holds at each of `paths`, relative to the folder dropped onto. */
+function holding(entries: Record<string, ContainerKind>): HeldFiles {
+  return new Map(Object.entries(entries));
+}
+
+// PK-10: a dropped file whose path holds a one-file Entry replaces it, and one
+// whose path a Pack holds is refused. The question says which, by name.
+describe('collisions', () => {
+  it('says nothing more where no dropped path is held', () => {
+    const collisions = collisionsOf(book('BookX', 3), holding({ 'BookX/other.jpg': 'one-file' }));
+    expect(collisions).toEqual({ replaced: [], refused: [] });
+    expect(replacesLine(collisions)).toBeNull();
+    expect(refusedLine(collisions)).toBeNull();
+  });
+
+  it('names the files that replace one-file Entries, the first five and a count of the rest', () => {
+    const files = Array.from({ length: 7 }, (_, at) => added(`BookX/p${at}.jpg`));
+    const held = holding(Object.fromEntries(files.map((file) => [file.path, 'one-file' as const])));
+    const collisions = collisionsOf(files, held);
+    expect(collisions.refused).toEqual([]);
+    expect(replacesLine(collisions)).toBe(
+      '7 files in this drop replace the files the Library already has at the same path: ' +
+        'BookX/p0.jpg, BookX/p1.jpg, BookX/p2.jpg, BookX/p3.jpg, BookX/p4.jpg, and 2 more',
+    );
+    expect(refusedLine(collisions)).toBeNull();
+
+    expect(replacesLine(collisionsOf([files[0]], held))).toBe(
+      '1 file in this drop replaces the file the Library already has at the same path: BookX/p0.jpg',
+    );
+  });
+
+  it('counts the files a Pack refuses beside the ones that are replaced', () => {
+    const files = [added('BookX/a.jpg'), added('BookX/b.jpg'), added('BookX/c.jpg'), added('loose.txt')];
+    const collisions = collisionsOf(
+      files,
+      holding({ 'BookX/a.jpg': 'one-file', 'BookX/b.jpg': 'pack', 'BookX/c.jpg': 'pack' }),
+    );
+    expect(collisions).toEqual({ replaced: ['BookX/a.jpg'], refused: ['BookX/b.jpg', 'BookX/c.jpg'] });
+    expect(replacesLine(collisions)).toContain('BookX/a.jpg');
+    expect(refusedLine(collisions)).toBe(
+      '2 files are refused, because a Pack holds the file at that path',
+    );
+  });
+});
+
+describe('heldUnder', () => {
+  /** A listing of `path` holding `files` (name → kind) and `folders`. */
+  function listingOf(
+    path: string,
+    files: Record<string, ContainerKind | null>,
+    folders: string[] = [],
+  ): Listing {
+    const at = (name: string) => (path === '' ? name : `${path}/${name}`);
+    return {
+      path,
+      mapped: true,
+      held: true,
+      folders: folders.map((name) => ({ name, path: at(name), mapped: true })),
+      files: Object.entries(files).map(([name, container]) => ({
+        name,
+        path: at(name),
+        size: 1,
+        mtime: null,
+        state: container === null ? 'added' : 'remote',
+        container,
+        openable: true,
+        content_type: 'image/jpeg',
+      })),
+      folders_on_disk: [],
+    };
+  }
+
+  // The listing on hand answers for the loose files; a folder the drop carries
+  // is listed, and one under it the drop carries too, and nothing it does not.
+  it('lists only the folders the drop reaches, and keys what they hold by the dropped path', async () => {
+    const landing = listingOf('albums', { 'cover.png': 'one-file', 'new.png': null }, [
+      'BookX',
+      'Other',
+    ]);
+    const listings: Record<string, Listing> = {
+      'albums/BookX': listingOf('albums/BookX', { 'p1.jpg': 'pack' }, ['scans', 'unrelated']),
+      'albums/BookX/scans': listingOf('albums/BookX/scans', { 'p2.jpg': 'one-file' }),
+    };
+    const list = vi.fn(async (folder: string) => listings[folder]);
+
+    const held = await heldUnder(
+      landing,
+      [added('cover.png'), added('new.png'), added('BookX/p1.jpg'), added('BookX/scans/p2.jpg')],
+      list,
+    );
+
+    expect(list.mock.calls.map(([folder]) => folder).sort()).toEqual([
+      'albums/BookX',
+      'albums/BookX/scans',
+    ]);
+    expect(held).toEqual(
+      holding({ 'cover.png': 'one-file', 'BookX/p1.jpg': 'pack', 'BookX/scans/p2.jpg': 'one-file' }),
+    );
+  });
+
+  // At the Library root the dropped paths are the Library's own.
+  it('reads a drop onto the Library root', async () => {
+    const landing = listingOf('', {}, ['BookX']);
+    const list = vi.fn(async () => listingOf('BookX', { 'p1.jpg': 'one-file' }));
+    expect(await heldUnder(landing, [added('BookX/p1.jpg')], list)).toEqual(
+      holding({ 'BookX/p1.jpg': 'one-file' }),
+    );
+    expect(list).toHaveBeenCalledWith('BookX');
+  });
+
+  it('asks for nothing where no dropped folder is already there', async () => {
+    const list = vi.fn();
+    expect(await heldUnder(listingOf('albums', {}, ['Other']), book('BookX', 2), list)).toEqual(
+      NOTHING_HELD,
+    );
+    expect(list).not.toHaveBeenCalled();
   });
 });
