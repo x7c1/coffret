@@ -37,6 +37,8 @@ the Container's [Key Envelope](../key-envelope/) from the
 - open (a Container with the Master Key and its Key Envelope)
 - read (a parcel of a Container, or several adjacent ones, never a range
   smaller than a parcel)
+- release (an Entry to the reader, once the chunks covering it have arrived,
+  while the rest of the parcel still streams)
 - hold (a parcel on the device, so it is never asked of Storage again)
 - trash (a superseded or removed Container, after the commit that takes it out
   of the current set)

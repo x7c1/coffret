@@ -125,3 +125,13 @@ Concept background: [Library](../../concepts/library/),
     the last catch-up. A run a later one displaced from the record is
     one that had stopped, so it is reported as `stopped` and always with its
     refusal. *(Form: test)*
+  - A sync, a freeze, and a deletion each own this device's pending work for
+    the whole of a run (OC-2). Within one server they take **turns** at it
+    rather than refusing each other: a run armed while another holds the turn
+    waits, and the turns go in the order the runs ask for them. What the server
+    holds of its running work names the run holding the turn and the runs
+    waiting for it, and a waiting run is reported as waiting for the holder.
+    Across processes there is no queue: of a server's run and a sync or a
+    freeze from the command line, whichever comes second is refused at once,
+    changing nothing — a server's run as a `conflict` — and goes through when
+    it is run again after the other finishes. *(Form: test)*
