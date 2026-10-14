@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Create or update the release PR on every push to main.
+# Create or update the release PR on every push to main, on a manual
+# dispatch from main, and when the release PR's title is edited.
 #
 # The release PR is the single moving handle a developer touches to cut a
 # new release: its title encodes the next version (e.g. "Release v0.2.0"),
 # and merging it triggers the tagging workflow. This script rebuilds the
-# release branch on every push to main so the PR always reflects the
+# release branch from main on every run so the PR always reflects the
 # latest state, while preserving the developer-chosen title across runs.
 #
 # Behaviour:
@@ -40,6 +41,14 @@ CARGO_TOML="${REPO_ROOT}/backend/Cargo.toml"
 
 main() {
   local pr_number last_tag next_version repo_url changelog branch
+
+  # Everything this script describes (the last tag, the changelog, the
+  # commit a new release branch starts from) is main. On a title edit the
+  # workflow's checkout is the release PR's merge ref instead, whose history
+  # holds the release branch's own "Release vX.Y.Z" commit, so start from
+  # origin/main before anything reads history.
+  git fetch origin main
+  git checkout --detach origin/main
 
   pr_number=$(find_existing_pr)
   last_tag=$(get_last_tag)
@@ -192,7 +201,6 @@ update_release_pr() {
   # re-apply the version bump on top. Reusing the same branch name is
   # what keeps the PR's head pointer in sync with our push, even when
   # the developer has promoted the title (patch -> minor/major).
-  git fetch origin main
   git checkout -B "$branch" origin/main
 
   bump_version_in_workspace "$version"
