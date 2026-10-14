@@ -34,6 +34,9 @@ use finding_dto::FindingDto;
 mod freeze_dto;
 use freeze_dto::FreezeDto;
 
+mod kept_parcels_dto;
+use kept_parcels_dto::KeptParcelsDto;
+
 mod reconnect_dto;
 use reconnect_dto::ReconnectDto;
 
@@ -78,7 +81,7 @@ fn waits(running: bool, flow: TurnTaker, turn: Option<TurnTaker>) -> bool {
 /// It needs no key and takes none, so it answers a locked server as readily as
 /// an open one.
 pub async fn work(State(state): State<Arc<ServerState>>) -> Json<WorkDto> {
-    Json(WorkDto::of(&state))
+    Json(WorkDto::of(&state).await)
 }
 
 // Every state this answer can be in, written to the file the explorer's own

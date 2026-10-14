@@ -49,6 +49,7 @@ export type {
   Freeze,
   FreezePreview,
   FreezeStatus,
+  KeptParcels,
   LibraryState,
   NotStopped,
   PackRefusalReason,

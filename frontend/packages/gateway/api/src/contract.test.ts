@@ -38,6 +38,7 @@ import type {
   Freeze,
   FreezePreview,
   FreezeStatus,
+  KeptParcels,
   LibraryState,
   Phase,
   Reconnect,
@@ -526,6 +527,14 @@ function catalog(value: unknown, where: string): Catalog {
   return { state, stopped: null };
 }
 
+function keptParcels(value: unknown, where: string): KeptParcels {
+  const fields = object(value, where, ['count', 'bytes']);
+  return {
+    count: number(fields.count, `${where}.count`),
+    bytes: number(fields.bytes, `${where}.bytes`),
+  };
+}
+
 function reconnect(value: unknown, where: string): Reconnect {
   const fields = object(value, where, ['state', 'message']);
   return {
@@ -539,6 +548,7 @@ function work(value: unknown, where: string): Work {
     'server',
     'library',
     'catalog',
+    'kept_parcels',
     'turn',
     'fill',
     'sync',
@@ -550,6 +560,9 @@ function work(value: unknown, where: string): Work {
     server: string(fields.server, `${where}.server`),
     library: one(LIBRARY_STATES, fields.library, `${where}.library`),
     catalog: catalog(fields.catalog, `${where}.catalog`),
+    kept_parcels: nullable(fields.kept_parcels, (value) =>
+      keptParcels(value, `${where}.kept_parcels`),
+    ),
     turn: nullable(fields.turn, (value) => one(TURN_TAKERS, value, `${where}.turn`)),
     fill: nullable(fields.fill, (value) => fill(value, `${where}.fill`)),
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),

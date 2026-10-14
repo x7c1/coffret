@@ -45,6 +45,8 @@ pub struct HaltingStore {
     inner: std::sync::Arc<dyn ObjectStore>,
     halted: AtomicBool,
     stalled: AtomicBool,
+    /// Whether the next read panics instead of answering, once.
+    panics: AtomicBool,
     /// Whether a commit slot is refused, which is the step of a commit that
     /// comes after the committed Keyring was examined and repaired.
     commits_refused: AtomicBool,
@@ -83,6 +85,7 @@ impl HaltingStore {
             inner,
             halted: AtomicBool::new(false),
             stalled: AtomicBool::new(false),
+            panics: AtomicBool::new(false),
             commits_refused: AtomicBool::new(false),
             held: watch::channel(false).0,
             refused: AtomicUsize::new(0),
@@ -98,6 +101,17 @@ impl HaltingStore {
     /// Refuses every read from now on.
     pub fn halt(&self) {
         self.halted.store(true, Ordering::SeqCst);
+    }
+
+    /// Panics in the next read, once, wherever it is waiting.
+    ///
+    /// Not a way Storage fails: a way the code reading from it does, which no
+    /// refusal can stand in for. A case uses it to state what becomes of a
+    /// read whose task unwinds — what the log says, and what is given back.
+    /// Once and not from now on, so whatever reads after it meets an ordinary
+    /// Storage rather than a process full of panics.
+    pub fn panic_next_read(&self) {
+        self.panics.store(true, Ordering::SeqCst);
     }
 
     /// Refuses every commit slot from now on, and nothing else.
@@ -234,6 +248,9 @@ impl ObjectStore for HaltingStore {
             // Never ready, and never woken: the only way out of this read is
             // whoever asked for it dropping it.
             std::future::pending::<()>().await;
+        }
+        if self.panics.swap(false, Ordering::SeqCst) {
+            panic!("a read panicked, as the case asked");
         }
         if self.halted.load(Ordering::SeqCst) {
             self.refused.fetch_add(1, Ordering::SeqCst);

@@ -34,10 +34,14 @@ and keeps on its own disk, beside the spool, so that reading a page a second
 time asks Storage for nothing. It is ciphertext kept for reading again rather
 than a record of anything: losing every held parcel costs only reads the
 provider can observe, never correctness. The Index records which parcels are
-held, since nothing else names the files; a parcel is let go once every Entry
-it covers that this device maps is present or witnessed absent, or by the
+held, and it is still what names the files: a fetch finds a parcel by its row,
+never by looking in the directory. A parcel is let go once every Entry it
+covers that this device maps is present or witnessed absent, or by the
 device's next fetch, catch-up, or deletion after its Container has left the
-current set (spec: PK-19, PK-21).
+current set (spec: PK-19, PK-21). When a server opens the Library, before it
+serves anything, any parcel file in the directory that no row names is
+discarded; that sweep only removes what the Index does not name, and never adds
+a row.
 
 For a current Entry, **present** means this device recorded materializing it
 and has not witnessed its file go. **Remote** means every other current Entry:

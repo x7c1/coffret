@@ -10,7 +10,8 @@ use coffret_model::ContainerId;
 /// device holds is ciphertext it read, and losing every row of it costs a
 /// re-read the provider can observe and nothing else. The row is what lets
 /// that ciphertext be found again and, once it has served its purpose, let go
-/// of — nothing lists the directory the files are in.
+/// of. The directory the files are in is listed only to discard what no row
+/// names, once, as a server opens the Library.
 ///
 /// Which Entries the parcel covers is recorded as the stretch of the
 /// Container's plaintext stream it opens into, rather than as the Entries

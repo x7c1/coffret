@@ -603,6 +603,23 @@ export interface Reconnect {
  */
 export type TurnTaker = 'sync' | 'freeze' | 'delete';
 
+/**
+ * The parcels this device keeps for the Library, and how much of its disk they
+ * take.
+ *
+ * A fetch keeps every parcel it read until every Entry it covers that this
+ * device maps is on the device or witnessed absent, or its Container leaves the
+ * current set, and nothing else tells a person the directory they are kept in
+ * exists: a reader who opens the first page of many books leaves a parcel or
+ * two behind for each, which over time is gigabytes.
+ */
+export interface KeptParcels {
+  /** How many parcels are kept. */
+  count: number;
+  /** How many bytes their files take. */
+  bytes: number;
+}
+
 /** What the server is doing on its own — `GET /api/work`. */
 export interface Work {
   /**
@@ -644,6 +661,13 @@ export interface Work {
    * has to be told apart from a Library nobody has looked at yet.
    */
   catalog: Catalog;
+  /**
+   * The parcels this device keeps for the Library, and `null` while it is
+   * locked or when they could not be counted: they are counted from the
+   * Index's held-parcel rows, which a locked server does not hold open, and a
+   * failed count is said in the server's log.
+   */
+  kept_parcels: KeptParcels | null;
   /**
    * Which flow's run holds this device's pending work right now, and `null`
    * where nobody does.
@@ -899,6 +923,7 @@ interface WorkSent {
   server: string;
   library: LibraryState;
   catalog: { state: CatalogState; stopped: unknown };
+  kept_parcels: KeptParcels | null;
   turn: TurnTaker | null;
   fill: FillSent | null;
   sync: SyncSent | null;
@@ -941,6 +966,7 @@ export function workOf(sent: unknown): Work {
     server: work.server,
     library: work.library,
     catalog: catalogOf(work.catalog),
+    kept_parcels: work.kept_parcels,
     turn: work.turn,
     fill: work.fill === null ? null : fillOf(work.fill),
     sync: work.sync === null ? null : syncOf(work.sync),

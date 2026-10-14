@@ -89,6 +89,13 @@ const DEADLINE: Duration = Duration::from_secs(60);
 ///
 /// What a person does about it is press refresh, which meets the same Storage
 /// and says so in the same words.
+///
+/// # The parcel files no row names
+///
+/// Once the catch-up is over, the parcel directory is swept of every file no
+/// held-parcel row names — what a letting go that ran beside a fetch can leave
+/// (spec: PK-21). Here and nowhere later, because this is the one moment the
+/// process is certain no fetch is in flight.
 pub async fn catch_up_at_startup(state: &ServerState) {
     match timeout(DEADLINE, run::catch_up(state, "startup")).await {
         Ok(Ok(_outcome)) => {}
@@ -98,6 +105,10 @@ pub async fn catch_up_at_startup(state: &ServerState) {
         // written here: `Replaying` is the guard that does it, for the reason it
         // exists — a catch-up can end without reaching any line of its own.
         Err(_elapsed) => gave_up(),
+    }
+    // However the catch-up ended: the sweep needs only the rows and the disk.
+    if let Ok(library) = state.unlocked() {
+        library.sweep_parcels().await;
     }
 }
 
