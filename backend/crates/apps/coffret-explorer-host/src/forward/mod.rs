@@ -1,5 +1,8 @@
 //! `/api`, forwarded to the server with the key it admits callers by.
 
+mod failure_kind;
+use failure_kind::failure_kind;
+
 mod headers;
 
 mod not_answering;
@@ -81,9 +84,15 @@ pub(crate) async fn forward(State(host): State<Arc<Forwarder>>, request: Request
     remove_hop_by_hop(&mut headers);
     let server = host.server;
     // A failure midway is met after the status has gone, so the browser sees
-    // only a body cut short; this is the one place it can still be said.
+    // only a body cut short; this is the one place it can still be said. Said
+    // as the kind of failure rather than as `cause`, whose text names the URL.
     let body = answer.bytes_stream().inspect_err(move |cause| {
-        tracing::warn!(%server, %cause, "the server's answer broke off midway");
+        tracing::warn!(
+            %server,
+            operation = "stream_answer",
+            kind = failure_kind(cause),
+            "the server's answer broke off midway",
+        );
     });
     let mut response = Response::new(Body::from_stream(body));
     *response.status_mut() = status;
