@@ -154,6 +154,10 @@ impl Index for TruncatingIndex<'_> {
         self.inner.mark_spooled(container_id).await
     }
 
+    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
+        self.inner.mark_commit_attempted(container_ids).await
+    }
+
     async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
         self.inner.clear_pending_row(container_id).await
     }

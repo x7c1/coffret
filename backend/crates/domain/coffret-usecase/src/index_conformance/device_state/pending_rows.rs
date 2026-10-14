@@ -163,3 +163,65 @@ pub async fn a_spool_is_recorded_until_its_row_is_cleared(fixture: &IndexUnderTe
         [pending(2, "batch-alpha")]
     );
 }
+
+/// A commit marks the rows of its batch attempted together, and leaves every
+/// other row as it was (spec: OC-2, OC-3).
+///
+/// The mark is what a later settle reads to tell a batch whose create may have
+/// reached Storage from one whose create was never sent, so it moves only the
+/// marker of the rows it names: another batch's row stays unmarked, and a
+/// Container with no row changes nothing rather than failing or inventing one.
+/// Marking again changes nothing, so a commit that is retried simply marks the
+/// same rows again.
+pub async fn a_batch_is_marked_attempted_together(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    for row in [
+        pending(1, "batch-alpha"),
+        spooling(2, "batch-alpha"),
+        pending(3, "batch-beta"),
+    ] {
+        index
+            .record_pending_row(row)
+            .await
+            .expect("recording a spool must succeed");
+    }
+    let attempted = |row: PendingRow| PendingRow {
+        commit_attempted: true,
+        ..row
+    };
+    let expected = [
+        attempted(pending(1, "batch-alpha")),
+        attempted(spooling(2, "batch-alpha")),
+        pending(3, "batch-beta"),
+    ];
+
+    index
+        .mark_commit_attempted(&[container_id(1), container_id(2), container_id(9)])
+        .await
+        .expect("marking a batch attempted must succeed");
+    assert_eq!(
+        index
+            .pending_rows()
+            .await
+            .expect("reading the spools must succeed"),
+        expected,
+        "the named rows are marked, and nothing else changes",
+    );
+
+    index
+        .mark_commit_attempted(&[container_id(1), container_id(2)])
+        .await
+        .expect("marking a batch attempted again must succeed");
+    index
+        .mark_commit_attempted(&[])
+        .await
+        .expect("marking an empty batch must succeed");
+    assert_eq!(
+        index
+            .pending_rows()
+            .await
+            .expect("reading the spools must succeed"),
+        expected,
+        "repeating the mark changes nothing",
+    );
+}

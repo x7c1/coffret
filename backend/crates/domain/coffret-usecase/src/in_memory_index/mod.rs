@@ -147,6 +147,11 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
+    async fn mark_commit_attempted(&self, container_ids: &[ContainerId]) -> IndexResult<()> {
+        self.locked().mark_commit_attempted(container_ids);
+        Ok(())
+    }
+
     async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
         self.locked().clear_pending_row(container_id);
         Ok(())

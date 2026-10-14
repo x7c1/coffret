@@ -246,6 +246,28 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
     Ok(())
 }
 
+/// Marks the pending rows of a batch whose Journal record is about to be sent
+/// (spec: OC-2, OC-3).
+///
+/// One `UPDATE` per Container, all inside the caller's transaction: a failure on
+/// any of them rolls back the ones before it, so the batch is marked whole or
+/// not at all. Like [`mark_spooled`], an update and not an upsert.
+pub(crate) fn mark_commit_attempted(
+    connection: &Connection,
+    container_ids: &[ContainerId],
+) -> IndexResult<()> {
+    const OPERATION: &str = "marking a commit attempted";
+    let mut statement = connection
+        .prepare_cached("UPDATE pending_rows SET commit_attempted = 1 WHERE container_id = ?1")
+        .map_err(classify(OPERATION))?;
+    for container_id in container_ids {
+        statement
+            .execute(params![container_id.as_bytes().as_slice()])
+            .map_err(classify(OPERATION))?;
+    }
+    Ok(())
+}
+
 /// Drops the pending row for one Container, its batch having committed or been
 /// abandoned.
 ///
