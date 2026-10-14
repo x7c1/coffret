@@ -241,7 +241,7 @@ enum Catalog<'a> {
 /// kept for the next run. Listing is not catching up: the catalog stays where
 /// it is, and the listing serves only as the handles the objects it names are
 /// reached by (spec: FM-3, FM-12).
-async fn listed(
+pub(super) async fn listed(
     store: &dyn ObjectStore,
     index: &dyn Index,
     retry: &RetryPolicy,
@@ -277,9 +277,10 @@ async fn listed(
 /// until the set may have been repaired: a repair keeps the commitment
 /// (spec: KL-13, KL-14), so the memory forgets a table kept with that finding
 /// at the next catch-up and any table once a write run of this process is over,
-/// and the fetch after that reads the set again and reports it short only if
-/// that read finds it so (spec: KL-15).
-async fn key_table(
+/// and does not keep a table whose read began before either of those forgets;
+/// the fetch after that reads the set again and reports it short only if that
+/// read finds it so (spec: KL-15).
+pub(super) async fn key_table(
     store: &dyn ObjectStore,
     keys: &LibraryKeys,
     retry: &RetryPolicy,
@@ -290,12 +291,21 @@ async fn key_table(
     if let Some(kept) = memory.and_then(|memory| memory.key_table_for(commitment)) {
         return Ok(kept);
     }
+    // Taken before the replicas are read, so that a write run of this process
+    // repairing the set while this read is under way leaves what it found
+    // unkept rather than put back after the repair forgot it (spec: KL-15).
+    let read_under = memory.map(FetchMemory::key_table_generation);
     let (key_table, degraded) = read_committed(store, keys.control(), retry, listing, commitment)
         .await?
         .reported();
     let key_table = Arc::new(key_table);
-    if let Some(memory) = memory {
-        memory.remember_key_table(commitment.clone(), Arc::clone(&key_table), degraded);
+    if let (Some(memory), Some(read_under)) = (memory, read_under) {
+        memory.remember_key_table(
+            read_under,
+            commitment.clone(),
+            Arc::clone(&key_table),
+            degraded,
+        );
     }
     Ok((key_table, degraded))
 }

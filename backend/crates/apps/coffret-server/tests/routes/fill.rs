@@ -531,3 +531,125 @@ async fn opening_a_file_behind_a_degraded_keyring_says_so_on_the_fill_it_arms() 
     );
     assert_eq!(fill["findings"], degraded_keyring(), "{work}");
 }
+
+// Two books in one Pack: the first page of the second lies in the parcel the
+// first book was read from, so it is placed alongside and opening that book
+// fetches nothing. A page opened in a folder this device does not wholly have
+// is the signal all the same, and the rest of the book comes over without a
+// second page being opened (spec: PK-16).
+#[tokio::test]
+async fn opening_a_present_page_of_a_folder_not_wholly_here_brings_the_rest_over() {
+    let served = Served::library().await;
+    for (index, (path, len)) in [
+        ("scans/a/000.jpg", 100 * 1024),
+        ("scans/b/000.jpg", 100 * 1024),
+        ("scans/b/001.jpg", 1536 * 1024),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        served
+            .commit_elsewhere(path, &vec![0x40 + index as u8; len])
+            .await;
+    }
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    // The first book, brought over by a fill: its fetch is waited for to its
+    // end, so what its parcel placed alongside is on disk once it is done.
+    served.arm_fill("scans/a");
+    served.fill_idle().await;
+    assert!(
+        served.holds("scans/b/000.jpg"),
+        "placed out of the parcel the first book was read from",
+    );
+    assert!(
+        !served.holds("scans/b/001.jpg"),
+        "and the rest of it runs on past that parcel",
+    );
+
+    let (_, before) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&before)["folder"], "scans/a", "{before}");
+
+    assert_eq!(
+        served.get("/api/file?path=scans/b/000.jpg").await.status(),
+        200
+    );
+    let (_, armed) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&armed)["folder"], "scans/b", "{armed}");
+
+    served.fill_idle().await;
+    let (_, done) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&done)["status"], "done", "{done}");
+    assert_eq!(
+        fill(&done)["findings"],
+        json!([]),
+        "no fetch, nothing heard"
+    );
+    assert!(served.holds("scans/b/001.jpg"), "the rest came over");
+}
+
+// A folder this device has whole has nothing to bring over, and opening a page
+// of it arms nothing: a drop placed every file of it here, and no fill has run.
+#[tokio::test]
+async fn opening_a_page_of_a_folder_wholly_here_arms_nothing() {
+    let served = Served::library().await;
+    assert_eq!(
+        served
+            .upload("fresh", &[("one.jpg", b"one"), ("two.jpg", b"two")])
+            .await
+            .status(),
+        200,
+    );
+    served.sync_idle().await;
+
+    assert_eq!(
+        served.get("/api/file?path=fresh/one.jpg").await.status(),
+        200
+    );
+    served.fill_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&work), &serde_json::Value::Null, "no fill: {work}");
+}
+
+// A fill that ended on a folder has had its go at it. What is still not here
+// after it — an Entry it declined, here — is not a reason to arm another run
+// on every page turned: each would meet the same answer (spec: EP-11). The
+// retry is `POST /api/fill`, and a page that has to be fetched still arms.
+#[tokio::test]
+async fn a_page_answered_from_disk_after_a_fill_ended_on_its_folder_arms_nothing() {
+    let served = Served::library().await;
+    served.plant_locally("albums/cover.png", b"something of my own");
+
+    assert_eq!(
+        served.get("/api/file?path=albums/notes.txt").await.status(),
+        200,
+    );
+    served.fill_idle().await;
+    let (_, ended) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&ended)["status"], "done", "{ended}");
+    assert_eq!(
+        declined(fill(&ended)),
+        [("albums/cover.png".to_owned(), "surfaced".to_owned())],
+    );
+    let run = fill(&ended)["run"].clone();
+    let (_, listing) = body_of(served.get("/api/list?path=albums").await).await;
+    assert!(
+        states(&listing)
+            .iter()
+            .any(|(name, state)| name == "cover.png" && state != "present"),
+        "the folder is still not wholly here: {listing}",
+    );
+
+    for page in ["albums/notes.txt", "albums/caf%C3%A9.jpg"] {
+        assert_eq!(
+            served.get(&format!("/api/file?path={page}")).await.status(),
+            200,
+        );
+        served.fill_idle().await;
+    }
+
+    let (_, after) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&after)["run"], run, "no second run: {after}");
+}

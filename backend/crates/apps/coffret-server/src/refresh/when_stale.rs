@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use coffret_device::{EntryFetchOutcome, Error};
+use coffret_device::{EntryFetchOutcome, Error, FetchError};
 use tracing::info;
 
 use crate::api_error::ApiError;
@@ -41,20 +41,83 @@ where
     Fut: Future<Output = coffret_device::Result<EntryFetchOutcome>>,
 {
     let first = fetch().await;
-    if !first.as_ref().is_err_and(says_catalog_stale) {
+    let Some(refusal) = first.as_ref().err().and_then(stale_refusal) else {
         return Ok(first);
-    }
+    };
     info!(
         operation = "fetch_entry",
-        "the Container the catalog names is not on Storage, so the catalog is caught up \
-         once and the Entry asked for again",
+        refusal,
+        "the Container the catalog names is out of this device's reach, so the catalog is \
+         caught up once and the Entry asked for again",
     );
     run::catch_up(state, "fetch").await?;
     Ok(fetch().await)
 }
 
-/// Whether a fetch's refusal is the fetch's own way of saying the catalog may
-/// be stale.
-fn says_catalog_stale(error: &Error) -> bool {
-    matches!(error, Error::Fetch { cause } if cause.may_mean_catalog_stale())
+/// Which of the fetch's two ways of saying the catalog may be stale a refusal
+/// is, where it is one of them: `not_found` where Storage says it holds no such
+/// object, and `unreachable` where no handle reaches it at all.
+///
+/// Named in the event because the two are read differently afterwards. The
+/// first is the provider's own word; the second is this device having no
+/// handle, which the listing it reaches objects through decides.
+fn stale_refusal(error: &Error) -> Option<&'static str> {
+    let Error::Fetch { cause } = error else {
+        return None;
+    };
+    if !cause.may_mean_catalog_stale() {
+        return None;
+    }
+    match **cause {
+        FetchError::ContainerUnreachable { .. } => Some("unreachable"),
+        // Storage's `NotFound`, which is the other refusal the gate above
+        // admits.
+        FetchError::Storage(_) => Some("not_found"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_device::{FetchError, Missing, StorageError};
+    use coffret_model::ContainerId;
+
+    use super::*;
+
+    fn fetch_refused(cause: FetchError) -> Error {
+        Error::Fetch {
+            cause: Box::new(cause),
+        }
+    }
+
+    // Both refusals `may_mean_catalog_stale` admits, each named in the event
+    // as itself, and a refusal it does not admit named as neither. The route
+    // cases meet the first; the second needs a Container no handle reaches,
+    // which a store addressed by name never leaves.
+    #[test]
+    fn each_refusal_that_may_mean_a_stale_catalog_is_named_as_itself() {
+        let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);
+        assert_eq!(
+            stale_refusal(&fetch_refused(FetchError::Storage(
+                StorageError::NotFound {
+                    missing: Missing::Object(container_id.object_name()),
+                }
+            ))),
+            Some("not_found"),
+        );
+        assert_eq!(
+            stale_refusal(&fetch_refused(FetchError::ContainerUnreachable {
+                container_id
+            })),
+            Some("unreachable"),
+        );
+        assert_eq!(
+            stale_refusal(&fetch_refused(FetchError::Storage(
+                StorageError::NotFound {
+                    missing: Missing::Listing,
+                }
+            ))),
+            None,
+        );
+    }
 }

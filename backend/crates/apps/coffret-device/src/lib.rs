@@ -294,6 +294,10 @@ pub use run_fetch::run_fetch;
 mod run_fetch_entry;
 pub use run_fetch_entry::run_fetch_entry;
 
+// Reading a listed folder's Container fronts ahead of the fetch that wants them.
+mod read_fronts;
+pub use read_fronts::FRONTS_PER_LISTING;
+
 mod run_freeze;
 pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 

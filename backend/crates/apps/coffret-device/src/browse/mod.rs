@@ -56,8 +56,14 @@ mod folders;
 // more than one kind of catalog row.
 mod list;
 
+// Which of one folder's Entries this device does not have.
+mod remote_in;
+
 // Whether this device has one Entry's file.
 mod state_of;
+
+// Whether this device has every Entry of one folder.
+mod wholly_present;
 
 #[cfg(test)]
 mod tests;
