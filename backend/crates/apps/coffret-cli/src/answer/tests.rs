@@ -136,7 +136,7 @@ fn a_fetch_answers_its_counts() {
         surfaced: Vec::new(),
         refused: Vec::new(),
         key_lost: Vec::new(),
-        degraded: None,
+        short: None,
     };
     let ran = Ran::clean(Answer::Fetched(Fetched::from(&outcome)));
 
@@ -168,7 +168,7 @@ fn a_key_lost_container_is_found_by_that_name() {
         surfaced: Vec::new(),
         refused: Vec::new(),
         key_lost: vec![container_id],
-        degraded: None,
+        short: None,
     };
     let findings = Findings::assembled([Finding::KeyLostContainer { container_id }]);
     let ran = Ran::found(

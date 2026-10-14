@@ -2,7 +2,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use coffret_model::EntryPath;
 
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::publication::Publication;
 use crate::fetch::unheld_parcel::UnheldParcel;
@@ -18,17 +18,17 @@ use crate::fetch::unheld_parcel::UnheldParcel;
 /// copy and never across an await.
 pub(super) struct Herald<'h> {
     publication: &'h dyn Publication,
-    degraded: Option<DegradedKeyring>,
+    short: Option<ShortKeyring>,
     unheld: Mutex<Vec<UnheldParcel>>,
 }
 
 impl<'h> Herald<'h> {
     /// A read telling `publication`, with what the run read of the committed
     /// Keyring before it started.
-    pub(super) fn new(publication: &'h dyn Publication, degraded: Option<DegradedKeyring>) -> Self {
+    pub(super) fn new(publication: &'h dyn Publication, short: Option<ShortKeyring>) -> Self {
         Self {
             publication,
-            degraded,
+            short,
             unheld: Mutex::new(Vec::new()),
         }
     }
@@ -47,7 +47,7 @@ impl<'h> Herald<'h> {
         let unheld = self.locked().clone();
         self.publication.published(&EntryFetchOutcome {
             fetch: EntryFetch::Placed,
-            degraded: self.degraded,
+            short: self.short,
             alongside: alongside.to_vec(),
             unheld,
         });

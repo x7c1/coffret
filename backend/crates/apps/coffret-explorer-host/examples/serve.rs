@@ -1,5 +1,5 @@
 //! The explorer's host on a port of its own, in front of a server that is
-//! already running: what the desktop shell will do in-process, runnable today
+//! already running: what the desktop app will do in-process, runnable today
 //! against `make dev`'s server.
 //!
 //! ```text

@@ -4,7 +4,7 @@ use coffret_device::Passphrase;
 use serde::de::{self, Deserialize, Deserializer, Visitor};
 use zeroize::ZeroizeOnDrop;
 
-/// The Passphrase as the Passphrase window's call hands it to this shell: the
+/// The Passphrase as the Passphrase window's call hands it to this app: the
 /// one point where coffret's own code receives it, and so where DK-7's claim
 /// over it begins.
 ///
@@ -114,7 +114,7 @@ mod tests {
     }
 
     // The testable half of DK-7 for the one inventory type the domain's
-    // assertions cannot name: they live in a crate below this shell. The same
+    // assertions cannot name: they live in a crate below this app. The same
     // two checks, for the same reasons; the probe is checked against a type that
     // is `Clone` on purpose, so that it can tell the two apart.
     #[test]

@@ -287,9 +287,9 @@ async fn a_container_gone_from_a_current_catalog_is_refused_after_one_catch_up()
     assert_eq!(catch_ups_for_a_fetch(&logs), 1, "{}", logs.text());
 }
 
-/// Whether the fill the last opened file armed says the Keyring is degraded,
+/// Whether the fill the last opened file armed says the Keyring is short,
 /// which is where a person who only opens files hears of it (spec: KL-15).
-async fn says_degraded(served: &Served) -> bool {
+async fn says_short(served: &Served) -> bool {
     let (_, work) = body_of(served.get("/api/work").await).await;
     fill(&work)["findings"].as_array().is_some_and(|findings| {
         findings
@@ -323,14 +323,11 @@ async fn a_refresh_that_advances_nothing_keeps_a_whole_sets_key_table() {
 // next fetch reads the Keyring again rather than repeating what the first read
 // found.
 #[tokio::test]
-async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
+async fn a_refresh_after_a_repair_elsewhere_stops_the_short_finding() {
     let served = two_containers().await;
     let lost = served.degrade_the_keyring().await;
     open(&served, "solo/one.png", b"one").await;
-    assert!(
-        says_degraded(&served).await,
-        "the first read finds it short"
-    );
+    assert!(says_short(&served).await, "the first read finds it short");
 
     served.put_back(lost).await;
     let (status, refreshed) = body_of(served.post("/api/refresh").await).await;
@@ -342,7 +339,7 @@ async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
     let asked = served.asked();
     assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
     assert!(
-        !says_degraded(&served).await,
+        !says_short(&served).await,
         "and found whole, so not said short again",
     );
 }
@@ -353,14 +350,11 @@ async fn a_refresh_after_a_repair_elsewhere_stops_the_degraded_finding() {
 // and the next fetch learns so by reading it rather than repeating the finding
 // the key table was kept with.
 #[tokio::test]
-async fn a_sync_that_repaired_the_set_stops_the_degraded_finding() {
+async fn a_sync_that_repaired_the_set_stops_the_short_finding() {
     let served = two_containers().await;
     served.degrade_the_keyring().await;
     open(&served, "solo/one.png", b"one").await;
-    assert!(
-        says_degraded(&served).await,
-        "the first read finds it short"
-    );
+    assert!(says_short(&served).await, "the first read finds it short");
 
     served.refuse_commits();
     served.upload("albums", &[("late.jpg", b"late")]).await;
@@ -377,7 +371,7 @@ async fn a_sync_that_repaired_the_set_stops_the_degraded_finding() {
     let asked = served.asked();
     assert_eq!(whole_reads(&asked), 1, "the Keyring, read again: {asked:?}");
     assert!(
-        !says_degraded(&served).await,
+        !says_short(&served).await,
         "and found whole, so not said short again",
     );
 }

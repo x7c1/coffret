@@ -1,4 +1,4 @@
-//! The one setting the shell reads for itself.
+//! The one setting the app reads for itself.
 
 use anyhow::Context;
 

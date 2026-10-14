@@ -30,7 +30,7 @@ use std::ops::Range;
 
 use coffret_model::{EntryMetadata, EntryPath};
 
-use crate::commit::DegradedKeyring;
+use crate::commit::ShortKeyring;
 use crate::device_state::DeviceTime;
 use crate::fetch::cancellation::Cancellation;
 use crate::fetch::fetch_error::FetchError;
@@ -88,7 +88,7 @@ pub(super) struct ParcelRead<'r> {
     pub(super) publication: &'r dyn Publication,
     /// What the run read of the committed Keyring before the parcels, which
     /// goes with that news.
-    pub(super) degraded: Option<DegradedKeyring>,
+    pub(super) short: Option<ShortKeyring>,
     /// Where the Container's front is kept between runs, where it is
     /// (spec: FM-2, PK-20).
     pub(super) memory: Option<&'r FetchMemory>,

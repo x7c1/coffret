@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use coffret_model::{ContainerId, Generation, KeyTable, KeyringCommitment};
 
-use crate::commit::{ControlListing, DegradedKeyring};
+use crate::commit::{ControlListing, ShortKeyring};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
@@ -80,7 +80,7 @@ struct Listed {
 struct Opened {
     commitment: KeyringCommitment,
     key_table: Arc<KeyTable>,
-    degraded: Option<DegradedKeyring>,
+    short: Option<ShortKeyring>,
 }
 
 impl FetchMemory {
@@ -127,12 +127,12 @@ impl FetchMemory {
     pub(crate) fn key_table_for(
         &self,
         commitment: &KeyringCommitment,
-    ) -> Option<(Arc<KeyTable>, Option<DegradedKeyring>)> {
+    ) -> Option<(Arc<KeyTable>, Option<ShortKeyring>)> {
         self.locked()
             .keyring
             .as_ref()
             .filter(|opened| &opened.commitment == commitment)
-            .map(|opened| (Arc::clone(&opened.key_table), opened.degraded))
+            .map(|opened| (Arc::clone(&opened.key_table), opened.short))
     }
 
     /// Forgets the key table where the read that produced it found the set
@@ -144,12 +144,12 @@ impl FetchMemory {
     /// found, so the finding would otherwise outlive the condition it reports;
     /// the next fetch reads the set again instead, and says it is short only if
     /// it still is (spec: KL-15).
-    pub(crate) fn forget_degraded_key_table(&self) {
+    pub(crate) fn forget_short_key_table(&self) {
         let mut kept = self.locked();
         if kept
             .keyring
             .as_ref()
-            .is_some_and(|opened| opened.degraded.is_some())
+            .is_some_and(|opened| opened.short.is_some())
         {
             kept.keyring = None;
         }
@@ -171,12 +171,12 @@ impl FetchMemory {
         &self,
         commitment: KeyringCommitment,
         key_table: Arc<KeyTable>,
-        degraded: Option<DegradedKeyring>,
+        short: Option<ShortKeyring>,
     ) {
         self.locked().keyring = Some(Opened {
             commitment,
             key_table,
-            degraded,
+            short,
         });
     }
 

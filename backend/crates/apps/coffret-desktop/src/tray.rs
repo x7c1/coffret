@@ -1,4 +1,4 @@
-//! The tray icon: what is left of the shell once a Library is open.
+//! The tray icon: what is left of the app once a Library is open.
 //!
 //! Three items. *Unlock…* brings the Passphrase window forward once the Library
 //! has locked itself, to unlock it in place without waiting for the explorer to
@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::explorer;
-use crate::unlock::{self, Shell};
+use crate::unlock::{self, Desktop};
 
 /// The tray icon's id.
 const TRAY_ID: &str = "coffret";
@@ -21,7 +21,7 @@ const TRAY_ID: &str = "coffret";
 const UNLOCK_ID: &str = "unlock";
 /// The menu item that opens the explorer again.
 const OPEN_ID: &str = "open";
-/// The menu item that ends the shell.
+/// The menu item that ends the app.
 const QUIT_ID: &str = "quit";
 
 /// Puts the icon in the tray.
@@ -51,7 +51,7 @@ pub fn show(app: &AppHandle) -> anyhow::Result<()> {
 fn chosen(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         UNLOCK_ID => unlock_chosen(app),
-        OPEN_ID => match app.state::<Shell>().explorer() {
+        OPEN_ID => match app.state::<Desktop>().explorer() {
             Some(address) => explorer::open(app, address),
             // The icon is shown only once the explorer is served.
             None => tracing::warn!("the tray asked for an explorer that is not served"),
@@ -71,7 +71,7 @@ fn chosen(app: &AppHandle, event: MenuEvent) {
 /// lock happens on the server's own clock and a menu kept in step with it would
 /// be a second thing watching that clock.
 fn unlock_chosen(app: &AppHandle) {
-    let Some(served) = app.state::<Shell>().served().cloned() else {
+    let Some(served) = app.state::<Desktop>().served().cloned() else {
         // The icon is shown only once a Library is served.
         tracing::warn!("the tray asked to unlock a Library that is not served");
         return;

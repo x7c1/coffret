@@ -117,7 +117,7 @@ pub async fn file(
         EntryFetch::Placed => fill_folder(
             Arc::clone(&state),
             Folder::holding(&path),
-            fetched.degraded,
+            fetched.short,
             fetched.unheld,
         ),
         EntryFetch::AlreadyPresent => {}
