@@ -54,7 +54,7 @@
   "library": {
     "library_id": "1111111111111111",
     "name": "served",
-    "provider": "s3"
+    "provider": "drive"
   },
   "listings": {
     "albums": {

@@ -133,7 +133,7 @@ async fn the_status_bar_is_told_which_library_this_is() {
         json!({
             "name": "served",
             "library_id": "1111111111111111",
-            "provider": "s3",
+            "provider": "drive",
         }),
     );
 }
