@@ -25,8 +25,8 @@ export function DeleteConfirm({
 }: {
   question: DeleteQuestion;
   /**
-   * The sync or freeze under way as the question is shown, which a deletion
-   * confirmed now starts after — said here, so the person learns it before
+   * The sync or freeze holding the turn as the question is shown, which a
+   * deletion confirmed now starts after — said here, so the person learns it before
    * confirming rather than from the progress line after.
    */
   startsAfter?: WaitsFor;

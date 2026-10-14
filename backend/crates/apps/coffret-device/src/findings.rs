@@ -379,6 +379,37 @@ mod tests {
         );
     }
 
+    // EP-15's copy moved to the trash is said as what was done, and still
+    // opens on a kind word of its own, as every other finding does: the line is
+    // what a script reading the CLI's `said` splits on.
+    #[test]
+    fn a_copy_moved_to_the_trash_is_said_as_moved() {
+        let outcome = SyncOutcome {
+            added: Vec::new(),
+            replaced: Vec::new(),
+            unchanged: 0,
+            mappings: 1,
+            surfaced: vec![Surfaced::MovedToTrash {
+                path: entry_path("albums/old.jpg"),
+            }],
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: None,
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(!findings.needs_attention());
+
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered,
+            [
+                "moved albums/old.jpg: it was deleted from the Library, and this device's \
+              unedited copy was moved to the trash"
+            ]
+        );
+    }
+
     // EP-12's finding names the mapping the way EP-13's does, because they are
     // two questions about one mapping and a person with several of them is
     // otherwise told a folder went unread with no way to tell which mapping it

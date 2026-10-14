@@ -29,6 +29,7 @@ use crate::finding::Finding;
 use crate::folder::Folder;
 use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
+use crate::pending_rows::TurnTaker;
 use crate::reconnect::Reconnect;
 use crate::refresh::Standing;
 use crate::reported::Reported;
@@ -193,26 +194,48 @@ fn answer(
     sync: Option<SyncRun>,
     freeze: Option<Latest<FreezeRun>>,
 ) -> WorkDto {
+    // The turn is the first of the two runs still going, as it is on a server
+    // that took them up in that order; the other waits for it.
+    let turn = if sync
+        .as_ref()
+        .is_some_and(|run| run.status == SyncStatus::Syncing)
+    {
+        Some(TurnTaker::Sync)
+    } else if freeze
+        .as_ref()
+        .is_some_and(|latest| latest.on_record.status == FreezeStatus::Freezing)
+    {
+        Some(TurnTaker::Freeze)
+    } else {
+        None
+    };
     WorkDto {
         server: SERVER.to_owned(),
         library,
         catalog: CatalogDto::of(&catalog),
+        turn: turn.map(TurnTaker::as_str),
         fill: fill.as_ref().map(FillDto::of),
-        sync: sync.as_ref().map(SyncDto::of),
-        freeze: freeze.as_ref().map(FreezeDto::of),
+        sync: sync.as_ref().map(|run| SyncDto::of(run, turn)),
+        freeze: freeze.as_ref().map(|latest| FreezeDto::of(latest, turn)),
         delete: None,
         reconnect: None,
     }
 }
 
 /// The same answer, with a deletion standing where `run` says and `waiting`
-/// more behind it.
+/// more behind it, holding the turn where it is running: every answer it is
+/// put beside has nothing else running.
 fn deleting(answer: WorkDto, run: DeleteRun, waiting: usize) -> WorkDto {
+    let turn = (run.status == DeleteStatus::Deleting).then_some(TurnTaker::Delete);
     WorkDto {
-        delete: Some(DeleteDto::of(&DeleteReport {
-            on_record: run,
-            waiting,
-        })),
+        turn: turn.map(TurnTaker::as_str),
+        delete: Some(DeleteDto::of(
+            &DeleteReport {
+                on_record: run,
+                waiting,
+            },
+            turn,
+        )),
         ..answer
     }
 }

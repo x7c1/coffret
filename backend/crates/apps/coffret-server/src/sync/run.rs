@@ -5,6 +5,7 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::finding::Finding;
+use crate::pending_rows::TurnTaker;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
@@ -35,7 +36,7 @@ pub(super) async fn sync(state: &ServerState) {
     // rather than being refused them (spec: OC-2). Before the keys, so the
     // wait is not counted as somebody being here (spec: DK-4) and a lock that
     // lands meanwhile stops this run below.
-    let _turn = state.pending_rows.take().await;
+    let _turn = state.pending_rows.take(TurnTaker::Sync).await;
 
     // The keys, once, for the whole run, as the fill takes them: a lock that
     // lands mid-walk leaves this holding what it took and the run finishes,

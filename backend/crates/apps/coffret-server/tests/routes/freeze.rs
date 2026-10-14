@@ -85,6 +85,7 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
         json!({
             "library": "unlocked",
             "catalog": { "state": "caught_up", "stopped": null },
+            "turn": null,
             "fill": null,
             "sync": null,
             "reconnect": null,

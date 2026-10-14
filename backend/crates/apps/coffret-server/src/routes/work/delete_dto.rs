@@ -1,9 +1,10 @@
 use serde::Serialize;
 
-use crate::delete::DeleteReport;
+use crate::delete::{DeleteReport, DeleteStatus};
+use crate::pending_rows::TurnTaker;
 use crate::routes::{RefusalDto, RefusedPackDto};
 
-use super::{FindingDto, StepDto};
+use super::{waits, FindingDto, StepDto};
 
 #[derive(Serialize)]
 pub(super) struct DeleteDto {
@@ -37,7 +38,12 @@ pub(super) struct DeleteDto {
     /// How far into the run the flow says it has got, and `null` before it has
     /// said and once the run is over.
     step: Option<StepDto>,
-    /// How many deletions are waiting their turn behind this one.
+    /// Whether the run is waiting for its turn at the pending rows: true from
+    /// the moment it is on record until it holds the turn, and false once it
+    /// does and once it is over.
+    waits: bool,
+    /// How many deletions are waiting their turn behind this one — queued in
+    /// the deletion's own queue, which is not what the field above says.
     waiting: usize,
     /// What stopped the deletion, and `null` where nothing did — which is
     /// exactly where `status` is not `stopped`.
@@ -45,7 +51,7 @@ pub(super) struct DeleteDto {
 }
 
 impl DeleteDto {
-    pub(super) fn of(report: &DeleteReport) -> Self {
+    pub(super) fn of(report: &DeleteReport, turn: Option<TurnTaker>) -> Self {
         let run = &report.on_record;
         Self {
             run: run.run,
@@ -66,6 +72,11 @@ impl DeleteDto {
                 .collect(),
             findings: run.findings.iter().map(FindingDto::of).collect(),
             step: run.step.as_ref().map(StepDto::of),
+            waits: waits(
+                matches!(run.status, DeleteStatus::Deleting),
+                TurnTaker::Delete,
+                turn,
+            ),
             waiting: report.waiting,
             stopped: run.status.stopped().map(RefusalDto::of),
         }

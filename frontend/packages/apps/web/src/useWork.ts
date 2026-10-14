@@ -13,6 +13,7 @@ import {
   type LibraryState,
   type Reconnect,
   type Sync,
+  type TurnTaker,
 } from '@coffret/api';
 
 import {
@@ -26,6 +27,7 @@ import {
   type Dismissed,
 } from './dismissed';
 import { POLL_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
+import { finishedAfter, NOTHING_FINISHED } from './finished';
 import { refusedAsRanOut } from './ranOut';
 import { offeredFolders, stillStanding, type Pressed, type Trouble } from './retry';
 import { said } from './useAsked';
@@ -57,6 +59,17 @@ export function useWork(readerOpen: boolean): {
   freeze: Freeze | null;
   /** The latest deletion, running or finished, and `null` where none has run. */
   deletion: Delete | null;
+  /**
+   * Which flow's run holds this device's pending work, and `null` where nobody
+   * does — or where no answer has said.
+   */
+  turn: TurnTaker | null;
+  /**
+   * The sync, the freeze and the deletion whose runs are over, the most
+   * recently finished first — as this tab saw the answers report the endings.
+   * See [`finishedAfter`](./finished).
+   */
+  finished: readonly TurnTaker[];
   /**
    * Whether this device still holds the Library open, and `null` until an
    * answer has said.
@@ -122,6 +135,8 @@ export function useWork(readerOpen: boolean): {
   const [sync, setSync] = useState<Sync | null>(null);
   const [freeze, setFreeze] = useState<Freeze | null>(null);
   const [deletion, setDeletion] = useState<Delete | null>(null);
+  const [turn, setTurn] = useState<TurnTaker | null>(null);
+  const [finished, setFinished] = useState(NOTHING_FINISHED);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
@@ -157,6 +172,10 @@ export function useWork(readerOpen: boolean): {
     setSync(work.sync);
     setFreeze(work.freeze);
     setDeletion(work.delete);
+    setTurn(work.turn);
+    // Which run finished last, across the flows: the work answer carries no
+    // clock, so the order is the order the answers reported the endings in.
+    setFinished((before) => finishedAfter(before, work));
     setLibrary(work.library);
     setCatalog(work.catalog);
     setReconnect(work.reconnect);
@@ -369,13 +388,13 @@ export function useWork(readerOpen: boolean): {
         setDismissed((away) => putAwayFolders(away, what.queue, what.folders));
         return;
       }
-      const run = { fill, sync, freeze }[what.flow];
+      const run = { fill, sync, freeze, delete: deletion }[what.flow];
       if (!canPutAway(run)) {
         return;
       }
       setDismissed((away) => putAway(away, what.flow, run.run));
     },
-    [fill, sync, freeze],
+    [fill, sync, freeze, deletion],
   );
 
   // What a press was refused with, for as long as that press is still on offer.
@@ -407,6 +426,8 @@ export function useWork(readerOpen: boolean): {
     sync,
     freeze,
     deletion,
+    turn,
+    finished: finished.order,
     library,
     catalog,
     reconnect,

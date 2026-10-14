@@ -311,8 +311,12 @@ function andTheRest(count: number, line: string | null): string | null {
 /**
  * The line the status bar shows for a sync, or `null` for one worth no line.
  *
- * A sync that finished with nothing to report says nothing: it is the rows that
- * changed, and they say so themselves. One that found something keeps its line,
+ * A sync that finished with nothing to report says how many files it carried
+ * in. The rows say the same of the folder on the screen, but the bar is where
+ * the latest thing that happened is said, and a sync that said nothing left
+ * the line to whatever finished before it — a Pack made minutes ago went on
+ * saying `packed …` over every file added after it. One that found something
+ * keeps its line instead,
  * because that finding is the only place the person who dropped a file is told
  * their file was not backed up — and one that stopped keeps its line for the
  * reason a stopped fill does: the retry hangs off it. A stopped one says what
@@ -320,10 +324,10 @@ function andTheRest(count: number, line: string | null): string | null {
  * repair its commit made before failing reaches the person who dropped the
  * file (spec: KL-15).
  *
- * A running one with no step yet, while a freeze or a deletion is under way, is
- * waiting its turn behind it, and says so in the words `waits` carries — the
- * same [`waitsFor`](./turns.ts) answer the deletion's and the freeze's lines
- * are given.
+ * A running one the server says is waiting its turn behind a freeze or a
+ * deletion says so in the words `waits` carries — the same
+ * [`waitsFor`](./turns.ts) answer the deletion's and the freeze's lines are
+ * given.
  */
 export function syncLine(sync: Sync | null, waits: WaitsFor = null): string | null {
   if (sync === null) {
@@ -337,7 +341,26 @@ export function syncLine(sync: Sync | null, waits: WaitsFor = null): string | nu
     case 'stopped':
       return besides(`could not back up what was added — ${sync.stopped.message}`, sync.findings);
     case 'done':
-      return sync.findings.length === 0 ? null : oneLine(sync.findings);
+      return sync.findings.length === 0 ? addedLine(sync.added) : oneLine(sync.findings);
+  }
+}
+
+/**
+ * What a sync that found nothing came to: how many files it carried into the
+ * Library, or that everything added was there already.
+ *
+ * The second is said of the files rather than of the run: a sync armed while
+ * another ran often finds the first carried everything, and as the last word
+ * on the drop it must not read as the dropped files having gone nowhere.
+ */
+function addedLine(added: number): string {
+  switch (added) {
+    case 0:
+      return 'everything added is in the Library';
+    case 1:
+      return 'added 1 file to the Library';
+    default:
+      return `added ${added} files to the Library`;
   }
 }
 
@@ -365,8 +388,8 @@ const PACKING = 'packing';
  * that stopped keeps its line because the retry hangs off it, and says what it
  * found on the way after what stopped it, as a sync's does.
  *
- * A running one with no step yet, while a sync or a deletion is under way, is
- * waiting its turn behind it and says so, as a sync's line does.
+ * A running one the server says is waiting its turn behind a sync or a
+ * deletion says so, as a sync's line does.
  */
 export function freezeLine(
   freeze: Freeze | DisplacedFreeze | null,

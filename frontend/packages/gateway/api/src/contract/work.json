@@ -10,7 +10,8 @@
     "library": "locked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -51,7 +52,8 @@
       "stopped": null,
       "waiting": [
         "books/vol-2"
-      ]
+      ],
+      "waits": true
     },
     "library": "unlocked",
     "reconnect": null,
@@ -70,8 +72,10 @@
         "phase": "uploading",
         "total": 4
       },
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
   },
   {
     "catalog": {
@@ -99,12 +103,14 @@
         "total": 1
       },
       "stopped": null,
-      "waiting": []
+      "waiting": [],
+      "waits": false
     },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": "freeze"
   },
   {
     "catalog": {
@@ -129,12 +135,14 @@
         "total": 4
       },
       "stopped": null,
-      "waiting": []
+      "waiting": [],
+      "waits": false
     },
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": "freeze"
   },
   {
     "catalog": {
@@ -162,14 +170,16 @@
         "total": 2
       },
       "stopped": null,
-      "waiting": 1
+      "waiting": 1,
+      "waits": false
     },
     "fill": null,
     "freeze": null,
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": "delete"
   },
   {
     "catalog": {
@@ -220,14 +230,16 @@
       "status": "done",
       "step": null,
       "stopped": null,
-      "waiting": 0
+      "waiting": 0,
+      "waits": false
     },
     "fill": null,
     "freeze": null,
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -253,14 +265,16 @@
         "error": "conflict",
         "message": "another device changed the Library meanwhile, so nothing was changed — running it again plans from the Library as it is now"
       },
-      "waiting": 0
+      "waiting": 0,
+      "waits": false
     },
     "fill": null,
     "freeze": null,
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -284,8 +298,10 @@
         "phase": "catching_up",
         "total": 2
       },
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
   },
   {
     "catalog": {
@@ -309,8 +325,10 @@
         "phase": "settling",
         "total": 2
       },
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
   },
   {
     "catalog": {
@@ -334,8 +352,10 @@
         "phase": "scanning",
         "total": 2
       },
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
   },
   {
     "catalog": {
@@ -359,8 +379,10 @@
         "phase": "fetching",
         "total": 2
       },
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
   },
   {
     "catalog": {
@@ -520,7 +542,8 @@
       "status": "done",
       "step": null,
       "stopped": null,
-      "waiting": []
+      "waiting": [],
+      "waits": false
     },
     "library": "unlocked",
     "reconnect": null,
@@ -633,8 +656,10 @@
       "run": 2,
       "status": "done",
       "step": null,
-      "stopped": null
-    }
+      "stopped": null,
+      "waits": false
+    },
+    "turn": null
   },
   {
     "catalog": {
@@ -731,7 +756,8 @@
         "error": "server",
         "message": "the server did not finish, and did not say why"
       },
-      "waiting": []
+      "waiting": [],
+      "waits": false
     },
     "library": "unlocked",
     "reconnect": null,
@@ -752,8 +778,10 @@
         "error": "storage",
         "message": "the Library's Storage no longer accepts this device's grant",
         "reason": "unauthenticated"
-      }
-    }
+      },
+      "waits": false
+    },
+    "turn": null
   },
   {
     "catalog": {
@@ -778,7 +806,8 @@
     "library": "unlocked",
     "reconnect": null,
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -798,7 +827,8 @@
       "state": "waiting"
     },
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -818,7 +848,8 @@
       "state": "renewed"
     },
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -838,7 +869,8 @@
       "state": "refused"
     },
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -858,7 +890,8 @@
       "state": "timed_out"
     },
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   },
   {
     "catalog": {
@@ -878,6 +911,7 @@
       "state": "failed"
     },
     "server": "contract-server",
-    "sync": null
+    "sync": null,
+    "turn": null
   }
 ]
