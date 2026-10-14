@@ -27,18 +27,30 @@ coffret-device = { workspace = true }
 coffret-server = { workspace = true }
 
 axum = { workspace = true }
+# The encoding a launch ticket and a browser token travel in: unpadded
+# base64url, which a URL fragment and an `Authorization` header both carry as
+# it is (spec: LA-20).
+base64 = { workspace = true }
 # `inspect_err` over the answer's body: a body that breaks off midway is met
 # after the status has gone, and without this nothing would say so.
 futures-util = { workspace = true }
+# The operating system's CSPRNG, which every ticket and token is drawn from.
+getrandom = { workspace = true }
 include_dir = { workspace = true, optional = true }
 # The client `/api` is forwarded through. Already the workspace's HTTP client
 # (the Drive gateway's), and its `stream` feature is what carries a body through
 # in pieces rather than gathered: a drop onto a folder is tens of megabytes in
 # one request, and a file the explorer opens comes back the same way.
 reqwest = { workspace = true }
+# The digest a ticket or a token is held as: never the credential itself
+# (spec: LA-20).
+sha2 = { workspace = true }
 # A forwarded request that could not be sent, or an answer that broke off, is
 # met here and nowhere else; the person sees a `502`, and this says why.
 tracing = { workspace = true }
+# What a ticket or a token, and the digest kept of either, overwrites itself
+# with as it is dropped.
+zeroize = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
