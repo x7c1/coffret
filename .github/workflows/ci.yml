@@ -228,6 +228,22 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
+      # Every package in pnpm-lock.yaml against the advisories the npm registry
+      # publishes, development and test dependencies included: none of those
+      # ships in the explorer, but the toolchain runs on the same device as a
+      # person's Libraries. An advisory no update clears is allowed in
+      # frontend/pnpm-workspace.yaml, with its reason beside it, and not here.
+      #
+      # This is the one step in the job that can turn red with this repository
+      # unchanged, when an advisory is published against something already in
+      # the lockfile. It runs last so that such a day still says whether the
+      # frontend builds, typechecks, tests and lints. Without
+      # `--ignore-registry-errors`: a registry that cannot be asked is a run that
+      # did not check, and passing it would be the silence this step exists to
+      # remove. `make audit` runs the same command.
+      - name: Audit
+        run: pnpm audit
+
   # The checks `make check` runs on how the spec is cited rather than on the
   # code: a rule is cited with the `spec:` prefix outside the register, every
   # cited rule has exactly one home, and that second check still refuses what it

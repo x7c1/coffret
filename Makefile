@@ -705,6 +705,18 @@ shell-lint:
 deny:
 	cd backend && cargo deny --locked check
 
+## audit: ask the npm registry for advisories against frontend/pnpm-lock.yaml
+#
+# The frontend's counterpart to `deny`: the run the `Audit` step of the
+# `frontend` job in .github/workflows/ci.yml makes, reproduced here for the
+# reasons `deny` is. Out of `make check` for the reason `deny` is, given below.
+# That step's comment says why development and test dependencies are asked
+# about too; frontend/pnpm-workspace.yaml says how an advisory is allowed. The
+# pnpm that frontend/package.json pins is the one that runs this.
+.PHONY: audit
+audit:
+	cd frontend && pnpm audit
+
 ## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
@@ -734,7 +746,7 @@ deny:
 #     target above. What stands for them here is the gateway's own cases over
 #     its scripted transport, and the device layer's cases that create and join
 #     a Library through a stub one.
-#   - `deny`: see below.
+#   - `deny` and `audit`: see below.
 #
 # `cargo doc` is here and not only in CI because a broken intra-doc link is the
 # one failure mode a documentation-only change has, and the doc comments in this
@@ -764,6 +776,11 @@ deny:
 # `cargo-deny` job in .github/workflows/ci.yml, and backend/deny.toml for what
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
+#
+# `pnpm audit` is absent for the same reasons: it sends the lockfile's packages
+# to the npm registry and answers from the advisories published there, which
+# move without this checkout moving. The `frontend` job in CI runs it, and
+# `make audit` above runs it here.
 .PHONY: check
 check: deps interop spec-citations spec-rule-ids spec-rule-ids-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace

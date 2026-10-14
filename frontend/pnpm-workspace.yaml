@@ -2,3 +2,9 @@ packages:
   - 'packages/*/*'
 allowBuilds:
   esbuild: true
+# An advisory `pnpm audit` (`make audit`, and the `Audit` step of CI's
+# `frontend` job) should let pass is listed under `auditConfig.ignoreGhsas`, by
+# its GHSA id, and only when no release clears it or the release that does is a
+# major that cannot be adopted yet. Each id carries a comment naming the input
+# path and the mode it would need (say, "needs Vitest's UI server listening")
+# and why that does not hold here. There are none today.
