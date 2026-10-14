@@ -46,31 +46,42 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // The explorer as it is built, served the way `make web` serves it: a static
-  // bundle with `/api` proxied to the coffret server. The proxy is aimed by
-  // COFFRET_PORT and reads the key the server admits callers by out of the file
-  // COFFRET_SERVER_KEY_FILE names — on this device, so the key never reaches
-  // the page. Together those two are the whole of pointing the explorer at the
-  // server this run started.
+  // The explorer as it is built, served the way `make web` serves it: the
+  // development host, `coffret-explorer-dev`, serving the build from disk with
+  // `/api` forwarded to the coffret server. The host reads the key the server
+  // admits callers by out of the Library's directory — on this device, so the
+  // key never reaches the page — and admits the page only by a browser token,
+  // which each journey gets by opening the launch file the host writes into
+  // `launchDir` (see `openExplorer` in `journeys/journey.ts`). Nothing turns that off.
   //
-  // The preview outlives every server the journeys start, including the ones
-  // that replace a killed process; the proxy reads that file per request, so it
-  // is aimed once and follows the key wherever it goes.
+  // The host outlives every server the journeys start, including the ones that
+  // replace a killed process; it reads the server's key file per request, and writes a
+  // fresh launch file — the host's generation retired, every session with it —
+  // when the key in it changes.
   webServer: {
-    // Loopback and nothing else, as the server it proxies to binds: the pages
-    // it serves read a Library's plaintext, and an interface anybody else is on
-    // would be that plaintext offered to whoever else is on the network.
-    command:
-      `pnpm exec vite preview --host 127.0.0.1 --port ${setting.webPort} --strictPort`,
-    cwd: setting.webPackage,
+    command: [
+      setting.hostBinary,
+      '--library',
+      setting.library,
+      '--server-port',
+      String(setting.serverPort),
+      '--port',
+      String(setting.webPort),
+      '--dist',
+      setting.webDist,
+      '--launch-dir',
+      setting.launchDir,
+    ]
+      .map((argument) => `'${argument.replaceAll("'", "'\\''")}'`)
+      .join(' '),
     url: setting.webUrl,
-    // Nothing else may be answering there: a preview left over from another run
+    // Nothing else may be answering there: a host left over from another run
     // would be serving another build against another server.
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      COFFRET_PORT: String(setting.serverPort),
-      COFFRET_SERVER_KEY_FILE: setting.serverKeyFile,
+      COFFRET_STATE_DIR: setting.stateDir,
+      COFFRET_LOG_DIR: setting.logDir,
     },
     stdout: 'pipe',
     stderr: 'pipe',

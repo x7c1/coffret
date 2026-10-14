@@ -4,16 +4,9 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use sha2::{Digest, Sha256};
 
-/// The `Content-Security-Policy` every page and asset is served with.
-///
-/// Everything from the host's own origin and nothing from anywhere else; no
-/// plugin, no `<base>`, no framing by any page (spec: LA-16), no form
-/// submitted anywhere, and no `eval`. Images may also be `blob:` URLs, which
-/// is how the explorer shows a file it fetched. The one exception is the
-/// stylesheet the explorer's `index.html` carries inline: each `<style>` in it
-/// is admitted by its own hash and no other inline style is, so that the
-/// exceptions are exactly what this build needs.
-pub(crate) fn content_security_policy() -> &'static str {
+/// The `Content-Security-Policy` every page and asset of the build compiled
+/// into the binary is served with: [`policy_for`] its `index.html`.
+pub(super) fn embedded() -> &'static str {
     static POLICY: OnceLock<String> = OnceLock::new();
     POLICY.get_or_init(|| policy_for(index()))
 }
@@ -31,6 +24,14 @@ fn index() -> Option<&'static [u8]> {
 }
 
 /// The policy for a build whose `index.html` is `index`.
+///
+/// Everything from the host's own origin and nothing from anywhere else; no
+/// plugin, no `<base>`, no framing by any page (spec: LA-16), no form
+/// submitted anywhere, and no `eval`. Images may also be `blob:` URLs, which
+/// is how the explorer shows a file it fetched. The one exception is the
+/// stylesheet the explorer's `index.html` carries inline: each `<style>` in it
+/// is admitted by its own hash and no other inline style is, so that the
+/// exceptions are exactly what this build needs.
 pub(super) fn policy_for(index: Option<&[u8]>) -> String {
     let mut style = String::from("style-src 'self'");
     let index = index.map(String::from_utf8_lossy).unwrap_or_default();

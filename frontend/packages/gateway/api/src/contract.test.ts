@@ -55,6 +55,7 @@ import { workOf } from './work';
 import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
+import hostRefusals from './contract/host-refusals.json';
 import type { Browsed } from './browse';
 import type { Folders } from './folders';
 import type { Library } from './library';
@@ -72,11 +73,12 @@ import { uploadOf } from './upload';
 type Literals<T extends string> = Record<T, true>;
 
 /**
- * The kinds the server can send. The two this client mints where no answer of
- * the server's shape arrived are marked as such, so that the table still covers
- * the whole union and a case can say which of them the files must hold.
+ * The kinds the server can send. The ones the explorer host in front of it
+ * sends, and the ones this client mints where no answer of the server's shape
+ * arrived, are marked as such, so that the table still covers the whole union
+ * and a case can say which of them the files must hold.
  */
-const KINDS: Record<RefusalKind, 'server' | 'client'> = {
+const KINDS: Record<RefusalKind, 'server' | 'host' | 'client'> = {
   bad_path: 'server',
   bad_request: 'server',
   unauthorized: 'server',
@@ -90,8 +92,16 @@ const KINDS: Record<RefusalKind, 'server' | 'client'> = {
   storage: 'server',
   unverified: 'server',
   server: 'server',
+  authentication_required: 'host',
+  library_locked: 'host',
+  server_unavailable: 'host',
+  bad_gateway: 'host',
+  session_limit: 'host',
+  rate_limited: 'host',
+  origin_refused: 'host',
   unreachable: 'client',
   unrecognized: 'client',
+  withdrawn: 'client',
 };
 
 const PLACEMENT_REASONS: Literals<PlacementReason> = {
@@ -698,6 +708,37 @@ it('reads every refusal the server sends as the refusal it is', async () => {
     .filter(([, carried]) => carried === 'refusal')
     .map(([name]) => name);
   expect([...findings].sort()).toEqual(refusalFindings.sort());
+});
+
+// Every refusal the explorer host sends in front of the server is read as the
+// kind it names where this client has a word for it, and as `unrecognized`
+// where it is a refusal of something this client never asks — with its
+// sentence kept either way. And every kind this client gives the host is one
+// the host sends, so neither side's words drift from the other's.
+it('reads every refusal the explorer host sends as the refusal it is', async () => {
+  const kinds = new Set<string>();
+  for (const [index, sent] of hostRefusals.entries()) {
+    const where = `hostRefusals[${index}]`;
+    const body = object(sent.body, where, ['error', 'message'], []);
+    const refusal = await refusalOf(
+      new Response(JSON.stringify(body), {
+        status: sent.status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const known =
+      typeof body.error === 'string' &&
+      Object.hasOwn(KINDS, body.error) &&
+      KINDS[body.error as RefusalKind] === 'host';
+    expect(refusal.kind, where).toBe(known ? body.error : 'unrecognized');
+    expect(refusal.status, where).toBe(sent.status);
+    expect(refusal.message, where).toBe(body.message);
+    kinds.add(refusal.kind);
+  }
+  const hostKinds = Object.entries(KINDS)
+    .filter(([, minted]) => minted === 'host')
+    .map(([kind]) => kind);
+  expect([...kinds].filter((kind) => kind !== 'unrecognized').sort()).toEqual(hostKinds.sort());
 });
 
 // Every state the work answer can be in narrows to `Work`, and between

@@ -145,6 +145,20 @@ impl State {
         })
     }
 
+    /// Whether `ticket` is still good for an exchange: issued in this
+    /// generation, not exchanged, and not expired by `now` (spec: LA-17).
+    pub(super) fn is_live(&self, ticket: &LaunchTicket, now: Instant) -> bool {
+        let digest = ticket.digest();
+        find(
+            self.tickets
+                .iter()
+                .filter(|held| now < held.expires_at)
+                .map(|held| &held.digest),
+            &digest,
+        )
+        .is_some()
+    }
+
     /// Ends one session. Whether it was still held.
     pub(super) fn revoke(&mut self, session: &Session) -> bool {
         if session.instance_id != self.instance_id() {

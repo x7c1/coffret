@@ -1,0 +1,32 @@
+[package]
+name = "coffret-explorer-dev"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "The explorer's host for development: the explorer's build on disk, in front of a running coffret-server"
+
+# A shell beside the others, held by `make deps` to the boundary they are: it
+# names coffret-device for where a Library's directory is, and the explorer's
+# host for everything it serves, and nothing below either.
+[dependencies]
+coffret-device = { workspace = true }
+coffret-explorer-host = { workspace = true }
+# How a coffret process starts its log, which is the same in every binary.
+coffret-shell = { workspace = true }
+
+anyhow = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+# The digest of the server key the host compares runs by, so that the key
+# itself is not what is kept between one look at its file and the next.
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The build and the key file a case's host reads, in directories of its own.
+tempfile = { workspace = true }
+# `oneshot`, which drives the host's router as the service it is.
+tower = { workspace = true }

@@ -10,27 +10,14 @@
 // the screen does while it is gone; the restart journey asks what a server finds
 // when it comes back. Each hands the server back before it ends, so the
 // journeys after it run against one that is up.
+//
+// The explorer's host is what notices. A server it finds stopped is the end of
+// every session it holds (spec: LA-15), so the screen goes with the session:
+// the tab says it holds no session, and how the explorer is opened. What brings
+// the listing back is what brings it back for a person — the server started
+// again, and the launch file the host writes for its next run opened.
 
-import type { Locator, Page } from '@playwright/test';
-
-import { bookPage, expect, row, setting, shot, test } from './journey';
-
-/**
- * What the screen says when the server is not there.
- *
- * Two sentences and not one, because a server that has gone can go two ways
- * through the proxy the explorer is served behind: the connection is refused,
- * which never reaches an answer at all, or the proxy answers for it with a page
- * of its own that is not the server's refusal shape. Both are the same event
- * and both are what the explorer is being asked to survive here, so the journey
- * accepts either rather than pinning the run to which one a proxy happens to
- * do.
- */
-function gone(page: Page): Locator {
-  return page.getByText(
-    /the coffret server did not answer|the server answered \d+ in a shape this client does not know/,
-  );
-}
+import { bookPage, expect, NO_SESSION, row, setting, shot, openExplorer, test } from './journey';
 
 test('lose the server and get the listing back', async ({ page, coffret }) => {
   await page.goto(`/#path=${setting.book}`);
@@ -39,22 +26,23 @@ test('lose the server and get the listing back', async ({ page, coffret }) => {
   await coffret.stop();
   await page.reload();
 
-  // Every region of the screen asks the server the same question and they fail
-  // together, so there is one offer to try again and it is made wherever the
-  // eye lands.
-  const again = page.getByRole('button', { name: 'try again' });
-  await expect(again.first()).toBeVisible();
-  await expect(gone(page).first()).toBeVisible();
+  // The host found the server gone as the page asked it, and ended every
+  // session it held. Which sentence comes with that — the server not
+  // answering, or the session simply gone — is whichever of the page's
+  // questions was answered first, so the journey asserts the state rather than
+  // the words.
+  await expect(page.getByText(NO_SESSION)).toBeVisible();
+  await expect(row(page, bookPage(0))).toHaveCount(0);
   await shot(page, '01-the-server-is-gone');
 
-  // Back on the same port, which is what the explorer is aimed at: a server
-  // that came back somewhere else would be a server this page could not reach,
-  // and the retry would be answering a different question.
+  // Back on the same port, which is what the host is aimed at: a server that
+  // came back somewhere else would be a server this page could not reach. The
+  // host sees its new key and writes a launch file for it.
   await coffret.start();
-  await again.first().click();
+  await openExplorer(page, { afterRestart: true });
+  await page.goto(`/#path=${setting.book}`);
 
   await expect(row(page, bookPage(0))).toBeVisible();
   await expect(page.getByText(`${setting.library} — on s3`)).toBeVisible();
-  await expect(again).toHaveCount(0);
   await shot(page, '02-and-back-again');
 });

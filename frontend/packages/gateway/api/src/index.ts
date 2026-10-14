@@ -16,6 +16,11 @@
  * a field the server gains has one obvious place to land here — and every
  * refusal arrives as one shape a screen can branch on.
  *
+ * Beside them, the explorer host's own three under `/auth`: exchanging a launch
+ * ticket for a browser token, asking whether a session still stands, and
+ * ending it. Every request carries that token, which this package holds for
+ * the page (`credential`), and goes to the page's own origin and nowhere else.
+ *
  * Nothing above this package builds a URL or reads a status code. That is the
  * whole point of it: the app package knows what a Library holds, and this one
  * knows how to ask.
@@ -63,6 +68,16 @@ export type {
   SyncStatus,
   TurnTaker,
 } from './work';
+export { checkSession, launch, revokeSession } from './auth';
+export type { Launched, SessionStanding } from './auth';
+export {
+  dropToken,
+  heldToken,
+  holdToken,
+  onSessionEnding,
+  withdrawAnswers,
+} from './credential';
+export type { Ending, EndingListener } from './credential';
 export { browseFolders } from './browse';
 export type { Browsed, BrowsedFolder } from './browse';
 export { getFile } from './file';
@@ -78,7 +93,8 @@ export { startReconnect } from './reconnect';
 export type { Reconnecting } from './reconnect';
 export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
-export { isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
+export { isLockedRefusal, isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
+export { ForeignUrl } from './request';
 export type { Progress } from './request';
 export type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 export { askToUnlock } from './unlock';

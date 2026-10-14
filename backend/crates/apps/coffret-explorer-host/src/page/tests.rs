@@ -14,8 +14,11 @@ use super::*;
 struct Build(HashMap<&'static str, &'static [u8]>);
 
 impl Assets for Build {
-    fn file(&self, name: &str) -> Option<&'static [u8]> {
-        self.0.get(name).copied()
+    fn file(&self, name: &str) -> Lookup {
+        match self.0.get(name) {
+            Some(contents) => Lookup::Found((*contents).into()),
+            None => Lookup::Missing,
+        }
     }
 }
 
@@ -137,4 +140,89 @@ fn a_link_in_the_build_output_is_found() {
         super::dist_links::links_in(dist.path()).unwrap(),
         vec![link, folder]
     );
+}
+
+/// A build on disk, beside a file outside it that nothing may serve.
+#[cfg(unix)]
+struct OnDisk {
+    /// Holds both directories for as long as the case runs.
+    _parent: tempfile::TempDir,
+    dist: DistDir,
+}
+
+#[cfg(unix)]
+const OUTSIDE: &str = "outside the build";
+
+#[cfg(unix)]
+fn on_disk() -> OnDisk {
+    let parent = tempfile::tempdir().unwrap();
+    let outside = parent.path().join("secret.txt");
+    std::fs::write(&outside, OUTSIDE).unwrap();
+    let root = parent.path().join("dist");
+    std::fs::create_dir_all(root.join("assets")).unwrap();
+    std::fs::write(root.join(INDEX), "<!doctype html><title>index</title>").unwrap();
+    std::fs::write(root.join("assets/app-3f2a.js"), "console.log(1)").unwrap();
+    std::fs::write(root.join(".env"), "SECRET=1").unwrap();
+    std::os::unix::fs::symlink(&outside, root.join("linked.txt")).unwrap();
+    std::os::unix::fs::symlink(parent.path(), root.join("up")).unwrap();
+    OnDisk {
+        _parent: parent,
+        dist: DistDir::new(root),
+    }
+}
+
+// A build on disk serves what is in it, as it stands at the request.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_build_on_disk_is_read_at_each_request() {
+    let build = on_disk();
+    assert_eq!(
+        body(respond_from(&build.dist, "/assets/app-3f2a.js")).await,
+        "console.log(1)"
+    );
+    assert!(body(respond_from(&build.dist, "/"))
+        .await
+        .contains("<title>index"));
+    assert!(body(respond_from(&build.dist, "/assets"))
+        .await
+        .contains("<title>index"));
+
+    std::fs::write(build.dist.root().join(INDEX), "<title>rebuilt</title>").unwrap();
+    assert!(body(respond_from(&build.dist, "/"))
+        .await
+        .contains("rebuilt"));
+}
+
+// LA-16: a build on disk serves nothing outside it: no dotfile, no traversal,
+// and nothing a symbolic link inside it points at.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_build_on_disk_serves_nothing_outside_it() {
+    let build = on_disk();
+    for path in [
+        "/.env",
+        "/../secret.txt",
+        "/%2e%2e/secret.txt",
+        "/assets/%2e%2e/%2e%2e/secret.txt",
+        "/linked.txt",
+        "/up/secret.txt",
+        "/up/dist/index.html",
+    ] {
+        let answer = respond_from(&build.dist, path);
+        assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{path}");
+        let said = body(answer).await;
+        assert_eq!(said, NOT_HERE, "{path}");
+        assert!(!said.contains(OUTSIDE), "{path}");
+    }
+}
+
+// A build on disk that has not been written yet says so rather than serving
+// nothing in silence.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_build_on_disk_with_no_index_says_so() {
+    let empty = tempfile::tempdir().unwrap();
+    let answer = respond_from(&DistDir::new(empty.path().to_path_buf()), "/");
+    assert_eq!(answer.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(body(answer).await.contains("no index.html"));
 }

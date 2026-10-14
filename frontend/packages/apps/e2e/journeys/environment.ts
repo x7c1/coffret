@@ -17,6 +17,13 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export interface Environment {
   /** The `coffret-server` binary the script built. */
   serverBinary: string;
+  /** The development host, `coffret-explorer-dev`, the explorer is served by. */
+  hostBinary: string;
+  /**
+   * The owner-only directory the host writes its launch file into, which a
+   * journey opens to give its tab a session.
+   */
+  launchDir: string;
   /** The joined device's state directory, which is where its Library is. */
   stateDir: string;
   /** What that device calls the Library, which is what the server serves. */
@@ -36,12 +43,12 @@ export interface Environment {
   passphrase: string;
   /** The loopback port the server is started on, and restarted on. */
   serverPort: number;
-  /** The loopback port the built explorer is previewed at. */
+  /** The loopback port the development host serves the explorer at. */
   webPort: number;
   /** Where the explorer is, as a page addresses it. */
   webUrl: string;
-  /** The web package, which is what `vite preview` is run from. */
-  webPackage: string;
+  /** The explorer's build output, which the host serves from disk. */
+  webDist: string;
   /** Where the checkpoint pictures a person reviews are written. */
   screenshots: string;
   /** Where Playwright's own traces and failure shots go. */
@@ -91,6 +98,8 @@ export function fromEnvironment(): Environment {
   const library = required('COFFRET_E2E_LIBRARY');
   return {
     serverBinary: required('COFFRET_E2E_SERVER_BIN'),
+    hostBinary: required('COFFRET_E2E_HOST_BIN'),
+    launchDir: required('COFFRET_E2E_LAUNCH_DIR'),
     stateDir,
     library,
     serverKeyFile: path.join(stateDir, 'libraries', library, 'server-key'),
@@ -99,7 +108,7 @@ export function fromEnvironment(): Environment {
     serverPort,
     webPort,
     webUrl: `http://127.0.0.1:${webPort}/`,
-    webPackage: path.resolve(HERE, '../../web'),
+    webDist: path.resolve(HERE, '../../web/dist'),
     screenshots: required('COFFRET_E2E_SCREENSHOTS'),
     artifacts: required('COFFRET_E2E_ARTIFACTS'),
     album: required('COFFRET_E2E_ALBUM'),

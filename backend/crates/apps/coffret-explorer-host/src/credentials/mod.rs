@@ -178,6 +178,16 @@ impl Credentials {
         Ok(ticket)
     }
 
+    /// Whether `ticket` is still good for an exchange: not exchanged, not
+    /// expired, and issued in the current generation (spec: LA-17).
+    ///
+    /// What whoever delivered it reads to know when the file it was delivered
+    /// in has served its turn and is to be removed (spec: LA-21).
+    pub fn is_live(&self, ticket: &LaunchTicket) -> bool {
+        let now = self.shared.clock.now();
+        self.shared.lock().is_live(ticket, now)
+    }
+
     /// Ends every session, and spends every ticket not yet exchanged
     /// (spec: LA-18).
     pub fn revoke_all(&self) {

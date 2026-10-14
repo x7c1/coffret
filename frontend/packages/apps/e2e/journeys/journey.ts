@@ -10,21 +10,49 @@
 
 import path from 'node:path';
 
-import { test as base, type Locator, type Page } from '@playwright/test';
+import { expect, test as base, type Locator, type Page } from '@playwright/test';
 
 import { fromEnvironment, type Environment } from './environment';
+import { openLaunchFile } from './launch';
 import { CoffretServer } from './server';
 
 /** What the run built, read once and shared by every journey. */
 export const setting: Environment = fromEnvironment();
 
+/** The control the explorer offers a tab holding a session, and only such a tab. */
+const DISCONNECT = 'Disconnect this tab';
+
+/** What a tab with no session shows in place of the Library. */
+export const NO_SESSION = /This tab holds no session with the explorer/;
+
 /**
- * The one server, started before the first journey and killed after the last.
+ * Opens the explorer in `page`, the way a person does: by opening the launch file the
+ * explorer's host wrote, which refreshes to the explorer with a one-time ticket
+ * in the fragment. The page exchanges it and takes it out of the address.
  *
- * Worker-scoped and automatic, because the journeys are one journey: they share
- * a Library on disk and run in one worker, in order. The fixture is handed over
- * so that the journeys that take it away can kill it and start it again —
- * which is the only reason the process is the suite's rather than the script's.
+ * `afterRestart` waits for the file the host writes for a server of the next
+ * run, rather than taking one written for the run before, whose generation the
+ * host has since retired.
+ */
+export async function openExplorer(page: Page, { afterRestart = false } = {}): Promise<void> {
+  await openLaunchFile(page, setting.launchDir, { afterRestart });
+  await expect(page.getByRole('button', { name: DISCONNECT })).toBeVisible();
+  // The ticket is gone from the address the tab is left at.
+  await expect(page).toHaveURL(setting.webUrl);
+}
+
+/**
+ * The one server, started before the first journey and killed after the last,
+ * and a page holding a session with the explorer in front of it for each journey.
+ *
+ * The server is worker-scoped and automatic, because the journeys are one
+ * journey: they share a Library on disk and run in one worker, in order. The
+ * fixture is handed over so that the journeys that take it away can kill it
+ * and start it again — which is the only reason the process is the suite's
+ * rather than the script's.
+ *
+ * The page opens the explorer before the journey begins and disconnects after it,
+ * so that one journey's session is not held while the next one's is made.
  */
 export const test = base.extend<object, { coffret: CoffretServer }>({
   coffret: [
@@ -39,6 +67,15 @@ export const test = base.extend<object, { coffret: CoffretServer }>({
     },
     { scope: 'worker', auto: true },
   ],
+  page: async ({ page }, use) => {
+    await openExplorer(page);
+    await use(page);
+    const disconnect = page.getByRole('button', { name: DISCONNECT });
+    if (await disconnect.isVisible()) {
+      await disconnect.click();
+      await expect(page.getByText(NO_SESSION)).toBeVisible();
+    }
+  },
 });
 
 export { expect } from '@playwright/test';

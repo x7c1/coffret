@@ -335,3 +335,31 @@ fn a_poisoned_lock_fails_closed() {
     assert_ne!(credentials.instance_id(), before);
     assert!(gate.exchange(&ticket(&credentials)).is_ok());
 }
+
+// LA-17, LA-21: a ticket is live until it is exchanged, expires, or its
+// generation is retired, which is what tells whoever delivered it to take the
+// file it was delivered in away.
+#[test]
+fn a_ticket_is_live_until_it_is_spent() {
+    let (credentials, gate, clock) = credentials();
+
+    let exchanged = credentials.issue_ticket().expect("the CSPRNG answers");
+    assert!(credentials.is_live(&exchanged));
+    gate.exchange(&exchanged.encoded())
+        .expect("a fresh ticket exchanges");
+    assert!(!credentials.is_live(&exchanged));
+
+    let expired = credentials.issue_ticket().expect("the CSPRNG answers");
+    clock.advance(TICKET_LIFETIME - Duration::from_millis(1));
+    assert!(credentials.is_live(&expired));
+    clock.advance(Duration::from_millis(1));
+    assert!(!credentials.is_live(&expired));
+
+    let retired = credentials.issue_ticket().expect("the CSPRNG answers");
+    credentials.retire();
+    assert!(!credentials.is_live(&retired));
+
+    let revoked = credentials.issue_ticket().expect("the CSPRNG answers");
+    credentials.revoke_all();
+    assert!(!credentials.is_live(&revoked));
+}

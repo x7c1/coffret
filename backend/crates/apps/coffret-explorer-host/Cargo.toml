@@ -48,6 +48,9 @@ include_dir = { workspace = true, optional = true }
 # in pieces rather than gathered: a drop onto a folder is tens of megabytes in
 # one request, and a file the explorer opens comes back the same way.
 reqwest = { workspace = true }
+# Which account this process runs as, which a directory of launch files has to
+# belong to (spec: LA-21). The standard library cannot ask.
+rustix = { workspace = true, features = ["process"] }
 # The JSON `/auth` reads and answers with.
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -66,8 +69,6 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-# The example's arguments, parsed the way the binaries parse theirs.
-clap = { workspace = true }
 # The host's events read back as the log file would hold them, for the cases
 # that hold them to what an event may carry.
 coffret-logging = { workspace = true, features = ["testing"] }
@@ -78,5 +79,3 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 # `oneshot`, which drives the host's router as the service it is.
 tower = { workspace = true }
-# The example's diagnostics on its terminal: the host's warnings are events.
-tracing-subscriber = { workspace = true }

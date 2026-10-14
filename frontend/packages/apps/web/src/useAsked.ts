@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { isRefusal } from '@coffret/api';
+import { isLockedRefusal, isRefusal } from '@coffret/api';
 
 import { refusedAsRanOut } from './ranOut';
 
@@ -23,8 +23,9 @@ export type Asked<T> =
        */
       ranOut?: boolean;
       /**
-       * Whether what refused it is the locked refusal: the Library shut under
-       * the page, which the page may not have heard from the work answer yet.
+       * Whether what refused it is the locked refusal — the server's, or the
+       * explorer host's in front of it: the Library shut under the page, which
+       * the page may not have heard from the work answer yet.
        */
       locked?: boolean;
     };
@@ -78,7 +79,7 @@ export function useAsked<T>(
           status: 'failed',
           message: said(refused),
           ranOut: refusedAsRanOut(refused),
-          locked: isRefusal(refused) && refused.kind === 'locked',
+          locked: isLockedRefusal(refused),
         });
       },
     );
