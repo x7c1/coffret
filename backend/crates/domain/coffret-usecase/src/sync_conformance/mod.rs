@@ -55,8 +55,9 @@ pub use departed::{
     a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_back,
     a_departed_file_with_no_recorded_hash_is_kept_once_it_changed,
     a_departed_path_whose_file_is_gone_is_forgotten,
-    a_file_put_where_one_was_moved_to_the_trash_is_new,
-    a_freeze_leaves_a_departed_file_to_the_sync, a_path_a_new_entry_arrived_at_is_not_departed,
+    a_file_put_where_one_was_moved_to_the_trash_is_new, a_folder_empty_before_the_run_stays,
+    a_folder_that_still_holds_an_edited_copy_stays, a_freeze_leaves_a_departed_file_to_the_sync,
+    a_path_a_new_entry_arrived_at_is_not_departed,
     a_refused_move_to_the_trash_leaves_the_file_and_is_retried,
     a_touched_departed_file_with_its_recorded_content_is_unedited,
     an_edited_departed_file_is_kept_and_reported_every_run,
@@ -64,6 +65,7 @@ pub use departed::{
     an_unedited_file_this_device_deleted_goes_to_the_trash,
     nothing_is_moved_to_the_trash_through_a_refused_root,
     nothing_is_moved_to_the_trash_under_an_unavailable_root,
+    the_folders_the_moves_to_the_trash_emptied_are_removed,
 };
 
 // Visible to the freeze suite, which borrows the one helper that arranges an
@@ -189,6 +191,9 @@ macro_rules! sync_conformance {
             a_path_a_new_entry_arrived_at_is_not_departed,
             a_file_put_where_one_was_moved_to_the_trash_is_new,
             a_departed_path_whose_file_is_gone_is_forgotten,
+            the_folders_the_moves_to_the_trash_emptied_are_removed,
+            a_folder_that_still_holds_an_edited_copy_stays,
+            a_folder_empty_before_the_run_stays,
             a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_back,
             a_refused_move_to_the_trash_leaves_the_file_and_is_retried,
             nothing_is_moved_to_the_trash_through_a_refused_root,

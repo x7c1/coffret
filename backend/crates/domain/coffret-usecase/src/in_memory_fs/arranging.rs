@@ -63,7 +63,11 @@ impl InMemoryFs {
     /// case wants of a descent is a *shape* rather than a refusal, and
     /// [`plant_other`](Self::plant_other), [`write_file`](Self::write_file),
     /// and [`plant_marker`](Self::plant_marker) are what arrange one — the
-    /// root's own identity included (spec: EP-13).
+    /// root's own identity included (spec: EP-13). Nor is
+    /// [`remove_emptied_folder`](crate::LocalTrash::remove_emptied_folder):
+    /// what a case wants of it is a folder's contents, which
+    /// [`write_file`](Self::write_file) and
+    /// [`create_dir`](Self::create_dir) arrange.
     ///
     /// The refusal's cause carries
     /// [`io::ErrorKind::Other`](std::io::ErrorKind::Other), because no

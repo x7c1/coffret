@@ -117,17 +117,78 @@ impl RefusedPack {
     /// The sentence a person reads beside the files that stayed.
     ///
     /// Written here rather than by the browser, as every refusal's sentence is:
-    /// what a screen shows verbatim is the server's.
-    pub fn message(&self) -> &'static str {
+    /// what a screen shows verbatim is the server's. It agrees in number with
+    /// what it counts — the named files the Pack holds, and the others packed
+    /// beside them — so one named file reads "it", not "them".
+    pub fn message(&self) -> String {
+        let named = if self.spared.len() == 1 { "it" } else { "them" };
         match self.reason {
             "key_lost" => {
-                "the Library has no key for the Pack holding them, so the files packed beside \
-                 them cannot be carried into a rebuilt one — the Pack is left as it is"
+                let others = if self.kept == 1 {
+                    "the file"
+                } else {
+                    "the files"
+                };
+                format!(
+                    "the Library has no key for the Pack holding {named}, so {others} packed \
+                     beside {named} cannot be carried into a rebuilt one — the Pack is left as \
+                     it is"
+                )
             }
-            _ => {
-                "the Pack holding them did not verify when it was read back, so no rebuilt one \
-                 was written — the Pack is left as it is"
-            }
+            _ => format!(
+                "the Pack holding {named} did not verify when it was read back, so no rebuilt \
+                 one was written — the Pack is left as it is"
+            ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_model::EntryPath;
+
+    use super::RefusedPack;
+
+    fn refused(spared: &[&str], kept: usize, reason: &'static str) -> RefusedPack {
+        RefusedPack {
+            spared: spared
+                .iter()
+                .map(|path| EntryPath::parse(*path).expect("a case names a valid Entry Path"))
+                .collect(),
+            kept,
+            reason,
+        }
+    }
+
+    // The sentence counts what it names: one file is "it", and one file packed
+    // beside it is "the file".
+    #[test]
+    fn a_refusal_for_one_file_says_it() {
+        let message = refused(&["a.jpg"], 1, "key_lost").message();
+        assert!(message.contains("the Pack holding it,"), "{message}");
+        assert!(message.contains("the file packed beside it "), "{message}");
+        assert!(!message.contains("them"), "{message}");
+
+        let message = refused(&["a.jpg"], 1, "unverified").message();
+        assert!(
+            message.contains("the Pack holding it did not verify"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_refusal_for_two_files_says_them() {
+        let message = refused(&["a.jpg", "b.jpg"], 2, "key_lost").message();
+        assert!(message.contains("the Pack holding them,"), "{message}");
+        assert!(
+            message.contains("the files packed beside them "),
+            "{message}"
+        );
+
+        let message = refused(&["a.jpg", "b.jpg"], 2, "unverified").message();
+        assert!(
+            message.contains("the Pack holding them did not verify"),
+            "{message}"
+        );
     }
 }

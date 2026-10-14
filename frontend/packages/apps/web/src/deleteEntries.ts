@@ -19,7 +19,14 @@
 // Kept free of DOM and of React so it is unit testable, as `packFolder.ts`
 // beside it is.
 
-import type { Delete, DeletePreview, DeleteTarget, RefusedPack } from '@coffret/api';
+import {
+  isRefusal,
+  type Delete,
+  type DeletePreview,
+  type DeleteTarget,
+  type RefusedPack,
+  type RefusalKind,
+} from '@coffret/api';
 
 import { size } from './humanize';
 import { waitingClause, type WaitsFor } from './turns';
@@ -166,6 +173,39 @@ export async function askToDelete(deleting: Deleting): Promise<Deleted> {
 }
 
 /**
+ * What the notice area says of a deletion: the sentence, and the target a
+ * *try again* beside it would ask about again — `null` where nothing invites
+ * one.
+ *
+ * Only a `conflict` does. Its sentence is the server's "another device changed
+ * the Library meanwhile, so nothing was changed — running it again plans from
+ * the Library as it is now", and a sentence that says to run it again with
+ * nothing to press beside it sends the person back to the row's menu for it.
+ * Any other refusal is one asking again would only meet once more.
+ */
+export interface DeleteNotice {
+  text: string;
+  retry: DeleteTarget | null;
+}
+
+/** The target again, where a refusal of `kind` invites asking about it again. */
+function retryOf(target: DeleteTarget, kind: RefusalKind | null): DeleteTarget | null {
+  return kind === 'conflict' ? { folder: target.folder, paths: target.paths } : null;
+}
+
+/**
+ * The notice for a preview or an arming that was refused: what the server said,
+ * under the name of what was pressed on. `said` is that sentence, as the
+ * explorer words any refusal.
+ */
+export function refusedNotice(target: DeleteTarget, cause: unknown, said: string): DeleteNotice {
+  return {
+    text: `${targetName(target)} was not deleted — ${said}`,
+    retry: retryOf(target, isRefusal(cause) ? cause.kind : null),
+  };
+}
+
+/**
  * What the confirmation says where another run holds the turn at this
  * device's pending work: the deletion confirmed now starts after it.
  */
@@ -210,16 +250,19 @@ const PHASE: Record<NonNullable<Delete['step']>['phase'], string> = {
 
 /**
  * What a finished deletion is said as: what left the Library, and anything it
- * was refused — or, for one that stopped, what stopped it. `null` while it is
- * still running.
+ * was refused — or, for one that stopped, what stopped it, with a *try again*
+ * where that was a `conflict`. `null` while it is still running.
  */
-export function deletedLine(run: Delete): string | null {
+export function deletedLine(run: Delete): DeleteNotice | null {
   const name = targetName(run);
   switch (run.status) {
     case 'deleting':
       return null;
     case 'stopped':
-      return `${name} was not deleted — ${run.stopped.message}`;
+      return {
+        text: `${name} was not deleted — ${run.stopped.message}`,
+        retry: retryOf(run, run.stopped.kind),
+      };
     case 'done': {
       const parts = [
         run.entries === 0
@@ -233,7 +276,7 @@ export function deletedLine(run: Delete): string | null {
       if (run.missing.length > 0) {
         parts.push(`not in the Library: ${run.missing.map(lastOf).join(', ')}`);
       }
-      return parts.join('; ');
+      return { text: parts.join('; '), retry: null };
     }
   }
 }

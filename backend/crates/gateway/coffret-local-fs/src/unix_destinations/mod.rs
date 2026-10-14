@@ -66,7 +66,8 @@ mod unix_flushed_file;
 mod unix_scratch_file;
 
 // The same descent asked for a different write: moving a file a deleted Entry
-// left behind into the desktop's trash (spec: EP-15).
+// left behind into the desktop's trash, and removing a folder those moves
+// emptied (spec: EP-15).
 mod trash;
 
 // What the descent asks of the root it has just opened, before it descends

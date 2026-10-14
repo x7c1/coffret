@@ -56,6 +56,11 @@ impl OpenLibrary {
     /// it up. The refusal names the component, because that is the part of the
     /// path there is anything to do about (spec: EP-4).
     ///
+    /// The same refusal where the file would land in a folder a desktop keeps
+    /// its trash in — `.Trash`, `.Trashes`, `.Trash-<digits>` — standing
+    /// directly under the mapped root, which a scan never enters either
+    /// (spec: EP-16).
+    ///
     /// The same `Error::FileNotAdded` carrying `FoldedReservedComponent`
     /// where a component only folds to the management area's name under ASCII
     /// case folding (spec: EP-14). Refused for the same reason and said in a
@@ -119,6 +124,18 @@ impl OpenLibrary {
         let place = local_place_for(self.index.as_ref(), path)
             .await
             .map_err(Error::file_not_added)?;
+        // A desktop's trash folder at the top of the mapped root (spec: EP-16).
+        // Asked of the place rather than of the path, because the folder is the
+        // first component under the root, and a top-level mapping's prefix is
+        // not a folder on this disk.
+        if let Some(component) = place.trash_folder_name() {
+            return Err(Error::FileNotAdded {
+                cause: Box::new(FetchError::ReservedComponent {
+                    path: path.clone(),
+                    component: component.to_owned(),
+                }),
+            });
+        }
         let directory = place
             .descend(self.local_fs.as_ref())
             .await

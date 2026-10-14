@@ -392,7 +392,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     materialization. It is moved to the desktop's own trash — the freedesktop.org
     Trash on Linux, the Finder's on macOS — its record is forgotten, so the
     path is outside the device's scope again, and the run reports it as moved
-    to the trash with its Entry Path.
+    to the trash with its Entry Path. A folder below the mapped root that the
+    run's moves emptied — it holds nothing at all once they are made — is
+    removed, and so is each folder above it that is emptied in turn, never the
+    mapped root itself; a folder that was empty before the run, or still holds
+    anything the run did not move, stays.
   - **Edited** — anything else. It is left where it is and reported by every
     run as deleted from the Library and kept because it changed, until the
     person moves or removes it. Moved to another path it is an ordinary new
