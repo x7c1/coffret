@@ -6,5 +6,5 @@
     "types": []
   },
   "include": ["src", "src/**/*.json"],
-  "exclude": ["src/**/*.test.ts", "src/contract"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.testing.ts", "src/contract"]
 }

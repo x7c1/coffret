@@ -1395,6 +1395,7 @@ dependencies = [
  "axum",
  "coffret-device",
  "coffret-explorer-host",
+ "coffret-logging",
  "coffret-server",
  "coffret-shell",
  "glib",
@@ -1405,7 +1406,9 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "tempfile",
  "tokio",
+ "tower",
  "tracing",
  "zeroize",
 ]
@@ -1440,24 +1443,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "coffret-explorer-host"
+name = "coffret-explorer-dev"
 version = "0.0.0"
 dependencies = [
  "anyhow",
  "axum",
  "clap",
  "coffret-device",
- "coffret-logging",
- "coffret-server",
- "futures-util",
- "include_dir",
- "reqwest 0.12.28",
- "serde_json",
+ "coffret-explorer-host",
+ "coffret-shell",
+ "sha2 0.11.0",
  "tempfile",
  "tokio",
  "tower",
  "tracing",
- "tracing-subscriber",
+]
+
+[[package]]
+name = "coffret-explorer-host"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "coffret-device",
+ "coffret-logging",
+ "coffret-server",
+ "futures-util",
+ "getrandom 0.4.3",
+ "hyper",
+ "hyper-util",
+ "include_dir",
+ "reqwest 0.12.28",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokio",
+ "tower",
+ "tracing",
+ "zeroize",
 ]
 
 [[package]]

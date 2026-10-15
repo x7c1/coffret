@@ -17,9 +17,17 @@ compatibility between releases (see the README's status).
 The app asks for a Library and its Passphrase in a small window of its own,
 starts the server in its own process, and opens the explorer in your default
 browser. Once a Library is open the window goes away and a tray icon is left,
-which unlocks the Library, opens the explorer again, or quits. Only one copy
-runs at a time: launching it again opens the explorer again.
-[Environments](../environments.md#the-desktop-app) describes it in full.
+which unlocks the Library, opens the explorer again, disconnects every browser
+tab, or quits. Only one copy runs at a time: launching it again opens the
+explorer again. A tab is let in only when the app opens it, so a tab that says
+it holds no session — after 12 hours, or one opened from a bookmark — is opened
+again from the tray's *Open the explorer*.
+
+The browser is expected to be a Chromium-based one: Google Chrome or Chromium
+from a `.deb` on Linux, or the macOS app. A browser installed as a Snap is not
+supported, since it may not be allowed to read the file the app opens it
+through. [Environments](../environments.md#the-desktop-app) describes it in
+full.
 
 The app opens Libraries that already exist on the device; it does not create
 or join one. That is done with the `coffret` command line, which the bundles

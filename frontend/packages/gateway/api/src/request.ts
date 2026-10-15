@@ -1,14 +1,28 @@
-import { Refusal, refusalOf } from './refusal';
+import { currentRound, heardRefusal, heldToken } from './credential';
+import { isRefusal, Refusal, refusalOf } from './refusal';
 
 /**
  * Where the routes are.
  *
- * Relative, and deliberately: the page and the server are one origin — the dev
- * server proxies `/api` to it, and a built bundle is served beside it — so
- * there is no host for this client to be configured with and no request of it
- * that could be aimed anywhere else.
+ * Relative, and deliberately: the page is served by the explorer host, which
+ * forwards `/api` to the server and answers `/auth` itself, so there is no
+ * host for this client to be configured with and no request of it that could
+ * be aimed anywhere else.
  */
 const BASE = '/api';
+
+/**
+ * The paths a request of this client may be made to: the server's routes, as
+ * the host forwards them, and the host's own (spec: LA-16).
+ */
+const OWN_PREFIXES = ['/api/', '/auth/'] as const;
+
+/** What a request made without a session is refused with, before it is sent. */
+const NO_SESSION = 'this tab holds no session with the explorer, so nothing was asked';
+
+/** What an answer let go of says, for whoever still reads it. */
+const WITHDRAWN =
+  'that answer arrived after this tab let go of its session, or after the Library locked';
 
 /** The URL of one route, with the query it is asked with. */
 export function apiUrl(
@@ -17,6 +31,84 @@ export function apiUrl(
 ): string {
   const query = new URLSearchParams(params as Record<string, string> | string[][]).toString();
   return query === '' ? `${BASE}/${route}` : `${BASE}/${route}?${query}`;
+}
+
+/** The URL of one of the host's own routes under `/auth`. */
+export function authUrl(route: string): string {
+  return `/auth/${route}`;
+}
+
+/**
+ * A request this client refuses to make: one to another origin, or to a path
+ * of its own origin that is neither the server's routes nor the host's.
+ *
+ * Thrown rather than made into a {@link Refusal}, because no answer stands
+ * behind it: it is this client being asked for something it never sends, and
+ * the token it would carry must not go anywhere else (spec: LA-6).
+ */
+export class ForeignUrl extends Error {
+  constructor() {
+    super('the explorer sends its requests to its own host, under /api/ and /auth/, and nowhere else');
+    this.name = 'ForeignUrl';
+  }
+}
+
+/** Refuses `url` unless it is the page's own origin, under `/api/` or `/auth/`. */
+function ownUrl(url: string): void {
+  const origin = globalThis.location?.origin;
+  if (origin === undefined || origin === 'null') {
+    throw new ForeignUrl();
+  }
+  let resolved: URL;
+  try {
+    resolved = new URL(url, origin);
+  } catch {
+    throw new ForeignUrl();
+  }
+  const own =
+    resolved.origin === origin &&
+    resolved.username === '' &&
+    resolved.password === '' &&
+    OWN_PREFIXES.some((prefix) => resolved.pathname.startsWith(prefix));
+  if (!own) {
+    throw new ForeignUrl();
+  }
+}
+
+/**
+ * The `Authorization` a request carries: the one it was given, or the held
+ * token's, or a refusal before anything is sent where there is none.
+ */
+function authorizationFor(given: string | undefined): string {
+  if (given !== undefined) {
+    return given;
+  }
+  const token = heldToken();
+  if (token === null) {
+    throw new Refusal('authentication_required', 0, NO_SESSION);
+  }
+  return `Bearer ${token}`;
+}
+
+/** An answer that arrived for a round that has ended, let go of. */
+function withdrawn(status: number): Refusal {
+  return new Refusal('withdrawn', status, WITHDRAWN);
+}
+
+/** How one request is made, beyond its URL. */
+export interface Asking {
+  signal?: AbortSignal;
+  method?: 'GET' | 'POST';
+  body?: BodyInit;
+  /**
+   * `Authorization`, for the host's own routes that are asked with a
+   * credential other than the held token: a launch ticket, or a token not yet
+   * held. A refusal of such a request is the caller's to read, and ends no
+   * session by itself.
+   */
+  authorization?: string;
+  /** `Content-Type`, for a body that is not `FormData`. */
+  contentType?: string;
 }
 
 /**
@@ -41,24 +133,61 @@ export function apiUrl(
  * {@link sentForJson} instead, which keeps this contract and says how much of
  * the body has gone.
  */
-export async function asked(
+export function asked(
   url: string,
   signal?: AbortSignal,
   method: 'GET' | 'POST' = 'GET',
   body?: BodyInit,
 ): Promise<Response> {
+  return requested(url, { signal, method, body });
+}
+
+/**
+ * {@link asked}, with everything about the request stated.
+ *
+ * Every request is made the one way: to the page's own origin under `/api/`
+ * or `/auth/` and nowhere else, with the browser token in `Authorization`,
+ * with no cookie, no redirect followed and nothing stored by the browser's
+ * cache. A refusal that says the session ended — the token no longer admits,
+ * the server behind the host stopped, the Library locked — is told to whoever
+ * listens for that ({@link onSessionEnding}), and is thrown as any other
+ * refusal is. Nothing is ever sent again on its own: a mutation refused that
+ * way stays refused.
+ *
+ * An answer that arrives after the round it was asked in has ended is let go
+ * of as `withdrawn`, whatever it carries.
+ */
+export async function requested(url: string, asking: Asking): Promise<Response> {
+  const { signal, method = 'GET', body, contentType } = asking;
+  ownUrl(url);
+  const headers: Record<string, string> = { Authorization: authorizationFor(asking.authorization) };
+  // No `Content-Type` of this client's own for a `FormData` body: it has a
+  // boundary the browser mints as it serializes, and a header written here
+  // would name a boundary that is not in the body — which the server then
+  // cannot find a single part inside.
+  if (contentType !== undefined) {
+    headers['Content-Type'] = contentType;
+  }
+  const round = currentRound();
   let response: Response;
   try {
-    // No `Content-Type` of this client's own. A `FormData` body has a boundary
-    // the browser mints as it serializes, and a header written here would name a
-    // boundary that is not in the body — which the server then cannot find a
-    // single part inside.
-    response = await fetch(url, { method, signal, body });
+    response = await fetch(url, {
+      method,
+      signal,
+      body,
+      headers,
+      credentials: 'omit',
+      redirect: 'error',
+      cache: 'no-store',
+    });
   } catch (cause) {
     if (signal?.aborted === true) {
       throw cause;
     }
     throw new Refusal('unreachable', 0, noAnswer(body), null, null, null, { cause });
+  }
+  if (round !== currentRound()) {
+    throw withdrawn(response.status);
   }
   if (!response.ok) {
     const refusal = await refusalOf(response);
@@ -66,6 +195,9 @@ export async function asked(
     // answer that broke off.
     if (refusal.kind === 'unreachable' && signal?.aborted === true) {
       throw refusal.cause;
+    }
+    if (asking.authorization === undefined) {
+      heardRefusal(refusal);
     }
     throw refusal;
   }
@@ -106,13 +238,19 @@ function noAnswer(body: BodyInit | XMLHttpRequestBodyInit | undefined): string {
  * and read by the narrowing a refused request goes through (`workOf`,
  * `uploadOf`) rather than cast.
  */
-export async function askedForJson<T>(
+export function askedForJson<T>(
   url: string,
   signal?: AbortSignal,
   method: 'GET' | 'POST' = 'GET',
   body?: BodyInit,
 ): Promise<T> {
-  const response = await asked(url, signal, method, body);
+  return requestedJson<T>(url, { signal, method, body });
+}
+
+/** {@link askedForJson}, with everything about the request stated. */
+export async function requestedJson<T>(url: string, asking: Asking): Promise<T> {
+  const { signal } = asking;
+  const response = await requested(url, asking);
   try {
     return (await response.json()) as T;
   } catch (cause) {
@@ -147,9 +285,12 @@ export type Progress = (sent: number, total: number) => void;
  * about it is the contract every other request in this package keeps, and is
  * kept by handing the answer to the same readers rather than by restating them:
  *
- * - the same URL and the same headers — none of this client's own, for the
- *   reason {@link asked} gives about a `FormData` boundary; the server's key is
- *   added by whatever serves the page, never by the page;
+ * - the same URL, held to the same origin and paths, and the same headers:
+ *   the browser token and nothing else — no `Content-Type`, for the reason
+ *   {@link requested} gives about a `FormData` boundary, and no cookie; the
+ *   server's key is added by the host that serves the page, never by the page;
+ * - a refusal that ends the session is told about as {@link requested} tells
+ *   it, and an answer to an ended round is `withdrawn`;
  * - a non-2xx answer becomes the refusal its body describes, read by
  *   {@link refusalOf} off a `Response` built from what arrived;
  * - a request that got no answer is `unreachable`, worded by what it was doing;
@@ -172,6 +313,9 @@ export function sentForJson<T>(
       reject(abortOf(signal));
       return;
     }
+    ownUrl(url);
+    const authorization = authorizationFor(undefined);
+    const round = currentRound();
     const request = new XMLHttpRequest();
     const abort = () => request.abort();
     signal?.addEventListener('abort', abort, { once: true });
@@ -180,6 +324,8 @@ export function sentForJson<T>(
       end();
     };
     request.open('POST', url);
+    request.withCredentials = false;
+    request.setRequestHeader('Authorization', authorization);
     request.responseType = 'text';
     if (onProgress !== undefined) {
       request.upload.addEventListener('progress', (event) => {
@@ -197,7 +343,16 @@ export function sentForJson<T>(
     request.addEventListener('error', unanswered);
     request.addEventListener('load', () => {
       settle(() => {
-        void answered<T>(request.status, request.responseText).then(resolve, reject);
+        if (round !== currentRound()) {
+          reject(withdrawn(request.status));
+          return;
+        }
+        void answered<T>(request.status, request.responseText).then(resolve, (thrown: unknown) => {
+          if (isRefusal(thrown)) {
+            heardRefusal(thrown);
+          }
+          reject(thrown);
+        });
       });
     });
     request.send(body);

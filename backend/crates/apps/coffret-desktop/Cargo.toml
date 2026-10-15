@@ -36,8 +36,6 @@ coffret-server = { workspace = true }
 coffret-shell = { workspace = true }
 
 anyhow = { workspace = true }
-# The router the explorer's host answers through, served on a port of its own.
-axum = { workspace = true }
 # The Passphrase the window's call carries, read straight into the type that
 # wipes it rather than into a `String` first (spec: DK-7).
 serde = { workspace = true }
@@ -57,3 +55,14 @@ zeroize = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true }
+
+[dev-dependencies]
+# The explorer's host driven as the service it is, for the cases that hold the
+# app's launch files to what the host does with the tickets in them.
+axum = { workspace = true }
+# The app's events read back as the log file would hold them, for the case that
+# holds them to what an event may carry (spec: EL-1).
+coffret-logging = { workspace = true, features = ["testing"] }
+# A launch directory of the case's own.
+tempfile = { workspace = true }
+tower = { workspace = true }

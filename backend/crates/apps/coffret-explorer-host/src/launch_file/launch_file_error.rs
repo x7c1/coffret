@@ -1,0 +1,98 @@
+use std::fmt;
+use std::io;
+use std::net::SocketAddr;
+
+use crate::credentials::NotDrawn;
+
+/// Why the directory for launch files could not be prepared or swept, or a
+/// launch file could not be written in it.
+///
+/// No variant names the file or the directory, and none carries the ticket:
+/// the caller knows where it asked for the file, and says so where a person
+/// is told (spec: EL-1).
+#[derive(Debug)]
+pub enum LaunchFileError {
+    /// What the directory was asked to be is not a directory, or is a link to
+    /// one.
+    NotADirectory,
+    /// The directory belongs to another account, which could read every
+    /// ticket put in it.
+    ForeignOwner,
+    /// The directory admits somebody besides its owner: its mode, which must
+    /// grant nothing to the group or to others.
+    TooOpen {
+        /// The permission bits it was found with.
+        mode: u32,
+    },
+    /// The name asked for is not one file name ending in `.html`.
+    NotAName,
+    /// The host's address is not on `127.0.0.1`, which is the only address the
+    /// host serves (spec: LA-13).
+    NotLoopback(SocketAddr),
+    /// No ticket could be drawn.
+    NotDrawn(NotDrawn),
+    /// A launch file, or the temporary file one was being written under, that
+    /// a run before this one left could not be removed by a sweep. The first
+    /// refusal, of however many there were.
+    NotRemoved(io::Error),
+    /// The file system refused a step of preparing the directory, reading it,
+    /// or writing a file into it.
+    Io {
+        /// The step, in a fixed word.
+        operation: &'static str,
+        cause: io::Error,
+    },
+}
+
+impl LaunchFileError {
+    pub(super) fn io(operation: &'static str) -> impl FnOnce(io::Error) -> Self {
+        move |cause| Self::Io { operation, cause }
+    }
+}
+
+impl fmt::Display for LaunchFileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotADirectory => {
+                f.write_str("the place for launch files is not a directory of its own")
+            }
+            Self::ForeignOwner => f.write_str(
+                "the directory for launch files belongs to another account, which could read \
+                 the tickets in it",
+            ),
+            Self::TooOpen { mode } => write!(
+                f,
+                "the directory for launch files is mode {mode:o}, which lets others in; it has \
+                 to be 700"
+            ),
+            Self::NotAName => {
+                f.write_str("a launch file is named by one file name ending in .html")
+            }
+            Self::NotLoopback(address) => write!(
+                f,
+                "a launch file opens the explorer on 127.0.0.1 alone, and was asked to open \
+                 {address}"
+            ),
+            Self::NotDrawn(_) => f.write_str("no launch ticket could be drawn"),
+            Self::NotRemoved(_) => {
+                f.write_str("a launch file an earlier run left could not be removed")
+            }
+            Self::Io { operation, .. } => {
+                write!(
+                    f,
+                    "the file system refused a step with launch files: {operation} failed"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for LaunchFileError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::NotDrawn(cause) => Some(cause),
+            Self::NotRemoved(cause) | Self::Io { cause, .. } => Some(cause),
+            _ => None,
+        }
+    }
+}

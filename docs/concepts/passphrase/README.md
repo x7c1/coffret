@@ -32,7 +32,9 @@ protection, anyone holding the device would hold the Library's root secret.
     locked takes the Passphrase again only from the
     [desktop app](../library/#browsing-surface)'s own window, through a
     prompt that does not echo — never from the explorer's page in the
-    system browser, which carries no secret at all. The window is a page too,
+    system browser, which holds no key: neither a cryptographic key nor the
+    server key, only a browser token that admits it to the explorer and
+    unlocks nothing. The window is a page too,
     but one the app itself ships and renders; whatever brings it forward, the
     Passphrase takes the same path through it. A server started from the
     command line has no such prompt, so it is unlocked by starting it again
@@ -53,8 +55,10 @@ protection, anyone holding the device would hold the Library's root secret.
     keys (spec: DK-1, DK-4, DK-7, DK-8, DK-9).
     - While a device serves that Library for browsing, "whoever reaches the
       device" stays what it says: the server answers only a caller that can
-      read the owner's own files, not everything that can reach a loopback
-      port (spec: LA-2, LA-3).
+      read the owner's own files, and the explorer host in front of it only a
+      page holding a browser token that came to it through one of those
+      files — not everything that can reach a loopback port
+      (spec: LA-2, LA-3, LA-14, LA-21).
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.

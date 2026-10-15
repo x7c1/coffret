@@ -1,15 +1,25 @@
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::Ipv4Addr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
 use coffret_device::{LibraryDir, Passphrase};
+use coffret_explorer_host::credentials::{Credentials, SystemClock};
+use coffret_explorer_host::launch_file::LaunchDir;
+use coffret_explorer_host::Config;
 use coffret_server::{Launch, ServerState, Serving, UnlockPrompt};
 use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 use super::{ask_for_passphrase, refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
+use crate::launch::Launcher;
 use crate::{explorer, tray};
+
+/// How often the launch files are looked at, to remove those whose tickets
+/// were exchanged or have expired (spec: LA-21): often enough that a file
+/// outlives its use by a second at most, against a ticket good for a minute.
+const TIDY_EVERY: Duration = Duration::from_secs(1);
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
 /// front of it, and opens the explorer in the default browser.
@@ -32,11 +42,16 @@ pub async fn open_library(
     let passphrase = passphrase.into_passphrase();
 
     let _turn = desktop.opening.lock().await;
-    if let Some(address) = desktop.explorer() {
+    if let Some(launcher) = desktop.explorer() {
         // A press that waited behind the one that opened the Library.
-        explorer::open(&app, address);
+        explorer::open(&app, launcher);
         return Ok(());
     }
+    let launch_dir = desktop
+        .launch_dir
+        .get()
+        .cloned()
+        .ok_or("The app did not finish starting.")?;
 
     // The server's way of asking for the Passphrase again once it has locked:
     // the explorer's *unlock* reaches this window through it (spec: DK-1).
@@ -53,9 +68,9 @@ pub async fn open_library(
     };
     let started = desktop
         .runtime
-        .spawn(serve(app.clone(), launch, passphrase))
+        .spawn(serve(app.clone(), launch, passphrase, launch_dir))
         .await;
-    let (address, served) = match started {
+    let (launcher, served) = match started {
         Ok(Ok(started)) => started,
         Ok(Err(refused)) => {
             tracing::warn!(
@@ -71,7 +86,7 @@ pub async fn open_library(
     };
     // Nobody else sets them: the lock above is held by whoever reaches here.
     let _ = desktop.served.set(served);
-    let _ = desktop.explorer.set(address);
+    let _ = desktop.explorer.set(Arc::clone(&launcher));
     desktop.runtime.spawn(answer_prompts(app.clone(), asked));
 
     if let Err(error) = tray::show(&app) {
@@ -83,7 +98,7 @@ pub async fn open_library(
     }
     // The explorer is a process of its own and does not touch the window, so it
     // may open before the page hears the answer.
-    explorer::open(&app, address);
+    explorer::open(&app, &launcher);
     Ok(())
 }
 
@@ -104,14 +119,16 @@ async fn answer_prompts(app: AppHandle, mut asked: mpsc::Receiver<()>) {
 }
 
 /// Opens the Library, binds the explorer's host in front of it, and starts
-/// both answering. Returns where the explorer is, and what the server serves.
+/// both answering. Returns what opens the explorer, writing its launch files
+/// into `launch_dir`, and what the server serves.
 ///
 /// Run on the app's own runtime, because what it binds is served there.
 async fn serve(
     app: AppHandle,
     launch: Launch,
     passphrase: Passphrase,
-) -> anyhow::Result<(SocketAddr, Arc<ServerState>)> {
+    launch_dir: LaunchDir,
+) -> anyhow::Result<(Arc<Launcher>, Arc<ServerState>)> {
     let idle_minutes = launch.idle_minutes;
     let serving: Serving = launch.open(move || Ok(passphrase)).await?;
     let server = serving.address();
@@ -126,41 +143,65 @@ async fn serve(
          written to the Library; unlock it again from the explorer or from the tray icon."
     );
 
-    let host = coffret_explorer_host::router(coffret_explorer_host::Config::for_library(
-        server, &library,
-    ))?;
     // Loopback, for the reason the server's own socket is (spec: LA-1), and
     // any free port: nothing but this app ever needs to know the number, and
-    // it is the one that opens the browser on it.
+    // it is the one that opens the browser on it. Bound before the host is
+    // built, because the host answers only the authority it was built around,
+    // and that has to be the one actually bound (spec: LA-13).
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
         .context("nothing could listen for the explorer on 127.0.0.1")?;
     let address = listener
         .local_addr()
         .context("the address the explorer is served at could not be read")?;
-    eprintln!("The explorer is at http://{address}/.");
+    // The handle that issues launch tickets stays with this app, in the
+    // launcher, and is never handed to the host's routes (spec: LA-17).
+    let credentials = Credentials::new(Arc::new(SystemClock))
+        .context("the explorer's credentials could not be drawn")?;
+    let host = coffret_explorer_host::router(
+        &listener,
+        Config::for_library(server, &library, Arc::clone(&served)),
+        credentials.gate(),
+    )?;
+    let launcher = Arc::new(Launcher::new(credentials, launch_dir, address));
+    eprintln!(
+        "The explorer is at http://{address}/; a tab is let in only when it is opened from the \
+         app or its tray icon."
+    );
 
-    let stopped = app.clone();
+    let stopped = Arc::clone(&launcher);
     tokio::spawn(async move {
         if let Err(error) = serving.serve().await {
-            stop(&stopped, "the server", &error);
+            stop(&app, &stopped, &error);
         }
     });
-    tokio::spawn(async move {
-        if let Err(error) = axum::serve(listener, host).await {
-            stop(&app, "the explorer's host", &anyhow::Error::new(error));
-        }
-    });
-    Ok((address, served))
+    // It answers for as long as the app runs, and tries again after a failure
+    // to accept rather than stopping.
+    tokio::spawn(coffret_explorer_host::serve(listener, host));
+    tokio::spawn(tidy(Arc::clone(&launcher)));
+    Ok((launcher, served))
 }
 
-/// Ends the app because one of the two things it serves stopped.
+/// Removes each launch file once its ticket is spent, for as long as the app
+/// runs (spec: LA-21).
+async fn tidy(launcher: Arc<Launcher>) {
+    let mut every = tokio::time::interval(TIDY_EVERY);
+    every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        every.tick().await;
+        launcher.tidy();
+    }
+}
+
+/// Ends the app because the server it serves stopped.
 ///
-/// An app whose server is gone has nothing to show, and one whose host is gone
-/// has nothing anybody can reach; either way the tray would be offering an
-/// explorer that is not there.
-fn stop(app: &AppHandle, what: &str, error: &anyhow::Error) {
-    eprintln!("{what} stopped: {error:#}");
-    tracing::error!("{what} stopped; coffret-desktop is ending");
+/// An app whose server is gone has nothing to show, and the tray would be
+/// offering an explorer that is not there. Every session and ticket goes
+/// first, so that nothing issued for the server that stopped outlasts it
+/// (spec: LA-18).
+fn stop(app: &AppHandle, launcher: &Launcher, error: &anyhow::Error) {
+    launcher.retire();
+    eprintln!("the server stopped: {error:#}");
+    tracing::error!("the server stopped; coffret-desktop is ending");
     app.exit(1);
 }

@@ -1,0 +1,107 @@
+[
+  {
+    "body": {
+      "error": "origin_refused",
+      "message": "This explorer answers only its own page, at the address the app opened."
+    },
+    "status": 403
+  },
+  {
+    "body": {
+      "error": "authentication_required",
+      "message": "This explorer holds no session. Open the explorer from the coffret app."
+    },
+    "status": 401
+  },
+  {
+    "body": {
+      "error": "library_locked",
+      "message": "The Library is locked. Unlock it from the coffret app to read it again."
+    },
+    "status": 423
+  },
+  {
+    "body": {
+      "error": "rate_limited",
+      "message": "The explorer was opened too many times at once. Try again in a moment."
+    },
+    "status": 429
+  },
+  {
+    "body": {
+      "error": "not_found",
+      "message": "There is nothing here."
+    },
+    "status": 404
+  },
+  {
+    "body": {
+      "error": "method_not_allowed",
+      "message": "This address does not take that method."
+    },
+    "status": 405
+  },
+  {
+    "body": {
+      "error": "not_json",
+      "message": "The request's body is not JSON."
+    },
+    "status": 400
+  },
+  {
+    "body": {
+      "error": "unsupported_media_type",
+      "message": "The request's body has to be JSON."
+    },
+    "status": 415
+  },
+  {
+    "body": {
+      "error": "body_too_large",
+      "message": "The request's body is larger than this address takes."
+    },
+    "status": 413
+  },
+  {
+    "body": {
+      "error": "headers_too_large",
+      "message": "The request's headers are larger than this explorer takes."
+    },
+    "status": 431
+  },
+  {
+    "body": {
+      "error": "request_timeout",
+      "message": "The request took too long to arrive."
+    },
+    "status": 408
+  },
+  {
+    "body": {
+      "error": "server_unavailable",
+      "message": "The coffret server behind this explorer is not the one it was opened for, or has stopped. Open the explorer from the coffret app again."
+    },
+    "status": 502
+  },
+  {
+    "body": {
+      "error": "credential_not_drawn",
+      "message": "No credential could be drawn. Try again."
+    },
+    "status": 500
+  },
+  {
+    "body": {
+      "error": "server_unavailable",
+      "message": "The coffret server at 127.0.0.1:8787 is not answering. Start it, then open the explorer again."
+    },
+    "status": 502
+  },
+  {
+    "body": {
+      "error": "bad_gateway",
+      "message": "The request could not be forwarded to the coffret server at 127.0.0.1:8787 (failure kind: timeout)."
+    },
+    "status": 502
+  }
+]

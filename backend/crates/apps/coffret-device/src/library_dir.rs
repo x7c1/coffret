@@ -278,6 +278,13 @@ pub(crate) fn entries(path: &Path) -> Result<Vec<String>> {
     Ok(names)
 }
 
+/// Coffret's own directory under the state directory the platform names, or
+/// the one [`STATE_DIRECTORY`] names in its place: where the Libraries are
+/// kept, under `libraries`, and where a shell keeps what it holds beside them.
+pub fn state_directory() -> Result<PathBuf> {
+    state_root()
+}
+
 /// The directory Libraries are kept under.
 pub(crate) fn libraries_root() -> Result<PathBuf> {
     Ok(state_root()?.join("libraries"))
