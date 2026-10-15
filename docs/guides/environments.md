@@ -139,10 +139,39 @@ and the server's own locked refusal is what the explorer shows.
 The desktop app asks for a Library and its Passphrase in a small window of its
 own, starts the server in its own process, and opens the explorer in the default
 browser. Once a Library is open the window goes away and a tray icon is left,
-which unlocks the Library, opens the explorer again, or quits; quitting ends the
-server, which locks the Library. A second launch opens the explorer again rather
-than starting a second copy, with the app's window in front of it where the
-Library has locked. The Library also locks itself after the idle interval
+which unlocks the Library, opens the explorer again, disconnects every browser
+tab, or quits; quitting ends the server, which locks the Library. A second
+launch opens the explorer again rather than starting a second copy, with the
+app's window in front of it where the Library has locked.
+
+The app opens the explorer the way the development host's launch file does: it
+issues a one-time ticket, writes it into an owner-only **launch file** — a page
+that refreshes to `http://127.0.0.1:<port>/#launch=<ticket>` — and asks the
+system to open that file, so the browser's command line carries a path and
+never the ticket. Every opening (after the Passphrase, from the tray's *Open
+the explorer*, from a second launch) is a fresh ticket in a fresh file, which
+the app removes once the page has exchanged it or after the minute it is good
+for. The files live in a `0700` directory named for the app's identifier:
+`$XDG_RUNTIME_DIR/<identifier>` on Linux, and `explorer-launch/<identifier>`
+under the state directory where `$XDG_RUNTIME_DIR` is unset and on macOS. The
+app refuses to start where that directory is another account's or open to
+anyone else, and removes what its last run left there as it starts.
+
+The address typed by hand, a bookmark, and a tab whose session ended — after
+12 hours, or because the app ended it — show a page saying the tab holds no
+session: open the explorer again from the tray. *Disconnect all browser tabs*
+ends every tab's session at once; quitting does too, and so does the server
+stopping. At most eight tabs hold a session at once, and closing a tab does not
+end its session, so where a newly opened tab says the explorer is open in as
+many tabs as it may be, use *Disconnect this tab* in a tab no longer wanted, or
+*Disconnect all browser tabs*, and open the explorer again. Locking does not
+end a session: a tab of a locked Library keeps its session, shows the locked
+state, and comes back once the Library is unlocked. The browser is
+expected to be a Chromium-based one, installed from a `.deb` on Linux or as the
+macOS app; a browser installed as a Snap may not read the launch file, and is
+not supported.
+
+The Library also locks itself after the idle interval
 (`COFFRET_IDLE_MINUTES`, 30 minutes unless set), as the server's does. It is
 unlocked in place: press *unlock* in the explorer's status bar, or choose
 *Unlock…* from the tray, and the app's own window comes forward to take the

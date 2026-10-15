@@ -1,10 +1,14 @@
 //! The tray icon: what is left of the app once a Library is open.
 //!
-//! Three items. *Unlock…* brings the Passphrase window forward once the Library
+//! Four items. *Unlock…* brings the Passphrase window forward once the Library
 //! has locked itself, to unlock it in place without waiting for the explorer to
-//! ask (spec: DK-1). *Open the explorer* opens it in the browser again, for
-//! somebody who closed the tab. *Quit* ends the process, and the server with it
-//! — which is the lock (spec: DK-1): what the process held is gone with it.
+//! ask (spec: DK-1). *Open the explorer* opens it in the browser again through a
+//! fresh launch ticket, for somebody who closed the tab or whose tab holds no
+//! session — one whose session expired, or one opened from a bookmark
+//! (spec: LA-18, LA-21). *Disconnect all browser tabs* ends every tab's session
+//! at once (spec: LA-18). *Quit* ends the process, and the server with it —
+//! which is the lock (spec: DK-1): what the process held is gone with it, every
+//! browser session included.
 
 use anyhow::Context;
 use tauri::menu::{Menu, MenuEvent, MenuItem};
@@ -21,6 +25,8 @@ const TRAY_ID: &str = "coffret";
 const UNLOCK_ID: &str = "unlock";
 /// The menu item that opens the explorer again.
 const OPEN_ID: &str = "open";
+/// The menu item that ends every browser tab's session.
+const DISCONNECT_ID: &str = "disconnect";
 /// The menu item that ends the app.
 const QUIT_ID: &str = "quit";
 
@@ -30,9 +36,17 @@ pub fn show(app: &AppHandle) -> anyhow::Result<()> {
         .context("the tray's unlock item could not be made")?;
     let open = MenuItem::with_id(app, OPEN_ID, "Open the explorer", true, None::<&str>)
         .context("the tray's open item could not be made")?;
+    let disconnect = MenuItem::with_id(
+        app,
+        DISCONNECT_ID,
+        "Disconnect all browser tabs",
+        true,
+        None::<&str>,
+    )
+    .context("the tray's disconnect item could not be made")?;
     let quit = MenuItem::with_id(app, QUIT_ID, "Quit", true, None::<&str>)
         .context("the tray's quit item could not be made")?;
-    let menu = Menu::with_items(app, &[&unlock, &open, &quit])
+    let menu = Menu::with_items(app, &[&unlock, &open, &disconnect, &quit])
         .context("the tray menu could not be made")?;
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip("Coffret")
@@ -52,9 +66,13 @@ fn chosen(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
         UNLOCK_ID => unlock_chosen(app),
         OPEN_ID => match app.state::<Desktop>().explorer() {
-            Some(address) => explorer::open(app, address),
+            Some(launcher) => explorer::open(app, launcher),
             // The icon is shown only once the explorer is served.
             None => tracing::warn!("the tray asked for an explorer that is not served"),
+        },
+        DISCONNECT_ID => match app.state::<Desktop>().explorer() {
+            Some(launcher) => launcher.disconnect_all(),
+            None => tracing::warn!("the tray asked to disconnect an explorer that is not served"),
         },
         QUIT_ID => app.exit(0),
         other => tracing::warn!(

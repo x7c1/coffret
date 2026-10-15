@@ -1392,8 +1392,10 @@ name = "coffret-desktop"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "axum",
  "coffret-device",
  "coffret-explorer-host",
+ "coffret-logging",
  "coffret-server",
  "coffret-shell",
  "glib",
@@ -1404,7 +1406,9 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "tempfile",
  "tokio",
+ "tower",
  "tracing",
  "zeroize",
 ]

@@ -46,6 +46,42 @@ impl LaunchDir {
         &self.path
     }
 
+    /// Removes every launch file in the directory, and every temporary file
+    /// one was being written under, and answers how many went: what an app
+    /// that is the directory's only writer does as it starts, since whatever a
+    /// run before it left there is of a generation that is over.
+    ///
+    /// The tickets in such files admit nobody already (spec: LA-17, LA-18);
+    /// this is housekeeping, not what keeps them spent. Anything else in the
+    /// directory is left where it is. A file that will not go is passed over,
+    /// and the first refusal is answered once the rest have been tried.
+    pub fn sweep(&self) -> Result<usize, LaunchFileError> {
+        check(&self.path)?;
+        let entries =
+            fs::read_dir(&self.path).map_err(LaunchFileError::io("reading the directory"))?;
+        let mut removed = 0;
+        let mut refused = None;
+        for entry in entries {
+            let entry = entry.map_err(LaunchFileError::io("reading the directory"))?;
+            let ours = entry.file_name().to_str().is_some_and(is_ours);
+            let is_file = entry.file_type().is_ok_and(|kind| kind.is_file());
+            if !ours || !is_file {
+                continue;
+            }
+            match fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(cause) if cause.kind() == io::ErrorKind::NotFound => {}
+                Err(cause) => {
+                    refused.get_or_insert(cause);
+                }
+            }
+        }
+        match refused {
+            Some(cause) => Err(LaunchFileError::io("removing a stale file")(cause)),
+            None => Ok(removed),
+        }
+    }
+
     /// Issues a ticket from `credentials` and writes the file named `name`
     /// that delivers it to the host at `address`, replacing whatever file had
     /// that name.
@@ -95,6 +131,16 @@ fn is_a_name(name: &str) -> bool {
         && !name.contains(['/', '\\', '\0'])
         && name.len() > ".html".len()
         && name.ends_with(".html")
+}
+
+/// Whether `name` is one [`LaunchDir::deliver`] writes: a launch file's, or
+/// the temporary name one is written under.
+fn is_ours(name: &str) -> bool {
+    is_a_name(name)
+        || name
+            .strip_prefix('.')
+            .and_then(|rest| rest.strip_suffix(".tmp"))
+            .is_some_and(|rest| rest.contains(".html."))
 }
 
 /// A hidden name beside `name` that no other write of this process picks. One

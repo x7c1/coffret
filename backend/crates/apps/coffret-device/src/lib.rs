@@ -231,7 +231,7 @@ pub use join_library::{
 mod kept_parcels;
 
 mod library_dir;
-pub use library_dir::{LibraryDir, STATE_DIRECTORY};
+pub use library_dir::{state_directory, LibraryDir, STATE_DIRECTORY};
 
 // The three things both ways of putting a Library on this device write once its
 // Master Key and its place on Storage are decided.
