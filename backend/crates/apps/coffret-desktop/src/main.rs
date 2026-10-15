@@ -2,8 +2,10 @@
 //!
 //! A launcher, not a window onto the explorer. It starts the server inside its
 //! own process, serves the built explorer in front of it on a loopback port of
-//! its own (`coffret-explorer-host`), and opens that address in the system's
-//! default browser. The explorer's reader and its drag-and-drop want a
+//! its own (`coffret-explorer-host`), and opens the explorer in the system's
+//! default browser through a one-time launch ticket in a file only this
+//! account can read ([`launch`]), since the host admits a browser by nothing
+//! else (spec: LA-17, LA-21). The explorer's reader and its drag-and-drop want a
 //! Chromium-class engine, which the webview a Linux desktop offers is not, so
 //! the explorer is never shown in a webview here.
 //!
@@ -25,12 +27,13 @@
 //! `COFFRET_STATE_DIR` names for a process started with it set.
 
 mod explorer;
+mod launch;
 mod settings;
 mod startup;
 mod tray;
 mod unlock;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tokio::runtime::Runtime;
 
@@ -83,7 +86,11 @@ fn main() {
         // window closing, which ends the event loop, and the process with it.
         // Once a Library is open the window is hidden rather than closed, and
         // the tray's *Quit* is what ends it.
-        Ok(app) => app.run(|_, _| {}),
+        Ok(app) => app.run(|app, event| {
+            if let RunEvent::Exit = event {
+                quitting(app);
+            }
+        }),
         Err(error) => {
             eprintln!("coffret-desktop could not start: {error}");
             std::process::exit(1);
@@ -113,12 +120,21 @@ fn set_window_app_id(identifier: &str) {
 /// that is where they are in the middle of opening one.
 fn launched_again(app: &AppHandle) {
     let desktop = app.state::<Desktop>();
-    if let Some(address) = desktop.explorer() {
-        explorer::open(app, address);
+    if let Some(launcher) = desktop.explorer() {
+        explorer::open(app, launcher);
         unlock::ask_for_passphrase(app);
         return;
     }
     unlock::bring_forward(app);
+}
+
+/// What the app does as it ends, however it was asked to: every browser
+/// session and ticket goes, and the launch files with them, since the host
+/// that issued them is ending too (spec: LA-18, LA-21).
+fn quitting(app: &AppHandle) {
+    if let Some(launcher) = app.state::<Desktop>().explorer() {
+        launcher.retire();
+    }
 }
 
 /// Show a startup failure in a message dialog and exit 1 when it is

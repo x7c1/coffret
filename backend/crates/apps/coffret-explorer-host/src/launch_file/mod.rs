@@ -13,7 +13,8 @@
 //! and renamed into place, so that nothing ever reads half of one and nobody
 //! else can read one at all. Whoever delivered it removes it once its ticket
 //! is spent — exchanged, expired, or retired with its generation — which
-//! [`LaunchFile::is_spent`] says.
+//! [`LaunchFile::is_spent`] says. An app that is the directory's only writer
+//! clears what a run before it left there with [`LaunchDir::sweep`].
 //!
 //! What the file holds is a page with no executable part: a refresh, a link
 //! for a browser that does not follow one, and nothing else.

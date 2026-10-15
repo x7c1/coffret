@@ -239,3 +239,28 @@ fn a_launch_file_is_spent_once_used_or_expired() {
         .remove()
         .expect("a file already gone is not an error");
 }
+
+// LA-21: what a run before left in the directory — launch files, and the
+// temporary names they were written under — is swept away, and nothing else.
+#[test]
+fn a_sweep_removes_what_an_earlier_run_left_and_nothing_else() {
+    let parent = tempfile::tempdir().unwrap();
+    let dir = LaunchDir::prepare(parent.path().join("launch")).unwrap();
+    let (credentials, _) = credentials();
+    dir.deliver("explorer-0.html", host(), &credentials)
+        .unwrap();
+    fs::write(dir.path().join(".explorer-1.html.4242.0.tmp"), "half").unwrap();
+    fs::write(dir.path().join("notes.txt"), "somebody's").unwrap();
+    fs::DirBuilder::new()
+        .create(dir.path().join("kept.html"))
+        .unwrap();
+
+    assert_eq!(dir.sweep().expect("the directory is swept"), 2);
+    let mut left: Vec<_> = fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["kept.html", "notes.txt"]);
+    assert_eq!(dir.sweep().unwrap(), 0, "a second sweep finds nothing");
+}
