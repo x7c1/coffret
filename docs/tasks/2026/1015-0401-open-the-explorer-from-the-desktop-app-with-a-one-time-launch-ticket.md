@@ -93,15 +93,15 @@ should be reopened from the tray.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this Linux machine, with Chrome installed from its deb, the
+- [x] On this Linux machine, with Chrome installed from its deb, the
       development app (`make desktop-dev`) on a development Library opens a
       tab that lands on the explorer with the fragment gone from the address
       bar, lists the Library, opens a book, and takes a drop. The launch file
       has been removed afterwards
-- [ ] Opening the same launch file a second time (copied aside before it was
+- [x] Opening the same launch file a second time (copied aside before it was
       removed) shows the "open from the tray" message, and the tray's "Open
       explorer" then gives a working tab
-- [ ] After an idle lock the tab shows the locked state, unlocking through the
+- [x] After an idle lock the tab shows the locked state, unlocking through the
       app's Passphrase window resumes it, and "Disconnect all browser tabs"
       turns every open tab back to the "open from the tray" message
-- [ ] macOS is not checked in this change; the PR says so
+- [x] macOS is not checked in this change; the PR says so
