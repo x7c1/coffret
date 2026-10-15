@@ -190,13 +190,19 @@ jobs:
       # (io.github.x7c1.coffret). The bundle directory is emptied first, since
       # backend/target is restored from a cache that may hold the bundles of
       # an earlier version.
+      #
+      # `--verbose` because the macOS dmg step fails now and then (about one
+      # run in twenty) inside the create-dmg script tauri runs, and without it
+      # the log says only that the script failed. With it, the script's own
+      # output, including what hdiutil answered, is in the log of the run that
+      # failed.
       - name: Build the bundles
         env:
           BUNDLES: ${{ matrix.bundles }}
         run: |
           rm -rf "$BUNDLE_DIR"
           cd backend/crates/apps/coffret-desktop
-          cargo tauri build --features embed-web --bundles "$BUNDLES"
+          cargo tauri build --verbose --features embed-web --bundles "$BUNDLES"
 
       # Each bundle type is written to a directory of its name, as a file
       # with its name as the extension.
