@@ -40,7 +40,9 @@ mod tests;
 /// The kind of file-system failure under `error`, for an event, or `none`.
 fn io_error_kind(error: &LaunchFileError) -> String {
     match error {
-        LaunchFileError::Io { cause, .. } => format!("{:?}", cause.kind()),
+        LaunchFileError::NotRemoved(cause) | LaunchFileError::Io { cause, .. } => {
+            format!("{:?}", cause.kind())
+        }
         _ => "none".to_owned(),
     }
 }

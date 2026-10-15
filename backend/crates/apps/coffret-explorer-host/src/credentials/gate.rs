@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use super::state::Admission;
 use super::{ExchangeRefused, Exchanged, InstanceId, Session, Shared, Unauthenticated};
 
 /// The handle request handlers are given: it admits, and issues nothing.
@@ -13,11 +14,21 @@ pub struct Gate {
 
 impl Gate {
     /// Exchanges a launch ticket, as the page presented it, for a browser
-    /// token, spending the ticket (spec: LA-16, LA-17).
+    /// token, spending the ticket (spec: LA-16, LA-17). Where the host holds
+    /// as many sessions as it may, the session used least recently is
+    /// revoked to admit this one (spec: LA-18).
     pub fn exchange(&self, ticket: &str) -> Result<Exchanged, ExchangeRefused> {
         let now = self.shared.clock.now();
         let mut state = self.shared.lock();
-        let exchanged = state.exchange(ticket, now)?;
+        let Admission { exchanged, evicted } = state.exchange(ticket, now)?;
+        if evicted {
+            tracing::info!(
+                kind = "revocation",
+                reason = "session_cap",
+                revoked_sessions = 1,
+                "the session used least recently was revoked to admit a new one",
+            );
+        }
         tracing::info!(
             kind = "exchange",
             sessions = state.held().sessions,

@@ -26,8 +26,6 @@ pub(crate) enum Refusal {
     /// `429`: past the exchange limit; the next is let through after this long
     /// (spec: LA-17).
     RateLimited(Duration),
-    /// `409`: the host holds as many sessions as it may (spec: LA-18).
-    SessionLimit,
     /// `404`: a path under `/auth` that is not one of the host's own
     /// (spec: LA-16).
     NotFound,
@@ -101,7 +99,6 @@ impl Refusal {
             Self::AuthenticationRequired => StatusCode::UNAUTHORIZED,
             Self::LibraryLocked => StatusCode::LOCKED,
             Self::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
-            Self::SessionLimit => StatusCode::CONFLICT,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::NotJson => StatusCode::BAD_REQUEST,
@@ -121,7 +118,6 @@ impl Refusal {
             Self::AuthenticationRequired => "authentication_required",
             Self::LibraryLocked => "library_locked",
             Self::RateLimited(_) => "rate_limited",
-            Self::SessionLimit => "session_limit",
             Self::NotFound => "not_found",
             Self::MethodNotAllowed => "method_not_allowed",
             Self::NotJson => "not_json",
@@ -147,10 +143,6 @@ impl Refusal {
             }
             Self::RateLimited(_) => {
                 "The explorer was opened too many times at once. Try again in a moment."
-            }
-            Self::SessionLimit => {
-                "This explorer is open in as many tabs as it may be. Close one, then open the \
-                 explorer from the coffret app again."
             }
             Self::NotFound => "There is nothing here.",
             Self::MethodNotAllowed => "This address does not take that method.",

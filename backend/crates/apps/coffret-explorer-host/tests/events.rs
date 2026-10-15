@@ -296,3 +296,43 @@ async fn authentication_events_carry_kinds_reasons_and_counts_alone() {
         );
     }
 }
+
+// LA-18: an exchange past the session cap records the session it revoked as a
+// revocation by kind, a fixed reason and a count, and carries no ticket, token
+// or digest of either, the evicted session's included.
+#[tokio::test]
+async fn an_eviction_at_the_session_cap_carries_a_kind_a_reason_and_a_count_alone() {
+    let host = Harness::start().await;
+    let logs = CapturedLogs::capture_target(TARGET);
+
+    let mut credentials = Vec::new();
+    for _ in 0..9 {
+        let ticket = host.ticket();
+        let launched = host.send(host.launch(&ticket)).await;
+        assert_eq!(launched.status(), StatusCode::OK);
+        let token = support::json_of(launched).await["token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        credentials.push(ticket);
+        credentials.push(token);
+    }
+
+    let mut sentinels: Vec<String> = Vec::new();
+    for credential in &credentials {
+        sentinels.push(credential.clone());
+        sentinels.extend(digests_of(credential));
+    }
+    let sentinels: Vec<&str> = sentinels.iter().map(String::as_str).collect();
+    logs.assert_free_of(&sentinels);
+
+    let revocations: Vec<LoggedEvent> = logs
+        .events()
+        .into_iter()
+        .filter(|event| event.field("kind") == "revocation")
+        .collect();
+    assert_eq!(revocations.len(), 1, "{revocations:?}");
+    let eviction = &revocations[0];
+    assert_eq!(eviction.field("reason"), "session_cap", "{eviction}");
+    assert_eq!(eviction.number("revoked_sessions"), 1, "{eviction}");
+}

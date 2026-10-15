@@ -449,28 +449,39 @@ async fn an_exchange_that_never_finishes_arriving_is_given_up_on() {
     assert_eq!(error, "request_timeout");
 }
 
-// LA-17, LA-18: past the exchange limit an exchange is `429` with when to come
-// back, and past the session cap it is refused rather than ending a session.
+// LA-18: past the session cap an exchange still succeeds, and the session used
+// least recently — here the first, which nothing used since — is revoked to
+// admit it.
 #[tokio::test]
-async fn the_exchange_limit_and_the_session_cap_answer_their_refusals() {
+async fn the_session_cap_admits_a_ninth_exchange_by_revoking_the_least_recently_used() {
     let host = Harness::start().await;
-    let tokens: Vec<String> = {
-        let mut tokens = Vec::new();
-        for _ in 0..8 {
-            tokens.push(host.token().await);
-        }
-        tokens
-    };
-    let (status, error) = error_of(host.send(host.launch(&host.ticket())).await).await;
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(error, "session_limit");
-    for token in &tokens {
+    let mut tokens = Vec::new();
+    for _ in 0..9 {
+        let response = host.send(host.launch(&host.ticket())).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        tokens.push(
+            json_of(response).await["token"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+
+    let (status, error) = error_of(get(&host, "/api/list", &tokens[0]).await).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(error, "authentication_required");
+    for token in &tokens[1..] {
         assert_eq!(
             get(&host, "/api/list", token).await.status(),
             StatusCode::OK
         );
     }
+}
 
+// LA-17: past the exchange limit an exchange is `429` with when to come back.
+#[tokio::test]
+async fn the_exchange_limit_answers_its_refusal() {
+    let host = Harness::start().await;
     // The burst is twenty; well past it, some exchange is told to wait.
     let mut limited = None;
     for _ in 0..40 {

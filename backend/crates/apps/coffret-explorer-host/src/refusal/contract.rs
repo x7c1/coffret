@@ -32,7 +32,6 @@ fn every_answer() -> Vec<Response> {
         Refusal::AuthenticationRequired,
         Refusal::LibraryLocked,
         Refusal::RateLimited(Duration::from_millis(1500)),
-        Refusal::SessionLimit,
         Refusal::NotFound,
         Refusal::MethodNotAllowed,
         Refusal::NotJson,

@@ -162,11 +162,10 @@ The address typed by hand, a bookmark, and a tab whose session ended — after
 session: open the explorer again from the tray. *Disconnect all browser tabs*
 ends every tab's session at once; quitting does too, and so does the server
 stopping. At most eight tabs hold a session at once, and closing a tab does not
-end its session, so where a newly opened tab says the explorer is open in as
-many tabs as it may be, use *Disconnect this tab* in a tab no longer wanted, or
-*Disconnect all browser tabs*, and open the explorer again. Locking does not
-end a session: a tab of a locked Library keeps its session, shows the locked
-state, and comes back once the Library is unlocked. The browser is
+end its session; opening a ninth ends the session of the tab used least
+recently, which then shows the page saying it holds no session. Locking does
+not end a session: a tab of a locked Library keeps its session, shows the
+locked state, and comes back once the Library is unlocked. The browser is
 expected to be a Chromium-based one, installed from a `.deb` on Linux or as the
 macOS app; a browser installed as a Snap may not read the launch file, and is
 not supported.

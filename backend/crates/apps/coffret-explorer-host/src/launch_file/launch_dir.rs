@@ -54,7 +54,8 @@ impl LaunchDir {
     /// The tickets in such files admit nobody already (spec: LA-17, LA-18);
     /// this is housekeeping, not what keeps them spent. Anything else in the
     /// directory is left where it is. A file that will not go is passed over,
-    /// and the first refusal is answered once the rest have been tried.
+    /// and the first refusal is answered, as [`LaunchFileError::NotRemoved`],
+    /// once the rest have been tried.
     pub fn sweep(&self) -> Result<usize, LaunchFileError> {
         check(&self.path)?;
         let entries =
@@ -77,7 +78,7 @@ impl LaunchDir {
             }
         }
         match refused {
-            Some(cause) => Err(LaunchFileError::io("removing a stale file")(cause)),
+            Some(cause) => Err(LaunchFileError::NotRemoved(cause)),
             None => Ok(removed),
         }
     }

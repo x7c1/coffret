@@ -264,3 +264,33 @@ fn a_sweep_removes_what_an_earlier_run_left_and_nothing_else() {
     assert_eq!(left, ["kept.html", "notes.txt"]);
     assert_eq!(dir.sweep().unwrap(), 0, "a second sweep finds nothing");
 }
+
+// A stale file a sweep could not remove is said to be one that was not
+// removed, not one that was not written.
+#[test]
+fn a_sweep_that_cannot_remove_a_file_says_so() {
+    let parent = tempfile::tempdir().unwrap();
+    let dir = LaunchDir::prepare(parent.path().join("launch")).unwrap();
+    let stale = dir.path().join("explorer-0.html");
+    fs::write(&stale, "a spent ticket").unwrap();
+
+    // A directory nobody may remove anything from, its owner included; still
+    // the owner's alone.
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o500)).unwrap();
+    let swept = dir.sweep();
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+
+    if !stale.exists() {
+        // Run as an account the mode does not bind, which removed it anyway.
+        return;
+    }
+    let refused = swept.expect_err("the stale file would not go");
+    assert!(
+        matches!(&refused, LaunchFileError::NotRemoved(cause) if cause.kind() == std::io::ErrorKind::PermissionDenied),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused.to_string(),
+        "a launch file an earlier run left could not be removed"
+    );
+}

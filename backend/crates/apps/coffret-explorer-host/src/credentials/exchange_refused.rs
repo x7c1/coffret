@@ -15,11 +15,6 @@ pub enum ExchangeRefused {
     /// the next is let through after `retry_after` (spec: LA-17). Checked
     /// before the ticket is looked at, so a refused exchange spends nothing.
     RateLimited { retry_after: Duration },
-    /// The ticket is good, but the host already holds as many sessions as it
-    /// may; no session is ended to make room (spec: LA-18). The ticket is not
-    /// spent, so a page that revokes a session elsewhere may try again
-    /// before it expires.
-    SessionsFull,
     /// The ticket is good, but no token could be drawn for it. The ticket is
     /// not spent.
     NotDrawn(NotDrawn),
@@ -32,7 +27,6 @@ impl fmt::Display for ExchangeRefused {
             Self::RateLimited { .. } => {
                 f.write_str("more launch tickets were exchanged than this host lets through")
             }
-            Self::SessionsFull => f.write_str("this host already holds as many sessions as it may"),
             Self::NotDrawn(_) => f.write_str("no browser token could be drawn"),
         }
     }
@@ -42,7 +36,7 @@ impl std::error::Error for ExchangeRefused {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::NotDrawn(cause) => Some(cause),
-            Self::Unauthenticated | Self::RateLimited { .. } | Self::SessionsFull => None,
+            Self::Unauthenticated | Self::RateLimited { .. } => None,
         }
     }
 }
