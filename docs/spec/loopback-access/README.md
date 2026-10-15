@@ -245,8 +245,14 @@ Concept background: [Library](../../concepts/library/),
   host draws an `instance_id` for each generation and hands it to the page with
   every token, so that a page can tell one generation from the next; it is
   public, and admits nothing. At most 8 sessions are held at once, and an
-  exchange that would make a ninth is refused rather than ending one already
-  held. A session expires 12 hours after its token was issued, and nothing
+  exchange that would make a ninth is not refused: the host revokes the
+  session whose token was used least recently — used meaning authenticated
+  by any request, `/auth/session` included, or else issued — and admits the
+  new one. A cap that refused would refuse the owner, since closing a tab ends
+  no session; one that evicts is safe, since an exchange needs a ticket, which
+  only the owner's account can come by (LA-17, LA-21). The eviction is
+  recorded as an event by its kind, a fixed reason and a count alone (EL-1).
+  A session expires 12 hours after its token was issued, and nothing
   refreshes it: a page whose session ended exchanges a new ticket, which only
   the app can give it. Every ticket and token is discarded when the host or the
   server restarts and when the Library it serves changes; a Library that locks

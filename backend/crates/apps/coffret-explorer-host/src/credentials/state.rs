@@ -16,7 +16,8 @@ pub(super) const TICKET_CAP: usize = 4;
 /// How long a session lasts after its token was issued (spec: LA-18).
 pub(super) const SESSION_LIFETIME: Duration = Duration::from_secs(12 * 60 * 60);
 
-/// How many sessions may be held at once (spec: LA-18).
+/// How many sessions may be held at once; an exchange past it revokes the
+/// session used least recently (spec: LA-18).
 pub(super) const SESSION_CAP: usize = 8;
 
 /// Every ticket and session the host holds, as one state machine.
@@ -31,6 +32,7 @@ pub(super) struct State {
     generation: u64,
     /// In the order they were issued, so that the front is the oldest.
     tickets: VecDeque<HeldTicket>,
+    /// In the order they were issued, too.
     sessions: Vec<HeldSession>,
     next_session: u64,
     rate: RateLimit,
@@ -52,6 +54,18 @@ struct HeldSession {
     id: SessionId,
     digest: Digest,
     expires_at: Instant,
+    /// When its token last authenticated a request, or was issued: what the
+    /// session cap revokes the oldest of (spec: LA-18).
+    last_used: Instant,
+}
+
+/// What an exchange made: the page's token, and whether a session was revoked
+/// to make room for it.
+pub(super) struct Admission {
+    pub(super) exchanged: Exchanged,
+    /// Whether the session cap was reached, so that the session used least
+    /// recently was revoked to admit this one (spec: LA-18).
+    pub(super) evicted: bool,
 }
 
 impl State {
@@ -91,14 +105,16 @@ impl State {
     /// Exchanges `presented` for a browser token, spending the ticket.
     ///
     /// The limit is checked first, so that every attempt counts against it,
-    /// a malformed one included; the session cap and the token's draw come
-    /// before the ticket is spent, so that neither refusal costs the page its
-    /// ticket.
+    /// a malformed one included; the token's draw comes before the ticket is
+    /// spent, so that a failed draw costs the page neither its ticket nor
+    /// another tab its session. Where the host already holds as many sessions
+    /// as it may, the one used least recently is revoked to make room
+    /// (spec: LA-18).
     pub(super) fn exchange(
         &mut self,
         presented: &str,
         now: Instant,
-    ) -> Result<Exchanged, ExchangeRefused> {
+    ) -> Result<Admission, ExchangeRefused> {
         self.rate
             .take(now)
             .map_err(|retry_after| ExchangeRefused::RateLimited { retry_after })?;
@@ -106,28 +122,48 @@ impl State {
         self.expire(now);
         let held = find(self.tickets.iter().map(|held| &held.digest), &presented)
             .ok_or(ExchangeRefused::Unauthenticated)?;
-        if self.sessions.len() >= SESSION_CAP {
-            return Err(ExchangeRefused::SessionsFull);
-        }
         let token = BrowserToken::draw().map_err(ExchangeRefused::NotDrawn)?;
 
         self.tickets.remove(held);
+        let evicted = self.sessions.len() >= SESSION_CAP;
+        if evicted {
+            self.evict_least_recently_used();
+        }
         let id = SessionId(self.next_session);
         self.next_session += 1;
         self.sessions.push(HeldSession {
             id,
             digest: token.digest(),
             expires_at: now + SESSION_LIFETIME,
+            last_used: now,
         });
-        Ok(Exchanged {
-            token,
-            expires_in: SESSION_LIFETIME,
-            instance_id: self.instance_id(),
+        Ok(Admission {
+            exchanged: Exchanged {
+                token,
+                expires_in: SESSION_LIFETIME,
+                instance_id: self.instance_id(),
+            },
+            evicted,
         })
     }
 
-    /// The session `presented` stands for, while it lasts (spec: LA-14,
-    /// LA-18).
+    /// Revokes the session whose token was used least recently; of two used
+    /// at the same instant, the one issued first, since the sessions are held
+    /// in the order they were issued and the first of equals is the one taken.
+    fn evict_least_recently_used(&mut self) {
+        let oldest = self
+            .sessions
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, held)| held.last_used)
+            .map(|(at, _)| at);
+        if let Some(at) = oldest {
+            self.sessions.remove(at);
+        }
+    }
+
+    /// The session `presented` stands for, while it lasts, marked as used
+    /// at `now` (spec: LA-14, LA-18).
     pub(super) fn authenticate(
         &mut self,
         presented: &str,
@@ -137,10 +173,12 @@ impl State {
         self.expire(now);
         let held = find(self.sessions.iter().map(|held| &held.digest), &presented)
             .ok_or(Unauthenticated)?;
-        let held = &self.sessions[held];
+        let instance_id = self.instance_id();
+        let held = &mut self.sessions[held];
+        held.last_used = now;
         Ok(Session {
             id: held.id,
-            instance_id: self.instance_id(),
+            instance_id,
             expires_in: held.expires_at - now,
         })
     }

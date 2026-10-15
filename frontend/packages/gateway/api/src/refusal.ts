@@ -8,7 +8,7 @@ import surfacedFindings from './surfaced-findings.json';
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
  *
- * The next seven are the explorer host's, which answers in front of the server
+ * The next six are the explorer host's, which answers in front of the server
  * in the same shape: the page's session, the host's own limits, and a server
  * it could not reach (spec: LA-14, LA-15, LA-17, LA-18). The host's other
  * refusals are of requests this client never sends, and read as
@@ -121,8 +121,6 @@ export type RefusalKind =
   | 'server_unavailable'
   /** A request the host could not hand to the server, which ended no session. */
   | 'bad_gateway'
-  /** The host holds as many sessions as it may (spec: LA-18). */
-  | 'session_limit'
   /** Too many exchanges at once (spec: LA-17). */
   | 'rate_limited'
   /** The request named an address or an origin that is not the host's own (spec: LA-13). */
@@ -498,7 +496,6 @@ const KINDS: readonly string[] = [
   'library_locked',
   'server_unavailable',
   'bad_gateway',
-  'session_limit',
   'rate_limited',
   'origin_refused',
 ];

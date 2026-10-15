@@ -142,11 +142,11 @@ it('keeps the token in memory where storage throws', async () => {
 it('holds nothing where the exchange is refused', async () => {
   const asking = host();
   asking.launch.mockRejectedValueOnce(
-    new Refusal('session_limit', 409, 'This explorer is open in as many tabs as it may be.'),
+    new Refusal('rate_limited', 429, 'The explorer was opened too many times at once.'),
   );
   expect(await establish(TICKET, shelf(), asking)).toEqual({
     kind: 'none',
-    said: 'This explorer is open in as many tabs as it may be.',
+    said: 'The explorer was opened too many times at once.',
   });
   expect(heldToken()).toBeNull();
 });

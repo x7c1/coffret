@@ -161,27 +161,56 @@ fn the_ticket_cap_expires_the_oldest_unused_ticket() {
     assert!(gate.exchange(&newest).is_ok());
 }
 
-// LA-18: past eight sessions, an exchange is refused rather than ending one,
-// and the ticket it presented is not spent.
+// LA-18: past eight sessions, an exchange revokes the session used least
+// recently rather than being refused, and every other session keeps working.
 #[test]
-fn the_session_cap_refuses_a_new_session_rather_than_evicting_one() {
+fn the_session_cap_revokes_the_least_recently_used_session() {
+    let (credentials, gate, clock) = credentials();
+    let tokens: Vec<String> = (0..SESSION_CAP)
+        .map(|_| {
+            clock.advance(Duration::from_secs(1));
+            token(&credentials, &gate)
+        })
+        .collect();
+
+    // The first issued is used again, so the second is now the one used least
+    // recently.
+    clock.advance(Duration::from_secs(1));
+    gate.authenticate(&tokens[0])
+        .expect("the first token admits");
+
+    clock.advance(Duration::from_secs(1));
+    let newest = token(&credentials, &gate);
+
+    assert!(matches!(
+        gate.authenticate(&tokens[1]),
+        Err(Unauthenticated)
+    ));
+    assert!(gate.authenticate(&newest).is_ok());
+    assert!(gate.authenticate(&tokens[0]).is_ok());
+    for token in &tokens[2..] {
+        assert!(gate.authenticate(token).is_ok());
+    }
+}
+
+// LA-18: of sessions none of which was used since it was issued, the cap
+// revokes the one issued first.
+#[test]
+fn the_session_cap_revokes_the_first_issued_of_unused_sessions() {
     let (credentials, gate, _) = credentials();
     let tokens: Vec<String> = (0..SESSION_CAP)
         .map(|_| token(&credentials, &gate))
         .collect();
 
-    let ticket = ticket(&credentials);
+    let newest = token(&credentials, &gate);
+
     assert!(matches!(
-        gate.exchange(&ticket),
-        Err(ExchangeRefused::SessionsFull)
+        gate.authenticate(&tokens[0]),
+        Err(Unauthenticated)
     ));
-    for token in &tokens {
+    for token in tokens[1..].iter().chain([&newest]) {
         assert!(gate.authenticate(token).is_ok());
     }
-
-    let first = gate.authenticate(&tokens[0]).unwrap();
-    assert!(gate.revoke(&first));
-    assert!(gate.exchange(&ticket).is_ok());
 }
 
 // LA-18: an expired session makes room for a new one.

@@ -96,7 +96,6 @@ const KINDS: Record<RefusalKind, 'server' | 'host' | 'client'> = {
   library_locked: 'host',
   server_unavailable: 'host',
   bad_gateway: 'host',
-  session_limit: 'host',
   rate_limited: 'host',
   origin_refused: 'host',
   unreachable: 'client',
@@ -739,6 +738,22 @@ it('reads every refusal the explorer host sends as the refusal it is', async () 
     .filter(([, minted]) => minted === 'host')
     .map(([kind]) => kind);
   expect([...kinds].filter((kind) => kind !== 'unrecognized').sort()).toEqual(hostKinds.sort());
+});
+
+// The host never refuses an exchange at its session cap: it revokes the
+// session used least recently instead (spec: LA-18). So it sends no
+// `session_limit`, and one arriving from anywhere is a word this client has
+// no branch for.
+it('reads no session_limit from the explorer host', async () => {
+  expect(hostRefusals.map((sent) => sent.body.error)).not.toContain('session_limit');
+  expect(Object.hasOwn(KINDS, 'session_limit')).toBe(false);
+  const refusal = await refusalOf(
+    new Response(JSON.stringify({ error: 'session_limit', message: 'an older host' }), {
+      status: 409,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+  expect(refusal.kind).toBe('unrecognized');
 });
 
 // Every state the work answer can be in narrows to `Work`, and between

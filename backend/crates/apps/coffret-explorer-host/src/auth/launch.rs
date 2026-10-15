@@ -60,9 +60,6 @@ pub(super) async fn launch(State(host): State<Arc<Host>>, request: Request) -> R
         Err(ExchangeRefused::RateLimited { retry_after }) => {
             return Refusal::RateLimited(retry_after).answer("exchange_rate", headers)
         }
-        Err(ExchangeRefused::SessionsFull) => {
-            return Refusal::SessionLimit.answer("session_cap", headers)
-        }
         Err(ExchangeRefused::NotDrawn(_)) => return Refusal::NotDrawn.answer("csprng", headers),
     };
     if let Some(refused) = unpinned_answer(&host, &exchanged.instance_id, headers) {

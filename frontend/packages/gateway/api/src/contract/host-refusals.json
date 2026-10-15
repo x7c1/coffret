@@ -29,13 +29,6 @@
   },
   {
     "body": {
-      "error": "session_limit",
-      "message": "This explorer is open in as many tabs as it may be. Close one, then open the explorer from the coffret app again."
-    },
-    "status": 409
-  },
-  {
-    "body": {
       "error": "not_found",
       "message": "There is nothing here."
     },
