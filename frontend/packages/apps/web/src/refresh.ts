@@ -2,11 +2,12 @@
 //
 // The explorer reads the Library out of this device's catalog, and the catalog
 // holds what this device has replayed. Nothing brings it forward on its own —
-// there is no polling of the remote head and there is deliberately not going to
-// be one — so a device that has just joined shows an empty Library, and one
-// another device has committed into shows the Library as it was. This is the
-// gesture that ends that: one request, and then the two questions the screen
-// answers with, asked again.
+// the explorer looks at the remote head every so often (`remoteHead.ts`), but a
+// look only says there is something new and never takes it in — so a device
+// that has just joined shows an empty Library, and one another device has
+// committed into shows the Library as it was. This is the gesture that ends
+// that: one request, and then the two questions the screen answers with, asked
+// again.
 //
 // Kept free of DOM and of React so it is unit testable: what it does is a
 // sequence — say nothing, ask, say what came of it, ask the folder and the tree
@@ -27,6 +28,11 @@ export interface Refreshing {
   trouble: (line: string | null) => void;
   /** Asks the folder tree and the open folder what they hold now. */
   reload: () => void;
+  /**
+   * Says the catalog has reached the Library's head, so nothing is waiting any
+   * more: what draws the sync icon plain again.
+   */
+  landed: () => void;
 }
 
 /**
@@ -57,6 +63,7 @@ export async function askWhatIsNew(refreshing: Refreshing): Promise<void> {
   try {
     const refreshed = await refreshing.ask();
     refreshing.line(refreshedLine(refreshed));
+    refreshing.landed();
     refreshing.reload();
   } catch (refused: unknown) {
     refreshing.trouble(said(refused));
@@ -127,14 +134,25 @@ export function catchUpLanded(before: CatalogState | null, now: CatalogState): b
 }
 
 /**
- * What is written on the control that asks the Library what is new.
+ * What the sync icon that asks the Library what is new is called — its title
+ * and the name a screen reader gives it.
  *
  * Named here rather than on the bar that draws it, because two places say it:
- * the button, and the sentence below that tells somebody to press the button.
- * Two literals would be a banner naming a control that no longer goes by that
+ * the icon, and the sentence below that tells somebody to press it. Two
+ * literals would be a banner naming a control that no longer goes by that
  * name.
  */
-export const ASKING = 'look for what is new';
+export const CHECKING = 'Check for changes';
+
+/**
+ * What the icon is called while the last look said another device has
+ * committed since this one caught up: the same name, and then the news, so
+ * the control is still found by what it does.
+ */
+export const CHANGES_WAITING = `${CHECKING} — changes are waiting`;
+
+/** What the icon is called while the catch-up it started is running. */
+export const LOOKING = `${CHECKING} — looking…`;
 
 /**
  * What the screen says about a catalog that is not the Library's, or `null`
@@ -156,10 +174,11 @@ export const ASKING = 'look for what is new';
  * (`renewable`): then the sentence stops at what is wrong with the listing,
  * and the reconnect drawn after it says the rest.
  *
- * The second names that control by the words written on it. This sentence
- * stands at the top of the screen and the control is in the bar at the bottom,
- * so a person told to "ask what is new" would be left looking for a button of
- * that name among three others that all offer a second attempt.
+ * The second names that control as the icon it is, by the name it is shown
+ * under. This sentence stands at the top of the screen and the control is in
+ * the bar at the bottom, so a person told to "ask what is new" would be left
+ * looking for a button of that name among three others that all offer a second
+ * attempt.
  */
 export function catalogLine(catalog: Catalog | null, renewable = false): string | null {
   if (catalog === null) {
@@ -179,7 +198,7 @@ export function catalogLine(catalog: Catalog | null, renewable = false): string 
       }
       return (
         'this device has not caught up with the Library, so what is listed may not be ' +
-        `all of it — ${catalog.stopped.message}. Press "${ASKING}" to try again`
+        `all of it — ${catalog.stopped.message}. Press the sync icon, "${CHECKING}", to try again`
       );
   }
 }

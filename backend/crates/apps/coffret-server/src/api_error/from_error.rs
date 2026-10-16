@@ -48,6 +48,12 @@ impl From<Error> for ApiError {
             Error::Freeze { cause } => from_freeze(*cause),
             Error::Delete { cause } => from_delete(*cause),
             Error::CatchUp { cause } => from_commit(&cause, cause.redacted()),
+            // The look at which heads there are walks the catch-up's own
+            // listing, so what refuses it is answered as the catch-up's
+            // refusal is: Storage away is `storage`, a catalog that did not
+            // answer is the catalog's, and the rest is the control state's
+            // (spec: FM-12).
+            Error::RemoteHeadNotRead { cause } => from_commit(&cause, cause.redacted()),
             // The verdict a single writer gets when the folder it was to place
             // into is not the folder the mapping was recorded against — a
             // dropped file, most of the time (spec: EP-13). It is the same state

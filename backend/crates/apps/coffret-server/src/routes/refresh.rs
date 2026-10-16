@@ -47,11 +47,12 @@ impl RefreshedDto {
 /// Asks the Library what is new, and replays it into this device's catalog
 /// (spec: CK-9).
 ///
-/// This is the one control on the screen that reaches Storage because somebody
-/// pressed it, and it exists because nothing else can: the explorer never polls
-/// the remote head, and until a device catches up it cannot know a Container
-/// another device committed — a joined device's first window would be an empty
-/// Library, and a running one would never hear of what the other device added.
+/// This is the one control on the screen that catches up because somebody
+/// pressed it, and it exists because nothing else does: the explorer looks at
+/// the remote head on its own (`GET /api/remote-head`) and says when there is
+/// something new, but only a catch-up brings in a Container another device
+/// committed — a joined device's first window would be an empty Library, and a
+/// running one would never show what the other device added.
 ///
 /// It takes no path. What a catch-up covers is the Library entire, because a
 /// Journal record is replayed whole or not at all, and a route that narrowed it

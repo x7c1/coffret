@@ -25,6 +25,7 @@ mod reconnect;
 mod redaction;
 mod refresh;
 mod remembered;
+mod remote_head;
 mod turns;
 mod upload;
 mod work;

@@ -1,17 +1,24 @@
-//! The fifteen things a browser may ask of a Library.
+//! The sixteen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
 //! and it reaches it for one Entry at a time. There is deliberately no route
-//! that lists Storage, and none that hands anything encrypted out: what crosses
-//! this boundary is plaintext the device already has, or is about to place, and
-//! nothing else.
+//! that hands Storage's listing out, and none that hands anything encrypted
+//! out: what crosses this boundary is plaintext the device already has, or is
+//! about to place, and nothing else — the one route that walks the listing
+//! answers with a single word about it.
 //!
 //! The refresh is the fifth, and the one that reaches Storage for no bytes at
 //! all: it replays what the Journal holds into the catalog (spec: CK-9) and says
 //! what changed. It is how a device that has just joined, or one another device
 //! has committed past, learns there is anything to show — and it hands over
 //! counts rather than content.
+//!
+//! Beside it is the look that comes before it: the remote head, which asks
+//! Storage for the names of the Library's heads and says whether the newest has
+//! moved past the catalog's. It reads no object and moves nothing, and it is
+//! what lets the explorer say there is something to catch up with before
+//! anybody asks it to catch up.
 //!
 //! One goes the other way. The upload takes files somebody dropped into the
 //! folder this device maps and arms the flow that carries them in — a sync for
@@ -61,7 +68,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the fifteen go on answering once the Library is locked — which
+//! Three of the sixteen go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -78,7 +85,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the fifteen are two answers that are not routes at all: one for a path
+//! Beside the sixteen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -118,6 +125,9 @@ pub use reconnect::reconnect;
 
 mod refresh;
 pub use refresh::refresh;
+
+mod remote_head;
+pub use remote_head::remote_head;
 
 mod refusal_dto;
 use refusal_dto::RefusalDto;

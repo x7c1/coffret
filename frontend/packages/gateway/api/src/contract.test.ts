@@ -64,6 +64,7 @@ import type { Mapped, MappedMarker } from './map';
 import type { Reconnecting } from './reconnect';
 import type { Unlocking } from './unlock';
 import type { Refreshed } from './refresh';
+import type { HeadState, RemoteHead } from './remoteHead';
 import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 import { NO_FOLDER_HERE, refusalOf } from './refusal';
 import type { RefusedPart, Upload } from './upload';
@@ -179,6 +180,7 @@ const RECONNECT_STATES: Literals<ReconnectState> = {
   failed: true,
 };
 const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, added: true };
+const HEAD_STATES: Literals<HeadState> = { newer: true, current: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
 const MARKERS: Literals<MappedMarker> = { written: true, adopted: true, reset: true };
 
@@ -826,6 +828,12 @@ it('reads every other answer the server sends through its type', () => {
       entries: number(fields.entries, 'refreshed.entries'),
     };
   })();
+  const remoteHead = (name: 'current' | 'newer'): RemoteHead => {
+    const where = `remote_head.${name}`;
+    const fields = object(answers.remote_head[name], where, ['head']);
+    return { head: one(HEAD_STATES, fields.head, `${where}.head`) };
+  };
+  const looked = { current: remoteHead('current'), newer: remoteHead('newer') };
   const reconnecting: Reconnecting = (() => {
     const fields = object(answers.reconnecting, 'reconnecting', ['url', 'message']);
     return {
@@ -934,6 +942,9 @@ it('reads every other answer the server sends through its type', () => {
   expect(library.provider).toBe('drive');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
+  expect(looked.current.head).toBe('current');
+  expect(looked.newer.head).toBe('newer');
+  expect(unmet(HEAD_STATES), 'head states no look sent').toEqual([]);
   expect(reconnecting.url.length).toBeGreaterThan(0);
   expect(alreadyUnlocked.library).toBe('unlocked');
   expect(askedTheApp.library).toBe('locked');

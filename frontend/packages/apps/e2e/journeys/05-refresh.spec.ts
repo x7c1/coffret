@@ -2,11 +2,12 @@
 //
 // Everything on the screen comes out of this device's catalog, and a catalog
 // only moves when the Journal is replayed into it (spec: CK-9). Nothing does
-// that on a timer — the explorer makes no request while nothing is happening,
-// deliberately — so a Container another device committed is invisible here until
-// somebody asks for it. This journey is that asking: the other device commits,
-// the folder on the screen says nothing about it, and the control in the status
-// bar brings it in.
+// that on a timer — the explorer only looks, by name, whether there is a newer
+// head, and draws the sync icon as waiting when there is — so a Container
+// another device committed is not on the screen until somebody asks for it.
+// This journey is that asking: the other device commits, the folder on the
+// screen says nothing about it, the icon says changes are waiting, and pressing
+// it brings them in.
 //
 // What arrives is the row and not the file. A catch-up opens no Container, so
 // the photograph is `remote` afterwards exactly as every other Entry this device
@@ -19,6 +20,10 @@ import { commitElsewhere } from './uploader';
 /** What the other device commits, named so that it sorts to the top of the album. */
 const ADDED = 'committed-elsewhere.jpg';
 
+/** What the sync icon is called, plain and while changes are waiting. */
+const CHECKING = 'Check for changes';
+const CHANGES_WAITING = `${CHECKING} — changes are waiting`;
+
 test('ask what is new and find what another device committed', async ({ page }) => {
   await page.goto(`/#path=${setting.album}`);
   await expect(row(page, ADDED)).toHaveCount(0);
@@ -27,14 +32,20 @@ test('ask what is new and find what another device committed', async ({ page }) 
   await commitElsewhere(setting, `${setting.album}/${ADDED}`, setting.refreshFile);
 
   // Still nothing, and that is the point rather than a delay: this device has
-  // not been told, and no amount of waiting would tell it.
+  // not caught up, and no amount of waiting would bring the row in. What the
+  // explorer learns on its own — here as the page comes up again — is that
+  // there is something to bring in.
+  await expect(row(page, ADDED)).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('button', { name: CHANGES_WAITING })).toBeVisible();
   await expect(row(page, ADDED)).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'look for what is new' }).click();
+  await page.getByRole('button', { name: CHANGES_WAITING }).click();
 
   await expect(row(page, ADDED)).toHaveCount(1);
   await expect(chip(page, ADDED)).toHaveText('remote');
   await expect(page.getByText('1 new file')).toBeVisible();
+  await expect(page.getByRole('button', { name: CHECKING, exact: true })).toBeVisible();
   await shot(page, '02-the-catalog-caught-up');
 
   // The tree is asked again as well, so a folder that arrived with the same

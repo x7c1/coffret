@@ -33,13 +33,15 @@
 //! empty Library whether the Library is empty or this device never learnt what
 //! is in it.
 //!
-//! **When somebody asks**, through `POST /api/refresh`. There is no polling and
-//! no following of the remote head: the explorer's discipline is zero requests
-//! while nothing is happening, and a reader who wants to know what is new says
-//! so. Nothing about the Library's correctness rests on hearing about a commit
-//! promptly — a stale catalog is exactly what every writing flow's own catch-up
-//! fixes before it does anything (spec: CK-9), and what an Entry fetch meets
-//! as a Container that is no longer there, which [`when_stale`] answers.
+//! **When somebody asks**, through `POST /api/refresh`. Nothing catches up on a
+//! timer: a reader who wants what is new says so. What the explorer does on
+//! its own is look — `GET /api/remote-head` compares the newest head Storage's
+//! listing names with the catalog's, reads no object, and replays nothing — so
+//! the control that asks can say there is something to ask for. Nothing about
+//! the Library's correctness rests on hearing about a commit promptly — a stale
+//! catalog is exactly what every writing flow's own catch-up fixes before it
+//! does anything (spec: CK-9), and what an Entry fetch meets as a Container
+//! that is no longer there, which [`when_stale`] answers.
 //!
 //! Short of that one case, an Entry fetch does not catch up, and that is the
 //! point of these being the only places: a fetch answers from the catalog as it

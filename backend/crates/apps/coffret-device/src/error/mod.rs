@@ -739,6 +739,24 @@ pub enum Error {
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<CommitError>,
     },
+    /// The Library's newest head was not compared with the catalog's, so
+    /// whether it is newer is not known.
+    ///
+    /// The look that comes before a catch-up and changes nothing (see
+    /// [`OpenLibrary::remote_head`](crate::OpenLibrary::remote_head)). It walks
+    /// the listing and reads no object, so what refuses it is Storage not
+    /// answering, a listing that is not one Library's, or the catalog not
+    /// answering — the commit flow's vocabulary for all three, since the walk
+    /// is that flow's own (spec: FM-12).
+    /// Kept apart from [`CatchUp`](Self::CatchUp) because nothing was being
+    /// brought to the head: saying the catalog was not caught up would describe
+    /// a run that never started.
+    RemoteHeadNotRead {
+        /// What the walk reported.
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<CommitError>,
+    },
     /// The Library's first head was not written to Storage (spec: CP-2,
     /// FM-13).
     ///

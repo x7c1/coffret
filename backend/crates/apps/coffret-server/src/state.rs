@@ -253,8 +253,8 @@ impl ServerState {
     /// the cell was emptied does nothing at all.
     ///
     /// And this is where somebody being here is recorded (spec: DK-4), because
-    /// this is the one door every piece of work that needs the Library goes
-    /// through. Presence is not "a request arrived" — the explorer asks what
+    /// this is the one door every piece of work that needs the Library's keys
+    /// goes through. Presence is not "a request arrived" — the explorer asks what
     /// this server is doing several times a second while a reader is open, and
     /// an open tab is not a person at the keyboard. It is somebody wanting the
     /// Library itself: a page turned, a folder listed, a file dropped. A route
@@ -271,6 +271,25 @@ impl ServerState {
             .unlocked()
             .ok_or_else(|| ApiError::locked(self.way_back()))?;
         Ok(KeyHandle::taken(library, Arc::clone(&self.idle)))
+    }
+
+    /// The open Library for a look that needs no key, or the same refusal
+    /// [`unlocked`](Self::unlocked) gives while it is locked (spec: DK-2).
+    ///
+    /// The one door that does not record somebody being here. What goes
+    /// through it is the explorer asking, on a timer and when its tab comes back
+    /// to the front, whether the Library has a head this device has not caught
+    /// up with — object names and nothing a key opens — and an open tab asking
+    /// that is not a person wanting the Library: were it activity, a window
+    /// left open would keep the keys unlocked for as long as it stayed open
+    /// (spec: DK-4).
+    ///
+    /// Refused while locked all the same, because the Storage it asks is
+    /// reached through the open Library, and that goes with the keys.
+    pub(crate) fn unlocked_unattended(&self) -> Result<Arc<OpenLibrary>, ApiError> {
+        self.custody
+            .unlocked()
+            .ok_or_else(|| ApiError::locked(self.way_back()))
     }
 
     /// Locks the Library, and it is locked by the time this returns — the move

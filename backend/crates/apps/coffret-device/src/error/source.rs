@@ -77,7 +77,9 @@ impl error::Error for Error {
             | Self::FileNotAdded { cause }
             | Self::LocalFilesNotRead { cause }
             | Self::LocalFileNotOpened { cause } => Some(cause.as_ref()),
-            Self::CatchUp { cause } | Self::FirstHead { cause } => Some(cause.as_ref()),
+            Self::CatchUp { cause }
+            | Self::RemoteHeadNotRead { cause }
+            | Self::FirstHead { cause } => Some(cause.as_ref()),
             Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
                 Some(cause.as_ref())
             }

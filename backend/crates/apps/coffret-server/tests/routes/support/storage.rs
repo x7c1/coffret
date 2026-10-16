@@ -32,6 +32,12 @@ impl Served {
         self.storage.panic_next_read();
     }
 
+    /// Takes Storage's listing away and leaves reads of objects alone (see
+    /// [`HaltingStore::refuse_listing`](super::HaltingStore::refuse_listing)).
+    pub fn refuse_listing(&self) {
+        self.storage.refuse_listing();
+    }
+
     /// Gives it back.
     pub fn resume_storage(&self) {
         self.storage.resume();

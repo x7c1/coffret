@@ -26,8 +26,10 @@ use crate::support::{bytes, json as body_of, route, Served};
 ///
 /// The browse and the map need no key either, and are here all the same: they
 /// serve the mapping a page offers over a listing, and a locked server answers
-/// no listing (see `routes`).
-const KEYED_ROUTES: [(&str, &str); 11] = [
+/// no listing (see `routes`). So does the look at the remote head, which reads
+/// names alone: the Storage it asks is reached through the open Library, and
+/// that goes with the keys.
+const KEYED_ROUTES: [(&str, &str); 12] = [
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),
     ("GET", "/api/file?path=albums/cover.png"),
@@ -36,6 +38,7 @@ const KEYED_ROUTES: [(&str, &str); 11] = [
     ("GET", "/api/freeze?path=albums"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
+    ("GET", "/api/remote-head"),
     ("POST", "/api/reconnect"),
     ("GET", "/api/browse?path=/"),
     ("POST", "/api/map"),
