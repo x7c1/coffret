@@ -10,7 +10,7 @@ import type { Freeze, Sync } from '@coffret/api';
  * moment the sync commits they become ordinary Entry rows. Which is why this
  * watches the status and not the count — a sync reports what it did when it
  * has done it. And a commit can make a folder: a file added one by one into a
- * folder made here is the first Entry under it, and until that commit the
+ * folder a drop made is the first Entry under it, and until that commit the
  * Library has no such folder to name. So the tree is asked again too, for the
  * sync as for the freeze — without it a folder a one-by-one add made stayed
  * out of the tree until somebody pressed "look for what is new".

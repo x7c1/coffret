@@ -17,10 +17,11 @@ import type {
   Listing,
 } from '@coffret/api';
 
+import { Banner, DropBanner, dropOutline } from './Banner';
 import { deleteOffered, DELETE } from './deleteEntries';
-
+import { useDragOver } from './dragOver';
 import { droppedFiles } from './drop';
-import { dropLine, dropOutcome, type DropOutcome } from './dropTarget';
+import { dropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
@@ -80,17 +81,17 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * pressed: a box on every row, always, is a column of controls for a gesture
  * made now and then. Leaving that mode lets what was picked go.
  *
- * What a drop is added as follows what was dropped, not where: files on their
- * own go one at a time, and a drop holding a folder is asked about before
- * anything is sent — that question is the screen's, after this list has handed
- * the files over.
+ * Every drop is confirmed before anything is sent — where it lands, and for a
+ * drop holding a folder whether it goes as a Pack or its files one by one —
+ * and that confirmation is the screen's, after this list has handed the files
+ * over. A row of the folder tree takes a drop the same way, for its own folder.
  */
 export function FileList({
   listing,
   fill,
   freeze,
-  madeHere,
-  madeHereKnown,
+  stranded,
+  strandedKnown,
   selected,
   onOpenFolder,
   onOpenFile,
@@ -112,22 +113,23 @@ export function FileList({
   /** What the server is packing, wherever it is packing it. */
   freeze: Freeze | null;
   /**
-   * Whether this is a folder made in this browser that the Library does not
-   * hold yet. It decides nothing about how a drop is added — only what is said
-   * over a folder with nothing in it.
+   * Whether this is the folder of a book whose freeze has not committed, which
+   * the Library does not hold yet (see [`strandedFolders`](./stranded)). It
+   * decides nothing about how a drop is added — only that a path the Library
+   * holds nothing at is not said to be nothing.
    */
-  madeHere: boolean;
+  stranded: boolean;
   /**
-   * Whether the folders made in this browser are known yet.
+   * Whether the stranded folders are known yet.
    *
-   * `madeHere` is read off them, and they are not all on hand when this screen
-   * comes up: a folder whose book never committed is put back among them out of
-   * the folder tree's answer, which is a request of its own beside this
-   * listing's. Until that lands, a `madeHere` of false means "not known to be
-   * one" rather than "not one" — and `false` here says so, so that nothing on
-   * this screen states as a fact what only that answer decides.
+   * `stranded` is read off them, and they are not on hand when this screen
+   * comes up: they are read against the folder tree's answer, which is a
+   * request of its own beside this listing's. Until that lands, a `stranded`
+   * of false means "not known to be one" rather than "not one" — and `false`
+   * here says so, so that nothing on this screen states as a fact what only
+   * that answer decides.
    */
-  madeHereKnown: boolean;
+  strandedKnown: boolean;
   /**
    * The Entry Path the reader was last opened at here, if any, which is the
    * row selected when the reader closes over the list.
@@ -201,17 +203,10 @@ export function FileList({
    */
   onDelete: (target: DeleteTarget) => void;
 }) {
-  // Whether something is being dragged over the list right now. A `dragenter` and
-  // a `dragleave` fire for every element the pointer crosses inside it, so this
-  // is counted rather than set: a `dragleave` off a row onto the row below it
-  // would otherwise take the outline away in the middle of the drag.
-  const [over, setOver] = useState(0);
-  const dragged = over > 0;
-  // Whether what is being dragged carries files, as the browser says on the way
-  // in. Only such a drag gets the line saying what letting go will do: a
-  // selection of text or a link dropped here adds nothing (the drop says "that
-  // drop carried no files"), and a line promising otherwise would be wrong.
-  const [carriesFiles, setCarriesFiles] = useState(false);
+  // Whether files are being dragged over the list right now (see
+  // [`useDragOver`](./dragOver)).
+  const drag = useDragOver();
+  const dragged = drag.dragged;
   // The files picked out for one deletion together (see
   // [`selection`](./selection)). Held here rather than by the screen: nothing
   // outside the list needs to know what is picked until a deletion names it.
@@ -258,20 +253,20 @@ export function FileList({
   const empty = listing.folders.length === 0 && listing.files.length === 0;
   // A path the Library names nothing at, as far as what is on hand goes. A
   // folder of the Library is what the separators under it imply, so `held` being
-  // false means nothing is under this one — and a folder made in this browser is
-  // the one place that is a state rather than a mistake, since the Library has
-  // not heard of it yet and the whole point of it is what gets dropped in next.
-  const unheld = !listing.held && !madeHere;
+  // false means nothing is under this one — and the folder of a book whose
+  // freeze has not committed is the one place that is a state rather than a
+  // mistake, since its pages are on the disk and the Library has not heard of
+  // it yet.
+  const unheld = !listing.held && !stranded;
   // And the same thing said out loud, which waits for the one answer that can
-  // still overturn it. A folder stranded by a book that never committed rejoins
-  // the ones made here off the folder tree, a separate request from this
-  // listing, so until it lands `madeHere` is false even for a folder whose book
-  // is being packed this minute: somebody who closed the tab mid-packing and
-  // reopened that folder would read that the Library has nothing of theirs
-  // there. Said once the folders are known, and not at all where that request
-  // failed — the screen is already showing the tree's own trouble, and a fact
-  // this page could not confirm is not one to assert.
-  const nowhere = unheld && madeHereKnown;
+  // still overturn it. A stranded folder is read off the folder tree, a separate
+  // request from this listing, so until it lands `stranded` is false even for a
+  // folder whose book is being packed this minute: somebody who closed the tab
+  // mid-packing and reopened that folder would read that the Library has
+  // nothing of theirs there. Said once the folders are known, and not at all
+  // where that request failed — the screen is already showing the tree's own
+  // trouble, and a fact this page could not confirm is not one to assert.
+  const nowhere = unheld && strandedKnown;
   // A Library root with no mapping of its own and no files sitting in it is the
   // ordinary shape of a device that mapped one top-level folder, and there is
   // nothing on this screen for a banner to explain: no row here is inert,
@@ -297,13 +292,6 @@ export function FileList({
     mapped: listing.mapped,
     freezing: isFreezing(freeze),
   });
-  const takesADrop = outcome !== 'refused';
-  // A folder made here, still empty, waiting for what it was made for. Said
-  // because the Library has no such folder yet and the rows cannot say why the
-  // place exists — and said only where a drop would in fact be taken, since
-  // inviting files into a folder no mapping of this device reaches would
-  // contradict the banner above it.
-  const waitingForADrop = madeHere && takesADrop && empty;
   // The folder's own action: packing what it holds one file at a time into
   // Packs. Offered on a mapped folder that is not the Library root (see
   // [`packOffered`](./packFolder)), and not over a path the Library holds
@@ -377,9 +365,7 @@ export function FileList({
         minWidth: 0,
         // The list's own focus is drawn by the selected row rather than by a
         // ring around the whole of it, so the outline is a drag's alone.
-        outline: dragged
-          ? `2px dashed ${takesADrop ? COLOR.added : COLOR.refused}`
-          : 'none',
+        outline: dropOutline(dragged, outcome),
         // Inside the outline rather than around it, so that the outline moves
         // nothing on the screen when a drag arrives: one that took up room
         // would shift the list itself, edges and all. The drop line does move
@@ -391,20 +377,14 @@ export function FileList({
         // did not light up would leave a person to find out by letting go.
         outlineOffset: -2,
       }}
-      // The three that have to be answered for a drop to happen at all. The
-      // browser's own default for a dropped file is to navigate to it, which
-      // would replace the explorer with the picture — so both of the first two
-      // are prevented, and `dragover` on every pass rather than once.
-      onDragEnter={(event) => {
-        event.preventDefault();
-        setOver((crossed) => crossed + 1);
-        setCarriesFiles(event.dataTransfer.types.includes('Files'));
-      }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragLeave={() => setOver((crossed) => Math.max(0, crossed - 1))}
+      // The three that have to be answered for a drop to happen at all (see
+      // [`useDragOver`](./dragOver)).
+      onDragEnter={drag.onDragEnter}
+      onDragOver={drag.onDragOver}
+      onDragLeave={drag.onDragLeave}
       onDrop={(event) => {
         event.preventDefault();
-        setOver(0);
+        drag.ended();
         if (!listing.mapped) {
           // Said and not merely not done. A drop is a gesture with an outcome,
           // and the outcome here is that none of those files were added — which
@@ -478,7 +458,6 @@ export function FileList({
           />
         )}
         {packing && <Packing />}
-        {waitingForADrop && <WaitingForADrop />}
         {/* While a drag is over the list, the line saying what letting go
             will do. It takes its own room in the block rather than being laid
             over what is under it: laid over, it covered the top of whichever
@@ -486,7 +465,7 @@ export function FileList({
             down by its height as a drag arrives, which costs nothing, since
             what takes the drop is the whole list and not the row under the
             pointer. */}
-        {dragged && carriesFiles && <DropBanner outcome={outcome} held={!nowhere} />}
+        {dragged && drag.carriesFiles && <DropBanner outcome={outcome} held={!nowhere} />}
         {/* The column headings stay with the banners, so that the line a
             selection is said on can stand in for them without covering a row:
             the headings are the one thing on the list it may hide. */}
@@ -548,29 +527,23 @@ export function FileList({
         )}
       </div>
       {empty ? (
-        // A folder waiting for a drop has been told what it is for by the
-        // banner above, and "this folder is empty" under it would be the screen
-        // saying the same thing twice, the second time as though something were
-        // missing.
-        !waitingForADrop && (
-          <p style={{ padding: 16, color: COLOR.dim }}>
-            {/* Three states and not two. A folder of the Library holds
-                something by definition, so "this folder is empty" over a path
-                the Library has never held is the screen inventing a folder to
-                describe — which is what somebody who mistyped a component into
-                the address bar, or followed a link written before the Entries
-                went, would read it as. The listing says which of the two it
-                answered and this says it back — once the folders made here are
-                known, since a folder whose book is still being packed is the
-                one path the listing alone would have it wrong about, and where
-                it is still out this falls back to the milder of the two. */}
-            {nowhere
-              ? NOTHING_AT_THIS_PATH
-              : root
-                ? 'this Library is empty'
-                : 'this folder is empty'}
-          </p>
-        )
+        <p style={{ padding: 16, color: COLOR.dim }}>
+          {/* Three states and not two. A folder of the Library holds
+              something by definition, so "this folder is empty" over a path
+              the Library has never held is the screen inventing a folder to
+              describe — which is what somebody who mistyped a component into
+              the address bar, or followed a link written before the Entries
+              went, would read it as. The listing says which of the two it
+              answered and this says it back — once the stranded folders are
+              known, since a folder whose book is still being packed is the
+              one path the listing alone would have it wrong about, and where
+              it is still out this falls back to the milder of the two. */}
+          {nowhere
+            ? NOTHING_AT_THIS_PATH
+            : root
+              ? 'this Library is empty'
+              : 'this folder is empty'}
+        </p>
       ) : (
         <table style={TABLE}>
           <Columns picking={picking} />
@@ -924,29 +897,6 @@ function Chip({
 }
 
 /**
- * What a banner over the rows is drawn as.
- *
- * Not sticky of its own: the block the list draws its banners in is, so that
- * two standing at once stack rather than overlap as the rows scroll under them.
- */
-function Banner({ tone, background, children }: { tone: string; background: string; children: ReactNode }) {
-  return (
-    <p
-      style={{
-        margin: 0,
-        padding: '8px 12px',
-        background,
-        borderBottom: `1px solid ${tone}`,
-        color: tone,
-        fontSize: 13,
-      }}
-    >
-      {children}
-    </p>
-  );
-}
-
-/**
  * Said while the book in this folder is being packed.
  *
  * The rows say "not in Library" throughout, which is true and is not the whole
@@ -959,38 +909,6 @@ function Packing() {
     <Banner tone={COLOR.added} background={COLOR.addedGround}>
       packing this folder into the Library — the pages go up together, as Packs,
       and become ordinary rows when the batch commits
-    </Banner>
-  );
-}
-
-/**
- * Said in a folder made here that is still waiting for what it was made for.
- *
- * Making a folder decides nothing about how what is dropped into it is added:
- * that follows the drop, as it does everywhere else.
- */
-function WaitingForADrop() {
-  return (
-    <Banner tone={COLOR.added} background={COLOR.addedGround}>
-      this folder was made here and the Library does not have it yet — drop files
-      or a folder in; a folder is asked about first, as a Pack or its files one by one
-    </Banner>
-  );
-}
-
-/**
- * Said while files are dragged over the list: what letting go of them here
- * will do, as `dropLine` words it. A folder that takes no drop says so in the
- * refused colour the outline around it is drawn in.
- */
-function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) {
-  const refused = outcome === 'refused';
-  return (
-    <Banner
-      tone={refused ? COLOR.refused : COLOR.added}
-      background={refused ? COLOR.refusedGround : COLOR.addedGround}
-    >
-      {dropLine(outcome, held)}
     </Banner>
   );
 }
@@ -1015,11 +933,11 @@ function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) 
  * folders reads as a reference to something that is not on the screen. So the
  * clause that names what mapping would be for names what is actually here: the
  * files in this folder, or the files in the folders below it — or, where there
- * is neither, nothing fetched at all. A folder made in this browser inside an
- * unmapped subtree is empty and still needs the banner, because the drop it was
- * made for is the gesture that would be refused; over rows that are not there,
- * both of the other clauses would point at something to fetch and the line
- * under them would say the folder is empty.
+ * is neither, nothing fetched at all. A stranded folder inside an unmapped
+ * subtree that has come to be empty still needs the banner, because a drop into
+ * it is the gesture that would be refused; over rows that are not there, both
+ * of the other clauses would point at something to fetch and the line under
+ * them would say the folder is empty.
  *
  * What it offers to map is the top-level folder and not this one. A mapping is
  * keyed by one top-level component of the Library (spec: EP-9), so a mapping

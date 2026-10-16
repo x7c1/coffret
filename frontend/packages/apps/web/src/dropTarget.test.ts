@@ -1,19 +1,18 @@
 import { expect, it } from 'vitest';
 
-import { NO_FOLDER_HERE } from '@coffret/api';
+import { NO_FOLDER_HERE, type Listing } from '@coffret/api';
 
-import { dropLine, dropOutcome, PACKED_AFTER, TAKEN } from './dropTarget';
+import { dropLine, dropOutcome, mappedAt, PACKED_AFTER, TAKEN } from './dropTarget';
 import { NOTHING_AT_THIS_PATH } from './unmapped';
 
-// What a drop is added as follows what was dropped: the line says a folder is
-// asked about and files on their own go one by one, wherever the folder on
-// the screen came from.
-it('says a folder is asked about and files are added one by one', () => {
+// Every drop is confirmed before anything is sent — where it lands and what it
+// is added as — and the line while the drag is in the air says so, wherever the
+// folder it is over came from.
+it('says the drop is confirmed, where and how, before anything is sent', () => {
   const outcome = dropOutcome({ mapped: true, freezing: false });
   expect(outcome).toBe('taken');
   expect(dropLine(outcome, true)).toBe(TAKEN);
-  expect(TAKEN).toContain('a folder is asked about first');
-  expect(TAKEN).toContain('files on their own are added one by one');
+  expect(TAKEN).toContain('where it goes, and how, is confirmed before anything is sent');
 });
 
 // EP-9: a folder no mapping of this device reaches takes nothing, and the
@@ -33,4 +32,34 @@ it('says a folder added as a Pack while a freeze runs is packed after it', () =>
   expect(outcome).toBe('taken_after');
   expect(dropLine(outcome, true)).toBe(`${TAKEN} — ${PACKED_AFTER}`);
   expect(PACKED_AFTER).toContain('packed after it');
+});
+
+/** The listing of a Library root, mapped or not, over two top-level folders. */
+function root(mapped: boolean): Listing {
+  return {
+    path: '',
+    mapped,
+    held: true,
+    folders: [
+      { name: 'albums', path: 'albums', mapped: true },
+      { name: 'books', path: 'books', mapped },
+    ],
+    files: [],
+    folders_on_disk: [],
+  };
+}
+
+// EP-9: a mapping stands for a top-level folder and everything under it, or for
+// the root — so the root's listing answers for every row of the tree.
+it('reads whether a tree row is mapped off the listing of the root', () => {
+  expect(mappedAt('', root(false))).toBe(false);
+  expect(mappedAt('', root(true))).toBe(true);
+  expect(mappedAt('albums/2026/08', root(false))).toBe(true);
+  expect(mappedAt('books/vol-1', root(false))).toBe(false);
+  // A top-level folder the root does not list is reached where the root is,
+  // and otherwise is not known from here.
+  expect(mappedAt('stranded/vol-1', root(true))).toBe(true);
+  expect(mappedAt('stranded/vol-1', root(false))).toBeNull();
+  // Nothing is known before the root has been listed.
+  expect(mappedAt('albums', null)).toBeNull();
 });

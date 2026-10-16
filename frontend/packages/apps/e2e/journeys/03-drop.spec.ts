@@ -1,10 +1,12 @@
 // Dragging a photograph onto a folder, which is the whole of adding one.
 //
-// There is no upload button and no dialog: what a person means by dragging a
-// file onto a folder is not in doubt. What the screen owes them afterwards is
-// what follows — the file is in the folder while the Library does not have it
-// yet, the sync the server armed carries it in, and then the Library has it —
-// and this journey is that. How much of the middle is ever on the screen is
+// There is no upload button: what a person means by dragging a file onto a
+// folder is not in doubt, and the one thing the screen asks before anything is
+// sent is the confirmation every drop gets — where it lands, and that a file on
+// its own is added as it is. What the screen owes them afterwards is what
+// follows — the file is in the folder while the Library does not have it yet,
+// the sync the server armed carries it in, and then the Library has it — and
+// this journey is that. How much of the middle is ever on the screen is
 // the machine's speed, not the product's behavior: the sync is armed the
 // moment the file lands, and on a slow enough runner it has committed before
 // the browser draws the row at all, so the first chip it ever shows is
@@ -32,6 +34,16 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   // list, only so that the point dropped on is on the screen however long the
   // folder is.
   await dropFileOnto(page, row(page, photo(0)), setting.dropFile);
+
+  // Confirmed before anything is sent: one file, added on its own, into the
+  // album the list is showing. Nothing is in the folder until Add.
+  const question = page.getByRole('dialog');
+  await expect(question).toContainText('1 file');
+  await expect(question).toContainText('added on its own');
+  await expect(question).toContainText(`goes into ${setting.album}/`);
+  await expect(question).not.toContainText('is new');
+  await expect(row(page, dropped)).toHaveCount(0);
+  await question.getByRole('button', { name: 'Add', exact: true }).click();
 
   // In the folder from that moment. Which word the chip has for it is the
   // race described above — "not in Library" until the armed sync commits,

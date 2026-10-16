@@ -250,8 +250,8 @@ and has a window of its own for entering the Passphrase.
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
-    by name only, apart from the Library's folders, so a page about to make a
-    new folder knows the name is already taken by files on disk.
+    by name only, apart from the Library's folders, so a page can tell a name
+    already taken by files on disk from one nothing stands at.
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**: the check establishes whether the root is there to be

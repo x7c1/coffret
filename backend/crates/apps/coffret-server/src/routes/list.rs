@@ -60,10 +60,7 @@ pub struct ListingDto {
     ///
     /// `folders` is the catalog's, and the catalog has never heard of a folder
     /// nothing under it has committed — so a folder on disk whose files all sit
-    /// in subfolders of it lists here and nowhere else. It is what a page
-    /// making a new folder reads to know a place is taken: the first drop into
-    /// a new folder freezes it, and a freeze takes every eligible file under the
-    /// folder (spec: PK-1, PK-17), the ones already standing there included.
+    /// in subfolders of it lists here and nowhere else.
     ///
     /// Names and not rows, and not drawn as folders: what a person can do with
     /// a folder the Library does not hold is a separate question, and this
