@@ -6,7 +6,6 @@ import {
   heldToken,
   isRefusal,
   onSessionEnding,
-  revokeSession,
   withdrawAnswers,
   type Refusal,
 } from '@coffret/api';
@@ -25,12 +24,6 @@ export const NO_SESSION = 'This tab holds no session with the explorer, so it sh
 export const HOW_TO_OPEN =
   "Open the explorer from the coffret app's tray — or, in development, by opening the launch " +
   'file the development host printed.';
-
-/** The control that ends this tab's session and no other. */
-export const DISCONNECT = 'Disconnect this tab';
-
-/** What a tab that was disconnected says it was. */
-const DISCONNECTED = 'This tab was disconnected.';
 
 /** What a tab whose session ended under it says, where the host gave no reason of its own. */
 const ENDED = 'This tab’s session ended: it ran out, was revoked, or the explorer was started again.';
@@ -59,8 +52,8 @@ type Standing =
  * Library under it, ends the screen:
  *
  * - **ended** — the token admits nothing any more, the server behind the
- *   host stopped, the session ran out, or this tab disconnected. The token is
- *   let go of and forgotten, and the screen goes with everything it held.
+ *   host stopped, or the session ran out. The token is let go of and
+ *   forgotten, and the screen goes with everything it held.
  * - **locked** — the Library locked under a session that still stands. The
  *   screen is drawn afresh, which drops the listing, what the server was doing
  *   and every page the reader held, and what it asks is refused as locked,
@@ -70,6 +63,9 @@ type Standing =
  *
  * Either way, an answer to a request of the screen before is let go of rather
  * than drawn, and nothing that was refused is sent again.
+ *
+ * The page offers no control that ends its own session: disconnecting is the
+ * desktop app's, from its tray, for every tab at once.
  */
 export function Explorer({
   opened,
@@ -198,31 +194,6 @@ export function Explorer({
     };
   }, [locked, endSession]);
 
-  // One press at a time, and the token let go of before the host is asked to
-  // end it, so that nothing in flight is drawn after the press.
-  const disconnecting = useRef(false);
-  const disconnect = useCallback(() => {
-    if (disconnecting.current) {
-      return;
-    }
-    disconnecting.current = true;
-    const token = heldToken();
-    endSession(DISCONNECTED);
-    if (token !== null) {
-      revokeSession(token)
-        .catch((refused: unknown) => {
-          // The tab holds nothing either way; a session the host could not be
-          // told to end runs out on its own.
-          console.warn('the explorer could not ask its host to end this session', refused);
-        })
-        .finally(() => {
-          disconnecting.current = false;
-        });
-    } else {
-      disconnecting.current = false;
-    }
-  }, [endSession]);
-
   if (standing.kind === 'opening') {
     return <Notice lines={['Opening the explorer…']} />;
   }
@@ -234,7 +205,7 @@ export function Explorer({
       <div style={{ flex: 1, minHeight: 0 }}>
         <Screen key={standing.round} />
       </div>
-      <SessionBar locked={standing.locked} onDisconnect={disconnect} />
+      {standing.locked && <LockedBar />}
     </div>
   );
 }
@@ -270,37 +241,20 @@ function Notice({ lines, said = null }: { lines: string[]; said?: string | null 
   );
 }
 
-/** The line under the screen that says the tab holds a session, and ends it. */
-function SessionBar({ locked, onDisconnect }: { locked: boolean; onDisconnect: () => void }) {
+/** The line under the screen while the Library is locked under this tab's session. */
+function LockedBar() {
   return (
     <div
       style={{
-        display: 'flex',
-        gap: 12,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
         padding: '2px 12px',
         fontSize: 12,
+        textAlign: 'right',
         color: COLOR.dim,
         background: COLOR.panel,
         borderTop: `1px solid ${COLOR.border}`,
       }}
     >
-      {locked && <span>the Library is locked; this tab waits for it to be unlocked</span>}
-      <button
-        onClick={onDisconnect}
-        style={{
-          border: `1px solid ${COLOR.border}`,
-          background: COLOR.panel,
-          color: COLOR.text,
-          font: 'inherit',
-          padding: '0 8px',
-          borderRadius: 4,
-          cursor: 'pointer',
-        }}
-      >
-        {DISCONNECT}
-      </button>
+      the Library is locked; this tab waits for it to be unlocked
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 
@@ -25,6 +25,7 @@ import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
 import { packOffered, PACK_THIS_FOLDER } from './packFolder';
+import { RowMenu, type MenuItem } from './RowMenu';
 import {
   chosen,
   everyToggled,
@@ -63,10 +64,21 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * letting go says in words that nothing was added, naming the folders below that
  * would have taken it. That is the only thing that turns a drop away.
  *
- * Every gesture such a folder refuses is answered that way, the click on a row
+ * Every gesture such a folder refuses is answered that way, opening a row
  * included. A row there is not offered to the pointer and does not open, and it
- * still says why when it is clicked: the alternative is a person clicking a
+ * still says why when it is opened: the alternative is a person clicking a
  * name over and over at a screen that never once reacts.
+ *
+ * A click on a row selects it and a double-click opens it, as a file manager's
+ * rows do, so that a row can be pointed at without walking into it: a folder
+ * navigates and a file opens the reader. `Enter` opens the selected row and the
+ * arrow keys move the selection. On a touch screen a tap opens, since a double
+ * tap is not a gesture a touch screen reliably hands over. Selecting changes
+ * nothing else on the screen.
+ *
+ * Files are picked out for one deletion together only after "Select" is
+ * pressed: a box on every row, always, is a column of controls for a gesture
+ * made now and then. Leaving that mode lets what was picked go.
  *
  * What a drop is added as follows what was dropped, not where: files on their
  * own go one at a time, and a drop holding a folder is asked about before
@@ -116,7 +128,10 @@ export function FileList({
    * this screen states as a fact what only that answer decides.
    */
   madeHereKnown: boolean;
-  /** The Entry Path the reader was last opened at here, if any. */
+  /**
+   * The Entry Path the reader was last opened at here, if any, which is the
+   * row selected when the reader closes over the list.
+   */
   selected: string | null;
   onOpenFolder: (path: string) => void;
   onOpenFile: (path: string) => void;
@@ -201,7 +216,10 @@ export function FileList({
   // [`selection`](./selection)). Held here rather than by the screen: nothing
   // outside the list needs to know what is picked until a deletion names it.
   const [selection, setSelection] = useState<Selection | null>(null);
-  const picked = chosen(selection, listing);
+  // Whether the boxes are out: picking files for one deletion is a mode a
+  // person enters with "Select", and leaving it lets what was picked go.
+  const [picking, setPicking] = useState(false);
+  const picked = picking ? chosen(selection, listing) : [];
   const pickable = selectable(listing);
   // A listing of another folder, or the same one asked again without some of
   // the files, leaves the selection holding only what is still offered. Read
@@ -209,13 +227,33 @@ export function FileList({
   useEffect(() => {
     setSelection((held) => kept(held, listing));
   }, [listing]);
+  // And another folder leaves the mode as well: the boxes were put out for the
+  // files of the folder they were put out in.
+  useEffect(() => {
+    setPicking(false);
+    setSelection(null);
+  }, [listing.path]);
+  const leavePicking = () => {
+    setPicking(false);
+    setSelection(null);
+  };
   // Whatever is picked goes the moment a deletion is asked for, from the
   // selection or from a row: the rows it named are leaving, and a box left
   // ticked over them would offer to delete them a second time.
   const askToDelete = (target: DeleteTarget) => {
-    setSelection(null);
+    leavePicking();
     onDelete(target);
   };
+  // The row selected by a click, or by the arrow keys, which `Enter` opens:
+  // one at a time, and nothing but a highlight. It follows the reader, so that
+  // the row a reader closed over is the selected one, and starts over in
+  // another folder.
+  const [cursor, setCursor] = useState<string | null>(
+    selected === null ? null : fileKey(selected),
+  );
+  useEffect(() => {
+    setCursor(selected === null ? null : fileKey(selected));
+  }, [listing.path, selected]);
   const root = listing.path === '';
   const empty = listing.folders.length === 0 && listing.files.length === 0;
   // A path the Library names nothing at, as far as what is on hand goes. A
@@ -271,14 +309,77 @@ export function FileList({
   // [`packOffered`](./packFolder)), and not over a path the Library holds
   // nothing at, where there is no folder to pack.
   const offersPack = packOffered(listing) && !unheld;
+  // "Select" is offered where there is a file to pick; the mode is left from
+  // the same place.
+  const offersSelect = pickable.length > 0 || picking;
+  // What opening a file's row does: what a double-click, a tap and `Enter`
+  // reach.
+  //
+  // A folder no mapping reaches has nowhere on this device to put a file, so
+  // every fetch under it would be declined: its rows are shown and not offered,
+  // rather than letting a reader walk into the refusal. What opening one gets
+  // instead is the sentence, the way the drop above does — the row stays
+  // un-openable and the attempt stops being met by nothing at all, which is the
+  // one answer a person cannot tell from a screen that is broken.
+  const openFile = (file: ListedFile) =>
+    !listing.mapped
+      ? () => onUnmapped('open', !nowhere)
+      : file.openable
+        ? () => onOpenFile(file.path)
+        : () => onUnsupported(file);
+  // Every row in the order it is drawn, which is what the arrow keys walk.
+  const rows: ListRow[] = [
+    ...listing.folders.map((folder) => ({
+      key: folderKey(folder.path),
+      open: () => onOpenFolder(folder.path),
+    })),
+    ...listing.files.map((file) => ({ key: fileKey(file.path), open: openFile(file) })),
+  ];
+  // The keys the list answers while it has the focus itself — which a click on
+  // a row gives it — and not while a control inside it does: `Enter` on a
+  // menu's button or a box is that control's.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || rows.length === 0) {
+      return;
+    }
+    if (event.key === 'Enter') {
+      const open = rows.find((row) => row.key === cursor)?.open;
+      if (open !== undefined) {
+        event.preventDefault();
+        open();
+      }
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return;
+    }
+    event.preventDefault();
+    const at = rows.findIndex((row) => row.key === cursor);
+    const next =
+      at === -1
+        ? event.key === 'ArrowDown'
+          ? 0
+          : rows.length - 1
+        : Math.min(rows.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)));
+    setCursor(rows[next].key);
+  };
   return (
     <div
       // What a row's menu measures the room below it against (see `RowMenu`).
       data-scroll-area=""
+      // Focusable, so that the keys that move and open the selection reach it:
+      // a click on a row focuses the list.
+      tabIndex={0}
+      onKeyDown={onKeyDown}
       style={{
         flex: 1,
         overflow: 'auto',
         minWidth: 0,
+        // The list's own focus is drawn by the selected row rather than by a
+        // ring around the whole of it, so the outline is a drag's alone.
+        outline: dragged
+          ? `2px dashed ${takesADrop ? COLOR.added : COLOR.refused}`
+          : 'none',
         // Inside the outline rather than around it, so that the outline moves
         // nothing on the screen when a drag arrives: one that took up room
         // would shift the list itself, edges and all. The drop line does move
@@ -288,9 +389,6 @@ export function FileList({
         // refused colour. The answer to "will this take my files" is worth
         // having while the files are still in the air, and a list that simply
         // did not light up would leave a person to find out by letting go.
-        outline: dragged
-          ? `2px dashed ${takesADrop ? COLOR.added : COLOR.refused}`
-          : undefined,
         outlineOffset: -2,
       }}
       // The three that have to be answered for a drop to happen at all. The
@@ -332,19 +430,42 @@ export function FileList({
           stand at once — the drop line under the unmapped one — and two sticky
           to the same edge would be drawn one over the other. */}
       <div style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-        {offersPack && (
+        {(offersPack || offersSelect) && (
           <div
             style={{
               display: 'flex',
               justifyContent: 'flex-end',
+              gap: 8,
               padding: '4px 12px',
               background: COLOR.panel,
               borderBottom: `1px solid ${COLOR.border}`,
             }}
           >
-            <button type="button" onClick={() => onPack(listing.path)} style={BAR_BUTTON}>
-              {PACK_THIS_FOLDER}
-            </button>
+            {offersSelect && (
+              <button
+                type="button"
+                aria-pressed={picking}
+                // Entering the mode lets the row a click chose go: a highlight
+                // is what a picked row is drawn with, and one left over a row
+                // whose box is empty would read as picked.
+                onClick={
+                  picking
+                    ? leavePicking
+                    : () => {
+                        setPicking(true);
+                        setCursor(null);
+                      }
+                }
+                style={BAR_BUTTON}
+              >
+                {picking ? END_SELECT : SELECT}
+              </button>
+            )}
+            {offersPack && (
+              <button type="button" onClick={() => onPack(listing.path)} style={BAR_BUTTON}>
+                {PACK_THIS_FOLDER}
+              </button>
+            )}
           </div>
         )}
         {sayUnmapped && (
@@ -371,7 +492,7 @@ export function FileList({
             the headings are the one thing on the list it may hide. */}
         {!empty && (
           <table style={TABLE}>
-            <Columns />
+            <Columns picking={picking} />
             <thead>
               {picked.length > 0 ? (
                 // While files are picked out, what they come to and the one
@@ -401,15 +522,19 @@ export function FileList({
                 </tr>
               ) : (
                 <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
-                  <th style={{ ...HEAD, ...PICK }}>
-                    {pickable.length > 0 && (
-                      <EveryBox
-                        picked={picked.length}
-                        of={pickable.length}
-                        onToggle={() => setSelection((held) => everyToggled(held, listing))}
-                      />
-                    )}
-                  </th>
+                  {/* The box column is there only while files are being
+                      picked out, and so is the box that picks them all. */}
+                  {picking && (
+                    <th style={{ ...HEAD, ...PICK }}>
+                      {pickable.length > 0 && (
+                        <EveryBox
+                          picked={picked.length}
+                          of={pickable.length}
+                          onToggle={() => setSelection((held) => everyToggled(held, listing))}
+                        />
+                      )}
+                    </th>
+                  )}
                   <th style={HEAD} />
                   <th style={HEAD}>Name</th>
                   <th style={{ ...HEAD, textAlign: 'right' }}>Size</th>
@@ -448,88 +573,86 @@ export function FileList({
         )
       ) : (
         <table style={TABLE}>
-          <Columns />
+          <Columns picking={picking} />
           <tbody>
-            {listing.folders.map((folder) => (
-              <Row
-                key={folder.path}
-                icon="▸"
-                name={folder.name}
-                onActivate={() => onOpenFolder(folder.path)}
-                // No box: the server takes one folder per deletion, and a
-                // folder is deleted from its own row's menu.
-                pick={null}
-              >
-                <td style={CELL} />
-                <td style={CELL} />
-                <td style={CELL}>
-                  {!folder.mapped && <Chip color={COLOR.warn}>not here</Chip>}
-                </td>
-                <RowMenu
+            {listing.folders.map((folder) => {
+              const key = folderKey(folder.path);
+              return (
+                <Row
+                  key={key}
+                  icon={<FolderIcon />}
                   name={folder.name}
-                  items={[
-                    {
-                      label: DELETE,
-                      onPress: () => askToDelete({ folder: folder.path, paths: [] }),
-                    },
-                  ]}
-                />
-              </Row>
-            ))}
-            {listing.files.map((file) => (
-              <Row
-                key={file.path}
-                icon={file.openable ? '▣' : '▤'}
-                name={file.name}
-                dim={!file.openable}
-                selected={file.path === selected}
-                // A folder no mapping reaches has nowhere on this device to put
-                // a file, so every fetch under it would be declined: its rows
-                // are shown and not offered, rather than letting a reader walk
-                // into the refusal. What the click gets instead is the sentence,
-                // the way the drop above does — the row stays un-openable and
-                // the attempt stops being met by nothing at all, which is the
-                // one answer a person cannot tell from a screen that is broken.
-                onActivate={
-                  !listing.mapped
-                    ? () => onUnmapped('open', !nowhere)
-                    : file.openable
-                      ? () => onOpenFile(file.path)
-                      : () => onUnsupported(file)
-                }
-                offered={listing.mapped}
-                pick={
-                  deleteOffered(file)
-                    ? {
-                        picked: picked.includes(file.path),
-                        onToggle: () =>
-                          setSelection((held) => toggled(held, listing, file.path)),
-                      }
-                    : null
-                }
-              >
-                <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
-                  {size(file.size)}
-                </td>
-                <td style={{ ...CELL, color: COLOR.dim }}>{time(file.mtime)}</td>
-                <td style={CELL}>
-                  <StateChip file={file} folder={listing.path} fill={fill} />
-                </td>
-                <RowMenu
+                  selected={cursor === key}
+                  onSelect={() => setCursor(key)}
+                  onOpen={() => onOpenFolder(folder.path)}
+                  // No box: the server takes one folder per deletion, and a
+                  // folder is deleted from its own row's menu.
+                  pick={picking ? null : undefined}
+                >
+                  <td style={CELL} />
+                  <td style={CELL} />
+                  <td style={CELL}>
+                    {!folder.mapped && <Chip color={COLOR.warn}>not here</Chip>}
+                  </td>
+                  <MenuCell
+                    name={folder.name}
+                    items={[
+                      {
+                        label: DELETE,
+                        onPress: () => askToDelete({ folder: folder.path, paths: [] }),
+                      },
+                    ]}
+                  />
+                </Row>
+              );
+            })}
+            {listing.files.map((file) => {
+              const key = fileKey(file.path);
+              const pick = !picking
+                ? undefined
+                : deleteOffered(file)
+                  ? {
+                      picked: picked.includes(file.path),
+                      onToggle: () => setSelection((held) => toggled(held, listing, file.path)),
+                    }
+                  : null;
+              return (
+                <Row
+                  key={key}
+                  // No mark: a file is told from a folder by the folder's, and
+                  // one the reader cannot draw by its dimmed name.
+                  icon={null}
                   name={file.name}
-                  items={
-                    deleteOffered(file)
-                      ? [
-                          {
-                            label: DELETE,
-                            onPress: () => askToDelete({ folder: null, paths: [file.path] }),
-                          },
-                        ]
-                      : []
-                  }
-                />
-              </Row>
-            ))}
+                  dim={!file.openable}
+                  selected={cursor === key || (pick?.picked ?? false)}
+                  onSelect={() => setCursor(key)}
+                  onOpen={openFile(file)}
+                  offered={listing.mapped}
+                  pick={pick}
+                >
+                  <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
+                    {size(file.size)}
+                  </td>
+                  <td style={{ ...CELL, color: COLOR.dim }}>{time(file.mtime)}</td>
+                  <td style={CELL}>
+                    <StateChip file={file} folder={listing.path} fill={fill} />
+                  </td>
+                  <MenuCell
+                    name={file.name}
+                    items={
+                      deleteOffered(file)
+                        ? [
+                            {
+                              label: DELETE,
+                              onPress: () => askToDelete({ folder: null, paths: [file.path] }),
+                            },
+                          ]
+                        : []
+                    }
+                  />
+                </Row>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -567,80 +690,185 @@ const CELL: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** What a list row is called by while it is selected, a folder's told from a file's. */
+function folderKey(path: string): string {
+  return `folder:${path}`;
+}
+
+function fileKey(path: string): string {
+  return `file:${path}`;
+}
+
+/** One row of the list as the keys see it: which it is, and what opening it does. */
+interface ListRow {
+  key: string;
+  open: () => void;
+}
+
+/** What puts the boxes out, and what takes them away again. */
+export const SELECT = 'Select';
+export const END_SELECT = 'Done';
+
 function Row({
   icon,
   name,
   dim,
   selected,
-  onActivate,
-  offered = onActivate !== undefined,
+  onSelect,
+  onOpen,
+  offered = true,
   pick,
   children,
 }: {
-  icon: string;
+  /** The mark beside the name, and `null` for a row that has none. */
+  icon: ReactNode;
   name: string;
   dim?: boolean;
-  selected?: boolean;
-  onActivate?: () => void;
+  /** Whether the row is drawn selected: the one a click chose, or one picked out. */
+  selected: boolean;
+  /** A click on the row, which selects it and opens nothing. */
+  onSelect: () => void;
+  /** A double-click, a tap, or `Enter` on the row while it is selected. */
+  onOpen: () => void;
   /**
    * Whether this row is offered to the pointer, which is what the cursor and the
    * hover say.
    *
-   * Apart from whether there is a handler at all, because one row has a handler
-   * and is not offered: a file in a folder no mapping of this device reaches
-   * answers a click with the reason it will not open, and a row that invited the
-   * click first would make that sentence the second surprise rather than the
-   * first. A row whose format the reader cannot draw is offered, and remains so
-   * — the sentence it answers with is about the one file, in a folder where
-   * every other row does open.
+   * Apart from whether it opens, because one row answers an open and is not
+   * offered: a file in a folder no mapping of this device reaches answers with
+   * the reason it will not open, and a row that invited the gesture first would
+   * make that sentence the second surprise rather than the first. A row whose
+   * format the reader cannot draw is offered, and remains so — the sentence it
+   * answers with is about the one file, in a folder where every other row does
+   * open.
    */
   offered?: boolean;
-  /** The row's box for picking it out, and `null` on a row that cannot be. */
-  pick: { picked: boolean; onToggle: () => void } | null;
+  /**
+   * The row's box for picking it out, `null` on a row that cannot be while
+   * files are being picked out, and `undefined` while they are not — when the
+   * box column is not drawn at all.
+   */
+  pick: { picked: boolean; onToggle: () => void } | null | undefined;
   children: ReactNode;
 }) {
-  // The row the reader was last opened at is brought back into view when the
-  // reader closes over it — a folder is not scrolled by turning pages, but one
-  // restored from a URL was never scrolled at all, and the marked row would be
-  // somewhere below the fold with nothing to say where.
+  // The selected row is brought into view: the one the reader was last opened
+  // at when the reader closes over it — a folder is not scrolled by turning
+  // pages, and one restored from a URL was never scrolled at all — and the one
+  // the arrow keys moved to.
   const here = useRef<HTMLTableRowElement>(null);
   useEffect(() => {
-    if (selected === true) {
+    if (selected) {
       here.current?.scrollIntoView({ block: 'nearest' });
     }
   }, [selected]);
+  // How the last press on the row was made. A tap opens, since a double tap is
+  // not a gesture a touch screen reliably hands over; a click from a mouse or a
+  // pen selects. Kept past the click rather than cleared by it: the
+  // double-click a browser makes of two taps comes after the second tap's
+  // click, and is told for a tap's by it.
+  const pointer = useRef<string | null>(null);
 
   return (
     <tr
       ref={here}
       className={offered ? 'row activatable' : 'row'}
-      onClick={onActivate}
+      aria-selected={selected}
+      onPointerDown={(event) => {
+        pointer.current = event.pointerType;
+      }}
+      onClick={() => {
+        // While files are picked out, a click on one that can be picked toggles
+        // it, as its box does: the rows are what a person points at. It does
+        // not also select the row, whose highlight would then stay on after a
+        // second click took the pick off again.
+        if (pick !== null && pick !== undefined) {
+          pick.onToggle();
+          return;
+        }
+        onSelect();
+        if (pointer.current === 'touch') {
+          onOpen();
+        }
+      }}
+      onDoubleClick={() => {
+        // A double tap, where a browser hands one over, has been opened by its
+        // first tap already.
+        if (pointer.current !== 'touch') {
+          onOpen();
+        }
+      }}
       title={name}
-      style={selected === true ? { background: COLOR.selected } : undefined}
+      style={selected ? { background: COLOR.selected } : undefined}
     >
       {/* The whole cell is the box's, and a click anywhere in it stops there:
-          the row under it opens the file, and picking a file out is not
-          opening it. A row with no box keeps the cell as part of the row. */}
-      <td
-        style={{ ...CELL, ...PICK }}
-        onClick={pick !== null ? (event) => event.stopPropagation() : undefined}
-      >
-        {pick !== null && (
-          <label style={{ display: 'block', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              aria-label={`select ${name}`}
-              checked={pick.picked}
-              onChange={pick.onToggle}
-              style={{ margin: 0, cursor: 'pointer' }}
-            />
-          </label>
-        )}
-      </td>
-      <td style={{ ...CELL, color: COLOR.dim, textAlign: 'center' }}>{icon}</td>
+          the row under it would toggle the box a second time. A row with no
+          box keeps the cell as part of the row. */}
+      {pick !== undefined && (
+        <td
+          style={{ ...CELL, ...PICK }}
+          onClick={pick !== null ? (event) => event.stopPropagation() : undefined}
+        >
+          {pick !== null && (
+            <label style={{ display: 'block', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                aria-label={`select ${name}`}
+                checked={pick.picked}
+                onChange={pick.onToggle}
+                style={{ margin: 0, cursor: 'pointer' }}
+              />
+            </label>
+          )}
+        </td>
+      )}
+      <td style={{ ...CELL, ...MARK }}>{icon}</td>
       <td style={{ ...CELL, color: dim === true ? COLOR.dim : COLOR.text }}>{name}</td>
       {children}
     </tr>
+  );
+}
+
+/**
+ * A folder, drawn as one: the mark on a folder's row, which navigates into it
+ * rather than opening anything out beneath it, so it is drawn as the thing and
+ * not as an arrow. In the text's own colour, whatever the theme draws that in.
+ */
+function FolderIcon() {
+  return (
+    <svg
+      role="img"
+      aria-label="folder"
+      width={ICON}
+      height={ICON}
+      viewBox="0 0 16 16"
+      style={{ display: 'block', margin: '0 auto' }}
+    >
+      <path
+        d="M1.5 3.5h4.2l1.5 1.5h7.3v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * The cell a row's menu stands in. A click anywhere in it stops there: the row
+ * under it selects and opens, and a press meant for the menu must not also
+ * reach the row. A row with nothing to offer keeps the cell as part of the row.
+ */
+function MenuCell({ name, items }: { name: string; items: readonly MenuItem[] }) {
+  return (
+    <td
+      // Not clipped like the other cells, since the menu hangs out of it.
+      style={{ ...CELL, overflow: 'visible', textAlign: 'center' }}
+      onClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
+      onDoubleClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
+    >
+      <RowMenu name={name} items={items} />
+    </td>
   );
 }
 
@@ -848,124 +1076,6 @@ function Unmapped({
   );
 }
 
-/** One thing a row's menu offers. */
-interface MenuItem {
-  label: string;
-  onPress: () => void;
-}
-
-/**
- * What a row offers besides opening, behind one "⋮".
- *
- * A button per action on every row is a list of twenty rows showing twenty
- * buttons, which is restless to look at for something pressed now and then;
- * one quiet mark per row says the same and keeps the names the thing being
- * read. The items are a list so that what a row offers can grow without the
- * row changing shape. A row with nothing to offer draws no mark at all.
- *
- * The menu closes on a click anywhere outside it, on `Escape`, and on choosing
- * an item. Every click inside it stops there: the row under it opens the file
- * or the folder, and a press meant for the menu must not also walk into it.
- *
- * It hangs below the mark, and above it where the list has no room below for
- * it and more above — the last rows of a list scrolled to its end, where a
- * menu hung below would be cut off by the bottom of the scroll area. Decided
- * once it is drawn and before it is painted, since its height is what is
- * measured.
- */
-function RowMenu({ name, items }: { name: string; items: readonly MenuItem[] }) {
-  const [open, setOpen] = useState(false);
-  const [upward, setUpward] = useState(false);
-  const here = useRef<HTMLTableCellElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    if (!open || here.current === null || menu.current === null) {
-      setUpward(false);
-      return;
-    }
-    setUpward(opensUpward(here.current, menu.current));
-  }, [open]);
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const away = (event: MouseEvent) => {
-      if (!(event.target instanceof Node) || !here.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('mousedown', away);
-      document.removeEventListener('keydown', escape);
-    };
-  }, [open]);
-
-  return (
-    <td
-      ref={here}
-      // Not clipped like the other cells, since the menu hangs out of it.
-      style={{ ...CELL, overflow: 'visible', position: 'relative', textAlign: 'center' }}
-      // A row with nothing to offer keeps the cell as part of the row, so a
-      // click there opens it like a click anywhere else on it.
-      onClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
-    >
-      {items.length > 0 && (
-        <>
-          <button
-            type="button"
-            aria-label={`actions for ${name}`}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            onClick={() => setOpen((was) => !was)}
-            style={MENU_BUTTON}
-          >
-            ⋮
-          </button>
-          {open && (
-            <div ref={menu} role="menu" style={upward ? MENU_UPWARD : MENU}>
-              {items.map((item) => (
-                <button
-                  key={item.label}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    item.onPress();
-                  }}
-                  style={MENU_ITEM}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </td>
-  );
-}
-
-/**
- * Whether a menu hung below `cell` would run past the bottom of the scroll area
- * the list is in, where there is more room above the cell than below it.
- */
-function opensUpward(cell: HTMLElement, menu: HTMLElement): boolean {
-  const area = cell.closest('[data-scroll-area]') ?? document.documentElement;
-  const bounds = area.getBoundingClientRect();
-  const at = cell.getBoundingClientRect();
-  const height = menu.getBoundingClientRect().height;
-  const below = bounds.bottom - at.bottom;
-  const above = at.top - bounds.top;
-  return height > below && above > below;
-}
-
 /**
  * The header's box: ticked where every file that can be picked is, part-ticked
  * where some are, and pressing it picks them all or clears them.
@@ -999,14 +1109,15 @@ function EveryBox({ picked, of, onToggle }: { picked: number; of: number; onTogg
 const TABLE: CSSProperties = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' };
 
 /**
- * The widths of the columns, given to both tables: the box, the icon, the name
- * (the rest of the width), the size, the time, the state, and the menu.
+ * The widths of the columns, given to both tables: the box (only while files
+ * are being picked out), the mark, the name (the rest of the width), the size,
+ * the time, the state, and the menu.
  */
-function Columns() {
+function Columns({ picking }: { picking: boolean }) {
   return (
     <colgroup>
-      <col style={{ width: 32 }} />
-      <col style={{ width: 28 }} />
+      {picking && <col style={{ width: 32 }} />}
+      <col style={{ width: MARK_WIDTH }} />
       <col />
       <col style={{ width: 100 }} />
       <col style={{ width: 210 }} />
@@ -1015,6 +1126,23 @@ function Columns() {
     </colgroup>
   );
 }
+
+/** How wide the mark is drawn, and the room its column leaves either side of it. */
+const ICON = 16;
+const MARK_PAD = 8;
+const MARK_WIDTH = ICON + 2 * MARK_PAD;
+
+/**
+ * The column the marks stand in: as wide as the folder's icon and its padding,
+ * and never cut short — a mark clipped to an ellipsis is a mark that says
+ * nothing.
+ */
+const MARK: CSSProperties = {
+  padding: `5px ${MARK_PAD}px`,
+  color: COLOR.dim,
+  textAlign: 'center',
+  textOverflow: 'clip',
+};
 
 /** The column the boxes stand in. */
 const PICK: CSSProperties = { width: 32, textAlign: 'center' };
@@ -1042,48 +1170,6 @@ const SELECTED_LINE: CSSProperties = {
   fontWeight: 'normal',
   textAlign: 'left',
   whiteSpace: 'nowrap',
-};
-
-const MENU_BUTTON: CSSProperties = {
-  border: 'none',
-  background: 'transparent',
-  color: COLOR.dim,
-  font: 'inherit',
-  fontSize: 14,
-  lineHeight: 1,
-  padding: '0 6px',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-
-const MENU: CSSProperties = {
-  position: 'absolute',
-  top: '100%',
-  right: 6,
-  zIndex: 2,
-  minWidth: 120,
-  padding: '4px 0',
-  background: COLOR.panel,
-  border: `1px solid ${COLOR.border}`,
-  borderRadius: 4,
-  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
-  textAlign: 'left',
-};
-
-/** The same menu, hung above the mark where there is no room below it. */
-const MENU_UPWARD: CSSProperties = { ...MENU, top: undefined, bottom: '100%' };
-
-const MENU_ITEM: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  border: 'none',
-  background: 'transparent',
-  color: COLOR.text,
-  font: 'inherit',
-  fontSize: 12,
-  padding: '4px 12px',
-  textAlign: 'left',
-  cursor: 'pointer',
 };
 
 /** A button on one of the bars over the rows. */

@@ -43,7 +43,7 @@ test('ask what is new and find what another device committed', async ({ page }) 
   await expect(page.getByTitle(leaf(setting.album), { exact: true }).first()).toBeVisible();
 
   // And the bytes come the way they always do.
-  await row(page, ADDED).click();
+  await row(page, ADDED).dblclick();
   await expect(page.getByRole('img', { name: ADDED })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(chip(page, ADDED)).toHaveText('present');

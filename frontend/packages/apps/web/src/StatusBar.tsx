@@ -41,7 +41,7 @@ import type { Asked } from './useAsked';
 /**
  * Which Library this is, along the bottom.
  *
- * The name and the provider, and a line while something is happening — a file
+ * The Library's name, and a line while something is happening — a file
  * being brought over, a drop's files landing in the folder, the sync carrying
  * them in, a book being packed — with the offer of a second attempt where one
  * of those stopped.
@@ -786,12 +786,17 @@ function shownAs(folder: string): string {
   return folder === '' ? 'the Library root' : folder;
 }
 
+/**
+ * What the bar calls the Library: its name alone. Which Storage it is kept on
+ * is the server's word for a provider, and not something a reader chose or
+ * needs to tell one Library from another by.
+ */
 function named(library: Asked<Library>): string {
   switch (library.status) {
     case 'loading':
       return 'opening the Library…';
     case 'ready':
-      return `${library.value.name} — on ${library.value.provider}`;
+      return library.value.name;
     case 'failed':
       return library.message;
   }

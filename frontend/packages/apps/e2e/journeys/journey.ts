@@ -19,9 +19,6 @@ import { CoffretServer } from './server';
 /** What the run built, read once and shared by every journey. */
 export const setting: Environment = fromEnvironment();
 
-/** The control the explorer offers a tab holding a session, and only such a tab. */
-const DISCONNECT = 'Disconnect this tab';
-
 /** What a tab with no session shows in place of the Library. */
 export const NO_SESSION = /This tab holds no session with the explorer/;
 
@@ -36,7 +33,8 @@ export const NO_SESSION = /This tab holds no session with the explorer/;
  */
 export async function openExplorer(page: Page, { afterRestart = false } = {}): Promise<void> {
   await openLaunchFile(page, setting.launchDir, { afterRestart });
-  await expect(page.getByRole('button', { name: DISCONNECT })).toBeVisible();
+  // The status bar is drawn only for a tab holding a session.
+  await expect(page.locator('footer')).toBeVisible();
   // The ticket is gone from the address the tab is left at.
   await expect(page).toHaveURL(setting.webUrl);
 }
@@ -51,8 +49,10 @@ export async function openExplorer(page: Page, { afterRestart = false } = {}): P
  * and start it again — which is the only reason the process is the suite's
  * rather than the script's.
  *
- * The page opens the explorer before the journey begins and disconnects after it,
- * so that one journey's session is not held while the next one's is made.
+ * The page opens the explorer before the journey begins. Nothing ends its
+ * session after: the page offers no control that would, and a session a closed
+ * page leaves behind is the one the host lets go of first once it holds as many
+ * as it keeps.
  */
 export const test = base.extend<object, { coffret: CoffretServer }>({
   coffret: [
@@ -70,11 +70,6 @@ export const test = base.extend<object, { coffret: CoffretServer }>({
   page: async ({ page }, use) => {
     await openExplorer(page);
     await use(page);
-    const disconnect = page.getByRole('button', { name: DISCONNECT });
-    if (await disconnect.isVisible()) {
-      await disconnect.click();
-      await expect(page.getByText(NO_SESSION)).toBeVisible();
-    }
   },
 });
 
@@ -98,6 +93,14 @@ export { expect } from '@playwright/test';
 export async function shot(page: Page, checkpoint: string): Promise<void> {
   const journey = path.basename(test.info().file).replace(/\.spec\.ts$/, '');
   await page.screenshot({ path: path.join(setting.screenshots, journey, `${checkpoint}.png`) });
+}
+
+/**
+ * The Library's name, where the status bar says it along the bottom: the name
+ * alone, without the Storage it is kept on.
+ */
+export function libraryName(page: Page): Locator {
+  return page.locator('footer').getByText(setting.library, { exact: true });
 }
 
 /** The folder tree, down the left. */

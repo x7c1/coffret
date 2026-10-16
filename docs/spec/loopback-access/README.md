@@ -257,9 +257,10 @@ Concept background: [Library](../../concepts/library/),
   the app can give it. Every ticket and token is discarded when the host or the
   server restarts and when the Library it serves changes; a Library that locks
   keeps its sessions, which are then refused data (LA-14). A session is
-  revoked singly by its own page, and all of them at once by the app, which
-  spends every ticket not yet exchanged as well, so that no ticket makes a
-  session after every session was revoked. *(Form: test)*
+  revoked singly by a request carrying its own token (LA-16) — which the
+  explorer offers no control to make — and all of them at once by the app,
+  which spends every ticket not yet exchanged as well, so that no ticket makes
+  a session after every session was revoked. *(Form: test)*
 - **LA-19.** What the host reads of a request is bounded before it is read. A
   request to `/auth` brings at most 1 KiB of body, any request at most 8 KiB
   of headers, and reading a request to `/auth` stops 5 seconds after it began.

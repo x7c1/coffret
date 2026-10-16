@@ -127,8 +127,7 @@ The host keeps the file ready: it writes it again once its ticket has been used
 or is about to expire, and writes a fresh one — ending every tab's session —
 when the server is started again, since a server of another run is not the one
 those tabs' sessions were issued under. While the server is stopped there is no
-file at all. A tab ends its own session by its *Disconnect this tab* control,
-too.
+file at all.
 
 What the development host cannot see is whether the server's Library is locked,
 since the server is another process: it forwards as though it were unlocked,

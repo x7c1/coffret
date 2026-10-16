@@ -180,7 +180,7 @@ export async function establish(
       holdToken(launched.token);
       return { kind: 'held', expiresIn: launched.expires_in };
     } catch (refused) {
-      return { kind: 'none', said: sentence(refused) };
+      return { kind: 'none', said: refusedLaunch(refused) };
     }
   }
   for (const kept of shelved.kept()) {
@@ -205,6 +205,22 @@ export async function establish(
     }
   }
   return { kind: 'none', said: null };
+}
+
+/**
+ * What refused the exchange of a ticket, as a sentence for the screen, and
+ * `null` where the refusal is only that this tab holds no session.
+ *
+ * A ticket already spent, or one the host never issued, is answered as a
+ * request with no session — and the page says that itself, with how to open
+ * the explorer, so the host's sentence under it would be the same thing said
+ * twice.
+ */
+function refusedLaunch(refused: unknown): string | null {
+  if (isRefusal(refused) && refused.kind === 'authentication_required') {
+    return null;
+  }
+  return sentence(refused);
 }
 
 /** What refused, as a sentence for the screen. */

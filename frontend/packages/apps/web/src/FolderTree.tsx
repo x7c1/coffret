@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
+import type { DeleteTarget } from '@coffret/api';
+
+import { DELETE } from './deleteEntries';
+import { RowMenu, type MenuItem } from './RowMenu';
 import { COLOR } from './theme';
 import { ancestry, nest, type FolderNode } from './tree';
 
@@ -18,6 +22,11 @@ import { ancestry, nest, type FolderNode } from './tree';
  * Entry under it commits, which is what makes it a folder the server names for
  * itself; a pending one is drawn dimmed, so that "not in the Library yet" is
  * something a person can see rather than something they have to remember.
+ *
+ * A book — a folder with no folders under it, which is where pages are — can
+ * be deleted from its row's "⋮", as it can from its row in the file list: the
+ * same target handed over, so the same question asked. Not a folder made here
+ * and not in the Library yet, which the Library has nothing of to take out.
  */
 export function FolderTree({
   folders,
@@ -25,6 +34,7 @@ export function FolderTree({
   current,
   onOpen,
   onNewFolder,
+  onDelete,
 }: {
   folders: readonly string[];
   /** The folders made here that the Library does not hold yet. */
@@ -33,6 +43,8 @@ export function FolderTree({
   onOpen: (folder: string) => void;
   /** Make a folder under the one that is open. */
   onNewFolder: () => void;
+  /** "Delete…" was chosen from a book's menu: the same as the file list's folder menu. */
+  onDelete: (target: DeleteTarget) => void;
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(ancestry(current)),
@@ -66,9 +78,10 @@ export function FolderTree({
   const waiting = new Set(pending);
   return (
     <nav aria-label="folders" style={{ padding: '8px 0' }}>
+      {/* No mark: the root is the place the tree hangs from, and what it is
+          called is in its name. */}
       <Row
         label="Library"
-        icon="◈"
         depth={0}
         selected={current === ''}
         onOpen={() => onOpen('')}
@@ -83,6 +96,7 @@ export function FolderTree({
           pending={waiting}
           onToggle={toggle}
           onOpen={onOpen}
+          onDelete={onDelete}
         />
       ))}
       {/* Under the tree rather than beside the folder it acts on. What it makes
@@ -117,6 +131,7 @@ function Branch({
   pending,
   onToggle,
   onOpen,
+  onDelete,
 }: {
   node: FolderNode;
   depth: number;
@@ -125,19 +140,26 @@ function Branch({
   pending: ReadonlySet<string>;
   onToggle: (path: string) => void;
   onOpen: (folder: string) => void;
+  onDelete: (target: DeleteTarget) => void;
 }) {
   const open = expanded.has(node.path);
+  const book = node.children.length === 0;
+  const waiting = pending.has(node.path);
   return (
     <>
       <Row
         label={node.name}
-        icon={node.children.length === 0 ? '·' : open ? '▾' : '▸'}
         depth={depth}
         selected={current === node.path}
-        waiting={pending.has(node.path)}
+        waiting={waiting}
         onOpen={() => onOpen(node.path)}
-        onToggleIcon={node.children.length === 0 ? undefined : () => onToggle(node.path)}
+        onToggle={book ? undefined : () => onToggle(node.path)}
         opened={open}
+        menu={
+          book && !waiting
+            ? [{ label: DELETE, onPress: () => onDelete({ folder: node.path, paths: [] }) }]
+            : []
+        }
       />
       {open &&
         node.children.map((child) => (
@@ -150,6 +172,7 @@ function Branch({
             pending={pending}
             onToggle={onToggle}
             onOpen={onOpen}
+            onDelete={onDelete}
           />
         ))}
     </>
@@ -158,24 +181,26 @@ function Branch({
 
 function Row({
   label,
-  icon,
   depth,
   selected,
   waiting,
   onOpen,
-  onToggleIcon,
+  onToggle,
   opened,
+  menu = [],
 }: {
   label: string;
-  icon: string;
   depth: number;
   selected: boolean;
   /** Whether this folder is one made here that the Library does not hold. */
   waiting?: boolean;
   onOpen: () => void;
-  onToggleIcon?: () => void;
+  /** Opens and closes the branch, on a folder that has one. */
+  onToggle?: () => void;
   /** Whether the branch this marker turns is open, where it turns one. */
   opened?: boolean;
+  /** What the row's "⋮" offers, and nothing drawn where it offers nothing. */
+  menu?: readonly MenuItem[];
 }) {
   // The current folder is brought into view, as the file list does for its
   // marked row: a folder restored from a URL several components deep has every
@@ -191,32 +216,23 @@ function Row({
   return (
     <div ref={here} style={{ display: 'flex', alignItems: 'center' }}>
       {/* The marker opens and closes the branch and the name chooses the
-          folder, so neither target has to mean both — except on a folder with
-          nothing under it, where there is no branch and the marker may as well
-          do what the row does. */}
-      <button
-        onClick={onToggleIcon ?? onOpen}
-        // What it will do when it is pressed, which is the opposite of what it
-        // last did: a marker on an open branch closes it, and reading out
-        // "expand" over it would name the wrong half of the toggle.
-        aria-label={
-          onToggleIcon === undefined
-            ? label
-            : `${opened === true ? 'collapse' : 'expand'} ${label}`
-        }
-        style={{
-          width: 18,
-          marginLeft: 6 + depth * 12,
-          border: 'none',
-          background: 'none',
-          color: COLOR.dim,
-          cursor: 'pointer',
-          font: 'inherit',
-          padding: 0,
-        }}
-      >
-        {icon}
-      </button>
+          folder, so neither target has to mean both. A folder with nothing
+          under it has no branch and no marker, and keeps the marker's room, so
+          that every name at one depth starts at one place. */}
+      {onToggle === undefined ? (
+        <span aria-hidden style={{ ...MARKER, cursor: undefined, marginLeft: indent(depth) }} />
+      ) : (
+        <button
+          onClick={onToggle}
+          // What it will do when it is pressed, which is the opposite of what
+          // it last did: a marker on an open branch closes it, and reading out
+          // "expand" over it would name the wrong half of the toggle.
+          aria-label={`${opened === true ? 'collapse' : 'expand'} ${label}`}
+          style={{ ...MARKER, marginLeft: indent(depth) }}
+        >
+          {opened === true ? '▾' : '▸'}
+        </button>
+      )}
       <button
         className="tree-name"
         onClick={onOpen}
@@ -244,6 +260,24 @@ function Row({
       >
         {label}
       </button>
+      <RowMenu name={label} items={menu} />
     </div>
   );
 }
+
+/** How far in a row at `depth` starts. */
+function indent(depth: number): number {
+  return 6 + depth * 12;
+}
+
+/** The marker that opens and closes a branch, and the room it keeps on a row without one. */
+const MARKER = {
+  flex: '0 0 auto',
+  width: 18,
+  border: 'none',
+  background: 'none',
+  color: COLOR.dim,
+  cursor: 'pointer',
+  font: 'inherit',
+  padding: 0,
+} as const;

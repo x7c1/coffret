@@ -235,6 +235,15 @@ function draw({
   );
 }
 
+// The bottom edge names the Library by its name alone: which Storage it is kept
+// on is the server's word for a provider, not something to read it by.
+it('names the Library alone, without the Storage it is kept on', () => {
+  const html = draw({});
+  expect(html).toContain('>Home</span>');
+  expect(html).not.toContain('Storage');
+  expect(html).not.toContain(' — on ');
+});
+
 // The parcels a reader's fetches kept are said beside the Library's name, with
 // the disk they take, because nothing else on the page says the directory they
 // are in exists; and nothing is said while none are kept (spec: PK-21).
@@ -927,7 +936,7 @@ it('shows the locked line and the unlock in place of the offers of a second atte
 
   expect(html).toContain(LOCKED);
   expect(html).toContain(`>${UNLOCK}</button>`);
-  expect(html).toContain('Home — on Storage');
+  expect(html).toContain('>Home</span>');
   for (const offer of ['bring over again', 'back up again', 'pack again', 'dismiss']) {
     expect(html, offer).not.toContain(offer);
   }

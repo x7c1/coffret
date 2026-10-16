@@ -1,13 +1,21 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { dropToken, getFile, getLibrary, heldToken, holdToken, isRefusal } from '@coffret/api';
+import {
+  dropToken,
+  getFile,
+  getLibrary,
+  heldToken,
+  holdToken,
+  isRefusal,
+  Refusal,
+} from '@coffret/api';
 
-import { DISCONNECT, Explorer, HOW_TO_OPEN, LOCKED_POLL_MS, NO_SESSION } from './Explorer';
+import { Explorer, HOW_TO_OPEN, LOCKED_POLL_MS, NO_SESSION } from './Explorer';
 import type { Page } from './pages';
 import { ReaderView } from './ReaderView';
-import { shelf, type Opened } from './session';
+import { establish, shelf, type Opened } from './session';
 
 // The pages the reader fetches, as it reaches them. Everything else the package
 // exports is the real thing — the token it holds and the requests it makes
@@ -163,18 +171,47 @@ it('shows the locked state on a 423 and asks the host, not the server, until unl
   expect(screen.queryByText(/waits for it to be unlocked/)).toBeNull();
 });
 
+// A launch file whose ticket was spent already is answered by the host as a
+// request with no session, in its own words. The page says that itself, with
+// how to open the explorer, and says it once.
+it('says once that the tab holds no session where the ticket was refused as such', async () => {
+  const HOST_SAYS = 'This explorer holds no session. Open the explorer from the coffret app.';
+  const opened = establish('t'.repeat(43), shelf(), {
+    launch: () => Promise.reject(new Refusal('authentication_required', 401, HOST_SAYS)),
+    checkSession: () => Promise.reject(new Error('not asked')),
+  });
+  render(<Explorer opened={opened} shelved={shelf()} screen={Asking} />);
+
+  expect(await screen.findByText(NO_SESSION)).toBeTruthy();
+  expect(screen.queryByText(HOST_SAYS)).toBeNull();
+  expect(screen.getAllByText(/holds no session/)).toHaveLength(1);
+});
+
+// The page offers no control that ends its own session: that is the desktop
+// app's, from its tray, for every tab at once (spec: LA-18).
+it('offers no control to disconnect the tab', async () => {
+  render(<Explorer opened={held()} shelved={shelf()} screen={Asking} />);
+  await screen.findByText('library main');
+  expect(screen.queryByRole('button')).toBeNull();
+  expect(screen.queryByText(/disconnect/i)).toBeNull();
+});
+
 // An answer that arrives after the Library locked under it, or after the
 // session ended, is not drawn.
 it('draws no answer that arrives after the lock or the end of the session', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   const gate = heldBack();
-  render(<Explorer opened={held()} shelved={shelf()} screen={Asking} />);
+  render(<Explorer opened={held(60)} shelved={shelf()} screen={Asking} />);
   await screen.findByText('asking');
   await act(async () => {
     await Promise.resolve();
   });
 
-  // The session ends while the question is in flight; then its answer lands.
-  fireEvent.click(screen.getByRole('button', { name: DISCONNECT }));
+  // The session runs out while the question is in flight; then its answer
+  // lands.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
   await act(async () => {
     gate.release(Response.json({ name: 'main', library_id: '1', provider: 's3' }));
   });
@@ -250,21 +287,6 @@ it('revokes every object URL the reader held when the session ends', async () =>
   expect(await screen.findByText(NO_SESSION)).toBeTruthy();
   expect(revoked).toEqual(expect.arrayContaining(created));
   expect(created.length).toBeGreaterThan(0);
-});
-
-// LA-16, LA-18: disconnecting ends this tab's own session at the host, with
-// the token it held, and lets the token go first.
-it('disconnects this tab by revoking its own session', async () => {
-  render(<Explorer opened={held()} shelved={shelf()} screen={Asking} />);
-  await screen.findByText('library main');
-
-  fireEvent.click(screen.getByRole('button', { name: DISCONNECT }));
-  expect(heldToken()).toBeNull();
-  expect(await screen.findByText(NO_SESSION)).toBeTruthy();
-  await act(async () => {
-    await Promise.resolve();
-  });
-  expect(made).toContain('/auth/session/revoke');
 });
 
 // LA-18: nothing renews a session, and the screen goes when it runs out.

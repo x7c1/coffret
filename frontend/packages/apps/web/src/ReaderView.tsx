@@ -182,14 +182,32 @@ export function ReaderView({
     return () => drawn.closed();
   }, [drawn]);
 
+  // The reader holds the keyboard's focus while it is open and hands it back on
+  // closing. Left where it was, on the list under the page, it would let ↑/↓
+  // move the list's selection out of sight and `Enter` open a row in place of
+  // the page being read.
+  const overlay = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const before = document.activeElement;
+    overlay.current?.focus();
+    return () => {
+      if (before instanceof HTMLElement && before.isConnected) {
+        before.focus();
+      }
+    };
+  }, []);
+
   if (page === undefined) {
     return null;
   }
 
   return (
     <div
+      ref={overlay}
+      tabIndex={-1}
       onClick={onClose}
       style={{
+        outline: 'none',
         position: 'absolute',
         inset: 0,
         display: 'flex',
