@@ -9,6 +9,15 @@
  * what the Library holds now, not what one immutable object happened to
  * capture.
  *
+ * The name is the one value that can be carried in both spellings: `path` is
+ * where the Entry stands in the Library now, and `original_path` is the Entry
+ * Path the owning Container's meta section records — the name it was captured
+ * under, which no rename moves. `original_path` is written only where it
+ * differs from `path`, so a map without it names an Entry whose two paths are
+ * one, which is also what every map written before the field existed means. A
+ * map carrying it equal to `path` is a second spelling of that same state and
+ * is refused.
+ *
  * A Snapshot's entry map carries `container` beside these fields, and the maps
  * are forward-open anyway (spec: FM-9), so anything not asked for here is
  * stepped over rather than refused.
@@ -23,12 +32,17 @@ import {
   encodeTrailingFields,
   storedPath,
 } from './entryFields.js';
-import type { CoffretErrorCode } from '../errors.js';
+import { fail, type CoffretErrorCode } from '../errors.js';
 import type { EntryMetadata } from '../model/entry.js';
 
 /** Serializes one Entry to the map a record and a Snapshot give it. */
 export function encodeCatalogEntryMap(entry: EntryMetadata): Map<string, unknown> {
   const map = new Map<string, unknown>([['path', entry.path]]);
+  // Present only where a rename has set the two apart (spec: FM-15, FM-16), so
+  // one state has one encoding.
+  if (entry.originalPath !== entry.path) {
+    map.set('original_path', entry.originalPath);
+  }
   encodeExtent(map, entry, 'control_payload_encode_failed');
   map.set('mtime', entry.mtimeSeconds);
   if (entry.btimeSeconds !== undefined) {
@@ -40,8 +54,18 @@ export function encodeCatalogEntryMap(entry: EntryMetadata): Map<string, unknown
 
 /** Reads one Entry out of a catalog map that may carry more. */
 export function decodeCatalogEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
+  const path = storedPath(map, 'path', code, 'path');
+  // Absent where the two paths are one, which every map an earlier schema
+  // wrote also is (spec: FM-15, FM-16).
+  const originalPath = map.has('original_path')
+    ? storedPath(map, 'original_path', code, 'original_path')
+    : path;
+  if (map.has('original_path') && originalPath === path) {
+    fail(code, 'an entry map carries an original_path equal to its path');
+  }
   const entry: EntryMetadata = {
-    path: storedPath(map, 'path', code, 'path'),
+    path,
+    originalPath,
     ...decodeExtent(map, code),
     mtimeSeconds: requiredInt(map, 'mtime', code),
     hash: decodeHash(map, code),

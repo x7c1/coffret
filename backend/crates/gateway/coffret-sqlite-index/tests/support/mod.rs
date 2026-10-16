@@ -97,6 +97,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
         vec![
             EntryMetadata {
                 path: original.clone(),
+                original_path: original.clone(),
                 extent: extent(0, 100),
                 mtime: Mtime::from_unix_seconds(1_700_000_000),
                 // The platform that wrote this Container reported a birth time
@@ -109,6 +110,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
             },
             EntryMetadata {
                 path: entry_path(format!("albums/{seed}.thumb.jpg")),
+                original_path: entry_path(format!("albums/{seed}.thumb.jpg")),
                 extent: extent(100, 64),
                 mtime: Mtime::from_unix_seconds(1_700_000_001),
                 btime: None,

@@ -26,10 +26,27 @@ export interface DerivedFrom {
  * current spelling, which is why a record and a Snapshot say `path`, `mtime`,
  * and `btime` for the same values (spec: FM-15, FM-16). One interface serves
  * both because the values are the same values — only the map key differs.
+ *
+ * The one exception is the name. The catalog keeps both the Entry Path the
+ * Library holds now (`path`) and the one the owning Container's meta section
+ * recorded (`originalPath`), so that every device can name both without
+ * opening the Container; a record and a Snapshot carry the original one
+ * wherever it differs from the current one (spec: FM-15, FM-16). Read out of a
+ * meta section, or laid out by the encoder, the two are the same path: the name
+ * a Container records is the one the Entry had when it was written.
  */
 export interface EntryMetadata {
   /** The Library position this Entry occupies. */
   path: string;
+  /**
+   * The Entry Path the owning Container's meta section records for this Entry:
+   * its name as of the moment that Container was written (spec: FM-9).
+   *
+   * The name it was captured under rather than where it stands. Equal to `path`
+   * until a rename moves the Entry, and never moved by one, because the
+   * Container it describes is never rewritten.
+   */
+  originalPath: string;
   /** Byte offset of this Entry's plaintext in the Container's plaintext stream. */
   offset: bigint;
   /** Length of this Entry's plaintext in bytes. */

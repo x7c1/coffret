@@ -46,7 +46,15 @@ import { requireKeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
 
 /** The schema this package writes for a Journal record payload (spec: FM-15). */
-export const JOURNAL_RECORD_SCHEMA = 1n;
+export const JOURNAL_RECORD_SCHEMA = 2n;
+
+/**
+ * The oldest schema a reader accepts: the first. Schema 2 added
+ * `original_path` to the entry map, present only where it differs from `path`,
+ * and a reader takes a schema 1 map, which lacks it, to name its current path
+ * as its original one, as it does for any map without it.
+ */
+const OLDEST_JOURNAL_RECORD_SCHEMA = 1n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
@@ -134,7 +142,7 @@ export function decodeJournalRecord(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < JOURNAL_RECORD_SCHEMA) {
+  if (schema < OLDEST_JOURNAL_RECORD_SCHEMA) {
     fail('unsupported_journal_record_schema', `unsupported Journal record payload schema ${schema}`);
   }
 

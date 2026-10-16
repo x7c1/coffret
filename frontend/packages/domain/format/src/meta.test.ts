@@ -36,6 +36,7 @@ const DECOMPOSED = 'cafe\u0301.txt';
 function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
+    originalPath: path,
     offset,
     size,
     mtimeSeconds: 42n,

@@ -37,7 +37,7 @@ pub(crate) struct WireMetaEntry {
 impl From<&EntryMetadata> for WireMetaEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
-            original_path: entry.path.as_str().to_owned(),
+            original_path: entry.original_path.as_str().to_owned(),
             offset: entry.extent.offset(),
             size: entry.extent.size(),
             original_mtime: entry.mtime.as_unix_seconds(),
@@ -51,8 +51,13 @@ impl From<&EntryMetadata> for WireMetaEntry {
 
 impl WireMetaEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
+        let original_path = stored_path(&self.original_path, "original_path")?;
         Ok(EntryMetadata {
-            path: stored_path(&self.original_path, "original_path")?,
+            // What this Container records is the name the Entry had when it was
+            // written, and that is all a meta section can say about where it
+            // stands.
+            path: original_path.clone(),
+            original_path,
             extent: stream_extent(
                 bounded_uint("offset", self.offset, malformed)?,
                 bounded_uint("size", self.size, malformed)?,

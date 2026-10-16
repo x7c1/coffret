@@ -24,7 +24,7 @@ import type { EntryMetadata } from '../model/entry.js';
 
 /** Serializes one Entry to the map FM-9 gives it. */
 export function encodeMetaEntryMap(entry: EntryMetadata): Map<string, unknown> {
-  const map = new Map<string, unknown>([['original_path', entry.path]]);
+  const map = new Map<string, unknown>([['original_path', entry.originalPath]]);
   encodeExtent(map, entry, 'meta_encode_failed');
   map.set('original_mtime', entry.mtimeSeconds);
   if (entry.btimeSeconds !== undefined) {
@@ -41,8 +41,12 @@ export function encodeMetaEntryMap(entry: EntryMetadata): Map<string, unknown> {
  * stepped over rather than refused.
  */
 export function decodeMetaEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
+  const originalPath = storedPath(map, 'original_path', code, 'original_path');
   const entry: EntryMetadata = {
-    path: storedPath(map, 'original_path', code, 'original_path'),
+    // What this Container records is the name the Entry had when it was
+    // written, and that is all a meta section can say about where it stands.
+    path: originalPath,
+    originalPath,
     ...decodeExtent(map, code),
     mtimeSeconds: requiredInt(map, 'original_mtime', code),
     hash: decodeHash(map, code),

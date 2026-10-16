@@ -38,6 +38,7 @@ pub(crate) async fn plant(
 
     let entry = EntryMetadata {
         path: entry_path(planted.path),
+        original_path: entry_path(planted.path),
         extent: EntryExtent::from_start(planted.content.len() as u64)
             .expect("a fixture's content is shorter than the address space the format admits"),
         mtime: planted.mtime,

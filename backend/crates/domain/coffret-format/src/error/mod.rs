@@ -160,9 +160,9 @@ pub enum Error {
     /// this enum states above.
     UnnormalizedEntryPath {
         /// The field the offending path stood in, as the map carrying it
-        /// names it: `original_path` in a meta section, `path` in a record or a
-        /// Snapshot, and `derived_from.original_path` in either
-        /// (spec: FM-9, FM-15, FM-16).
+        /// names it: `original_path` in a meta section, `path` or
+        /// `original_path` in a record or a Snapshot, and
+        /// `derived_from.original_path` in either (spec: FM-9, FM-15, FM-16).
         field: &'static str,
     },
     /// An Entry Path in a decoded entry table is not in the shape every Entry

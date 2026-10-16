@@ -12,6 +12,7 @@ use crate::padme;
 pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
+        original_path: entry_path(path),
         extent: entry_extent(offset, size),
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         btime: None,

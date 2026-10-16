@@ -28,7 +28,10 @@
 //! all but three of its keys are the same keys — but a record and a Snapshot are
 //! the catalog, so where FM-9 says `original_path`, `original_mtime`, and
 //! `original_btime` about one immutable object, they say `path`, `mtime`, and
-//! `btime` about the Library as it stands.
+//! `btime` about the Library as it stands. They carry FM-9's `original_path`
+//! too, beside `path` wherever the two differ: the name the Container recorded
+//! is one a rename does not move, and the catalog keeps it so a device can name
+//! both without opening the Container.
 
 mod cbor;
 mod wire_catalog_entry;

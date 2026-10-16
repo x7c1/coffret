@@ -241,6 +241,7 @@ pub(super) async fn plant(
 
     let entry = EntryMetadata {
         path: entry_path(path),
+        original_path: entry_path(path),
         extent: EntryExtent::from_start(content.len() as u64)
             .expect("a fixture's content is shorter than the address space the format admits"),
         mtime,

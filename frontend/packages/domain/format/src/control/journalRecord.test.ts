@@ -10,6 +10,7 @@ import {
   BORN,
   EPOCH,
   GENERATION,
+  ORIGINAL_DIR,
   addition,
   arrayField,
   bodyMap,
@@ -64,6 +65,43 @@ describe('Journal record payload (spec: FM-15)', () => {
     expect([...mapAt(entries, 1).keys()].sort()).toEqual(
       ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'derived_from', 'mime'].sort(),
     );
+  });
+
+  // An Entry's original path travels beside its current one, each under its
+  // own key, and each comes back as the one it went in as.
+  it('carries an original path beside the current path', () => {
+    const payload = encodeJournalRecord(record());
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    expect(mapAt(entries, 0).get('path')).toBe('albums/40/cover.jpg');
+    expect(mapAt(entries, 0).get('original_path')).toBe(`${ORIGINAL_DIR}/40/cover.jpg`);
+
+    const decoded = read(payload).additions[1].entries;
+    expect(decoded[0].path).toBe('albums/40/cover.jpg');
+    expect(decoded[0].originalPath).toBe(`${ORIGINAL_DIR}/40/cover.jpg`);
+    expect(decoded[1].originalPath).toBe(decoded[1].path);
+    expect([...mapAt(entries, 1).keys()]).not.toContain('original_path');
+  });
+
+  // A record of schema 1 was written before `original_path` existed, when
+  // nothing could rename an Entry, so a reader takes each Entry's original path
+  // to be its current one. Everything else in the record reads as it did.
+  it('reads each original path of a schema 1 record as its path', () => {
+    const payload = tampered((map) => {
+      for (const item of arrayField(map, 'additions')) {
+        for (const entry of arrayField(item as Map<unknown, unknown>, 'entries')) {
+          (entry as Map<unknown, unknown>).delete('original_path');
+        }
+      }
+      map.set('schema', 1n);
+    });
+    const asWrittenThen = (source: JournalRecord): JournalRecord => ({
+      ...source,
+      additions: source.additions.map((item) => ({
+        ...item,
+        entries: item.entries.map((entry) => ({ ...entry, originalPath: entry.path })),
+      })),
+    });
+    expect(read(payload)).toEqual(asWrittenThen(canonical(record())));
   });
 
   // `btime` is optional, so a record carries it for the Entries whose files had
@@ -183,7 +221,7 @@ describe('Journal record payload (spec: FM-15)', () => {
       for (const item of arrayField(map, 'additions')) {
         (item as Map<unknown, unknown>).set('future_addition_field', 1n);
       }
-      map.set('schema', 2n);
+      map.set('schema', 3n);
     });
     expect(read(payload)).toEqual(canonical(record()));
   });
@@ -267,6 +305,28 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
       const removals = arrayField(map, 'removals');
       removals[0] = '11111111';
       map.set('removals', removals);
+    });
+    expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
+  });
+
+  // EP-1, FM-9: an Entry's original path is the name a Container's meta section
+  // records, and FM-9 holds that name to EP-1 as well, so a decomposed one is
+  // refused the way a decomposed current path is.
+  it('refuses an original path that is not in NFC', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
+      mapAt(entries, 0).set('original_path', 'cafe\u0301.txt');
+    });
+    expect(errorCode(() => read(payload))).toBe('unnormalized_entry_path');
+  });
+
+  // FM-15: `original_path` is written only where it differs from `path`, so
+  // one state has one encoding; a map carrying it equal to `path` is a second
+  // spelling of a map without it, and is refused.
+  it('refuses an original path equal to the path', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
+      mapAt(entries, 0).set('original_path', mapAt(entries, 0).get('path'));
     });
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
   });
