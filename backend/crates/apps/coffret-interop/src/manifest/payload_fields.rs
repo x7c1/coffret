@@ -27,7 +27,7 @@ use super::{BodyField, BodyValue};
 
 /// The fields FM-15 gives the payload of `record`.
 pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
-    let mut fields = vec![BodyField::uint("schema", 1)];
+    let mut fields = vec![BodyField::uint("schema", 2)];
     if let Some(prev) = record.prev() {
         fields.push(BodyField::uint("prev", prev.get()));
     }
@@ -89,7 +89,7 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     let containers = snapshot.content.containers();
 
     let mut fields = vec![
-        BodyField::uint("schema", 1),
+        BodyField::uint("schema", 2),
         BodyField::uint("head_generation", checkpoint.head_generation().get()),
         BodyField::uint("journal_generation", checkpoint.journal_generation().get()),
     ];
@@ -207,9 +207,11 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
 ///
 /// The same values a Container's own meta section records, under the keys a
 /// record and a Snapshot give them: `path`, `mtime`, and an optional `btime`
-/// rather than FM-9's `original_` names. `derived_from` is the one place the
-/// prefix survives, because it names an Entry inside an object already written
-/// and no rename reaches in there.
+/// rather than FM-9's `original_` names. The prefix survives in two places,
+/// both naming what an object already written records: `original_path`
+/// beside `path`, the owning Container's own name for the Entry, written only
+/// where it differs from `path`, and the one inside `derived_from`, the
+/// parent's.
 fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
     let mut fields = vec![
         BodyField::text("path", entry.path.as_str()),
@@ -217,6 +219,12 @@ fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
         BodyField::uint("size", entry.extent.size()),
         BodyField::int("mtime", entry.mtime.as_unix_seconds()),
     ];
+    if entry.original_path != entry.path {
+        fields.push(BodyField::text(
+            "original_path",
+            entry.original_path.as_str(),
+        ));
+    }
     if let Some(btime) = entry.btime {
         fields.push(BodyField::int("btime", btime.as_unix_seconds()));
     }

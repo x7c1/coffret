@@ -65,6 +65,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
         container_id: container_id(row, "container_id", OPERATION)?,
         entry: EntryMetadata {
             path: entry_path(row, "path", OPERATION)?,
+            original_path: entry_path(row, "original_path", OPERATION)?,
             extent: entry_extent(row, OPERATION)?,
             mtime: Mtime::from_unix_seconds(integer(row, "mtime", OPERATION)?),
             btime: optional_integer(row, "btime", OPERATION)?.map(Btime::from_unix_seconds),

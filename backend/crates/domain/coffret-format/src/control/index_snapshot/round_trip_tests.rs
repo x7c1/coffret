@@ -6,6 +6,7 @@ use coffret_model::ControlObjectKind;
 
 use super::testing::{
     activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, GENERATION,
+    ORIGINAL_PATH,
 };
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
@@ -171,7 +172,7 @@ fn unknown_fields_are_ignored() {
             ));
         }
     }
-    *field(&mut fields, "schema") = Value::from(2u64);
+    *field(&mut fields, "schema") = Value::from(3u64);
 
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded =
@@ -192,6 +193,7 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
         map_keys(&entries[BORN_AT]),
         [
             "path",
+            "original_path",
             "offset",
             "size",
             "mtime",
@@ -208,11 +210,84 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
             !map_keys(entry).contains(&"btime"),
             "entry {index} carries a birth time no file of its reported",
         );
+        assert!(
+            !map_keys(entry).contains(&"original_path"),
+            "entry {index} was never renamed, so it carries no original path",
+        );
     }
 
     let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
     assert_eq!(decoded.content.entries()[BORN_AT].entry.btime, Some(BORN));
     assert_eq!(decoded.content.entries()[BORN_AT + 1].entry.btime, None);
+}
+
+// FM-16: an Entry's original path travels beside its current one, each under
+// its own key, and each comes back as the one it went in as.
+#[test]
+fn an_original_path_travels_beside_the_current_path() {
+    let payload = encode(&ordinary()).expect("encoding succeeds");
+    let mut fields = body_map(&payload);
+    let Value::Map(renamed) = &array(&mut fields, "entries")[BORN_AT] else {
+        panic!("an entry is a map");
+    };
+    assert_eq!(
+        renamed
+            .iter()
+            .find(|(key, _)| key.as_text() == Some("original_path"))
+            .and_then(|(_, value)| value.as_text()),
+        Some(ORIGINAL_PATH),
+    );
+
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    let entries = decoded.content.entries();
+    assert_eq!(entries[BORN_AT].entry.path.as_str(), "albums/spring/a.jpg");
+    assert_eq!(entries[BORN_AT].entry.original_path.as_str(), ORIGINAL_PATH);
+    for (index, location) in entries.iter().enumerate() {
+        if index != BORN_AT {
+            assert_eq!(location.entry.original_path, location.entry.path);
+        }
+    }
+}
+
+// FM-16: a Snapshot of schema 1 was written before `original_path` existed,
+// when nothing could rename an Entry, so a reader takes each Entry's original
+// path to be its current one. Everything else in the Snapshot reads as it did.
+#[test]
+fn a_schema_1_snapshot_reads_each_original_path_as_its_path() {
+    let payload = encode(&ordinary()).expect("encoding succeeds");
+    let mut fields = body_map(&payload);
+    for entry in array(&mut fields, "entries") {
+        let Value::Map(entry) = entry else {
+            panic!("an entry is a map");
+        };
+        entry.retain(|(key, _)| key.as_text() != Some("original_path"));
+    }
+    *field(&mut fields, "schema") = Value::from(1u64);
+
+    let older = with_body_map(payload.master_key_epoch, fields);
+    let decoded =
+        read(&older, ControlObjectKind::IndexSnapshot).expect("a schema 1 Snapshot reads back");
+
+    let as_written_then = |content: &coffret_model::SnapshotContent| {
+        content
+            .entries()
+            .iter()
+            .map(|location| {
+                let mut location = location.clone();
+                location.entry.original_path = location.entry.path.clone();
+                location
+            })
+            .collect::<Vec<_>>()
+    };
+    for location in decoded.content.entries() {
+        assert_eq!(location.entry.original_path, location.entry.path);
+    }
+    assert_eq!(
+        as_written_then(&decoded.content),
+        as_written_then(&decoded_content())
+    );
+    assert_eq!(decoded.content.containers(), decoded_content().containers());
+    assert_eq!(decoded.content.checkpoint(), decoded_content().checkpoint());
 }
 
 /// The payload as a reader fetching it under the sample's own name meets it.

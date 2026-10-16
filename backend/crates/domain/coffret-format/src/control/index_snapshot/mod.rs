@@ -42,7 +42,14 @@ mod size_tests;
 mod testing;
 
 /// The schema this crate writes for an Index Snapshot payload (spec: FM-16).
-const SCHEMA: u64 = 1;
+///
+/// Schema 2 added `original_path` to the entry map, present only where it
+/// differs from `path`. A reader still accepts schema 1, whose maps lack it,
+/// by taking it to equal `path`, as it does for any map without it.
+const SCHEMA: u64 = 2;
+
+/// The oldest schema a reader accepts: the first.
+const OLDEST_SCHEMA: u64 = 1;
 
 const HEAD_GENERATION: &str = "head_generation";
 const JOURNAL_GENERATION: &str = "journal_generation";

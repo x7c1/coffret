@@ -39,6 +39,9 @@ const DESIGN_BUDGET: usize = 120;
 /// pinned rather than bounded loosely, because it is the number a change to the
 /// schema moves: a field added per Entry, or a Container named by ID again,
 /// shows up here and nowhere else.
+///
+/// The sample renames nothing, so no Entry in it carries `original_path`: the
+/// field is written only where it differs from `path` (spec: FM-16).
 const PINNED_COST_BEYOND_THE_PATH: usize = 94;
 
 // FM-16: a Snapshot of ten thousand Entries stays inside the per-Entry cost the

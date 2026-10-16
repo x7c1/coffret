@@ -66,6 +66,7 @@ export function summary(seed: number, kind: ContainerKind): ContainerSummary {
 export function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
+    originalPath: path,
     offset,
     size,
     mtimeSeconds: 1_700_000_000n,
@@ -89,6 +90,12 @@ export function checkpoint(generation: bigint): IndexCheckpoint {
   };
 }
 
+/**
+ * The folder the first Entry of every table was written into, before whatever
+ * moved it to the path it holds now.
+ */
+export const ORIGINAL_DIR = 'imports';
+
 /** The birth time the one Entry that has one was created at. */
 export const BORN = 1_600_000_000n;
 
@@ -98,11 +105,18 @@ export const BORN = 1_600_000_000n;
  *
  * A Pack's table carries one Entry whose file had a birth time when the
  * Container was written and one whose file had none, so both spellings of the
- * optional field travel (spec: FM-15).
+ * optional field travel (spec: FM-15). The first Entry of every table carries
+ * an original path apart from its current one, as a renamed Entry would, so a
+ * codec that wrote one name as the other is caught (spec: FM-15).
  */
 export function addition(seed: number, kind: ContainerKind): ContainerAddition {
   const label = seed.toString(16).padStart(2, '0');
-  const entries = [entry(`albums/${label}/cover.jpg`, 0n, 120n)];
+  const entries = [
+    {
+      ...entry(`albums/${label}/cover.jpg`, 0n, 120n),
+      originalPath: `${ORIGINAL_DIR}/${label}/cover.jpg`,
+    },
+  ];
   if (kind === 'pack') {
     entries.push({
       ...entry(`albums/${label}/.thumbs/cover.jpg`, 120n, 40n),
@@ -193,6 +207,12 @@ export function pinnedKeyTable(): KeyTable {
 }
 
 /**
+ * The Entry Path the sample Snapshot's first Entry was written at, before
+ * whatever moved it to the path it holds now.
+ */
+export const ORIGINAL_PATH = 'imports/a.jpg';
+
+/**
  * A Library of three Containers whose Entries interleave across them.
  *
  * Interleaving is the point: `entries` is in Entry Path order across the whole
@@ -201,11 +221,14 @@ export function pinnedKeyTable(): KeyTable {
  * catch.
  *
  * One Entry's file had a birth time when its Container was written and the rest
- * had none, so both spellings of the optional field travel (spec: FM-16).
+ * had none, so both spellings of the optional field travel (spec: FM-16). The
+ * same Entry carries an original path apart from its current one, as a renamed
+ * Entry would, and the rest carry their current one.
  */
 export function content(): SnapshotContent {
   const born = located(0x40, 'albums/spring/a.jpg', 0n, 100n);
   born.entry.btimeSeconds = BORN;
+  born.entry.originalPath = ORIGINAL_PATH;
   return {
     checkpoint: checkpoint(GENERATION.value),
     containers: [summary(0x40, 'pack'), summary(0x21, 'one-file'), summary(0x33, 'pack')],

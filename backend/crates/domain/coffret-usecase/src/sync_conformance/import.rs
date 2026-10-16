@@ -82,6 +82,38 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     );
     assert_eq!(container.entries[0].metadata.path.as_str(), "a.jpg");
 
+    // The record names each Entry's original path as its Container's own meta
+    // section records it, taken from the table the encoder wrote rather than
+    // from the paths the batch was asked to commit (spec: FM-9, FM-15). The
+    // record is the one Storage holds, as another device replaying it reads it.
+    let stored = library
+        .record(store, commit.record.generation(), &master_key())
+        .await;
+    for addition in stored.additions() {
+        let container = library
+            .open(
+                store,
+                &commit.record,
+                addition.container().id,
+                &master_key(),
+            )
+            .await;
+        let recorded: Vec<_> = addition
+            .entries()
+            .iter()
+            .map(|entry| &entry.original_path)
+            .collect();
+        let written: Vec<_> = container
+            .entries
+            .iter()
+            .map(|entry| &entry.metadata.original_path)
+            .collect();
+        assert_eq!(
+            recorded, written,
+            "the record's original paths are the meta section's",
+        );
+    }
+
     let below = index
         .entry_at(&entry_path("below/b.png"))
         .await

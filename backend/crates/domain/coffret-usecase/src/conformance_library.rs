@@ -14,12 +14,12 @@
 use std::collections::BTreeMap;
 
 use coffret_format::{
-    decode, decode_control_object, decode_keyring, unwrap_container_key, DecodedContainer, Purpose,
-    PurposeKey,
+    decode, decode_control_object, decode_journal_record, decode_keyring, unwrap_container_key,
+    DecodedContainer, Purpose, PurposeKey,
 };
 use coffret_model::{
-    ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, JournalRecord,
-    MasterKey, ObjectRef, ReplicaPosition,
+    ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, Generation,
+    JournalRecord, MasterKey, ObjectRef, ReplicaPosition,
 };
 
 use crate::error_chains::every_link;
@@ -160,6 +160,35 @@ impl Library {
                 "{object:?} must decode as a Container: {}",
                 every_link(&error)
             )
+        })
+    }
+
+    /// The Journal record Storage holds at `generation`, decoded the way a
+    /// device catching up would decode it (spec: FM-15).
+    ///
+    /// What a run returned is the record it meant to write; this is the one it
+    /// did, which is what another device replays.
+    pub(crate) async fn record(
+        &self,
+        store: &dyn ObjectStore,
+        generation: Generation,
+        master_key: &MasterKey,
+    ) -> JournalRecord {
+        let spelling = ControlObjectName::head(generation).to_string();
+        let decoded = decode_control_object(
+            &self.bytes(store, &spelling).await,
+            &spelling,
+            &PurposeKey::derive(master_key, Purpose::ControlJournal),
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "{spelling:?} must open as a Journal record: {}",
+                every_link(&error)
+            )
+        });
+        assert_eq!(decoded.kind, ControlObjectKind::Journal);
+        decode_journal_record(&decoded.payload, decoded.generation).unwrap_or_else(|error| {
+            panic!("{spelling:?} must decode as FM-15: {}", every_link(&error))
         })
     }
 }

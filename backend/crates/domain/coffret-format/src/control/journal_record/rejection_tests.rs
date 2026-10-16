@@ -350,6 +350,49 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
+// EP-2, FM-9: an Entry's original path is the name a Container's meta section
+// records, and FM-9 holds that name to EP-1 as well, so one outside the shape
+// is refused in the same way, naming the field that carried it.
+#[test]
+fn an_original_path_with_a_shape_ep_2_excludes_is_rejected() {
+    let payload = tampered(|fields| {
+        *entry_field(fields, "original_path") = Value::Text("../x".to_owned());
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::MalformedEntryPath {
+                field: "original_path"
+            })
+        ),
+        "expected a `..` component to be refused, got {result:?}"
+    );
+}
+
+// FM-15, FM-16: `original_path` is written only where it differs from `path`,
+// so one state has one encoding. A map carrying it equal to `path` is a second
+// spelling of a map without it, and is refused rather than accepted as one.
+#[test]
+fn an_original_path_equal_to_the_path_is_rejected() {
+    let payload = tampered(|fields| {
+        let path = entry_field(fields, "path").clone();
+        let Value::Map(entry) = entry_map(fields) else {
+            panic!("an entry is a CBOR map");
+        };
+        entry.retain(|(key, _)| key.as_text() != Some("original_path"));
+        entry.push((Value::Text("original_path".to_owned()), path));
+    });
+    let result = read(&payload);
+    let Err(Error::MalformedJournalRecord {
+        detail: MalformedDetail::Written(detail),
+    }) = result
+    else {
+        panic!("expected a second spelling of one state to be refused, got {result:?}");
+    };
+    assert!(detail.contains("original_path"), "{detail}");
+}
+
 // FM-9, FM-15, FM-19: an addition carries the entry table of the Container it
 // adds, and each row of it places an Entry against a plaintext stream whose
 // positions the format bounds. A row whose `offset` and `size` end past the last
@@ -391,6 +434,17 @@ fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
     assert!(detail.contains("offset"), "{detail}");
     assert!(detail.contains("below 2^63"), "{detail}");
     assert!(detail.contains(&past_the_bound.to_string()), "{detail}");
+}
+
+/// The first entry map of the first addition, whole.
+fn entry_map(fields: &mut [(Value, Value)]) -> &mut Value {
+    let Value::Map(addition) = &mut array(fields, "additions")[0] else {
+        panic!("an addition is a CBOR map");
+    };
+    let Value::Array(entries) = field(addition, "entries") else {
+        panic!("an entry table is a CBOR array");
+    };
+    &mut entries[0]
 }
 
 /// The value one key of the first entry of the first addition holds.

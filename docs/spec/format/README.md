@@ -145,7 +145,9 @@ fields until a coordinated implementation changes the format.
     for one Entry may each carry a different `original_path`. The current
     state is the Journal's and its checkpoint's (CP-11, CK-1), which is why a
     record and a Snapshot spell the same values without the prefix (FM-15,
-    FM-16).
+    FM-16) — and why they also carry this `original_path` beside the current
+    one wherever the two differ, so that a device can name both without
+    opening the Container.
   - `derived_from` is itself a CBOR map with two fields: `container_id`,
     the parent Entry's Container ID as a 16-byte byte string, and
     `original_path`, the parent's Entry Path (EP-1) as a text string. The
@@ -341,7 +343,7 @@ fields until a coordinated implementation changes the format.
   to unwrap, so envelopes cannot be swapped between Containers.
   *(Form: test)*
 - **FM-15.** A Journal record's payload (kind `0x01`) is a CBOR map with:
-  `schema` (= 1); `prev`, the generation of the control head this record
+  `schema` (= 2); `prev`, the generation of the control head this record
   succeeds, omitted at generation 0 where there is none; `next_commit_slot`
   and `snapshot_slot`, each the Storage's own opaque token for the slot the
   record reserves — the successor's slot (CP-2) and this head's ordinary
@@ -371,19 +373,37 @@ fields until a coordinated implementation changes the format.
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
     string), `ciphertext_len`, optional `object_ref` (below), and `entries` —
-    the Container's entry table, each element a map of `path`, `offset`,
-    `size`, `mtime`, optional `btime`, `hash`, optional `mime`, and optional
-    `derived_from`. `offset`, `size`, `hash`, `mime`, and `derived_from` are
-    FM-9's fields verbatim, down to the `original_path` inside a
-    `derived_from`, and carrying the whole table is what lets a device replay a
-    record without opening a Container (CP-11).
-  - The three values that carry FM-9's `original_` prefix are spelled without
-    it here — `path`, `mtime`, and `btime` for what FM-9 calls
-    `original_path`, `original_mtime`, and `original_btime`. Same values, and
-    the difference is what the map is for: a record is the catalog, and an
-    addition's values are what the Library holds from this commit onward.
-    Keeping one spelling for both would leave a reader with no way to say which
-    of the two it had in hand.
+    the Container's entry table, each element a map of `path`, optional
+    `original_path`, `offset`, `size`, `mtime`, optional `btime`, `hash`,
+    optional `mime`, and optional `derived_from`. `original_path`, `offset`,
+    `size`, `hash`, `mime`, and `derived_from` are FM-9's fields verbatim, down
+    to the `original_path` inside a `derived_from`, and carrying the whole
+    table is what lets a device replay a record without opening a Container
+    (CP-11).
+  - `path`, `mtime`, and `btime` are spelled without FM-9's `original_`
+    prefix, though an addition takes them from the same entry table: the
+    difference is what the map is for. A record is the catalog, and those
+    values are what the Library holds from this commit onward, which a later
+    record may move. `original_path` keeps the prefix because it is not the
+    catalog's to move: it is the Entry Path the owning Container's meta section
+    records, the name it was captured under, so one map can carry both names
+    — `path` for where the Entry stands now, `original_path` for what its
+    Container calls it. Keeping one spelling for both would leave a reader
+    with no way to say which of the two it had in hand.
+  - `original_path` is present if and only if it differs from `path`: a map
+    without it names an Entry whose original path is its current one, so an
+    Entry no rename has moved costs nothing more than it did before the field
+    existed. One Library state therefore has one encoding, as with the orders
+    below, and a reader rejects a map whose `original_path` is present and equal
+    to its `path` rather than accepting a second spelling of it.
+  - A commit takes each original path from the entry table of the Container it
+    adds, as that Container's meta section records it, and not from the paths
+    its batch was asked to commit; a checkpoint copies it from the catalog
+    (FM-16).
+  - A record of `schema` 1 was written before `original_path` existed, and its
+    entry maps lack it. Nothing could rename an Entry then, so its original path
+    was its current one — which is what the absence of the field means under
+    the rule above, so a reader reads both schemas the same way.
   - `object_ref` is the Storage's own identifier for the Container's object —
     the same value whichever device reads it — carried as a cache so that a
     device can fetch the Container without listing Storage first. It is never
@@ -407,7 +427,7 @@ fields until a coordinated implementation changes the format.
   - The maps are forward-open on FM-9's terms: a reader ignores fields it
     does not know, adding a field only increments `schema`, and a reader
     accepts any `schema` of 1 or above and rejects anything lower.
-- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 1);
+- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 2);
   the checkpoint the Snapshot stands at — `head_generation`,
   `journal_generation`, `next_commit_slot` (the same opaque token FM-15
   spells, absent where the name is the slot), `keyring_generation`,
@@ -416,11 +436,12 @@ fields until a coordinated implementation changes the format.
   each element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
   `object_ref`, as FM-15's additions spell those fields; and `entries`, an
   array of every current Entry, each element the entry map an addition carries
-  — `path`, `mtime`, optional `btime`, and FM-9's `offset`, `size`, `hash`,
-  optional `mime`, and optional `derived_from` — plus
+  — `path`, `mtime`, optional `btime`, and FM-9's optional `original_path`,
+  `offset`, `size`, `hash`, optional `mime`, and optional `derived_from` — plus
   `container`, the 0-based index of the owning element of `containers`. A
   Snapshot is a checkpoint of the catalog, so it spells those three the
-  catalog's way for the reason FM-15 gives. The
+  catalog's way, and carries `original_path` where it differs from `path`,
+  for the reasons FM-15 gives. The
   fourth member of the Keyring tuple the checkpoint names, `master_key_epoch`
   (CK-3), is the field FM-13 gives every payload, so it is not repeated
   inside. The ordinary kind (`0x03`) and the activation kind (`0x04`) share
@@ -458,6 +479,10 @@ fields until a coordinated implementation changes the format.
     record of which checkpoint object this Index adopted. That last one is
     the Index's own provenance rather than Library content, so it is never
     encoded and a decoded Snapshot reports none.
+  - `original_path` is present if and only if it differs from `path`, and a
+    reader rejects one present and equal, as FM-15 has it for a record. A
+    Snapshot of `schema` 1 lacks the field in every entry map, which a reader
+    takes the same way: each Entry's original path is its `path`.
   - The maps are forward-open on FM-9's terms, as FM-15's are.
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
   `schema` (= 1); and `mapping`, the generation's complete **key table** from

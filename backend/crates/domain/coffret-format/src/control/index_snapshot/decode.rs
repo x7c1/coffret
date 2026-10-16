@@ -7,7 +7,7 @@ use coffret_model::{
 use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
     CONTAINERS, ENTRIES, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
-    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
+    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, OLDEST_SCHEMA,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -57,7 +57,7 @@ pub fn decode(
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < OLDEST_SCHEMA {
         return Err(Error::UnsupportedIndexSnapshotSchema { schema });
     }
 

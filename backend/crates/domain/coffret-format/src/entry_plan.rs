@@ -62,6 +62,9 @@ impl EntryPlan {
         );
         EntryMetadata {
             path: self.path.clone(),
+            // The name a Container records is the one the Entry has as it is
+            // written (spec: FM-9).
+            original_path: self.path.clone(),
             extent,
             mtime: self.mtime,
             btime: self.btime,

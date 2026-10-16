@@ -34,7 +34,8 @@ content shared by ordinary and activation Snapshots includes four things
 The Catalog copy beside it lists the current Containers and every current Entry
 with the Container holding it, in Container ID and [Entry Path](../entry-path/)
 order, so one Library state has exactly one encoding whichever device wrote it
-(spec: FM-16).
+(spec: FM-16). Each Entry carries its original path beside its current one where
+the two differ, as the [Catalog](../catalog/#domain-rules) keeps it.
 
 An ordinary Snapshot records an existing committed head. The Journal records
 it covers can then be pruned, because the Snapshot stands in for them.

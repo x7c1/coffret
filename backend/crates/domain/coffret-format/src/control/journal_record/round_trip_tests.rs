@@ -6,7 +6,7 @@ use coffret_model::{ContainerKind, Generation};
 
 use super::testing::{
     addition, addition_of, first_record, first_record_of, record, record_of, table, BORN,
-    GENERATION,
+    GENERATION, ORIGINAL_DIR,
 };
 use super::{decode, encode};
 use crate::control::testing::{
@@ -123,7 +123,7 @@ fn unknown_fields_are_ignored() {
         ));
     }
     // A newer writer would also have bumped `schema`.
-    *field(&mut fields, "schema") = Value::from(2u64);
+    *field(&mut fields, "schema") = Value::from(3u64);
 
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded = decode(&extended, generation(GENERATION)).expect("unknown fields are ignored");
@@ -183,6 +183,98 @@ fn an_entry_table_carries_the_catalog_spelling() {
             "mime"
         ],
     );
+}
+
+// FM-15: an Entry's original path travels beside its current one, each under
+// its own key, and each comes back as the one it went in as.
+#[test]
+fn an_original_path_travels_beside_the_current_path() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let table = entry_table(&payload, PACK);
+    let Value::Map(cover) = &table[0] else {
+        panic!("an entry is a map");
+    };
+    let text = |key: &str| {
+        cover
+            .iter()
+            .find(|(found, _)| found.as_text() == Some(key))
+            .and_then(|(_, value)| value.as_text())
+            .map(str::to_owned)
+    };
+    assert_eq!(text("path").as_deref(), Some("albums/40/cover.jpg"));
+    assert_eq!(
+        text("original_path"),
+        Some(format!("{ORIGINAL_DIR}/40/cover.jpg"))
+    );
+
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
+    let entries = decoded.additions()[PACK].entries();
+    assert_eq!(entries[0].path.as_str(), "albums/40/cover.jpg");
+    assert_eq!(
+        entries[0].original_path.as_str(),
+        format!("{ORIGINAL_DIR}/40/cover.jpg")
+    );
+    assert_eq!(
+        entries[1].original_path, entries[1].path,
+        "an Entry never moved carries its current path as its original one",
+    );
+    let Value::Map(unmoved) = &table[1] else {
+        panic!("an entry is a map");
+    };
+    assert!(
+        !unmoved
+            .iter()
+            .any(|(key, _)| key.as_text() == Some("original_path")),
+        "an Entry whose two paths are one is written without `original_path`",
+    );
+}
+
+// FM-15: a record of schema 1 was written before `original_path` existed, when
+// nothing could rename an Entry, so a reader takes each Entry's original path
+// to be its current one. Everything else in the record reads as it did.
+#[test]
+fn a_schema_1_record_reads_each_original_path_as_its_path() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let mut fields = body_map(&payload);
+    for addition in array(&mut fields, "additions") {
+        let Value::Map(addition) = addition else {
+            panic!("an addition is a map");
+        };
+        let Value::Array(entries) = field(addition, "entries") else {
+            panic!("an entry table is an array");
+        };
+        for entry in entries {
+            let Value::Map(entry) = entry else {
+                panic!("an entry is a map");
+            };
+            entry.retain(|(key, _)| key.as_text() != Some("original_path"));
+        }
+    }
+    *field(&mut fields, "schema") = Value::from(1u64);
+
+    let older = with_body_map(payload.master_key_epoch, fields);
+    let decoded = decode(&older, generation(GENERATION)).expect("a schema 1 record reads back");
+
+    let as_written_then = |record: &coffret_model::JournalRecord| {
+        record
+            .additions()
+            .iter()
+            .flat_map(|addition| addition.entries())
+            .map(|entry| coffret_model::EntryMetadata {
+                original_path: entry.path.clone(),
+                ..entry.clone()
+            })
+            .collect::<Vec<_>>()
+    };
+    for entry in decoded
+        .additions()
+        .iter()
+        .flat_map(|addition| addition.entries())
+    {
+        assert_eq!(entry.original_path, entry.path);
+    }
+    assert_eq!(as_written_then(&decoded), as_written_then(&record()));
+    assert_eq!(decoded.removals(), record().removals());
 }
 
 // FM-15: `btime` is optional, so a record carries it for the Entries whose

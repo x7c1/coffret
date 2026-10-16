@@ -6,6 +6,10 @@ use coffret_usecase::device_state::{
 };
 use coffret_usecase::{Index, IndexError};
 
+mod support;
+
+use support::{snapshot, stamp_of};
+
 #[tokio::test]
 async fn separate_connections_cannot_settle_a_live_producer() {
     let dir = tempfile::tempdir().unwrap();
@@ -43,7 +47,8 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
             "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
              ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; PRAGMA user_version = 7;",
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -92,7 +97,8 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; PRAGMA user_version = 8;",
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -134,7 +140,8 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
     connection
         .execute_batch(
             "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; PRAGMA user_version = 9;",
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             PRAGMA user_version = 9;",
         )
         .unwrap();
     drop(connection);
@@ -175,7 +182,8 @@ async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE held_parcels; DROP TABLE attempted_slots; PRAGMA user_version = 10;",
+            "DROP TABLE held_parcels; DROP TABLE attempted_slots; \
+             ALTER TABLE entries DROP COLUMN original_path; PRAGMA user_version = 10;",
         )
         .unwrap();
     drop(connection);
@@ -253,7 +261,10 @@ async fn layout_11_attempts_are_kept_with_no_slot() {
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("DROP TABLE attempted_slots; PRAGMA user_version = 11;")
+        .execute_batch(
+            "DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             PRAGMA user_version = 11;",
+        )
         .unwrap();
     drop(connection);
 
@@ -381,4 +392,91 @@ async fn a_batch_whose_slot_cannot_be_recorded_is_left_unmarked() {
         .await
         .unwrap()
         .is_empty());
+}
+
+/// Layout 12 cataloged no original path. Its catalog is kept rather than
+/// discarded — so the device does not catch up from Storage again — with every
+/// Entry's original path read as its current one, which is what every Entry
+/// had while nothing could rename one; its device state is kept with it
+/// (spec: FM-15, FM-16, EP-10, OC-2).
+#[tokio::test]
+async fn a_layout_12_catalog_is_kept_with_each_original_path_its_current_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    index.restore(snapshot(4)).await.unwrap();
+    let observation = LocalObservation {
+        path: EntryPath::parse("albums/1.jpg").unwrap(),
+        size: 100,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        at: DeviceTime::from_unix_seconds(1_700_000_400),
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
+    };
+    index.mark_present(observation.clone()).await.unwrap();
+    let row = PendingRow {
+        container_id: ContainerId::from_bytes([12; 16]),
+        spool_path: dir.path().join("spool"),
+        batch: BatchId::new("interrupted"),
+        created_at: DeviceTime::from_unix_seconds(1),
+        state: SpoolState::Spooled(Some(ObjectRef::new("uploaded"))),
+        commit_attempted: true,
+        materializes: true,
+    };
+    index.record_pending_row(row.clone()).await.unwrap();
+    let before = index.snapshot().await.unwrap();
+    assert!(!before.entries().is_empty(), "the case catalogs Entries");
+    drop(index);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("ALTER TABLE entries DROP COLUMN original_path; PRAGMA user_version = 12;")
+        .unwrap();
+    drop(connection);
+
+    let reopened = SqliteIndex::open(&path).unwrap();
+    assert_eq!(
+        stamp_of(&path),
+        13,
+        "the file is upgraded to the current layout"
+    );
+    let after = reopened.snapshot().await.unwrap();
+    for location in after.entries() {
+        assert_eq!(
+            location.entry.original_path, location.entry.path,
+            "an Entry cataloged before layout 13 was never renamed",
+        );
+    }
+    assert_eq!(
+        after, before,
+        "the catalog is the one the file held, checkpoint included, not one to catch up again",
+    );
+    assert_eq!(
+        reopened
+            .local_entry_at(&observation.path)
+            .await
+            .unwrap()
+            .expect("the materialization survives the upgrade")
+            .observation,
+        observation,
+    );
+    assert_eq!(reopened.pending_rows().await.unwrap(), [row]);
+    drop(reopened);
+
+    // The table laid out again is the one a fresh file lays out, so the upgraded
+    // file is not a layout of its own.
+    let fresh = dir.path().join("fresh.sqlite");
+    drop(SqliteIndex::open(&fresh).unwrap());
+    assert_eq!(entries_table(&path), entries_table(&fresh));
+}
+
+/// How a file declares its table of Entries and the index beside it.
+fn entries_table(file: &std::path::Path) -> Vec<String> {
+    let connection = rusqlite::Connection::open(file).unwrap();
+    let mut statement = connection
+        .prepare("SELECT sql FROM sqlite_schema WHERE tbl_name = 'entries' AND sql IS NOT NULL ORDER BY name")
+        .unwrap();
+    statement
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
 }

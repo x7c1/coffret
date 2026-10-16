@@ -25,10 +25,26 @@ use crate::mtime::Mtime;
 /// why a record and a Snapshot spell the same values `path`, `mtime`, and
 /// `btime` (spec: FM-15, FM-16). One struct serves both because the values
 /// are the same values — only the map key differs.
+///
+/// The one exception is the name. The catalog keeps both the Entry Path the
+/// Library holds now (`path`) and the one the owning Container's meta section
+/// recorded (`original_path`), so that every device can name both without
+/// opening the Container; a record and a Snapshot carry the original one
+/// wherever it differs from the current one (spec: FM-15, FM-16). Read out of
+/// a meta section, or laid out by a writer, the two are the same path: the
+/// name a Container records is the one the Entry had when it was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryMetadata {
     /// The Library position this Entry occupies.
     pub path: EntryPath,
+    /// The Entry Path the owning Container's meta section records for this
+    /// Entry: its name as of the moment that Container was written
+    /// (spec: FM-9).
+    ///
+    /// The name it was captured under rather than where it stands. Equal to
+    /// `path` until a rename moves the Entry, and never moved by one, because
+    /// the Container it describes is never rewritten.
+    pub original_path: EntryPath,
     /// Where this Entry's plaintext lies in the Container's plaintext stream.
     pub extent: EntryExtent,
     /// The file's modification time.

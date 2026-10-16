@@ -8,9 +8,11 @@
  * `original_path` / `original_mtime` / `original_btime` in the meta section,
  * where they state what one immutable object captured, against `path` /
  * `mtime` / `btime` in a record and a Snapshot, where they state what the
- * Library holds now. Those live in `metaEntryMap.ts` and `catalogEntryMap.ts`;
- * everything neither spelling changes lives here, so a field added to an Entry
- * cannot arrive in one shape there and another here.
+ * Library holds now; a record and a Snapshot carry the meta section's
+ * `original_path` beside their `path` wherever the two differ. Those live in
+ * `metaEntryMap.ts` and `catalogEntryMap.ts`; everything neither spelling
+ * changes lives here, so a field added to an Entry cannot arrive in one shape
+ * there and another here.
  */
 
 import { MAX_FORMAT_INTEGER, takeExactly } from './bytes.js';

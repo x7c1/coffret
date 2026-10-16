@@ -6,6 +6,7 @@ use coffret_model::{
 
 use super::{IndexSnapshotPayload, SnapshotActivation};
 use crate::control::testing::{checkpoint, container_id, entry, summary};
+use crate::entry_paths::entry_path;
 use crate::generations::generation;
 
 /// The head this Snapshot's checkpoint stands at.
@@ -19,6 +20,10 @@ pub(super) const BORN: Btime = Btime::from_unix_seconds(1_600_000_000);
 /// sample.
 pub(super) const BORN_AT: usize = 0;
 
+/// The Entry Path the Entry at [`BORN_AT`] was written at, before whatever
+/// moved it to the path it holds now.
+pub(super) const ORIGINAL_PATH: &str = "imports/a.jpg";
+
 /// A Library of three Containers, whose Entries interleave across them.
 ///
 /// Interleaving is the point: `entries` is in Entry Path order across the whole
@@ -27,7 +32,8 @@ pub(super) const BORN_AT: usize = 0;
 /// catch. The Containers and the Entries are both handed over out of order for
 /// the same reason. One Entry's file had a birth time when its Container was
 /// written and the rest had none, so both spellings of the optional field
-/// travel (spec: FM-16).
+/// travel (spec: FM-16). The same Entry carries an original path apart from its
+/// current one, as a renamed Entry would, and the rest carry their current one.
 pub(super) fn content() -> SnapshotContent {
     // Which checkpoint this Index adopted is device state, and no Snapshot
     // carries it (spec: CK-7). It is set here so that the encoder has
@@ -45,6 +51,7 @@ pub(super) fn decoded_content() -> SnapshotContent {
 fn content_of(adopted_from: Option<ControlObjectName>) -> SnapshotContent {
     let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(BORN);
+    born.entry.original_path = entry_path(ORIGINAL_PATH);
     SnapshotContent::canonical(
         checkpoint(GENERATION),
         adopted_from,

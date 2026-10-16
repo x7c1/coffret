@@ -1,3 +1,4 @@
+mod add_original_paths;
 mod provenance;
 
 use std::ops::Range;
@@ -10,22 +11,72 @@ use crate::error::classify;
 /// Current layout. Version 8 adds the durable commit-attempt marker, version 9
 /// the marker saying whether a pending Container's Entries are files this
 /// device put into it, version 10 the content hash a materialized file was
-/// made to match, version 11 the parcels this device holds (spec: PK-21), and
-/// version 12 the commit slots a batch attempted (spec: OC-2, OC-3).
-pub(crate) const SCHEMA_VERSION: i64 = 12;
+/// made to match, version 11 the parcels this device holds (spec: PK-21),
+/// version 12 the commit slots a batch attempted (spec: OC-2, OC-3), and
+/// version 13 each Entry's original path beside its current one
+/// (spec: FM-15, FM-16).
+pub(crate) const SCHEMA_VERSION: i64 = 13;
 
-/// The device-local layout floor. Versions 7 to 11 have one explicit,
+/// The device-local layout floor. Versions 7 to 12 have one explicit,
 /// transactional upgrade that preserves every row, treats old attempts as
 /// unknown, takes every old pending row to name a Container built out of this
 /// device's own files — the only kind a build before version 9 could spool —
 /// leaves every old materialization without a recorded hash, which is what a
 /// build before version 10 never wrote down, starts with no parcel held, which
-/// is what a build before version 11 never kept, and records no commit slot for
+/// is what a build before version 11 never kept, records no commit slot for
 /// any batch, which is what a build before version 12 never kept — so an old
-/// attempt stays one whose outcome is unknown (spec: OC-2). Other unreadable
-/// device layouts are refused rather than discarded, because Storage cannot
-/// reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 12;
+/// attempt stays one whose outcome is unknown (spec: OC-2) — and takes every
+/// Entry's original path to be its current one, which is what every Entry a
+/// build before version 13 cataloged had, since nothing could rename one
+/// (spec: FM-15, FM-16). That last step is the catalog's rather than the
+/// device's, and it is an upgrade too rather than a discard, so that no device
+/// has to catch up from Storage again for a column it can fill on its own.
+/// Every older layout this build reads is therefore upgraded whole, and the
+/// floor stands at the current layout. Other unreadable device layouts are
+/// refused rather than discarded, because Storage cannot reconstruct mappings,
+/// materializations, or provenance.
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 13;
+
+/// The table of current Entries, part of the Library-wide group below.
+///
+/// A macro rather than a constant so that the group can be spelled as one
+/// literal around it while the upgrade from a layout before 13 lays this table
+/// out on its own (spec: FM-15, FM-16).
+macro_rules! entries_ddl {
+    () => {
+        r#"
+CREATE TABLE entries (
+    -- UNIQUE by being the primary key: a defence, not the enforcement. What
+    -- keeps one Entry Path to one current Entry is the commit's own check
+    -- (spec: EP-5, EP-6); this catches a record that reached the catalog
+    -- claiming otherwise.
+    path                   TEXT PRIMARY KEY COLLATE BINARY,
+    -- The Entry Path the owning Container's meta section records for this
+    -- Entry: the name it was captured under, which no rename moves, where
+    -- `path` is where it stands now (spec: FM-9, FM-15, FM-16).
+    original_path          TEXT NOT NULL COLLATE BINARY,
+    container_id           BLOB NOT NULL REFERENCES containers(id),
+    "offset"               INTEGER NOT NULL,
+    size                   INTEGER NOT NULL,
+    mtime                  INTEGER NOT NULL,
+    -- NULL where the platform that wrote the Container reported no birth time,
+    -- which is the whole of what absent means (spec: FM-9, FM-15).
+    btime                  INTEGER,
+    hash                   BLOB NOT NULL,
+    mime                   TEXT,
+    derived_from_container BLOB,
+    derived_from_path      TEXT COLLATE BINARY
+) STRICT;
+
+-- Removing a Container removes its Entries, and a Pack holds many.
+CREATE INDEX entries_by_container ON entries (container_id);
+"#
+    };
+}
+
+/// The table of current Entries on its own, which the upgrade from a layout
+/// before 13 lays out again with the column it lacked.
+pub(crate) const ENTRIES_DDL: &str = entries_ddl!();
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -36,7 +87,8 @@ pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 12;
 ///
 /// Every Entry Path is stored in its canonical form (spec: EP-1, EP-2) and
 /// compared bytewise: `BINARY` is spelled out on each path column.
-const LIBRARY_WIDE_DDL: &str = r#"
+const LIBRARY_WIDE_DDL: &str = concat!(
+    r#"
 CREATE TABLE checkpoint (
     -- One row: an Index stands at exactly one committed Library state.
     only_row              INTEGER PRIMARY KEY CHECK (only_row = 0),
@@ -61,29 +113,9 @@ CREATE TABLE containers (
     ciphertext_len  INTEGER NOT NULL,
     object_ref      TEXT
 ) STRICT;
-
-CREATE TABLE entries (
-    -- UNIQUE by being the primary key: a defence, not the enforcement. What
-    -- keeps one Entry Path to one current Entry is the commit's own check
-    -- (spec: EP-5, EP-6); this catches a record that reached the catalog
-    -- claiming otherwise.
-    path                   TEXT PRIMARY KEY COLLATE BINARY,
-    container_id           BLOB NOT NULL REFERENCES containers(id),
-    "offset"               INTEGER NOT NULL,
-    size                   INTEGER NOT NULL,
-    mtime                  INTEGER NOT NULL,
-    -- NULL where the platform that wrote the Container reported no birth time,
-    -- which is the whole of what absent means (spec: FM-9, FM-15).
-    btime                  INTEGER,
-    hash                   BLOB NOT NULL,
-    mime                   TEXT,
-    derived_from_container BLOB,
-    derived_from_path      TEXT COLLATE BINARY
-) STRICT;
-
--- Removing a Container removes its Entries, and a Pack holds many.
-CREATE INDEX entries_by_container ON entries (container_id);
-"#;
+"#,
+    entries_ddl!()
+);
 
 /// The group that is this device's alone and is never uploaded (spec: EP-9,
 /// EP-10, OC-2).
@@ -218,7 +250,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7..=11 => provenance::preserve_device_state(connection),
+        7..=12 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }
@@ -379,7 +411,7 @@ mod tests {
         }
         assert_eq!(
             DEVICE_SCHEMA_VERSION, SCHEMA_VERSION,
-            "this build's device-local group changed with its catalog, so its own window is empty"
+            "this build upgrades every older layout it reads in place, so its own window is empty"
         );
         assert!(!carries_a_readable_device_group(SCHEMA_VERSION - 1));
     }

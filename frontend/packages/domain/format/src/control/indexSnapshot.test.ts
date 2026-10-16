@@ -12,6 +12,7 @@ import {
 import type { ControlPayload } from './payload.js';
 import {
   BORN,
+  ORIGINAL_PATH,
   activating,
   arrayField,
   bodyMap,
@@ -130,15 +131,59 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     const payload = encodeIndexSnapshot(ordinary());
     const entries = arrayField(bodyMap(payload), 'entries');
     expect([...mapAt(entries, 0).keys()].sort()).toEqual(
-      ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
+      ['path', 'original_path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
     );
     for (let index = 1; index < entries.length; index += 1) {
       expect([...mapAt(entries, index).keys()]).not.toContain('btime');
+      expect([...mapAt(entries, index).keys()]).not.toContain('original_path');
     }
 
     const decoded = readOrdinary(payload);
     expect(decoded.content.entries[0].entry.btimeSeconds).toBe(BORN);
     expect(decoded.content.entries[1].entry.btimeSeconds).toBeUndefined();
+  });
+
+  // An Entry's original path travels beside its current one, each under its
+  // own key, and each comes back as the one it went in as.
+  it('carries an original path beside the current path', () => {
+    const payload = encodeIndexSnapshot(ordinary());
+    const entries = arrayField(bodyMap(payload), 'entries');
+    expect(mapAt(entries, 0).get('original_path')).toBe(ORIGINAL_PATH);
+
+    const decoded = readOrdinary(payload).content.entries;
+    expect(decoded[0].entry.path).toBe('albums/spring/a.jpg');
+    expect(decoded[0].entry.originalPath).toBe(ORIGINAL_PATH);
+    for (const location of decoded.slice(1)) {
+      expect(location.entry.originalPath).toBe(location.entry.path);
+    }
+  });
+
+  // `original_path` is written only where it differs from `path`, so one state
+  // has one encoding; a map carrying it equal to `path` is refused.
+  it('refuses an original path equal to the path', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(map, 'entries');
+      mapAt(entries, 0).set('original_path', mapAt(entries, 0).get('path'));
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
+  });
+
+  // A Snapshot of schema 1 was written before `original_path` existed, when
+  // nothing could rename an Entry, so a reader takes each Entry's original path
+  // to be its current one. Everything else in the Snapshot reads as it did.
+  it('reads each original path of a schema 1 Snapshot as its path', () => {
+    const payload = tampered((map) => {
+      for (const entry of arrayField(map, 'entries')) {
+        (entry as Map<unknown, unknown>).delete('original_path');
+      }
+      map.set('schema', 1n);
+    });
+    const expected = canonical(content());
+    expected.entries = expected.entries.map((location) => ({
+      ...location,
+      entry: { ...location.entry, originalPath: location.entry.path },
+    }));
+    expect(readOrdinary(payload).content).toEqual(expected);
   });
 
   // EP-3: the order is over the canonical UTF-8 bytes, which is not the order
@@ -177,7 +222,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
           (item as Map<unknown, unknown>).set('future_element_field', 1n);
         }
       }
-      map.set('schema', 2n);
+      map.set('schema', 3n);
     });
     expect(readOrdinary(payload).content).toEqual(canonical(content()));
   });

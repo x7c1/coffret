@@ -1,7 +1,8 @@
-use coffret_model::{Btime, ContainerKind};
+use coffret_model::{Btime, ContainerKind, EntryPath};
 
 use crate::index_conformance::fixtures::{
-    addition, checkpoint, container_id, library_state, path, record, snapshot, snapshot_name, BORN,
+    addition, checkpoint, container_id, library_state, path, record, snapshot, snapshot_name,
+    written_as, BORN,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 use crate::index_error::IndexError;
@@ -320,5 +321,92 @@ pub async fn a_birth_time_survives_a_replay_and_a_query(fixture: &IndexUnderTest
             .map(|location| location.entry.btime)
             .collect::<Vec<_>>(),
         vec![Some(Btime::from_unix_seconds(BORN)), None],
+    );
+}
+
+/// An Entry's original path survives a replay, a query, a checkpoint, and a
+/// restore of that checkpoint, apart from its current one.
+///
+/// The catalog keeps both names so that a device can say what an Entry is
+/// called now and what its Container recorded it as without opening the
+/// Container (spec: FM-15, FM-16). Nothing renames an Entry yet, so every
+/// commit writes the two equal; the record here carries them apart for one
+/// Entry and equal for the other, so a catalog that stored one name in place
+/// of the other fails here.
+pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .apply(record(
+            0,
+            vec![written_as(
+                addition(1, ContainerKind::Pack, &["albums/a.jpg", "albums/b.jpg"]),
+                &[("albums/a.jpg", "inbox/a.jpg")],
+            )],
+            Vec::new(),
+        ))
+        .await
+        .expect("applying the first record must succeed");
+
+    let renamed = index
+        .entry_at(&path("albums/a.jpg"))
+        .await
+        .expect("looking a path up must succeed")
+        .expect("the record added it");
+    assert_eq!(
+        renamed.entry.original_path,
+        path("inbox/a.jpg"),
+        "the original path the record carried, not the current one",
+    );
+    let unrenamed = index
+        .entry_at(&path("albums/b.jpg"))
+        .await
+        .expect("looking a path up must succeed")
+        .expect("the record added it");
+    assert_eq!(unrenamed.entry.original_path, path("albums/b.jpg"));
+
+    let expected: Vec<EntryPath> = vec![path("inbox/a.jpg"), path("albums/b.jpg")];
+    assert_eq!(
+        index
+            .entries_under(Some(&path("albums")))
+            .await
+            .expect("listing a folder must succeed")
+            .into_iter()
+            .map(|location| location.entry.original_path)
+            .collect::<Vec<_>>(),
+        expected,
+        "a listing answers what a lookup does",
+    );
+
+    // A checkpoint carries both names, and another device that takes it
+    // answers what this one does without replaying the record (spec: CK-7).
+    let snapshot = index
+        .snapshot()
+        .await
+        .expect("an applied catalog has a state to checkpoint");
+    assert_eq!(
+        snapshot
+            .entries()
+            .iter()
+            .map(|location| location.entry.original_path.clone())
+            .collect::<Vec<_>>(),
+        expected,
+    );
+
+    let other = fixture.other();
+    other
+        .restore(snapshot)
+        .await
+        .expect("restoring a Snapshot must succeed");
+    assert_eq!(
+        other
+            .entry_at(&path("albums/a.jpg"))
+            .await
+            .expect("looking a path up must succeed")
+            .expect("the Snapshot holds it")
+            .entry
+            .original_path,
+        path("inbox/a.jpg"),
+        "a restore fills the original path from the Snapshot",
     );
 }

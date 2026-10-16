@@ -5,7 +5,7 @@ use coffret_model::{
 
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
+    NEXT_COMMIT_SLOT, OLDEST_SCHEMA, PREV, REMOVALS, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -32,7 +32,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < OLDEST_SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
 

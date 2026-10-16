@@ -77,6 +77,7 @@ pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> Prepare
         let size = 100 + position as u64;
         entries.push(EntryMetadata {
             path: path(text),
+            original_path: path(text),
             extent: entry_extent(offset, size),
             mtime: Mtime::from_unix_seconds(1_700_000_000 + position as i64),
             btime: None,
