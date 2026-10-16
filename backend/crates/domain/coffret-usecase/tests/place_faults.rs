@@ -1114,7 +1114,7 @@ impl<'a> RefusingIndex<'a> {
 fn refused() -> IndexError {
     IndexError::Backend {
         operation: "mark_present",
-        cause: Box::new(std::io::Error::other(
+        cause: std::sync::Arc::new(std::io::Error::other(
             "the catalog was interrupted after the file was renamed into place",
         )),
     }

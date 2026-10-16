@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use coffret_model::{Generation, Mtime, ObjectRef};
 use coffret_usecase::device_state::{
@@ -40,7 +41,7 @@ pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
         let expected =
             RootMarkerId::parse(&spelling).map_err(|cause| IndexError::UnreadableCatalog {
                 operation: OPERATION,
-                cause: Box::new(cause),
+                cause: Arc::new(cause),
             })?;
         mapping = mapping.expecting(expected);
     }

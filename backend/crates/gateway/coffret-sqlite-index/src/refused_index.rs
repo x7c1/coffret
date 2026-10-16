@@ -13,6 +13,7 @@
 use std::error;
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::{IndexError, IndexResult};
@@ -55,7 +56,7 @@ impl RefusedIndex {
                 let fallback = Self::readable(path, OpenFlags::SQLITE_OPEN_READ_WRITE);
                 fallback.map_err(|read_write| IndexError::Backend {
                     operation: OPERATION,
-                    cause: Box::new(BothOpensFailed {
+                    cause: Arc::new(BothOpensFailed {
                         read_only,
                         read_write,
                     }),

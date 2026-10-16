@@ -83,7 +83,7 @@ impl<'a> WatchingIndex<'a> {
 fn refused() -> IndexError {
     IndexError::Backend {
         operation: "marking a Container spooled",
-        cause: Box::new(std::io::Error::other(
+        cause: std::sync::Arc::new(std::io::Error::other(
             "the catalog was interrupted before the spool was recorded as complete",
         )),
     }

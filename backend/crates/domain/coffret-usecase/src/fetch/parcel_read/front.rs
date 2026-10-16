@@ -1,14 +1,47 @@
 use std::ops::Range;
+use std::sync::Arc;
 
 use coffret_format::{ContainerOutline, Error as FormatError, Header};
 use coffret_model::{ContainerId, ContainerKey, ObjectRef};
 use tracing::debug;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::fetch_memory::FetchMemory;
+use crate::fetch::fetch_memory::{FetchMemory, Turn};
+use crate::fetch::storage_reads::Origin;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
+
+/// Why a front could not be read: the two refusals reading one can meet, in a
+/// form every reader waiting on that read can be handed as the reader met it.
+#[derive(Debug, Clone)]
+pub(crate) enum FrontRefusal {
+    /// Storage failed, or answered short.
+    Storage(Error),
+    /// The header is not one, or declares lengths the object cannot hold.
+    Format(FormatError),
+}
+
+impl From<Error> for FrontRefusal {
+    fn from(error: Error) -> Self {
+        Self::Storage(error)
+    }
+}
+
+impl From<FormatError> for FrontRefusal {
+    fn from(error: FormatError) -> Self {
+        Self::Format(error)
+    }
+}
+
+impl From<FrontRefusal> for FetchError {
+    fn from(refusal: FrontRefusal) -> Self {
+        match refusal {
+            FrontRefusal::Storage(error) => Self::Storage(error),
+            FrontRefusal::Format(error) => Self::Format(error),
+        }
+    }
+}
 
 /// The header and the meta section, read off the front of the object as it
 /// arrived, for [`outline`] to open.
@@ -34,7 +67,7 @@ pub(super) async fn front(
     retry: &RetryPolicy,
     object: &ObjectRef,
     object_len: u64,
-) -> FetchResult<Vec<u8>> {
+) -> std::result::Result<Vec<u8>, FrontRefusal> {
     let mut front = ranged(store, retry, object, 0..Header::LEN as u64).await?;
     let front_len = ContainerOutline::prefix_len(&front)?;
     within_object(&(0..front_len), object_len)?;
@@ -44,12 +77,19 @@ pub(super) async fn front(
 }
 
 /// The same front, out of `memory` where it keeps this Container's, and read
-/// and kept there where it does not.
+/// and kept there where it does not — or, where another run is reading it
+/// already, out of that read once it lands. Answers with where it came from.
 ///
 /// A Container object never changes once committed (spec: FM-2, CP-11), so the
 /// bytes kept are the object's own; they are opened under the key each time, as
 /// bytes read from Storage are. Kept only once they have opened, so a front
 /// that would not authenticate is read again rather than remembered.
+///
+/// A read under way is joined whoever made it — a page fetch waits on the read
+/// ahead a listing set going, and a read ahead on the page fetch — and what it
+/// came to is what the waiter gets: the bytes, which it opens under its own
+/// key, or the same refusal the reader met. A reader dropped before it landed
+/// anything leaves the read to the waiter, which then makes it itself.
 pub(in crate::fetch) async fn outline(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
@@ -58,20 +98,56 @@ pub(in crate::fetch) async fn outline(
     object: &ObjectRef,
     object_len: u64,
     key: &ContainerKey,
-) -> FetchResult<ContainerOutline> {
-    if let Some(kept) = memory.and_then(|memory| memory.front(container_id)) {
-        debug!(
-            container = %container_id,
-            "the Container's front is kept from an earlier fetch, so it is not read again",
-        );
-        return Ok(ContainerOutline::open(&kept, key)?);
+) -> FetchResult<(ContainerOutline, Origin)> {
+    let Some(memory) = memory else {
+        let read = front(store, retry, object, object_len).await?;
+        return Ok((ContainerOutline::open(&read, key)?, Origin::Read));
+    };
+    loop {
+        let flight = match memory.front_of(container_id) {
+            Turn::Kept(kept) => {
+                debug!(
+                    container = %container_id,
+                    "the Container's front is kept from an earlier fetch, so it is not read again",
+                );
+                return Ok((ContainerOutline::open(&kept, key)?, Origin::Kept));
+            }
+            Turn::Join(waiter) => match waiter.landed().await {
+                Some(landed) => {
+                    debug!(
+                        container = %container_id,
+                        read = landed.is_ok(),
+                        "the Container's front was being read already, so this fetch waited for that read",
+                    );
+                    let landed = landed?;
+                    return Ok((ContainerOutline::open(&landed, key)?, Origin::Joined));
+                }
+                None => {
+                    debug!(
+                        container = %container_id,
+                        "the read of the Container's front this fetch waited for was dropped, so it reads the front itself",
+                    );
+                    continue;
+                }
+            },
+            Turn::Read(flight) => flight,
+        };
+        let read = match front(store, retry, object, object_len).await {
+            Ok(read) => Arc::<[u8]>::from(read),
+            Err(refusal) => {
+                flight.land(Err(refusal.clone()));
+                return Err(refusal.into());
+            }
+        };
+        let outline = ContainerOutline::open(&read, key);
+        if outline.is_ok() {
+            memory.remember_front(container_id, Arc::clone(&read));
+        }
+        // The bytes as they arrived, opened or not: a waiter opens them under
+        // its own key, and meets the same refusal this did if they do not.
+        flight.land(Ok(read));
+        return Ok((outline?, Origin::Read));
     }
-    let read = front(store, retry, object, object_len).await?;
-    let outline = ContainerOutline::open(&read, key)?;
-    if let Some(memory) = memory {
-        memory.remember_front(container_id, read.into());
-    }
-    Ok(outline)
 }
 
 /// Whether an extent of the object lies inside what the catalog records the
@@ -82,9 +158,12 @@ pub(in crate::fetch) async fn outline(
 /// header declares. It goes to the inner channel, the Library's, because the
 /// length it is held against is the committed one (spec: FM-15) and no second
 /// request would make the object any longer.
-pub(super) fn within_object(extent: &Range<u64>, object_len: u64) -> FetchResult<()> {
+pub(super) fn within_object(
+    extent: &Range<u64>,
+    object_len: u64,
+) -> std::result::Result<(), FormatError> {
     if extent.end > object_len {
-        return Err(FetchError::Format(FormatError::Truncated));
+        return Err(FormatError::Truncated);
     }
     Ok(())
 }

@@ -97,7 +97,7 @@ pub(crate) fn register_root(root: &Path) -> RootMarkerId {
 pub(crate) fn unopenable_catalog(_: &Path) -> coffret_usecase::IndexResult<()> {
     Err(coffret_usecase::IndexError::Backend {
         operation: "opening the Index file",
-        cause: Box::new(std::io::Error::other("the disk refused the catalog's file")),
+        cause: std::sync::Arc::new(std::io::Error::other("the disk refused the catalog's file")),
     })
 }
 

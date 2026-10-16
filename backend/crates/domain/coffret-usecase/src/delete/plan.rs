@@ -195,7 +195,9 @@ pub(super) async fn plan(
 fn unheld(container_id: ContainerId) -> IndexError {
     IndexError::UnreadableCatalog {
         operation: "reading the Containers a deletion touches",
-        cause: format!("an Entry names Container {container_id}, which the catalog does not hold")
-            .into(),
+        cause: Box::<dyn std::error::Error + Send + Sync>::from(format!(
+            "an Entry names Container {container_id}, which the catalog does not hold"
+        ))
+        .into(),
     }
 }

@@ -12,7 +12,8 @@
 //! The listing never waits for it. It is answered out of the catalog, and what
 //! is read here is read after the answer has been handed over, on a task of its
 //! own; a read that fails is said and forgotten, because the fetch that wants
-//! the front reads it again and is who answers for it.
+//! the front is who answers for it. A page opened while these reads are under
+//! way waits for them rather than reading the same objects a second time.
 
 use std::sync::Arc;
 
@@ -26,8 +27,9 @@ use crate::state::ServerState;
 /// than sleep on them.
 ///
 /// Nothing about the Library and nothing a browser is told: these reads finish
-/// on their own, and whoever opens a page before they have simply reads the
-/// front itself.
+/// on their own, and whoever opens a page before they have waits for the one
+/// read of the listing, key table or front under way rather than making it
+/// again.
 pub struct FrontsAhead {
     in_flight: watch::Sender<usize>,
 }

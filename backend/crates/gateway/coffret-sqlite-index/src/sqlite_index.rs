@@ -199,7 +199,7 @@ fn create_owner_only(path: &Path) -> IndexResult<()> {
         Err(cause) if cause.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
         Err(cause) => Err(IndexError::Backend {
             operation: "creating the Index file",
-            cause: Box::new(cause),
+            cause: Arc::new(cause),
         }),
     }
 }
@@ -224,7 +224,7 @@ async fn join<T>(
         Ok(outcome) => outcome,
         Err(error) => Err(IndexError::Backend {
             operation,
-            cause: Box::new(error),
+            cause: Arc::new(error),
         }),
     }
 }

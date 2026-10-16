@@ -112,7 +112,7 @@ impl Index for RefusingIndex {
         if self.refusing.load(Ordering::SeqCst) {
             return Err(IndexError::Backend {
                 operation: "reading the mappings",
-                cause: Box::new(std::io::Error::other(
+                cause: std::sync::Arc::new(std::io::Error::other(
                     "the catalog's file went away under the process",
                 )),
             });

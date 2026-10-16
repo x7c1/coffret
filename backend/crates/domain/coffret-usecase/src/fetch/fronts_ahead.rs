@@ -11,6 +11,7 @@ use crate::fetch::fetch_memory::FetchMemory;
 use crate::fetch::fronts_request::FrontsRequest;
 use crate::fetch::parcel_read::front;
 use crate::fetch::run::envelope;
+use crate::fetch::storage_reads::Origin;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
@@ -69,8 +70,9 @@ pub async fn read_fronts(
         // A Library that has committed nothing has no Container to open.
         return Ok(0);
     };
-    let listing = listed(store, index, &policy.retry, memory, &checkpoint).await?;
-    let (key_table, _) = key_table(
+    let (listing, listing_origin) =
+        listed(store, index, &policy.retry, memory, &checkpoint).await?;
+    let (key_table, _, key_table_origin) = key_table(
         store,
         keys,
         &policy.retry,
@@ -115,6 +117,12 @@ pub async fn read_fronts(
         read,
         "read the fronts of a listed folder's Containers ahead of a fetch",
     );
+    debug!(
+        listings = listing_origin.reads(),
+        key_tables = key_table_origin.reads(),
+        fronts = read,
+        "what a read of fronts ahead read from Storage",
+    );
     Ok(read)
 }
 
@@ -130,9 +138,11 @@ struct Ahead<'a> {
 
 impl Ahead<'_> {
     /// Reads and keeps the front of the Container `summary` describes, and
-    /// says whether it did: a Container the Keyring records as key-lost has a
-    /// front nothing can open, and is left for the fetch that reports it
-    /// (spec: KL-7, KL-17).
+    /// says whether it read it: a Container the Keyring records as key-lost
+    /// has a front nothing can open, and is left for the fetch that reports it
+    /// (spec: KL-7, KL-17); one a fetch is reading already is waited for
+    /// rather than read a second time, and one kept since it was chosen is
+    /// not read at all.
     async fn front_of(&self, summary: &ContainerSummary) -> FetchResult<bool> {
         let container_id = summary.id;
         let Some(envelope) = envelope(self.key_table, container_id)? else {
@@ -144,7 +154,7 @@ impl Ahead<'_> {
             .or_else(|| self.listing.container(container_id))
             .ok_or(FetchError::ContainerUnreachable { container_id })?;
         let key = unwrap_container_key(self.keys.container_wrap(), &container_id, &envelope)?;
-        front::outline(
+        let (_, origin) = front::outline(
             self.store,
             self.retry,
             Some(self.memory),
@@ -154,6 +164,6 @@ impl Ahead<'_> {
             &key,
         )
         .await?;
-        Ok(true)
+        Ok(origin == Origin::Read)
     }
 }

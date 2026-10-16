@@ -44,7 +44,7 @@ impl<'a> RefusingIndex<'a> {
 fn refused() -> IndexError {
     IndexError::Backend {
         operation: "refresh",
-        cause: Box::new(std::io::Error::other(
+        cause: std::sync::Arc::new(std::io::Error::other(
             "the catalog was interrupted after the batch's record landed",
         )),
     }
