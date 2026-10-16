@@ -79,7 +79,7 @@ a row to open it, so they double-click, and any that read the removed text.
 
 ### Before merge (verified outside the check command)
 
-- [ ] In Playwright's Chromium against the agent's Library: the mark column
+- [x] In Playwright's Chromium against the agent's Library: the mark column
       shows no ellipsis, a double-click opens a book, a click only selects,
       and deleting a book from the tree's `⋮` works.
 - [ ] The marks, icon and selection highlight look right — needs a person:
