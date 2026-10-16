@@ -1,6 +1,7 @@
 use std::error;
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::ffi;
@@ -18,7 +19,7 @@ use rusqlite::ffi;
 pub(crate) fn classify(operation: &'static str) -> impl Fn(rusqlite::Error) -> IndexError {
     move |error| IndexError::Backend {
         operation,
-        cause: Box::new(error),
+        cause: Arc::new(error),
     }
 }
 
@@ -132,7 +133,7 @@ impl error::Error for ObjectOnSpoolingRow {}
 pub(crate) fn object_on_spooling_row(operation: &'static str) -> IndexError {
     IndexError::UnreadableCatalog {
         operation,
-        cause: Box::new(ObjectOnSpoolingRow),
+        cause: Arc::new(ObjectOnSpoolingRow),
     }
 }
 
@@ -158,7 +159,7 @@ pub(crate) fn unreadable(
 ) -> IndexError {
     IndexError::UnreadableCatalog {
         operation,
-        cause: Box::new(UnreadableValue::new(expected, found)),
+        cause: Arc::new(UnreadableValue::new(expected, found)),
     }
 }
 
@@ -171,7 +172,7 @@ pub(crate) fn unreadable(
 pub(crate) fn negative(operation: &'static str, column: &'static str, value: i64) -> IndexError {
     IndexError::UnreadableCatalog {
         operation,
-        cause: Box::new(NegativeInteger { column, value }),
+        cause: Arc::new(NegativeInteger { column, value }),
     }
 }
 
@@ -186,6 +187,6 @@ pub(crate) fn unreadable_model(
 ) -> impl Fn(coffret_model::Error) -> IndexError {
     move |error| IndexError::UnreadableCatalog {
         operation,
-        cause: Box::new(error),
+        cause: Arc::new(error),
     }
 }

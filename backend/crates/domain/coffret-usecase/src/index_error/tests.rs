@@ -94,7 +94,9 @@ fn a_value_no_column_can_hold_is_named_with_the_number_and_the_column() {
 fn what_the_index_store_reported_is_named_by_its_operation() {
     let error = IndexError::Backend {
         operation: "recording a mapping",
-        cause: "unable to open database file /home/someone/library/index.db".into(),
+        cause: std::sync::Arc::new(std::io::Error::other(
+            "unable to open database file /home/someone/library/index.db",
+        )),
     };
 
     assert_eq!(

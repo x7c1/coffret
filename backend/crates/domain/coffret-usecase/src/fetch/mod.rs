@@ -251,6 +251,8 @@ mod scratch_guard;
 
 mod select;
 
+mod storage_reads;
+
 mod surfaced;
 pub use surfaced::Surfaced;
 

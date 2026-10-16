@@ -1,5 +1,6 @@
 use std::error;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use coffret_model::{ContainerId, EntryPath};
 
@@ -15,14 +16,14 @@ pub type IndexResult<T> = std::result::Result<T, IndexError>;
 /// mappings, materialization records, or pending provenance. Failures therefore
 /// distinguish an unreadable layout, a conflicting state, backend failure, and
 /// temporary ownership contention without advising that the whole file be lost.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum IndexError {
     /// Another sync, freeze or deletion owns this device's pending rows. Retry
     /// after it finishes; its in-flight ciphertext must not be reclaimed
     /// (spec: OC-2).
     PendingRowsBusy {
         /// The lock implementation's refusal, kept for inspection.
-        cause: Box<dyn error::Error + Send + Sync>,
+        cause: Arc<dyn error::Error + Send + Sync>,
     },
     /// The Index has never been given a committed state to stand on.
     ///
@@ -133,7 +134,7 @@ pub enum IndexError {
         /// What the Index was doing.
         operation: &'static str,
         /// What could not be read, as whatever refused it reported.
-        cause: Box<dyn error::Error + Send + Sync>,
+        cause: Arc<dyn error::Error + Send + Sync>,
     },
     /// The store the catalog is kept in failed.
     ///
@@ -143,7 +144,7 @@ pub enum IndexError {
         /// What the Index was doing.
         operation: &'static str,
         /// What the store reported.
-        cause: Box<dyn error::Error + Send + Sync>,
+        cause: Arc<dyn error::Error + Send + Sync>,
     },
 }
 

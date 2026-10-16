@@ -704,7 +704,7 @@ fn a_library_that_moved_underneath_a_commit_is_a_conflict_from_every_flow() {
 #[test]
 fn pending_rows_another_run_owns_are_a_conflict_from_every_flow_that_owns_them() {
     let busy = || coffret_usecase::IndexError::PendingRowsBusy {
-        cause: Box::new(std::io::Error::new(
+        cause: std::sync::Arc::new(std::io::Error::new(
             std::io::ErrorKind::WouldBlock,
             "the pending rows are locked",
         )),

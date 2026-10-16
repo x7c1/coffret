@@ -30,7 +30,7 @@ pub type CommitResult<T> = std::result::Result<T, CommitError>;
 /// variants carry ([`UnusableReplica`], [`UnrepairedReplica`],
 /// [`ControlObjectFault`]): a caller decides from the variant and the fields it
 /// names, never by comparing two errors.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CommitError {
     /// Storage failed, or answered something the flow cannot commit on.
     Storage(Error),
@@ -270,7 +270,7 @@ pub enum CommitError {
 /// reading [`CommitError::KeyringUnreadable`] tells a Keyring that has lost
 /// replicas from a provider that was merely having a bad minute by which of the
 /// two it finds.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnusableReplica {
     /// The commitment declares the replica and Storage does not hold it.
     Absent,
@@ -325,7 +325,7 @@ pub enum UnusableReplica {
 /// The other two are ordinary failures of the write KL-14 defines: Storage
 /// refused it, or it was acknowledged and the read-back that confirms it found
 /// something that is still not a valid replica.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnrepairedReplica {
     /// Storage would not hand over the object this position holds.
     ///
@@ -355,7 +355,7 @@ pub enum UnrepairedReplica {
 /// It is what [`CommitError::CorruptControlObject`] carries alongside the name
 /// the object was read under, so the reason is a value a caller can act on and
 /// not a sentence it would have to read.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ControlObjectFault {
     /// The format layer would not hand a value back for it.
     ///

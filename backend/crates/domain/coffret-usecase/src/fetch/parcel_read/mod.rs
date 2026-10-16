@@ -38,6 +38,7 @@ use crate::fetch::fetch_memory::FetchMemory;
 use crate::fetch::kept_parcels::KeptParcels;
 use crate::fetch::publication::Publication;
 use crate::fetch::reading::Reading;
+use crate::fetch::storage_reads::Origin;
 use crate::fetch::target::Target;
 use crate::fetch::unheld_parcel::UnheldParcel;
 use crate::index::Index;
@@ -67,6 +68,10 @@ pub(super) struct Stroke {
     pub(super) alongside: Vec<EntryPath>,
     /// The kept parcels that turned out not to be held, and were read again.
     pub(super) unheld: Vec<UnheldParcel>,
+    /// Where the Container's front came from.
+    pub(super) front: Origin,
+    /// How many parcels were asked of Storage.
+    pub(super) parcels_read: u64,
 }
 
 /// One Entry wanted out of a Container, the Entries that can come with it, and

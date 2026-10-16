@@ -57,7 +57,7 @@ impl ParcelRead<'_> {
             .ok_or(FetchError::ContainerUnreachable { container_id })?;
         let key = unwrap_container_key(reading.keys.container_wrap(), &container_id, envelope)?;
         let object_len = summary.ciphertext_len.get();
-        let outline = front::outline(
+        let (outline, front) = front::outline(
             reading.store,
             reading.retry,
             self.memory,
@@ -112,6 +112,8 @@ impl ParcelRead<'_> {
             placed: false,
             alongside: Vec::new(),
             unheld: Vec::new(),
+            front,
+            parcels_read: 0,
         };
         let herald = Herald::new(self.publication, self.short);
         let mut read_from_storage = 0u64;
@@ -193,6 +195,7 @@ impl ParcelRead<'_> {
         }
 
         stroke.unheld = herald.into_unheld();
+        stroke.parcels_read = read_from_storage;
         let_go::let_go_settled(self.index, self.kept, container_id, outline.entries()).await?;
         debug!(
             container = %container_id,

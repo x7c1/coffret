@@ -125,7 +125,7 @@ impl State {
         )
         .map_err(|cause| IndexError::UnreadableCatalog {
             operation: "reading the Library-wide state",
-            cause: Box::new(cause),
+            cause: std::sync::Arc::new(cause),
         })
     }
 

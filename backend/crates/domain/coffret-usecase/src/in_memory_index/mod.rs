@@ -64,7 +64,7 @@ impl Index for InMemoryIndex {
             .try_lock_owned()
             .map(crate::PendingRowsGuard::holding)
             .map_err(|cause| crate::IndexError::PendingRowsBusy {
-                cause: Box::new(cause),
+                cause: std::sync::Arc::new(cause),
             })
     }
 

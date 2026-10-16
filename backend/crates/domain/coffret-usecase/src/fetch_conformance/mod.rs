@@ -62,6 +62,11 @@ pub use conflicts::{
     a_witnessed_deletion_is_surfaced_and_not_refetched,
 };
 
+// Not a case of the backend suite: a page fetch and a read ahead at once,
+// over the in-memory store alone.
+#[cfg(test)]
+mod coalescing;
+
 mod counting_store;
 
 mod fetch_under_test;

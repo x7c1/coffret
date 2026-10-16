@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use coffret_model::{EntryPath, IndexCheckpoint, KeyTable, KeyringCommitment};
-use tracing::{debug, info};
+use coffret_model::EntryPath;
+use tracing::info;
 
-use crate::commit::{catch_up, read_committed, ControlListing, ShortKeyring};
+use crate::commit::{catch_up, ControlListing};
 use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -12,13 +12,16 @@ use crate::fetch::parcel_read::let_go::let_go_departed;
 use crate::fetch::parcel_read::ParcelRead;
 use crate::fetch::reading::Reading;
 use crate::fetch::run::envelope;
+use crate::fetch::storage_reads::{Origin, StorageReads};
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::{select, translate};
-use crate::index::Index;
-use crate::library_keys::LibraryKeys;
-use crate::object_store::ObjectStore;
 use crate::progress::{Phase, Step};
-use crate::retry::RetryPolicy;
+
+mod key_table;
+pub(super) use key_table::key_table;
+
+mod listed;
+pub(super) use listed::listed;
 
 /// Makes one Entry available on this device, reading only the parcels of its
 /// Container that hold it.
@@ -104,6 +107,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         memory,
     } = request;
 
+    let mut reads = StorageReads::default();
     let catalog = match memory {
         None => {
             // The same phases a folder fetch says, in the same order, so a
@@ -112,6 +116,9 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
             // joined it is still the longest part of the run.
             progress.step(Step::begun(Phase::CatchingUp));
             let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+            // The catch-up's own walk is the listing this run reaches objects
+            // through.
+            reads.listing(Origin::Read);
             Catalog::CaughtUp(Arc::new(caught.listing))
         }
         // The catalog as it stands: whoever keeps the memory keeps the catalog
@@ -131,7 +138,10 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     let listing = match catalog {
         Catalog::CaughtUp(listing) => listing,
         Catalog::AsItStands(memory) => {
-            listed(store, index, &policy.retry, memory, &checkpoint).await?
+            let (listing, origin) =
+                listed(store, index, &policy.retry, memory, &checkpoint).await?;
+            reads.listing(origin);
+            listing
         }
     };
 
@@ -142,15 +152,15 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
     let mut selection = select::select(index, destinations, vec![target]).await?;
     if let Some(surfaced) = selection.surfaced.pop() {
-        finished(&path, "surfaced");
+        finished(&path, "surfaced", &reads);
         return Ok(EntryFetchOutcome::of(EntryFetch::Surfaced(surfaced)));
     }
     let Some(target) = selection.wanted.pop() else {
-        finished(&path, "already present");
+        finished(&path, "already present", &reads);
         return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
     };
 
-    let (key_table, short) = key_table(
+    let (key_table, short, origin) = key_table(
         store,
         keys,
         &policy.retry,
@@ -159,6 +169,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         memory,
     )
     .await?;
+    reads.key_table(origin);
     let container_id = target.location.container_id;
     // One Container, counted as a folder fetch counts its Containers: said
     // before the parcel read starts, so a caller has a line up while the read
@@ -169,7 +180,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         // reported rather than read (spec: KL-7, KL-17, RV-2, RV-7). A Container
         // nothing can open is one fewer to wait for, as a folder fetch counts it.
         progress.step(Step::new(Phase::Fetching, 1, 1));
-        finished(&path, "key lost");
+        finished(&path, "key lost", &reads);
         return Ok(EntryFetchOutcome {
             short,
             ..EntryFetchOutcome::of(EntryFetch::Surfaced(Surfaced::KeyLost {
@@ -208,12 +219,14 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     };
     let stroke = read.read_entry(&summary, &envelope, target).await?;
     progress.step(Step::new(Phase::Fetching, 1, 1));
+    reads.front(stroke.front);
+    reads.parcels(stroke.parcels_read);
 
     let fetch = if stroke.placed {
-        finished(&path, "placed");
+        finished(&path, "placed", &reads);
         EntryFetch::Placed
     } else {
-        finished(&path, "cancelled");
+        finished(&path, "cancelled", &reads);
         EntryFetch::Cancelled
     };
     Ok(EntryFetchOutcome {
@@ -232,93 +245,19 @@ enum Catalog<'a> {
     AsItStands(&'a FetchMemory),
 }
 
-/// The listing the run reaches objects through, out of `memory` where it was
-/// taken at the head the catalog stands at.
-///
-/// Where it was not — nothing has been kept since the Library was opened, or
-/// the catalog has moved since, by a commit of this device's own or a
-/// catch-up that kept nothing — Storage is listed once, and what it says is
-/// kept for the next run. Listing is not catching up: the catalog stays where
-/// it is, and the listing serves only as the handles the objects it names are
-/// reached by (spec: FM-3, FM-12).
-pub(super) async fn listed(
-    store: &dyn ObjectStore,
-    index: &dyn Index,
-    retry: &RetryPolicy,
-    memory: &FetchMemory,
-    checkpoint: &IndexCheckpoint,
-) -> FetchResult<Arc<ControlListing>> {
-    let head = Some(checkpoint.head_generation());
-    if let Some(listing) = memory.listing_at(head) {
-        return Ok(listing);
-    }
-    debug!("no listing kept at the head the catalog stands at, so Storage is listed");
-    let listing = Arc::new(ControlListing::read(store, retry).await?);
-    memory
-        .remember_listing(index, Arc::clone(&listing), head)
-        .await?;
-    Ok(listing)
-}
-
-/// The committed key table the checkpoint names, and what reading it found of
-/// the set.
-///
-/// One valid replica carries the whole Keyring, so the count is redundancy and
-/// never a quorum (spec: KL-6). The finding is reported here and not held: a
-/// fetch writes nothing, so nothing later in this run examines the set the key
-/// table came from. It goes on the outcome as well, for whoever asked for the
-/// Entry (spec: KL-15).
-///
-/// Out of `memory`, where it keeps the table read under this very commitment:
-/// a commitment names its set by digest, so a table read under it is the table
-/// every replica of it carries (spec: KL-1, KL-6). The finding that read made
-/// goes on this outcome too — the set is as short as it was — and is not said
-/// again in the log, where it has been said once already. It is reported only
-/// until the set may have been repaired: a repair keeps the commitment
-/// (spec: KL-13, KL-14), so the memory forgets a table kept with that finding
-/// at the next catch-up and any table once a write run of this process is over,
-/// and does not keep a table whose read began before either of those forgets;
-/// the fetch after that reads the set again and reports it short only if that
-/// read finds it so (spec: KL-15).
-pub(super) async fn key_table(
-    store: &dyn ObjectStore,
-    keys: &LibraryKeys,
-    retry: &RetryPolicy,
-    listing: &ControlListing,
-    commitment: &KeyringCommitment,
-    memory: Option<&FetchMemory>,
-) -> FetchResult<(Arc<KeyTable>, Option<ShortKeyring>)> {
-    if let Some(kept) = memory.and_then(|memory| memory.key_table_for(commitment)) {
-        return Ok(kept);
-    }
-    // Taken before the replicas are read, so that a write run of this process
-    // repairing the set while this read is under way leaves what it found
-    // unkept rather than put back after the repair forgot it (spec: KL-15).
-    let read_under = memory.map(FetchMemory::key_table_generation);
-    let (key_table, short) = read_committed(store, keys.control(), retry, listing, commitment)
-        .await?
-        .reported();
-    let key_table = Arc::new(key_table);
-    if let (Some(memory), Some(read_under)) = (memory, read_under) {
-        memory.remember_key_table(
-            read_under,
-            commitment.clone(),
-            Arc::clone(&key_table),
-            short,
-        );
-    }
-    Ok((key_table, short))
-}
-
 /// Records what one partial fetch came to.
 ///
 /// The Entry Path never reaches a diagnostic event, so what is recorded is
 /// the verdict and how long the path was — enough to read a run's account of
 /// itself without naming what the user has.
-fn finished(path: &EntryPath, verdict: &'static str) {
+///
+/// What it read from Storage on the way goes beside it at debug level, so the
+/// round trips of one page open can be read off the log.
+fn finished(path: &EntryPath, verdict: &'static str, reads: &StorageReads) {
     info!(
         verdict,
         path_len = path.as_str().len(),
         "a partial fetch finished",
     );
+    reads.log(verdict);
 }

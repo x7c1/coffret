@@ -1,6 +1,7 @@
 use std::fs::{OpenOptions, TryLockError};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use coffret_usecase::{IndexError, IndexResult, PendingRowsGuard};
 
@@ -17,15 +18,15 @@ pub(crate) fn take(path: &Path) -> IndexResult<PendingRowsGuard> {
         .open(path)
         .map_err(|cause| IndexError::Backend {
             operation: "opening the pending-row ownership lock",
-            cause: Box::new(cause),
+            cause: Arc::new(cause),
         })?;
     file.try_lock().map_err(|cause| match cause {
         TryLockError::WouldBlock => IndexError::PendingRowsBusy {
-            cause: Box::new(cause),
+            cause: Arc::new(cause),
         },
         TryLockError::Error(cause) => IndexError::Backend {
             operation: "locking pending rows",
-            cause: Box::new(cause),
+            cause: Arc::new(cause),
         },
     })?;
     Ok(PendingRowsGuard::holding(file))
@@ -36,7 +37,7 @@ pub(crate) fn take(path: &Path) -> IndexResult<PendingRowsGuard> {
 pub(crate) fn path_for(path: &Path) -> IndexResult<PathBuf> {
     let path = path.canonicalize().map_err(|cause| IndexError::Backend {
         operation: "resolving the pending-row ownership path",
-        cause: Box::new(cause),
+        cause: Arc::new(cause),
     })?;
     let mut name = path.into_os_string();
     name.push(".pending.lock");
