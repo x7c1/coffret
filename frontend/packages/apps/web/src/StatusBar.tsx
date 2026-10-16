@@ -32,9 +32,9 @@ import { latestFirst, TIED } from './finished';
 import { size } from './humanize';
 import { ranOut } from './ranOut';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
-import { ASKING } from './refresh';
 import { offeredAgain, offersAgain, retryable, type Pressed, type Trouble } from './retry';
 import { COLOR } from './theme';
+import { SyncIcon } from './SyncIcon';
 import { runOf, waitsFor, type Turns } from './turns';
 import type { Asked } from './useAsked';
 
@@ -46,11 +46,12 @@ import type { Asked } from './useAsked';
  * them in, a book being packed — with the offer of a second attempt where one
  * of those stopped.
  *
- * And one control that is not about work already running: asking the Library
- * what is new. It is here because it is about the Library as a whole rather
- * than about the folder on the screen, which is what the status bar names —
- * and because nothing else on this page would ever ask, there being no polling
- * of the remote head.
+ * And one control that is not about work already running: the sync icon,
+ * which asks the Library what is new. It is here because it is about the
+ * Library as a whole rather than about the folder on the screen, which is what
+ * the status bar names — and because nothing else on this page catches up: the
+ * explorer looks at the remote head on its own, and what that look finds is
+ * only the icon's colour.
  *
  * There is no control to lock the Library. The server locks it after the idle
  * interval, and stopping the server ends its hold on the keys; a button that did
@@ -137,12 +138,18 @@ export function StatusBar({
   /**
    * Asking the Library what is new, and what the last asking came to.
    *
-   * One value rather than four props, because the four are one control: the
-   * button, whether it is busy, what it found, and what refused it.
+   * One value rather than five props, because the five are one control: the
+   * icon, whether it is busy, whether changes are waiting, what it found, and
+   * what refused it.
    */
   refresh: {
     /** Whether a refresh is running right now. */
     running: boolean;
+    /**
+     * Whether the last look at the remote head said another device has
+     * committed since this one caught up.
+     */
+    waiting: boolean;
     /** What the last one came to, and `null` before any has run. */
     said: string | null;
     /** What refused the last one, and `null` where none was. */
@@ -388,9 +395,9 @@ export function StatusBar({
           clears it stands after the refusal: pressing the buttons above again
           would only meet the same refusal until the permission is renewed. */}
       {expired && reconnect !== null && <ReconnectOffer offer={reconnect} />}
-      {/* The control that asks what is new stands at the far end, apart from the
-          three offers of a second attempt — those are made from a failure and go
-          away with it, and this is always there.
+      {/* The sync icon that asks what is new stands at the far end, apart from
+          the three offers of a second attempt — those are made from a failure
+          and go away with it, and this is always there.
 
           Its answer is said beside it rather than in the line above, because a
           refresh that is over has nothing to stop saying: in the line it would
@@ -403,13 +410,7 @@ export function StatusBar({
         ) : (
           refresh.said !== null && <span>{refresh.said}</span>
         )}
-        <button
-          onClick={refresh.ask}
-          disabled={refresh.running}
-          style={{ ...RETRY, cursor: refresh.running ? 'default' : 'pointer' }}
-        >
-          {refresh.running ? 'looking…' : ASKING}
-        </button>
+        <SyncIcon running={refresh.running} waiting={refresh.waiting} onPress={refresh.ask} />
       </span>
     </footer>
   );
@@ -769,7 +770,8 @@ function toneOf(status: string | undefined, findings: number): string {
 
 /**
  * What every button along this bar is drawn as: the three offers of a second
- * attempt, the one that asks the Library what is new, and the unlock.
+ * attempt and the unlock. The sync icon that asks the Library what is new is
+ * the one drawn otherwise, as an icon with no frame (see `SyncIcon`).
  */
 const RETRY = {
   border: `1px solid ${COLOR.border}`,

@@ -35,6 +35,12 @@ export const COLOR = {
   warn: '#c9a227',
   /** A refusal. */
   refused: '#c96a5a',
+  /**
+   * The sync icon while the Library has a head this device has not caught up
+   * with: brighter than `remote`, since what it says is that a press would
+   * bring something in.
+   */
+  newer: '#4fa3e6',
   /** Under a banner drawn in `added`: about files on their way into the Library. */
   addedGround: '#12222a',
   /** Under a banner drawn in `warn`. */

@@ -362,6 +362,9 @@ impl fmt::Display for Error {
             Self::CatchUp { .. } => {
                 f.write_str("the catalog was not brought to the Library's head")
             }
+            Self::RemoteHeadNotRead { .. } => {
+                f.write_str("the Library's head was not compared with the catalog's")
+            }
             Self::FirstHead { .. } => f.write_str("the Library's first head was not written"),
             Self::LibraryNotJoined { name, step, .. } => {
                 write!(f, "the Library {name:?} was not joined: {step} failed")

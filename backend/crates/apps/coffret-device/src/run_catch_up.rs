@@ -1,8 +1,11 @@
 use coffret_model::Passphrase;
-use coffret_usecase::catch_up::{catch_up_catalog, CatchUpOutcome, CatchUpRequest};
+use coffret_usecase::catch_up::{
+    catch_up_catalog, remote_head, CatchUpOutcome, CatchUpRequest, RemoteHead,
+};
+use coffret_usecase::commit::CommitPolicy;
 use tracing::info;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
@@ -42,6 +45,32 @@ impl OpenLibrary {
         self.let_go_parcels().await;
         Ok(outcome)
     }
+
+    /// Whether the Library has a head this device's catalog has not caught up
+    /// with, asked of the listing's names alone.
+    ///
+    /// The question before [`catch_up`](Self::catch_up), for a caller that
+    /// wants to say there is something new without bringing it in: no object is
+    /// read, so neither the Keyring nor any key is reached for, and the catalog
+    /// is left where it stands (spec: CK-9, FM-12). A listing that names the
+    /// catalog's own head is kept for the Entry fetches after it, as the one a
+    /// catch-up walks is.
+    ///
+    /// Not logged at `info`, unlike the catch-up: a process asks this on a
+    /// timer, and a line for every answer would bury the runs that changed
+    /// something.
+    pub async fn remote_head(&self) -> Result<RemoteHead> {
+        remote_head(
+            self.store.as_ref(),
+            self.index.as_ref(),
+            &CommitPolicy::default().retry,
+            Some(&self.fetch_memory),
+        )
+        .await
+        .map_err(|cause| Error::RemoteHeadNotRead {
+            cause: Box::new(cause),
+        })
+    }
 }
 
 /// Brings the catalog of the Library called `name` to its head.
@@ -66,6 +95,7 @@ mod tests {
     use coffret_usecase::sync::{sync_folders, SyncRequest};
     use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 
+    use super::RemoteHead;
     use crate::open_library::OpenLibrary;
     use crate::testing::local_fs;
 
@@ -207,5 +237,62 @@ mod tests {
         assert!(!again.advanced(), "there was nothing new: {again:?}");
         assert_eq!(again.gained(), 0);
         assert_eq!(again.to, outcome.to);
+    }
+
+    // The look before a catch-up: a device that has replayed nothing sees a
+    // newer head in a Library that has committed, and saying so moves nothing —
+    // the catalog still stands at no committed state. Once a catch-up lands it
+    // is current.
+    #[tokio::test]
+    async fn the_remote_head_says_newer_until_a_catch_up_lands() {
+        let store: Arc<dyn ObjectStore> = Arc::new(InMemoryStore::new(64));
+        let theirs = tempfile::tempdir().expect("a temporary directory must be available");
+        std::fs::write(theirs.path().join("spring.jpg"), b"spring")
+            .expect("a temporary file is writable");
+        let filled = InMemoryIndex::new();
+        filled
+            .set_mapping(Mapping::new(None, theirs.path().to_path_buf()))
+            .await
+            .expect("a mapping is recorded");
+        sync_folders(SyncRequest::new(
+            store.as_ref(),
+            &filled,
+            &keys(),
+            local_fs().as_ref(),
+            local_fs().as_ref(),
+            local_fs().as_ref(),
+            theirs.path().join("spool"),
+            BatchId::new("run-1"),
+            DeviceTime::from_unix_seconds(1_700_000_000),
+        ))
+        .await
+        .expect("the folder is carried into the Library");
+
+        let library = device(&store, Arc::new(InMemoryIndex::new()));
+        assert_eq!(
+            library
+                .remote_head()
+                .await
+                .expect("the listing is readable"),
+            RemoteHead::Newer,
+        );
+        assert!(
+            library
+                .index
+                .checkpoint()
+                .await
+                .expect("the catalog answers")
+                .is_none(),
+            "looking at the head moved nothing",
+        );
+
+        library.catch_up().await.expect("the head is readable");
+        assert_eq!(
+            library
+                .remote_head()
+                .await
+                .expect("the listing is readable"),
+            RemoteHead::Current,
+        );
     }
 }

@@ -206,6 +206,14 @@
     "entries": 10,
     "gained": 0
   },
+  "remote_head": {
+    "current": {
+      "head": "current"
+    },
+    "newer": {
+      "head": "newer"
+    }
+  },
   "unlock": {
     "already_unlocked": {
       "library": "unlocked",

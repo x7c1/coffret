@@ -228,7 +228,7 @@ function draw({
       onRetryFill={() => undefined}
       onRetrySync={() => undefined}
       onRetryFreeze={() => undefined}
-      refresh={{ running: false, said: null, refused: null, ask: () => undefined }}
+      refresh={{ running: false, waiting: false, said: null, refused: null, ask: () => undefined }}
       reconnect={reconnect}
       locked={locked}
     />,

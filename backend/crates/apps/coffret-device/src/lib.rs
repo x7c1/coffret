@@ -353,8 +353,9 @@ mod catalog_refusal_tests;
 // past it for: the values these calls take and hand back. The Recovery Code is
 // what `create_library` produces, `MappingListing` is what `mappings` returns
 // and a mapping is each one it carries, an Entry Path is what narrows a freeze
-// or a fetch, the five outcomes are what the flows answer with, and a commit
-// outcome is what two of them carry to say the Library changed — with the
+// or a fetch, the five outcomes are what the flows answer with, `RemoteHead` is
+// what the look before a catch-up answers with, and a commit outcome is what
+// two of the five carry to say the Library changed — with the
 // Keyring repair it performed on the way, which KL-15 obliges a shell to
 // surface, as it does the short Keyring a run that repaired nothing read
 // through. The modification time and the Container kind are what a
@@ -397,7 +398,7 @@ pub use coffret_model::{
     Generation, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_model::{ControlObjectKind, ControlObjectName};
-pub use coffret_usecase::catch_up::CatchUpOutcome;
+pub use coffret_usecase::catch_up::{CatchUpOutcome, RemoteHead};
 pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
     CheckpointFailure, CommitError, CommitFailure, CommitOutcome, KeyringRepair, RewrittenReplicas,

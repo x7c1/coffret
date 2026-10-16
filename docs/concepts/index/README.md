@@ -25,9 +25,10 @@ Index loses those local records too; Storage contains no copy of them
 The cached Catalog is as current as the device's last catch-up made it. An
 Index, and its cached Catalog, is **stale** when that catch-up finished and the
 Library's head has moved past it since, because another device committed.
-Nothing on this device knows that until a catch-up, or a read Storage refuses,
-shows it, so a stale Index answers as the Catalog stood when it was last caught
-up (spec: CK-9).
+Nothing on this device knows that until a catch-up, a read Storage refuses, or
+a look at the names of the Library's heads shows it. Such a look reads no
+object and changes nothing, so a stale Index answers as the Catalog stood when
+it was last caught up until a catch-up brings it forward (spec: CK-9, FM-12).
 
 A **held parcel** is a parcel of a Container's chunk sequence this device read
 and keeps on its own disk, beside the spool, so that reading a page a second

@@ -52,6 +52,11 @@
 //! it takes no key and so is not activity — the interval runs out under the very
 //! polling that reports it.
 //!
+//! The look at the remote head is silent too, though it reaches Storage: it
+//! reads object names and no object, so it needs no key, and the explorer asks
+//! it on a timer. It goes through `ServerState::unlocked_unattended`, which is
+//! refused while the Library is locked but records nobody being here.
+//!
 //! How long "long enough" is is a policy parameter and never a constant of this
 //! crate (spec: DK-4). The binary takes it from the command line, with the
 //! environment behind that and a default behind both.

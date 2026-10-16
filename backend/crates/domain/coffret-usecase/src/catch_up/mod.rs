@@ -29,12 +29,23 @@
 //! And it does not repair, prune, checkpoint, or commit. Nothing here writes to
 //! Storage at all, which is what makes it the one flow that is safe to run at
 //! the moment a process starts.
+//!
+//! # Asking without catching up
+//!
+//! Beside it is the question that comes before it: whether there is anything to
+//! catch up with. [`remote_head`] answers it from the listing's object names
+//! and the catalog's checkpoint, reads no object at all, and moves nothing — so
+//! a reader can be told that another device has committed without the catalog
+//! changing under them until they ask for it to.
 
 mod catch_up_outcome;
 pub use catch_up_outcome::CatchUpOutcome;
 
 mod catch_up_request;
 pub use catch_up_request::CatchUpRequest;
+
+mod remote_head;
+pub use remote_head::{remote_head, RemoteHead};
 
 mod run;
 pub use run::catch_up_catalog;

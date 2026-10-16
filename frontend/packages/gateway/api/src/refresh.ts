@@ -28,11 +28,12 @@ export interface Refreshed {
 /**
  * Asks the Library what is new — `POST /api/refresh`.
  *
- * The one control on the screen that reaches Storage because somebody pressed
- * it, and the only way this device hears of what another device committed: there
- * is no polling of the remote head, by design. Until a refresh has run, a device
- * that has just joined has an empty Library to show and a running one shows the
- * Library as it was.
+ * The one control on the screen that catches up because somebody pressed it,
+ * and the only way this device's catalog takes in what another device
+ * committed: [`getRemoteHead`](./remoteHead) can say there is something new,
+ * and never brings it in. Until a refresh has run, a device that has just
+ * joined has an empty Library to show and a running one shows the Library as
+ * it was.
  *
  * It brings over the catalog and never the bytes. Every row it adds is `remote`,
  * and opening one is what fetches it, exactly as before.

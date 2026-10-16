@@ -117,7 +117,7 @@ impl ControlListing {
 
     /// The newest link in the control-head chain, or `None` in a Library that
     /// has committed nothing.
-    pub(super) fn newest_head(&self) -> Option<Generation> {
+    pub(crate) fn newest_head(&self) -> Option<Generation> {
         self.heads.last().copied()
     }
 

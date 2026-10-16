@@ -6,6 +6,7 @@ import {
   getFolders,
   getLibrary,
   getListing,
+  getRemoteHead,
   previewDelete,
   previewFreeze,
   refreshCatalog,
@@ -58,6 +59,7 @@ import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
+import { RemoteHeadLooks } from './remoteHead';
 import { Region, TRY_AGAIN } from './Region';
 import { StatusBar } from './StatusBar';
 import { foldersWith, heldAfter, strandedFolders } from './stranded';
@@ -306,11 +308,55 @@ export function App() {
       unlock();
     }
   }, [custody, prompting, unlock]);
+  // Whether the Library has anything this device has not caught up with, which
+  // is what draws the sync icon as waiting. Looked at as the page comes up,
+  // when the tab comes back in front (below), and every few minutes while it
+  // is shown — and never while a catch-up runs or the Library is locked; that
+  // schedule is [`RemoteHeadLooks`](./remoteHead). A look moves nothing and
+  // takes no key, so it keeps nothing unlocked (spec: DK-4).
+  //
+  // The two refs it reads are declared here rather than beside what keeps
+  // them, because the looks are made here: `looking` is the refresh's guard
+  // below, and `stood` is the catalog standing the server last said, kept by
+  // the effect that reloads when a catch-up lands.
+  const looking = useRef(false);
+  const stood = useRef<CatalogState | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  const [looks] = useState(
+    () =>
+      new RemoteHeadLooks({
+        ask: () => getRemoteHead(),
+        heard: (head) => setWaiting(head === 'newer'),
+        held: () =>
+          looking.current || stood.current === 'catching_up' || held.current === 'locked',
+        shown: () => document.visibilityState === 'visible',
+      }),
+  );
+  useEffect(() => looks.start(), [looks]);
+  // And as an unlock lands. A look is not made while the Library is locked, and
+  // one the page made before it knew was refused and said nothing, so a page
+  // opened onto a locked Library would otherwise show the icon plain for up to
+  // [`LOOK_EVERY_MS`](./remoteHead) after the unlock — which is exactly when
+  // somebody, the Library just opened, looks at it. Its own ref rather than
+  // `held`, which the lock's effect above has already moved on by now.
+  const custodyLooked = useRef<LibraryState | null>(null);
+  useEffect(() => {
+    if (custody === null) {
+      return;
+    }
+    const before = custodyLooked.current;
+    custodyLooked.current = custody;
+    if (unlockLanded(before, custody)) {
+      looks.look();
+    }
+  }, [custody, looks]);
+
   // Coming back in front also asks what the server is doing, once. A page with
   // no reader open and nothing in flight asks nothing at the interval, so a
   // lock that landed while the person was away would otherwise not be seen —
   // and not asked about — until something else asked. The question takes no
-  // key, so it keeps nothing unlocked (spec: DK-4).
+  // key, so it keeps nothing unlocked (spec: DK-4). And it looks at the remote
+  // head, which is when somebody would glance at the sync icon.
   useEffect(() => {
     let wasInFront = inFront();
     const looked = () => {
@@ -322,6 +368,9 @@ export function App() {
       } else if (cameBack) {
         recheckWork();
       }
+      if (cameBack) {
+        looks.front();
+      }
     };
     looked();
     document.addEventListener('visibilitychange', looked);
@@ -332,12 +381,12 @@ export function App() {
       window.removeEventListener('focus', looked);
       window.removeEventListener('blur', looked);
     };
-  }, [prompting, unlock, recheckWork]);
+  }, [prompting, unlock, recheckWork, looks]);
 
-  // What is new in the Library, asked for and never polled for. The catalog is
-  // what every listing comes out of, so a refresh that advanced it has changed
-  // the tree's answer and the folder's alike — which is why both are asked
-  // again and neither is edited here.
+  // What is new in the Library, asked for and never caught up with on a timer.
+  // The catalog is what every listing comes out of, so a refresh that advanced
+  // it has changed the tree's answer and the folder's alike — which is why both
+  // are asked again and neither is edited here.
   //
   // Only ever one at a time, in a ref rather than in the state the button is
   // disabled from: what this guards against is the second of two clicks in one
@@ -345,17 +394,19 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshed, setRefreshed] = useState<string | null>(null);
   const [refreshTrouble, setRefreshTrouble] = useState<string | null>(null);
-  const looking = useRef(false);
   const refresh = useCallback(() => {
     if (looking.current) {
       return;
     }
     looking.current = true;
     setRefreshing(true);
+    // A look already on its way answers about the catalog before this moved it.
+    looks.forget();
     void askWhatIsNew({
       ask: refreshCatalog,
       line: setRefreshed,
       trouble: setRefreshTrouble,
+      landed: () => setWaiting(false),
       reload: () => {
         reloadFolders();
         reloadListing();
@@ -370,7 +421,7 @@ export function App() {
       looking.current = false;
       setRefreshing(false);
     });
-  }, [reloadFolders, reloadListing, recheckWork]);
+  }, [reloadFolders, reloadListing, recheckWork, looks]);
 
   // Renewing the permission Storage is reached through: one offer for the whole
   // screen, drawn wherever a refusal for a grant that ran out stands (see
@@ -477,8 +528,11 @@ export function App() {
   // Which answers are that news is [`catchUpLanded`](./refresh), read the way
   // the lock's is read above: against the last state this window was told,
   // which is in a ref because nothing on the screen is drawn from it.
+  //
+  // A catch-up that landed has also taken in whatever the sync icon said was
+  // waiting, so the icon goes back to plain, and a look asked before it is not
+  // drawn after it.
   const catalogState = work.catalog?.state ?? null;
-  const stood = useRef<CatalogState | null>(null);
   useEffect(() => {
     if (catalogState === null) {
       return;
@@ -486,10 +540,12 @@ export function App() {
     const before = stood.current;
     stood.current = catalogState;
     if (catchUpLanded(before, catalogState)) {
+      looks.forget();
+      setWaiting(false);
       reloadListing();
       reloadFolders();
     }
-  }, [catalogState, reloadListing, reloadFolders]);
+  }, [catalogState, reloadListing, reloadFolders, looks]);
 
   // The folders of books whose freeze has not committed — stopped by Storage,
   // waiting their turn behind another, thrown away by a worker that died, still
@@ -1171,6 +1227,7 @@ export function App() {
         onRetryFreeze={work.retryFreeze}
         refresh={{
           running: refreshing,
+          waiting,
           said: refreshed,
           refused: refreshTrouble,
           ask: refresh,

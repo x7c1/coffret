@@ -8,7 +8,7 @@ import {
   type Refused,
 } from '@coffret/api';
 
-import { askWhatIsNew, ASKING, catalogLine, catchUpLanded, refreshedLine } from './refresh';
+import { askWhatIsNew, catalogLine, catchUpLanded, CHECKING, refreshedLine } from './refresh';
 
 /** What the server answered, over the shape a refresh always has. */
 function refreshed(over: Partial<Refreshed> = {}): Refreshed {
@@ -20,16 +20,19 @@ function refreshing(ask: () => Promise<Refreshed>) {
   const said: (string | null)[] = [];
   const trouble: (string | null)[] = [];
   const reload = vi.fn();
+  const landed = vi.fn();
   return {
     said,
     trouble,
     reload,
+    landed,
     run: () =>
       askWhatIsNew({
         ask,
         line: (line) => said.push(line),
         trouble: (line) => trouble.push(line),
         reload,
+        landed,
       }),
   };
 }
@@ -45,6 +48,7 @@ it('asks the server and then asks the folder and the tree for themselves again',
 
   expect(ask).toHaveBeenCalledTimes(1);
   expect(run.reload).toHaveBeenCalledTimes(1);
+  expect(run.landed).toHaveBeenCalledTimes(1);
   expect(run.said).toEqual([null, '3 new files']);
   expect(run.trouble).toEqual([null]);
 });
@@ -75,6 +79,8 @@ it('shows what refused it and leaves the screen alone', async () => {
 
   expect(run.trouble).toEqual([null, "the Library's Storage did not answer"]);
   expect(run.reload).not.toHaveBeenCalled();
+  // And the icon goes on saying changes are waiting: nothing was taken in.
+  expect(run.landed).not.toHaveBeenCalled();
   expect(run.said).toEqual([null]);
 });
 
@@ -132,10 +138,10 @@ it('says why an empty Library may not be an empty Library', () => {
     catalog({ state: 'behind', stopped: STORAGE }),
   );
   expect(behind).toContain('Storage did not answer');
-  // And ends on the move that gets out of it, named by the words written on the
-  // control: the sentence stands at the top of the screen and the control is in
+  // And ends on the move that gets out of it, naming the icon by the name it is
+  // shown under: the sentence stands at the top of the screen and the icon is in
   // the bar at the bottom, among three other buttons offering a second attempt.
-  expect(behind).toContain(`"${ASKING}"`);
+  expect(behind).toContain(`"${CHECKING}"`);
 });
 
 // A catch-up the permission running out refused is the one the control below
@@ -156,11 +162,11 @@ it('does not send a catch-up the permission refused to the control that cannot c
 
   const renewable = catalogLine(ranOut, true);
   expect(renewable).toContain('has not caught up');
-  expect(renewable).not.toContain(ASKING);
+  expect(renewable).not.toContain(CHECKING);
 
-  expect(catalogLine(ranOut)).toContain(`"${ASKING}"`);
+  expect(catalogLine(ranOut)).toContain(`"${CHECKING}"`);
   expect(catalogLine(catalog({ state: 'behind', stopped: STORAGE }), true)).toContain(
-    `"${ASKING}"`,
+    `"${CHECKING}"`,
   );
 });
 

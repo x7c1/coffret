@@ -34,6 +34,9 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/file", get(routes::file))
         .route("/api/work", get(routes::work))
         .route("/api/browse", get(routes::browse))
+        // A look at which heads the Library has, by name, and nothing more:
+        // a `GET` because it moves nothing, the catalog included.
+        .route("/api/remote-head", get(routes::remote_head))
         // The nine that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Four
         // of them arm background work and answer at once — the fill, the sync,

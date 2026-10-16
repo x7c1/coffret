@@ -50,6 +50,9 @@ pub struct HaltingStore {
     /// Whether a commit slot is refused, which is the step of a commit that
     /// comes after the committed Keyring was examined and repaired.
     commits_refused: AtomicBool,
+    /// Whether a page of the listing is refused, which no other switch here
+    /// touches: [`halt`](Self::halt) is about reads of objects.
+    listing_refused: AtomicBool,
     /// Whether a read waits, and what wakes it when it stops waiting.
     ///
     /// A watch channel rather than a flag and a notification, because the two
@@ -92,6 +95,7 @@ impl HaltingStore {
             stalled: AtomicBool::new(false),
             panics: AtomicBool::new(false),
             commits_refused: AtomicBool::new(false),
+            listing_refused: AtomicBool::new(false),
             held: watch::channel(false).0,
             refused: AtomicUsize::new(0),
             stalled_reads: AtomicUsize::new(0),
@@ -130,6 +134,15 @@ impl HaltingStore {
     /// retryable, so no retry loop waits it out.
     pub fn refuse_commits(&self) {
         self.commits_refused.store(true, Ordering::SeqCst);
+    }
+
+    /// Refuses every page of the listing from now on, and nothing else.
+    ///
+    /// What a case gets from it is a look at which heads the Library has —
+    /// which lists and reads no object — meeting a Storage that has gone. The
+    /// refusal is [`Error::Unauthenticated`], as [`halt`](Self::halt)'s is.
+    pub fn refuse_listing(&self) {
+        self.listing_refused.store(true, Ordering::SeqCst);
     }
 
     /// Answers no read from now on, and refuses none either.
@@ -325,6 +338,12 @@ impl ObjectStore for HaltingStore {
     }
 
     async fn list(&self, page: Option<&PageToken>) -> StoreResult<ObjectPage> {
+        if self.listing_refused.load(Ordering::SeqCst) {
+            return Err(Error::Unauthenticated {
+                detail: "the grant has run out".to_owned(),
+                source: None,
+            });
+        }
         self.inner.list(page).await
     }
 

@@ -30,9 +30,11 @@ pub enum Standing {
     /// when it did.
     ///
     /// Not a claim about this instant. Another device may commit a moment
-    /// later, and nothing here follows the remote head — what this says is that
-    /// this device has replayed what the Library had, which is the difference
-    /// between an empty listing that is an answer and one that is a gap.
+    /// later, and this standing does not follow the remote head — the look at
+    /// it (`GET /api/remote-head`) is a separate answer and moves nothing here.
+    /// What this says is that this device has replayed what the Library had,
+    /// which is the difference between an empty listing that is an answer and
+    /// one that is a gap.
     CaughtUp,
     /// The last catch-up did not finish, and this says what stopped it.
     ///

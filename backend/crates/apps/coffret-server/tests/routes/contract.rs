@@ -239,6 +239,13 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let (status, unlocking) = body_of(in_the_app.post("/api/unlock").await).await;
     assert_eq!(status, 202, "{unlocking}");
 
+    // The look at the remote head, both ways: the served Library is at its
+    // head, and a second one another device has committed past has a newer one.
+    let current = answered_as_json(&served, "GET", "/api/remote-head").await;
+    let passed = Served::library().await;
+    passed.commit_elsewhere("albums/late.jpg", b"late").await;
+    let newer = answered_as_json(&passed, "GET", "/api/remote-head").await;
+
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
@@ -254,6 +261,10 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
             "refused": refused,
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
+        "remote_head": {
+            "current": current,
+            "newer": newer,
+        },
         // What a freeze of a folder would pack: `albums` holds one-file
         // Entries this device has, and Entries one folder down it has not
         // fetched.

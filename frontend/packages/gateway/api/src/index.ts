@@ -1,11 +1,12 @@
 /**
  * What the explorer reads a Library through.
  *
- * The seventeen routes `coffret-server` answers, as typed calls: which Library
+ * The eighteen routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
- * looked, what the server is doing on its own — which carries whether it still
- * holds the Library open — the three calls that ask it to take that work up
+ * looked and whether it has anything newer than that, what the server is doing
+ * on its own — which carries whether it still holds the Library open — the
+ * three calls that ask it to take that work up
  * again, the freeze among them also packing a folder somebody chose, the
  * question of what that freeze would pack, the deletion of files or a folder
  * and the question of what it would take out, the one that renews the grant
@@ -93,6 +94,8 @@ export { startReconnect } from './reconnect';
 export type { Reconnecting } from './reconnect';
 export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
+export { getRemoteHead } from './remoteHead';
+export type { HeadState, RemoteHead } from './remoteHead';
 export { isLockedRefusal, isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
 export { ForeignUrl } from './request';
 export type { Progress } from './request';

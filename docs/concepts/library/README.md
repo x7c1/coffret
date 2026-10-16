@@ -432,6 +432,14 @@ and has a window of its own for entering the Passphrase.
     since — is reported caught up, not behind, until a catch-up or a read
     Storage refuses shows the move (see [Index](../index/#mental-model);
     spec: LA-12, CK-9).
+  - The explorer can say the Library's head has moved past the Catalog's
+    before anybody catches up, whether the Catalog is stale, behind, or has
+    replayed nothing yet: it looks, as its page comes up, as its tab comes
+    back to the front, and every few minutes while the tab is shown, at the
+    names of the Library's heads, and draws the control that catches up as
+    waiting when one is newer than the Catalog's. The look reads no object, needs no key, changes neither the
+    Catalog nor the report above, and does not keep the Library unlocked
+    (spec: CK-9, FM-12, DK-4).
 - Findings report unresolved conditions and the results of work performed,
   using the lifetimes in the model above; a reported condition is never
   silently treated as backed up or repaired (spec: PK-14, KL-15).

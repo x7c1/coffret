@@ -13,7 +13,7 @@ import type { Freeze, Sync } from '@coffret/api';
  * folder a drop made is the first Entry under it, and until that commit the
  * Library has no such folder to name. So the tree is asked again too, for the
  * sync as for the freeze — without it a folder a one-by-one add made stayed
- * out of the tree until somebody pressed "look for what is new".
+ * out of the tree until somebody pressed the sync icon, "Check for changes".
  *
  * Each key names the run beside its status, the way a fill's count is in its
  * key. A freeze is of one folder, so the second book of a session that was

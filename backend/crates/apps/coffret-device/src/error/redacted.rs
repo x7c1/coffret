@@ -179,6 +179,9 @@ impl Redacted for Error {
                 format!("Device::LocalFileNotOpened: {}", cause.redacted())
             }
             Self::CatchUp { cause } => format!("Device::CatchUp: {}", cause.redacted()),
+            Self::RemoteHeadNotRead { cause } => {
+                format!("Device::RemoteHeadNotRead: {}", cause.redacted())
+            }
             Self::FirstHead { cause } => format!("Device::FirstHead: {}", cause.redacted()),
             Self::LibraryNotCreated {
                 step,
