@@ -49,6 +49,9 @@ pub enum CreationStep {
     Spool,
     /// Writing the settings file.
     Settings,
+    /// Writing the Library's first head to Storage: `head-0`, carrying the slot
+    /// the first commit consumes (spec: CP-2, FM-13).
+    FirstHead,
     /// Moving the finished directory into place.
     Publish,
 }
@@ -65,6 +68,7 @@ impl fmt::Display for CreationStep {
             Self::Index => "creating the catalog",
             Self::Spool => "creating the spool directory",
             Self::Settings => "writing the settings file",
+            Self::FirstHead => "writing the Library's first head to Storage",
             Self::Publish => "moving the finished Library directory into place",
         };
         f.write_str(said)

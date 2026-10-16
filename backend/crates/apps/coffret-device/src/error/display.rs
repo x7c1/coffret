@@ -362,6 +362,7 @@ impl fmt::Display for Error {
             Self::CatchUp { .. } => {
                 f.write_str("the catalog was not brought to the Library's head")
             }
+            Self::FirstHead { .. } => f.write_str("the Library's first head was not written"),
             Self::LibraryNotJoined { name, step, .. } => {
                 write!(f, "the Library {name:?} was not joined: {step} failed")
             }
@@ -387,6 +388,13 @@ impl fmt::Display for Error {
                     None if matches!(step, CreationStep::AppFolder) => {
                         f.write_str("; a folder may have been created before the answer was lost")
                     }
+                    // A prefix nothing references any more, under a Library ID
+                    // drawn for this attempt alone: a second `init` draws
+                    // another, so nothing left here is in its way.
+                    None if matches!(step, CreationStep::FirstHead) => f.write_str(
+                        "; what was written to Storage before that is left under a Library ID \
+                         no device references",
+                    ),
                     None => Ok(()),
                 }
             }

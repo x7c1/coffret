@@ -1,12 +1,11 @@
 //! Setting a Library up from the command line, as a person does it.
 //!
-//! The cases here create S3 Libraries, which write nothing to Storage — a prefix
-//! exists by being written under, so nothing is there until the first commit —
-//! and ask it whether the bucket is there at all, and, when one is joined,
-//! whether the prefix holds anything of the Library. Both are answered by
-//! `support::stub_endpoint`, which stands in for a bucket that exists and has
-//! never been written into, so the whole of `init`, `join`, `map`, `mappings`
-//! and `recovery-code` is exercised in an ordinary test run. What a real
+//! The cases here create S3 Libraries. Creating one asks the bucket whether it
+//! is there at all and writes the Library's first head under its prefix, and
+//! joining one asks whether the prefix holds anything of the Library. All of it
+//! is answered by `support::stub_endpoint`, which stands in for a bucket in
+//! memory, so the whole of `init`, `join`, `map`, `mappings` and
+//! `recovery-code` is exercised in an ordinary test run. What a real
 //! implementation answers is the round trip's business.
 
 mod support;
@@ -613,13 +612,13 @@ fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
     assert!(!stdout(&joined).contains(&recovery_code));
     assert!(!stderr(&joined).contains(&recovery_code));
 
-    // The Library this joins was created a moment ago and never synced, so its
-    // prefix holds nothing — and that is the join that gets the extra word,
-    // without which somebody would go looking for their files after a `fetch`
-    // that reported nothing and exited successfully.
+    // The Library this joins was created a moment ago and never synced, and
+    // its prefix holds its first head all the same (spec: CP-2), so the join
+    // finds it and says nothing about an empty place — that word is kept for a
+    // prefix that holds nothing of a Library.
     let said = stderr(&joined);
     assert!(
-        said.contains("Storage holds nothing of this Library yet."),
+        !said.contains("Storage holds nothing of this Library yet."),
         "{said}"
     );
 

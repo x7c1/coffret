@@ -7,10 +7,12 @@
 //! So they are this crate's own tests rather than suite cases, over the
 //! in-memory store of each shape.
 
-use coffret_model::{ContainerKind, ControlObjectName, Generation, JournalRecord};
+use coffret_model::{ContainerKind, ControlObjectName, JournalRecord};
 
 use crate::byte_stream::ByteStream;
-use crate::commit::{commit_batch, CommitError, ControlObjectFault, PreparedBatch};
+use crate::commit::{
+    commit_batch, write_first_head, CommitError, ControlObjectFault, PreparedBatch,
+};
 use crate::commit_conformance::fixtures::{
     container_id, control_keys, policy, prepared, request, request_under,
 };
@@ -50,6 +52,15 @@ async fn commit_checkpointed(
     .record
 }
 
+/// Creates a Library in an empty store, returning its first head
+/// (spec: CP-2, FM-13).
+async fn created(store: &dyn ObjectStore) -> JournalRecord {
+    write_first_head(store, &control_keys(), &policy())
+        .await
+        .expect("creating a Library in an empty store must succeed")
+        .expect("an empty store holds no head to find instead")
+}
+
 /// Puts every live object of `from` into `to` under the name it is listed by,
 /// as a Library carried from one Storage to another would be.
 async fn copy(from: &dyn ObjectStore, to: &dyn ObjectStore) {
@@ -78,6 +89,7 @@ async fn a_minting_store_consumes_the_identifiers_the_head_carries() {
     let store = InMemoryMintingStore::new(PAGE_SIZE);
     let index = InMemoryIndex::new();
 
+    let first_head = created(&store).await;
     let first = commit_checkpointed(&store, &index, 1).await;
     let second = commit_checkpointed(&store, &index, 2).await;
 
@@ -90,22 +102,29 @@ async fn a_minting_store_consumes_the_identifiers_the_head_carries() {
         library
             .handle(&ControlObjectName::head(generation(1)))
             .as_str(),
-        carried(first.next_commit_slot()),
-        "head 1 is the object head 0's next_commit_slot named",
+        carried(first_head.next_commit_slot()),
+        "the first commit is the object the head the Library was created with named",
     );
     assert_eq!(
         library
-            .handle(&ControlObjectName::index_snapshot(Generation::FIRST))
+            .handle(&ControlObjectName::head(generation(2)))
             .as_str(),
-        carried(first.snapshot_slot()),
-        "the checkpoint of head 0 is the object head 0's snapshot_slot named",
+        carried(first.next_commit_slot()),
+        "head 2 is the object head 1's next_commit_slot named",
     );
     assert_eq!(
         library
             .handle(&ControlObjectName::index_snapshot(generation(1)))
             .as_str(),
-        carried(second.snapshot_slot()),
+        carried(first.snapshot_slot()),
         "the checkpoint of head 1 is the object head 1's snapshot_slot named",
+    );
+    assert_eq!(
+        library
+            .handle(&ControlObjectName::index_snapshot(generation(2)))
+            .as_str(),
+        carried(second.snapshot_slot()),
+        "the checkpoint of head 2 is the object head 2's snapshot_slot named",
     );
 }
 
@@ -117,29 +136,33 @@ async fn a_name_keyed_store_consumes_the_names_the_head_derives() {
     let store = InMemoryStore::new(PAGE_SIZE);
     let index = InMemoryIndex::new();
 
+    let first_head = created(&store).await;
     let first = commit_checkpointed(&store, &index, 1).await;
     commit_checkpointed(&store, &index, 2).await;
 
-    assert_eq!(first.next_commit_slot(), None);
-    assert_eq!(first.snapshot_slot(), None);
+    for head in [&first_head, &first] {
+        assert_eq!(head.next_commit_slot(), None);
+        assert_eq!(head.snapshot_slot(), None);
+    }
     let library = Library::read(&store).await;
     assert_eq!(
         library
-            .handle(&ControlObjectName::head(generation(1)))
+            .handle(&ControlObjectName::head(generation(2)))
             .as_str(),
-        "head-1.cfrt",
+        "head-2.cfrt",
     );
     assert_eq!(
         library
-            .handle(&ControlObjectName::index_snapshot(Generation::FIRST))
+            .handle(&ControlObjectName::index_snapshot(generation(1)))
             .as_str(),
-        "idx-0.cfrt",
+        "idx-1.cfrt",
     );
 }
 
 /// What a commit onto a Library carried from `from` to `to` is refused with.
 async fn refused_after_moving(from: &dyn ObjectStore, to: &dyn ObjectStore) -> CommitError {
     let keys = control_keys();
+    created(from).await;
     commit_checkpointed(from, &InMemoryIndex::new(), 1).await;
     copy(from, to).await;
 
@@ -152,7 +175,7 @@ async fn refused_after_moving(from: &dyn ObjectStore, to: &dyn ObjectStore) -> C
     assert_eq!(
         Library::read(to)
             .await
-            .count(&ControlObjectName::head(generation(1))),
+            .count(&ControlObjectName::head(generation(2))),
         0,
         "nothing was created in place of the slot the head did not carry",
     );
@@ -174,7 +197,7 @@ async fn a_head_with_no_carried_slot_on_a_minting_store_is_refused() {
         CommitError::CorruptControlObject {
             object,
             fault: ControlObjectFault::NoCommitSlot,
-        } => assert_eq!(object, ControlObjectName::head(Generation::FIRST)),
+        } => assert_eq!(object, ControlObjectName::head(generation(1))),
         other => panic!("expected the head to be refused for carrying no slot, got {other:?}"),
     }
 }
@@ -193,7 +216,7 @@ async fn a_head_carrying_an_identifier_on_a_name_keyed_store_is_refused() {
         CommitError::CorruptControlObject {
             object,
             fault: ControlObjectFault::MintedCommitSlot,
-        } => assert_eq!(object, ControlObjectName::head(Generation::FIRST)),
+        } => assert_eq!(object, ControlObjectName::head(generation(1))),
         other => panic!("expected the head to be refused for its minted slot, got {other:?}"),
     }
 }

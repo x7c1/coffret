@@ -110,6 +110,21 @@ mod truncating_index;
 mod unmapped;
 pub use unmapped::a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed;
 
+/// Creates the Library a case runs in, in the empty store the backend handed
+/// over: its first head, written as creating a Library on a device writes it
+/// (spec: CP-2, FM-13). Public only for the macro, which calls it before each
+/// case.
+#[doc(hidden)]
+pub async fn create_library(fixture: &FreezeUnderTest) {
+    let keys = fixtures::keys();
+    crate::commit_conformance::create_library_in(
+        fixture.store(),
+        keys.control(),
+        &fixtures::policy(),
+    )
+    .await;
+}
+
 /// Declares the whole freeze conformance suite as tests of the calling crate.
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
@@ -156,7 +171,10 @@ macro_rules! freeze_conformance {
             #[tokio::test]
             async fn $case() {
                 match $setup {
-                    Some(fixture) => $crate::freeze_conformance::$case(&fixture).await,
+                    Some(fixture) => {
+                        $crate::freeze_conformance::create_library(&fixture).await;
+                        $crate::freeze_conformance::$case(&fixture).await
+                    }
                     None => eprintln!(
                         concat!(
                             "skipping ",

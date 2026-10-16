@@ -1,4 +1,4 @@
-use coffret_model::{ContainerKind, Generation};
+use coffret_model::ContainerKind;
 
 use crate::commit::{commit_batch, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
@@ -7,6 +7,7 @@ use crate::commit_conformance::fixtures::{
 };
 use crate::commit_conformance::gathering_store::{Gathered, GatheringStore};
 use crate::commit_conformance::library::Library;
+use crate::generations::generation;
 
 /// A commit sends its Keyring replicas to Storage together, and reads them back
 /// together (spec: CP-8, KL-2, KL-14).
@@ -32,8 +33,8 @@ pub async fn a_commit_writes_and_reads_back_its_replicas_at_once(fixture: &Commi
         triplicate(),
     ))
     .await
-    .expect("a commit into an empty Library must succeed");
-    assert_eq!(outcome.record.generation(), Generation::FIRST);
+    .expect("a commit into a newly created Library must succeed");
+    assert_eq!(outcome.record.generation(), generation(1));
 
     let together = Gathered {
         arrived: 3,

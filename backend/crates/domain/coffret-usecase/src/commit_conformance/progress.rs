@@ -38,7 +38,7 @@ pub async fn a_commit_is_seen_part_way_in_the_objects_it_stores(fixture: &Commit
         request_under(&store, fixture.index(), &keys, batch, triplicate()).watched_by(&watching),
     )
     .await
-    .expect("a watched commit into an empty Library must succeed");
+    .expect("a watched commit into a newly created Library must succeed");
 
     let committing = |done| Step::new(Phase::Committing, done, 4);
     let seen = store.seen();

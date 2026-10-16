@@ -13,9 +13,13 @@
 //! profile — so a device that may reach the bucket does, and one that may not is
 //! refused by S3 rather than by a file this crate wrote.
 
+use std::sync::Arc;
+
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::Client;
+use coffret_usecase::ObjectStore;
+use s3_store::{S3Settings, S3};
 
 use crate::error::{Error, Result};
 
@@ -55,16 +59,33 @@ pub(crate) async fn client(
     Client::from_conf(config.build())
 }
 
+/// A store over a Library's prefix of an S3 bucket.
+///
+/// What opening a Library reaches its Storage through, and what creating one
+/// writes the Library's first head through (spec: CP-2, FM-13).
+pub(crate) async fn store(
+    bucket: &str,
+    prefix: &str,
+    endpoint: Option<&str>,
+    region: Option<&str>,
+    path_style: bool,
+) -> Arc<dyn ObjectStore> {
+    let client = client(endpoint, region, path_style).await;
+    let settings = S3Settings::new(bucket).with_prefix(prefix);
+    Arc::new(S3::new(client, settings))
+}
+
 /// Asks the bucket whether it is there, and refuses the Library if it is not.
 ///
-/// The one call creating a Library on S3 makes to Storage, and it exists
-/// because otherwise there would be none. A join makes it too and then asks
-/// [`check_any_head_or_snapshot`] a second thing, which is a question about the
-/// prefix rather than about the bucket. On S3 a prefix exists by being written
-/// under, so nothing about setting a Library up would notice a mistyped bucket,
-/// an endpoint nothing is listening at, or credentials the SDK could not
-/// resolve: all three would be answered by a complete "success" and a Recovery
-/// Code, and found out at the first sync instead (spec: FM-18).
+/// The first call creating a Library on S3 makes to Storage, put before a
+/// Passphrase is chosen and before a file exists to take back. A join makes it
+/// too and then asks [`check_any_head_or_snapshot`] a second thing, which is a
+/// question about the prefix rather than about the bucket. On S3 a prefix
+/// exists by being written under, so nothing before the Library's first head is
+/// written — the last step of creating it (spec: CP-2) — would notice a
+/// mistyped bucket, an endpoint nothing is listening at, or credentials the SDK
+/// could not resolve: all three would be found out only after a Passphrase was
+/// chosen and the Library's files were built (spec: FM-18).
 ///
 /// Which of the three it was is the gateway's to decide: the question goes out
 /// through [`s3_store::check_bucket`], so the answer arrives already classified
@@ -90,11 +111,12 @@ pub(crate) async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
 /// Snapshot rather than one named object, because which of them survive
 /// depends on what has been pruned (see [`FoundOnStorage`](crate::FoundOnStorage)).
 ///
-/// The answer is a `bool` because absence is not a refusal — a Library created
-/// and never synced holds nothing either, and the two cannot be told apart from
-/// here (spec: FM-18). Everything that is not an answer about the prefix — a
-/// bucket that is not there, credentials S3 refused, an endpoint nothing is
-/// listening at, a listing that never ends — arrives as
+/// The answer is a `bool` because absence is not a refusal — a Library an
+/// earlier build created and nobody synced holds nothing either, and the two
+/// cannot be told apart from here (spec: FM-18). Everything that is not an
+/// answer about the prefix — a bucket that is not there, credentials S3
+/// refused, an endpoint nothing is listening at, a listing that never ends —
+/// arrives as
 /// [`Error::BucketUnreachable`], which is the same verdict [`check_bucket`]
 /// makes of the same causes: this device cannot use that bucket, and the
 /// gateway's classification says which of them it was.

@@ -50,7 +50,7 @@ pub async fn a_rebased_batch_whose_removal_is_no_longer_current_is_refused(
     }
 
     let library = Library::read(store).await;
-    let rival = library.record(store, generation(1)).await;
+    let rival = library.record(store, generation(2)).await;
     assert_eq!(
         rival.removals(),
         vec![container_id(1)],
@@ -58,7 +58,7 @@ pub async fn a_rebased_batch_whose_removal_is_no_longer_current_is_refused(
     );
     assert!(rival.additions().is_empty());
     assert!(
-        !library.holds(&ControlObjectName::head(generation(2))),
+        !library.holds(&ControlObjectName::head(generation(3))),
         "the refused batch wrote no record of its own (spec: CP-1)",
     );
     assert!(
@@ -106,8 +106,8 @@ pub async fn a_rebased_batch_whose_removals_are_current_commits(fixture: &Commit
         .expect("a removal that is still current rebases and commits");
 
     assert_eq!(outcome.attempts, 2, "the first attempt lost the slot");
-    assert_eq!(outcome.record.generation(), generation(2));
-    assert_eq!(outcome.record.prev(), Some(generation(1)));
+    assert_eq!(outcome.record.generation(), generation(3));
+    assert_eq!(outcome.record.prev(), Some(generation(2)));
     assert_eq!(outcome.record.removals(), vec![container_id(1)]);
 
     let moved = index

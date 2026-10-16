@@ -52,11 +52,13 @@ const OPERATION: &str = "join_library";
 /// is there — under the prefix on S3, in the app folder on Drive — and says
 /// what it found in [`JoinedLibrary::found`]. Any of them rather than one named
 /// object, because which of them survive depends on what has been pruned (see
-/// [`FoundOnStorage`]). A place holding nothing is not refused: a Library
-/// created and never synced holds nothing either, and the two are the same
-/// answer from here. So a caller reports it instead, and somebody whose Library
-/// is going to look empty hears why now rather than after a `fetch` that says
-/// nothing and succeeds. Reading keeps the promise that a join writes nothing.
+/// [`FoundOnStorage`]). A place holding nothing is not refused: a Library an
+/// earlier build created and nobody synced holds nothing either — one created
+/// now holds its first head from the start (spec: CP-2) — and the two are the
+/// same answer from here. So a caller reports it instead, and somebody whose
+/// Library is going to look empty hears why now rather than after a `fetch`
+/// that says nothing and succeeds. Reading keeps the promise that a join
+/// writes nothing.
 ///
 /// The two questions stay apart on Drive, where both can be asked. The name
 /// decides whether this is the Library's folder at all and refuses it if not;
@@ -383,9 +385,9 @@ where
         .map_err(|cause| staging.failed(CreationStep::AppFolderName, cause))?;
 
     // And now the other question, which the name cannot answer however certain
-    // it is: a Library nobody has synced holds nothing in its own folder, and
-    // somebody joining one is owed that word rather than an empty `fetch` they
-    // have to make sense of themselves.
+    // it is: a Library an earlier build created and nobody synced holds nothing
+    // in its own folder, and somebody joining one is owed that word rather than
+    // an empty `fetch` they have to make sense of themselves.
     let found = check_any_head_or_snapshot(transport, bound.tokens, folder_id)
         .await
         .map_err(|cause| {

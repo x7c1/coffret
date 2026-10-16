@@ -1,4 +1,6 @@
+use std::collections::BTreeSet;
 use std::ops::Range;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use coffret_model::{ControlObjectName, ObjectRef};
@@ -15,7 +17,25 @@ use crate::uploaded_object::UploadedObject;
 /// Accepts the Journal create but loses its response and withholds that head
 /// from later listings. A caller sees the older history (spec: OC-1, OC-3).
 pub(super) struct WithheldCommit<'a> {
-    pub(super) inner: &'a dyn ObjectStore,
+    inner: &'a dyn ObjectStore,
+    /// The heads this store accepted and withholds, by name: the heads the
+    /// Library already had stay listed, as the older history.
+    withheld: Mutex<BTreeSet<String>>,
+}
+
+impl<'a> WithheldCommit<'a> {
+    pub(super) fn around(inner: &'a dyn ObjectStore) -> Self {
+        Self {
+            inner,
+            withheld: Mutex::default(),
+        }
+    }
+
+    fn withheld(&self) -> std::sync::MutexGuard<'_, BTreeSet<String>> {
+        self.withheld
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 fn is_head(name: &str) -> bool {
@@ -36,6 +56,7 @@ impl ObjectStore for WithheldCommit<'_> {
     async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
         if is_head(slot.name()) {
             self.inner.put_if_absent(slot, body).await?;
+            self.withheld().insert(slot.name().to_owned());
             return Err(Error::Transport {
                 detail: "the commit response was lost".to_owned(),
                 source: None,
@@ -53,7 +74,10 @@ impl ObjectStore for WithheldCommit<'_> {
 
     async fn list(&self, page: Option<&PageToken>) -> Result<ObjectPage> {
         let mut result = self.inner.list(page).await?;
-        result.objects.retain(|object| !is_head(&object.name));
+        let withheld = self.withheld();
+        result
+            .objects
+            .retain(|object| !withheld.contains(&object.name));
         Ok(result)
     }
 

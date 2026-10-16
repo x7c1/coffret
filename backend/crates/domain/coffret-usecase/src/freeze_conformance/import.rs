@@ -1,5 +1,5 @@
 use coffret_format::DecodedContainer;
-use coffret_model::{ContainerKind, Generation};
+use coffret_model::ContainerKind;
 
 use crate::entry_paths::entry_path;
 use crate::freeze_conformance::fixtures::{
@@ -7,6 +7,7 @@ use crate::freeze_conformance::fixtures::{
     sync_source, write, TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
+use crate::generations::generation;
 use crate::sync_conformance::fixtures::born;
 
 /// The files a case imports, in the order they stand in the Library.
@@ -72,7 +73,11 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     let commit = outcome
         .commit
         .expect("a folder of new files is worth a commit");
-    assert_eq!(commit.record.generation(), Generation::FIRST);
+    assert_eq!(
+        commit.record.generation(),
+        generation(1),
+        "the first commit succeeds the head the Library was created with (spec: CP-2)",
+    );
     assert_eq!(commit.record.additions().len(), outcome.packs.len());
     assert!(commit.record.removals().is_empty());
     for addition in commit.record.additions() {

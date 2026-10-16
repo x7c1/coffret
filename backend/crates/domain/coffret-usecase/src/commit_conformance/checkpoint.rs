@@ -1,10 +1,11 @@
-use coffret_model::{ContainerKind, Generation, SnapshotContent};
+use coffret_model::{ContainerKind, SnapshotContent};
 
 use crate::commit::{commit_batch, CheckpointOutcome, CommitRequest, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
 use crate::commit_conformance::faulty_store::FaultyStore;
 use crate::commit_conformance::fixtures::{control_keys, policy, prepared, request};
 use crate::commit_conformance::library::Library;
+use crate::generations::generation;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 
@@ -31,11 +32,11 @@ pub async fn a_checkpoint_is_written_once_the_threshold_is_crossed(fixture: &Com
     ]);
     let outcome = commit_batch(checkpointing(store, index, &keys, batch))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
 
     match outcome.checkpoint {
         CheckpointOutcome::Written { ref object } => {
-            assert_eq!(object.to_string(), "idx-0.cfrt")
+            assert_eq!(object.to_string(), "idx-1.cfrt")
         }
         ref other => panic!("expected this commit to write its checkpoint, got {other:?}"),
     }
@@ -46,7 +47,7 @@ pub async fn a_checkpoint_is_written_once_the_threshold_is_crossed(fixture: &Com
         .expect("a committed device has something to checkpoint");
     let stored = Library::read(store)
         .await
-        .snapshot(store, Generation::FIRST)
+        .snapshot(store, generation(1))
         .await;
     let (checkpoint, adopted_from, containers, entries) = held.into_parts();
     assert_eq!(
@@ -59,7 +60,7 @@ pub async fn a_checkpoint_is_written_once_the_threshold_is_crossed(fixture: &Com
             .expect("what an Index handed back holds together"),
         "the Snapshot on Storage is this device's Index (spec: CK-7)",
     );
-    assert_eq!(stored.checkpoint().head_generation(), Generation::FIRST);
+    assert_eq!(stored.checkpoint().head_generation(), generation(1));
     assert_eq!(stored.checkpoint().keyring(), outcome.record.keyring());
 }
 
@@ -76,7 +77,7 @@ pub async fn no_checkpoint_is_written_below_the_threshold(fixture: &CommitUnderT
     let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
     let outcome = commit_batch(request(store, fixture.index(), &keys, batch))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
 
     assert!(
         matches!(outcome.checkpoint, CheckpointOutcome::NotDue),
@@ -110,7 +111,7 @@ pub async fn a_snapshot_slot_taken_by_a_sibling_converges(fixture: &CommitUnderT
 
     match outcome.checkpoint {
         CheckpointOutcome::Existing { ref object } => {
-            assert_eq!(object.to_string(), "idx-0.cfrt")
+            assert_eq!(object.to_string(), "idx-1.cfrt")
         }
         ref other => panic!("expected the sibling's checkpoint to answer it, got {other:?}"),
     }
@@ -125,8 +126,8 @@ pub async fn a_snapshot_slot_taken_by_a_sibling_converges(fixture: &CommitUnderT
         1,
         "one head has one checkpoint",
     );
-    let stored = library.snapshot(store, Generation::FIRST).await;
-    assert_eq!(stored.checkpoint().head_generation(), Generation::FIRST);
+    let stored = library.snapshot(store, generation(1)).await;
+    assert_eq!(stored.checkpoint().head_generation(), generation(1));
 }
 
 /// A commit under a policy that checkpoints every head.

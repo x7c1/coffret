@@ -15,8 +15,9 @@
 //! holds is a head or a Snapshot (see
 //! [`ControlObjectName::names_a_head_or_index_snapshot`]). So this asks by
 //! prefix whether either is there, and it is deliberately a `bool` rather than
-//! a refusal: a Library that has been created and never synced holds neither,
-//! so absence is two different things and neither of them is an error.
+//! a refusal: a Library an earlier build created and never synced holds
+//! neither, so absence is two different things and neither of them is an
+//! error.
 
 use std::time::Duration;
 
@@ -310,8 +311,8 @@ mod tests {
     }
 
     // The whole point of the `bool`: a prefix holding nothing is an answer and
-    // not a failure, because a Library that has never been synced holds nothing
-    // either and the two cannot be told apart from here.
+    // not a failure, because a Library an earlier build created and never synced
+    // holds nothing either and the two cannot be told apart from here.
     #[tokio::test]
     async fn an_empty_prefix_is_an_answer_rather_than_a_refusal() {
         let (client, replay) = answering(&[(200, &page(&[], None)), (200, &page(&[], None))]);

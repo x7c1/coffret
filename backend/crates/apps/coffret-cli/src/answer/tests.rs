@@ -367,6 +367,26 @@ fn an_epoch_answers_epoch() {
     assert_eq!(answered["error"]["kind"], "epoch", "{answered}");
 }
 
+// A Library listing two control objects under one name, whichever flow met
+// it, by the commit refusal's own variant: no flow reads or writes such a
+// Library, so a script branches on the Library rather than on the flow
+// (spec: FM-12).
+#[test]
+fn two_control_objects_of_one_name_answer_duplicate_control_object() {
+    let error = Error::from(SyncError::Commit(coffret_device::CommitFailure {
+        error: Box::new(CommitError::DuplicateControlObject {
+            object: coffret_device::ControlObjectName::head(coffret_device::Generation::FIRST),
+        }),
+        repairs: Vec::new(),
+    }));
+
+    let answered = failed("sync", error);
+    assert_eq!(
+        answered["error"]["kind"], "duplicate_control_object",
+        "{answered}"
+    );
+}
+
 // Flags that leave a provider short, which the shell refuses itself once the
 // parser has let them through: a kind of their own rather than `other`, with
 // the command and the log named, since the command had started.

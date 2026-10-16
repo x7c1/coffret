@@ -1,18 +1,23 @@
 //! Bringing a Library into being on this device.
 //!
-//! Seven steps in a fixed order, and the order is the design: the Master Key is
-//! drawn and stored first because the envelope that opens the account's grant
-//! is sealed under a key derived from it, and the settings file is written last because a directory carrying
-//! one is a Library anything may open. Everything is built in a staging
-//! directory that only takes the Library's real name once the last step has
-//! landed, so an interrupted creation leaves something a later attempt can
-//! discard rather than half a Library nothing can tell from a whole one.
+//! The steps run in a fixed order, and the order is the design: the Master Key
+//! is drawn and stored first because the envelope that opens the account's
+//! grant is sealed under a key derived from it, and the settings file is written
+//! after the rest because a directory carrying one is a Library anything may
+//! open. Everything is built in a staging directory that only takes the
+//! Library's real name once the last step has landed, so an interrupted
+//! creation leaves something a later attempt can discard rather than half a
+//! Library nothing can tell from a whole one.
 //!
-//! Nothing is written to Storage but the app folder a Drive Library needs to
-//! exist at all. Keyring generation 1 and Journal record 1 are the first
-//! commit's work, which is what makes a Library that has never been synced
-//! indistinguishable on Storage from one that was never created — and what lets
-//! this flow be abandoned at any point without leaving a Library behind.
+//! Two things are written to Storage: the app folder a Drive Library needs to
+//! exist at all, and, last, the Library's first head — `head-0`, a Journal
+//! record with nothing in it, selecting an empty Keyring generation, and
+//! carrying the slot the first commit consumes (spec: CP-2, FM-13). Writing it
+//! here, before any other device can know of the Library, is what keeps a
+//! commit from ever starting from no head, where each writer would reserve a
+//! slot of its own. It is the last step because it is the one this flow cannot
+//! take back: a failure there leaves what was written under a Library ID that
+//! nothing references, and a second attempt draws another.
 
 mod create_library_request;
 pub use create_library_request::{CreateLibraryRequest, NewProvider};

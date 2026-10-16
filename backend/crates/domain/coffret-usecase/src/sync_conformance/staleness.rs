@@ -1,6 +1,7 @@
-use coffret_model::{ContainerKind, Generation, Mtime};
+use coffret_model::{ContainerKind, Mtime};
 
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 use crate::in_memory_index::InMemoryIndex;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{
@@ -88,7 +89,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         .expect("the run caught the catalog up before it scanned (spec: CK-9)");
     assert_eq!(
         checkpoint.head_generation(),
-        Generation::FIRST,
+        generation(1),
         "the catalog stands at the head the store holds, and the run moved it no further",
     );
     assert!(

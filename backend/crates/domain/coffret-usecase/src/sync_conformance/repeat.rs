@@ -1,6 +1,7 @@
-use coffret_model::{Generation, Mtime};
+use coffret_model::Mtime;
 
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{keys, map, request, spooled, touch, write, NEWER, OLDER};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
@@ -27,7 +28,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         .expect("two new files are worth a commit")
         .record
         .generation();
-    assert_eq!(head, Generation::FIRST);
+    assert_eq!(head, generation(1));
 
     let second = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await

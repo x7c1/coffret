@@ -11,8 +11,8 @@
 //! It is a call worth making because on S3 a prefix exists only by being written
 //! under, so nothing about setting a Library up would otherwise notice a
 //! mistyped bucket, an endpoint nothing is listening at, or credentials the SDK
-//! could not resolve: all three would look exactly like a Library that has never
-//! been synced (spec: FM-18).
+//! could not resolve until creating it writes the Library's first head, its
+//! last step, after a Passphrase has been chosen (spec: CP-2, FM-18).
 //!
 //! It belongs to the gateway rather than to whoever creates a Library because
 //! reading the answer means reading a status and an S3 error code, and this

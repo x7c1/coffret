@@ -46,7 +46,7 @@ pub async fn a_lost_replica_is_rewritten_before_the_next_commit(fixture: &Commit
         triplicate(),
     ))
     .await
-    .expect("a commit into an empty Library must succeed");
+    .expect("a commit into a newly created Library must succeed");
     assert!(
         first.repairs.is_empty(),
         "the Library's first commit had no committed Keyring to repair (spec: FM-13)",
@@ -107,7 +107,7 @@ pub async fn an_unreadable_replica_is_replaced(fixture: &CommitUnderTest) {
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
 
     let mut committed = first.record.keyring().clone();
     for (seed, position, mangle) in [(2u8, 1u16, true), (3, 0, false)] {
@@ -153,7 +153,7 @@ pub async fn a_repair_the_provider_refuses_stops_the_commit(fixture: &CommitUnde
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, index, &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     lose_replica(store, &committed, 1).await;
@@ -201,11 +201,11 @@ pub async fn a_repair_the_provider_refuses_stops_the_commit(fixture: &CommitUnde
 
     let refused = Library::read(store).await;
     assert!(
-        !refused.holds(&ControlObjectName::head(generation(1))),
+        !refused.holds(&ControlObjectName::head(generation(2))),
         "nothing of the batch was committed (spec: KL-16)",
     );
     assert!(
-        replicas_written(&counting, generation(1)).is_empty(),
+        replicas_written(&counting, generation(2)).is_empty(),
         "and the batch's own Keyring candidate was never written either",
     );
     assert_eq!(
@@ -215,7 +215,7 @@ pub async fn a_repair_the_provider_refuses_stops_the_commit(fixture: &CommitUnde
             .expect("reading the checkpoint must succeed")
             .expect("the first commit left one")
             .head_generation(),
-        Generation::FIRST,
+        generation(1),
         "the Index stands where the first commit left it (spec: CP-1)",
     );
 
@@ -227,7 +227,7 @@ pub async fn a_repair_the_provider_refuses_stops_the_commit(fixture: &CommitUnde
         one_repair(&outcome).rewritten.iter().collect::<Vec<_>>(),
         vec![1]
     );
-    assert_eq!(outcome.record.generation(), generation(1));
+    assert_eq!(outcome.record.generation(), generation(2));
     Library::read(store).await.keyring(store, &committed).await;
 }
 
@@ -248,7 +248,7 @@ pub async fn a_repair_that_stops_reports_what_it_put_back(fixture: &CommitUnderT
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request_under(store, index, &keys, adding(1), triplicate()))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     for position in [1, 2] {
@@ -302,7 +302,7 @@ pub async fn a_repair_that_stops_reports_what_it_put_back(fixture: &CommitUnderT
          replica short rather than two",
     );
     assert!(
-        !library.holds(&ControlObjectName::head(generation(1))),
+        !library.holds(&ControlObjectName::head(generation(2))),
         "and nothing of the batch was committed (spec: KL-16)",
     );
 }
@@ -324,7 +324,7 @@ pub async fn an_unfetchable_replica_stops_the_commit_unrewritten(fixture: &Commi
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, index, &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     let hidden = Library::read(store)
@@ -368,7 +368,7 @@ pub async fn an_unfetchable_replica_stops_the_commit_unrewritten(fixture: &Commi
     assert!(
         !Library::read(store)
             .await
-            .holds(&ControlObjectName::head(generation(1))),
+            .holds(&ControlObjectName::head(generation(2))),
         "and nothing of the batch was committed",
     );
 }
@@ -387,7 +387,7 @@ pub async fn a_keyring_no_replica_answers_stays_unreadable(fixture: &CommitUnder
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, index, &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     for position in 0..committed.replica_count() {
@@ -413,7 +413,7 @@ pub async fn a_keyring_no_replica_answers_stays_unreadable(fixture: &CommitUnder
     assert!(
         !Library::read(store)
             .await
-            .holds(&ControlObjectName::head(generation(1))),
+            .holds(&ControlObjectName::head(generation(2))),
         "and nothing of the batch was committed",
     );
 }
@@ -434,7 +434,7 @@ pub async fn a_complete_set_costs_no_writes_and_reports_no_repair(fixture: &Comm
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     Library::upload_container(store, container_id(2)).await;
@@ -470,7 +470,7 @@ pub async fn a_repair_before_a_lost_slot_is_still_reported(fixture: &CommitUnder
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     lose_replica(store, &committed, 1).await;
@@ -521,7 +521,7 @@ pub async fn a_repair_before_the_rebases_ran_out_is_still_reported(fixture: &Com
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     lose_replica(store, &committed, 1).await;
@@ -578,7 +578,7 @@ pub async fn a_repair_before_a_refused_record_is_still_reported(fixture: &Commit
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     lose_replica(store, &committed, 0).await;
@@ -603,7 +603,7 @@ pub async fn a_repair_before_a_refused_record_is_still_reported(fixture: &Commit
     );
     let library = Library::read(store).await;
     assert!(
-        !library.holds(&ControlObjectName::head(generation(1))),
+        !library.holds(&ControlObjectName::head(generation(2))),
         "nothing of the batch was committed (spec: CP-1)",
     );
     library.keyring(store, &committed).await;
@@ -630,7 +630,7 @@ pub async fn two_devices_repairing_one_position_both_commit(fixture: &CommitUnde
     Library::upload_container(store, container_id(1)).await;
     let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
         .await
-        .expect("a commit into an empty Library must succeed");
+        .expect("a commit into a newly created Library must succeed");
     let committed = first.record.keyring().clone();
 
     lose_replica(store, &committed, 1).await;
@@ -650,10 +650,7 @@ pub async fn two_devices_repairing_one_position_both_commit(fixture: &CommitUnde
         true => (left, right),
         false => (right, left),
     };
-    assert_eq!(
-        winner.record.generation(),
-        Generation::FIRST.next().unwrap()
-    );
+    assert_eq!(winner.record.generation(), generation(2));
     assert_eq!(
         loser.record.prev(),
         Some(winner.record.generation()),

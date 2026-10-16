@@ -16,10 +16,10 @@
 //! both by the prefixes their names start with.
 //!
 //! It is deliberately a `bool` rather than a refusal, and the S3 gateway's
-//! check answers the same question the same way: a Library created and
-//! never synced holds nothing, and nothing at this layer can tell that apart
-//! from a place that is not the Library's — so absence is an answer and the
-//! caller is the one that says what it means.
+//! check answers the same question the same way: a Library an earlier build
+//! created and never synced holds nothing, and nothing at this layer can tell
+//! that apart from a place that is not the Library's — so absence is an answer
+//! and the caller is the one that says what it means.
 //!
 //! Drive has no lookup by prefix, and this crate already knows how to ask about
 //! the contents of a folder: the port's `list` is `files.list` over the app
@@ -315,8 +315,9 @@ mod tests {
     }
 
     // The whole point of the `bool`: a folder holding nothing of the Library is
-    // an answer and not a failure, because a Library created and never synced
-    // holds nothing either and the two cannot be told apart from here.
+    // an answer and not a failure, because a Library an earlier build created
+    // and never synced holds nothing either and the two cannot be told apart
+    // from here.
     #[tokio::test]
     async fn a_folder_holding_no_head_is_an_answer_rather_than_a_refusal() {
         let transport = StubTransport::new([StubAnswer::json(200, r#"{"files":[]}"#)]);

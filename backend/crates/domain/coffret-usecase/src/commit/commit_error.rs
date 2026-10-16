@@ -176,6 +176,30 @@ pub enum CommitError {
         /// The generation whose head object is gone.
         generation: Generation,
     },
+    /// The Library's first head, which this run wrote or found created into
+    /// `head-0` by another writer first, is not in the listing read after it
+    /// (spec: CP-2).
+    ///
+    /// Not a head that is gone, like [`MissingHead`](Self::MissingHead): it was
+    /// written, and the listing has not caught up with it. Writing it again
+    /// would put a second `head-0` beside the first on a Storage that mints
+    /// identifiers — two control objects under one name, which every reader
+    /// refuses (spec: FM-12) — so the run stops instead, and a later one finds
+    /// the head once the listing shows it.
+    FirstHeadUnlisted,
+    /// Storage lists two control objects under one name.
+    ///
+    /// On a Storage that mints identifiers names are not unique, and a head or a
+    /// checkpoint twice over says the exclusion its name stands for did not
+    /// hold: two successors of one head, or two checkpoints of one
+    /// (spec: CP-3, CK-11). Neither is the Library's more than the other, and
+    /// whichever one a reader took the other would stay invisible to
+    /// everything that reads by name, so the Library is inconsistent and
+    /// nothing is read from it or written to it (spec: FM-12).
+    DuplicateControlObject {
+        /// The name both objects are listed under.
+        object: ControlObjectName,
+    },
     /// The head chain carries a Master Key epoch activation.
     ///
     /// A writer whose slot was consumed by an activation Snapshot stops until it
@@ -502,6 +526,16 @@ impl fmt::Display for CommitError {
             Self::MissingHead { generation } => {
                 write!(f, "the head at generation {generation} is not in Storage")
             }
+            Self::FirstHeadUnlisted => f.write_str(
+                "the Library's first head was written but Storage does not list it yet; \
+                 nothing of this batch was committed, and a later run finds the head once \
+                 the listing shows it",
+            ),
+            Self::DuplicateControlObject { object } => write!(
+                f,
+                "Storage holds two control objects named {object}, so the Library is \
+                 inconsistent and neither of them was read"
+            ),
             Self::EpochActivated { generation } => write!(
                 f,
                 "a Master Key epoch was activated at generation {generation}; \
@@ -764,6 +798,10 @@ impl Redacted for CommitError {
             }
             Self::MissingHead { generation } => {
                 format!("Commit::MissingHead(generation={generation})")
+            }
+            Self::FirstHeadUnlisted => "Commit::FirstHeadUnlisted".to_owned(),
+            Self::DuplicateControlObject { object } => {
+                format!("Commit::DuplicateControlObject(object={object})")
             }
             Self::EpochActivated { generation } => {
                 format!("Commit::EpochActivated(generation={generation})")

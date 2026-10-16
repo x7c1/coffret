@@ -548,21 +548,20 @@ created before the failure and is the account's to remove."
 fi
 
 if ! library_present "$JOINER"; then
-  # Whether the folder is empty at the moment of the join, which decides which
-  # of the two things `join` says about what it found there. It is knowable
-  # only where $UPLOADER was created a moment ago in this same run: nothing has
-  # been synced into its folder yet, so the join has to report an empty one. A
-  # run that found $UPLOADER already on this device cannot tell — the run that
-  # created it may have carried a batch up or may have stopped before it — so
-  # it asserts nothing either way.
-  nothing_synced_yet=true
+  # Whether $UPLOADER was created a moment ago in this same run, which decides
+  # what the join can be held to about what it found there. Creating a Library
+  # writes its first head as its last step (spec: CP-2), so a Library made in
+  # this run holds that head before anything is synced, and the join has to
+  # report finding the Library. A run that found $UPLOADER already on this
+  # device asserts nothing either way: it did not watch the Library being made.
+  created_this_run=true
 
   # Where a run before this one created the Library and then lost the joining
   # half, the code is asked of the Library that has it rather than made again:
   # a second `init` would be a second Library and a second folder on the
   # account.
   if [ -z "${recovery_code:-}" ]; then
-    nothing_synced_yet=false
+    created_this_run=false
     echo
     echo "--- reading $UPLOADER's Recovery Code back, to join with ---"
     run_cli recovery-code --library "$UPLOADER" --passphrase-stdin
@@ -603,20 +602,16 @@ device, and the join should have found the one $UPLOADER's grant is kept under
 
   # A join asks the place it was given whether it holds anything of the Library
   # and says what it found, on Drive as on S3. Where $UPLOADER was created in
-  # this same run it found nothing, and it is right to: $UPLOADER syncs further
-  # down this script. So the line is the answer working rather than anything
-  # wrong — and this is the one check in the target that a real Drive answered
+  # this same run, its folder holds the first head creating it wrote, though
+  # nothing has been synced into it yet — so the join has to say it found the
+  # Library. This is the one check in the target that a real Drive answered
   # that second question at all.
-  if [ "$nothing_synced_yet" = true ]; then
-    answered '.answer.found_on_storage == "nothing_yet"' >/dev/null || fail "
-$JOINER joined a folder nothing has been synced into, and the join did not say
-so. The line is what tells somebody whose Library is going to look empty why it
-is, and what tells somebody who joined the wrong place that they did — see
-\`nothing_there_yet\` in backend/crates/apps/coffret-cli/src/join.rs."
-    echo
-    echo "That line about the folder holding nothing is the right answer here:"
-    echo "$UPLOADER was created a moment ago and has synced nothing into it yet."
-    echo "This run carries the first batch up below."
+  if [ "$created_this_run" = true ]; then
+    answered '.answer.found_on_storage == "the_library"' >/dev/null || fail "
+$JOINER joined the folder of a Library created a moment ago, and the join did not
+say it found the Library there. Creating a Library writes its first head, so the
+folder is not empty even before the first sync — see \`FoundOnStorage\` in
+backend/crates/apps/coffret-cli/src/answer/joined.rs."
   fi
 fi
 

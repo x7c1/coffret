@@ -27,6 +27,22 @@ Concept background: [Journal](../../concepts/journal/),
     re-derived at the moment the slot is consumed, from the head's generation
     and the successor's role (CP-15, FM-12), so the two spellings cannot drift
     apart.
+  - A Library's first head is written when the Library is created: `head-0`,
+    a Journal record that adds and removes nothing and carries the slot the
+    first commit consumes (FM-13, FM-15). No commit therefore starts from no
+    head, and no batch is committed into a slot its writer reserved for
+    itself: where the Storage mints identifiers, such a slot would be that
+    writer's alone, and two writers each holding one would both succeed
+    (CP-3).
+    Joining a Library writes no head; the Library it joins already has one.
+    - A Library created before this rule may have no head yet. Its first
+      commit writes the empty `head-0` into a slot it reserves for it, and
+      then commits its batch on top of that head through the slot the head
+      carries. What is left of the race is that one create: on a Storage
+      that mints identifiers two first commits racing there can both write
+      `head-0`, and readers then refuse the Library rather than read one of
+      the two (FM-12). A writer that wrote the empty head and does not find
+      it listed afterwards stops rather than write another.
 - **CP-3.** Both successor kinds use conditional create against the same
   slot, so of the operations that start from the same head exactly one
   succeeds. This is what lets epoch activation atomically fence writers that
