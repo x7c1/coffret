@@ -39,4 +39,4 @@ When the explorer deletes Entries, the device that ran the delete keeps its mapp
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's MinIO Library, deleting a book from the explorer moves its local folder to the macOS Trash immediately, and the explorer no longer lists it as "not in Library".
+- [x] On the agent's MinIO Library, deleting a book from the explorer moves its local folder to the macOS Trash immediately, and the explorer no longer lists it as "not in Library".
