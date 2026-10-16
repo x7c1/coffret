@@ -87,6 +87,7 @@ Out of scope: rename itself (`renames`), any UI that shows the original path.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's MinIO Library, a device running this build upgrades its
-      existing catalog without a catch-up from Storage, and a new drop commits
-      a record whose entries carry `original_path`.
+- [x] On the agent's MinIO Library, a device running this build upgrades its
+      existing catalog without a catch-up from Storage, and a new sync commits
+      a record that a second device, upgraded the same way, reads back with
+      the Entry's original path equal to its path.
