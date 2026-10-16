@@ -38,5 +38,5 @@ Out of scope: catching up automatically, push notifications, showing what change
 
 ### Before merge (verified outside the check command)
 
-- [ ] Against the agent's two-device MinIO Library in Playwright's Chromium: after device 2 commits, device 1's icon shows changes waiting after returning to the tab; pressing it catches up and the icon returns to plain.
+- [x] Against the agent's two-device MinIO Library in Playwright's Chromium: after device 2 commits, device 1's icon shows changes waiting after returning to the tab; pressing it catches up and the icon returns to plain.
 - [ ] The icon and its colors look right — needs a person: a visual judgement.
