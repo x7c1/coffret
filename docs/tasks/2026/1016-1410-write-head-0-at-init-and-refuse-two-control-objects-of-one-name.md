@@ -104,5 +104,5 @@ Out of scope: pruning old heads (CK-4..CK-6), Keyring generation pruning.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's MinIO Library, a fresh `init` into a new prefix shows
+- [x] On the agent's MinIO Library, a fresh `init` into a new prefix shows
       `head-0` in the bucket, and a following drop / sync commits `head-1`.
