@@ -73,7 +73,7 @@ renaming, moving.
 
 ### Before merge (verified outside the check command)
 
-- [ ] In Playwright's Chromium against the agent's Library: dropping a folder
+- [x] In Playwright's Chromium against the agent's Library: dropping a folder
       onto a tree row and dropping loose files onto the list each show the
       confirmation with the right destination, and Add commits them.
 - [ ] The confirmation reads clearly — needs a person: a UX judgement.
