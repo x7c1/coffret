@@ -1,16 +1,11 @@
-use std::sync::Arc;
-
 use coffret_model::Redacted;
 use tracing::{info, warn};
 
 use crate::commit::catch_up;
-use crate::index::Index;
-use crate::local_trash::LocalTrash;
+use crate::departure::{move_departed_to_trash, EmptiedFolders};
 use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
-use crate::sync::departed::Departed;
 use crate::sync::disposal::Disposal;
-use crate::sync::emptied_folders::EmptiedFolders;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
@@ -297,43 +292,4 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         "a sync run finished",
     );
     Ok(outcome)
-}
-
-/// Moves one departed file to the trash, and says what became of it
-/// (spec: EP-15).
-///
-/// A refusal is a finding and not a failure: the file stays where it is with
-/// its row, so the next run finds it departed again and asks again, and the
-/// rest of this run goes on. Nothing here falls back on deleting the file. Only
-/// a failure to forget the row of a file that did go fails the run, since that
-/// is the catalog failing rather than the trash — and the next run, finding the
-/// row and no file, forgets it then.
-async fn move_departed_to_trash(
-    index: &dyn Index,
-    trash: &dyn LocalTrash,
-    departed: Departed,
-) -> SyncResult<Surfaced> {
-    let Departed { source, expected } = departed;
-    match trash
-        .move_to_trash(&source.root, expected.as_ref(), &source.relative)
-        .await
-    {
-        Ok(()) => {
-            index.forget_local_entry(&source.path).await?;
-            Ok(Surfaced::MovedToTrash { path: source.path })
-        }
-        Err(refused) => {
-            // What refused and of what kind, and nothing that names the file:
-            // the path stays in the finding, for whoever asked for the run.
-            warn!(
-                reason = %refused.redacted(),
-                "a deleted Entry's local file could not be moved to the trash; it is left in \
-                 place for the next run",
-            );
-            Ok(Surfaced::MoveToTrashRefused {
-                path: source.path,
-                cause: Arc::new(refused),
-            })
-        }
-    }
 }

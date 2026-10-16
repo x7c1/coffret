@@ -2,14 +2,12 @@ use std::collections::BTreeMap;
 
 use coffret_model::{ContainerId, ContainerKind, ContentHash};
 
-use crate::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, RootMarkerId,
-};
+use crate::departure::{self, Departed};
+use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation, RootMarkerId};
 use crate::index::Index;
 use crate::local_scan::SourceFile;
 use crate::mapped_roots::MappedRoots;
 use crate::sync::candidate::Candidate;
-use crate::sync::departed::Departed;
 use crate::sync::surfaced::Surfaced;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
@@ -46,7 +44,7 @@ pub(super) async fn examine(
         return Ok(());
     }
 
-    if hashed(roots, source).await? == location.entry.hash {
+    if source.content_hash(roots).await? == location.entry.hash {
         // Touched and not changed: the content the Library holds is still the
         // content on disk, so only what this device last saw of the file moves.
         survey.unchanged += 1;
@@ -100,7 +98,7 @@ async fn without_entry(
         });
         return Ok(());
     };
-    if unedited(roots, source, &local).await? {
+    if departure::unedited(roots, source, &local).await? {
         survey.departed.push(Departed {
             source: source.clone(),
             expected,
@@ -111,35 +109,6 @@ async fn without_entry(
         });
     }
     Ok(())
-}
-
-/// Whether a departed file still holds what this device last made it match
-/// (spec: EP-15).
-///
-/// The cheap comparison first, as everywhere a scan compares: a file whose
-/// length and modification time are what this device recorded is not opened.
-/// One whose observation moved is hashed and held against the hash recorded
-/// beside the row, since the Entry's own left the catalog with the Entry. A row
-/// that recorded no hash — one an older build wrote — leaves nothing to hold
-/// the content against, and the file is kept rather than guessed about.
-async fn unedited(
-    roots: &dyn MappedRoots,
-    source: &SourceFile,
-    local: &LocalEntry,
-) -> SyncResult<bool> {
-    if local.observation.size == source.size && local.observation.mtime == source.mtime {
-        return Ok(true);
-    }
-    let Some(recorded) = local.observation.hash else {
-        return Ok(false);
-    };
-    Ok(hashed(roots, source).await? == recorded)
-}
-
-/// The content hash of a file's whole plaintext.
-async fn hashed(roots: &dyn MappedRoots, source: &SourceFile) -> SyncResult<ContentHash> {
-    let content = source.read(roots).await?;
-    Ok(ContentHash::from_bytes(*blake3::hash(&content).as_bytes()))
 }
 
 /// What this device saw of a file, stamped with when it looked and with the

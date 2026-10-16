@@ -6,6 +6,7 @@ use crate::delete::delete_error::{DeleteError, DeleteResult};
 use crate::delete::delete_outcome::DeleteOutcome;
 use crate::delete::delete_request::DeleteRequest;
 use crate::delete::key_lost::lost;
+use crate::delete::mapped_copies::{self, MappedCopiesOutcome};
 use crate::delete::pack_refusal::PackRefusal;
 use crate::delete::plan::{self, Partial};
 use crate::delete::rebuilt_pack::RebuiltPack;
@@ -48,6 +49,13 @@ use crate::upload;
 /// [`CommitOutcome::untrashed`](crate::commit::CommitOutcome::untrashed)
 /// (spec: CP-1, OC-6).
 ///
+/// Once the commit has landed, and where the request carries this device's
+/// mapped folders and trash, the run applies EP-15 to this device's own copies
+/// of the Entries it deleted, as the next sync would: an unedited one goes to
+/// the desktop's trash, an edited one is kept, and both are reported in
+/// [`DeleteOutcome::local`]. A refusal there is reported and fails nothing: the
+/// deletion stands, and the next sync asks again (spec: EP-15).
+///
 /// A run with nothing to delete commits nothing (spec: CP-1). What an
 /// interrupted run leaves is the sync's to settle, as it settles an
 /// interrupted freeze: a pending row names every rebuilt Pack from before its
@@ -66,6 +74,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         now,
         progress,
         policy,
+        copies,
     } = request;
 
     let _pending_owner = index.own_pending_rows().await?;
@@ -197,6 +206,16 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
     }
     deleted.sort_unstable();
 
+    // Only once the commit has landed, which `commit` being `Some` says:
+    // before it, every Entry named is still in the Library and its copy is an
+    // ordinary materialized file (spec: EP-15).
+    let local_copies = match copies {
+        Some(copies) if commit.is_some() => {
+            mapped_copies::move_mapped_copies_to_trash(index, copies, &deleted).await
+        }
+        _ => MappedCopiesOutcome::default(),
+    };
+
     let outcome = DeleteOutcome {
         deleted,
         bytes,
@@ -217,6 +236,8 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         missing: plan.missing,
         commit,
         short: short.unspoken(),
+        local: local_copies.surfaced,
+        unavailable: local_copies.unavailable,
     };
     info!(
         deleted = outcome.deleted.len(),
@@ -231,6 +252,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
             .as_ref()
             .map_or(0, |commit| commit.untrashed.len()),
         keyring_short = outcome.short.is_some(),
+        local = outcome.local.len(),
         "a deletion finished",
     );
     Ok(outcome)

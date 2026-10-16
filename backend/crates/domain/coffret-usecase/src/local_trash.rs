@@ -6,13 +6,14 @@ use crate::descent_error::DescentError;
 use crate::device_state::RootMarkerId;
 use crate::mapped_relative_location::MappedRelativeLocation;
 
-/// The desktop's own trash, as a sync asks it to take one file.
+/// The desktop's own trash, as a sync or a deletion asks it to take one file.
 ///
 /// A file this device materialized whose Entry has since left the Library, and
 /// which still holds what this device last made it match, is moved there by the
-/// sync that finds it rather than left to be carried back in as new
-/// (spec: EP-15). Moved and never deleted: the trash is where a person who
-/// meant to keep it takes it back from.
+/// sync that finds it — or, where this device made the deletion, right after
+/// its commit — rather than left to be carried back in as new (spec: EP-15).
+/// Moved and never deleted: the trash is where a person who meant to keep it
+/// takes it back from.
 ///
 /// A capability for the reason [`Spool`](crate::Spool),
 /// [`MappedRoots`](crate::MappedRoots) and

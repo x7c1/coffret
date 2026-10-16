@@ -21,13 +21,16 @@
 //! turn at them on [`PendingRows`](crate::PendingRows) before it starts rather
 //! than being refused the rows.
 //!
-//! # What it does not touch
+//! # This device's copies
 //!
-//! Local files. A deletion changes the Library and nothing in a mapped folder,
-//! so the person is told only what leaves the Library. What becomes of a file
-//! whose Entry left is the next sync's to decide, on this device and every other
-//! that holds one: an unedited copy goes to the desktop's trash and an edited
-//! one is kept and reported (spec: EP-15).
+//! Once the batch has committed, this device's own copies of the deleted
+//! Entries are dealt with right away rather than at the next sync, so the
+//! explorer does not go on listing them as files the Library does not hold: an
+//! unedited copy goes to the desktop's trash and an edited one is kept, and
+//! both are among the run's findings, in the words a sync reports them in
+//! (spec: EP-15). A move that is refused is reported and leaves the deletion
+//! standing; the next sync tries again. Every other device that holds a copy
+//! decides it at its own next sync.
 
 mod delete_run;
 pub use delete_run::{DeleteRun, RefusedPack};

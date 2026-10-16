@@ -206,6 +206,11 @@ mod error_chains;
 
 pub mod delete;
 
+// What becomes of a file this device materialized once its Entry has left the
+// Library, decided once for the sync that finds it and the deletion that
+// removed it (spec: EP-15).
+mod departure;
+
 // The deletion's own contract, behind the same feature as the other flows'.
 #[cfg(feature = "conformance")]
 pub mod delete_conformance;

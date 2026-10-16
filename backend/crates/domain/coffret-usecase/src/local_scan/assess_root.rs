@@ -34,7 +34,7 @@ use crate::unavailable_root::RootUnavailable;
 /// fails the run with the [`LocalError::Io`] the gateway reports, carrying the
 /// same path and the same operating-system cause. Nothing here reads an error
 /// kind to tell the two apart.
-pub(super) async fn assess_root(
+pub(crate) async fn assess_root(
     roots: &dyn MappedRoots,
     mapping: &Mapping,
 ) -> Result<RootState, LocalError> {

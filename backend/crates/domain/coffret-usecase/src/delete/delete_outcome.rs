@@ -3,6 +3,8 @@ use coffret_model::{ContainerId, EntryPath};
 use crate::commit::{CommitOutcome, ShortKeyring};
 use crate::delete::rebuilt_pack::RebuiltPack;
 use crate::delete::refused_pack::RefusedPack;
+use crate::sync::Surfaced;
+use crate::unavailable_root::UnavailableRoot;
 
 /// What one deletion took out of the Library, rebuilt, and left alone.
 ///
@@ -43,6 +45,22 @@ pub struct DeleteOutcome {
     /// The committed Keyring set the run's read had to step over a position
     /// of, where nothing later in the run spoke for it (spec: KL-15).
     pub short: Option<ShortKeyring>,
+    /// What became of this device's own copies of the deleted Entries right
+    /// after the commit, in Entry Path order, as a sync reports its departed
+    /// files: [`MovedToTrash`](Surfaced::MovedToTrash),
+    /// [`KeptEdited`](Surfaced::KeptEdited) or
+    /// [`MoveToTrashRefused`](Surfaced::MoveToTrashRefused) (spec: EP-15).
+    ///
+    /// Empty where the run was not handed this device's mapped folders; a copy
+    /// whose file is gone from disk as well is not listed. A refused move leaves
+    /// the deletion committed and the copy where it is, and the next sync asks
+    /// again; so does a kept one, which every sync reports until the person
+    /// moves or removes it.
+    pub local: Vec<Surfaced>,
+    /// The mappings whose roots this device could not vouch for when the run
+    /// came to its copies under them, which it left untouched for the next
+    /// sync (spec: EP-12).
+    pub unavailable: Vec<UnavailableRoot>,
 }
 
 impl DeleteOutcome {

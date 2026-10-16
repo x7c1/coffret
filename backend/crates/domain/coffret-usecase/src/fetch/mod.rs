@@ -260,6 +260,7 @@ mod translate;
 pub use translate::{
     local_folder_for, local_path_for, local_path_of, local_place_for, local_place_of,
 };
+pub(crate) use translate::{reaching, relative_below};
 
 mod unheeded;
 pub use unheeded::{Unheeded, UNHEEDED};

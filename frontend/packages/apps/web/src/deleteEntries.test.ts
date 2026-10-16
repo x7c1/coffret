@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { Refusal, type Delete, type DeletePreview } from '@coffret/api';
+import { Refusal, type Delete, type DeletePreview, type Finding } from '@coffret/api';
 
 import {
   askToDelete,
@@ -200,6 +200,34 @@ describe('the lines a deletion stands under', () => {
         '📁 albums — 12 files, 340.0 MB removed from the Library; 2 Packs rebuilt; ' +
         'page-002.jpg stays in the Library — the Library has no key for the Pack holding them; ' +
         'not in the Library: gone.jpg',
+      retry: null,
+    });
+  });
+
+  it('says what became of this device’s copies: counted when moved, named when kept', () => {
+    const finding = (path: string | null, surfaced: Finding['surfaced'], message: string) =>
+      ({ path, message, reason: surfaced === null ? 'root_missing' : 'surfaced', surfaced }) as Finding;
+    expect(
+      deletedLine(
+        run({
+          status: 'done',
+          entries: 4,
+          bytes: 4_000,
+          findings: [
+            finding('albums/a.jpg', 'MovedToTrash', 'moved'),
+            finding('albums/b.jpg', 'MovedToTrash', 'moved'),
+            finding('albums/c.jpg', 'KeptEdited', 'kept'),
+            finding('albums/d.jpg', 'MoveToTrashRefused', 'moving it to the trash was refused'),
+            finding(null, null, 'a folder this device maps is not there'),
+          ],
+        }),
+      ),
+    ).toEqual({
+      text:
+        '📁 albums — 4 files, 4.0 kB removed from the Library; ' +
+        '2 files moved to the trash on this device; ' +
+        'kept on this device because it changed: c.jpg; ' +
+        'd.jpg — moving it to the trash was refused (and 1 more)',
       retry: null,
     });
   });

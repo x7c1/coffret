@@ -19,7 +19,7 @@ use crate::mapped_relative_location::MappedRelativeLocation;
 /// dotfile, a folder — is not removed by the gateway, which removes a folder
 /// only where nothing at all is in it.
 #[derive(Debug, Default)]
-pub(super) struct EmptiedFolders {
+pub(crate) struct EmptiedFolders {
     /// Keyed by the root and the folder's path below it, so a folder several
     /// moved files stood in is asked about once.
     candidates: BTreeMap<(PathBuf, PathBuf), Candidate>,
@@ -34,7 +34,7 @@ struct Candidate {
 
 impl EmptiedFolders {
     /// Records that the file at `relative` below `root` was moved to the trash.
-    pub(super) fn moved(
+    pub(crate) fn moved(
         &mut self,
         root: &Path,
         expected: Option<RootMarkerId>,
@@ -67,7 +67,7 @@ impl EmptiedFolders {
     /// run depends on it. Nothing asks again — the next run moved nothing out
     /// of it — so the person removes such a folder the way they would any
     /// empty folder of their own.
-    pub(super) async fn remove(self, trash: &dyn LocalTrash) {
+    pub(crate) async fn remove(self, trash: &dyn LocalTrash) {
         let mut candidates: Vec<_> = self.candidates.into_iter().collect();
         candidates.sort_by_key(|(_, candidate)| Reverse(candidate.depth));
         for ((root, _), candidate) in candidates {

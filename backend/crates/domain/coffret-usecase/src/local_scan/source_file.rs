@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use coffret_model::{Btime, EntryPath, Mtime};
+use coffret_model::{Btime, ContentHash, EntryPath, Mtime};
 
 use crate::local_error::LocalError;
+use crate::local_io_error::LocalIoError;
 use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
 use crate::source_reader::SourceReader;
@@ -68,6 +69,32 @@ impl SourceFile {
                 return Ok(content);
             }
             content.extend_from_slice(&buffer[..filled]);
+        }
+    }
+
+    /// The content hash of the file's whole plaintext.
+    ///
+    /// What a scan holds a touched file against — its current Entry's hash, or
+    /// the hash recorded beside a departed file's row (spec: EP-10, EP-15) —
+    /// read a buffer at a time, so hashing a file costs no more memory than one
+    /// buffer of it.
+    ///
+    /// Fails only as the disk refuses — opening the file or reading it — so it
+    /// says so in its type, and a caller holding the refusal has no name to
+    /// account for that a read of one known file cannot meet.
+    pub(crate) async fn content_hash(
+        &self,
+        roots: &dyn MappedRoots,
+    ) -> Result<ContentHash, LocalIoError> {
+        let mut reader = roots.source_reader(&self.root, &self.relative).await?;
+        let mut hasher = blake3::Hasher::new();
+        let mut buffer = vec![0u8; READ_CHUNK];
+        loop {
+            let filled = reader.read(&mut buffer).await?;
+            if filled == 0 {
+                return Ok(ContentHash::from_bytes(*hasher.finalize().as_bytes()));
+            }
+            hasher.update(&buffer[..filled]);
         }
     }
 
