@@ -39,4 +39,4 @@ Out of scope: changing what the read-ahead reads or how many fronts it reads.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's two-device MinIO Library with the server at debug level: opening a not-yet-fetched book immediately after listing its folder logs one parcel read and no second front, listing or key-table read.
+- [x] On the agent's two-device MinIO Library with the server at debug level: opening a not-yet-fetched book immediately after listing its folder logs one parcel read and no second front, listing or key-table read.
