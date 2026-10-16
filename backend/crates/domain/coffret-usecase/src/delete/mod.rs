@@ -33,6 +33,15 @@
 //!    and, after the commit, moves every removed object to the provider's
 //!    trash, reporting one that would not go without un-committing anything
 //!    (spec: OC-6).
+//! 6. **This device's copies** (spec: EP-15). Where the caller hands over the
+//!    device's mapped folders and trash
+//!    ([`DeleteRequest::with_mapped_copies`]), the run decides right away what
+//!    the next sync would otherwise decide for this device's own files of the
+//!    deleted Entries: an unedited copy goes to the desktop's trash and its row
+//!    is forgotten, the folders those moves emptied are removed, and an edited
+//!    one is kept and reported — under the same root checks a sync's moves
+//!    answer to (spec: EP-12, EP-13). Nothing here un-commits anything or fails
+//!    the run: a refusal is reported, and the next sync tries again.
 //!
 //! Deletion is not undoable in the Library. A removed Container ID is never
 //! added again (spec: CP-14), and the provider's trash keeps the removed
@@ -45,11 +54,11 @@
 //! [`committed_key_lost`] is the run's own first step on its own, for a caller
 //! that wants the preview to name the Packs a run would be refused for.
 //!
-//! What is deliberately not here. **The local files** a device holds for a
-//! deleted Entry: a deletion touches no mapped folder, and what becomes of a
-//! file whose Entry left the Library is the next sync's to decide (spec: EP-15).
-//! **`update`** (spec: PK-11, PK-12), which rebuilds Packs the same way and
-//! substitutes changed Entries; the rebuild is kept apart from this flow for it.
+//! What is deliberately not here. **Other devices' local files** for a deleted
+//! Entry: what becomes of them is each device's next sync's to decide, once it
+//! has caught up (spec: EP-15). **`update`** (spec: PK-11, PK-12), which
+//! rebuilds Packs the same way and substitutes changed Entries; the rebuild is
+//! kept apart from this flow for it.
 //! **Repack and compaction** (spec: PK-8), which regroup what deletions leave
 //! smaller.
 
@@ -70,6 +79,9 @@ pub use delete_selection::DeleteSelection;
 
 mod key_lost;
 pub use key_lost::committed_key_lost;
+
+mod mapped_copies;
+pub use mapped_copies::MappedCopies;
 
 mod pack_refusal;
 pub use pack_refusal::PackRefusal;

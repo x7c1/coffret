@@ -77,34 +77,13 @@ impl<'a> IntoIterator for &'a Findings {
 
 impl From<&SyncOutcome> for Findings {
     fn from(outcome: &SyncOutcome) -> Self {
-        let surfaced = outcome.surfaced.iter().map(|surfaced| match surfaced {
-            Surfaced::PackResident { path, .. } => Finding::Surfaced {
-                path: path.clone(),
-                reason: FindingReason::ChangedInPack,
-            },
-            Surfaced::DeletedLocally { path } => Finding::Surfaced {
-                path: path.clone(),
-                reason: FindingReason::DeletedLocally,
-            },
-            Surfaced::MovedToTrash { path } => Finding::Surfaced {
-                path: path.clone(),
-                reason: FindingReason::MovedToTrash,
-            },
-            Surfaced::KeptEdited { path } => Finding::Surfaced {
-                path: path.clone(),
-                reason: FindingReason::KeptEdited,
-            },
-            Surfaced::MoveToTrashRefused { path, cause } => Finding::Surfaced {
-                path: path.clone(),
-                reason: FindingReason::MoveToTrashRefused {
-                    cause: cause.clone(),
-                },
-            },
-        });
         let settled = outcome.settled.iter().cloned().map(Finding::Settled);
 
         Self(
-            surfaced
+            outcome
+                .surfaced
+                .iter()
+                .map(surfaced)
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
                 .chain(committed(outcome.commit.as_ref()))
@@ -138,8 +117,13 @@ impl From<&FreezeOutcome> for Findings {
     }
 }
 
-/// What a deletion still has to say beside its counts: what its commit left
+/// What a deletion still has to say beside its counts: what became of this
+/// device's own copies of the deleted Entries, the mapped roots it could not
+/// vouch for when it came to them (spec: EP-12, EP-15), what its commit left
 /// for later and the Keyring repairs it performed (spec: OC-6, KL-15).
+///
+/// The copies are said in the words a sync says its departed files in,
+/// because it is the same decision about the same files, made sooner.
 ///
 /// The Packs it was refused for are not among these. They are the deletion's
 /// own answer — which named Entries stayed, and why — and a caller reads them
@@ -148,8 +132,12 @@ impl From<&FreezeOutcome> for Findings {
 impl From<&DeleteOutcome> for Findings {
     fn from(outcome: &DeleteOutcome) -> Self {
         Self(
-            committed(outcome.commit.as_ref())
-                .into_iter()
+            outcome
+                .local
+                .iter()
+                .map(surfaced)
+                .chain(unavailable(&outcome.unavailable))
+                .chain(committed(outcome.commit.as_ref()))
                 .chain(repaired(outcome.commit.as_ref()))
                 .chain(short(outcome.short.as_ref()))
                 .collect(),
@@ -226,6 +214,28 @@ impl Findings {
             .find_map(|link| link.downcast_ref::<CommitFailure>())
             .map(Self::from)
             .unwrap_or_default()
+    }
+}
+
+/// The finding for one file a sync — or a deletion, for this device's copies of
+/// the Entries it deleted — reported rather than acted on, or reported having
+/// acted on (spec: PK-14, EP-10, EP-15).
+fn surfaced(surfaced: &Surfaced) -> Finding {
+    let (path, reason) = match surfaced {
+        Surfaced::PackResident { path, .. } => (path, FindingReason::ChangedInPack),
+        Surfaced::DeletedLocally { path } => (path, FindingReason::DeletedLocally),
+        Surfaced::MovedToTrash { path } => (path, FindingReason::MovedToTrash),
+        Surfaced::KeptEdited { path } => (path, FindingReason::KeptEdited),
+        Surfaced::MoveToTrashRefused { path, cause } => (
+            path,
+            FindingReason::MoveToTrashRefused {
+                cause: cause.clone(),
+            },
+        ),
+    };
+    Finding::Surfaced {
+        path: path.clone(),
+        reason,
     }
 }
 

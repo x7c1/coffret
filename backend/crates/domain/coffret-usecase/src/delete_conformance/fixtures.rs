@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use coffret_format::DecodedContainer;
 use coffret_model::{
@@ -9,7 +10,7 @@ use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
 use crate::delete::{delete_entries, DeleteOutcome, DeleteRequest, DeleteSelection};
 use crate::delete_conformance::delete_under_test::DeleteUnderTest;
-use crate::device_state::{BatchId, DeviceTime, Mapping};
+use crate::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::index::Index;
@@ -54,8 +55,30 @@ pub(super) async fn map(fixture: &DeleteUnderTest) {
         .expect("recording a mapping must succeed");
 }
 
-/// Writes one file into the device's folder, with a fixed modification time.
-pub(super) fn write(fixture: &DeleteUnderTest, relative: &str, content: &[u8]) {
+/// The identity a case that moves files out of the folder registers its root
+/// under (spec: EP-13).
+pub(super) fn registered() -> RootMarkerId {
+    RootMarkerId::from_bytes([0xde, 0x1e, 0x7e, 0x00, 0x15, 0x0e, 0x01, 0x05])
+}
+
+/// Maps the device's folder onto the Library root the way recording a mapping
+/// does: a marker in the root, and the same identity expected of it.
+///
+/// What a case needs whose deletion moves this device's copies to the trash:
+/// a move is a write into the mapped folder, made only through a root that
+/// vouches for itself (spec: EP-13, EP-15).
+pub(super) async fn map_registered(fixture: &DeleteUnderTest) {
+    fixture.fs().plant_marker(fixture.folder(), &registered());
+    fixture
+        .index()
+        .set_mapping(Mapping::new(None, fixture.folder().to_path_buf()).expecting(registered()))
+        .await
+        .expect("recording a mapping must succeed");
+}
+
+/// Writes one file into the device's folder, with a fixed modification time,
+/// and says where it stands.
+pub(super) fn write(fixture: &DeleteUnderTest, relative: &str, content: &[u8]) -> PathBuf {
     let path =
         crate::sync_conformance::fixtures::write(fixture.fs(), fixture.folder(), relative, content);
     crate::sync_conformance::fixtures::touch(
@@ -63,6 +86,7 @@ pub(super) fn write(fixture: &DeleteUnderTest, relative: &str, content: &[u8]) {
         &path,
         crate::sync_conformance::fixtures::OLDER,
     );
+    path
 }
 
 /// Content that differs in every byte from one seed to the next.
@@ -145,6 +169,26 @@ pub(super) fn request<'a>(
         at(run),
     )
     .with_policy(policy())
+}
+
+/// Deletes `selection` through the device whose catalog is `index`, handing
+/// the run the fixture's folder and trash so that it deals with that device's
+/// own copies of what it deletes (spec: EP-15). The case expects it to
+/// succeed.
+pub(super) async fn delete_with_copies(
+    store: &dyn ObjectStore,
+    index: &dyn Index,
+    fixture: &DeleteUnderTest,
+    selection: DeleteSelection,
+    run: i64,
+) -> DeleteOutcome {
+    let keys = keys();
+    delete_entries(
+        request(store, index, fixture, &keys, selection, run)
+            .with_mapped_copies(fixture.fs(), fixture.fs()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a deletion must succeed: {error}"))
 }
 
 /// Deletes `selection`, which the case expects to succeed.

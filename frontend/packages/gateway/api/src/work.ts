@@ -516,7 +516,13 @@ interface DeleteOfItsOwn {
   refused: RefusedPack[];
   /** Named files the Library held nothing at. */
   missing: string[];
-  /** What its commit left for later, and the Keyring repairs it performed. */
+  /**
+   * What became of this device's own copies of the deleted files — moved to
+   * the trash, kept because they changed, or a move that was refused — and the
+   * mapped folders it could not vouch for when it came to them, said as a
+   * sync's findings are; then what its commit left for later, and the Keyring
+   * repairs it performed.
+   */
   findings: Finding[];
   /**
    * How far into the run the flow says it has got, and `null` before it has

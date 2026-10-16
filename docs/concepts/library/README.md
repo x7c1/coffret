@@ -137,9 +137,10 @@ and has a window of its own for entering the Passphrase.
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
   the Library)
-- move (a departed file to the desktop's trash, during a sync) — never *trash*,
-  which is Storage's verb: a [Storage Object](../storage-object/) is trashed
-- remove (a folder below a mapped root that a sync's moves to the trash
+- move (a departed file to the desktop's trash, during a sync, or right after
+  the commit of the deletion this device made) — never *trash*, which is
+  Storage's verb: a [Storage Object](../storage-object/) is trashed
+- remove (a folder below a mapped root that a run's moves to the trash
   emptied, once every move is made) — never *delete*, which is the Library's
   verb for Entries
 - take (the turn at this device's pending work, as a server's sync, freeze or
@@ -237,13 +238,14 @@ and has a window of its own for entering the Passphrase.
     carrying it back in would undo the deletion, so no run uploads it. A sync
     moves an **unedited** one — still holding what this device last made it
     match — to the desktop's trash and forgets the record, so the path is
-    outside this device's scope again. An **edited** one is the person's change to a
+    outside this device's scope again; the device that made the deletion does
+    the same for its own copies right after the commit. An **edited** one is the person's change to a
     file the Library no longer has: it stays where it is and every run reports
     it, until the person moves it — elsewhere it is an ordinary added file — or
     removes it. Telling the two apart takes the content hash this device
     records whenever it materializes a file, because the Entry's own leaves the
-    Catalog with the Entry (spec: EP-15). A folder below the mapped root that a
-    sync's moves to the trash leave with nothing at all in it is removed with
+    Catalog with the Entry (spec: EP-15). A folder below the mapped root that
+    those moves to the trash leave with nothing at all in it is removed with
     them, and each folder above it emptied in turn — never the mapped root, and
     never a folder that was empty before the run or still holds anything
     (spec: EP-15).
@@ -456,7 +458,9 @@ and has a window of its own for entering the Passphrase.
   local copy of a deleted Entry moves it to the desktop's trash once it has
   caught up, unless the copy changed since the device last made it match — then
   it keeps it and says so — so the deletion reaches every device's disk without
-  any of them losing an edit (spec: EP-15).
+  any of them losing an edit. The device that made the deletion does this for
+  its own copies right after the commit; every other device does it at its
+  next sync (spec: EP-15).
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).

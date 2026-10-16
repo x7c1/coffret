@@ -2,9 +2,12 @@ use std::path::{Path, PathBuf};
 
 use crate::commit::CommitPolicy;
 use crate::delete::delete_selection::DeleteSelection;
+use crate::delete::mapped_copies::MappedCopies;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::local_trash::LocalTrash;
+use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
 use crate::spool::Spool;
@@ -14,9 +17,15 @@ use crate::spool::Spool;
 /// The two ports, the epoch's keys, where on this device the Packs it rebuilds
 /// wait for their commit, which Entries to delete, and the two values a device
 /// supplies rather than derives: what it calls this batch and what its clock
-/// says. No mapped folder: a deletion is a change to the Library, and what
-/// becomes of a local file that held a deleted Entry is the next sync's to
-/// decide, on this device as on every other (spec: EP-15).
+/// says.
+///
+/// And, where the device hands them over with
+/// [`with_mapped_copies`](Self::with_mapped_copies), its mapped folders and its
+/// trash: then the run applies EP-15 to this device's own copies of the
+/// Entries it deleted right after its commit, as the next sync would, instead
+/// of leaving them standing in the folder until then. Without them the run
+/// touches no mapped folder and the next sync decides. Other devices' copies
+/// are their next sync's to decide either way (spec: EP-15).
 pub struct DeleteRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,
@@ -43,6 +52,10 @@ pub struct DeleteRequest<'a> {
     /// The decisions Storage does not make, for the commit this run ends in
     /// and for the reads and uploads that precede it.
     pub policy: CommitPolicy,
+    /// This device's mapped folders and trash, where the run is to move its own
+    /// unedited copies of the deleted Entries to the trash after the commit,
+    /// and `None` where it is to leave them to the next sync (spec: EP-15).
+    pub copies: Option<MappedCopies<'a>>,
 }
 
 impl<'a> DeleteRequest<'a> {
@@ -72,6 +85,7 @@ impl<'a> DeleteRequest<'a> {
             now,
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
+            copies: None,
         }
     }
 
@@ -84,6 +98,18 @@ impl<'a> DeleteRequest<'a> {
     /// The same request under a different policy.
     pub fn with_policy(mut self, policy: CommitPolicy) -> Self {
         self.policy = policy;
+        self
+    }
+
+    /// The same request moving this device's own unedited copies of the
+    /// Entries it deletes to `trash` once its commit has landed, finding them
+    /// in the folders `roots` reads (spec: EP-15).
+    pub fn with_mapped_copies(
+        mut self,
+        roots: &'a dyn MappedRoots,
+        trash: &'a dyn LocalTrash,
+    ) -> Self {
+        self.copies = Some(MappedCopies { roots, trash });
         self
     }
 }

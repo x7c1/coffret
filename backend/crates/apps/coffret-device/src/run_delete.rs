@@ -24,9 +24,13 @@ impl OpenLibrary {
     /// (spec: PK-10, KL-17). The outcome says which, and a refusal is not an error:
     /// the rest of the deletion commits.
     ///
-    /// No mapped folder is touched, and this answers only what leaves the
-    /// Library. What becomes of a local file whose Entry left is the next
-    /// sync's to decide (spec: EP-15).
+    /// Once the batch has committed, this device's own copies of the deleted
+    /// Entries are dealt with as the next sync would deal with them, so the
+    /// person does not see them standing in the folder until then: an
+    /// unedited one goes to the desktop's trash and an edited one is kept,
+    /// and the outcome says which (spec: EP-15). A refusal there leaves the
+    /// deletion committed and is reported, for the next sync to try again.
+    /// Other devices' copies are their next sync's to decide.
     pub async fn delete(
         &self,
         selection: DeleteSelection,
@@ -55,7 +59,8 @@ impl OpenLibrary {
             batch,
             now,
         )
-        .watched_by(progress);
+        .watched_by(progress)
+        .with_mapped_copies(self.local_fs.as_ref(), self.local_fs.as_ref());
         let outcome = delete_entries(request).await;
         self.fetch_memory.forget_key_table();
         let outcome = outcome?;

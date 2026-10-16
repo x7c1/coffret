@@ -172,7 +172,7 @@ pub async fn local_folder_for(
 /// root mapping is the answer only where no other mapping represents that
 /// component — which is the same partition [`targets`] walks from the other
 /// end.
-fn reaching<'a>(mappings: &'a [Mapping], path: &EntryPath) -> Option<&'a Mapping> {
+pub(crate) fn reaching<'a>(mappings: &'a [Mapping], path: &EntryPath) -> Option<&'a Mapping> {
     mappings
         .iter()
         .find(|mapping| {
@@ -331,19 +331,30 @@ fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<LocalPlace> {
         stopped_at: None,
     };
 
+    let relative = relative_below(mapping, path).ok_or_else(unmaterializable)?;
+    Ok(LocalPlace::new(
+        mapping,
+        crate::MappedRelativeLocation::from_entry_path(&relative),
+    ))
+}
+
+/// Where a path stands below the root of one mapping that reaches it, or
+/// `None` where it is exactly the mapping's own prefix (spec: EP-9).
+///
+/// The whole of the split a fetch places a file by, and the one a deletion
+/// looks for this device's copy of a deleted Entry by
+/// ([`departure`](crate::departure)): the place a file was put and the place
+/// it is looked for again come out of one reading of the mapping.
+pub(crate) fn relative_below(mapping: &Mapping, path: &EntryPath) -> Option<EntryPath> {
     let relative = match mapping.prefix.as_ref() {
         None => path.as_str(),
         Some(prefix) => path
             .as_str()
             .strip_prefix(prefix.as_str())
-            .and_then(|rest| rest.strip_prefix('/'))
-            .ok_or_else(unmaterializable)?,
+            .and_then(|rest| rest.strip_prefix('/'))?,
     };
-
-    let relative = EntryPath::stored(relative)
-        .expect("removing a whole Entry Path prefix leaves an Entry Path");
-    Ok(LocalPlace::new(
-        mapping,
-        crate::MappedRelativeLocation::from_entry_path(&relative),
-    ))
+    Some(
+        EntryPath::stored(relative)
+            .expect("removing a whole Entry Path prefix leaves an Entry Path"),
+    )
 }

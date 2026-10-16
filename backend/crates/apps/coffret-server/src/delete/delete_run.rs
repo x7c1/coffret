@@ -39,8 +39,11 @@ pub struct DeleteRun {
     pub refused: Vec<RefusedPack>,
     /// Named files the Library held no current Entry at.
     pub missing: Vec<EntryPath>,
-    /// What its commit left for later and the Keyring repairs it performed
-    /// (spec: OC-6, KL-15) — on a run that stopped, the repairs alone.
+    /// What became of this device's copies of the deleted files, the mapped
+    /// folders it could not vouch for when it came to them (spec: EP-12,
+    /// EP-15), what its commit left for later and the Keyring repairs it
+    /// performed (spec: OC-6, KL-15) — on a run that stopped, the repairs
+    /// alone.
     pub findings: Vec<Finding>,
     /// How far into the run the flow has got, and `None` before it has said
     /// and once it is over.

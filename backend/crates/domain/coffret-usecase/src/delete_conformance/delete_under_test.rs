@@ -7,7 +7,7 @@ use crate::sync_conformance::fixtures::{folder, spool_dir};
 
 /// What a backend hands the deletion suite for one case.
 ///
-/// One store and **two devices**. A deletion reads no mapped folder, but a case
+/// One store and **two devices**. A deletion needs no mapped folder, but a case
 /// has to put Entries into the Library before it can take any out, and the
 /// flows that do that start at a folder — so the first device has one, in the
 /// [`InMemoryFs`] this fixture makes, along with the spool every flow here

@@ -423,6 +423,15 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     finding to be about. Its record is forgotten and nothing is reported: the
     deletion it would otherwise read as (EP-10) is of an Entry the Library no
     longer holds.
+  - The device that deletes Entries (PK-9) applies this rule to its own files
+    of those Entries right after the deletion's commit, rather than leaving
+    them to its next sync: an unedited one goes to the trash and its record is
+    forgotten, the folders those moves emptied are removed, and an edited one
+    is kept, each reported with the deletion's outcome, under the same root
+    checks and the same handling of a refused move. Nothing there fails the
+    deletion, which has already committed, and whatever it leaves is the next
+    sync's to decide as above. Every other device applies the rule at its own
+    next sync, once it has caught up.
   - A forgotten record and an absent one are not the same state. Absence is a
     deletion the device witnessed of an Entry it materialized, which a fetch
     declines to put back (EP-11); a forgotten record witnesses nothing, so an

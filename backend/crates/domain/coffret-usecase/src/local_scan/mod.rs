@@ -29,9 +29,11 @@
 //! It fails in [`LocalError`](crate::local_error::LocalError), which each flow
 //! reports under its own names.
 
-// The root check itself is never named by a caller — the walk is what asks it,
-// once per mapping, before anything under that root is read (spec: EP-12).
+// The root check itself is asked by the walk, once per mapping, before anything
+// under that root is read (spec: EP-12), and by a deletion before it moves this
+// device's copies of the Entries it deleted out of that root (spec: EP-15).
 mod assess_root;
+pub(crate) use assess_root::assess_root;
 
 mod root_state;
 pub(crate) use root_state::RootState;

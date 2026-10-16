@@ -1,8 +1,8 @@
 use coffret_model::EntryPath;
 
+use crate::departure::Departed;
 use crate::device_state::LocalObservation;
 use crate::sync::candidate::Candidate;
-use crate::sync::departed::Departed;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
 

@@ -5,9 +5,11 @@
 // of them: the server is asked what the deletion would take out and what it
 // would rebuild, that is shown, and only Delete arms it. Cancel arms nothing.
 //
-// What is shown is what leaves the Library, and nothing about this device's own
-// files: a deletion touches no mapped folder, so a file this device holds stays
-// where it is.
+// What is shown is what leaves the Library. Once that has committed, the server
+// moves this device's own unedited copies of the deleted files to the trash and
+// keeps any it finds edited, and the finished line says which, so a file the
+// person has just deleted does not go on standing in the folder as one the
+// Library does not hold.
 //
 // A deletion names one folder, or any number of files: a row's menu names its
 // own, and the explorer's selection (see [`selection`](./selection)) names
@@ -24,6 +26,7 @@ import {
   type Delete,
   type DeletePreview,
   type DeleteTarget,
+  type Finding,
   type RefusedPack,
   type RefusalKind,
 } from '@coffret/api';
@@ -249,9 +252,10 @@ const PHASE: Record<NonNullable<Delete['step']>['phase'], string> = {
 };
 
 /**
- * What a finished deletion is said as: what left the Library, and anything it
- * was refused — or, for one that stopped, what stopped it, with a *try again*
- * where that was a `conflict`. `null` while it is still running.
+ * What a finished deletion is said as: what left the Library, anything it was
+ * refused, and what became of this device's own copies — or, for one that
+ * stopped, what stopped it, with a *try again* where that was a `conflict`.
+ * `null` while it is still running.
  */
 export function deletedLine(run: Delete): DeleteNotice | null {
   const name = targetName(run);
@@ -276,9 +280,44 @@ export function deletedLine(run: Delete): DeleteNotice | null {
       if (run.missing.length > 0) {
         parts.push(`not in the Library: ${run.missing.map(lastOf).join(', ')}`);
       }
+      parts.push(...findingLines(run.findings));
       return { text: parts.join('; '), retry: null };
     }
   }
+}
+
+/**
+ * What became of this device's own copies of the deleted files, and anything
+ * else the run reported beside them.
+ *
+ * The moves are counted rather than named: they are what the person asked for,
+ * and the line already names what was deleted. A copy kept because it changed
+ * is named, because it is the one the person has to do something about; so is
+ * anything else — a refused move, a folder this device could not vouch for, a
+ * Keyring repair — said in the server's own sentence, the first of them and
+ * how many more, as a sync's findings are.
+ */
+function findingLines(findings: readonly Finding[]): string[] {
+  const moved = findings.filter((finding) => finding.surfaced === 'MovedToTrash').length;
+  const kept = findings
+    .filter((finding) => finding.surfaced === 'KeptEdited')
+    .map((finding) => lastOf(finding.path ?? ''));
+  const others = findings.filter(
+    (finding) => finding.surfaced !== 'MovedToTrash' && finding.surfaced !== 'KeptEdited',
+  );
+  const lines: string[] = [];
+  if (moved > 0) {
+    lines.push(`${count(moved)} moved to the trash on this device`);
+  }
+  if (kept.length > 0) {
+    lines.push(`kept on this device because ${kept.length === 1 ? 'it' : 'they'} changed: ${kept.join(', ')}`);
+  }
+  const [first] = others;
+  if (first !== undefined) {
+    const named = first.path === null ? first.message : `${lastOf(first.path)} — ${first.message}`;
+    lines.push(others.length === 1 ? named : `${named} (and ${others.length - 1} more)`);
+  }
+  return lines;
 }
 
 /** `1 file`, `12 files`. */
