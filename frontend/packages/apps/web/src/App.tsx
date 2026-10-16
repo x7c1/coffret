@@ -97,7 +97,7 @@ export function App() {
   useEffect(() => {
     const restore = () => {
       setView(parseHash(window.location.hash));
-      // The notice answers one click on one row, and a move away from that row
+      // The notice answers one gesture on one row, and a move away from that row
       // is the end of it. `go` clears it for the moves it makes; these are the
       // moves it never sees, and a notice left standing would name a file the
       // folder now on the screen does not hold.
@@ -952,6 +952,8 @@ export function App() {
             than shouldering the list across the screen and handing the width
             back when the folders arrive. */}
         <aside
+          // What a book's menu in the tree measures the room below it against.
+          data-scroll-area=""
           style={{
             width: 260,
             flex: '0 0 auto',
@@ -968,6 +970,7 @@ export function App() {
                 current={view.folder}
                 onOpen={(chosen) => go({ folder: chosen, open: null })}
                 onNewFolder={newFolder}
+                onDelete={deleteEntries}
               />
             )}
           </Region>
@@ -1000,7 +1003,7 @@ export function App() {
               )}
             </p>
           )}
-          {/* The answer to a gesture that came to nothing — a row clicked and
+          {/* The answer to a gesture that came to nothing — a row asked to open and
               not opened, files dropped and not added. It stands above the list
               and not inside it, so that it is on the screen whatever the list
               is scrolled to — and it is said in the colour of something a

@@ -8,14 +8,26 @@
 // Reloading in the middle of a book is the ordinary thing a person does to a
 // tab, and coming back to the list would lose where they were.
 
-import { bookPage, chip, expect, inTree, leaf, row, setting, shot, test, top } from './journey';
+import {
+  bookPage,
+  chip,
+  expect,
+  inTree,
+  leaf,
+  libraryName,
+  row,
+  setting,
+  shot,
+  test,
+  top,
+} from './journey';
 
 test('walk the tree to a book, read a page, and reload back into it', async ({ page }) => {
   await page.goto('/');
 
   // The status bar names the Library this device joined, under the name this
-  // device gave it and on the provider it is kept on.
-  await expect(page.getByText(`${setting.library} — on s3`)).toBeVisible();
+  // device gave it.
+  await expect(libraryName(page)).toBeVisible();
   const mapped = top(setting.album);
   await expect(row(page, mapped)).toBeVisible();
   await shot(page, '01-library-root');
@@ -33,9 +45,14 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await expect(page.locator('tbody tr')).toHaveCount(setting.pages);
   await shot(page, '02-book-folder');
 
+  // A click selects a row and opens nothing.
+  await row(page, bookPage(0)).click();
+  await expect(row(page, bookPage(0))).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('img', { name: bookPage(0) })).toHaveCount(0);
+
   // Opening a page fetches it, which is the reader's whole vocabulary for a
   // file this device does not have: there is no download button to press.
-  await row(page, bookPage(0)).click();
+  await row(page, bookPage(0)).dblclick();
   await expect(page.getByRole('img', { name: bookPage(0) })).toBeVisible();
   await expect(page.getByText(`${bookPage(0)} (1/${setting.pages})`)).toBeVisible();
   await shot(page, '03-first-page');
@@ -56,7 +73,7 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
 
   // And the URL is where the screen's place lives: a reload in the middle of a
   // book comes back to the page that was open and not to the top of the folder.
-  await row(page, bookPage(2)).click();
+  await row(page, bookPage(2)).dblclick();
   await expect(page.getByRole('img', { name: bookPage(2) })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('img', { name: bookPage(2) })).toBeVisible();

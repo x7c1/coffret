@@ -1,11 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
 import { TAKEN } from './dropTarget';
-import { FileList } from './FileList';
+import { END_SELECT, FileList, SELECT } from './FileList';
 
 function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
   return {
@@ -161,6 +161,8 @@ it('does not offer a row it will not open', () => {
 function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
+  const onOpenFolder = vi.fn();
+  const onUnsupported = vi.fn();
   const onMap = vi.fn();
   const onPack = vi.fn();
   const onDelete = vi.fn();
@@ -172,9 +174,9 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
       madeHere={madeHere}
       madeHereKnown={madeHereKnown}
       selected={null}
-      onOpenFolder={() => undefined}
+      onOpenFolder={onOpenFolder}
       onOpenFile={onOpenFile}
-      onUnsupported={() => undefined}
+      onUnsupported={onUnsupported}
       onAdd={() => undefined}
       onCollecting={() => undefined}
       onUnreadable={() => undefined}
@@ -189,21 +191,30 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   if (list === null) {
     throw new Error('the list draws an element');
   }
-  return { list, onUnmapped, onOpenFile, onMap, onPack, onDelete };
+  return { list, onUnmapped, onOpenFile, onOpenFolder, onUnsupported, onMap, onPack, onDelete };
 }
 
-afterEach(cleanup);
+// jsdom lays nothing out and has no scrollIntoView of its own, and a selected
+// row asks to be brought into view.
+const unscrolled = Element.prototype.scrollIntoView;
+beforeEach(() => {
+  Element.prototype.scrollIntoView = () => undefined;
+});
+afterEach(() => {
+  cleanup();
+  Element.prototype.scrollIntoView = unscrolled;
+});
 
-// A row in a folder no mapping reaches is not offered, and a click on it is
-// still answered: with which gesture it was and whether there is a folder here
-// to talk about — which there is, since it has a row in it. What it does not do
-// is open, since the fetch behind it would be declined.
-it('answers a click on a row of an unmapped folder as an open, about a folder that is there', () => {
+// A row in a folder no mapping reaches is not offered, and opening it is still
+// answered: with which gesture it was and whether there is a folder here to
+// talk about — which there is, since it has a row in it. What it does not do is
+// open, since the fetch behind it would be declined.
+it('answers opening a row of an unmapped folder as an open, about a folder that is there', () => {
   const { onUnmapped, onOpenFile } = mount(
     listing({ mapped: false, files: [file('cover.png')] }),
   );
 
-  fireEvent.click(screen.getByTitle('cover.png'));
+  fireEvent.doubleClick(screen.getByTitle('cover.png'));
 
   expect(onUnmapped).toHaveBeenCalledTimes(1);
   expect(onUnmapped).toHaveBeenCalledWith('open', true);
@@ -382,20 +393,26 @@ it('closes the menu on a click away and on Escape', () => {
 // folder this device does not map too. A file only added here is not in the
 // Library at all, so it has nothing to delete and nothing to pick out.
 it('offers to delete what the Library holds, mapped here or not, and nothing else', () => {
-  mount(listing({ mapped: false, files: [file('cover.png')] }));
+  const { onDelete } = mount(listing({ mapped: false, files: [file('cover.png')] }));
   deleteFromMenu('cover.png');
+  expect(onDelete).toHaveBeenCalledWith({ folder: null, paths: ['albums/cover.png'] });
+  startSelecting();
   expect(screen.getByLabelText('select cover.png')).toBeTruthy();
   cleanup();
 
+  // A file only added here offers nothing to delete — and so nothing to pick
+  // out, nor a mode to pick it out in.
   mount(listing({ files: [file('new.jpg', { state: 'added', container: null })] }));
   expect(screen.queryByLabelText('actions for new.jpg')).toBeNull();
   expect(screen.queryByRole('menuitem')).toBeNull();
+  expect(screen.queryByRole('button', { name: SELECT })).toBeNull();
   expect(screen.queryByLabelText('select new.jpg')).toBeNull();
 });
 
 // Folders are not picked out: the server takes one folder per deletion.
 it('offers no box on a folder row', () => {
   mount(listing({ folders: [folder('2026', true)], files: [file('cover.png')] }));
+  startSelecting();
   expect(screen.queryByLabelText('select 2026')).toBeNull();
 });
 
@@ -409,46 +426,195 @@ const three = listing({
   ],
 });
 
-// Files picked out are deleted in one go, named in the listing's order rather
-// than the order they were picked in — and picking one opens nothing.
-it('deletes the files picked out together, in the listing order', () => {
-  const { onDelete, onOpenFile } = mount(three);
+/** Puts the boxes out, as "Select" over the rows does. */
+function startSelecting() {
+  fireEvent.click(screen.getByRole('button', { name: SELECT }));
+}
+
+// A box on every row, always, is a column of controls for a gesture made now
+// and then: the boxes, and the one that picks them all, are out only after
+// "Select" is pressed, and go again with what was picked when it is left.
+it('shows no box until the selection mode is entered, and clears it on leaving', () => {
+  const { list } = mount(three);
+  expect(list.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+  expect(screen.queryByLabelText('select every file')).toBeNull();
+
+  startSelecting();
+  expect(screen.getByLabelText('select every file')).toBeTruthy();
+  expect(list.querySelectorAll('tbody input[type="checkbox"]')).toHaveLength(3);
+  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  expect(screen.getByText('1 selected')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: END_SELECT }));
+  expect(list.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
   expect(screen.queryByText(/selected$/)).toBeNull();
 
+  // And coming back into it starts with nothing picked.
+  startSelecting();
+  expect((screen.getByLabelText('select p1.jpg') as HTMLInputElement).checked).toBe(false);
+});
+
+// Files picked out are deleted in one go, named in the listing's order rather
+// than the order they were picked in — and picking one opens nothing, whether
+// by its box or by a click on its row.
+it('deletes the files picked out together, in the listing order', () => {
+  const { list, onDelete, onOpenFile } = mount(three);
+  expect(screen.queryByText(/selected$/)).toBeNull();
+  startSelecting();
+
   fireEvent.click(screen.getByLabelText('select p3.jpg'));
-  fireEvent.click(screen.getByLabelText('select p1.jpg'));
+  fireEvent.click(screen.getByTitle('p1.jpg'));
   expect(onOpenFile).not.toHaveBeenCalled();
   expect(screen.getByText('2 selected')).toBeTruthy();
+  expect((screen.getByLabelText('select p1.jpg') as HTMLInputElement).checked).toBe(true);
 
   fireEvent.click(screen.getByRole('button', { name: 'Delete…' }));
   expect(onDelete).toHaveBeenCalledWith({
     folder: null,
     paths: ['albums/p1.jpg', 'albums/p3.jpg'],
   });
-  // Asking for the deletion takes the selection with it.
+  // Asking for the deletion takes the selection with it, and the mode.
   expect(screen.queryByText(/selected$/)).toBeNull();
+  expect(list.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
 });
 
-// A click on the row away from its box still opens the file.
-it('still opens a file on a click away from its box', () => {
-  const { onOpenFile } = mount(three);
+/** Whether the row titled `name` is drawn selected. */
+function isSelected(name: string): boolean {
+  return screen.getByTitle(name).getAttribute('aria-selected') === 'true';
+}
+
+// A click selects and opens nothing — one row at a time; a double-click opens,
+// a file and a folder alike.
+it('selects a row on a click and opens it on a double-click', () => {
+  const { onOpenFile, onOpenFolder } = mount(three);
+
   fireEvent.click(screen.getByTitle('p1.jpg'));
+  expect(isSelected('p1.jpg')).toBe(true);
+  fireEvent.click(screen.getByTitle('2026'));
+  expect(isSelected('2026')).toBe(true);
+  expect(isSelected('p1.jpg')).toBe(false);
+  expect(onOpenFile).not.toHaveBeenCalled();
+  expect(onOpenFolder).not.toHaveBeenCalled();
+
+  fireEvent.doubleClick(screen.getByTitle('p1.jpg'));
   expect(onOpenFile).toHaveBeenCalledWith('albums/p1.jpg');
+  fireEvent.doubleClick(screen.getByTitle('2026'));
+  expect(onOpenFolder).toHaveBeenCalledWith('albums/2026');
 });
 
-// A row with no box and no menu keeps those cells as part of the row: a click
-// on them opens the file as a click anywhere else on it does.
-it('opens a file from the empty cells of a row with nothing to pick or offer', () => {
+// Enter opens the selected row, and the arrow keys move the selection along
+// the rows — folders first, then files, as they are drawn.
+it('opens the selected row on Enter and moves the selection with the arrow keys', () => {
+  const { list, onOpenFile, onOpenFolder } = mount(three);
+
+  fireEvent.click(screen.getByTitle('2026'));
+  fireEvent.keyDown(list, { key: 'Enter' });
+  expect(onOpenFolder).toHaveBeenCalledWith('albums/2026');
+
+  fireEvent.keyDown(list, { key: 'ArrowDown' });
+  expect(isSelected('p1.jpg')).toBe(true);
+  fireEvent.keyDown(list, { key: 'ArrowDown' });
+  expect(isSelected('new.jpg')).toBe(true);
+  fireEvent.keyDown(list, { key: 'ArrowUp' });
+  expect(isSelected('p1.jpg')).toBe(true);
+  fireEvent.keyDown(list, { key: 'Enter' });
+  expect(onOpenFile).toHaveBeenCalledWith('albums/p1.jpg');
+
+  // A key pressed on a control inside the list is that control's.
+  fireEvent.keyDown(screen.getByLabelText('actions for p1.jpg'), { key: 'Enter' });
+  expect(onOpenFile).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * A `pointerdown` made with `pointerType`. jsdom has no PointerEvent, so the
+ * event is a plain one with the field the row reads put on it.
+ */
+function pressWith(target: Element, pointerType: string) {
+  const down = createEvent.pointerDown(target);
+  Object.defineProperty(down, 'pointerType', { value: pointerType });
+  fireEvent(target, down);
+}
+
+// On a touch screen a tap opens: a double tap is not a gesture a touch screen
+// reliably hands over.
+it('opens a row on a touch tap', () => {
+  const { onOpenFile } = mount(three);
+  const row = screen.getByTitle('p2.jpg');
+  pressWith(row, 'touch');
+  fireEvent.click(row);
+  expect(onOpenFile).toHaveBeenCalledWith('albums/p2.jpg');
+  // The double-click a browser may make of two taps opens nothing more: each
+  // tap has opened the row already.
+  fireEvent.doubleClick(row);
+  expect(onOpenFile).toHaveBeenCalledTimes(1);
+
+  // A mouse's click still only selects.
+  pressWith(screen.getByTitle('p3.jpg'), 'mouse');
+  fireEvent.click(screen.getByTitle('p3.jpg'));
+  expect(onOpenFile).toHaveBeenCalledTimes(1);
+  expect(isSelected('p3.jpg')).toBe(true);
+});
+
+// While files are picked out, the highlight says which are picked and nothing
+// else: neither a row chosen before "Select" was pressed nor one whose pick was
+// taken off again stays drawn as though it were.
+it('draws only the picked rows selected while files are picked out', () => {
+  mount(three);
+  fireEvent.click(screen.getByTitle('p2.jpg'));
+  expect(isSelected('p2.jpg')).toBe(true);
+
+  startSelecting();
+  expect(isSelected('p2.jpg')).toBe(false);
+
+  fireEvent.click(screen.getByTitle('p1.jpg'));
+  expect(isSelected('p1.jpg')).toBe(true);
+  fireEvent.click(screen.getByTitle('p1.jpg'));
+  expect(isSelected('p1.jpg')).toBe(false);
+});
+
+// The row the reader was last opened at is the selected one when the reader
+// closes over the list.
+it('selects the row the reader was last opened at', () => {
+  render(<FileList {...listOf(three).props} selected="albums/p2.jpg" />);
+  expect(isSelected('p2.jpg')).toBe(true);
+});
+
+// A row with no box and no menu keeps those cells as part of the row: a
+// double-click on them opens the file as one anywhere else on it does — and on
+// a menu's cell it is the menu's.
+it('opens a file from the empty cells of a row with nothing to offer', () => {
   const { onOpenFile } = mount(three);
   const cells = screen.getByTitle('new.jpg').querySelectorAll('td');
-  fireEvent.click(cells[0]);
-  fireEvent.click(cells[cells.length - 1]);
+  fireEvent.doubleClick(cells[0]);
+  fireEvent.doubleClick(cells[cells.length - 1]);
   expect(onOpenFile).toHaveBeenCalledTimes(2);
   expect(onOpenFile).toHaveBeenCalledWith('albums/new.jpg');
+
+  fireEvent.doubleClick(screen.getByLabelText('actions for p1.jpg'));
+  expect(onOpenFile).toHaveBeenCalledTimes(2);
+});
+
+// The placeholders the first rows were drawn with are gone: a folder row has a
+// folder drawn on it, and a file row no mark at all — one the reader cannot
+// draw is told by its dimmed name.
+it('draws a folder icon on folder rows and no mark on file rows', () => {
+  mount(listing({ folders: [folder('2026', true)], files: [file('p1.jpg'), file('notes.txt', { openable: false })] }));
+  const marks = (name: string) => screen.getByTitle(name).querySelectorAll('td')[0];
+
+  expect(marks('2026').querySelector('svg[aria-label="folder"]')).not.toBeNull();
+  for (const name of ['p1.jpg', 'notes.txt']) {
+    expect(marks(name).textContent).toBe('');
+    expect(marks(name).querySelector('svg')).toBeNull();
+  }
+  expect(document.body.textContent).not.toMatch(/[▸▣▤]/);
+  const dimmed = screen.getByTitle('notes.txt').querySelectorAll('td')[1] as HTMLElement;
+  const plain = screen.getByTitle('p1.jpg').querySelectorAll('td')[1] as HTMLElement;
+  expect(dimmed.style.color).not.toBe(plain.style.color);
 });
 
 it('picks every file from the header and clears them again', () => {
   mount(three);
+  startSelecting();
   const every = screen.getByLabelText('select every file');
 
   fireEvent.click(every);
@@ -465,6 +631,7 @@ it('picks every file from the header and clears them again', () => {
 // the listing still has.
 it('lets the selection go when the folder changes or its files leave', () => {
   const { rerender } = render(listOf(three));
+  startSelecting();
   fireEvent.click(screen.getByLabelText('select p1.jpg'));
   fireEvent.click(screen.getByLabelText('select p2.jpg'));
   expect(screen.getByText('2 selected')).toBeTruthy();
@@ -472,11 +639,15 @@ it('lets the selection go when the folder changes or its files leave', () => {
   rerender(listOf({ ...three, files: [file('p2.jpg'), file('p3.jpg')] }));
   expect(screen.getByText('1 selected')).toBeTruthy();
 
+  // Another folder leaves the mode too.
   rerender(listOf({ ...three, path: 'albums/2026' }));
   expect(screen.queryByText(/selected$/)).toBeNull();
+  expect(screen.queryByLabelText('select p2.jpg')).toBeNull();
 
   // And coming back does not bring it back.
   rerender(listOf(three));
+  expect(screen.queryByText(/selected$/)).toBeNull();
+  startSelecting();
   expect(screen.queryByText(/selected$/)).toBeNull();
 });
 
@@ -501,6 +672,7 @@ it('says a selection and a drag in the sticky block rather than over the first r
   const sticky = list.firstElementChild as HTMLElement;
   expect(sticky.style.position).toBe('sticky');
 
+  startSelecting();
   fireEvent.click(screen.getByLabelText('select p1.jpg'));
   const line = screen.getByText('1 selected');
   expect(sticky.contains(line)).toBe(true);
@@ -560,6 +732,7 @@ it("opens the last row's menu upwards where there is no room below it", () => {
 // line in each.
 it('gives the selection line the headings’ height and font size', () => {
   const { list } = mount(three);
+  startSelecting();
   const row = () => list.querySelector('thead tr') as HTMLElement;
   const headings = { height: row().style.height, fontSize: row().style.fontSize };
   expect(headings.height).not.toBe('');

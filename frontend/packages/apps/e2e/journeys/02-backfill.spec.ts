@@ -29,7 +29,7 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   await expect(chip(page, last)).toHaveText('remote');
   await shot(page, '01-nothing-here-yet');
 
-  await row(page, first).click();
+  await row(page, first).dblclick();
   await expect(page.getByRole('img', { name: first })).toBeVisible();
 
   // The line the status bar shows while the folder is coming over. Photographed

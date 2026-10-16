@@ -17,7 +17,17 @@
 // the listing back is what brings it back for a person — the server started
 // again, and the launch file the host writes for its next run opened.
 
-import { bookPage, expect, NO_SESSION, row, setting, shot, openExplorer, test } from './journey';
+import {
+  bookPage,
+  expect,
+  libraryName,
+  NO_SESSION,
+  openExplorer,
+  row,
+  setting,
+  shot,
+  test,
+} from './journey';
 
 test('lose the server and get the listing back', async ({ page, coffret }) => {
   await page.goto(`/#path=${setting.book}`);
@@ -43,6 +53,6 @@ test('lose the server and get the listing back', async ({ page, coffret }) => {
   await page.goto(`/#path=${setting.book}`);
 
   await expect(row(page, bookPage(0))).toBeVisible();
-  await expect(page.getByText(`${setting.library} — on s3`)).toBeVisible();
+  await expect(libraryName(page)).toBeVisible();
   await shot(page, '02-and-back-again');
 });

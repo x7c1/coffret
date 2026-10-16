@@ -15,7 +15,7 @@ export const COLOR = {
   ground: '#111',
   /** The tree and the status bar, a shade off the ground. */
   panel: '#181818',
-  /** The folder being listed, and the row the reader was last opened at. */
+  /** The folder being listed, and the list row selected by a click or the arrow keys. */
   selected: '#2b3d52',
   border: '#333',
   /** The line between one row of the file list and the next, fainter than a border. */

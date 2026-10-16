@@ -150,3 +150,14 @@ it('holds nothing where the exchange is refused', async () => {
   });
   expect(heldToken()).toBeNull();
 });
+
+// A ticket refused as no session — spent already, or never issued — is the one
+// thing the page says on its own, so the host's sentence for it is not carried.
+it('carries no sentence where the exchange is refused as no session', async () => {
+  const asking = host();
+  asking.launch.mockRejectedValueOnce(
+    new Refusal('authentication_required', 401, 'This explorer holds no session.'),
+  );
+  expect(await establish(TICKET, shelf(), asking)).toEqual({ kind: 'none', said: null });
+  expect(heldToken()).toBeNull();
+});
