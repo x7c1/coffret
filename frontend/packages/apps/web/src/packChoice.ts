@@ -1,15 +1,17 @@
-// Whether a dropped folder goes into the Library as a Pack, asked before
-// anything is sent.
+// What a drop is added as, confirmed before anything is sent.
+//
+// Every drop is confirmed, once it has been read and before a byte of it goes:
+// where it lands (see `destination.ts`), what it carries, and Add or Cancel.
+// Nothing has been sent when the answer is Cancel, so Cancel needs no clean-up.
 //
 // What a drop is added as follows what was dropped. A drop of files is added one
-// by one, a Container per file, as it always was. A drop holding a folder may be
-// a book — a folder of a few hundred page images, which one by one would be a
-// few hundred Storage objects — or a folder of unrelated files somebody wants
-// added as they are, and only the person dropping it knows which. So it is
-// asked, once the drop has been read and before a byte of it goes: the folder,
-// how many files it holds at every depth and how much they come to, and three
-// answers. Nothing has been sent when the answer is Cancel, so Cancel needs no
-// clean-up.
+// by one, a Container per file, and the confirmation says so with how many and
+// how much. A drop holding a folder may be a book — a folder of a few hundred
+// page images, which one by one would be a few hundred Storage objects — or a
+// folder of unrelated files somebody wants added as they are, and only the
+// person dropping it knows which. So it is asked as well: the folder, how many
+// files it holds at every depth and how much they come to, and whether it goes
+// as a Pack or one by one.
 //
 // What the answer "Pack" packs is exactly the files this drop carries: the
 // server arms the freeze with the paths the upload wrote (spec: PK-17), so a
@@ -54,17 +56,22 @@ export interface DroppedFolder {
   exists: boolean;
 }
 
-/** What a drop holding at least one folder carries, as the question shows it. */
+/** What a drop carries, as the confirmation shows it. */
 export interface DropSummary {
-  /** The dropped folders, in the order the drop first named them. */
+  /** The dropped folders, in the order the drop first named them; none for files alone. */
   folders: DroppedFolder[];
-  /** How many files were dropped loose beside them. */
+  /** How many files were dropped loose, beside the folders or on their own. */
   loose: number;
+  /** How many bytes the loose files come to. */
+  looseBytes: number;
   /** How many files the whole drop carries — every part the request will send. */
   files: number;
 }
 
-/** What the person answered. */
+/**
+ * What the person answered: a Pack or the files one by one, which a drop of
+ * files alone is always added as, or nothing at all.
+ */
 export type Choice = 'pack' | 'one_by_one' | 'cancel';
 
 /**
@@ -74,7 +81,7 @@ export type Choice = 'pack' | 'one_by_one' | 'cancel';
 export type Answer = 'cancel' | { choice: Exclude<Choice, 'cancel'>; numbering: Numbering };
 
 /**
- * What the drop holds, or `null` where it holds no folder and nothing is asked.
+ * What the drop holds.
  *
  * A file's path is relative to the folder it was dropped onto, so a path with a
  * separator is under a dropped folder and its first component is that folder;
@@ -84,13 +91,15 @@ export type Answer = 'cancel' | { choice: Exclude<Choice, 'cancel'>; numbering: 
  * `existing` is the names of the folders the Library already has where the drop
  * lands, which the question says of a dropped folder of the same name.
  */
-export function summarize(files: readonly Added[], existing: readonly string[]): DropSummary | null {
+export function summarize(files: readonly Added[], existing: readonly string[]): DropSummary {
   const folders = new Map<string, DroppedFolder>();
   let loose = 0;
+  let looseBytes = 0;
   for (const added of files) {
     const cut = added.path.indexOf('/');
     if (cut === -1) {
       loose += 1;
+      looseBytes += added.file.size;
       continue;
     }
     const name = added.path.slice(0, cut);
@@ -104,18 +113,18 @@ export function summarize(files: readonly Added[], existing: readonly string[]):
     folder.bytes += added.file.size;
     folders.set(name, folder);
   }
-  if (folders.size === 0) {
-    return null;
-  }
-  return { folders: [...folders.values()], loose, files: files.length };
+  return { folders: [...folders.values()], loose, looseBytes, files: files.length };
 }
 
 /**
  * The question itself, which is also the dialog's label. The drop is what is
  * asked about — the answer applies to all of it — so it is the drop that is
- * counted in, folder by folder.
+ * counted in: folder by folder where it holds any, and file by file where not.
  */
 export function questionOf(summary: DropSummary): string {
+  if (summary.folders.length === 0) {
+    return `this drop holds ${count(summary.files)} — add ${summary.files === 1 ? 'it' : 'them'} to the Library?`;
+  }
   const held = summary.folders.length === 1 ? 'a folder' : `${summary.folders.length} folders`;
   return `this drop holds ${held} — how should it go into the Library?`;
 }
@@ -139,21 +148,37 @@ export function existsLine(folder: DroppedFolder): string {
   );
 }
 
-/** What the loose files beside the folders are told, where there are any. */
+/**
+ * What the loose files are told, where there are any: beside folders, that
+ * they go the way the folders are asked to; on their own, that they are added
+ * one by one — a Container each — with how many and how much.
+ */
 export function looseLine(summary: DropSummary): string {
+  if (summary.folders.length === 0) {
+    const how = summary.loose === 1 ? 'added on its own' : 'added one by one';
+    return `${count(summary.loose)}, ${size(summary.looseBytes)} — ${how}`;
+  }
   const beside = summary.folders.length === 1 ? 'it' : 'them';
   return `and ${count(summary.loose)} beside ${beside}, added the same way`;
 }
 
-/** The three answers, worded for this drop. */
-export function choiceLabels(summary: DropSummary): Record<Choice, string> {
+/**
+ * The two ways a drop holding a folder can be added, worded for this drop. The
+ * confirmation offers them as a choice, with Add and Cancel below.
+ */
+export function choiceLabels(summary: DropSummary): Record<Exclude<Choice, 'cancel'>, string> {
   return {
-    pack: 'Add as a Pack (recommended)',
+    pack: 'As a Pack (recommended)',
     one_by_one:
-      summary.files === 1 ? 'Add the 1 file on its own' : `Add the ${summary.files} files one by one`,
-    cancel: 'Cancel',
+      summary.files === 1 ? 'The 1 file on its own' : `The ${summary.files} files one by one`,
   };
 }
+
+/** What sends the drop, once the confirmation says where and how. */
+export const ADD = 'Add';
+
+/** What sends nothing. */
+export const CANCEL = 'Cancel';
 
 /**
  * The files the Library holds where a drop lands, keyed by their path relative
@@ -299,14 +324,13 @@ export interface Choosing {
   existing: readonly string[];
   /**
    * What the Library holds at the paths `files` may be sent under — see
-   * {@link heldUnder} — asked once the drop is known to hold a folder
-   * and before the question goes up.
+   * {@link heldUnder} — asked before the question goes up.
    */
   held: (files: readonly Added[]) => Promise<HeldFiles>;
   /**
-   * Asks the person what a drop holding a folder is added as, showing what
-   * numbering `files` would come to and which of them replace or are refused
-   * by what is `held`.
+   * Asks the person to confirm the drop — and, where it holds a folder, what it
+   * is added as — showing what numbering `files` would come to and which of
+   * them replace or are refused by what is `held`.
    */
   ask: (summary: DropSummary, files: readonly Added[], held: HeldFiles) => Promise<Answer>;
   /**
@@ -322,17 +346,18 @@ export interface Choosing {
 export type Chosen = 'sent' | 'refused' | 'cancelled';
 
 /**
- * Adds one drop, asking first where it holds a folder.
+ * Adds one drop, once the person has confirmed it.
  *
  * The budgets come first. A drop that is certain to be refused — a file larger
  * than one part may be, more files than one request may carry — is refused
- * here, without being asked about: asking somebody to choose how to add what
- * cannot be added at all would make the choice the first of two surprises.
+ * here, without being asked about: asking somebody to confirm what cannot be
+ * added at all would make the confirmation the first of two surprises.
  *
- * Then a drop of files alone is sent one by one, as it always was, and one
- * holding a folder is asked about. The answer applies to the whole drop: every
- * folder in it, and the loose files beside them — which keep their names, since
- * they are no folder's pages.
+ * Then every drop is asked about, and nothing is sent until it is answered. A
+ * drop of files alone can only be added one by one, so its answer is Add or
+ * Cancel; one holding a folder is also asked what it goes as. The answer
+ * applies to the whole drop: every folder in it, and the loose files beside
+ * them — which keep their names, since they are no folder's pages.
  *
  * The summary counts the files as dropped, and numbering changes none of what
  * it counts: renaming moves no file in or out of a folder it names.
@@ -344,14 +369,16 @@ export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
     return 'refused';
   }
   const summary = summarize(choosing.files, choosing.existing);
-  if (summary === null) {
-    await choosing.send(choosing.files, false);
-    return 'sent';
-  }
   const held = await choosing.held(choosing.files);
   const answer = await choosing.ask(summary, choosing.files, held);
   if (answer === 'cancel') {
     return 'cancelled';
+  }
+  if (summary.folders.length === 0) {
+    // Files alone are no folder's pages: they keep their names and go one by
+    // one whatever the answer carried.
+    await choosing.send(choosing.files, false);
+    return 'sent';
   }
   await choosing.send(renumber(choosing.files, answer.numbering).files, answer.choice === 'pack');
   return 'sent';

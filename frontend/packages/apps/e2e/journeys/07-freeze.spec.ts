@@ -5,13 +5,15 @@
 // page images, and adding it the way a photograph is added would make it one
 // Container per page — a few hundred uploads, a few hundred objects, and a few
 // hundred provider calls to open it again. So a drop holding a folder is asked
-// about before anything is sent, naming the folder with its count and size, and
-// the answer "Add as a Pack" packs exactly the pages the drop carried: they
+// about before anything is sent, as every drop is confirmed: naming the folder
+// with its count and size and the full path it lands under, and offering it as
+// a Pack. Adding it as a Pack packs exactly the pages the drop carried: they
 // land, a freeze packs them together, and what the Library gains is Packs
 // (spec: PK-1, PK-7, PK-17).
 //
 // What a person sees is the whole of what this journey asserts: the question
-// names the dropped folder and how many files it holds, the folder is on the
+// names the dropped folder, how many files it holds, and where it lands — a
+// folder the Library does not have yet, marked new — the folder is on the
 // tree though the Library has not committed it yet, the rows appear the moment
 // the pages land, they become ordinary `present` rows when the batch commits,
 // and a reload finds the folder as the Library's own rather than this
@@ -56,8 +58,22 @@ const GLIMPSE_MS = 4_000;
 /** How long the book has to reach MinIO and be committed. */
 const FREEZE_MS = 120_000;
 
-/** What the question offers for a Pack. */
-const AS_A_PACK = 'Add as a Pack (recommended)';
+/** What the question offers for a Pack, chosen unless somebody says otherwise. */
+const AS_A_PACK = 'As a Pack (recommended)';
+
+/**
+ * Answers the confirmation a drop of the book `name` onto the album brings up:
+ * it names the folder with its count, says where it lands — under the album,
+ * as a folder the Library does not have yet — and goes as a Pack on Add.
+ */
+async function addAsAPack(page: Page, name: string): Promise<void> {
+  const question = page.getByRole('dialog');
+  await expect(question).toContainText(`📁 ${name} — ${setting.importPages} files`);
+  await expect(question).toContainText(`goes into ${setting.album}/${name}/`);
+  await expect(question).toContainText(`${name} is new`);
+  await expect(question.getByRole('radio', { name: AS_A_PACK })).toBeChecked();
+  await question.getByRole('button', { name: 'Add', exact: true }).click();
+}
 
 /**
  * The book's pages in a folder of their own called `name`, which is what the
@@ -179,15 +195,11 @@ async function dropFolderOnto(target: Locator, folder: string): Promise<void> {
   );
 }
 
-/** Drops `folder` onto the album and answers the question with a Pack. */
+/** Drops `folder` onto the album's rows and answers the question with a Pack. */
 async function dropAsAPack(page: Page, folder: string): Promise<void> {
   await page.goto(`/#path=${setting.album}`);
   await dropFolderOnto(row(page, photo(0)), folder);
-  const question = page.getByRole('dialog');
-  await expect(question).toContainText(
-    `📁 ${path.basename(folder)} — ${setting.importPages} files`,
-  );
-  await question.getByRole('button', { name: AS_A_PACK }).click();
+  await addAsAPack(page, path.basename(folder));
 }
 
 test('drop a book folder, add it as a Pack, and watch it pack', async ({ page }) => {
@@ -195,17 +207,18 @@ test('drop a book folder, add it as a Pack, and watch it pack', async ({ page })
   expect(pages).toHaveLength(setting.importPages);
 
   // Onto the album, which is in the part of the Library this device maps,
-  // because that is the only part a file can land in at all (spec: EP-9). The
-  // question is the first thing the drop is answered with: nothing is sent
-  // until it is.
+  // because that is the only part a file can land in at all (spec: EP-9) — and
+  // onto its row in the tree, which takes a drop for its own folder as the
+  // list does. The question is the first thing the drop is answered with:
+  // nothing is sent until it is.
   const book = await bookCalled(IMPORTED);
   await page.goto(`/#path=${setting.album}`);
-  await dropFolderOnto(row(page, photo(0)), book);
+  await dropFolderOnto(inTree(page, path.basename(setting.album)), book);
   await expect(page.getByRole('dialog')).toContainText(
-    `📁 ${IMPORTED} — ${setting.importPages} files`,
+    `goes into ${setting.album}/${IMPORTED}/`,
   );
   await shot(page, '01-asked-how-to-add-the-folder');
-  await page.getByRole('dialog').getByRole('button', { name: AS_A_PACK }).click();
+  await addAsAPack(page, IMPORTED);
 
   // The folder is on the tree though the Library has not committed it: the
   // freeze packing it names it, and the explorer draws it from that.

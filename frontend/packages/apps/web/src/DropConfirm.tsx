@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import type { Added } from '@coffret/api';
 
+import { newLine, pathLine, type Destination, type Level } from './destination';
 import {
+  ADD,
+  CANCEL,
   choiceLabels,
   collisionsOf,
   existsLine,
@@ -22,6 +25,7 @@ import {
   groupHeading,
   hasHidden,
   leftWholeLine,
+  NO_NUMBERING,
   renameLine,
   renumber,
   unchangedLine,
@@ -41,9 +45,18 @@ const REMEMBERED = {
 } as const;
 
 /**
- * The question a drop holding a folder is asked before anything is sent: each
- * dropped folder with how many files it holds and how much they come to, and
- * three answers — a Pack, the files one by one, or nothing at all.
+ * The confirmation every drop is answered with before anything is sent: where
+ * it lands, what it carries, and Add or Cancel.
+ *
+ * Where it lands is said as the Library will hold it — the full path of the
+ * folder each part of the drop goes under, see `destination.ts` — with the
+ * levels the Library does not have yet marked as new, since a drop is also how
+ * a folder comes to be.
+ *
+ * A drop of files alone says how many and how much, and that they are added one
+ * by one. A drop holding a folder names each dropped folder with how many files
+ * it holds and how much they come to, and asks what it goes in as: a Pack,
+ * chosen unless somebody says otherwise, or the files one by one.
  *
  * A folder the Library already has where the drop lands is said to exist, and
  * the same answers are offered all the same. Adding goes as it always does: a
@@ -53,43 +66,50 @@ const REMEMBERED = {
  * other files already in that folder (spec: PK-17).
  *
  * Where the Library already holds a file at a path the drop is sent under, the
- * question says so by name: how many files replace a one-file Entry, the first
- * few of them spelled out, and how many a Pack holds and so are refused. The
- * paths are the ones the drop will be sent under, so ticking a box below that
- * renames them changes what is said here too. Where nothing collides, nothing
- * more is said.
+ * confirmation says so by name: how many files replace a one-file Entry, the
+ * first few of them spelled out, and how many a Pack holds and so are refused.
+ * The paths are the ones the drop will be sent under, so ticking a box below
+ * that renames them changes what is said here too. Where nothing collides,
+ * nothing more is said.
  *
- * Below the answers, two boxes offer to number the pages and the volume
- * folders of what was dropped, off unless the last drop ticked them. Ticking
- * one shows what it would rename before anything is chosen, because a rename
- * is only worth having where it reads the names the way the person meant —
- * and the answer then carries the boxes beside it, whichever it is.
+ * For a drop holding a folder, two boxes offer to number the pages and the
+ * volume folders of what was dropped, off unless the last drop ticked them.
+ * Ticking one shows what it would rename before anything is sent, because a
+ * rename is only worth having where it reads the names the way the person
+ * meant — and Add carries the boxes beside the choice. Files dropped alone are
+ * no folder's pages, and are sent under the names they were dropped with.
  *
  * Escape and a click outside it are Cancel, as they close any dialog — and
  * Cancel costs nothing, because nothing has been sent.
  */
-export function PackConfirm({
+export function DropConfirm({
   summary,
   files,
+  destinations,
   held = NOTHING_HELD,
   onChoose,
 }: {
   summary: DropSummary;
   /** The drop's files as dropped, which the preview is worked out from. */
   files: readonly Added[];
+  /** Where each part of the drop lands, as `destinationsOf` names it. */
+  destinations: readonly Destination[];
   /** What the Library holds where the drop lands, by path relative to it. */
   held?: HeldFiles;
   onChoose: (choice: Choice, numbering: Numbering) => void;
 }) {
-  const [numbering, setNumbering] = useState<Numbering>(() => ({
+  const asked = summary.folders.length > 0;
+  const [how, setHow] = useState<Exclude<Choice, 'cancel'>>(asked ? 'pack' : 'one_by_one');
+  const [ticked, setTicked] = useState<Numbering>(() => ({
     pages: recall(REMEMBERED.pages),
     volumes: recall(REMEMBERED.volumes),
   }));
+  // Files alone are numbered by nothing, whatever the last drop ticked.
+  const numbering = asked ? ticked : NO_NUMBERING;
   const tick = (which: keyof Numbering, on: boolean) => {
     remember(REMEMBERED[which], on);
-    setNumbering((held) => ({ ...held, [which]: on }));
+    setTicked((held) => ({ ...held, [which]: on }));
   };
-  const answer = (choice: Choice) => onChoose(choice, numbering);
 
   useEffect(() => {
     const closing = (event: KeyboardEvent) => {
@@ -109,10 +129,13 @@ export function PackConfirm({
 
   const labels = choiceLabels(summary);
   const question = questionOf(summary);
+  const into = (folder: string | null) =>
+    destinations.find((destination) => destination.folder === folder) ?? null;
+  const loose = into(null);
   return (
     <div
       role="presentation"
-      onClick={() => answer('cancel')}
+      onClick={() => onChoose('cancel', numbering)}
       style={{
         position: 'fixed',
         inset: 0,
@@ -144,57 +167,126 @@ export function PackConfirm({
         }}
       >
         <p style={{ margin: 0 }}>{question}</p>
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-          {summary.folders.map((folder) => (
-            <li key={folder.name} style={{ padding: '2px 0' }}>
-              {folderLine(folder)}
-              {folder.exists && (
-                <span style={{ display: 'block', color: COLOR.warn, paddingLeft: 22 }}>
-                  {existsLine(folder)}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+        {asked && (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {summary.folders.map((folder) => {
+              const destination = into(folder.name);
+              return (
+                <li key={folder.name} style={{ padding: '2px 0' }}>
+                  {folderLine(folder)}
+                  {destination !== null && <Where levels={destination.levels} />}
+                  {folder.exists && (
+                    <span style={{ ...INSET, color: COLOR.warn }}>{existsLine(folder)}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {summary.loose > 0 && (
-          <p style={{ margin: 0, color: COLOR.dim }}>{looseLine(summary)}</p>
+          <div>
+            <span style={{ color: asked ? COLOR.dim : COLOR.text }}>{looseLine(summary)}</span>
+            {loose !== null && <Where levels={loose.levels} />}
+          </div>
         )}
         {replaces !== null && (
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
         )}
         {refused !== null && <p style={{ margin: 0, color: COLOR.warn }}>{refused}</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <button type="button" autoFocus onClick={() => answer('pack')} style={CHOICE}>
-            {labels.pack}
-          </button>
-          <button type="button" onClick={() => answer('one_by_one')} style={CHOICE}>
-            {labels.one_by_one}
-          </button>
-          <button type="button" onClick={() => answer('cancel')} style={CHOICE}>
-            {labels.cancel}
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={numbering.pages}
-              onChange={(event) => tick('pages', event.target.checked)}
-            />
-            Number the pages
-          </label>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={numbering.volumes}
-              onChange={(event) => tick('volumes', event.target.checked)}
-            />
-            Number the volume folders
-          </label>
-        </div>
+        {asked && (
+          <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <legend style={{ padding: 0, marginBottom: 4, color: COLOR.dim }}>add it as</legend>
+            {(['pack', 'one_by_one'] as const).map((choice) => (
+              <label key={choice} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  name="how"
+                  checked={how === choice}
+                  onChange={() => setHow(choice)}
+                />
+                {labels[choice]}
+              </label>
+            ))}
+          </fieldset>
+        )}
+        {asked && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={ticked.pages}
+                onChange={(event) => tick('pages', event.target.checked)}
+              />
+              Number the pages
+            </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={ticked.volumes}
+                onChange={(event) => tick('volumes', event.target.checked)}
+              />
+              Number the volume folders
+            </label>
+          </div>
+        )}
         {(numbering.pages || numbering.volumes) && <Preview groups={groups} />}
+        {/* At the foot of the dialog and kept in view as it scrolls: a preview
+            of a few hundred renames would otherwise push the one thing every
+            drop needs answered out of reach. */}
+        <div
+          style={{
+            position: 'sticky',
+            bottom: -16,
+            margin: '0 -16px -16px',
+            padding: '10px 16px 16px',
+            background: COLOR.panel,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 8,
+          }}
+        >
+          <button type="button" onClick={() => onChoose('cancel', numbering)} style={CHOICE}>
+            {CANCEL}
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={() => onChoose(how, numbering)}
+            style={{ ...CHOICE, borderColor: COLOR.added }}
+          >
+            {ADD}
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Where one part of the drop lands, as the Library will hold it, with the
+ * levels it does not have yet drawn in the colour of what is on its way in and
+ * said in words below.
+ */
+function Where({ levels }: { levels: readonly Level[] }) {
+  const made = newLine(levels);
+  return (
+    <>
+      <span style={{ ...INSET, overflowWrap: 'anywhere' }}>
+        <span style={{ color: COLOR.dim }}>goes into </span>
+        {levels.length === 0
+          ? pathLine(levels)
+          : levels.map((level) => (
+              <span
+                key={level.path}
+                data-new={level.exists ? undefined : ''}
+                style={level.exists ? undefined : { color: COLOR.added, fontStyle: 'italic' }}
+              >
+                {`${level.name}/`}
+              </span>
+            ))}
+      </span>
+      {made !== null && <span style={{ ...INSET, color: COLOR.added }}>{made}</span>}
+    </>
   );
 }
 
@@ -262,6 +354,9 @@ function Preview({ groups }: { groups: readonly Group[] }) {
     </div>
   );
 }
+
+/** A line under the one it belongs to, set in past the folder's mark. */
+const INSET: CSSProperties = { display: 'block', paddingLeft: 22 };
 
 const CHOICE: CSSProperties = {
   border: `1px solid ${COLOR.border}`,

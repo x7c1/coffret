@@ -42,16 +42,24 @@ describe('summarize', () => {
   it('counts every file under a dropped folder, however deep', () => {
     const files = [...book('BookX', 80, 725_000), added('BookX/a/b/c/deep.jpg', 0)];
     const summary = summarize(files, []);
-    expect(summary).not.toBeNull();
-    expect(summary?.folders).toEqual([
+    expect(summary.folders).toEqual([
       { name: 'BookX', files: 81, bytes: 58_000_000, exists: false },
     ]);
-    expect(summary?.files).toBe(files.length);
-    expect(folderLine(summary!.folders[0])).toBe('📁 BookX — 81 files, 58.0 MB');
+    expect(summary.files).toBe(files.length);
+    expect(folderLine(summary.folders[0])).toBe('📁 BookX — 81 files, 58.0 MB');
   });
 
-  it('asks nothing of a drop of files alone', () => {
-    expect(summarize([added('cover.png'), added('notes.txt')], [])).toBeNull();
+  // Files alone are confirmed too: how many and how much, and that they go
+  // one by one, since there is no folder to make a Pack of.
+  it('counts a drop of files alone, and says they are added one by one', () => {
+    const summary = summarize([added('cover.png', 1_500_000), added('notes.txt', 500_000)], []);
+    expect(summary).toEqual({ folders: [], loose: 2, looseBytes: 2_000_000, files: 2 });
+    expect(questionOf(summary)).toBe('this drop holds 2 files — add them to the Library?');
+    expect(looseLine(summary)).toBe('2 files, 2.0 MB — added one by one');
+
+    const one = summarize([added('cover.png', 1_000)], []);
+    expect(questionOf(one)).toBe('this drop holds 1 file — add it to the Library?');
+    expect(looseLine(one)).toMatch(/^1 file, .* — added on its own$/);
   });
 
   // Several folders are listed each with its own totals, and loose files beside
@@ -59,19 +67,18 @@ describe('summarize', () => {
   it('lists each folder of a drop and the loose files beside them', () => {
     const files = [...book('vol-1', 3), ...book('vol-2', 2), added('cover.png')];
     const summary = summarize(files, ['vol-2']);
-    expect(summary?.folders.map((folder) => [folder.name, folder.files, folder.exists])).toEqual([
+    expect(summary.folders.map((folder) => [folder.name, folder.files, folder.exists])).toEqual([
       ['vol-1', 3, false],
       ['vol-2', 2, true],
     ]);
-    expect(summary?.loose).toBe(1);
-    expect(summary?.files).toBe(6);
-    expect(existsLine(summary!.folders[1])).toMatch(/^vol-2 already exists here — /);
-    expect(questionOf(summary!)).toBe('this drop holds 2 folders — how should it go into the Library?');
-    expect(looseLine(summary!)).toBe('and 1 file beside them, added the same way');
-    expect(choiceLabels(summary!)).toEqual({
-      pack: 'Add as a Pack (recommended)',
-      one_by_one: 'Add the 6 files one by one',
-      cancel: 'Cancel',
+    expect(summary.loose).toBe(1);
+    expect(summary.files).toBe(6);
+    expect(existsLine(summary.folders[1])).toMatch(/^vol-2 already exists here — /);
+    expect(questionOf(summary)).toBe('this drop holds 2 folders — how should it go into the Library?');
+    expect(looseLine(summary)).toBe('and 1 file beside them, added the same way');
+    expect(choiceLabels(summary)).toEqual({
+      pack: 'As a Pack (recommended)',
+      one_by_one: 'The 6 files one by one',
     });
   });
 });
@@ -123,12 +130,29 @@ describe('chooseAndAdd', () => {
     expect(asking.ask).toHaveBeenCalledWith(expect.anything(), asking.files, held);
   });
 
-  it('sends a drop of files alone one by one without asking', async () => {
-    const { asking, order } = choosing([added('cover.png')]);
-    expect(await chooseAndAdd(asking)).toBe('sent');
-    expect(asking.held).not.toHaveBeenCalled();
-    expect(asking.ask).not.toHaveBeenCalled();
-    expect(order).toEqual(['sent one by one']);
+  // A drop of files alone is confirmed like any other, and goes one by one
+  // under the names it was dropped with — a Pack or a numbering it could not
+  // have been offered changes neither.
+  it('asks about a drop of files alone before sending it one by one', async () => {
+    const files = [added('cover.png'), added('king-#1.jpg')];
+    for (const choice of ['one_by_one', 'pack'] as const) {
+      const { asking, order, sent } = choosing(files, choice, { pages: true, volumes: true });
+      expect(await chooseAndAdd(asking)).toBe('sent');
+      expect(asking.held).toHaveBeenCalledWith(files);
+      expect(asking.ask).toHaveBeenCalledWith(
+        expect.objectContaining({ folders: [], loose: 2 }),
+        files,
+        NOTHING_HELD,
+      );
+      expect(order).toEqual(['asked', 'sent one by one']);
+      expect(sent).toEqual([['cover.png', 'king-#1.jpg']]);
+    }
+  });
+
+  it('sends nothing of a drop of files alone when it is cancelled', async () => {
+    const { asking } = choosing([added('cover.png')], 'cancel');
+    expect(await chooseAndAdd(asking)).toBe('cancelled');
+    expect(asking.send).not.toHaveBeenCalled();
   });
 
   // Choosing Pack asks the server for a freeze; choosing one by one asks for

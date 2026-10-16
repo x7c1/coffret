@@ -37,19 +37,19 @@ function listing(over: Partial<Listing> = {}): Listing {
   };
 }
 
-function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
-  return renderToStaticMarkup(listOf(shown, madeHere, madeHereKnown));
+function draw(shown: Listing, stranded = false, strandedKnown = true): string {
+  return renderToStaticMarkup(listOf(shown, stranded, strandedKnown));
 }
 
 /** The list drawn for `shown`, with every callback a no-op. */
-function listOf(shown: Listing, madeHere = false, madeHereKnown = true) {
+function listOf(shown: Listing, stranded = false, strandedKnown = true) {
   return (
     <FileList
       listing={shown}
       fill={null}
       freeze={null}
-      madeHere={madeHere}
-      madeHereKnown={madeHereKnown}
+      stranded={stranded}
+      strandedKnown={strandedKnown}
       selected={null}
       onOpenFolder={() => undefined}
       onOpenFile={() => undefined}
@@ -79,9 +79,9 @@ it('tells a folder of files from a folder of folders', () => {
   expect(onlyFolders).not.toContain('to fetch its files');
 });
 
-// And a folder holding neither, which is a folder made in this browser inside an
-// unmapped subtree: the drop it was made for is what the banner is there to warn
-// about, and either fetching clause would point at rows that are not on the
+// And a folder holding neither, which is a stranded folder inside an unmapped
+// subtree that has come to be empty: a drop into it is what the banner is there
+// to warn about, and either fetching clause would point at rows that are not on the
 // screen while the line under it says the folder is empty.
 it('tells an empty one what to do before anything is put in it', () => {
   const made = draw(listing({ path: 'books/vol-1', mapped: false, held: false }), true);
@@ -111,22 +111,22 @@ it('tells a folder that is not there from one that is empty', () => {
     'the Library holds nothing at this path',
   );
 
-  // A folder made in this browser is empty and not yet the Library's, and it is
-  // waiting for what it was made for rather than missing.
-  const made = draw(listing({ path: 'books/vol-2', held: false }), true);
-  expect(made).not.toContain('the Library holds nothing at this path');
-  expect(made).toContain('the Library does not have it yet');
+  // The folder of a book whose freeze has not committed is not yet the
+  // Library's, and it is not missing either: it is not said to be nothing.
+  const stranded = draw(listing({ path: 'books/vol-2', held: false }), true);
+  expect(stranded).not.toContain('the Library holds nothing at this path');
+  expect(stranded).toContain('this folder is empty');
 });
 
-// A folder stranded by a book that never committed rejoins the folders made
-// here only once the folder tree answers, which is a request of its own beside
-// the listing's. Until it does, a `madeHere` of false is not an answer — and
+// A folder stranded by a book that never committed is known to be one only once
+// the folder tree answers, which is a request of its own beside the listing's.
+// Until it does, a `stranded` of false is not an answer — and
 // somebody who closed the tab while their book was packing and came back to
 // that folder would be told the Library has nothing of theirs there. The
 // sentence waits; what stands in the meantime is what stood before it. A tree
 // whose request failed never answers, so it never says it — the screen is
 // already showing that trouble, and this page cannot confirm what it asserts.
-it('waits for the folders made here before saying the Library has nothing', () => {
+it('waits for the stranded folders before saying the Library has nothing', () => {
   const waiting = draw(listing({ path: 'books/vol-2', held: false }), false, false);
   expect(waiting).not.toContain('the Library holds nothing at this path');
   expect(waiting).toContain('this folder is empty');
@@ -139,7 +139,7 @@ it('waits for the folders made here before saying the Library has nothing', () =
 // Being told to map a folder that does not exist would send somebody to a
 // terminal to give a place on this device to a part of the Library there is
 // none of. Held back on what is on hand rather than on the final answer: the
-// objection stands just as well while the folders made here are still out.
+// objection stands just as well while the stranded folders are still out.
 it('does not tell a reader to map a path the Library names nothing at', () => {
   for (const known of [true, false]) {
     expect(
@@ -158,7 +158,7 @@ it('does not offer a row it will not open', () => {
 });
 
 /** The list drawn into the DOM, with what it hands its `onUnmapped` recorded. */
-function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
+function mount(shown: Listing, strandedKnown = true, stranded = false) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
   const onOpenFolder = vi.fn();
@@ -171,8 +171,8 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
       listing={shown}
       fill={null}
       freeze={null}
-      madeHere={madeHere}
-      madeHereKnown={madeHereKnown}
+      stranded={stranded}
+      strandedKnown={strandedKnown}
       selected={null}
       onOpenFolder={onOpenFolder}
       onOpenFile={onOpenFile}
@@ -237,7 +237,7 @@ it('answers a drop on an unmapped root as an add, about a folder that is there',
 });
 
 // And the same drop on a path the Library holds nothing at is said to be about
-// no folder at all — once the folders made in this browser are known, since
+// no folder at all — once the stranded folders are known, since
 // until then a folder whose book is still being packed would look the same.
 it('answers a drop on a path the Library holds nothing at as about no folder, once that is known', () => {
   const nowhere = listing({ path: 'nowhere', mapped: false, held: false });
@@ -286,7 +286,7 @@ it('offers to map the Library root over an unmapped root', () => {
 });
 
 // While files are dragged over the list it says what letting go will do — the
-// same line over a folder made here as over one the Library has, since how a
+// same line over a stranded folder as over one the Library has, since how a
 // drop is added follows what was dropped. Letting go takes it away, and a drag
 // that carries no files gets no such line.
 const carryingFiles = { dataTransfer: { types: ['Files'] } };
@@ -300,8 +300,8 @@ it('says what a drop will do while it is dragged over the list', () => {
   expect(existing.list.textContent).not.toContain('drop to');
   cleanup();
 
-  // A folder made here says the same: making it decided nothing about how a
-  // drop into it is added.
+  // A stranded folder says the same: how a drop into it is added follows what
+  // was dropped.
   const made = mount(listing({ path: 'books/vol-1', held: false }), true, true);
   fireEvent.dragEnter(made.list, carryingFiles);
   expect(made.list.textContent).toContain(TAKEN);
