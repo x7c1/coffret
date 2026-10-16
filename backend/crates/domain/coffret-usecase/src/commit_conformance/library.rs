@@ -111,7 +111,7 @@ impl Library {
     }
 
     /// The bytes of one object, which the case expects to be there.
-    async fn bytes(&self, store: &dyn ObjectStore, name: &str) -> Vec<u8> {
+    pub(super) async fn bytes(&self, store: &dyn ObjectStore, name: &str) -> Vec<u8> {
         let object = self
             .handles
             .get(name)

@@ -11,9 +11,10 @@ use crate::object_store::ObjectStore;
 /// else committed (spec: CP-4).
 ///
 /// Every case starts from a store holding nothing and two catalogs standing at
-/// no committed state. The catalogs must not share storage: two devices that
-/// did would agree by accident rather than because a Snapshot and a record say
-/// the same thing.
+/// no committed state, and creates the Library in that store before it does
+/// anything else (see [`create_library`](super::create_library)). The catalogs
+/// must not share storage: two devices that did would agree by accident rather
+/// than because a Snapshot and a record say the same thing.
 pub struct CommitUnderTest {
     // Dropped before `resources`, so that whatever a catalog or a store is kept
     // in outlives them.

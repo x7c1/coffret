@@ -3,7 +3,6 @@ use std::sync::Arc;
 use coffret_model::{MasterKey, Passphrase};
 use coffret_usecase::ObjectStore;
 use google_drive_store::{DriveSettings, GoogleDrive};
-use s3_store::{S3Settings, S3};
 
 use crate::account_grant::{self, LibraryGrant};
 use crate::accounts::Accounts;
@@ -38,7 +37,7 @@ pub(super) async fn build(
             region,
             path_style,
         } => Ok((
-            s3_store(
+            s3::store(
                 bucket,
                 prefix,
                 endpoint.as_deref(),
@@ -118,17 +117,4 @@ async fn drive_store(
         )),
         grant,
     ))
-}
-
-/// A store over the Library's prefix of an S3 bucket.
-async fn s3_store(
-    bucket: &str,
-    prefix: &str,
-    endpoint: Option<&str>,
-    region: Option<&str>,
-    path_style: bool,
-) -> Arc<dyn ObjectStore> {
-    let client = s3::client(endpoint, region, path_style).await;
-    let settings = S3Settings::new(bucket).with_prefix(prefix);
-    Arc::new(S3::new(client, settings))
 }

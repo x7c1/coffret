@@ -91,11 +91,15 @@ impl From<Error> for ApiError {
 /// control is worth pressing again once there is a bucket to reach. A head the
 /// listing named and that could not be opened is on that side of the line too —
 /// nothing here can tell an object that has just been pruned from one a proxy
-/// swallowed, and both are answered by asking again.
+/// swallowed, and both are answered by asking again. So is a first head the
+/// commit wrote and the listing after it does not show yet: asking again finds
+/// it once the listing does (spec: CP-2).
 ///
 /// A control object that arrived and is not one is `unverified`, for the reason
 /// a fetch's mismatches are: what is at the far end is not what this Library
-/// names.
+/// names. So are two control objects listed under one name, which is a Library
+/// whose exclusion did not hold and which no reader picks a side of
+/// (spec: CP-3, FM-12).
 ///
 /// An epoch this device holds no Master Key for is `epoch`, and is neither of
 /// those nor any of the rest: it is a state of the Library, permanent until
@@ -138,9 +142,9 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         {
             grant_not_accepted(cause)
         }
-        CommitError::MissingHead { .. } | CommitError::KeyringUnreadable { .. } => {
-            storage_did_not_answer(cause)
-        }
+        CommitError::MissingHead { .. }
+        | CommitError::FirstHeadUnlisted
+        | CommitError::KeyringUnreadable { .. } => storage_did_not_answer(cause),
         // No control object states a length this build cannot address, so the
         // commit never raises it; named anyway, so that the arm below keeps
         // accusing only the bytes whatever reaches it.
@@ -149,6 +153,14 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         }
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::unverified(
             "what Storage answered with is not the control state the Library names",
+            cause,
+        ),
+        // Storage answered, and what it holds is two control objects where
+        // the Library names one (spec: CP-3, FM-12): not control state the
+        // Library can be read from, like a corrupt one, and nothing pressing
+        // the control again changes.
+        CommitError::DuplicateControlObject { .. } => ApiError::unverified(
+            "Storage holds two control objects under one name, so the Library is inconsistent",
             cause,
         ),
         CommitError::EpochActivated { .. } => ApiError::epoch(cause),

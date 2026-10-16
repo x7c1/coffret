@@ -66,8 +66,9 @@ pub async fn a_pack_absorbing_a_removed_container_is_refused(fixture: &FreezeUnd
     let library = Library::read(store).await;
     assert_eq!(
         library.heads(),
-        2,
-        "the sync's head and the other device's, and none of this run's",
+        3,
+        "the head the Library was created with, the sync's, and the other device's, and \
+         none of this run's",
     );
     assert!(
         index

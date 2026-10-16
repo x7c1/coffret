@@ -70,7 +70,7 @@ pub async fn a_lost_response_and_withheld_head_never_authorize_trash(fixture: &S
     let keys = keys();
     map(fixture, None).await;
     write(fixture.fs(), fixture.folder(), "a.jpg", b"committed bytes");
-    let withheld = WithheldCommit { inner: store };
+    let withheld = WithheldCommit::around(store);
     let failed = sync_folders(request(&withheld, index, &keys, fixture.fs(), 1)).await;
     assert!(failed.is_err(), "the commit response is unavailable");
     let rows = pending(index).await;

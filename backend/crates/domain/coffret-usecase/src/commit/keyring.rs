@@ -384,10 +384,27 @@ pub(super) async fn replicate(
     batch: &PreparedBatch,
     committing: Committing<'_>,
 ) -> CommitResult<KeyringCommitment> {
-    let generation = examined.next;
     let key_table = next_generation(index, &examined.held, batch).await?;
-    let digest = keyring_set_digest(&key_table)?;
-    let payload = encode_keyring(&key_table, keys.master_key_epoch())?;
+    write_generation(store, keys, policy, examined.next, &key_table, committing).await
+}
+
+/// Writes every replica of one Keyring generation and reads every one of them
+/// back, returning the commitment a head selects it by (spec: CP-8, KL-2,
+/// KL-14).
+///
+/// [`replicate`]'s writing half, apart because writing a Library's first head
+/// writes a generation too — the empty key table a Library that holds nothing
+/// maps — and has no Index to compute one from (spec: CP-2, FM-13).
+pub(super) async fn write_generation(
+    store: &dyn ObjectStore,
+    keys: &ControlKeys,
+    policy: &CommitPolicy,
+    generation: Generation,
+    key_table: &KeyTable,
+    committing: Committing<'_>,
+) -> CommitResult<KeyringCommitment> {
+    let digest = keyring_set_digest(key_table)?;
+    let payload = encode_keyring(key_table, keys.master_key_epoch())?;
 
     let names = (0..policy.replica_count)
         .map(|index_of| {

@@ -44,6 +44,16 @@ impl PreparedBatch {
         self
     }
 
+    /// Whether the batch changes nothing: it adds no Container and removes
+    /// none.
+    ///
+    /// What a commit writes for such a batch is a record with nothing in it,
+    /// which is exactly a Library's first head (spec: CP-2, FM-13) and nothing
+    /// a later head needs.
+    pub fn is_empty(&self) -> bool {
+        self.additions.is_empty() && self.removals.is_empty()
+    }
+
     /// The same batch, recording what this device put on disk for it.
     pub fn materializing(mut self, materialized: Vec<LocalObservation>) -> Self {
         self.materialized = materialized;

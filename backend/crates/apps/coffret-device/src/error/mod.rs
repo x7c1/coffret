@@ -511,10 +511,11 @@ pub enum Error {
     /// The bucket a Library was to live in is not one this device can use.
     ///
     /// Asked before a Library is created, because on S3 nothing else would ask
-    /// until the first sync: a prefix exists by being written under, so a
-    /// mistyped bucket, an endpoint nothing is listening at, and credentials the
-    /// SDK could not resolve all look exactly like a Library that has never been
-    /// synced (spec: FM-18).
+    /// until creating it writes the Library's first head, its last step, after a
+    /// Passphrase has been chosen (spec: CP-2): a prefix exists by being written
+    /// under, so a mistyped bucket, an endpoint nothing is listening at, and
+    /// credentials the SDK could not resolve would be found out only then
+    /// (spec: FM-18).
     ///
     /// The variant is the verdict — no Library goes here — and the cause is
     /// which of those it was, classified by the gateway rather than left as a
@@ -734,6 +735,19 @@ pub enum Error {
     /// starts from there, which is what lets a reader go on browsing either way.
     CatchUp {
         /// What the flow reported.
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<CommitError>,
+    },
+    /// The Library's first head was not written to Storage (spec: CP-2,
+    /// FM-13).
+    ///
+    /// Creating a Library writes `head-0` so that no commit ever starts from no
+    /// head, and it fails in the commit flow's vocabulary because writing it is
+    /// that flow's: a Keyring generation written and read back, and a record
+    /// created into a slot.
+    FirstHead {
+        /// What the write reported.
         ///
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<CommitError>,

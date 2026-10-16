@@ -1,6 +1,10 @@
 use coffret_format::{generate_library_id, generate_master_key, RecoveryCode, StoredMasterKey};
-use coffret_model::{LibraryId, MasterKeyEpoch, Passphrase};
-use google_drive_store::create_app_folder;
+use std::sync::Arc;
+
+use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch, Passphrase};
+use coffret_usecase::commit::{write_first_head, CommitPolicy, ControlKeys};
+use coffret_usecase::ObjectStore;
+use google_drive_store::{create_app_folder, DriveSettings, GoogleDrive};
 use tracing::info;
 
 use super::{CreateLibraryRequest, CreatedLibrary, NewProvider};
@@ -132,12 +136,12 @@ fn account_of(request: &CreateLibraryRequest) -> Result<Option<(Accounts, Choice
 /// Where the Library turns out to be, for a provider whose answer is known
 /// before anything is written.
 ///
-/// S3 is the whole of it: nothing is created there, because a prefix exists by
-/// being written under, so the Library's place is resolved by working out its
-/// name (spec: FM-18) and the first commit is what puts anything there. The one
-/// question worth putting to Storage is whether the bucket is there at all, and
-/// it is put here so that the answer arrives before a Passphrase is chosen and
-/// before a file exists to take back.
+/// S3 is the whole of it: no folder is created there, because a prefix exists
+/// by being written under, so the Library's place is resolved by working out
+/// its name (spec: FM-18) and the first head is what puts anything there. The
+/// one question worth putting to Storage before then is whether the bucket is
+/// there at all, and it is put here so that the answer arrives before a
+/// Passphrase is chosen and before a file exists to take back.
 ///
 /// Drive's place is not knowable yet — the folder does not exist until a grant
 /// has been given and it has been created — so it comes back `None` and is
@@ -200,8 +204,11 @@ where
     let stored = StoredMasterKey::create(&passphrase, &master_key, epoch).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let (provider, new_account) = match (resolved, account) {
-        (Some(provider), _) => (provider, None),
+    let (provider, store, new_account) = match (resolved, account) {
+        (Some(provider), _) => {
+            let store = provider_store(&provider).await;
+            (provider, store, None)
+        }
         (None, Some((accounts, choice))) => {
             drive_folder(
                 reach,
@@ -219,6 +226,7 @@ where
 
     let settings = DeviceSettings::new(library_id, provider);
     library_files::write(staging, &settings, reach)?;
+    first_head(reach.first_head_store(store), &master_key, epoch, staging).await?;
 
     Ok(Built {
         recovery_code: RecoveryCode::encode(master_key, epoch),
@@ -238,10 +246,10 @@ async fn drive_folder<F>(
     request: &CreateLibraryRequest,
     library_id: LibraryId,
     staging: &mut Staging,
-    master_key: &coffret_model::MasterKey,
+    master_key: &MasterKey,
     (accounts, choice, passphrase): (&Accounts, Choice, &Passphrase),
     open_url: F,
-) -> Result<(ProviderSettings, Option<NewAccount>)>
+) -> Result<(ProviderSettings, Arc<dyn ObjectStore>, Option<NewAccount>)>
 where
     F: FnOnce(&str) + Send,
 {
@@ -271,19 +279,29 @@ where
     AccountEnvelope::write(staging.staged(), master_key, &bound.account, &bound.key)
         .map_err(|cause| staging.failed(CreationStep::AccountEnvelope, cause))?;
 
-    let folder_id = create_app_folder(transport, bound.tokens, parent, library_id)
-        .await
-        .map_err(|cause| {
-            staging.failed(
-                CreationStep::AppFolder,
-                Error::Drive {
-                    cause: Box::new(cause),
-                },
-            )
-        })?;
+    let folder_id = create_app_folder(
+        Arc::clone(&transport),
+        Arc::clone(&bound.tokens),
+        parent,
+        library_id,
+    )
+    .await
+    .map_err(|cause| {
+        staging.failed(
+            CreationStep::AppFolder,
+            Error::Drive {
+                cause: Box::new(cause),
+            },
+        )
+    })?;
     // From here on a failure leaves a folder behind, and every refusal says so.
     staging.created_folder(folder_id.clone());
 
+    let store: Arc<dyn ObjectStore> = Arc::new(GoogleDrive::new(
+        transport,
+        bound.tokens,
+        DriveSettings::new(&folder_id),
+    ));
     Ok((
         ProviderSettings::Drive {
             folder_id,
@@ -291,8 +309,67 @@ where
             client_secret: client_secret.clone(),
             account: Some(bound.account.as_str().to_owned()),
         },
+        store,
         bound.new_account,
     ))
+}
+
+/// The store over a Library's place, for a provider whose place is known
+/// before anything is written.
+async fn provider_store(provider: &ProviderSettings) -> Arc<dyn ObjectStore> {
+    match provider {
+        ProviderSettings::S3 {
+            bucket,
+            prefix,
+            endpoint,
+            region,
+            path_style,
+        } => {
+            s3::store(
+                bucket,
+                prefix,
+                endpoint.as_deref(),
+                region.as_deref(),
+                *path_style,
+            )
+            .await
+        }
+        ProviderSettings::Drive { .. } => {
+            unreachable!("a Drive Library's place is resolved only once its folder is created")
+        }
+    }
+}
+
+/// Writes the Library's first head to its Storage (spec: CP-2, FM-13).
+///
+/// `head-0` with nothing in it, carrying the slot the first commit consumes.
+/// Written here, before any other device can know the Library exists, so that
+/// no commit ever starts from no head: one that did would reserve a slot of its
+/// own, and on a Storage that mints identifiers two of them would both succeed
+/// (spec: CP-3).
+///
+/// The last step, because it is the one that leaves something on Storage that
+/// this flow cannot take back. A failure here discards the staging directory
+/// like any other, and what reached Storage stays under a Library ID nothing
+/// references; a second `init` draws an ID of its own.
+async fn first_head(
+    store: Arc<dyn ObjectStore>,
+    master_key: &MasterKey,
+    epoch: MasterKeyEpoch,
+    staging: &Staging,
+) -> Result<()> {
+    let keys = ControlKeys::derive(master_key, epoch);
+    write_first_head(store.as_ref(), &keys, &CommitPolicy::default())
+        .await
+        .map_err(|cause| {
+            staging.failed(
+                CreationStep::FirstHead,
+                Error::FirstHead {
+                    cause: Box::new(cause),
+                },
+            )
+        })?;
+    Ok(())
 }
 
 /// Moves the finished directory to the name the Library is known by.

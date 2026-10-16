@@ -20,16 +20,17 @@
 //! Two calls sit outside the port entirely, and both are questions a Library's
 //! first moments put to Storage before there is a store to put anything to.
 //! [`check_bucket()`] asks whether a bucket is there at all — on S3 a prefix
-//! exists only by being written under, so nothing else would ask until the
-//! first sync. [`check_any_head_or_snapshot()`] asks whether any head or Index
-//! Snapshot stands under a prefix, which is how taking up an existing Library
-//! finds out whether the prefix it was given is a Library's at all — by prefix
-//! rather than by naming one object, because which of them survive depends on
-//! what has been pruned. Absence is an answer rather than a refusal there,
-//! because a Library created and never synced holds nothing either. Both are
-//! here rather than with their caller for the same reason everything below is:
-//! reading the answer means reading a status and an S3 error code, and there is
-//! one table for that.
+//! exists only by being written under, so nothing else would ask before
+//! creating a Library writes its first head, as its last step.
+//! [`check_any_head_or_snapshot()`] asks whether any head or Index Snapshot
+//! stands under a prefix, which is how taking up an existing Library finds out
+//! whether the prefix it was given is a Library's at all — by prefix rather
+//! than by naming one object, because which of them survive depends on what
+//! has been pruned. Absence is an answer rather than a refusal there, because a
+//! Library an earlier build created and never synced holds nothing either.
+//! Both are here rather than with their caller for the same reason everything
+//! below is: reading the answer means reading a status and an S3 error code,
+//! and there is one table for that.
 //!
 //! Every call is bounded in time, in a way that depends on what it carries:
 //! [`call_deadline`] says which and why, and holds the numbers the client is to

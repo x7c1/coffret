@@ -8,10 +8,11 @@
 //! the golden as placeholders.
 //!
 //! The Libraries here are S3 ones against `support::stub_endpoint`, as in
-//! `setup.rs`, which is a bucket that answers and holds nothing: enough for
-//! every command to run to its answer without Docker. What a run that carried
-//! files answers is pinned in the answer module's own cases, over outcomes
-//! assembled by hand, and exercised end to end by `e2e-it`.
+//! `setup.rs`, which is a bucket in memory that holds what the cases write and
+//! nothing else: enough for every command to run to its answer without Docker.
+//! What a run that carried files answers is pinned in the answer module's own
+//! cases, over outcomes assembled by hand, and exercised end to end by
+//! `e2e-it`.
 
 mod support;
 
@@ -190,7 +191,7 @@ fn join_answers_what_it_found_and_carries_no_recovery_code() {
                 "storage": { "provider": "s3", "bucket": "photos", "prefix": prefix },
                 "account": null,
                 "consent_asked": false,
-                "found_on_storage": "nothing_yet",
+                "found_on_storage": "the_library",
             },
             "error": null,
             "findings": [],

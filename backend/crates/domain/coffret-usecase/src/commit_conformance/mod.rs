@@ -68,6 +68,9 @@ use coffret_model::ControlObjectName;
 #[cfg(test)]
 mod carried_slot_tests;
 
+#[cfg(test)]
+mod first_head_tests;
+
 mod checkpoint_failure;
 mod refused_checkpoint;
 pub use checkpoint_failure::repeated_checkpoint_failures_leave_the_journal_replayable;
@@ -162,12 +165,49 @@ fn is_head(name: &str) -> bool {
     )
 }
 
+/// Creates the Library a case runs in, in the empty store the backend handed
+/// over: its first head, written as creating a Library on a device writes it
+/// (spec: CP-2, FM-13).
+///
+/// Every case starts here, so what each asserts is what a commit does to a
+/// Library as it exists once created — whose first commit consumes the slot
+/// `head-0` carries, like every commit after it. Public only for
+/// [`commit_conformance!`](crate::commit_conformance!), which calls it before
+/// each case.
+#[doc(hidden)]
+pub async fn create_library(fixture: &CommitUnderTest) {
+    create_library_in(
+        fixture.store(),
+        &fixtures::control_keys(),
+        &fixtures::policy(),
+    )
+    .await;
+}
+
+/// Writes the first head of a Library into an empty store, as creating the
+/// Library on a device does (spec: CP-2, FM-13).
+///
+/// Shared by every suite whose cases commit, so that each of them starts from a
+/// Library as it exists once created rather than from one no device makes any
+/// more.
+pub(crate) async fn create_library_in(
+    store: &dyn crate::object_store::ObjectStore,
+    keys: &crate::commit::ControlKeys,
+    policy: &crate::commit::CommitPolicy,
+) {
+    crate::commit::write_first_head(store, keys, policy)
+        .await
+        .expect("creating a Library in an empty store must succeed")
+        .expect("an empty store holds no head to find instead");
+}
+
 /// Declares the whole commit conformance suite as tests of the calling crate.
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
 /// that awaits an `Option<`[`CommitUnderTest`]`>`: `Some` with an empty store and
 /// two empty catalogs to run the case against, or `None` to skip it because this
-/// backend is not configured in this environment.
+/// backend is not configured in this environment. Each case first creates the
+/// Library in that store ([`create_library`]).
 ///
 /// The calling crate needs `tokio` with its `macros` and `rt` features among its
 /// dev-dependencies, since the cases are async.
@@ -178,9 +218,8 @@ fn is_head(name: &str) -> bool {
 ///
 /// The `@cases` form takes the same argument followed by `=>` and a list of
 /// case names, and declares only those. It is for a run that cannot hold every
-/// case, such as `InMemoryMintingStore`'s, which leaves out the two races over
-/// a Library's first record; a case added to the suite is not in such a run
-/// until it is added to that list as well.
+/// case; a case added to the suite is not in such a run until it is added to
+/// that list as well.
 ///
 /// ```ignore
 /// coffret_usecase::commit_conformance!(@cases my_fixture().await =>
@@ -232,7 +271,10 @@ macro_rules! commit_conformance {
             #[tokio::test]
             async fn $case() {
                 match $setup {
-                    Some(fixture) => $crate::commit_conformance::$case(&fixture).await,
+                    Some(fixture) => {
+                        $crate::commit_conformance::create_library(&fixture).await;
+                        $crate::commit_conformance::$case(&fixture).await
+                    }
                     None => eprintln!(
                         concat!(
                             "skipping ",

@@ -1,12 +1,12 @@
 //! Helpers shared by this crate's own tests.
 //!
-//! Creating an S3 Library writes nothing to Storage — on S3 a prefix exists by
-//! being written under, so nothing is there until the first commit — and asks it
-//! exactly one question: whether the bucket is there at all. That is what lets
-//! the whole of the creation flow, the layout it produces, and the refusals it
-//! owes be tested in this crate rather than only behind a container, with
-//! [`stub_bucket`] standing in for the bucket. What needs a real one is
-//! opening a Library and running a flow over it, and those are in `tests/`.
+//! Creating an S3 Library asks its bucket whether it is there at all and then
+//! writes the Library's first head under its prefix, and nothing else. That is
+//! what lets the whole of the creation flow, the layout it produces, and the
+//! refusals it owes be tested in this crate rather than only behind a
+//! container, with [`stub_bucket`] standing in for the bucket in memory. What
+//! needs a real one is opening a Library and running a flow over it, and those
+//! are in `tests/`.
 
 mod drive_stub;
 pub(crate) use drive_stub::{consent, DriveStub, CREATED_FOLDER_ID};

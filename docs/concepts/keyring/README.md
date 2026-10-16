@@ -22,7 +22,9 @@ explicit key-lost marker when the committed control state has no reachable
 envelope for it (spec: KL-7). Reading therefore needs just one valid committed
 replica — the count adds redundancy, never a quorum (spec: KL-6). Every
 generation belongs to one Master Key epoch; its number runs across epochs
-without restarting.
+without restarting. A Library's first generation is written when the Library
+is created, with an empty key table, and is the one its first head selects
+(spec: CP-2, FM-13).
 
 ### Keyring commitment
 

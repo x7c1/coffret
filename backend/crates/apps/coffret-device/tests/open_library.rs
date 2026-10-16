@@ -73,17 +73,31 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
     // no grant for a running process to renew.
     assert!(open.grant.is_none(), "an S3 Library holds no grant");
 
-    // A Library that has never been synced has nothing on Storage: the first
-    // commit is what writes Keyring generation 1 and Journal record 1, so the
-    // prefix answers and answers empty.
+    // A Library that has never been synced holds its first head and nothing
+    // else: `head-0`, carrying the slot the first commit consumes, and the
+    // Keyring generation it selects (spec: CP-2, FM-13).
     let page = open
         .store
         .list(None)
         .await
         .expect("the store must reach the bucket the settings name");
+    let heads: Vec<&str> = page
+        .objects
+        .iter()
+        .map(|object| object.name.as_str())
+        .filter(|name| name.starts_with("head-"))
+        .collect();
+    assert_eq!(
+        heads,
+        ["head-0.cfrt"],
+        "a Library that has never been synced holds its first head: {:?}",
+        page.objects
+    );
     assert!(
-        page.objects.is_empty(),
-        "a Library that has never been synced holds nothing: {:?}",
+        page.objects
+            .iter()
+            .all(|object| object.name.starts_with("head-") || object.name.starts_with("key-")),
+        "and nothing but the first head and its Keyring: {:?}",
         page.objects
     );
 

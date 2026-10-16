@@ -90,6 +90,10 @@ impl Aim {
 /// re-read a writer that woke long after its epoch ended could create a
 /// successor into a position the Library has moved past.
 ///
+/// A Library with no head has none to carry a slot, so the aim is the one
+/// [`first_aim`] decides for `head-0` — which the commit flow reaches only
+/// with an empty batch, the empty first head itself (spec: CP-2, FM-13).
+///
 /// `None` says this attempt has no slot to consume and the next one catches up
 /// afresh (spec: CP-4). Nothing has been created either way.
 pub(super) async fn aim(
@@ -98,42 +102,56 @@ pub(super) async fn aim(
     caught: &CaughtUp,
     standing: Option<&IndexCheckpoint>,
 ) -> CommitResult<Option<Aim>> {
-    let (generation, prev) = match caught.head {
-        Some(current) => (current.generation().next()?, Some(current.generation())),
-        None => (Generation::FIRST, None),
+    let Some(current) = caught.head else {
+        return first_aim(store).await.map(Some);
     };
+    let generation = current.generation().next()?;
     let head = ControlHead::at(generation);
     let next_commit_slot = head.reserve_commit_slot(store).await?;
     let snapshot_slot = head.reserve_snapshot_slot(store).await?;
     let mints = next_commit_slot.as_provider_id().is_some();
 
-    let commit_slot = match caught.head {
-        Some(current) => {
-            let Some(slot) = carried_slot(current, standing, mints)? else {
-                return Ok(None);
-            };
-            require_head(store, policy, &caught.listing, current).await?;
-            slot
-        }
-        // A Library that has committed nothing has no head to carry a slot, so
-        // its first record is created into a slot reserved here, under the name
-        // generation 0 takes (spec: FM-13). Where Storage mints identifiers that
-        // reservation is this writer's own, so what it records of the slot
-        // (spec: OC-2) can only ever read back as its own record or as nothing.
-        None => {
-            store
-                .reserve_create(&ControlObjectName::head(Generation::FIRST).to_string())
-                .await?
-        }
+    let Some(commit_slot) = carried_slot(current, standing, mints)? else {
+        return Ok(None);
     };
+    require_head(store, policy, &caught.listing, current).await?;
 
     Ok(Some(Aim {
         generation,
-        prev,
+        prev: Some(current.generation()),
         commit_slot,
         next_commit_slot,
         snapshot_slot,
     }))
+}
+
+/// Decides the slot a Library's first head is created into (spec: CP-2,
+/// FM-13).
+///
+/// A Library with no head has nothing to carry a slot, so the slot generation
+/// 0 takes is reserved here, under the name `head-0`, by the writer that is
+/// about to consume it. That is the one reservation a writer ever makes for
+/// itself. Creating a Library makes it before any other device knows the
+/// Library exists, so nothing races it there. A Library created before its
+/// first head was written at creation has it made by its first commit, which
+/// writes an empty `head-0` this way before committing its batch on top of it;
+/// two such commits can race here (spec: CP-2). Where Storage mints
+/// identifiers the reservation is this writer's own, so what it records of the
+/// slot (spec: OC-2) can only ever read back as its own record or as nothing.
+pub(super) async fn first_aim(store: &dyn ObjectStore) -> CommitResult<Aim> {
+    let head = ControlHead::at(Generation::FIRST);
+    let next_commit_slot = head.reserve_commit_slot(store).await?;
+    let snapshot_slot = head.reserve_snapshot_slot(store).await?;
+    let commit_slot = store
+        .reserve_create(&ControlObjectName::head(Generation::FIRST).to_string())
+        .await?;
+    Ok(Aim {
+        generation: Generation::FIRST,
+        prev: None,
+        commit_slot,
+        next_commit_slot,
+        snapshot_slot,
+    })
 }
 
 /// Consumes the slot [`aim`] decided with the batch's Journal record.

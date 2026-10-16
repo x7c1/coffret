@@ -95,6 +95,9 @@ impl Classified {
 /// credentials Storage rejected, and an epoch this device holds no key for.
 /// Each is answered by one gesture — `coffret map`, deleting the Index file,
 /// `coffret authorize`, the credentials, re-enrolment — whatever flow met it.
+/// A Library listing two control objects under one name is found the same way:
+/// no flow reads or writes such a Library, so what a caller does about it is
+/// the same whichever flow stopped (spec: FM-12).
 ///
 /// Then the outermost error this crate knows the type of, named by its variant
 /// — except where the variant is a flow's wrapper around Storage not coming
@@ -127,8 +130,12 @@ fn classified<'a>(
             .downcast_ref::<CommitFailure>()
             .map(|failure| failure.error.as_ref())
             .or_else(|| link.downcast_ref::<CommitError>());
-        if let Some(CommitError::EpochActivated { .. }) = commit {
-            return Classified::kind("epoch");
+        match commit {
+            Some(CommitError::EpochActivated { .. }) => return Classified::kind("epoch"),
+            Some(CommitError::DuplicateControlObject { .. }) => {
+                return Classified::kind("duplicate_control_object")
+            }
+            _ => {}
         }
     }
 
@@ -191,11 +198,13 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Delete { .. } if storage_below => "storage",
         Error::Fetch { .. } if storage_below => "storage",
         Error::CatchUp { .. } if storage_below => "storage",
+        Error::FirstHead { .. } if storage_below => "storage",
         Error::Sync { .. } => "sync",
         Error::Freeze { .. } => "freeze",
         Error::Delete { .. } => "delete",
         Error::Fetch { .. } => "fetch",
         Error::CatchUp { .. } => "catch_up",
+        Error::FirstHead { .. } => "first_head",
         // The name the explorer's server gives the same refusal of a mapped
         // folder (spec: EP-13).
         Error::RootRefused(_) => "refused_root",

@@ -1,4 +1,4 @@
-use coffret_model::{ContainerKind, Generation};
+use coffret_model::{ContainerKind, ControlObjectName, Generation};
 
 use crate::commit::{commit_batch, CommitError, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
@@ -10,6 +10,18 @@ use crate::commit_conformance::library::{mapped, Library};
 use crate::error::Error;
 use crate::generations::generation;
 
+/// The generation a newly created Library's first commit takes, and its
+/// Keyring generation with it: the one after the Library's first head
+/// (spec: CP-2, FM-13).
+fn generation_of_the_first_commit() -> Generation {
+    generation(1)
+}
+
+/// The name a newly created Library's first commit is created under.
+fn first_commit() -> ControlObjectName {
+    ControlObjectName::head(generation_of_the_first_commit())
+}
+
 /// A batch whose Entry Paths would collide is refused, and nothing is written
 /// (spec: EP-5, EP-6).
 ///
@@ -17,11 +29,12 @@ use crate::generations::generation;
 /// Keyring candidate is on Storage and the answer would be the same, except
 /// that the Library would then be carrying replicas no commit will ever select
 /// — an orphan for OC-2 to reason about, made by a batch that never had a
-/// chance. So the assertion is not only on the error but on the store being
-/// exactly as empty as it started.
+/// chance. So the assertion is not only on the error but on the store holding
+/// exactly what it held before.
 pub async fn a_colliding_entry_path_is_refused_before_any_write(fixture: &CommitUnderTest) {
     let store = fixture.store();
     let keys = control_keys();
+    let before = Library::read(store).await.names();
 
     let batch = PreparedBatch::adding(vec![
         prepared(1, ContainerKind::OneFile, &["albums/a.jpg"]),
@@ -35,8 +48,9 @@ pub async fn a_colliding_entry_path_is_refused_before_any_write(fixture: &Commit
         }
         other => panic!("expected the colliding Entry Path to be refused, got {other:?}"),
     }
-    assert!(
-        Library::read(store).await.names().is_empty(),
+    assert_eq!(
+        Library::read(store).await.names(),
+        before,
         "a refused batch writes nothing at all",
     );
 }
@@ -63,13 +77,13 @@ pub async fn a_missing_keyring_replica_stops_the_commit(fixture: &CommitUnderTes
             replica,
             ..
         }) => {
-            assert_eq!(generation, Generation::FIRST);
+            assert_eq!(generation, generation_of_the_first_commit());
             assert_eq!(replica, 1, "the failure names the replica that was missing");
         }
         other => panic!("expected an incomplete candidate Keyring, got {other:?}"),
     }
     assert!(
-        !Library::read(store).await.holds_any("head-"),
+        !Library::read(store).await.holds(&first_commit()),
         "no Journal record is created while the candidate is incomplete",
     );
 }
@@ -102,13 +116,13 @@ pub async fn the_lowest_missing_replica_is_the_one_reported(fixture: &CommitUnde
             replica,
             ..
         }) => {
-            assert_eq!(generation, Generation::FIRST);
+            assert_eq!(generation, generation_of_the_first_commit());
             assert_eq!(replica, 1, "the failure names the lowest replica missing");
         }
         other => panic!("expected an incomplete candidate Keyring, got {other:?}"),
     }
     assert!(
-        !Library::read(store).await.holds_any("head-"),
+        !Library::read(store).await.holds(&first_commit()),
         "no Journal record is created while the candidate is incomplete",
     );
 }
@@ -145,7 +159,7 @@ pub async fn a_refused_replica_write_stops_the_commit_before_its_head(fixture: &
             "expected the refused write of replica {position} to stop the commit, got {result:?}",
         );
         assert!(
-            !Library::read(store).await.holds_any("head-"),
+            !Library::read(store).await.holds(&first_commit()),
             "a commit whose replica {position} was refused creates no Journal record",
         );
     }
@@ -179,27 +193,29 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
 
     let interrupted = Library::read(store).await;
     assert!(
-        !interrupted.holds_any("head-"),
+        !interrupted.holds(&first_commit()),
         "a commit that never created its record left the head chain alone",
     );
     assert!(
-        interrupted.holds_any("key-"),
+        interrupted.holds_any("key-1-"),
         "the candidate it had already written is still there, selecting nothing",
     );
-    assert!(
+    assert_eq!(
         index
             .checkpoint()
             .await
             .expect("reading the checkpoint must succeed")
-            .is_none(),
-        "the Index stands where it did: the batch changed nothing (spec: CP-1)",
+            .map(|checkpoint| checkpoint.head_generation()),
+        Some(Generation::FIRST),
+        "the Index stands at the head the commit caught up to: the batch changed nothing \
+         (spec: CP-1)",
     );
 
     let outcome = commit_batch(request(store, index, &keys, batch))
         .await
         .expect("the next run commits the same batch cleanly");
-    assert_eq!(outcome.record.generation(), Generation::FIRST);
-    assert_eq!(outcome.record.prev(), None);
+    assert_eq!(outcome.record.generation(), generation(1));
+    assert_eq!(outcome.record.prev(), Some(Generation::FIRST));
 
     let library = Library::read(store).await;
     let keyring = library.keyring(store, outcome.record.keyring()).await;
@@ -238,7 +254,7 @@ pub async fn an_untrashed_removal_reports_what_storage_refused(fixture: &CommitU
         .await
         .expect("a trash the provider refuses does not fail the commit");
 
-    assert_eq!(outcome.record.generation(), generation(1));
+    assert_eq!(outcome.record.generation(), generation(2));
     assert_eq!(outcome.record.removals(), vec![container_id(1)]);
     let [untrashed] = &outcome.untrashed[..] else {
         panic!(

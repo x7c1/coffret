@@ -27,7 +27,14 @@ follow the event privacy boundary (spec: EL-1, EL-5).
 
 Each committed record becomes the Library's **control head**, the position
 the next writer commits from, and the head exposes one **commit slot** — the
-single place where that head's successor can be created (spec: CP-2).
+single place where that head's successor can be created (spec: CP-2). The
+head carries that slot in the shape the [Storage](../storage/) identifies
+objects by: a pre-minted identifier where the Storage mints identifiers, and
+the successor's name `head-<generation + 1>`, re-derived rather than stored,
+where it names objects. A writer never reserves a slot of its own
+(spec: CP-2, CP-3, CP-15). So that even a Library's first commit has a head
+to start from, the first head is written when the Library is created:
+`head-0`, a record that adds and removes nothing.
 
 A batch and its Journal record move through one lifecycle:
 

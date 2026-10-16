@@ -1,10 +1,10 @@
 //! Settling a batch whose commit was attempted, by the slots it recorded
 //! (spec: OC-2, OC-3, OC-7).
 //!
-//! Every case starts from a Library that has committed once, so that the
-//! attempt it interrupts aims at a slot a head carries: on a Storage that mints
-//! identifiers, the slot of a Library's first record is one writer's own
-//! reservation, and no other writer can ever take it.
+//! Every case starts from a Library that has committed once. Like every commit,
+//! the attempt it interrupts aims at a slot a head carries, never at one of its
+//! own: the Library's first head was written when the Library was created
+//! (spec: CP-2).
 
 use coffret_model::{ContainerKind, Mtime};
 
@@ -34,7 +34,7 @@ pub async fn an_attempt_whose_slot_another_writer_took_is_disposed(fixture: &Syn
             .iter()
             .map(AttemptedSlot::generation)
             .collect::<Vec<_>>(),
-        [generation(1)],
+        [generation(2)],
         "the attempt recorded the one slot it aimed at",
     );
 
@@ -85,7 +85,7 @@ pub async fn a_rebased_attempt_is_disposed_only_once_every_slot_is_proven(fixtur
             .iter()
             .map(AttemptedSlot::generation)
             .collect::<Vec<_>>(),
-        [generation(1), generation(2)],
+        [generation(2), generation(3)],
         "the rebased batch recorded both slots it attempted",
     );
 

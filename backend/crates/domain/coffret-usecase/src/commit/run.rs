@@ -7,7 +7,7 @@ use crate::commit::commit_request::CommitRequest;
 use crate::commit::committing::Committing;
 use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
-use crate::commit::{after_commit, candidate, catch_up, journal, keyring};
+use crate::commit::{after_commit, candidate, catch_up, first_head, journal, keyring};
 use crate::committed_batch::CommittedBatch;
 
 /// Makes a prepared batch the Library's next committed state.
@@ -45,6 +45,13 @@ use crate::committed_batch::CommittedBatch;
 /// generation over the new current set — and tries again, up to
 /// [`CommitPolicy::attempts`](super::CommitPolicy::attempts). Nothing is ever
 /// resolved by comparing timestamps (spec: CP-4, CP-7, CP-18, EP-7).
+///
+/// Every commit starts from a head, because creating a Library writes its first
+/// one ([`write_first_head`](super::write_first_head)). A Library created before
+/// that has none until something commits, and its first run writes the empty
+/// `head-0` before the batch and then commits the batch on top of it through
+/// the slot that head carries; that is not an attempt at the batch, and it is
+/// made at most once a run (spec: CP-2).
 ///
 /// What happens after the record exists cannot un-commit it (spec: CP-1).
 /// Trashing the removed Containers and writing the head's Snapshot are both
@@ -111,10 +118,39 @@ async fn attempt_until_committed(
         short,
     } = request;
     let committing = Committing::under(&policy, progress);
+    // Whether this run has written the Library's first head, or found it
+    // created by another writer first; it tries at most once (see below).
+    let mut wrote_first_head = false;
 
-    for attempt in 1..=policy.attempts {
+    let mut attempt = 0;
+    while attempt < policy.attempts {
         committing.begun();
         let caught = catch_up::catch_up(store, index, keys, &policy.retry).await?;
+
+        // A Library with no head has its empty first head written before the
+        // batch, so the batch never reserves a slot of its own (spec: CP-2);
+        // see [`commit_batch`]. An empty batch is itself such a head and goes
+        // straight on.
+        if caught.head.is_none() && !batch.is_empty() {
+            if wrote_first_head {
+                return Err(CommitError::FirstHeadUnlisted);
+            }
+            wrote_first_head = true;
+            if let Attempted::Committed(landed) =
+                first_head::write(store, keys, &policy, committing).await?
+            {
+                index
+                    .refresh(CommittedBatch {
+                        record: landed.record,
+                        materialized: Vec::new(),
+                    })
+                    .await?;
+            }
+            // Not an attempt at this batch: the next pass catches up onto the
+            // head just written, or onto whichever writer's got there first.
+            continue;
+        }
+        attempt += 1;
 
         candidate::check(index, &batch).await?;
 

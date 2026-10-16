@@ -108,6 +108,14 @@ pub(crate) use control_listing::ControlListing;
 
 mod control_object;
 
+// A Library's first head, written when the Library is created so that no
+// commit ever starts from no head (spec: CP-2, FM-13).
+mod first_head;
+pub use first_head::write_first_head;
+
+#[cfg(test)]
+mod first_head_tests;
+
 mod journal;
 
 mod keyring;

@@ -1,8 +1,15 @@
 use std::fs;
+use std::ops::Range;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use coffret_format::RecoveryCode;
-use coffret_model::{MasterKeyEpoch, Passphrase};
+use coffret_model::{ControlObjectName, Generation, MasterKeyEpoch, ObjectRef, Passphrase};
+use coffret_usecase::catch_up::{catch_up_catalog, CatchUpRequest};
+use coffret_usecase::{
+    ByteStream, CommitSlot, InMemoryIndex, InMemoryMintingStore, InMemoryStore, Index, LibraryKeys,
+    ObjectPage, ObjectStore, PageToken, UploadedObject,
+};
 
 use super::{create_library, create_library_through, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
@@ -287,7 +294,7 @@ async fn a_catalog_that_will_not_open_leaves_no_library_behind() {
     );
     assert_eq!(
         *orphan_folder, None,
-        "an S3 Library creates nothing on Storage"
+        "an S3 Library has put nothing on Storage before its first head"
     );
     assert!(!dir.staging().path().exists());
     assert!(!dir.path().exists());
@@ -391,4 +398,207 @@ async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
         !device.path().join("accounts/default").exists()
             && !device.path().join("accounts/default.partial").exists(),
     );
+}
+
+/// What a created Library's Storage holds, read the way a device recovering it
+/// reads it: the listing's control-object names, and a catalog caught up from
+/// nothing (spec: RV-1, CK-9).
+async fn recovered(store: &dyn ObjectStore, name: &str) -> (Vec<String>, InMemoryIndex) {
+    let dir = LibraryDir::resolve(name).expect("the name is one component");
+    let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
+        .expect("the Passphrase must open the key");
+    let keys = LibraryKeys::derive(&unlocked.master_key, unlocked.epoch);
+
+    let mut names = Vec::new();
+    let mut token = None;
+    loop {
+        let page = store
+            .list(token.as_ref())
+            .await
+            .expect("a store in memory lists");
+        names.extend(
+            page.objects
+                .into_iter()
+                .map(|object| object.name)
+                .filter(|name| {
+                    matches!(
+                        ControlObjectName::parse(name),
+                        Ok(ControlObjectName::Head { .. })
+                    )
+                }),
+        );
+        token = page.next;
+        if token.is_none() {
+            break;
+        }
+    }
+
+    let index = InMemoryIndex::new();
+    catch_up_catalog(CatchUpRequest::new(store, &index, &keys))
+        .await
+        .expect("a freshly created Library is one to catch up with");
+    (names, index)
+}
+
+// CP-2, FM-13: creating a Library writes its first head, `head-0` with nothing
+// in it, so the first commit consumes a slot a head carries. On a Storage that
+// keys objects by name the head persists no slot of its own — the name
+// `head-1` is the slot — and a device recovering the Library from nothing
+// stands at that head and lists no Entry (spec: RV-1, CK-9).
+#[tokio::test]
+async fn a_created_library_holds_its_first_head() {
+    state_dir();
+    let store = Arc::new(InMemoryStore::new(16));
+
+    create_library_through(
+        &Reach::this_device().storing_into(Arc::clone(&store) as _),
+        request("first-head"),
+        passphrase,
+        |_| panic!("an S3 Library asks nobody for consent"),
+    )
+    .await
+    .expect("an S3 Library needs nothing but this device and a bucket that answers");
+
+    let (heads, index) = recovered(store.as_ref(), "first-head").await;
+    assert_eq!(heads, ["head-0.cfrt"], "the one head is the first one");
+    let standing = index
+        .checkpoint()
+        .await
+        .expect("the catalog answers")
+        .expect("a Library with a head is one a catalog stands somewhere in");
+    assert_eq!(standing.head_generation(), Generation::FIRST);
+    assert_eq!(
+        standing.next_commit_slot(),
+        None,
+        "where names identify objects the slot is the successor's name, persisted nowhere",
+    );
+    assert!(
+        index
+            .containers_under(None)
+            .await
+            .expect("the catalog answers")
+            .is_empty(),
+        "a Library just created holds nothing",
+    );
+}
+
+// The same on Drive's shape of Storage, where the slot `head-0` carries is an
+// identifier minted for its successor before the head was written: the one
+// every writer of the first commit consumes (spec: CP-2, CP-3).
+#[tokio::test]
+async fn a_created_drive_library_holds_its_first_head_with_a_minted_slot() {
+    let _device = isolated::device();
+    let store = Arc::new(InMemoryMintingStore::new(16));
+
+    create_library_through(
+        &Reach::this_device()
+            .storing_into(Arc::clone(&store) as _)
+            .reaching_drive_through(DriveStub::empty()),
+        drive_request("first-head-on-drive"),
+        passphrase,
+        consent,
+    )
+    .await
+    .expect("a consent and a Drive that answers are all a Drive Library needs");
+
+    let (heads, index) = recovered(store.as_ref(), "first-head-on-drive").await;
+    assert_eq!(heads, ["head-0.cfrt"], "the one head is the first one");
+    let standing = index
+        .checkpoint()
+        .await
+        .expect("the catalog answers")
+        .expect("a Library with a head is one a catalog stands somewhere in");
+    assert_eq!(standing.head_generation(), Generation::FIRST);
+    assert!(
+        standing.next_commit_slot().is_some(),
+        "where Storage mints identifiers the head carries the one minted for its successor",
+    );
+}
+
+/// A store that refuses every call, as a provider that will not take this
+/// device's writes does.
+struct Refusing;
+
+impl Refusing {
+    fn refusal() -> coffret_usecase::Error {
+        coffret_usecase::Error::PermissionDenied {
+            detail: "refused".to_owned(),
+            source: None,
+        }
+    }
+}
+
+#[async_trait]
+impl ObjectStore for Refusing {
+    async fn put(&self, _: &str, _: ByteStream) -> coffret_usecase::Result<UploadedObject> {
+        Err(Self::refusal())
+    }
+
+    async fn reserve_create(&self, name: &str) -> coffret_usecase::Result<CommitSlot> {
+        Ok(CommitSlot::by_name(name))
+    }
+
+    async fn put_if_absent(
+        &self,
+        _: &CommitSlot,
+        _: ByteStream,
+    ) -> coffret_usecase::Result<ObjectRef> {
+        Err(Self::refusal())
+    }
+
+    fn object_at(&self, slot: &CommitSlot) -> coffret_usecase::Result<ObjectRef> {
+        Ok(ObjectRef::new(slot.name()))
+    }
+
+    async fn get(
+        &self,
+        _: &ObjectRef,
+        _: Option<Range<u64>>,
+    ) -> coffret_usecase::Result<ByteStream> {
+        Err(Self::refusal())
+    }
+
+    async fn list(&self, _: Option<&PageToken>) -> coffret_usecase::Result<ObjectPage> {
+        Ok(ObjectPage::last(Vec::new()))
+    }
+
+    async fn trash(&self, _: &ObjectRef) -> coffret_usecase::Result<()> {
+        Err(Self::refusal())
+    }
+
+    async fn purge(&self, _: &ObjectRef) -> coffret_usecase::Result<()> {
+        Err(Self::refusal())
+    }
+}
+
+// A first head Storage will not take leaves no Library on this device: the
+// step says so, and a Library with no head is not one a later commit may
+// start a race for (spec: CP-2). What reached Storage before stays under a
+// Library ID nothing references.
+#[tokio::test]
+async fn a_first_head_storage_refuses_leaves_no_library_behind() {
+    state_dir();
+    let dir = LibraryDir::resolve("no-first-head").expect("the name is one component");
+
+    let result = create_library_through(
+        &Reach::this_device().storing_into(Arc::new(Refusing)),
+        request("no-first-head"),
+        passphrase,
+        |_| panic!("an S3 Library asks nobody for consent"),
+    )
+    .await;
+
+    assert!(
+        matches!(
+            &result,
+            Err(Error::LibraryNotCreated {
+                step: CreationStep::FirstHead,
+                cause,
+                ..
+            }) if matches!(**cause, Error::FirstHead { .. })
+        ),
+        "expected the creation to stop at the first head, got {result:?}",
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
 }

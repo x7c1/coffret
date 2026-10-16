@@ -163,6 +163,21 @@ pub use unmapped::a_device_that_maps_nothing_is_told_apart_from_a_folder_with_no
 // same ordering, and one account of what that means is enough.
 pub(crate) mod watching_index;
 
+/// Creates the Library a case runs in, in the empty store the backend handed
+/// over: its first head, written as creating a Library on a device writes it
+/// (spec: CP-2, FM-13). Public only for the macro, which calls it before each
+/// case.
+#[doc(hidden)]
+pub async fn create_library(fixture: &SyncUnderTest) {
+    let keys = fixtures::keys();
+    crate::commit_conformance::create_library_in(
+        fixture.store(),
+        keys.control(),
+        &fixtures::policy(),
+    )
+    .await;
+}
+
 /// Declares the whole sync conformance suite as tests of the calling crate.
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
@@ -243,7 +258,10 @@ macro_rules! sync_conformance {
             #[tokio::test]
             async fn $case() {
                 match $setup {
-                    Some(fixture) => $crate::sync_conformance::$case(&fixture).await,
+                    Some(fixture) => {
+                        $crate::sync_conformance::create_library(&fixture).await;
+                        $crate::sync_conformance::$case(&fixture).await
+                    }
                     None => eprintln!(
                         concat!(
                             "skipping ",

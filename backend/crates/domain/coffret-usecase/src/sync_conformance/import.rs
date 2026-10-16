@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
-use coffret_model::{Btime, ContainerKind, EntryPath, Generation};
+use coffret_model::{Btime, ContainerKind, EntryPath};
 
 use crate::conformance_library::Library;
 use crate::device_state::Mapping;
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{
     born, keys, map, master_key, observed, request, spooled, write,
@@ -51,7 +52,11 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(outcome.unchanged, 0);
 
     let commit = outcome.commit.expect("two new files are worth a commit");
-    assert_eq!(commit.record.generation(), Generation::FIRST);
+    assert_eq!(
+        commit.record.generation(),
+        generation(1),
+        "the first sync commits onto the head the Library was created with (spec: CP-2)",
+    );
     assert_eq!(commit.record.additions().len(), 2);
     assert!(commit.record.removals().is_empty());
     for addition in commit.record.additions() {

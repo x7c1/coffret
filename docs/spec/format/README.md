@@ -298,6 +298,17 @@ fields until a coordinated implementation changes the format.
     digest is computed over is the Keyring's business (FM-17, KL-1); the name
     only needs a single spelling per digest and a token that cannot swallow
     the `-` separators the rest of the name is parsed on.
+  - A `head-*` or `idx-*` name stands for one object. On a Storage that
+    mints identifiers names are not unique, so two control objects can be
+    listed under one such name, and that happens only where an exclusion did
+    not hold: two successors of one head (CP-3), or two checkpoints of one
+    (CK-11). A reader that lists two refuses the Library, naming the object,
+    and does not pick one of them: neither is the Library's more than the
+    other, and whichever was read, the other would stay invisible to every
+    reader that discovers by name. Nothing is read from, committed to, or
+    synced with such a Library. A Keyring replica listed twice is not that:
+    its name fixes the one content it may hold, so either copy that reads
+    back valid is the replica (KL-14).
   - Discovery follows the roles: recovery lists `head-*` for the newest head
     and `idx-*` for the newest ordinary checkpoint. A `head-`-named object
     whose header says activation Index Snapshot is a checkpoint candidate
@@ -310,13 +321,14 @@ fields until a coordinated implementation changes the format.
   control history and never restarts at a rotation — so an object name
   (FM-12) is never reused across epochs (CP-13, KL-10). *(Form: test)*
   - Journal records and activation Index Snapshots form one control-head
-    chain: the Library's first head is written as generation 0, and every
-    successor — whichever kind wins the head's commit slot (CP-2) — carries
-    the head's generation plus 1, so chain generations are unique across
-    both kinds (CP-6, MR-2).
-    - `head-0` is a Journal record. A Library's first epoch is the one it was
-      created in, so there is no earlier epoch for an activation Snapshot to
-      supersede before the first commit.
+    chain: the Library's first head is written as generation 0 when the
+    Library is created (CP-2), and every successor — whichever kind wins the
+    head's commit slot (CP-2) — carries the head's generation plus 1, so chain
+    generations are unique across both kinds (CP-6, MR-2).
+    - `head-0` is a Journal record with no additions and no removals. A
+      Library's first epoch is the one it was created in, so there is no
+      earlier epoch for an activation Snapshot to supersede before the first
+      commit.
   - An ordinary Index Snapshot carries the generation of the head it
     represents (CK-10), so `idx-<generation>` names that head's checkpoint
     and nothing else.
@@ -352,6 +364,9 @@ fields until a coordinated implementation changes the format.
     carries none. A reader rejects anything else — a `prev` naming another
     head, a missing one above generation 0, and a `prev` on the record at
     generation 0.
+  - `additions` and `removals` may both be empty. The record at generation 0
+    always is such a record: written when the Library is created, it commits
+    nothing but the slot it carries (CP-2).
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
@@ -505,15 +520,19 @@ fields until a coordinated implementation changes the format.
   name is `coffret-` followed by the **Library ID**: 64 bits drawn from a
   CSPRNG when the Library is created, spelled as 16 lowercase hex characters.
   The folder holds every object of that Library — Containers (FM-3) and
-  control objects (FM-12) alike — each directly in it, so one name identifies
-  one object within it. The one thing nested inside is the trash a Storage with
-  no trash of its own keeps in a reserved segment of the folder, which no live
-  name is ever looked for in. On a Storage that keys objects by name rather
-  than holding folders, the app folder is the key prefix
-  `coffret-<library id>/`, placed under the base prefix its Storage location
-  configures — either empty or ending in `/`. *(Form: test for the folder's
-  name and prefix and their derivation from the ID; prose for the rule on
-  renaming below — it binds the user rather than coffret)*
+  control objects (FM-12) alike — each directly in it under a name of its own,
+  so one name identifies one object within it. On a Storage that mints
+  identifiers that holds only as far as the exclusions do: two control
+  objects there share a name only where one did not hold, and a reader
+  refuses such a Library rather than read one of them (CP-3, FM-12). The one
+  thing nested inside is the trash a Storage with no trash of its own keeps in
+  a reserved segment of the folder, which no live name is ever looked for in.
+  On a Storage that keys objects by name rather than holding folders, the app
+  folder is the key prefix `coffret-<library id>/`, placed under the base
+  prefix its Storage location configures — either empty or ending in `/`.
+  *(Form: test for the folder's name and prefix and their derivation from the
+  ID; prose for the rule on renaming below — it binds the user rather than
+  coffret)*
   - The ID is drawn independently of the [Master Key](../../concepts/master-key/)
     and of everything derived from it, so rotating the Master Key leaves the
     folder's name alone (MR-1): a name that moved at a rotation would strand

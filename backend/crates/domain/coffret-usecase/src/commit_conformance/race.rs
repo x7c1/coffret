@@ -51,11 +51,11 @@ pub async fn two_writers_agree_on_one_head_chain(fixture: &CommitUnderTest) {
             (right, left)
         };
 
-    assert_eq!(winner.record.generation(), Generation::FIRST);
-    assert_eq!(winner.record.prev(), None);
+    assert_eq!(winner.record.generation(), generation(1));
+    assert_eq!(winner.record.prev(), Some(Generation::FIRST));
     assert_eq!(
         loser.record.generation(),
-        generation(1),
+        generation(2),
         "the rebased commit takes the generation after the one it found",
     );
     assert_eq!(
@@ -67,15 +67,12 @@ pub async fn two_writers_agree_on_one_head_chain(fixture: &CommitUnderTest) {
     // Two commits, two Keyring generations: the candidate the loser prepared
     // before it lost stays uncommitted and is not the one it committed
     // (spec: KL-3).
-    assert_eq!(winner.record.keyring().generation(), Generation::FIRST);
-    assert_eq!(loser.record.keyring().generation(), generation(1));
+    assert_eq!(winner.record.keyring().generation(), generation(1));
+    assert_eq!(loser.record.keyring().generation(), generation(2));
 
     let library = Library::read(store).await;
-    assert_eq!(
-        library.record(store, Generation::FIRST).await,
-        winner.record
-    );
-    assert_eq!(library.record(store, generation(1)).await, loser.record);
+    assert_eq!(library.record(store, generation(1)).await, winner.record);
+    assert_eq!(library.record(store, generation(2)).await, loser.record);
 
     let keyring = library.keyring(store, loser.record.keyring()).await;
     assert_eq!(
@@ -116,21 +113,22 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
         .expect("losing the slot is a rebase, not a failure");
 
     assert_eq!(outcome.attempts, 2, "the first attempt lost the slot");
-    assert_eq!(outcome.record.generation(), generation(1));
+    assert_eq!(outcome.record.generation(), generation(2));
     assert_eq!(
         outcome.record.prev(),
-        Some(Generation::FIRST),
+        Some(generation(1)),
         "the rebased record names the head the rival committed",
     );
     assert_eq!(
         outcome.record.keyring().generation(),
-        generation(1),
+        generation(2),
         "the rebase prepares a fresh generation rather than reusing the candidate \
          it had already written (spec: KL-3)",
     );
 
     let library = Library::read(store).await;
-    let rival = library.record(store, Generation::FIRST).await;
+    let rival = library.record(store, generation(1)).await;
+    assert_eq!(rival.prev(), Some(Generation::FIRST));
     assert_eq!(rival.additions().len(), 1);
     assert_eq!(rival.additions()[0].container().id, container_id(1));
 
@@ -158,13 +156,13 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
 /// of it, and both batches end up in the Journal (spec: CP-2, CP-3, CP-4,
 /// CP-15).
 ///
-/// The case above puts its collision at the Library's first record, where
-/// there is no head yet and the slot is the one generation 0 takes. This one
-/// puts it one link further, at the slot a committed head carries, which is
-/// where the exclusion depends on what each writer consumes: on a Storage that
-/// mints identifiers a writer that reserved a slot of its own would be handed
-/// an identifier nobody else aims at, both creates would succeed, and the
-/// Library would hold two `head-1` objects of which a reader keeps one. Every
+/// The case above puts its collision at the Library's first commit, in the
+/// slot the head the Library was created with carries. This one puts it one
+/// link further, at the slot a committed batch's head carries. Either way the
+/// exclusion depends on what each writer consumes: on a Storage that mints
+/// identifiers a writer that reserved a slot of its own would be handed an
+/// identifier nobody else aims at, both creates would succeed, and the Library
+/// would hold two heads under one name, which a reader refuses. Every
 /// writer has to consume the slot the head carries — the pre-minted identifier
 /// in its `next_commit_slot`, or the re-derived name where names identify
 /// objects — so that exactly one of them succeeds and the other rebases.
@@ -180,11 +178,11 @@ pub async fn two_writers_on_one_head_leave_one_successor(fixture: &CommitUnderTe
     let head = commit_batch(request(store, fixture.index(), &keys, seed))
         .await
         .expect("the first commit is uncontested and must succeed");
-    assert_eq!(head.record.generation(), Generation::FIRST);
+    assert_eq!(head.record.generation(), generation(1));
 
-    // Both devices start from head 0: this one stands there already, and the
+    // Both devices start from head 1: this one stands there already, and the
     // rival catches up to it inside its own commit, at the moment this one
-    // reaches the create of head 1.
+    // reaches the create of head 2.
     let rival_batch =
         PreparedBatch::adding(vec![prepared(2, ContainerKind::OneFile, &["albums/a.jpg"])]);
     let racing = RacingStore::letting_in(store, fixture.other(), &keys, rival_batch);
@@ -195,24 +193,29 @@ pub async fn two_writers_on_one_head_leave_one_successor(fixture: &CommitUnderTe
 
     assert_eq!(
         outcome.attempts, 2,
-        "the rival consumed the slot head 0 carries, so the first attempt lost it",
+        "the rival consumed the slot head 1 carries, so the first attempt lost it",
     );
-    assert_eq!(outcome.record.generation(), generation(2));
-    assert_eq!(outcome.record.prev(), Some(generation(1)));
+    assert_eq!(outcome.record.generation(), generation(3));
+    assert_eq!(outcome.record.prev(), Some(generation(2)));
 
     let library = Library::read(store).await;
-    for generation in [Generation::FIRST, generation(1), generation(2)] {
+    for generation in [
+        Generation::FIRST,
+        generation(1),
+        generation(2),
+        generation(3),
+    ] {
         assert_eq!(
             library.count(&ControlObjectName::head(generation)),
             1,
             "one head at generation {generation}, and no second successor beside it",
         );
     }
-    let rival = library.record(store, generation(1)).await;
-    assert_eq!(rival.prev(), Some(Generation::FIRST));
+    let rival = library.record(store, generation(2)).await;
+    assert_eq!(rival.prev(), Some(generation(1)));
     assert_eq!(rival.additions().len(), 1);
     assert_eq!(rival.additions()[0].container().id, container_id(2));
-    assert_eq!(library.record(store, generation(2)).await, outcome.record);
+    assert_eq!(library.record(store, generation(3)).await, outcome.record);
 
     let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(
@@ -268,7 +271,7 @@ pub async fn two_replays_of_one_catalog_converge(fixture: &CommitUnderTest) {
         .expect("a caught-up catalog has a state to checkpoint");
     assert_eq!(
         caught_up.checkpoint().head_generation(),
-        generation(2),
+        generation(3),
         "the contended replay reaches the head, once, and does not go back",
     );
     assert_eq!(
@@ -297,9 +300,9 @@ pub async fn a_refused_replay_no_checkpoint_explains_is_reported(fixture: &Commi
     let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
     commit_batch(request(store, fixture.other(), &keys, batch))
         .await
-        .expect("committing into an empty Library must succeed");
+        .expect("committing into a newly created Library must succeed");
 
-    let refusing = RivalIndex::refusing_without_moving(fixture.index(), Generation::FIRST);
+    let refusing = RivalIndex::refusing_without_moving(fixture.index(), generation(1));
     match catch_up(store, &refusing, &keys, &policy().retry).await {
         Err(CommitError::Index(IndexError::DuplicatePath { path })) => {
             assert_eq!(path.as_str(), "albums/a.jpg")
@@ -308,14 +311,16 @@ pub async fn a_refused_replay_no_checkpoint_explains_is_reported(fixture: &Commi
         Ok(_) => panic!("a refusal nothing explains is not a replay that converged"),
     }
 
-    assert!(
+    assert_eq!(
         fixture
             .index()
             .checkpoint()
             .await
             .expect("reading the checkpoint must succeed")
-            .is_none(),
-        "the catalog stands where it did, and the caller has been told why",
+            .map(|checkpoint| checkpoint.head_generation()),
+        Some(Generation::FIRST),
+        "the catalog stands at the head before the refused record, and the caller has \
+         been told why",
     );
 }
 

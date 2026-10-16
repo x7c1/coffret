@@ -78,6 +78,11 @@ permission it asks for names no account (spec: SA-3).
   inside, the place the user configured: where it sits is the user's
   arrangement of their own Storage, and it is the folder's name that a device
   recovering with only a Recovery Code enumerates for (spec: FM-18).
+  - On a Storage that mints identifiers — Google Drive — names are not
+    unique, and what keeps one control object to one name is the exclusion a
+    head's commit slot stands for. Two control objects share a name there
+    only where that exclusion was broken, and a reader refuses such a Library
+    rather than read one of the two (spec: CP-3, FM-12).
   - The folder's name is how the Library is found, so a user does not rename
     it. Outside the devices already configured for the Library, the name is the
     only place the Library ID is kept: a renamed folder is found neither by a

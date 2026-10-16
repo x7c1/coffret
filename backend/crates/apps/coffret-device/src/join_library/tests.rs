@@ -255,27 +255,27 @@ async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
     assert!(!state_dir().join("libraries").join("elsewhere").exists());
 }
 
-// A Library's own prefix is a prefix like any other until something has been
-// written under it, so the join says what it found there rather than deciding
-// what it means. Two joins reach this state and the flow cannot tell them
-// apart: the Library these cases create has never been synced, and a Library ID
-// with a character wrong is a perfectly well-formed prefix that holds nothing.
-// Both are joined, and both say so — which is what lets a caller say one
-// sentence that serves whichever of the two it was.
+// A prefix is a prefix like any other until something has been written under
+// it, so the join says what it found there rather than deciding what it
+// means. A Library created on a device holds its first head from the moment it
+// exists (spec: CP-2, FM-13), so joining it finds the Library; a Library ID
+// with a character wrong is a perfectly well-formed prefix that holds nothing,
+// and is joined all the same, saying so — as is a Library an earlier build
+// created and never synced, which this flow cannot tell from it.
 #[tokio::test]
-async fn a_prefix_holding_nothing_of_a_library_is_joined_and_says_so() {
+async fn a_created_library_is_found_and_a_prefix_holding_nothing_says_so() {
     let created = create_s3("never-synced").await;
     let its_own = prefix_of(&created.settings);
 
     let fresh = join("fresh-join", &created.recovery_code, &its_own).await;
     assert_eq!(
         fresh.found,
-        FoundOnStorage::NothingYet,
-        "a Library that has committed nothing holds nothing at its prefix",
+        FoundOnStorage::TheLibrary,
+        "a Library holds its first head from the moment it is created",
     );
 
     // The same shape with a Library ID that is not this Library's: well-formed,
-    // so nothing refuses it, and empty for the other of the two reasons.
+    // so nothing refuses it, and empty.
     let mistyped = join(
         "mistyped-join",
         &created.recovery_code,
@@ -285,18 +285,19 @@ async fn a_prefix_holding_nothing_of_a_library_is_joined_and_says_so() {
     assert_eq!(
         mistyped.found,
         FoundOnStorage::NothingYet,
-        "a prefix that is not the Library's holds nothing either",
+        "a prefix that is not the Library's holds nothing",
     );
 }
 
 // The contents question, which both providers are asked and which neither
 // answers by refusing. On S3 the prefix is asked whether it holds any head or
 // Index Snapshot and on Drive the app folder is, and the one answer is read
-// the same way: a Library nobody has synced holds nothing wherever it lives,
-// and the person joining it is owed that word rather than an empty `fetch` to
-// make sense of. A Drive folder whose name is beyond doubt is exactly the case
-// this is for — the name decides which Library it is and says nothing at all
-// about whether anything has been committed into it.
+// the same way: a Library an earlier build created and nobody synced holds
+// nothing wherever it lives, and the person joining it is owed that word
+// rather than an empty `fetch` to make sense of. A Drive folder whose name is
+// beyond doubt is exactly the case this is for — the name decides which
+// Library it is and says nothing at all about whether anything has been
+// committed into it.
 #[test]
 fn a_place_without_any_head_or_snapshot_holds_nothing_of_the_library() {
     assert_eq!(FoundOnStorage::of(false), FoundOnStorage::NothingYet);

@@ -15,8 +15,9 @@
 /// it has ever been committed to, and somebody who joined it reads the same
 /// empty `fetch` as somebody who mistyped a prefix. The answer has to be said
 /// rather than acted on. Refusing [`NothingYet`](Self::NothingYet) would refuse
-/// every join of a Library that was created a minute ago and not yet synced,
-/// which is exactly the join a second device makes first.
+/// every join of a Library an earlier build created and nobody synced — a
+/// Library created now holds its first head from the start (spec: CP-2), but
+/// one created before then holds nothing until its first commit.
 ///
 /// What is asked about is whether *any* head or ordinary Index Snapshot is
 /// there, by prefix, and never one object by name. No particular head is
@@ -45,8 +46,8 @@ pub enum FoundOnStorage {
     TheLibrary,
     /// The place is where the Library would be, and holds nothing of one yet.
     ///
-    /// Two things look like this and neither is a failure: a Library that has
-    /// been created and never synced, and — on S3, where the place is a prefix
+    /// Two things look like this and neither is a failure: a Library an earlier
+    /// build created and nobody synced, and — on S3, where the place is a prefix
     /// rather than a folder whose name was checked — a prefix that is not the
     /// Library's, from a mistyped Library ID or the wrong base prefix in front
     /// of a right one. A caller says so, so that whoever typed it wrong finds

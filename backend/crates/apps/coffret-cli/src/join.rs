@@ -192,22 +192,23 @@ fn report(joined: &JoinedLibrary) {
 /// What a person is told when the place they joined holds nothing of a Library.
 ///
 /// Both of the things this can mean are worth hearing, and the sentence has to
-/// serve both because nothing here can tell them apart: a Library created a
-/// minute ago and not yet synced holds nothing, and so does a prefix with a
-/// character wrong in its Library ID. The first person is told why their
-/// Library looks empty; the second finds out now rather than after a `fetch`
-/// that reports nothing and exits successfully.
+/// serve both because nothing here can tell them apart: a prefix with a
+/// character wrong in its Library ID holds nothing, and so does a Library an
+/// earlier version created and nobody has synced — a Library created now holds
+/// its first head from the start. The first person finds out now rather than
+/// after a `fetch` that reports nothing and exits successfully; the second is
+/// told why their Library looks empty.
 ///
 /// It is not a refusal. The join has happened either way, and refusing the
-/// first person's perfectly good Library to catch the second's typo would be
+/// second person's perfectly good Library to catch the first's typo would be
 /// the worse trade.
 fn nothing_there_yet(found: FoundOnStorage) -> Option<&'static str> {
     match found {
         FoundOnStorage::TheLibrary => None,
         FoundOnStorage::NothingYet => Some(
-            "Storage holds nothing of this Library yet. That is what a Library nobody has \
-             synced looks like — and also what somewhere that is not this Library's looks \
-             like, so check the place above if you expected it to hold something.",
+            "Storage holds nothing of this Library yet. That is what somewhere that is not \
+             this Library's looks like, so check the place above. A Library an earlier \
+             version created and nobody has synced looks like this too.",
         ),
     }
 }
@@ -224,8 +225,8 @@ mod tests {
     }
 
     // The one sentence both of the empty cases get, because from here they are
-    // the same answer: a Library created and never synced, and a prefix that is
-    // not this Library's at all.
+    // the same answer: a prefix that is not this Library's at all, and a Library
+    // an earlier version created and never synced.
     #[test]
     fn a_place_holding_nothing_is_said_to_hold_nothing_and_why_that_is_two_things() {
         let said = nothing_there_yet(FoundOnStorage::NothingYet)

@@ -1,3 +1,5 @@
+use coffret_model::Generation;
+
 use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, SyncError};
 use crate::sync_conformance::fixtures::{keys, map, request, spooled, write};
@@ -44,13 +46,14 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
             .is_none(),
         "nothing was committed, so nothing is current (spec: CP-1)",
     );
-    assert!(
+    assert_eq!(
         index
             .checkpoint()
             .await
             .expect("reading the checkpoint must succeed")
-            .is_none(),
-        "the Library stands where it stood",
+            .map(|checkpoint| checkpoint.head_generation()),
+        Some(Generation::FIRST),
+        "the Library stands where it stood, at the head it was created with",
     );
 
     let pending = index

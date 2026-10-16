@@ -292,12 +292,12 @@ and has a window of its own for entering the Passphrase.
   - A join asks whether the place it was given holds any head or
     [Index Snapshot](../index-snapshot/) of a Library, since one that has
     committed anything holds at least one of the two whatever `prune` has
-    deleted (see [Journal](../journal/); spec: CK-2, CK-4, CK-6). A place
-    holding neither is **nothing yet**, not a failure: a Library created and
-    not yet synced looks exactly like this, and it is the Library a second
-    device most often joins first. On S3 it is also how a mistyped prefix
-    shows itself, since a prefix is not checked the way a Drive folder's name
-    is.
+    deleted (see [Journal](../journal/); spec: CK-2, CK-4, CK-6). A Library
+    holds its first head from the moment it is created, so a place holding
+    neither is **nothing yet**, not a failure: a Library an earlier build
+    created and never synced looks exactly like this. On S3 it is also how a
+    mistyped prefix shows itself, since a prefix is not checked the way a
+    Drive folder's name is (spec: CP-2).
 - A Library served for browsing on this device is served to this device alone:
   the server listens on loopback only, and as it starts it draws a random
   **server key** and writes it to a file in the Library's directory that only
