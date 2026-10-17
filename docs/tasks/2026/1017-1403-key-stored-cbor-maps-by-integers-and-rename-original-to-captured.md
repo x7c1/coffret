@@ -67,4 +67,4 @@ In the same change, rename the provenance fields. `original_path`, `original_mti
 
 ### Before merge (verified outside the check command)
 
-- [ ] On fresh agent MinIO Libraries (`coffret-agent`, `coffret-agent-2`, re-created with `init` / `join` after this change): a sync and a freeze commit, the second device catches up and fetches a page, and a payload dumped through the debugging aid shows field names.
+- [x] On fresh agent MinIO Libraries (`coffret-agent`, `coffret-agent-2`, re-created with `init` / `join` after this change): a sync and a freeze commit, the second device catches up and fetches a page, and a payload dumped through the debugging aid shows field names.
