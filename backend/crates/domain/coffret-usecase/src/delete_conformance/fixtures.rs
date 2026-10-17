@@ -229,18 +229,17 @@ pub(super) async fn current(index: &dyn Index, path: &str) -> Option<EntryLocati
         .expect("asking the catalog for a path must succeed")
 }
 
-/// One Container's rows, as the catalog records them, in stream order.
+/// One Container's rows, as the catalog records them, in entry number order —
+/// which is stream order, Entries of no bytes sharing an offset included
+/// (spec: FM-9).
 pub(super) async fn table(index: &dyn Index, container_id: ContainerId) -> Vec<EntryMetadata> {
-    let mut rows: Vec<EntryMetadata> = index
-        .entries_under(None)
+    index
+        .entries_in(container_id)
         .await
-        .expect("listing the catalog must succeed")
+        .expect("listing a Container's Entries must succeed")
         .into_iter()
-        .filter(|location| location.container_id == container_id)
         .map(|location| location.entry)
-        .collect();
-    rows.sort_by_key(|row| row.extent.range().start);
-    rows
+        .collect()
 }
 
 /// The Containers the catalog calls current.

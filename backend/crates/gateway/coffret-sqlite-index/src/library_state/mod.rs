@@ -21,7 +21,7 @@ mod apply;
 pub(crate) use apply::{apply, refresh};
 
 mod lookup;
-pub(crate) use lookup::{containers_under, entries_under, entry_at};
+pub(crate) use lookup::{containers_under, entries_in, entries_under, entry_at};
 
 mod restore;
 pub(crate) use restore::restore;

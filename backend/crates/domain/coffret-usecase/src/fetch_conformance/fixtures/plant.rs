@@ -47,6 +47,17 @@ pub(crate) async fn plant(
         derived_from: None,
         mime: None,
     };
+    // An Entry of no bytes after the first, which the record's table holds
+    // and the object's does not: entry number 1 of a table one Entry long.
+    let unheld = planted.unheld.map(|path| EntryMetadata {
+        path: entry_path(path),
+        captured_path: entry_path(path),
+        extent: EntryExtent::new(entry.extent.end(), 0)
+            .expect("an Entry of no bytes at the end of a short stream"),
+        hash: ContentHash::from_bytes(*blake3::hash(b"").as_bytes()),
+        ..entry.clone()
+    });
+    let entries: Vec<EntryMetadata> = std::iter::once(entry).chain(unheld).collect();
     let envelope = wrap_container_key(
         &purpose_key(Purpose::ContainerWrap),
         &container_id,
@@ -58,7 +69,7 @@ pub(crate) async fn plant(
         ContainerAddition::new(
             ContainerSummary {
                 id: container_id,
-                kind: ContainerKind::OneFile,
+                kind: planted.kind(),
                 // The hash of what is really stored, so the fetch's first check
                 // passes and the case reaches the one it is about (spec: FM-15)
                 // — unless the case is about that check.
@@ -66,7 +77,7 @@ pub(crate) async fn plant(
                 ciphertext_len: ciphertext_len(ciphertext.len() as u64),
                 object_ref: None,
             },
-            vec![entry],
+            entries,
         )
         .expect("a fixture holds a table that tiles its Container's stream"),
         envelope,
@@ -120,10 +131,23 @@ pub(crate) struct Planted<'a> {
     /// Everything else about the object is true: it is a real Container under
     /// the key the record maps it to, holding the content the record names.
     pub(crate) misrecorded: bool,
+    /// A second Entry the record's table holds, of no bytes, that the object's
+    /// own table does not: where a case is about an entry number the
+    /// Container does not reach (spec: FM-9, CP-11). The Container is a Pack
+    /// where there is one, in the record and the object alike, since a
+    /// one-file Container holds one Entry (spec: PK-15).
+    pub(crate) unheld: Option<&'a str>,
 }
 
-/// Where the meta section length sits in a Container header (spec: FM-2).
 impl Planted<'_> {
+    /// The kind of Container the record and the object both say it is.
+    fn kind(&self) -> ContainerKind {
+        match self.unheld {
+            Some(_) => ContainerKind::Pack,
+            None => ContainerKind::OneFile,
+        }
+    }
+
     /// The ciphertext hash the Journal record carries for what is stored.
     fn recorded_hash(&self, ciphertext: &[u8]) -> ContentHash {
         let stored = blake3::hash(ciphertext);
@@ -134,6 +158,7 @@ impl Planted<'_> {
     }
 }
 
+/// Where the meta section length sits in a Container header (spec: FM-2).
 const META_LEN_RANGE: std::ops::Range<usize> = 28..32;
 
 impl Planted<'_> {
@@ -146,7 +171,7 @@ impl Planted<'_> {
         let entries = [EntrySource::new(entry_path(self.path), self.mtime, content)];
         let mut bytes = encode(&EncodeRequest::new(
             container_id,
-            ContainerKind::OneFile,
+            self.kind(),
             &ContainerKey::from_bytes(PLANTED_KEY),
             &entries,
         ))

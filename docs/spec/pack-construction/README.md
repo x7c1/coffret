@@ -84,10 +84,17 @@ Concept background: [Pack](../../concepts/pack/),
   and omits each deleted Entry. If any old Entry cannot be read and verified,
   the writer must not commit the replacement; if no Entry remains, the old
   Pack is removed without creating an empty replacement. *(Form: test)*
-  - A carried Entry keeps what the old Pack recorded for it — its Entry Path,
+  - Each Entry of the old Pack is verified against the catalog's row with the
+    same entry number (FM-9) on what a rename cannot change — its captured
+    path, extent, and hash — and never on its current path, so a Pack holding
+    a renamed Entry is rewritten like any other (FM-15).
+  - A carried Entry keeps what the old Pack recorded for it —
     `captured_mtime`, `captured_btime`, and hash (FM-9) — and the carried
-    Entries keep their order. The replacement is encrypted under a new
-    Container Key (KD-2).
+    Entries keep their order. It is recorded under its current Entry Path,
+    which becomes its captured path in the replacement: a rewrite captures the
+    name current at the rewrite, so the catalog no longer holds a captured
+    path apart from the current one (FM-15). The replacement is encrypted
+    under a new Container Key (KD-2).
   - A writer that cannot read and verify the old Pack commits nothing for it:
     neither the replacement nor the old Pack's removal. Every Entry of the old
     Pack, the ones it was asked to delete included, stays current, and the

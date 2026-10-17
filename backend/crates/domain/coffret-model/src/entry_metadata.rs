@@ -63,3 +63,72 @@ pub struct EntryMetadata {
     /// (spec: FM-9).
     pub mime: Option<String>,
 }
+
+impl EntryMetadata {
+    /// Whether `recorded` — what a Container's own entry table records at this
+    /// Entry's entry number — is this Entry, on everything a rename leaves
+    /// alone: the name it was captured under, where its plaintext lies, and
+    /// what that plaintext hashes to (spec: FM-9, FM-15).
+    ///
+    /// The current path is left out because a rename changes it and no
+    /// Container is rewritten to follow, so a catalog row and its meta entry
+    /// differ there by design. The rest of the row is left out too: the
+    /// modification and birth times are values the Library may later hold
+    /// differently from what the Container captured (spec: FM-9), and the
+    /// three compared here are what says which bytes the Entry is.
+    pub fn is_recorded_as(&self, recorded: &EntryMetadata) -> bool {
+        self.captured_path == recorded.captured_path
+            && self.extent == recorded.extent
+            && self.hash == recorded.hash
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn path(text: &str) -> EntryPath {
+        EntryPath::parse(text).expect("a fixture holds a literal path")
+    }
+
+    fn recorded() -> EntryMetadata {
+        EntryMetadata {
+            path: path("albums/a.jpg"),
+            captured_path: path("albums/a.jpg"),
+            extent: EntryExtent::new(8, 4).expect("a small extent"),
+            mtime: Mtime::from_unix_seconds(1_700_000_000),
+            btime: None,
+            hash: ContentHash::from_bytes([0x11; 32]),
+            derived_from: None,
+            mime: None,
+        }
+    }
+
+    // FM-9, FM-15: a renamed row is still the Entry its Container records,
+    // and one whose captured path, extent, or hash differs is not.
+    #[test]
+    fn a_row_is_recorded_as_its_meta_entry_whatever_its_current_path() {
+        let meta = recorded();
+        let renamed = EntryMetadata {
+            path: path("books/a.jpg"),
+            ..recorded()
+        };
+        assert!(renamed.is_recorded_as(&meta));
+
+        let elsewhere = EntryMetadata {
+            captured_path: path("albums/b.jpg"),
+            ..recorded()
+        };
+        let other_extent = EntryMetadata {
+            extent: EntryExtent::new(12, 4).expect("a small extent"),
+            ..recorded()
+        };
+        let other_content = EntryMetadata {
+            hash: ContentHash::from_bytes([0x22; 32]),
+            ..recorded()
+        };
+        for row in [elsewhere, other_extent, other_content] {
+            assert!(!row.is_recorded_as(&meta), "{row:?}");
+        }
+    }
+}

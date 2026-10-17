@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, EntryMetadata, EntryPath};
+use coffret_model::{ContainerId, EntryLocation, EntryNumber};
 use tracing::debug;
 
 use crate::device_state::HeldParcel;
@@ -68,16 +68,18 @@ pub(in crate::fetch) async fn let_go_departed(
 /// Lets go of every held parcel of one Container whose mapped Entries are all
 /// on this device or witnessed absent (spec: PK-21, EP-10, EP-11).
 ///
-/// `entries` is what the Container holds, from its own entry table or from the
-/// catalog; a parcel covers the ones it has bytes of. An Entry this device does
-/// not map is not waited for — a Pack holds whatever folders it was frozen
-/// from, and a device mapping only some of them would otherwise hold the rest
-/// of the Pack for ever.
+/// A parcel covers the current Entries of the Container it has bytes of, and
+/// the catalog says which those are and at which path each stands now: by
+/// entry number, so a renamed Entry is waited for at its current path
+/// (spec: FM-9, FM-15). An Entry this device does not map is not waited for —
+/// a Pack holds whatever folders it was frozen from, and a device mapping only
+/// some of them would otherwise hold the rest of the Pack for ever. A
+/// Container that has left the current set holds no current Entry, so every
+/// parcel of it is let go.
 pub(in crate::fetch) async fn let_go_settled(
     index: &dyn Index,
     kept: &KeptParcels<'_>,
     container_id: ContainerId,
-    entries: &[EntryMetadata],
 ) -> FetchResult<()> {
     let held: Vec<HeldParcel> = index
         .held_parcels()
@@ -85,19 +87,23 @@ pub(in crate::fetch) async fn let_go_settled(
         .into_iter()
         .filter(|parcel| parcel.container_id == container_id)
         .collect();
-    let mut verdicts: BTreeMap<&EntryPath, bool> = BTreeMap::new();
+    if held.is_empty() {
+        return Ok(());
+    }
+    let entries = index.entries_in(container_id).await?;
+    let mut verdicts: BTreeMap<EntryNumber, bool> = BTreeMap::new();
     let mut let_go_of = 0;
     for parcel in &held {
         let mut all_settled = true;
-        for entry in entries
+        for location in entries
             .iter()
-            .filter(|entry| parcel.covers(entry.extent.offset(), entry.extent.size()))
+            .filter(|location| parcel.covers(location.extent().offset(), location.extent().size()))
         {
-            let settled = match verdicts.get(&entry.path) {
+            let settled = match verdicts.get(&location.entry_number) {
                 Some(settled) => *settled,
                 None => {
-                    let settled = settled(index, container_id, &entry.path).await?;
-                    verdicts.insert(&entry.path, settled);
+                    let settled = settled(index, location).await?;
+                    verdicts.insert(location.entry_number, settled);
                     settled
                 }
             };
@@ -129,9 +135,9 @@ pub(in crate::fetch) async fn let_go_settled(
 /// calls afterwards — a deletion this device committed, a catch-up. A sync or a
 /// freeze does not call it: a Container either of them replaces keeps its
 /// parcels until the next fetch or catch-up lets them go, which costs disk for
-/// that long and nothing else. It asks the catalog for the Entries of the
-/// Containers parcels are held of, which is a walk of the catalog, and so it
-/// returns at once where nothing is held.
+/// that long and nothing else. It asks the catalog for the Entries of each
+/// Container parcels are held of, and so it returns at once where nothing is
+/// held.
 pub async fn let_go_parcels(index: &dyn Index, kept: &KeptParcels<'_>) -> FetchResult<()> {
     let_go_departed(index, kept).await?;
     let held: BTreeSet<ContainerId> = index
@@ -140,45 +146,23 @@ pub async fn let_go_parcels(index: &dyn Index, kept: &KeptParcels<'_>) -> FetchR
         .into_iter()
         .map(|parcel| parcel.container_id)
         .collect();
-    if held.is_empty() {
-        return Ok(());
-    }
-    let mut entries: BTreeMap<ContainerId, Vec<EntryMetadata>> = BTreeMap::new();
-    for location in index.entries_under(None).await? {
-        if held.contains(&location.container_id) {
-            entries
-                .entry(location.container_id)
-                .or_default()
-                .push(location.entry);
-        }
-    }
     for container_id in held {
-        let of_it = entries.remove(&container_id).unwrap_or_default();
-        let_go_settled(index, kept, container_id, &of_it).await?;
+        let_go_settled(index, kept, container_id).await?;
     }
     Ok(())
 }
 
-/// Whether one Entry of a Container holds a parcel of it no longer.
+/// Whether one current Entry of a Container holds a parcel of it no longer.
 ///
-/// Settled where the Library no longer holds it in this Container, where no
-/// mapping of this device reaches it or none can place it, and where this
-/// device holds a row for it — present, or a deletion it witnessed
-/// (spec: EP-9, EP-10, EP-11). Only an Entry this device maps and has never had
-/// is still waited for.
-async fn settled(
-    index: &dyn Index,
-    container_id: ContainerId,
-    path: &EntryPath,
-) -> FetchResult<bool> {
-    match index.entry_at(path).await? {
-        Some(location) if location.container_id == container_id => {}
-        _ => return Ok(true),
-    }
-    match translate::target_of(index, path).await {
+/// Settled where no mapping of this device reaches it or none can place it,
+/// and where this device holds a row for it at its current path — present, or
+/// a deletion it witnessed (spec: EP-9, EP-10, EP-11). Only an Entry this
+/// device maps and has never had there is still waited for.
+async fn settled(index: &dyn Index, location: &EntryLocation) -> FetchResult<bool> {
+    match translate::target_of(index, location.path()).await {
         Ok(_) => {}
         Err(error) if super::never_placed(&error) => return Ok(true),
         Err(error) => return Err(error),
     }
-    Ok(index.local_entry_at(path).await?.is_some())
+    Ok(index.local_entry_at(location.path()).await?.is_some())
 }

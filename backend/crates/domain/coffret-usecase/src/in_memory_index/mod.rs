@@ -96,6 +96,10 @@ impl Index for InMemoryIndex {
         Ok(self.locked().entries_under(prefix))
     }
 
+    async fn entries_in(&self, container_id: ContainerId) -> IndexResult<Vec<EntryLocation>> {
+        Ok(self.locked().entries_in(container_id))
+    }
+
     async fn containers_under(
         &self,
         prefix: Option<&EntryPath>,

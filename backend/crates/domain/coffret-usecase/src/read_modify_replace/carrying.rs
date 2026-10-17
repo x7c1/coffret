@@ -136,12 +136,24 @@ impl<'a> Carrying<'a> {
 
     /// Opens the meta section and holds it against what the catalog records
     /// (spec: CP-11, FM-9).
+    ///
+    /// Each row is held against the meta entry at the same entry number, on
+    /// what a rename cannot change — the captured path, the extent, and the
+    /// hash — and never on its current path, which a rename sets apart from
+    /// the one the table records (spec: FM-15). So a Pack holding a renamed
+    /// Entry is read and carried forward like any other.
     fn open(&mut self) -> Result<(), Stop> {
         let outline =
             ContainerOutline::open(&self.front, self.key).map_err(Unverified::Unopenable)?;
+        let recorded = outline.entries();
         if outline.container_id() != self.old.id
             || outline.kind() != self.old.kind
-            || outline.entries() != self.table
+            || recorded.len() != self.table.len()
+            || !self
+                .table
+                .iter()
+                .zip(recorded)
+                .all(|(row, recorded)| row.is_recorded_as(recorded))
         {
             return Err(Unverified::Disagrees.into());
         }

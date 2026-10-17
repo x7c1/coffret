@@ -194,6 +194,15 @@ pub trait Index: Send + Sync {
     /// the subtree a device maps a local root to (spec: EP-9).
     async fn entries_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<EntryLocation>>;
 
+    /// Every current Entry one Container holds, ordered by entry number.
+    ///
+    /// The Container's side of the catalog: what a reader holding its entry
+    /// table asks to learn which of those Entries are current and at which
+    /// path each stands now, since a rename changes the path and leaves the
+    /// `(Container ID, entry number)` alone (spec: FM-9, FM-15). A Container
+    /// that is not current holds none.
+    async fn entries_in(&self, container_id: ContainerId) -> IndexResult<Vec<EntryLocation>>;
+
     /// The distinct current Containers holding any Entry under a prefix,
     /// ordered by Container ID.
     ///

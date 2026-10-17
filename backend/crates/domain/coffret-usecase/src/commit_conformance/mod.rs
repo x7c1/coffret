@@ -81,6 +81,9 @@ pub use checkpoint::{
     a_snapshot_slot_taken_by_a_sibling_converges, no_checkpoint_is_written_below_the_threshold,
 };
 
+mod commit_renames_in;
+pub(crate) use commit_renames_in::commit_renames_in;
+
 mod commit_under_test;
 pub use commit_under_test::CommitUnderTest;
 

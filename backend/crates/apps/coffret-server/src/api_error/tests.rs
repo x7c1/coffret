@@ -960,6 +960,7 @@ fn an_integrity_verdict_keeps_the_container_and_drops_the_entry_path() {
     for cause in [
         FetchError::EntryMissing {
             container_id: container_id(),
+            entry_number: EntryNumber::FIRST,
             path: path(),
         },
         FetchError::ContentMismatch {

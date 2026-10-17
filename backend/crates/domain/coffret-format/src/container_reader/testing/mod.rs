@@ -79,7 +79,9 @@ pub(super) fn outline_of(object: &[u8]) -> ContainerOutline {
 pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
     let outline = outline_of(object);
     let entry = outline
-        .entry_at(&entry_path(path))
+        .entries()
+        .iter()
+        .find(|entry| entry.captured_path == entry_path(path))
         .expect("the Pack holds the Entry the case asked for")
         .clone();
     let run = outline
@@ -109,7 +111,9 @@ pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
 /// Where one Entry stands in a Pack's plaintext stream.
 pub(super) fn entry_of(object: &[u8], path: &str) -> EntryMetadata {
     outline_of(object)
-        .entry_at(&entry_path(path))
+        .entries()
+        .iter()
+        .find(|entry| entry.captured_path == entry_path(path))
         .expect("the Pack holds the Entry the case asked for")
         .clone()
 }

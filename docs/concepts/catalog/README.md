@@ -81,10 +81,11 @@ A batch committed after another device's rename is rebased over it by the
 same pair: a change that replaces the renamed Entry takes it over at its new
 path, and a change that writes to the same Entry or Entry Path from the other
 side is a conflict (spec: CP-4, CP-7, EP-7).
-Metadata-only rename is not complete yet: no operation writes a rename, fetch
-does not yet read by entry number, and a device does not yet relocate its file
-of a renamed Entry. Until it does, that file stays where it was placed, and
-the device neither carries it in as a new file nor treats it as deleted.
+Fetch reads an Entry by its entry number and places it at its current path
+(spec: EP-11). Metadata-only rename is not complete yet: no operation writes a
+rename, and a device does not yet relocate its file of a renamed Entry. Until
+it does, that file stays where it was placed, and the device neither carries
+it in as a new file nor treats it as deleted.
 
 ## Related Concepts
 

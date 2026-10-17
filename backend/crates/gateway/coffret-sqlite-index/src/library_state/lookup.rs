@@ -1,4 +1,4 @@
-use coffret_model::{ContainerSummary, EntryLocation, EntryPath};
+use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath};
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
 
@@ -48,6 +48,21 @@ pub(crate) fn entries_under(
             )
         }
     }
+}
+
+/// Every current Entry one Container holds, ordered by entry number
+/// (spec: FM-9).
+pub(crate) fn entries_in(
+    connection: &Connection,
+    container_id: ContainerId,
+) -> IndexResult<Vec<EntryLocation>> {
+    collect(
+        connection,
+        "SELECT * FROM entries WHERE container_id = ?1 ORDER BY entry_number",
+        params![container_id.as_bytes().as_slice()],
+        "reading a Container's Entries",
+        rows::entry_location,
+    )
 }
 
 /// The distinct Containers holding any Entry under a prefix (spec: PK-8).

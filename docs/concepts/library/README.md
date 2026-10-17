@@ -500,10 +500,11 @@ Metadata-only rename is not complete yet. A rename commits a change to the
 Catalog's names without replacing the affected Containers, and replaying a
 record or adopting a Snapshot already applies one: the Catalog takes each
 Entry's new path, and a file this device placed for a renamed Entry waits at
-its old path to be relocated (spec: FM-15, RV-5, EP-10). What remains is
-writing renames — no writer emits one yet, though a batch carrying one is
-already rebased onto a newer head (spec: EP-7) — fetching an Entry by its
-entry number, and relocating a waiting file on this device. Mappings will
+its old path to be relocated (spec: FM-15, RV-5, EP-10). A fetch already
+finds an Entry by its entry number and places it at its current path
+(spec: EP-11). What remains is writing renames — no writer emits one yet,
+though a batch carrying one is already rebased onto a newer head
+(spec: EP-7) — and relocating a waiting file on this device. Mappings will
 continue to translate names to local paths; they do not make local folders the
 authority for the namespace. A device following a rename must protect local
 changes and retry a refused relocation without prematurely relabeling its

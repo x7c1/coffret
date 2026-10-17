@@ -1,11 +1,14 @@
 use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKind, EntryMetadata};
+use coffret_format::{Purpose, PurposeKey};
+use coffret_model::{ContainerId, ContainerKind, EntryMetadata, EntryRename};
+
+use crate::commit_conformance::commit_renames_in;
 
 use crate::delete_conformance::delete_under_test::DeleteUnderTest;
 use crate::delete_conformance::fixtures::{
-    current, current_containers, delete, filler, folder, freeze, map, opened, paths, spooled,
-    stored, table, write,
+    current, current_containers, delete, filler, folder, freeze, map, master_key, opened, paths,
+    spooled, stored, table, write,
 };
 use crate::entry_paths::entry_path;
 
@@ -265,4 +268,73 @@ pub async fn a_folder_spanning_several_packs_is_deleted_in_one_batch(fixture: &D
             "every removed Pack went to the trash"
         );
     }
+}
+
+/// PK-10, FM-15: a Pack whose kept Entry another device renamed is rebuilt
+/// all the same, and the replacement records that Entry under its current
+/// path: a rewrite captures the name current at the rewrite, so the catalog
+/// no longer holds a captured path apart from it.
+///
+/// The rename lands behind this device's catalog, so the deletion catches it
+/// up before it plans, and the rebuild then holds each row against the old
+/// Pack's meta entry at the same entry number — where the path that Pack
+/// records is the one the rename left behind.
+pub async fn a_pack_whose_kept_entry_was_renamed_is_rebuilt_under_its_current_path(
+    fixture: &DeleteUnderTest,
+) {
+    let store = fixture.store();
+    let index = fixture.index();
+    map(fixture).await;
+    write(fixture, "albums/a.jpg", &filler(300, 1));
+    write(fixture, "albums/b.jpg", &filler(120, 2));
+    write(fixture, "albums/c.jpg", &filler(80, 3));
+    let old = freeze(fixture, 1).await;
+    let renamed = current(index, "albums/a.jpg")
+        .await
+        .expect("the freeze committed the file");
+    commit_renames_in(
+        store,
+        index,
+        &PurposeKey::derive(&master_key(), Purpose::ControlJournal),
+        vec![EntryRename::new(
+            renamed.container_id,
+            renamed.entry_number,
+            entry_path("books/a.jpg"),
+        )
+        .expect("an ordinary path is a rename's target")],
+    )
+    .await;
+
+    let outcome = delete(store, fixture, paths(&["albums/b.jpg"]), 2).await;
+
+    let commit = outcome
+        .commit
+        .as_ref()
+        .expect("a deletion is worth a commit");
+    assert_eq!(commit.record.removals(), [old], "the old Pack is removed");
+    assert!(outcome.refused.is_empty(), "{:?}", outcome.refused);
+    let replacement = commit.record.additions()[0].container().id;
+    let decoded = opened(store, &commit.record, replacement).await;
+    assert_eq!(
+        decoded
+            .entries
+            .iter()
+            .map(|entry| entry.metadata.captured_path.as_str())
+            .collect::<Vec<_>>(),
+        ["books/a.jpg", "albums/c.jpg"],
+        "the kept Entries in the old Pack's order, the renamed one under its current path",
+    );
+    assert_eq!(decoded.entries[0].content, filler(300, 1), "byte for byte");
+
+    let carried = current(index, "books/a.jpg")
+        .await
+        .expect("the renamed Entry stays current");
+    assert_eq!(carried.container_id, replacement);
+    assert_eq!(
+        carried.entry.captured_path, carried.entry.path,
+        "the catalog holds no captured path apart from the current one",
+    );
+    assert_eq!(carried.entry.hash, renamed.entry.hash);
+    assert!(current(index, "albums/a.jpg").await.is_none());
+    assert!(current(index, "albums/b.jpg").await.is_none());
 }

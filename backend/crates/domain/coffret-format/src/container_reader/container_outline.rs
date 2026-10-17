@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryMetadata, EntryPath};
+use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryMetadata, EntryNumber};
 
 use crate::aead::Cipher;
 use crate::chunk_size::ChunkSize;
@@ -124,6 +124,13 @@ impl ContainerOutline {
         let cipher = Cipher::new(key.as_bytes());
         let meta = meta::decode(&cipher.open(&nonce::meta(), associated_data, meta_section)?)?;
         let layout = ChunkLayout::of(&header, meta.plaintext_len()?)?;
+        // Every Entry a reader finds is found by its number, so a table longer
+        // than entry numbers reach is one whose tail no reader could name
+        // (spec: FM-9). The table is never empty, as decoding the meta section
+        // checked.
+        if let Some(last) = meta.entries.len().checked_sub(1) {
+            EntryNumber::at_position(last)?;
+        }
 
         Ok(Self {
             header,
@@ -174,13 +181,24 @@ impl ContainerOutline {
         self.entries
     }
 
-    /// What the entry table records about the Entry at one Entry Path, if it
-    /// holds one.
+    /// What the entry table records about the Entry numbered `number`, if the
+    /// table is that long (spec: FM-9).
     ///
-    /// At most one: an Entry Path identifies at most one Entry of a Container,
-    /// as it does of the whole Library (spec: EP-5).
-    pub fn entry_at(&self, path: &EntryPath) -> Option<&EntryMetadata> {
-        self.entries.iter().find(|entry| &entry.path == path)
+    /// The number is the one name for an Entry that a rename leaves alone, so
+    /// it is what a reader finds an Entry by. The path the table records is
+    /// the one the Entry was captured under, which the catalog's current path
+    /// for it need not be (spec: FM-15).
+    pub fn entry_numbered(&self, number: EntryNumber) -> Option<&EntryMetadata> {
+        self.entries.get(usize::try_from(number.get()).ok()?)
+    }
+
+    /// The entry table, each Entry beside its entry number (spec: FM-9).
+    pub fn numbered_entries(&self) -> impl Iterator<Item = (EntryNumber, &EntryMetadata)> {
+        self.entries.iter().enumerate().map(|(position, entry)| {
+            let number = EntryNumber::at_position(position)
+                .expect("an opened table's every position is numbered, as `open` checked");
+            (number, entry)
+        })
     }
 
     /// How many chunk messages the object carries (spec: FM-5).

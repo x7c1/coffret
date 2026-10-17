@@ -12,13 +12,16 @@
 //! [`rebuild`](fn@rebuild) reads the old Container whole, verifies it three
 //! ways — the object against the hash its record names (spec: FM-15), every
 //! chunk against its key (spec: FM-5, FM-8), every Entry's plaintext against
-//! the hash its row records (spec: CP-11) — and streams the kept Entries
-//! straight into a replacement through the writer a freeze uses, under a
-//! Container Key of its own (spec: KD-2, FM-14). The replacement keeps the old
-//! Container's kind (spec: PK-15) and each kept Entry's recorded metadata —
-//! Entry Path, `captured_mtime`, `captured_btime`, hash — in the order the old
-//! Container held them. What it hands back is a spooled Container ready to
-//! upload and commit, superseding the old one.
+//! the hash its row records (spec: CP-11), each row found in the Container's
+//! own table by its entry number rather than its path — and streams the kept
+//! Entries straight into a replacement through the writer a freeze uses, under
+//! a Container Key of its own (spec: KD-2, FM-14). The replacement keeps the
+//! old Container's kind (spec: PK-15) and each kept Entry's modification time,
+//! birth time, and hash as its row holds them, in the order the old Container
+//! held them, and records each under its current Entry Path: a rewrite
+//! captures the name current at the rewrite, so a renamed Entry's captured
+//! path becomes its current one (spec: FM-15). What it hands back is a spooled
+//! Container ready to upload and commit, superseding the old one.
 //!
 //! If any Entry does not verify, no replacement is handed back: a replacement
 //! is a claim that it carries the old Entries forward, and one written from an

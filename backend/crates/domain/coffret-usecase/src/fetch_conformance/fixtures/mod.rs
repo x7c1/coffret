@@ -18,7 +18,7 @@ pub(crate) use files::read;
 pub(super) use crate::sync_conformance::fixtures::write;
 
 mod keys;
-pub(super) use keys::keys;
+pub(super) use keys::{keys, purpose_key};
 
 mod lose_key;
 pub(crate) use lose_key::lose_key;

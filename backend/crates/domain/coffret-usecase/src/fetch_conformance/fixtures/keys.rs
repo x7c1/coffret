@@ -17,6 +17,6 @@ pub(crate) fn keys() -> LibraryKeys {
 ///
 /// The cases derive their own rather than borrowing a run's, so that what they
 /// open or write a control object with is the rule and not the code under test.
-pub(super) fn purpose_key(purpose: Purpose) -> PurposeKey {
+pub(crate) fn purpose_key(purpose: Purpose) -> PurposeKey {
     PurposeKey::derive(&master_key(), purpose)
 }
