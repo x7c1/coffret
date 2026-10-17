@@ -119,6 +119,10 @@ would fence nobody (spec: FM-12).
     without it degrades to **salvage**, the recovery mode without currency
     guarantees: decryptable contents can still be presented, but nothing
     proves which Containers are current (spec: RV-4).
+  - Salvage presents each Entry under the captured path its Container
+    records, never a current name: renames live only in this history and its
+    checkpoints, so a renamed Entry is shown under the name it had when its
+    Container was written (spec: RV-4, FM-9).
 - `prune` never leaves a Library that has committed anything with neither a
   head nor an [Index Snapshot](../index-snapshot/): it deletes only the
   records a checkpoint has applied, and never the Snapshot that applied them,

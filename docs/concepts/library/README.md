@@ -261,10 +261,10 @@ and has a window of its own for entering the Passphrase.
     outside this device's scope again; the device that made the deletion does
     the same for its own copies right after the commit. An **edited** one is the person's change to a
     file the Library no longer has: it stays where it is and every run reports
-    it, until the person moves it — elsewhere it is an ordinary added file — or
-    removes it. Telling the two apart takes the content hash this device
-    records whenever it materializes a file, because the Entry's own leaves the
-    Catalog with the Entry (spec: EP-15). A folder below the mapped root that
+    it, until the person takes it elsewhere — at another path it is an
+    ordinary added file — or removes it. Telling the two apart takes the
+    content hash this device records whenever it materializes a file, because
+    the Entry's own leaves the Catalog with the Entry (spec: EP-15). A folder below the mapped root that
     those discards leave with nothing at all in it is removed with them, and
     each folder above it emptied in turn — never the mapped root, and never a
     folder that was empty before the run or still holds anything (spec: EP-15).

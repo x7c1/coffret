@@ -26,7 +26,7 @@
 //!
 //! Ten of the cases need Storage to misbehave, in six ways — a replica that
 //! never arrives, a head that refuses the create, a snapshot slot a sibling
-//! reached first, a provider that will not move anything to the trash, one that
+//! reached first, a provider that will not trash anything, one that
 //! refuses a replica write, one that holds a replica and will not hand it
 //! over — and reach it by wrapping whatever store the backend handed over. That
 //! keeps them backend-agnostic: the same fault runs against a real provider and

@@ -593,8 +593,8 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     still holds anything the run did not discard, stays.
   - **Edited** — anything else. It is left where it is and reported by every
     run as deleted from the Library and kept because it changed, until the
-    person moves or removes it. Moved to another path it is an ordinary new
-    file there (EP-10).
+    person takes it elsewhere or removes it. At another path it is an
+    ordinary new file there (EP-10).
   - The device records the content hash of the Entry a file was made to match
     whenever it marks the file present — by uploading it, fetching it, or
     finding it unchanged against its Entry — because the Entry's own hash

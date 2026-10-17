@@ -266,6 +266,26 @@ pub(super) async fn opened(
         .await
 }
 
+/// Opens one Container the long way round under the record the catalog
+/// stands at — for a Container still current there.
+pub(super) async fn opened_at_head(
+    store: &dyn ObjectStore,
+    index: &dyn Index,
+    container_id: ContainerId,
+) -> DecodedContainer {
+    let head = index
+        .checkpoint()
+        .await
+        .expect("reading the checkpoint must succeed")
+        .expect("an earlier run left the catalog at a head")
+        .head_generation();
+    let library = Library::read(store).await;
+    let record = library.record(store, head, &master_key()).await;
+    library
+        .open(store, &record, container_id, &master_key())
+        .await
+}
+
 /// Whether Storage still lists one Container's object — not trashed.
 pub(super) async fn stored(store: &dyn ObjectStore, container_id: ContainerId) -> bool {
     Library::read(store).await.holds_container(container_id)
