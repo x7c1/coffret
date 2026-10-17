@@ -15,7 +15,7 @@ use coffret_model::{
     KeyringCommitment, LibraryId, MasterKey, MasterKeyEpoch, Mtime,
 };
 use coffret_usecase::device_state::{DeviceTime, LocalObservation, Mapping};
-use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
+use coffret_usecase::{EntryRef, InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 
 use crate::browse::EntryState;
 use crate::open_library::OpenLibrary;
@@ -111,6 +111,12 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
 
 /// Records that this device has the file for one Entry (spec: EP-10).
 async fn hold(library: &OpenLibrary, path: &str) {
+    let entry = library
+        .index
+        .entry_at(&entry_path(path))
+        .await
+        .expect("the catalog answers")
+        .expect("a case holds a file of an Entry the Library holds");
     library
         .index
         .mark_present(LocalObservation {
@@ -118,6 +124,7 @@ async fn hold(library: &OpenLibrary, path: &str) {
             size: 100,
             mtime: Mtime::from_unix_seconds(1_700_000_000),
             at: DeviceTime::from_unix_seconds(1_700_000_100),
+            entry: EntryRef::of(&entry),
             hash: None,
         })
         .await

@@ -57,8 +57,18 @@ make the Entry present (spec: EP-10). These states describe local
 availability; key-lost describes whether the Container can be decrypted, and
 locked describes whether the running Library holds its Master Key.
 
-A materialization record carries the content hash of the Entry the file was
-made to match, and it can outlive that Entry. Once the Entry leaves the
+A materialization record names the Entry its file is a copy of by that
+Entry's Container and entry number, never by the path the file stands at. The
+Index keeps the name current as a replacement — an update, a freeze absorbing
+the file, a rebuilt Pack — gives the Entry a new Container and number: a
+record whose Entry a record replaces at the path the Entry stood at follows
+the replacement, and one whose Entry an adopted Snapshot no longer holds
+follows the Entry standing where its own stood, where that Entry's Container
+is new to the device. An Entry that was current already is never taken for
+the record's own, however it came to the record's path (spec: EP-10).
+
+It also carries the content hash of the Entry the file was made to match, and
+it can outlive that Entry. Once the Entry leaves the
 Library, a record still saying present marks the file as departed, and the
 hash it carries is what tells an unedited file from an edited one, since the
 Entry's own hash leaves the cached Catalog with it. The device forgets the
@@ -73,11 +83,16 @@ the materialization record stays with the file and records the Entry's new
 path until the file is relocated to follow it. While it waits, the file is not
 the Entry at its own path: a scan neither reports it as deleted or departed nor
 carries it in as a new file (spec: FM-15, EP-10). A device that adopts a
-Snapshot past the rename records the new path the same way. Once the Entry
-leaves the Library the wait ends, and the file is judged where it stands like
-any other: departed where no current Entry stands there (spec: EP-15). Where
-another Entry stands there, the device forgets the record instead, since the
-file is not a copy of that Entry (spec: EP-10, EP-11).
+Snapshot past the rename records the new path the same way. A sync or a fetch
+relocates the file before it scans or places anything, and only once the file
+is relocated does the record follow it to the new path; a relocation that is
+refused or interrupted leaves the record where its file is, and the next run
+finishes it (spec: EP-10). Once the Entry leaves the Library the wait ends,
+and the file is judged where it stands like any other: departed where no
+current Entry stands there (spec: EP-15). Wherever another Entry stands at the
+path a record's file stands at, by a rename or an addition, the device forgets
+the record instead, since the file is not a copy of that Entry
+(spec: EP-10, EP-11).
 
 A **spool** holds a new Container's ciphertext on this device. A **pending row**
 is its local provenance: which batch created it, where its spool and uploaded
@@ -115,6 +130,9 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - announce (a spool by recording its pending row)
 - mark (a recorded spool complete, a materialized file present or absent, or a
   materialized file to follow a rename of its Entry)
+- carry over (a materialization record to the Entry that replaces its own)
+- re-key (a materialization record to the path its file was relocated to,
+  after the file is relocated)
 - forget (a materialization record whose Entry left the Library, once its file
   has gone to the desktop's trash or from the disk, or at once where another
   Entry holds the path its file stands at)

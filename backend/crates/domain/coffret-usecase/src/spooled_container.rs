@@ -128,13 +128,22 @@ impl SpooledContainer {
         } else {
             &[]
         };
-        held.iter().map(move |entry| LocalObservation {
-            path: entry.path.clone(),
-            size: entry.extent.size(),
-            mtime: entry.mtime,
-            at,
-            hash: Some(entry.hash),
-        })
+        held.iter()
+            .enumerate()
+            .map(move |(position, entry)| LocalObservation {
+                path: entry.path.clone(),
+                size: entry.extent.size(),
+                mtime: entry.mtime,
+                at,
+                // Each Entry is numbered by its place in the table the encoder laid
+                // down (spec: FM-9).
+                entry: EntryRef::new(
+                    self.container_id,
+                    EntryNumber::at_position(position)
+                        .expect("an entry table never runs past what entry numbers reach"),
+                ),
+                hash: Some(entry.hash),
+            })
     }
 }
 

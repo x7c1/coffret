@@ -204,7 +204,9 @@ impl Finding {
     /// the next qualifying commit retries a checkpoint (spec: CK-8).
     ///
     /// A deleted Entry's copy discarded into the trash is work the run did, and
-    /// the person who wants it back knows where to look (spec: EP-15).
+    /// the person who wants it back knows where to look (spec: EP-15). So is a
+    /// file relocated to follow a rename of its Entry, and a redundant one
+    /// discarded instead (spec: EP-10).
     ///
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
@@ -218,7 +220,9 @@ impl Finding {
         !matches!(
             self,
             Self::Surfaced {
-                reason: FindingReason::Discarded,
+                reason: FindingReason::Discarded
+                    | FindingReason::Relocated { .. }
+                    | FindingReason::RelocationDiscarded { .. },
                 ..
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::UntrashedRemoval { .. }
@@ -365,6 +369,16 @@ impl fmt::Display for Finding {
             Self::Surfaced {
                 path,
                 reason: reason @ FindingReason::Discarded,
+            } => write!(f, "discarded {path}: {reason}"),
+            // The same for a file relocated to follow a rename of its Entry, and
+            // for the redundant copy discarded in its place (spec: EP-10).
+            Self::Surfaced {
+                path,
+                reason: reason @ FindingReason::Relocated { .. },
+            } => write!(f, "relocated {path}: {reason}"),
+            Self::Surfaced {
+                path,
+                reason: reason @ FindingReason::RelocationDiscarded { .. },
             } => write!(f, "discarded {path}: {reason}"),
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
             Self::UnavailableRoot {

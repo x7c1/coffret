@@ -2,7 +2,9 @@ use coffret_model::ContainerKind;
 
 use super::{relocate_to, rename, renaming};
 use crate::index::Index;
-use crate::index_conformance::fixtures::{addition, container_id, observation, path, record};
+use crate::index_conformance::fixtures::{
+    addition, container_id, entry, observation, observation_of, path, record,
+};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 /// The file this device has of a renamed Entry stays where it was placed, and
@@ -24,9 +26,12 @@ pub async fn the_file_of_a_renamed_entry_waits_to_follow_it(fixture: &IndexUnder
         ))
         .await
         .expect("applying the first record must succeed");
-    for text in ["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"] {
+    for (position, text) in ["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"]
+        .into_iter()
+        .enumerate()
+    {
         index
-            .mark_present(observation(text, 100))
+            .mark_present(observation_of(text, 100, entry(1, position)))
             .await
             .expect("recording a materialized file must succeed");
     }
@@ -120,9 +125,9 @@ pub async fn the_file_of_a_removed_entry_stops_waiting_for_it(fixture: &IndexUnd
         ))
         .await
         .expect("applying the first record must succeed");
-    for text in ["albums/a.jpg", "albums/b.jpg", "inbox/c.jpg"] {
+    for (text, seed) in [("albums/a.jpg", 1), ("albums/b.jpg", 2), ("inbox/c.jpg", 3)] {
         index
-            .mark_present(observation(text, 100))
+            .mark_present(observation_of(text, 100, entry(seed, 0)))
             .await
             .expect("recording a materialized file must succeed");
     }
@@ -205,9 +210,13 @@ pub async fn a_restore_past_a_rename_marks_the_file_to_follow_it(fixture: &Index
         .apply(records[0].clone())
         .await
         .expect("applying the first record must succeed");
-    for text in ["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"] {
+    for (text, seed) in [
+        ("albums/a.jpg", 1),
+        ("albums/b.jpg", 2),
+        ("albums/c.jpg", 3),
+    ] {
         index
-            .mark_present(observation(text, 100))
+            .mark_present(observation_of(text, 100, entry(seed, 0)))
             .await
             .expect("recording a materialized file must succeed");
     }
@@ -336,9 +345,9 @@ fn swap_then_remove() -> [coffret_model::JournalRecord; 3] {
 }
 
 async fn mark_both_present(index: &dyn Index) {
-    for text in ["albums/a.jpg", "albums/b.jpg"] {
+    for (text, seed) in [("albums/a.jpg", 1), ("albums/b.jpg", 2)] {
         index
-            .mark_present(observation(text, 100))
+            .mark_present(observation_of(text, 100, entry(seed, 0)))
             .await
             .expect("recording a materialized file must succeed");
     }

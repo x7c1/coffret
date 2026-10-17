@@ -1,6 +1,7 @@
 use coffret_model::{ContentHash, EntryPath, Mtime};
 
 use crate::device_state::device_time::DeviceTime;
+use crate::entry_ref::EntryRef;
 
 /// What this device last saw of the local file at one Entry Path.
 ///
@@ -11,8 +12,12 @@ use crate::device_state::device_time::DeviceTime;
 /// Container that holds it (spec: FM-9), and this is only the local file the
 /// device put there.
 ///
-/// The one fact about the Entry it does keep is the content hash the file was
-/// made to match, because it is the one a device cannot ask the Library for once
+/// The two facts about the Entry it does keep are which Entry the file is a
+/// copy of and the content hash the file was made to match. The first is what
+/// keeps the record about that Entry and no other: a rename can change the Entry's
+/// current path away from the one the file stands at and give the path to another Entry, and
+/// a record that knew only its path would then claim the newcomer
+/// (spec: EP-10). The second is the one a device cannot ask the Library for once
 /// the Entry is gone: a catch-up that removes the Entry removes its hash with it,
 /// and the device still has to tell a file left exactly as the Library had it
 /// from one somebody edited since (spec: EP-15).
@@ -26,6 +31,14 @@ pub struct LocalObservation {
     pub mtime: Mtime,
     /// When the device last looked.
     pub at: DeviceTime,
+    /// The Entry this device last made the file a copy of — by uploading it,
+    /// fetching it, or finding it unchanged against it — by the name no rename
+    /// changes (spec: FM-9, EP-10).
+    ///
+    /// The Index keeps it current as replacements give the Entry a new
+    /// Container and entry number, so it names the Entry for as long as the
+    /// Library holds it, and then the last one it was.
+    pub entry: EntryRef,
     /// The content hash of the Entry this device last made the file match —
     /// by uploading it, fetching it, or finding it unchanged against it
     /// (spec: EP-10, EP-15).

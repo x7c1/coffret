@@ -190,6 +190,7 @@ mod tests {
     /// A run that placed nothing, out of `mappings` mappings.
     fn empty_run(mappings: usize) -> FetchOutcome {
         FetchOutcome {
+            relocations: Vec::new(),
             fetched: Vec::new(),
             containers: Vec::new(),
             skipped: 0,
@@ -278,6 +279,7 @@ mod tests {
     #[test]
     fn a_mapped_device_reads_as_it_always_did() {
         let outcome = FetchOutcome {
+            relocations: Vec::new(),
             fetched: vec![EntryPath::parse("albums/a.jpg").expect("the literal is one")],
             containers: Vec::new(),
             skipped: 0,

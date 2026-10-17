@@ -15,11 +15,14 @@ use crate::fetch::target::Target;
 use crate::fetch::{container, select, translate};
 use crate::progress::{Phase, Step};
 use crate::refused_root::RefusedRoot;
+use crate::relocate::{relocate_waiting, LocalDisk, Relocation};
 
 /// Materializes the Library's current Entries into this device's mapped folders.
 ///
 /// The whole path, in the order it has to happen in: catch the Index up to the
-/// Library's head (spec: CK-9), let the mappings say where each current Entry
+/// Library's head (spec: CK-9), relocate this device's files of Entries a
+/// rename gave another path (spec: EP-10), let the mappings say where each
+/// current Entry
 /// would go (spec: EP-9), decide per Entry whether this device may write there
 /// (spec: EP-10, EP-11), open the committed Keyring the caught-up checkpoint
 /// names (spec: KL-1, KL-3), fetch each needed Container once (spec: PK-16),
@@ -61,6 +64,9 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         index,
         keys,
         destinations,
+        roots,
+        relocations,
+        trash,
         parcels,
         prefix,
         now,
@@ -76,6 +82,20 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // A held parcel whose Container the catch-up took out of the current set
     // serves nothing any more (spec: PK-21).
     let_go_departed(index, &parcels).await?;
+    // The files of Entries a rename gave another path follow them before
+    // anything is selected, so a place this device's own file was relocated to
+    // reads as that file and not as one to fetch (spec: EP-10). The whole of
+    // this device's files, whatever prefix narrows the run: a relocation is
+    // about the files, and the next run would only meet them again.
+    let relocations = relocate_waiting(
+        index,
+        LocalDisk {
+            roots,
+            relocations,
+            trash,
+        },
+    )
+    .await?;
 
     let mut outcome = FetchOutcome {
         fetched: Vec::new(),
@@ -86,6 +106,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         // device that maps nothing selects nothing whatever the Library holds,
         // and those are two different empty answers (spec: EP-9).
         mappings: index.mappings().await?.len(),
+        relocations,
         surfaced: Vec::new(),
         refused: Vec::new(),
         key_lost: Vec::new(),
@@ -268,6 +289,16 @@ fn finished(outcome: &FetchOutcome) {
         // A count and nothing else: a mapping names a prefix and a local root,
         // and neither may reach a diagnostic event.
         mappings = outcome.mappings,
+        relocated = outcome
+            .relocations
+            .iter()
+            .filter(|one| matches!(one, Relocation::Relocated { .. }))
+            .count(),
+        relocations_refused = outcome
+            .relocations
+            .iter()
+            .filter(|one| matches!(one, Relocation::Refused { .. }))
+            .count(),
         surfaced = outcome.surfaced.len(),
         refused_roots = outcome.refused.len(),
         key_lost = outcome.key_lost.len(),

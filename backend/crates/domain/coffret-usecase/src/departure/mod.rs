@@ -28,7 +28,7 @@ mod emptied_folders;
 pub(crate) use emptied_folders::EmptiedFolders;
 
 mod mapped_source;
-pub(crate) use mapped_source::mapped_source;
+pub(crate) use mapped_source::{mapped_file, mapped_source, MappedFile};
 
 mod discard_departed;
 pub(crate) use discard_departed::discard_departed;

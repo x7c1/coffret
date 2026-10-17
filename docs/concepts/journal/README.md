@@ -160,12 +160,13 @@ picking one (spec: CP-7). Removals are carried over as they are, since they
 name Containers, and a folder rename is the Entries it was prepared with and
 no more.
 
-Fetching already finds an Entry by its entry number (spec: EP-11). The rest
-of the rollout is planned: the rename operation that writes these batches, and
-device-local materialization relocations. A failed local relocation must
-retain its old materialization record and remain pending for a later
-catch-up. These are requirements for rename, not guarantees of the current
-implementation.
+Fetching already finds an Entry by its entry number (spec: EP-11), and a
+device that catches a rename up relocates its file of the renamed Entry before
+its next sync or fetch scans or places anything; a relocation it cannot make
+keeps the old materialization record and stays pending for a later run
+(spec: EP-10). The rest of the rollout is planned: the rename operation that
+writes these batches. That is a requirement for rename, not a guarantee of the
+current implementation.
 
 ## Related Concepts
 

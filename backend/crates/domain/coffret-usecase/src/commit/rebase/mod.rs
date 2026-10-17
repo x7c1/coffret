@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use coffret_model::{EntryNumber, EntryPath, JournalRecord};
 
 use crate::commit::commit_error::CommitResult;
-use crate::commit::entry_ref::EntryRef;
 use crate::commit::prepared_batch::PreparedBatch;
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 
 mod check_contested;
@@ -51,9 +51,9 @@ use take_over::take_over;
 /// admit (spec: CP-18, EP-6, FM-15).
 ///
 /// The local file the batch materialized for an Entry it takes over at another
-/// path is left out of what it records: the file stays at the path it was
-/// captured from, and its row goes on waiting to be relocated to the Entry, as
-/// the catch-up that replayed the rename left it (spec: EP-10).
+/// path stays at the path it was captured from, and what the batch records of
+/// it names the Entry that takes over: the refresh records it there, waiting
+/// to be relocated to the Entry's new path (spec: EP-10).
 ///
 /// # Errors
 ///
@@ -72,10 +72,7 @@ pub(super) async fn rebase(
     follow_replaced(&mut batch, intervening)?;
     let renamed = final_paths(intervening);
     check_contested(index, &batch, &renamed, intervening).await?;
-    let taken_over = take_over(&mut batch, &renamed)?;
-    batch
-        .materialized
-        .retain(|observation| !taken_over.contains(&observation.path));
+    take_over(&mut batch, &renamed)?;
     Ok(batch)
 }
 

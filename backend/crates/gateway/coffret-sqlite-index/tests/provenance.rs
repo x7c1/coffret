@@ -1,14 +1,16 @@
-use coffret_model::{ContainerId, ContentHash, EntryPath, Generation, Mtime, ObjectRef};
+use coffret_model::{
+    ContainerId, ContentHash, EntryNumber, EntryPath, Generation, Mtime, ObjectRef,
+};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntryState, LocalObservation, PendingRow,
     SpoolState,
 };
-use coffret_usecase::{Index, IndexError};
+use coffret_usecase::{EntryRef, Index, IndexError};
 
 mod support;
 
-use support::{snapshot, stamp_of};
+use support::{container_id, snapshot, stamp_of};
 
 #[tokio::test]
 async fn separate_connections_cannot_settle_a_live_producer() {
@@ -48,7 +50,7 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
              ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 7;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -98,7 +100,7 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 8;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -127,13 +129,10 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("index.sqlite");
     let index = SqliteIndex::open(&path).unwrap();
-    let observation = LocalObservation {
-        path: EntryPath::parse("albums/a.jpg").unwrap(),
-        size: 100,
-        mtime: Mtime::from_unix_seconds(1_700_000_000),
-        at: DeviceTime::from_unix_seconds(1_700_000_400),
-        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
-    };
+    // A record the catalog names the Entry of, which is the one an upgrade
+    // keeps (spec: EP-10).
+    index.restore(snapshot(4)).await.unwrap();
+    let observation = materialized("albums/1.jpg");
     index.mark_present(observation.clone()).await.unwrap();
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
@@ -141,7 +140,7 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
         .execute_batch(
             "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 9;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 9;",
         )
         .unwrap();
     drop(connection);
@@ -170,20 +169,15 @@ async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("index.sqlite");
     let index = SqliteIndex::open(&path).unwrap();
-    let observation = LocalObservation {
-        path: EntryPath::parse("books/atlas/003.jpg").unwrap(),
-        size: 100,
-        mtime: Mtime::from_unix_seconds(1_700_000_000),
-        at: DeviceTime::from_unix_seconds(1_700_000_400),
-        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
-    };
+    index.restore(snapshot(4)).await.unwrap();
+    let observation = materialized("albums/1.jpg");
     index.mark_present(observation.clone()).await.unwrap();
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
             "DROP TABLE held_parcels; DROP TABLE attempted_slots; \
-             ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 10;",
+             ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 10;",
         )
         .unwrap();
     drop(connection);
@@ -263,7 +257,7 @@ async fn layout_11_attempts_are_kept_with_no_slot() {
     connection
         .execute_batch(
             "DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 11;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 11;",
         )
         .unwrap();
     drop(connection);
@@ -405,13 +399,7 @@ async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     let path = dir.path().join("index.sqlite");
     let index = SqliteIndex::open(&path).unwrap();
     index.restore(snapshot(4)).await.unwrap();
-    let observation = LocalObservation {
-        path: EntryPath::parse("albums/1.jpg").unwrap(),
-        size: 100,
-        mtime: Mtime::from_unix_seconds(1_700_000_000),
-        at: DeviceTime::from_unix_seconds(1_700_000_400),
-        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
-    };
+    let observation = materialized("albums/1.jpg");
     index.mark_present(observation.clone()).await.unwrap();
     let row = PendingRow {
         container_id: ContainerId::from_bytes([12; 16]),
@@ -426,14 +414,14 @@ async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; PRAGMA user_version = 12;")
+        .execute_batch("ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 12;")
         .unwrap();
     drop(connection);
 
     let reopened = SqliteIndex::open(&path).unwrap();
     assert_eq!(
         stamp_of(&path),
-        16,
+        17,
         "the file is upgraded to the current layout"
     );
     assert!(
@@ -455,6 +443,19 @@ async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     let fresh = dir.path().join("fresh.sqlite");
     drop(SqliteIndex::open(&fresh).unwrap());
     assert_eq!(entries_table(&path), entries_table(&fresh));
+}
+
+/// A file this device has materialized at `text`, a copy of the first Entry
+/// of the Pack the seeded Snapshot holds.
+fn materialized(text: &str) -> LocalObservation {
+    LocalObservation {
+        path: EntryPath::parse(text).unwrap(),
+        size: 100,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        at: DeviceTime::from_unix_seconds(1_700_000_400),
+        entry: EntryRef::new(container_id(1), EntryNumber::FIRST),
+        hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
+    }
 }
 
 /// How a file declares its table of Entries and the index beside it.

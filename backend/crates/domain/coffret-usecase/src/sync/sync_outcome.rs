@@ -1,6 +1,7 @@
 use coffret_model::ContainerId;
 
 use crate::commit::CommitOutcome;
+use crate::relocate::Relocation;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
@@ -52,6 +53,14 @@ pub struct SyncOutcome {
     /// say "everything is already backed up" to somebody whose files the
     /// Library has never heard of.
     pub mappings: usize,
+    /// What became of each file this device placed whose Entry a rename gave
+    /// another path, in the order the run came to them (spec: EP-10).
+    ///
+    /// Relocated before the scan, so the scan finds a relocated file at its
+    /// Entry's own path. One refused is still standing at a name the Library no
+    /// longer gives it, unreported by the scan and never uploaded, and is the
+    /// one shape here a caller has to read.
+    pub relocations: Vec<Relocation>,
     /// What the run found and did not act on (spec: PK-14).
     pub surfaced: Vec<Surfaced>,
     /// The mappings whose local roots the device could not vouch for

@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, EntryMetadata};
+use coffret_model::{ContainerId, EntryLocation};
 use tracing::info;
 
 use crate::device_state::{DeviceTime, LocalObservation, PendingRow};
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 use crate::spool::Spool;
 use crate::sync::settled::Settled;
@@ -33,8 +34,12 @@ pub(super) fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bo
 ///
 /// These are the files the interrupted run put on disk while producing the
 /// batch: the record carries each new Container's entry table (spec: CP-11), and
-/// its `path`, `size`, and `mtime` are exactly what that run handed the refresh
-/// it never completed. Reading them out of the Index rather than off Storage is
+/// its captured path, `size`, and `mtime` are exactly what that run handed the
+/// refresh it never completed. The captured path and not the current one,
+/// because that is where the file stands: an Entry a rename has given another
+/// path since — a rebase taking over one another writer renamed, or a rename
+/// committed after it — stands elsewhere, and its file waits to be relocated
+/// there (spec: EP-7, EP-10). Reading them out of the Index rather than off Storage is
 /// what keeps this from opening a Container.
 ///
 /// Taking the Container's Entries *as* the materialized files is sound because
@@ -59,30 +64,22 @@ pub(super) async fn materialized(
     index: &dyn Index,
     pending: &[PendingRow],
     current: &BTreeSet<ContainerId>,
-) -> SyncResult<BTreeMap<ContainerId, Vec<EntryMetadata>>> {
+) -> SyncResult<BTreeMap<ContainerId, Vec<EntryLocation>>> {
     let completing: BTreeSet<ContainerId> = pending
         .iter()
         .filter(|row| completes(row, current) && row.materializes)
         .map(|row| row.container_id)
         .collect();
-    let mut entries: BTreeMap<ContainerId, Vec<EntryMetadata>> = BTreeMap::new();
+    let mut entries: BTreeMap<ContainerId, Vec<EntryLocation>> = BTreeMap::new();
     if completing.is_empty() {
         return Ok(entries);
     }
     for location in index.entries_under(None).await? {
-        // An Entry a rename has given another path since — a rebase taking
-        // over one another writer renamed, or a rename committed after it —
-        // is not at the path the file stands at, which is the one its
-        // Container captured. That file waits to be relocated instead, and
-        // marking the Entry's path present would claim a file nobody placed
-        // there (spec: EP-7, EP-10).
-        if completing.contains(&location.container_id)
-            && location.entry.path == location.entry.captured_path
-        {
+        if completing.contains(&location.container_id) {
             entries
                 .entry(location.container_id)
                 .or_default()
-                .push(location.entry);
+                .push(location);
         }
     }
     Ok(entries)
@@ -102,16 +99,21 @@ pub(super) async fn complete(
     spool: &dyn Spool,
     now: DeviceTime,
     row: PendingRow,
-    entries: Option<Vec<EntryMetadata>>,
+    entries: Option<Vec<EntryLocation>>,
 ) -> SyncResult<Settled> {
     let entries = entries.unwrap_or_default();
-    for entry in &entries {
+    for location in &entries {
+        let entry = &location.entry;
+        // Recorded where the file stands, as a copy of the Entry wherever that
+        // stands now: the Index has it wait to follow an Entry a rename gave
+        // another path (spec: EP-10).
         index
             .mark_present(LocalObservation {
-                path: entry.path.clone(),
+                path: entry.captured_path.clone(),
                 size: entry.extent.size(),
                 mtime: entry.mtime,
                 at: now,
+                entry: EntryRef::of(location),
                 hash: Some(entry.hash),
             })
             .await?;
@@ -136,8 +138,8 @@ mod tests {
     use std::path::PathBuf;
 
     use coffret_model::{
-        ContainerAddition, ContainerKind, ContainerSummary, ContentHash, JournalRecord,
-        KeyringCommitment, MasterKeyEpoch, Mtime,
+        ContainerAddition, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
+        JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime,
     };
 
     use super::*;
@@ -147,6 +149,7 @@ mod tests {
     use crate::entry_extents::entry_extent;
     use crate::entry_paths::entry_path;
     use crate::generations::generation;
+    use crate::in_memory_fs::InMemoryFs;
     use crate::in_memory_index::InMemoryIndex;
 
     /// A one-file Container `seed` whose Entry stands at `path`, captured
@@ -191,10 +194,11 @@ mod tests {
     // EP-7, EP-10: a Container whose commit landed, rebased over another
     // writer's rename of the Entry it replaces, holds that Entry at the renamed
     // path while this device's file stands at the path it was captured from.
-    // Completing the interrupted bookkeeping marks present only the Entries
-    // that stand where their files do, and claims no file at the renamed path.
+    // Completing the interrupted bookkeeping records that file where it
+    // stands, waiting to follow the Entry, and claims no file at the renamed
+    // path.
     #[tokio::test]
-    async fn an_entry_taken_over_at_a_renamed_path_is_not_marked_present() {
+    async fn an_entry_taken_over_at_a_renamed_path_waits_where_its_file_stands() {
         let index = InMemoryIndex::new();
         let record = JournalRecord::canonical(
             generation(1),
@@ -222,18 +226,40 @@ mod tests {
         let rows = [pending(1), pending(2)];
         let current: BTreeSet<ContainerId> = rows.iter().map(|row| row.container_id).collect();
 
-        let entries = materialized(&index, &rows, &current)
+        let mut entries = materialized(&index, &rows, &current)
             .await
             .expect("reading the catalog must succeed");
+        let spool = InMemoryFs::new();
+        for row in rows {
+            let held = entries.remove(&row.container_id);
+            complete(&index, &spool, DeviceTime::from_unix_seconds(1), row, held)
+                .await
+                .expect("completing the interrupted bookkeeping must succeed");
+        }
 
-        assert_eq!(
-            entries.keys().copied().collect::<Vec<_>>(),
-            [ContainerId::from_bytes([2; ContainerId::BYTE_LEN])],
-            "only the Entry standing where its file was captured is claimed",
+        let row = |text| {
+            let index = &index;
+            async move {
+                index
+                    .local_entry_at(&entry_path(text))
+                    .await
+                    .expect("reading a local file's row must succeed")
+            }
+        };
+        let taken_over = row("albums/a.jpg")
+            .await
+            .expect("the file the update was drawn from is recorded where it stands");
+        assert_eq!(taken_over.relocate_to, Some(entry_path("albums/b.jpg")));
+        assert!(
+            row("albums/b.jpg").await.is_none(),
+            "no file is claimed at the renamed path",
         );
         assert_eq!(
-            entries[&rows[1].container_id][0].path,
-            entry_path("albums/c.jpg")
+            row("albums/c.jpg")
+                .await
+                .expect("the Entry standing where its file was captured is recorded")
+                .relocate_to,
+            None,
         );
     }
 }

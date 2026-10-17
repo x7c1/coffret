@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use coffret_model::{ContainerId, EntryNumber, EntryPath};
 use coffret_usecase::catalog_renames::{check_renames, Named};
 use coffret_usecase::{CommittedBatch, IndexError, IndexResult, JournalRecord};
@@ -29,7 +31,10 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
         .iter()
         .map(|addition| addition.container().id)
         .collect();
-    let vacated = device_state::following_any_of(connection, record.removals())?;
+    // Where the Entries of the rows this record's removals reach stand, read
+    // before they are taken out: a replacement takes a row over at the path its
+    // Entry stood at (spec: EP-6, EP-10).
+    let stood = device_state::standing_in(connection, record.removals())?;
 
     // Removals leave the current set before additions enter it: within one
     // record a path may pass from a replaced Container to its replacement
@@ -71,7 +76,18 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
     for one in &renamed {
         insert_entry(connection, &one.after())?;
     }
-    device_state::follow_renames(connection, &renamed)?;
+    // The rows a record can change the standing of: those whose Entry it
+    // removes or renames, and those at a path it gives an Entry, by a rename or
+    // an addition (spec: EP-10, FM-15).
+    let mut reached: BTreeSet<String> = stood.iter().map(|(path, _)| path.clone()).collect();
+    for one in &renamed {
+        reached.extend(device_state::copies_of(
+            connection,
+            one.before.container_id,
+            one.before.entry_number.get(),
+        )?);
+        reached.insert(one.path.as_str().to_owned());
+    }
     for addition in record.into_additions() {
         // Each Entry keeps the number its place in the table gives it
         // (spec: FM-9, FM-15).
@@ -79,9 +95,19 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
         insert_container(connection, &container)?;
         for entry in &located {
             insert_entry(connection, entry)?;
+            reached.insert(entry.path().as_str().to_owned());
         }
     }
-    device_state::release_vacated(connection, &vacated, &added)?;
+    device_state::carry_over(connection, &stood, |container_id| {
+        added
+            .iter()
+            .any(|added| added.as_bytes().as_slice() == container_id)
+    })?;
+    device_state::reconcile(
+        connection,
+        reached.iter().map(String::as_str),
+        "keeping the local files' rows about their Entries",
+    )?;
     // The checkpoint the record reaches; which Snapshot this catalog once
     // adopted is unchanged by a replay.
     write_checkpoint(connection, &checkpoint)

@@ -9,14 +9,16 @@ use crate::local_trash::LocalTrash;
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
+use crate::relocations::Relocations;
 use crate::spool::Spool;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
 ///
-/// The two ports, the epoch's keys, the three things this device's own disk is
+/// The two ports, the epoch's keys, the four things this device's own disk is
 /// asked for — where the ciphertext waits between being encoded and being
-/// committed, the mapped folders the scan reads, and the trash a deleted Entry's
-/// unedited copy goes to — and the two values a device supplies rather
+/// committed, the mapped folders the scan reads, the trash a deleted Entry's
+/// unedited copy goes to, and the rename a renamed Entry's file follows it by —
+/// and the two values a device supplies rather
 /// than derives: what it calls this batch and what its clock says. Which
 /// folders are scanned is not among them — that is the device's mappings, which
 /// the [`Index`] holds (spec: EP-9), so a caller cannot sync a folder the
@@ -49,6 +51,12 @@ pub struct SyncRequest<'a> {
     /// when the trash will not take a file without reaching the trash of the
     /// desktop it runs on.
     pub trash: &'a dyn LocalTrash,
+    /// Where a file this device placed is relocated to follow a rename of its
+    /// Entry, before the scan (spec: EP-10).
+    ///
+    /// A capability for the reason the trash is one: what a relocation
+    /// promises is about a rename that is refused or interrupted.
+    pub relocations: &'a dyn Relocations,
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -86,8 +94,8 @@ pub struct SyncRequest<'a> {
 impl<'a> SyncRequest<'a> {
     /// A run against `store` and `index`, reading the mapped folders through
     /// `roots`, discarding departed files into the desktop's trash through
-    /// `trash`, and spooling into `spool_dir` of `spool`, under the default
-    /// policy.
+    /// `trash`, relocating renamed Entries' files through `relocations`, and
+    /// spooling into `spool_dir` of `spool`, under the default policy.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
@@ -96,6 +104,7 @@ impl<'a> SyncRequest<'a> {
         spool: &'a dyn Spool,
         roots: &'a dyn MappedRoots,
         trash: &'a dyn LocalTrash,
+        relocations: &'a dyn Relocations,
         spool_dir: impl AsRef<Path>,
         batch: BatchId,
         now: DeviceTime,
@@ -107,6 +116,7 @@ impl<'a> SyncRequest<'a> {
             spool,
             roots,
             trash,
+            relocations,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             batch,
             now,

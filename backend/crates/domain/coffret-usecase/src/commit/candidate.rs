@@ -4,8 +4,8 @@ use coffret_model::{ContainerAddition, ContainerId, EntryLocation, EntryPath, En
 
 use crate::catalog_renames::{check_rename_set, Named, RenamedEntry};
 use crate::commit::commit_error::{CommitError, CommitResult};
-use crate::commit::entry_ref::EntryRef;
 use crate::commit::prepared_batch::PreparedBatch;
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 use crate::index_error::IndexError;
 

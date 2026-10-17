@@ -74,8 +74,8 @@ refuses the run. Findings have two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused | While a later run still observes the condition |
-| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash | As the result of that attempt; later attempts report their own results |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused, a file awaiting relocation that could not be relocated | While a later run still observes the condition |
+| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash, a file relocated, a redundant waiting copy discarded | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
 leaving the reported conditions for attention (spec: PK-14, EP-10, EP-12,
@@ -145,9 +145,13 @@ and has a window of its own for entering the Passphrase.
   *move*: no act on an Entry or a file is called that — a rename changes an
   Entry's path, including its folder, and the device holding its file
   relocates it
-- remove (a folder below a mapped root that a run's discards emptied, once
-  every discard is made) — never *delete*, which is the Library's verb for
-  Entries
+- relocate (a file awaiting relocation to its Entry's current path, during a
+  sync or a fetch and before either scans or places anything) — one rename on
+  this device's disk, under the mapped root it stands in, and its
+  materialization record after it; never *move*, for the reason above
+- remove (a folder below a mapped root that a run's discards or relocations
+  emptied, once every one is made) — never *delete*, which is the Library's
+  verb for Entries
 - take (the turn at this device's pending work, as a server's sync, freeze or
   deletion does before it asks for the Library; a run armed while another holds
   it waits for the holder)
@@ -258,9 +262,29 @@ and has a window of its own for entering the Passphrase.
     since its Entry is still current, and not added, since the record says
     this device put it there: a scan neither reports it nor carries it in, and
     no run selects it for update or freeze. It stays where it was placed, and
-    the record notes where its Entry stands now, until the device relocates it
-    to follow — a later change. If the Entry leaves the Library first, the
-    file is departed instead (spec: EP-10, FM-15).
+    the record notes where its Entry stands now. A sync or a fetch relocates it
+    before it scans or places anything: one rename to the Entry's current
+    path, under the same mapped root, and then the record follows, which ends
+    the wait. A file that cannot be relocated — its root unavailable; the file
+    edited since it was placed; the new path taken by something this device
+    did not place, or by its own file of another Entry still waiting there;
+    the new path under another mapped root or on another filesystem; a
+    symbolic link on the way; a filesystem that offers no rename that never
+    replaces — keeps waiting, is reported, and is tried again by the next run;
+    nothing is overwritten, copied, or uploaded. Where this device already has
+    its own copy of the Entry at the new path, the waiting one is redundant
+    and is discarded like a departed file, or kept and reported where it was
+    edited. If the Entry leaves the Library first, the wait ends and the file
+    is departed instead (spec: EP-10, EP-15, FM-15).
+  - A materialization record is about one Entry, named by its Container and
+    entry number, and never about whichever Entry its path holds. A
+    replacement — an update, a freeze absorbing the file, a rebuilt Pack —
+    carries the record over to the Entry that takes its place. Where another
+    Entry comes to hold the path the file stands at — a rename brings one
+    there, or one is added after the record's own Entry left — the record is
+    forgotten rather than read as that Entry's copy: the file is then one this
+    device never placed for it, which a fetch refuses to overwrite and no scan
+    offers as its update (spec: EP-10, EP-11).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
@@ -500,16 +524,13 @@ Metadata-only rename is not complete yet. A rename commits a change to the
 Catalog's names without replacing the affected Containers, and replaying a
 record or adopting a Snapshot already applies one: the Catalog takes each
 Entry's new path, and a file this device placed for a renamed Entry waits at
-its old path to be relocated (spec: FM-15, RV-5, EP-10). A fetch already
-finds an Entry by its entry number and places it at its current path
-(spec: EP-11). What remains is writing renames — no writer emits one yet,
-though a batch carrying one is already rebased onto a newer head
-(spec: EP-7) — and relocating a waiting file on this device. Mappings will
-continue to translate names to local paths; they do not make local folders the
-authority for the namespace. A device following a rename must protect local
-changes and retry a refused relocation without prematurely relabeling its
-materialization record. The current implementation does not infer a rename
-from a local file being renamed.
+its old path until a sync or a fetch relocates it (spec: FM-15, RV-5, EP-10).
+A fetch already finds an Entry by its entry number and places it at its
+current path (spec: EP-11). What remains is writing renames — no writer emits
+one yet, though a batch carrying one is already rebased onto a newer head
+(spec: EP-7). Mappings will continue to translate names to local paths; they
+do not make local folders the authority for the namespace. The current
+implementation does not infer a rename from a local file being renamed.
 
 ## Related Concepts
 

@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 
-use coffret_model::{ContainerId, ContainerKind, ContentHash};
+use coffret_model::{ContainerId, ContainerKind, EntryLocation};
 
 use crate::departure::{self, Departed};
 use crate::device_state::{
     DeviceTime, LocalEntry, LocalEntryState, LocalObservation, RootMarkerId,
 };
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 use crate::local_scan::SourceFile;
 use crate::mapped_roots::MappedRoots;
@@ -42,8 +43,9 @@ pub(super) async fn examine(
 
     // A current Entry this device never materialized is outside its scope,
     // whether or not a mapping covers it (spec: EP-10). Reporting it as changed
-    // would propose replacing an Entry from a file this device never put there.
-    let Some(local) = local else {
+    // would propose replacing an Entry from a file this device never put there,
+    // and a row recording a copy of another Entry is no copy of this one.
+    let Some(local) = local.filter(|local| local.is_copy_of(&location)) else {
         return Ok(());
     };
     if local.state == LocalEntryState::Present
@@ -58,9 +60,7 @@ pub(super) async fn examine(
         // Touched and not changed: the content the Library holds is still the
         // content on disk, so only what this device last saw of the file moves.
         survey.unchanged += 1;
-        survey
-            .refreshed
-            .push(observation(source, now, location.entry.hash));
+        survey.refreshed.push(observation(source, now, &location));
         return Ok(());
     }
 
@@ -119,13 +119,14 @@ async fn without_entry(
 }
 
 /// What this device saw of a file, stamped with when it looked and with the
-/// content it was found to hold.
-fn observation(source: &SourceFile, at: DeviceTime, hash: ContentHash) -> LocalObservation {
+/// Entry it was found to be a copy of.
+fn observation(source: &SourceFile, at: DeviceTime, location: &EntryLocation) -> LocalObservation {
     LocalObservation {
         path: source.path.clone(),
         size: source.size,
         mtime: source.mtime,
         at,
-        hash: Some(hash),
+        entry: EntryRef::of(location),
+        hash: Some(location.entry.hash),
     }
 }

@@ -305,7 +305,11 @@ pub async fn a_departed_file_with_no_recorded_hash_is_kept_once_it_changed(
 }
 
 /// A path where another device has since added a new Entry is not departed,
-/// and the existing rules decide it (spec: EP-15, EP-10).
+/// and the file there is not that Entry's copy either, however alike the two
+/// are: the record is about the Entry that left, so it is forgotten, and the
+/// file is one this device never placed for the newcomer — reported for
+/// nothing, offered as no edit of it, and never overwritten by a fetch
+/// (spec: EP-15, EP-10, EP-11).
 pub async fn a_path_a_new_entry_arrived_at_is_not_departed(fixture: &SyncUnderTest) {
     let content = b"the file's bytes";
     let path = materialized(fixture, "a.jpg", content).await;
@@ -337,8 +341,17 @@ pub async fn a_path_a_new_entry_arrived_at_is_not_departed(fixture: &SyncUnderTe
         outcome.surfaced,
     );
     assert_eq!(
-        outcome.unchanged, 1,
-        "the file is what this device last saw"
+        outcome.unchanged, 0,
+        "the file is no copy this device placed of the Entry standing there"
+    );
+    assert!(
+        fixture
+            .index()
+            .local_entry_at(&entry_path("a.jpg"))
+            .await
+            .expect("reading a local file's row must succeed")
+            .is_none(),
+        "the record of the Entry that left is forgotten"
     );
     assert!(fixture.fs().discarded().is_empty());
     assert!(fixture.fs().holds(&path));

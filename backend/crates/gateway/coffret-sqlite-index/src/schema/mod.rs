@@ -1,5 +1,9 @@
 mod provenance;
 
+// The upgrade that ties each materialization record to the Entry it records,
+// which every older layout takes on its way to this one (spec: EP-10).
+mod entry_identities;
+
 use std::ops::Range;
 
 use coffret_usecase::{IndexError, IndexResult};
@@ -18,16 +22,22 @@ use crate::error::classify;
 /// specification now gives the field, `captured_path` (spec: FM-9), version 15
 /// each Entry's entry number in its Container (spec: FM-9, FM-16), and version
 /// 16 the Entry Path a materialized file waits to follow once a rename has
-/// changed its Entry's current path (spec: FM-15, EP-10).
-pub(crate) const SCHEMA_VERSION: i64 = 16;
+/// changed its Entry's current path (spec: FM-15, EP-10), and version 17 the
+/// Entry each materialized file is a copy of, by its Container and entry number
+/// (spec: FM-9, EP-10).
+pub(crate) const SCHEMA_VERSION: i64 = 17;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 16 changed the device-local group, so the floor is the current
-/// layout and no older file keeps its device group as it is. A layout from 13
-/// to 15 has the one column it lacks added by the same upgrade the older ones
-/// take, and loses its catalog with them: a layout-13 catalog was filled from
+/// Layout 17 changed the device-local group, so the floor is the current
+/// layout and no older file keeps its device group as it is. A layout-16 file
+/// keeps its catalog and has each materialization record tied to the Entry the
+/// catalog holds where the record stands, or where it waits to follow
+/// (spec: EP-10); a record the catalog holds no Entry for is dropped and the
+/// drop reported, never guessed at. A layout from 13 to 15 has the columns it
+/// lacks added by the same upgrade the older ones take, and loses its catalog
+/// with them: a layout-13 catalog was filled from
 /// objects in a format this build no longer reads, a layout-14 one holds no
 /// entry numbers, and nothing either holds says what they were, so the rebuild
 /// from Storage replays them out of the Journal (spec: RV-5, FM-16). A
@@ -44,11 +54,15 @@ pub(crate) const SCHEMA_VERSION: i64 = 16;
 /// is what a build before version 11 never kept, records no commit slot for
 /// any batch, which is what a build before version 12 never kept — so an old
 /// attempt stays one whose outcome is unknown (spec: OC-2) — and has no file
-/// waiting to follow a rename, which no build before version 16 applied. Their
-/// catalog is discarded in the same transaction, for the reason above. Other
+/// waiting to follow a rename, which no build before version 16 applied. Each
+/// of their materialization records is tied to its Entry the way a layout-16
+/// one is, from a catalog that numbers its Entries — layout 15's — and dropped
+/// with a report where the catalog cannot say: a layout before 15 numbers none
+/// (spec: FM-16). Their catalog is then discarded in the same transaction, for
+/// the reason above. Other
 /// unreadable device layouts are refused rather than discarded, because
 /// Storage cannot reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 16;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 17;
 
 /// The table of current Entries, part of the Library-wide group below.
 macro_rules! entries_ddl {
@@ -159,27 +173,6 @@ CREATE TABLE mappings (
 
 CREATE UNIQUE INDEX mappings_by_prefix ON mappings (ifnull(prefix, ''));
 
-CREATE TABLE local_entries (
-    -- A row outlives the Entry it was made for: a path that leaves the Library
-    -- keeps its row, which is what lets the file be reported rather than left
-    -- behind unnoticed (spec: EP-10). No foreign key, for that reason. `hash`
-    -- is the content hash of the Entry this device last made the file match,
-    -- which is what tells a file left as the Library had it from one edited
-    -- since, once the Entry itself has left the catalog (spec: EP-15); NULL only
-    -- on a row an older layout wrote, which never recorded one. `relocate_to`
-    -- is where the Entry this file is a copy of stands now, once a rename has
-    -- changed its current path and the file has not followed it, and NULL
-    -- otherwise: the row stays keyed by `path`, where the file is
-    -- (spec: FM-15, EP-10).
-    path           TEXT PRIMARY KEY COLLATE BINARY,
-    state          TEXT NOT NULL,
-    observed_size  INTEGER NOT NULL,
-    observed_mtime INTEGER NOT NULL,
-    observed_at    INTEGER NOT NULL,
-    hash           BLOB,
-    relocate_to    TEXT COLLATE BINARY
-) STRICT;
-
 CREATE TABLE pending_rows (
     -- The local provenance that makes cleaning up an uncommitted Container
     -- possible at all (spec: OC-2, OC-3). The row precedes the file it names:
@@ -198,6 +191,43 @@ CREATE TABLE pending_rows (
     commit_attempted INTEGER NOT NULL DEFAULT 1 CHECK (commit_attempted IN (0, 1)),
     materializes INTEGER NOT NULL DEFAULT 1 CHECK (materializes IN (0, 1))
 ) STRICT;
+"#;
+
+/// The table of materialization records, which layout 17 laid out afresh to
+/// name the Entry each record is about.
+///
+/// Apart from the rest of the device-local group because the upgrade from an
+/// older layout lays it out on its own, and refills it (spec: EP-10).
+pub(crate) const LOCAL_ENTRIES_DDL: &str = r#"
+CREATE TABLE local_entries (
+    -- A row outlives the Entry it was made for: a path that leaves the Library
+    -- keeps its row, which is what lets the file be reported rather than left
+    -- behind unnoticed (spec: EP-10). No foreign key, for that reason. `hash`
+    -- is the content hash of the Entry this device last made the file match,
+    -- which is what tells a file left as the Library had it from one edited
+    -- since, once the Entry itself has left the catalog (spec: EP-15); NULL only
+    -- on a row an older layout wrote, which never recorded one. `relocate_to`
+    -- is where the Entry this file is a copy of stands now, once a rename has
+    -- changed its current path and the file has not followed it, and NULL
+    -- otherwise: the row stays keyed by `path`, where the file is
+    -- (spec: FM-15, EP-10). `entry_container` and `entry_number` name that
+    -- Entry by what no rename changes, kept current as a replacement gives it a
+    -- new Container, and the last ones it had once it leaves (spec: FM-9,
+    -- EP-10).
+    path            TEXT PRIMARY KEY COLLATE BINARY,
+    state           TEXT NOT NULL,
+    observed_size   INTEGER NOT NULL,
+    observed_mtime  INTEGER NOT NULL,
+    observed_at     INTEGER NOT NULL,
+    hash            BLOB,
+    relocate_to     TEXT COLLATE BINARY,
+    entry_container BLOB NOT NULL,
+    entry_number    INTEGER NOT NULL
+) STRICT;
+
+-- A record finds the Entry it is a copy of by its name, and a removal or a
+-- rename finds the records of the Entries it reaches the same way.
+CREATE INDEX local_entries_by_entry ON local_entries (entry_container, entry_number);
 "#;
 
 /// The table of held parcels, which layout 11 added to the device-local group.
@@ -253,8 +283,10 @@ CREATE UNIQUE INDEX attempted_slots_by_batch
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5) — a window this build leaves empty. Layouts 7 to 15 have their
-/// device-local group upgraded in place and lose their catalog the same way.
+/// (spec: RV-5) — a window this build leaves empty. Layout 16 keeps its catalog
+/// and has its materialization records tied to the Entries it holds; layouts 7
+/// to 15 have their device-local group upgraded in place and lose their catalog
+/// the same way.
 /// Anything else — older than that, or written by a build that came after this
 /// one — is refused, because guessing at a layout this build does not know is
 /// how a cache turns into wrong answers.
@@ -268,6 +300,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        16 => entry_identities::upgrade(connection),
         7..=15 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
@@ -306,6 +339,9 @@ fn create(connection: &Connection) -> IndexResult<()> {
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(DEVICE_LOCAL_DDL)
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute_batch(LOCAL_ENTRIES_DDL)
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(HELD_PARCELS_DDL)
@@ -431,9 +467,9 @@ mod tests {
         );
     }
 
-    /// This build's own window is empty: layout 16 changed the device-local
+    /// This build's own window is empty: layout 17 changed the device-local
     /// group, so no older layout keeps its device group unchanged, and every
-    /// layout from 7 up takes the upgrade rather than the discard
+    /// layout from 7 up takes an upgrade rather than the discard
     /// (spec: OC-2, EP-10).
     #[test]
     fn this_builds_window_is_empty() {

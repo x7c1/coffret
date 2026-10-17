@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
-    ContentHash, EntryExtent, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
+    ContentHash, EntryExtent, EntryMetadata, EntryNumber, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::byte_stream::ByteStream;
@@ -13,6 +13,7 @@ use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity,
 };
 use crate::entry_paths::entry_path;
+use crate::entry_ref::EntryRef;
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -103,6 +104,7 @@ pub(super) fn request<'a>(
         store,
         index,
         keys,
+        fs,
         fs,
         fs,
         fs,
@@ -279,6 +281,7 @@ pub(super) async fn plant(
             size: content.len() as u64,
             mtime,
             at: at(0),
+            entry: EntryRef::new(container_id, EntryNumber::FIRST),
             hash: Some(ContentHash::from_bytes(*blake3::hash(content).as_bytes())),
         }]);
     }

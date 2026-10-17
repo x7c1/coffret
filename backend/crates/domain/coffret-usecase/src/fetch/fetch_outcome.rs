@@ -3,6 +3,7 @@ use coffret_model::{ContainerId, EntryPath};
 use crate::commit::ShortKeyring;
 use crate::fetch::surfaced::Surfaced;
 use crate::refused_root::RefusedRoot;
+use crate::relocate::Relocation;
 
 /// What one fetch run placed, and what it did not.
 ///
@@ -44,6 +45,14 @@ pub struct FetchOutcome {
     /// counts alone would say "this part of the Library is already here" to
     /// somebody who has nowhere for it to be.
     pub mappings: usize,
+    /// What became of each file this device placed whose Entry a rename gave
+    /// another path, in the order the run came to them (spec: EP-10).
+    ///
+    /// Relocated before anything is selected, so the place of an Entry whose
+    /// file followed it reads as this device's own copy rather than as one to
+    /// fetch again. One refused is still standing at a name the Library no
+    /// longer gives it, and is the one shape here a caller has to read.
+    pub relocations: Vec<Relocation>,
     /// Every Entry the run selected and did not place, with the reason
     /// (spec: EP-11).
     pub surfaced: Vec<Surfaced>,

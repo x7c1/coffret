@@ -12,12 +12,15 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build that line falls at the current layout. Layout 16 changed
-//! the device group: a materialized file's row records the Entry Path it waits
-//! to follow once a rename has changed its Entry's current path. So no older
-//! layout keeps its device group as it is, and every layout from 7 up has that
-//! group upgraded by the adapter's own provenance step and its catalog
-//! discarded and rebuilt from Storage rather than migrated. The layouts below 7
+//! In *this* build that line falls at the current layout. Layout 17 changed
+//! the device group: a materialized file's row names the Entry it is a copy of
+//! by its Container and entry number. So no older layout keeps its device group
+//! as it is. A layout-16 file keeps its catalog and has each row tied to the
+//! Entry that catalog holds where the row stands, a row it holds none for
+//! dropped and reported; every layout from 7 to 15 has its group upgraded by
+//! the adapter's own provenance step, tied the same way where its catalog
+//! numbers its Entries, and its catalog discarded and rebuilt from Storage
+//! rather than migrated. The layouts below 7
 //! used here are refused whole and left exactly as they were, which is what
 //! lets their mappings still be read out of them and recorded again. Where the
 //! two edges of the window fall is a unit case in the adapter's own `schema`
@@ -26,13 +29,13 @@
 use std::path::{Path, PathBuf};
 
 use coffret_logging::testing::CapturedLogs;
-use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Mtime, ObjectRef};
+use coffret_model::{ContainerKind, ContainerSummary, ContentHash, EntryNumber, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity, RootMarkerId,
     SpoolState,
 };
-use coffret_usecase::{Index, IndexError};
+use coffret_usecase::{EntryRef, Index, IndexError};
 use tracing::Level;
 
 mod support;
@@ -48,7 +51,7 @@ use support::{
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers that decide everything below.
-const SCHEMA_VERSION: i64 = 16;
+const SCHEMA_VERSION: i64 = 17;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -76,13 +79,15 @@ fn mapping() -> Mapping {
     ]))
 }
 
-/// One file this device has materialized (spec: EP-10).
+/// One file this device has materialized (spec: EP-10): a copy of the first
+/// Entry of the Pack the seeded Snapshot holds, at that Entry's path.
 fn observation() -> LocalObservation {
     LocalObservation {
         path: entry_path("albums/1.jpg"),
         size: 100,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_400),
+        entry: EntryRef::new(container_id(1), EntryNumber::FIRST),
         hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),
     }
 }
@@ -133,13 +138,28 @@ async fn a_file_stamped(scratch: &Scratch, version: i64) {
 
 /// Stamps a layout version into a file, behind the adapter's back.
 ///
-/// An older layout's file loses the one device-local column layout 16 added,
-/// so the upgrade meets the shape a build before it left behind.
+/// An older layout's file loses the device-local columns layouts 16 and 17
+/// added, and one before 15 the entry numbers of its catalog, so the upgrade
+/// meets the shape a build before it left behind.
 fn restamp(file: &Path, version: i64) {
     let connection = rusqlite::Connection::open(file).expect("the Index file must open");
-    if version < SCHEMA_VERSION {
+    if version < 17 {
+        connection
+            .execute_batch(
+                "DROP INDEX local_entries_by_entry;                  ALTER TABLE local_entries DROP COLUMN entry_container;                  ALTER TABLE local_entries DROP COLUMN entry_number;",
+            )
+            .expect("dropping a column must succeed");
+    }
+    if version < 16 {
         connection
             .execute_batch("ALTER TABLE local_entries DROP COLUMN relocate_to;")
+            .expect("dropping a column must succeed");
+    }
+    if version < 15 {
+        connection
+            .execute_batch(
+                "DROP INDEX entries_by_container; ALTER TABLE entries DROP COLUMN entry_number;",
+            )
             .expect("dropping a column must succeed");
     }
     connection
@@ -147,30 +167,144 @@ fn restamp(file: &Path, version: i64) {
         .expect("stamping a version must succeed");
 }
 
-/// The layout before this one has its device-local group upgraded and its
-/// catalog discarded rather than migrated (spec: RV-5, EP-9, EP-10, OC-2).
+/// The layout before this one keeps its catalog and its device-local group, and
+/// each materialization record is tied to the Entry the catalog holds where it
+/// stands (spec: EP-10).
 ///
-/// Its device group lacks the column that says which files wait to follow a
-/// rename, and none of them does: no build before this one applied a rename.
-/// Its catalog would still read, and is discarded with every older layout's:
-/// the file is stamped as the current layout with an empty catalog, which the
-/// next catch-up rebuilds from Storage, and a warning says so.
+/// Nothing is dropped, so nothing is reported.
 #[tokio::test]
-async fn the_layout_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
-    loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 1).await;
+async fn the_layout_before_this_one_keeps_its_catalog_and_names_each_records_entry() {
+    let scratch = Scratch::new();
+    a_file_stamped(&scratch, SCHEMA_VERSION - 1).await;
+
+    let logs = CapturedLogs::capture();
+    let index = SqliteIndex::open(scratch.file()).expect("the layout before this one must open");
+    assert_eq!(
+        index
+            .snapshot()
+            .await
+            .expect("the catalog is kept, and has a state to checkpoint"),
+        snapshot(4),
+    );
+    let materialized = index
+        .local_entry_at(&observation().path)
+        .await
+        .expect("reading a local file's row must succeed")
+        .expect("the file it has on disk is kept");
+    assert_eq!(materialized.observation, observation());
+    assert_eq!(materialized.relocate_to, None);
+    assert_eq!(index.mappings().await.unwrap(), vec![mapping()]);
+    assert_eq!(index.pending_rows().await.unwrap().len(), 1);
+    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
+    assert!(logs.at(Level::WARN).is_empty(), "{}", logs.text());
 }
 
-/// The layout two below this one takes the same upgrade (spec: RV-5, EP-9,
-/// EP-10, OC-2): its catalog holds no entry numbers, and nothing it holds says
-/// what they were.
+/// A layout-16 record the catalog holds no Entry for — the file of an Entry
+/// that has left the Library — is dropped rather than guessed at, and the drop
+/// is reported with how many and nothing that names a file (spec: EP-10,
+/// EL-1). One waiting to follow a rename is tied to the Entry where it waits.
+#[tokio::test]
+async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
+    let scratch = Scratch::new();
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .restore(snapshot(4))
+            .await
+            .expect("restoring a Snapshot must succeed");
+        for observed in [
+            observation(),
+            // Its Entry, in a Container the catalog no longer holds, has left.
+            LocalObservation {
+                path: entry_path("albums/departed.jpg"),
+                entry: EntryRef::new(container_id(9), EntryNumber::FIRST),
+                ..observation()
+            },
+            LocalObservation {
+                path: entry_path("inbox/waiting.jpg"),
+                entry: EntryRef::new(
+                    container_id(1),
+                    EntryNumber::new(1).expect("one is an entry number"),
+                ),
+                ..observation()
+            },
+        ] {
+            index
+                .mark_present(observed)
+                .await
+                .expect("recording a materialized file must succeed");
+        }
+    }
+    restamp(&scratch.file(), SCHEMA_VERSION - 1);
+
+    let logs = CapturedLogs::capture();
+    let index = SqliteIndex::open(scratch.file()).expect("the layout before this one must open");
+    assert!(
+        index
+            .local_entry_at(&entry_path("albums/departed.jpg"))
+            .await
+            .expect("reading a local file's row must succeed")
+            .is_none(),
+        "a record no Entry stands for is dropped"
+    );
+    let waiting = index
+        .local_entry_at(&entry_path("inbox/waiting.jpg"))
+        .await
+        .expect("reading a local file's row must succeed")
+        .expect("a record waiting to follow its Entry is kept");
+    assert_eq!(
+        waiting.observation.entry,
+        EntryRef::new(
+            container_id(1),
+            EntryNumber::new(1).expect("one is an entry number")
+        )
+    );
+    assert_eq!(waiting.relocate_to, Some(entry_path("albums/1.thumb.jpg")));
+    assert!(index
+        .local_entry_at(&observation().path)
+        .await
+        .expect("reading a local file's row must succeed")
+        .is_some());
+    let warned = logs.at(Level::WARN);
+    assert_eq!(warned.len(), 1, "{}", logs.text());
+    assert!(logs.text().contains("\"dropped\":1"), "{}", logs.text());
+    assert!(!logs.text().contains("departed"), "{}", logs.text());
+}
+
+/// The layout two below this one has its device-local group upgraded and its
+/// catalog discarded rather than migrated (spec: RV-5, EP-9, EP-10, OC-2).
+///
+/// Its device group lacks the columns that say which files wait to follow a
+/// rename and which Entry each is a copy of; none waits, since no build before
+/// layout 16 applied a rename, and each is named by the Entry its catalog
+/// numbers at its path before that catalog goes. The catalog would still read,
+/// and is discarded with every older layout's: the file is stamped as the
+/// current layout with an empty catalog, which the next catch-up rebuilds from
+/// Storage, and a warning says so.
 #[tokio::test]
 async fn the_layout_two_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
-    loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 2).await;
+    loses_its_catalog(SCHEMA_VERSION - 2, Kept::Records).await;
+}
+
+/// The layout three below this one takes the same upgrade (spec: RV-5, EP-9,
+/// EP-10, OC-2), and its catalog holds no entry numbers, so it cannot say
+/// which Entry any record is a copy of: every record is dropped, and that is
+/// reported beside the discard (spec: FM-16).
+#[tokio::test]
+async fn the_layout_three_before_this_one_loses_its_catalog_and_its_records() {
+    loses_its_catalog(SCHEMA_VERSION - 3, Kept::NoRecords).await;
+}
+
+/// Whether an upgrade keeps the materialization records.
+enum Kept {
+    Records,
+    NoRecords,
 }
 
 /// Opens a file stamped `version`, and checks that its catalog was discarded,
-/// its device group kept, and the file stamped as the current layout.
-async fn loses_its_catalog_and_keeps_its_device_state(version: i64) {
+/// its device group kept — its records only where `kept` says — and the file
+/// stamped as the current layout.
+async fn loses_its_catalog(version: i64, kept: Kept) {
     let scratch = Scratch::new();
     // The stamp alone decides, as it does for every case here: what the
     // catalog's columns were called is not looked at before it is dropped.
@@ -206,16 +340,32 @@ async fn loses_its_catalog_and_keeps_its_device_state(version: i64) {
     let materialized = index
         .local_entry_at(&observation().path)
         .await
-        .expect("reading a local file's row must succeed")
-        .expect("and so is the file it has on disk");
-    assert_eq!(materialized.observation, observation());
-    assert_eq!(
-        materialized.relocate_to, None,
-        "which waits to follow no rename"
-    );
+        .expect("reading a local file's row must succeed");
+    match kept {
+        Kept::Records => {
+            let materialized = materialized.expect("and so is the file it has on disk");
+            assert_eq!(materialized.observation, observation());
+            assert_eq!(
+                materialized.relocate_to, None,
+                "which waits to follow no rename"
+            );
+            assert_eq!(logs.at(Level::WARN).len(), 1, "{}", logs.text());
+        }
+        Kept::NoRecords => {
+            assert!(
+                materialized.is_none(),
+                "a record no numbered catalog names an Entry for is dropped"
+            );
+            assert_eq!(
+                logs.at(Level::WARN).len(),
+                2,
+                "the discard and the drop are each reported: {}",
+                logs.text()
+            );
+        }
+    }
     assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
     assert_eq!(rows_in(&scratch.file(), "entries"), 0);
-    assert_eq!(logs.at(Level::WARN).len(), 1, "{}", logs.text());
 
     index
         .restore(snapshot(4))

@@ -13,6 +13,9 @@ use crate::index_error::{IndexError, IndexResult};
 
 mod apply;
 
+// Keeping each row's Entry identity current as the catalog changes.
+mod identity;
+
 mod restore;
 
 /// Everything one in-memory Index holds.
@@ -30,7 +33,8 @@ pub(super) struct State {
     entries: BTreeMap<EntryPath, EntryLocation>,
 
     // Device-local: never uploaded, and touched by the operations above only
-    // in which Entry a file is marked to follow (spec: FM-15, EP-10).
+    // in what each materialization record says about the Entry it names
+    // (spec: FM-15, EP-10).
     // Keyed by prefix, and holding the whole mapping: one per prefix is what the
     // port promises (spec: EP-9), and the local root is no longer the only thing
     // a mapping carries (spec: EP-12).
@@ -122,14 +126,44 @@ impl State {
     }
 
     pub(super) fn mark_present(&mut self, observation: LocalObservation) {
+        let path = observation.path.clone();
         self.local_entries.insert(
-            observation.path.clone(),
+            path.clone(),
             LocalEntry {
                 observation,
                 state: LocalEntryState::Present,
                 relocate_to: None,
             },
         );
+        self.reconcile([path]);
+    }
+
+    pub(super) fn awaiting_relocation(&self) -> Vec<LocalEntry> {
+        self.local_entries
+            .values()
+            .filter(|local| local.awaits_relocation())
+            .cloned()
+            .collect()
+    }
+
+    /// Takes every row a relocation names out before putting any back, so two rows
+    /// may exchange their paths (spec: EP-10).
+    pub(super) fn relocate_local_entries(&mut self, relocated: &[(EntryPath, EntryPath)]) {
+        let taken: Vec<(LocalEntry, EntryPath)> = relocated
+            .iter()
+            .filter_map(|(from, to)| {
+                self.local_entries
+                    .remove(from)
+                    .map(|local| (local, to.clone()))
+            })
+            .collect();
+        let mut placed = Vec::with_capacity(taken.len());
+        for (mut local, to) in taken {
+            local.observation.path = to.clone();
+            self.local_entries.insert(to.clone(), local);
+            placed.push(to);
+        }
+        self.reconcile(placed);
     }
 
     /// Marks a file this device had as gone.
@@ -239,23 +273,6 @@ impl State {
 
     pub(super) fn let_go_parcel(&mut self, container_id: ContainerId, index: u64) {
         self.held_parcels.remove(&(container_id, index));
-    }
-
-    /// Ends the wait of the file at `path`, whose Entry has left the Library
-    /// (spec: EP-10, EP-15).
-    ///
-    /// Where no current Entry stands at that path the row stays, following
-    /// nothing, and the file is departed there. Where one does, it is another
-    /// Entry than the one the file is a copy of, so the row is forgotten: a
-    /// record kept there would claim that Entry present and offer this file's
-    /// bytes as its edit. Forgotten, the file is one this device never placed
-    /// for it (spec: EP-11).
-    fn end_wait(&mut self, path: &EntryPath) {
-        if self.entries.contains_key(path) {
-            self.local_entries.remove(path);
-        } else if let Some(local) = self.local_entries.get_mut(path) {
-            local.relocate_to = None;
-        }
     }
 
     /// The rows of files this device has on disk as copies of the Entries at

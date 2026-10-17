@@ -18,7 +18,7 @@ use coffret_model::{ContainerId, EntryLocation, EntryRename, Mtime};
 
 use crate::commit_conformance::commit_renames_in;
 use crate::entry_paths::entry_path;
-use crate::fetch::{fetch_entry, fetch_folders, EntryFetch, FetchError, LibraryKeys, Surfaced};
+use crate::fetch::{fetch_entry, fetch_folders, EntryFetch, FetchError, LibraryKeys, Relocation};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
     entry_at, entry_request, exists, freeze_source, keys, map, observed, plant, purpose_key, read,
@@ -231,13 +231,14 @@ pub async fn a_renamed_entry_is_read_by_its_parcels_at_its_current_path(fixture:
     assert!(!stands(fixture, "albums/cover.jpg"));
 }
 
-/// A file this device placed before its Entry was renamed waits at its old
-/// path to be relocated, and a fetch neither relocates it nor overwrites it
-/// (spec: FM-15, EP-10, EP-11). The Entry is remote at its new path, so a
-/// fetch places it there where nothing stands; where the swap left the other
-/// Entry's waiting file at that path, the file is one this device never
-/// placed for the Entry now there, and is reported and left as it is.
-pub async fn a_fetch_leaves_a_file_awaiting_relocation_where_it_stands(fixture: &FetchUnderTest) {
+/// A file this device placed before its Entry was renamed is relocated to the
+/// Entry's current path before the fetch selects anything, and the fetch then
+/// finds every place already holding this device's own copy: the two files of
+/// the swapped Entries exchange their names, the others are relocated to theirs, and
+/// nothing is fetched, overwritten or left behind (spec: FM-15, EP-10, EP-11).
+pub async fn a_fetch_relocates_the_files_of_renamed_entries_before_it_places(
+    fixture: &FetchUnderTest,
+) {
     let keys = keys();
     let frozen = a_library(fixture, &keys).await;
     fetch_folders(request(fixture.store(), fixture, &keys, 3))
@@ -249,37 +250,44 @@ pub async fn a_fetch_leaves_a_file_awaiting_relocation_where_it_stands(fixture: 
         .await
         .unwrap_or_else(|error| panic!("a fetch after the renames must succeed: {error}"));
 
+    let mut relocated: Vec<(String, String)> = outcome
+        .relocations
+        .iter()
+        .map(|one| match one {
+            Relocation::Relocated { from, to } => {
+                (from.as_str().to_owned(), to.as_str().to_owned())
+            }
+            other => panic!("every waiting file is relocated, got {other:?}"),
+        })
+        .collect();
+    relocated.sort();
     assert_eq!(
-        outcome.fetched,
-        ["albums/front.jpg", "books/later/vol3.txt"].map(entry_path),
-        "each Entry renamed to a free path is placed there",
-    );
-    assert_eq!(
-        outcome.surfaced,
+        relocated,
         [
-            Surfaced::ForeignFile {
-                path: entry_path("books/vol1.txt"),
-            },
-            Surfaced::ForeignFile {
-                path: entry_path("books/vol2.txt"),
-            },
-        ],
-        "each swapped Entry finds the other's waiting file at its path",
+            ("albums/cover.jpg", "albums/front.jpg"),
+            ("books/vol1.txt", "books/vol2.txt"),
+            ("books/vol2.txt", "books/vol1.txt"),
+            ("books/vol3.txt", "books/later/vol3.txt"),
+        ]
+        .map(|(from, to)| (from.to_owned(), to.to_owned())),
     );
-    assert_eq!(placed(fixture, "books/later/vol3.txt"), VOL3);
-    assert_eq!(placed(fixture, "albums/front.jpg"), COVER);
+    assert!(outcome.fetched.is_empty(), "{:?}", outcome.fetched);
+    assert!(outcome.surfaced.is_empty(), "{:?}", outcome.surfaced);
+    assert_eq!(
+        outcome.skipped, 4,
+        "every place holds this device's own copy"
+    );
     for (relative, content) in [
-        ("books/vol1.txt", VOL1),
-        ("books/vol2.txt", VOL2),
-        ("books/vol3.txt", VOL3),
-        ("albums/cover.jpg", COVER),
+        ("books/vol2.txt", VOL1),
+        ("books/vol1.txt", VOL2),
+        ("books/later/vol3.txt", VOL3),
+        ("albums/front.jpg", COVER),
     ] {
-        assert_eq!(
-            placed(fixture, relative),
-            content,
-            "{relative} waits where it was placed, untouched",
-        );
+        assert_eq!(placed(fixture, relative), content, "{relative}");
     }
+    assert!(!stands(fixture, "books/vol3.txt"));
+    assert!(!stands(fixture, "albums/cover.jpg"));
+    assert!(fixture.fs().discarded().is_empty(), "nothing was discarded");
     assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 

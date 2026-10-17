@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use coffret_model::{ContainerAddition, EntryNumber, KeyEnvelope};
 
-use crate::commit::entry_ref::EntryRef;
+use crate::entry_ref::EntryRef;
 
 /// One Container of a batch, ready to be committed.
 ///

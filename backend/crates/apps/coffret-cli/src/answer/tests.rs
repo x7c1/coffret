@@ -75,6 +75,7 @@ fn discarded(literal: &str) -> Finding {
 #[test]
 fn a_sync_answers_its_counts_and_its_findings() {
     let outcome = SyncOutcome {
+        relocations: Vec::new(),
         added: vec![container(1), container(2)],
         replaced: vec![container(3)],
         unchanged: 4,
@@ -129,6 +130,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
 #[test]
 fn a_fetch_answers_its_counts() {
     let outcome = FetchOutcome {
+        relocations: Vec::new(),
         fetched: vec![path("albums/a.jpg"), path("albums/b.jpg")],
         containers: vec![container(1)],
         skipped: 3,
@@ -161,6 +163,7 @@ fn a_fetch_answers_its_counts() {
 fn a_key_lost_container_is_found_by_that_name() {
     let container_id = container(9);
     let outcome = FetchOutcome {
+        relocations: Vec::new(),
         fetched: Vec::new(),
         containers: Vec::new(),
         skipped: 0,

@@ -4,10 +4,10 @@ use coffret_model::{EntryLocation, EntryPath, Generation, JournalRecord};
 
 use super::number_at;
 use crate::commit::commit_error::{CommitError, CommitResult};
-use crate::commit::entry_ref::EntryRef;
 use crate::commit::pending_change::PendingChange;
 use crate::commit::prepared_batch::PreparedBatch;
 use crate::commit::rebase_rule::RebaseRule;
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 
 /// Refuses an addition whose path an intervening rename gave another Entry,

@@ -1,4 +1,4 @@
-use coffret_device::{EntryPath, FindingReason, RootRefused, RootUnavailable};
+use coffret_device::{EntryPath, FindingReason, RelocationRefused, RootRefused, RootUnavailable};
 
 use crate::api_error::refused_root_said;
 
@@ -326,6 +326,61 @@ fn said(reason: &FindingReason) -> &'static str {
             "this file's path carries `.coffret`, which is coffret's own folder inside a mapped \
              folder and never a place a file is put"
         }
+        FindingReason::Relocated { .. } => {
+            "this device's file was relocated here to follow a rename of its Entry"
+        }
+        FindingReason::RelocationDiscarded { .. } => {
+            "this file's Entry was renamed to where this device already had it, so this \
+             unedited copy was discarded into the trash"
+        }
+        FindingReason::RelocationRefused { reason, .. } => relocation_refused(reason),
+    }
+}
+
+/// What a person who meets a file left behind by a rename is told, naming what
+/// stands in the way — the one thing they act on — and never the local path a
+/// refusal may carry (spec: EP-10, EL-1).
+fn relocation_refused(reason: &RelocationRefused) -> &'static str {
+    macro_rules! left {
+        ($why:literal) => {
+            concat!(
+                "this file's Entry was renamed, and this device's file could not be relocated to \
+                 follow it: ",
+                $why,
+                "; it is left in place, and the next run tries again"
+            )
+        };
+    }
+    match reason {
+        RelocationRefused::Unavailable(_) => {
+            left!("the mapped folder it stands in is not available")
+        }
+        RelocationRefused::OutsideOneRoot => {
+            left!("its new path is not under the mapped folder it stands in")
+        }
+        RelocationRefused::ReservedName => {
+            left!("its new path passes through a name coffret or the desktop keeps for itself")
+        }
+        RelocationRefused::AnotherFilesystem => {
+            left!("its new path is on another filesystem")
+        }
+        RelocationRefused::SymbolicLink { .. } => {
+            left!("a folder on the way is not a folder of this device's mapped folder")
+        }
+        RelocationRefused::Edited => left!("it changed since this device placed it"),
+        RelocationRefused::DestinationTaken => {
+            left!("a file this device did not place stands at its new path")
+        }
+        RelocationRefused::WaitingFileInTheWay => {
+            left!("this device's own file at its new path is waiting to be relocated itself")
+        }
+        RelocationRefused::NoAtomicRename(_) => {
+            left!(
+                "the filesystem it stands on offers no rename that leaves what stands at its new \
+                 path untouched, so it waits until the folder is on one that does"
+            )
+        }
+        RelocationRefused::Disk(_) => left!("the disk refused"),
     }
 }
 
@@ -357,6 +412,12 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         FindingReason::Discarded => ("surfaced", "Discarded"),
         FindingReason::KeptEdited => ("surfaced", "KeptEdited"),
         FindingReason::DiscardRefused { .. } => ("surfaced", "DiscardRefused"),
+        // The three a sync or a folder fetch reports about a file that waited
+        // to follow a rename of its Entry. No declined fetch names them, so
+        // they too reach a page only on a finding.
+        FindingReason::Relocated { .. } => ("surfaced", "Relocated"),
+        FindingReason::RelocationDiscarded { .. } => ("surfaced", "RelocationDiscarded"),
+        FindingReason::RelocationRefused { .. } => ("surfaced", "RelocationRefused"),
     }
 }
 
@@ -673,7 +734,19 @@ mod tests {
                         ),
                     )),
                 }),
-                FindingReason::DiscardRefused { .. } => unavailable(RootUnavailable::Missing),
+                FindingReason::DiscardRefused { .. } => surfaced(FindingReason::Relocated {
+                    from: entry_path("inbox/a.jpg"),
+                }),
+                FindingReason::Relocated { .. } => surfaced(FindingReason::RelocationDiscarded {
+                    to: entry_path("albums/b.jpg"),
+                }),
+                FindingReason::RelocationDiscarded { .. } => {
+                    surfaced(FindingReason::RelocationRefused {
+                        to: entry_path("albums/b.jpg"),
+                        reason: coffret_device::RelocationRefused::Edited,
+                    })
+                }
+                FindingReason::RelocationRefused { .. } => unavailable(RootUnavailable::Missing),
             }),
             Finding::UnavailableRoot { reason, .. } => Some(match reason {
                 RootUnavailable::Missing => unavailable(RootUnavailable::AnotherFilesystem),

@@ -166,6 +166,17 @@ impl Index for WatchingIndex<'_> {
         self.inner.present_without_entry().await
     }
 
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.awaiting_relocation().await
+    }
+
+    async fn relocate_local_entries(
+        &self,
+        relocated: &[(EntryPath, EntryPath)],
+    ) -> IndexResult<()> {
+        self.inner.relocate_local_entries(relocated).await
+    }
+
     /// Holds a Spooling row to the ordering the spool steps promise, then
     /// records it.
     ///

@@ -114,8 +114,10 @@ pub(crate) use control_listing::ControlListing;
 
 mod control_object;
 
-mod entry_ref;
-pub use entry_ref::EntryRef;
+// The name a rename leaves an Entry, which a batch's pending changes act on.
+// It is the crate's rather than the commit's, because a materialization record
+// names the Entry it is a copy of the same way (spec: FM-9, EP-10).
+pub use crate::entry_ref::EntryRef;
 
 // A Library's first head, written when the Library is created so that no
 // commit ever starts from no head (spec: CP-2, FM-13).

@@ -256,7 +256,25 @@ export type SurfacedFinding =
    * file into the trash was refused — by the mapped folder, a folder on the way down,
    * or the trash itself. It is left where it is, and the next sync tries again.
    */
-  | 'DiscardRefused';
+  | 'DiscardRefused'
+  /**
+   * This device's file of an Entry another device renamed was relocated to the
+   * Entry's new path to follow it. Work done: nobody has to act on it.
+   */
+  | 'Relocated'
+  /**
+   * This device's file of an Entry another device renamed was redundant: the
+   * device already had the Entry at its new path, so this unedited copy was
+   * discarded into the desktop's trash. Work done: nobody has to act on it.
+   */
+  | 'RelocationDiscarded'
+  /**
+   * This device's file of an Entry another device renamed could not be relocated
+   * to follow it — its mapped folder is not there, the file changed, or
+   * something else stands at the new path — and is left where it is. The
+   * next sync or fetch tries again.
+   */
+  | 'RelocationRefused';
 
 /**
  * What a placement under a folder this device has no folder for is told as

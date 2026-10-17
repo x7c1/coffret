@@ -2,10 +2,10 @@ use coffret_model::{EntryPath, JournalRecord};
 
 use super::number_at;
 use crate::commit::commit_error::{CommitError, CommitResult};
-use crate::commit::entry_ref::EntryRef;
 use crate::commit::pending_change::PendingChange;
 use crate::commit::prepared_batch::PreparedBatch;
 use crate::commit::rebase_rule::RebaseRule;
+use crate::entry_ref::EntryRef;
 
 /// Carries each rename of the batch through the intervening records: onto the
 /// Entry a record that removed its Container added at the name the rename was

@@ -9,12 +9,13 @@ use crate::device_state::RootMarkerId;
 use crate::local_trash::LocalTrash;
 use crate::mapped_relative_location::MappedRelativeLocation;
 
-/// The folders a run's discards may have emptied, and the removal of
-/// the ones they did (spec: EP-15).
+/// The folders a run's discards and relocations may have emptied, and the
+/// removal of the ones they did (spec: EP-10, EP-15).
 ///
-/// Only a folder that held a discarded file is ever a candidate, and each
-/// folder above it below the mapped root: a folder that was already empty
-/// before the run held nothing the run discarded, so it is never asked about,
+/// Only a folder that held a file the run discarded or relocated is ever a
+/// candidate, and each folder above it below the mapped root: a folder that
+/// was already empty before the run held nothing the run took out of it, so it
+/// is never asked about,
 /// and a folder that still holds anything — an edited copy, a file of the
 /// person's, a dotfile, a folder — is not removed by the gateway, which removes
 /// a folder only where nothing at all is in it.
@@ -33,9 +34,9 @@ struct Candidate {
 }
 
 impl EmptiedFolders {
-    /// Records that the file at `relative` below `root` was discarded into the
-    /// trash.
-    pub(crate) fn discarded(
+    /// Records that the file at `relative` below `root` left its folder: it was
+    /// discarded into the trash, or relocated to follow its Entry.
+    pub(crate) fn vacated(
         &mut self,
         root: &Path,
         expected: Option<RootMarkerId>,

@@ -1,6 +1,6 @@
 use coffret_model::EntryPath;
 
-use crate::commit::entry_ref::EntryRef;
+use crate::entry_ref::EntryRef;
 
 /// One rename a batch makes: the Entry it gives a new current Entry Path, the
 /// name it was prepared against, and the path it gives it (spec: FM-15).

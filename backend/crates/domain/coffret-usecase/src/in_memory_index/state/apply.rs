@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, EntryLocation, EntryNumber, EntryPath, JournalRecord};
+use coffret_model::{ContainerId, EntryLocation, EntryNumber, JournalRecord};
 
 use super::{insert_container, insert_entry, State};
 use crate::catalog_renames::{self, Named, RenamedEntry};
@@ -32,7 +32,11 @@ impl State {
             .iter()
             .map(|addition| addition.container().id)
             .collect();
-        let waiting = self.following_any_of(record.removals());
+        // Where the Entries of the rows this record's removals reach stand,
+        // read before they are taken out: a replacement takes a row over at
+        // the path its Entry stood at (spec: EP-6, EP-10).
+        let removed = record.removals();
+        let stood = self.standing_of(|entry| removed.contains(&entry.container_id));
         for removed in record.removals() {
             self.containers.remove(removed);
             self.entries
@@ -47,7 +51,6 @@ impl State {
         for one in &renamed {
             insert_entry(&mut self.entries, &self.containers, one.after())?;
         }
-        self.follow_renames(&renamed);
         for addition in record.into_additions() {
             // Each Entry keeps the number its place in the table gives it
             // (spec: FM-9, FM-15).
@@ -57,53 +60,13 @@ impl State {
                 insert_entry(&mut self.entries, &self.containers, entry)?;
             }
         }
-        self.release_vacated(&waiting, &added);
+        self.carry_over(&stood, |entry| added.contains(&entry.container_id));
+        // A record touches few rows, but a catalog in memory is a case's own,
+        // so every row is brought in line rather than only the ones it
+        // reached.
+        self.reconcile_all();
         self.checkpoint = Some(checkpoint);
         Ok(())
-    }
-
-    /// The files waiting to follow an Entry of one of `removed`, read before a
-    /// record takes those Containers out (spec: EP-10, FM-15).
-    ///
-    /// Read off the rows rather than the paths the removals vacate: a rename of
-    /// the same record may give such a path to an Entry a file already follows
-    /// there, and that file's wait is not this record's to end.
-    fn following_any_of(&self, removed: &[ContainerId]) -> Vec<EntryPath> {
-        if removed.is_empty() {
-            return Vec::new();
-        }
-        self.local_entries
-            .iter()
-            .filter_map(|(path, local)| {
-                let to = local.relocate_to.as_ref()?;
-                self.entries
-                    .get(to)
-                    .is_some_and(|entry| removed.contains(&entry.container_id))
-                    .then(|| path.clone())
-            })
-            .collect()
-    }
-
-    /// Ends the wait of each file in `waiting`, whose Entry this record's
-    /// removals took out, unless the path it waited for passed to a Container
-    /// the record adds in its place (spec: EP-6, EP-10, FM-15).
-    fn release_vacated(&mut self, waiting: &[EntryPath], added: &BTreeSet<ContainerId>) {
-        for path in waiting {
-            let Some(to) = self
-                .local_entries
-                .get(path)
-                .and_then(|local| local.relocate_to.as_ref())
-            else {
-                continue;
-            };
-            let replaced = self
-                .entries
-                .get(to)
-                .is_some_and(|entry| added.contains(&entry.container_id));
-            if !replaced {
-                self.end_wait(path);
-            }
-        }
     }
 
     /// Checks `record`'s renames against the catalog as it stands.
@@ -134,38 +97,6 @@ impl State {
                     .map(|entry| (entry.container_id, entry.entry_number)))
             },
         )
-    }
-
-    /// Marks the rows of the files this device has of renamed Entries as
-    /// waiting to follow them (spec: EP-10, FM-15).
-    ///
-    /// A file stays where it was placed, and so does its row. A row follows the
-    /// Entry it is a copy of: the Entry at its own path where it follows no
-    /// earlier rename, or the Entry an earlier rename sent it after. Every
-    /// rename is matched against the rows as they were, so two Entries swapping
-    /// their names swap what their two files wait for, and a file whose Entry
-    /// is renamed back to where it stands waits for nothing any more.
-    fn follow_renames(&mut self, renamed: &[RenamedEntry]) {
-        if renamed.is_empty() {
-            return;
-        }
-        let to_by_from: BTreeMap<&EntryPath, &EntryPath> =
-            renamed.iter().map(|one| (one.from(), &one.path)).collect();
-        let following: Vec<(EntryPath, EntryPath)> = self
-            .local_entries
-            .iter()
-            .filter_map(|(path, local)| {
-                let copy_of = local.relocate_to.as_ref().unwrap_or(path);
-                to_by_from
-                    .get(copy_of)
-                    .map(|to| (path.clone(), (*to).clone()))
-            })
-            .collect();
-        for (path, to) in following {
-            if let Some(local) = self.local_entries.get_mut(&path) {
-                local.relocate_to = (to != path).then_some(to);
-            }
-        }
     }
 
     /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2).

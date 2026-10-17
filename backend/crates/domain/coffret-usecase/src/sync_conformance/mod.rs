@@ -122,8 +122,25 @@ pub use progress::a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can;
 
 pub(crate) mod refusing_index;
 
-mod renamed;
-pub use renamed::a_file_whose_entry_was_renamed_is_neither_deleted_nor_added;
+mod relocation;
+pub use relocation::{
+    a_cycle_refused_partway_reports_the_rest_as_waiting,
+    a_departed_file_is_not_claimed_by_an_entry_renamed_onto_its_path,
+    a_file_already_placed_at_the_new_path_makes_the_waiting_one_redundant,
+    a_file_behind_a_refused_waiting_file_waits_for_it,
+    a_file_edited_since_it_was_placed_is_not_relocated,
+    a_folders_worth_of_pack_entries_is_relocated, a_relocation_across_mapped_roots_is_refused,
+    a_relocation_interrupted_after_its_rename_is_finished_by_the_next_run,
+    a_relocation_interrupted_before_its_rename_is_made_by_the_next_run,
+    a_relocation_onto_another_filesystem_is_refused,
+    a_relocation_through_a_symbolic_link_is_refused, a_relocation_under_an_unavailable_root_waits,
+    a_relocation_without_an_atomic_rename_is_refused, a_rename_back_leaves_nothing_to_relocate,
+    a_renamed_entrys_file_is_relocated_to_follow_it,
+    a_snapshot_past_a_swap_and_a_removal_claims_neither_file,
+    an_exchange_interrupted_before_its_records_is_finished_by_the_next_run,
+    files_whose_entries_traded_names_exchange_them,
+    something_standing_at_the_new_path_is_never_overwritten,
+};
 
 mod repeat;
 pub use repeat::{
@@ -224,7 +241,25 @@ macro_rules! sync_conformance {
             nothing_is_discarded_through_a_refused_root,
             nothing_is_discarded_under_an_unavailable_root,
             a_freeze_leaves_a_departed_file_to_the_sync,
-            a_file_whose_entry_was_renamed_is_neither_deleted_nor_added,
+            a_renamed_entrys_file_is_relocated_to_follow_it,
+            a_folders_worth_of_pack_entries_is_relocated,
+            files_whose_entries_traded_names_exchange_them,
+            a_rename_back_leaves_nothing_to_relocate,
+            a_file_already_placed_at_the_new_path_makes_the_waiting_one_redundant,
+            a_relocation_under_an_unavailable_root_waits,
+            a_file_edited_since_it_was_placed_is_not_relocated,
+            something_standing_at_the_new_path_is_never_overwritten,
+            a_file_behind_a_refused_waiting_file_waits_for_it,
+            a_cycle_refused_partway_reports_the_rest_as_waiting,
+            a_relocation_across_mapped_roots_is_refused,
+            a_relocation_onto_another_filesystem_is_refused,
+            a_relocation_through_a_symbolic_link_is_refused,
+            a_relocation_without_an_atomic_rename_is_refused,
+            a_relocation_interrupted_before_its_rename_is_made_by_the_next_run,
+            a_relocation_interrupted_after_its_rename_is_finished_by_the_next_run,
+            an_exchange_interrupted_before_its_records_is_finished_by_the_next_run,
+            a_departed_file_is_not_claimed_by_an_entry_renamed_onto_its_path,
+            a_snapshot_past_a_swap_and_a_removal_claims_neither_file,
             a_missing_mapped_root_is_reported_and_infers_no_deletion,
             an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
             an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,

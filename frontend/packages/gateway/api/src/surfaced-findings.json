@@ -9,5 +9,8 @@
   "DeletedLocally",
   "Discarded",
   "KeptEdited",
-  "DiscardRefused"
+  "DiscardRefused",
+  "Relocated",
+  "RelocationDiscarded",
+  "RelocationRefused"
 ]

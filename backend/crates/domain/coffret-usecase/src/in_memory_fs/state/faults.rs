@@ -69,5 +69,6 @@ fn code(operation: LocalOperation) -> u8 {
         // match exhaustive rather than because a case ever scripts it.
         LocalOperation::Locking => 9,
         LocalOperation::Discarding => 10,
+        LocalOperation::Relocating => 11,
     }
 }
