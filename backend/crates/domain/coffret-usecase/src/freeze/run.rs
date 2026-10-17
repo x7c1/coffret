@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKeyStatus, KeyTable, Redacted};
+use coffret_model::{ContainerId, ContainerKeyStatus, Generation, KeyTable, Redacted};
 use tracing::{info, warn};
 
 use crate::commit::{catch_up, read_committed, ControlKeys, ShortKeyring, ShortReport};
@@ -104,8 +104,11 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
 
     let _pending_owner = index.own_pending_rows().await?;
 
-    let KeyringFindings { key_lost, short } =
-        read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
+    let KeyringFindings {
+        base,
+        key_lost,
+        short,
+    } = read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
     // The read's finding, from here to wherever this run ends. Said as the
     // guard goes out of scope — by the last line of the run or by any `?`
     // before it — unless the commit's examination of the same generation has
@@ -169,6 +172,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         keys.control(),
         &policy,
         now,
+        base,
         &spooled,
         &[],
         Some(&short),
@@ -265,24 +269,33 @@ async fn read_keyring(
     // nothing else would say a word during them.
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys, retry).await?;
+    let base = caught.head_generation();
     let Some(checkpoint) = index.checkpoint().await? else {
-        return Ok(KeyringFindings::default());
+        return Ok(KeyringFindings {
+            base,
+            ..KeyringFindings::default()
+        });
     };
     let read = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
     Ok(KeyringFindings {
+        base,
         key_lost: lost(&read.key_table),
         short: read.short,
     })
 }
 
-/// What the read of the committed Keyring leaves the run with.
+/// What the catch-up and the read of the committed Keyring leave the run with.
 ///
-/// Both halves come from the one walk: the Containers the scan has to treat as
-/// unreadable, and — where the walk had to step over a position of the set to
-/// reach the replica that answered — the finding the run reports if nothing
-/// else in it examines that set.
+/// The Keyring's two halves come from the one walk: the Containers the scan
+/// has to treat as unreadable, and — where the walk had to step over a position
+/// of the set to reach the replica that answered — the finding the run reports
+/// if nothing else in it examines that set.
 #[derive(Default)]
 struct KeyringFindings {
+    /// The head the catch-up before the read reached: what the run reads the
+    /// catalog at, and so what its batch is prepared against (spec: CP-4,
+    /// EP-7).
+    base: Option<Generation>,
     /// The Containers the committed Keyring records no key for (spec: KL-7).
     key_lost: BTreeSet<ContainerId>,
     /// The degradation the read found, where it found one.

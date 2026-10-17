@@ -4,11 +4,13 @@ use std::path::{Path, PathBuf};
 use coffret_device::{
     CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced, UnusableReplica,
 };
-use coffret_model::{ContainerId, ContentHash, Generation};
+use coffret_model::{ContainerId, ContentHash, EntryNumber, Generation};
+use coffret_usecase::commit::{EntryRef, PendingChange, RebaseRule};
 use coffret_usecase::delete::DeleteError;
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
+use coffret_usecase::RenameRule;
 
 use super::declines::name_of;
 use super::ApiError;
@@ -643,6 +645,15 @@ fn a_commit_verdict_is_answered_alike_from_every_flow() {
         );
         assert_eq!(wire(refusal), (500, "server", None, None), "from a {flow}");
     }
+    // FM-15: a rename of the batch's own that the head does not admit, with no
+    // other commit to account for it, is what this device assembled, not
+    // another device moving the Library.
+    for (flow, refusal) in from_every_flow(|| CommitError::RenameRefused {
+        element: 0,
+        rule: RenameRule::PathTaken,
+    }) {
+        assert_eq!(wire(refusal), (500, "server", None, None), "from a {flow}");
+    }
     for (flow, refusal) in from_every_flow(|| CommitError::MissingHead {
         generation: Generation::new(7).expect("a small generation is one"),
     }) {
@@ -650,19 +661,28 @@ fn a_commit_verdict_is_answered_alike_from_every_flow() {
     }
 }
 
-// CP-1, CP-18: a commit refused because another device changed the Library
-// meanwhile is a `conflict` from every flow that writes — the sync, the freeze
-// and the deletion — rather than the server that could not answer. Nothing was
-// committed, and running it again plans from the Library as it now stands,
-// which is what the sentence tells a person; what the commit collided over
-// stays in the log.
+// CP-1, CP-18, EP-7: a commit refused because another device changed the
+// Library meanwhile is a `conflict` from every flow that writes — the sync, the
+// freeze and the deletion — rather than the server that could not answer.
+// Nothing was committed, and running it again plans from the Library as it now
+// stands, which is what the sentence tells a person; what the commit collided
+// over stays in the log.
 #[test]
 fn a_library_that_moved_underneath_a_commit_is_a_conflict_from_every_flow() {
-    let conflicts: [fn() -> CommitError; 3] = [
+    let conflicts: [fn() -> CommitError; 4] = [
         || CommitError::RemovalNotCurrent {
             container_ids: vec![ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN])],
         },
         || CommitError::EntryPathCollision {
+            path: entry_path("albums/spring.jpg"),
+        },
+        || CommitError::RebaseConflict {
+            pending: PendingChange::Rename(EntryRef::new(
+                ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]),
+                EntryNumber::FIRST,
+            )),
+            record: Generation::new(7).expect("a small generation is one"),
+            rule: RebaseRule::RenamedEntryRenamed,
             path: entry_path("albums/spring.jpg"),
         },
         || CommitError::ConflictLimitReached { attempts: 8 },

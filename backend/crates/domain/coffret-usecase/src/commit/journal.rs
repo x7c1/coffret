@@ -1,6 +1,6 @@
 use coffret_format::{encode_control_object, encode_journal_record, ControlEncodeRequest};
 use coffret_model::{
-    ControlObjectKind, ControlObjectName, Generation, IndexCheckpoint, JournalRecord,
+    ControlObjectKind, ControlObjectName, EntryRename, Generation, IndexCheckpoint, JournalRecord,
     KeyringCommitment, Redacted,
 };
 use tracing::{debug, info, warn};
@@ -176,7 +176,8 @@ pub(super) async fn commit(
 
     // The additions arrive in the order the batch spooled them and the removals
     // in the order the Containers they supersede turned up, so the record is put
-    // in the Container ID order FM-15 fixes as it is built — and the generation
+    // in the Container ID order FM-15 fixes as it is built, the renames in the
+    // order of the Entries they name — and the generation
     // and the head it succeeds, computed above from the head this commit is
     // rebasing on, are confirmed to agree there rather than here (spec: FM-15).
     let record = JournalRecord::canonical(
@@ -193,6 +194,7 @@ pub(super) async fn commit(
             .collect(),
         batch.removals.clone(),
     )
+    .and_then(|record| record.with_renames(renames(batch)?))
     .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
     let name = ControlObjectName::head(generation);
     let payload = encode_journal_record(&record)?;
@@ -216,6 +218,7 @@ pub(super) async fn commit(
                 generation = generation.get(),
                 additions = record.additions().len(),
                 removals = record.removals().len(),
+                renames = record.renames().len(),
                 "committed the batch",
             );
             Ok(Attempted::Committed(Box::new(Committed { record })))
@@ -235,6 +238,24 @@ pub(super) async fn commit(
         }
         Err(error) => Err(error.into()),
     }
+}
+
+/// The batch's renames as its record carries them: in Container ID and then
+/// entry number order (spec: FM-15).
+fn renames(batch: &PreparedBatch) -> coffret_model::Result<Vec<EntryRename>> {
+    let mut renames = batch
+        .renames
+        .iter()
+        .map(|rename| {
+            EntryRename::new(
+                rename.entry.container_id,
+                rename.entry.entry_number,
+                rename.path.clone(),
+            )
+        })
+        .collect::<coffret_model::Result<Vec<_>>>()?;
+    renames.sort_by_key(EntryRename::order_key);
+    Ok(renames)
 }
 
 /// The commit slot the head this commit succeeds carries, in the form this

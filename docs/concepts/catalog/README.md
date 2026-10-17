@@ -77,6 +77,10 @@ state; [salvage](../journal/#domain-rules) can recover only the name captured
 in the Container. Replaying the Journal applies the renames its records carry,
 so every device that catches up reaches the same current paths, and a record
 whose renames the Catalog does not admit is refused whole (spec: FM-15, RV-5).
+A batch committed after another device's rename is rebased over it by the
+same pair: a change that replaces the renamed Entry takes it over at its new
+path, and a change that writes to the same Entry or Entry Path from the other
+side is a conflict (spec: CP-4, CP-7, EP-7).
 Metadata-only rename is not complete yet: no operation writes a rename, fetch
 does not yet read by entry number, and a device does not yet relocate its file
 of a renamed Entry. Until it does, that file stays where it was placed, and

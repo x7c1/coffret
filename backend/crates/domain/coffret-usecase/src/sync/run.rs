@@ -114,6 +114,9 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // nothing else would say a word during them.
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // What the scan reads the catalog at, and so what the batch is prepared
+    // against (spec: CP-4, EP-7).
+    let base = caught.head_generation();
 
     // The settle announces its own phase, and only where there are rows to
     // settle. It reads the slots an interrupted batch attempted through the
@@ -201,6 +204,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         keys.control(),
         &policy,
         now,
+        base,
         &spooled,
         &[],
         None,

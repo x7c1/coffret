@@ -70,7 +70,15 @@ pub(super) async fn materialized(
         return Ok(entries);
     }
     for location in index.entries_under(None).await? {
-        if completing.contains(&location.container_id) {
+        // An Entry a rename has given another path since — a rebase taking
+        // over one another writer renamed, or a rename committed after it —
+        // is not at the path the file stands at, which is the one its
+        // Container captured. That file waits to be relocated instead, and
+        // marking the Entry's path present would claim a file nobody placed
+        // there (spec: EP-7, EP-10).
+        if completing.contains(&location.container_id)
+            && location.entry.path == location.entry.captured_path
+        {
             entries
                 .entry(location.container_id)
                 .or_default()
@@ -121,4 +129,111 @@ pub(super) async fn complete(
         container_id: row.container_id,
         entries: entries.len(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use coffret_model::{
+        ContainerAddition, ContainerKind, ContainerSummary, ContentHash, JournalRecord,
+        KeyringCommitment, MasterKeyEpoch, Mtime,
+    };
+
+    use super::*;
+    use crate::ciphertext_len_claims::ciphertext_len;
+    use crate::committed_batch::CommittedBatch;
+    use crate::device_state::{BatchId, SpoolState};
+    use crate::entry_extents::entry_extent;
+    use crate::entry_paths::entry_path;
+    use crate::generations::generation;
+    use crate::in_memory_index::InMemoryIndex;
+
+    /// A one-file Container `seed` whose Entry stands at `path`, captured
+    /// under `captured`.
+    fn one_file(seed: u8, path: &str, captured: &str) -> ContainerAddition {
+        ContainerAddition::new(
+            ContainerSummary {
+                id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
+                kind: ContainerKind::OneFile,
+                ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
+                ciphertext_len: ciphertext_len(100 + 64),
+                object_ref: None,
+            },
+            vec![EntryMetadata {
+                path: entry_path(path),
+                captured_path: entry_path(captured),
+                extent: entry_extent(0, 100),
+                mtime: Mtime::from_unix_seconds(1_700_000_000),
+                btime: None,
+                hash: ContentHash::from_bytes([seed.wrapping_add(1); ContentHash::BYTE_LEN]),
+                derived_from: None,
+                mime: None,
+            }],
+        )
+        .expect("one Entry tiles its Container's stream")
+    }
+
+    /// The row an interrupted sync left for Container `seed`: spooled,
+    /// uploaded, its commit attempted, built out of this device's files.
+    fn pending(seed: u8) -> PendingRow {
+        PendingRow {
+            commit_attempted: true,
+            container_id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
+            spool_path: PathBuf::from(format!("/spool/{seed}.spool")),
+            batch: BatchId::new("an-interrupted-sync"),
+            created_at: DeviceTime::from_unix_seconds(1_700_000_000),
+            state: SpoolState::Spooled(None),
+            materializes: true,
+        }
+    }
+
+    // EP-7, EP-10: a Container whose commit landed, rebased over another
+    // writer's rename of the Entry it replaces, holds that Entry at the renamed
+    // path while this device's file stands at the path it was captured from.
+    // Completing the interrupted bookkeeping marks present only the Entries
+    // that stand where their files do, and claims no file at the renamed path.
+    #[tokio::test]
+    async fn an_entry_taken_over_at_a_renamed_path_is_not_marked_present() {
+        let index = InMemoryIndex::new();
+        let record = JournalRecord::canonical(
+            generation(1),
+            // A first commit succeeds the head the Library was created with.
+            Some(generation(0)),
+            MasterKeyEpoch::FIRST,
+            KeyringCommitment::new(generation(1), 3, "beef")
+                .expect("a lowercase hex digest and a non-zero count are a commitment"),
+            None,
+            None,
+            vec![
+                one_file(1, "albums/b.jpg", "albums/a.jpg"),
+                one_file(2, "albums/c.jpg", "albums/c.jpg"),
+            ],
+            Vec::new(),
+        )
+        .expect("the record is one a commit could write");
+        index
+            .refresh(CommittedBatch {
+                record,
+                materialized: Vec::new(),
+            })
+            .await
+            .expect("applying the record must succeed");
+        let rows = [pending(1), pending(2)];
+        let current: BTreeSet<ContainerId> = rows.iter().map(|row| row.container_id).collect();
+
+        let entries = materialized(&index, &rows, &current)
+            .await
+            .expect("reading the catalog must succeed");
+
+        assert_eq!(
+            entries.keys().copied().collect::<Vec<_>>(),
+            [ContainerId::from_bytes([2; ContainerId::BYTE_LEN])],
+            "only the Entry standing where its file was captured is claimed",
+        );
+        assert_eq!(
+            entries[&rows[1].container_id][0].path,
+            entry_path("albums/c.jpg")
+        );
+    }
 }

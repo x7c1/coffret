@@ -4,9 +4,10 @@ use coffret_format::{
     encode, generate_container_id, generate_container_key, wrap_container_key, EncodeRequest,
     EntrySource,
 };
-use coffret_model::{CiphertextLenClaim, ContainerKind};
+use coffret_model::{CiphertextLenClaim, ContainerKind, EntryNumber};
 use tracing::debug;
 
+use crate::commit::EntryRef;
 use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
@@ -124,5 +125,17 @@ pub(super) async fn spool(
         object_ref: None,
         announced_at: now,
         replaces: candidate.replaces.into_iter().collect(),
+        // The one Entry of the Container it replaces, which is a one-file
+        // Container's only one (spec: FM-9, PK-15).
+        supersedes: candidate
+            .replaces
+            .map(|replaced| {
+                (
+                    EntryNumber::FIRST,
+                    EntryRef::new(replaced, EntryNumber::FIRST),
+                )
+            })
+            .into_iter()
+            .collect(),
     })
 }

@@ -117,6 +117,9 @@ pub use race::{
 
 mod racing_store;
 
+#[cfg(test)]
+mod rebase_tests;
+
 mod refusals;
 pub use refusals::{
     a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,

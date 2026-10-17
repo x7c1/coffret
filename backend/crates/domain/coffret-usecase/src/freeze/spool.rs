@@ -4,9 +4,10 @@ use coffret_format::{
     generate_container_id, generate_container_key, wrap_container_key, ContainerWriter, EncodePlan,
     EntryPlan,
 };
-use coffret_model::{CiphertextLenClaim, ContainerKind, EntryPath};
+use coffret_model::{CiphertextLenClaim, ContainerKind, EntryNumber, EntryPath};
 use tracing::debug;
 
+use crate::commit::EntryRef;
 use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
 use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
@@ -176,6 +177,21 @@ pub(super) async fn spool(
             .iter()
             .filter_map(|member| member.absorbs)
             .collect(),
+        // Each member is the Pack's Entry at its position (spec: FM-9), and one
+        // it absorbs takes the place of that one-file Container's only Entry.
+        supersedes: segment
+            .members
+            .iter()
+            .enumerate()
+            .filter_map(|(position, member)| Some((position, member.absorbs?)))
+            .map(|(position, absorbed)| {
+                Ok((
+                    EntryNumber::at_position(position)?,
+                    EntryRef::new(absorbed, EntryNumber::FIRST),
+                ))
+            })
+            .collect::<coffret_model::Result<_>>()
+            .map_err(coffret_format::Error::from)?,
     })
 }
 
@@ -235,7 +251,7 @@ fn change(error: &coffret_format::Error) -> Option<SourceChange> {
 #[cfg(test)]
 mod tests {
     use coffret_format::{unwrap_container_key, ContainerFootprint, ContainerOutline};
-    use coffret_model::{ContentHash, MasterKey, MasterKeyEpoch, Mtime};
+    use coffret_model::{ContainerId, ContentHash, MasterKey, MasterKeyEpoch, Mtime};
 
     use super::*;
     use crate::entry_paths::entry_path;
@@ -322,6 +338,80 @@ mod tests {
             spooled.entries.as_slice(),
             "the entry table the meta section carries is the one the run reported",
         );
+    }
+
+    /// PK-7, EP-7: a Pack names, by its own entry number, the one-file Entry
+    /// each absorbed member takes the place of — the only Entry of the
+    /// Container it is absorbed out of — and names nothing for a member that
+    /// is a new file. That is what a rebase follows when another writer renamed
+    /// an absorbed Entry before the Pack committed, so a number off by one
+    /// would carry a rename to another file's content.
+    #[tokio::test]
+    async fn a_pack_names_the_entry_each_absorbed_member_takes_the_place_of() {
+        let local = InMemoryFs::new();
+        let absorbed_a = ContainerId::from_bytes([0x0a; ContainerId::BYTE_LEN]);
+        let absorbed_c = ContainerId::from_bytes([0x0c; ContainerId::BYTE_LEN]);
+        let members: Vec<Selected> = [
+            (
+                "albums/a.jpg",
+                &b"absorbed out of one Container"[..],
+                Some(absorbed_a),
+            ),
+            ("albums/b.jpg", &b"a file new to the Library"[..], None),
+            (
+                "albums/c.jpg",
+                &b"absorbed out of another"[..],
+                Some(absorbed_c),
+            ),
+        ]
+        .into_iter()
+        .map(|(path, content, absorbs)| Selected {
+            absorbs,
+            ..member(&local, path, content)
+        })
+        .collect();
+        let footprint = ContainerFootprint::of(
+            ContainerKind::Pack,
+            &members
+                .iter()
+                .map(|member| member.plan.clone())
+                .collect::<Vec<_>>(),
+        )
+        .expect("a segment this size measures");
+
+        let index = InMemoryIndex::new();
+        local
+            .prepare_dir(Path::new(SPOOL_DIR))
+            .await
+            .expect("preparing the spool directory must succeed");
+        let keys = LibraryKeys::derive(
+            &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
+            MasterKeyEpoch::FIRST,
+        );
+        let spooled = spool(
+            &index,
+            &keys,
+            &local,
+            &local,
+            Path::new(SPOOL_DIR),
+            &BatchId::new("a-batch"),
+            DeviceTime::from_unix_seconds(1_700_000_000),
+            &Segment { members, footprint },
+        )
+        .await
+        .expect("a Pack of three short files spools");
+
+        let first = EntryNumber::FIRST;
+        let third = EntryNumber::at_position(2).expect("a small position numbers");
+        assert_eq!(
+            spooled.supersedes.iter().collect::<Vec<_>>(),
+            [
+                (&first, &EntryRef::new(absorbed_a, EntryNumber::FIRST)),
+                (&third, &EntryRef::new(absorbed_c, EntryNumber::FIRST)),
+            ],
+        );
+        assert_eq!(spooled.entries[0].path, entry_path("albums/a.jpg"));
+        assert_eq!(spooled.entries[2].path, entry_path("albums/c.jpg"));
     }
 
     /// One member of a segment, whose file the case plants in the fake.

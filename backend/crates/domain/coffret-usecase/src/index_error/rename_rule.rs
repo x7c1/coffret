@@ -62,7 +62,7 @@ pub enum RenameRule {
 impl RenameRule {
     /// The rule's name and the values that identify it, and nothing the
     /// catalog holds: what a diagnostic event may carry (spec: EL-1).
-    pub(super) fn redacted(&self) -> String {
+    pub(crate) fn redacted(&self) -> String {
         match self {
             Self::ContainerRemoved { container_id } => {
                 format!("ContainerRemoved(container={container_id})")

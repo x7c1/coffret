@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use coffret_format::{
@@ -5,13 +6,15 @@ use coffret_format::{
     ChunkSize, ContainerWriter, EncodePlan, EntryPlan,
 };
 use coffret_model::{
-    CiphertextLenClaim, ContainerId, ContainerKey, ContentHash, EntryMetadata, Redacted,
+    CiphertextLenClaim, ContainerId, ContainerKey, ContentHash, EntryMetadata, EntryNumber,
+    Redacted,
 };
 use tokio::io::AsyncReadExt;
 use tracing::{debug, warn};
 
 use crate::answer_length::AnswerLength;
 use crate::byte_stream::ByteStream;
+use crate::commit::EntryRef;
 use crate::device_state::{PendingRow, SpoolState};
 use crate::error::Error;
 use crate::read_modify_replace::carrying::{Carrying, Stop};
@@ -126,6 +129,7 @@ pub(crate) async fn rebuild(
                 object_ref: None,
                 announced_at: with.now,
                 replaces: vec![old.id],
+                supersedes: carried_forward(old.id, replacing.keep)?,
                 materializes: false,
             }));
         }
@@ -245,4 +249,60 @@ async fn dispose(
         ),
     }
     Ok(())
+}
+
+/// Which Entry of Container `old` each Entry of the replacement carries
+/// forward, by the replacement's entry number: the kept rows, `keep` holding
+/// one flag per row of the old table, in the order the two tables hold them
+/// (spec: FM-9, PK-10).
+///
+/// A row's position in the old table is its entry number there, because the
+/// rows are the whole table in stream order and numbers are assigned gap-free in
+/// that order (spec: FM-9).
+fn carried_forward(
+    old: ContainerId,
+    keep: &[bool],
+) -> Result<BTreeMap<EntryNumber, EntryRef>, coffret_format::Error> {
+    keep.iter()
+        .enumerate()
+        .filter(|(_, keep)| **keep)
+        .enumerate()
+        .map(|(kept, (position, _))| {
+            Ok((
+                EntryNumber::at_position(kept)?,
+                EntryRef::new(old, EntryNumber::at_position(position)?),
+            ))
+        })
+        .collect::<coffret_model::Result<_>>()
+        .map_err(coffret_format::Error::from)
+}
+
+#[cfg(test)]
+mod carried_forward_tests {
+    use super::*;
+
+    fn number(n: u64) -> EntryNumber {
+        EntryNumber::new(n).expect("a small number is an entry number")
+    }
+
+    // EP-7, PK-10: a rebuilt Pack names the Entry of the old one each of its
+    // Entries carries forward, so a rebase can take a kept Entry over at the
+    // path another writer renamed it to. The replacement's numbers close up
+    // over the rows left out; the old numbers are the rows' own positions.
+    #[test]
+    fn each_kept_row_is_named_by_its_number_in_the_old_pack() {
+        let old = ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]);
+
+        let supersedes =
+            carried_forward(old, &[false, true, false, true, true]).expect("a short table numbers");
+
+        assert_eq!(
+            supersedes.into_iter().collect::<Vec<_>>(),
+            [
+                (number(0), EntryRef::new(old, number(1))),
+                (number(1), EntryRef::new(old, number(3))),
+                (number(2), EntryRef::new(old, number(4))),
+            ],
+        );
+    }
 }

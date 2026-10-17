@@ -12,6 +12,9 @@
 //! nothing is changed by asking, so a refusal leaves the implementation free to
 //! give the record up whole.
 
+mod check_rename_set;
+pub use check_rename_set::check_rename_set;
+
 mod check_renames;
 pub use check_renames::check_renames;
 
