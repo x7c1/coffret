@@ -185,6 +185,10 @@ impl fmt::Display for Error {
             Self::UnsupportedIndexSnapshotSchema { schema } => {
                 write!(f, "unsupported Index Snapshot payload schema {schema}")
             }
+            Self::SnapshotPredatesEntryNumbers { schema } => write!(
+                f,
+                "an Index Snapshot of schema {schema} carries no entry numbers, so the catalog is rebuilt from the Journal instead"
+            ),
             Self::MalformedKeyringReplica { detail } => {
                 malformed(f, "malformed Keyring replica payload", detail)
             }
@@ -227,6 +231,18 @@ impl fmt::Display for Error {
             Self::AdditionNamesOnePathTwice { addition, entry } => write!(
                 f,
                 "entry {entry} of addition {addition} names an Entry Path the same Container already holds"
+            ),
+            Self::SnapshotNamesOneEntryTwice {
+                entry,
+                container_id,
+                entry_number,
+            } => write!(
+                f,
+                "entry {entry} names entry number {entry_number} of {container_id}, which an earlier entry already names"
+            ),
+            Self::RenameIntoReservedNamespace { rename } => write!(
+                f,
+                "element {rename} of renames gives an Entry a path under the component reserved for derived Entries"
             ),
             Self::CheckpointJournalAheadOfHead {
                 head_generation,

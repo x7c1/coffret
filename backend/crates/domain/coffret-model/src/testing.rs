@@ -20,6 +20,7 @@ use crate::content_hash::ContentHash;
 use crate::entry_extent::EntryExtent;
 use crate::entry_location::EntryLocation;
 use crate::entry_metadata::EntryMetadata;
+use crate::entry_number::EntryNumber;
 use crate::entry_path::EntryPath;
 use crate::generation::Generation;
 use crate::key_envelope::KeyEnvelope;
@@ -105,10 +106,17 @@ pub(crate) fn table_at(entries: &[(&str, u64, u64)]) -> Vec<EntryMetadata> {
         .collect()
 }
 
-/// Where the Entry at `path` lives, held by the Container `seed` names.
-pub(crate) fn entry_location(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
+/// Where the Entry at `path` lives: entry `number` of the Container `seed` names.
+pub(crate) fn entry_location(
+    seed: u8,
+    number: u32,
+    path: &str,
+    offset: u64,
+    size: u64,
+) -> EntryLocation {
     EntryLocation {
         container_id: container_id(seed),
+        entry_number: EntryNumber::new(u64::from(number)).expect("every u32 is an entry number"),
         entry: entry(path, offset, size),
     }
 }

@@ -3,9 +3,10 @@ use coffret_model::{
     ContainerAddition, ContainerId, EntryMetadata, Generation, JournalRecord, KeyringCommitment,
 };
 
+use super::rename;
 use super::{
-    ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
+    ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, MIN_SCHEMA,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -27,7 +28,10 @@ use crate::field_numbers;
 /// under (spec: FM-15).
 ///
 /// The array orders are verified rather than restored, for the reason FM-15
-/// gives.
+/// gives. Of the rules FM-15 gives `renames`, this holds the ones the record
+/// alone shows — the order, a path that is an Entry Path outside the reserved
+/// derived namespace — and leaves the ones that need the catalog the record is
+/// applied to to the Index that applies it.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
     let value = read_body(
         &payload.body,
@@ -37,7 +41,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < MIN_SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
 
@@ -54,6 +58,18 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         .map(container_id)
         .collect::<Result<Vec<_>>>()?;
 
+    // Absent on a record that renames nothing, which every record of schema 2
+    // is (spec: FM-15).
+    let renames = match fields.get(RENAMES) {
+        None => Vec::new(),
+        Some(_) => fields
+            .array(RENAMES)?
+            .iter()
+            .enumerate()
+            .map(|(index, value)| rename::from_fields(index, &fields.map(value)?, malformed))
+            .collect::<Result<Vec<_>>>()?,
+    };
+
     JournalRecord::new(
         generation,
         fields.optional_generation(PREV)?,
@@ -68,6 +84,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         additions,
         removals,
     )
+    .and_then(|record| record.with_renames(renames))
     .map_err(refused_record)
 }
 

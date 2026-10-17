@@ -66,6 +66,8 @@ pub(crate) use catch_up::{catch_up, CaughtUp};
 
 #[cfg(test)]
 mod catch_up_tests;
+#[cfg(test)]
+mod snapshot_schema_tests;
 
 mod checkpoint_failure;
 pub use checkpoint_failure::CheckpointFailure;

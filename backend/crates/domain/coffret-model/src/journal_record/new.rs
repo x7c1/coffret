@@ -1,7 +1,8 @@
 use super::JournalRecord;
-use crate::canonical_order::{require_strictly_increasing, ADDITIONS, REMOVALS};
+use crate::canonical_order::{require_strictly_increasing, ADDITIONS, REMOVALS, RENAMES};
 use crate::container_addition::ContainerAddition;
 use crate::container_id::ContainerId;
+use crate::entry_rename::EntryRename;
 use crate::error::{Error, Result};
 use crate::generation::Generation;
 use crate::keyring_commitment::KeyringCommitment;
@@ -55,7 +56,27 @@ impl JournalRecord {
             snapshot_slot,
             additions,
             removals,
+            renames: Vec::new(),
         })
+    }
+
+    /// The same record, renaming `renames` as well.
+    ///
+    /// A record carries renames only where its batch renamed something, and a
+    /// writer building one says so after the rest is settled; a record without
+    /// this call renames nothing (spec: FM-15).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::CollectionOutOfCanonicalOrder`] where `renames` is not strictly
+    /// increasing by Container ID and then entry number — which a rename naming
+    /// one Entry twice fails as well (spec: FM-15).
+    pub fn with_renames(mut self, renames: Vec<EntryRename>) -> Result<Self> {
+        require_strictly_increasing(RENAMES, &renames, |left, right| {
+            left.order_key().cmp(&right.order_key())
+        })?;
+        self.renames = renames;
+        Ok(self)
     }
 
     /// The same record from collections in whatever order a writer gathered

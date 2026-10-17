@@ -15,7 +15,7 @@
 //! *beyond* the path is pinned separately: that number is the schema's own, and
 //! it does not move when the sample's paths do.
 
-use coffret_model::{ContainerId, ContainerKind, EntryLocation, SnapshotContent};
+use coffret_model::{ContainerId, ContainerKind, EntryLocation, EntryNumber, SnapshotContent};
 
 use super::testing::{located, GENERATION};
 use super::{encode, IndexSnapshotPayload};
@@ -34,14 +34,16 @@ const ENTRIES_PER_CONTAINER: usize = 50;
 /// sample cost 119 bytes per Entry, 94 of them beyond the path. With the fields
 /// carried under one-byte field numbers (spec: FM-16) the same sample costs 86,
 /// 61 beyond the path, and the budget follows the encoding down so that the
-/// room it leaves is a few bytes rather than the old key strings' worth.
+/// room it leaves is a few bytes rather than the old key strings' worth. Each
+/// Entry's `entry` number then added two bytes, 88 and 63.
 const DESIGN_BUDGET: usize = 90;
 
 /// What one Entry costs beyond its own Entry Path.
 ///
 /// Everything the schema itself spends: the entry map's one-byte field numbers
 /// and their values —
-/// `offset`, `size`, `mtime`, the 32-byte `hash`, and the `container` index —
+/// `offset`, `size`, `mtime`, the 32-byte `hash`, the `container` index, and
+/// the `entry` number —
 /// plus this Entry's share of the `containers` array and the checkpoint. It is
 /// pinned rather than bounded loosely, because it is the number a change to the
 /// schema moves: a field added per Entry, or a Container named by ID again,
@@ -49,7 +51,7 @@ const DESIGN_BUDGET: usize = 90;
 ///
 /// The sample renames nothing, so no Entry in it carries `captured_path`: the
 /// field is written only where it differs from `path` (spec: FM-16).
-const PINNED_COST_BEYOND_THE_PATH: usize = 61;
+const PINNED_COST_BEYOND_THE_PATH: usize = 63;
 
 // FM-16: a Snapshot of ten thousand Entries stays inside the per-Entry cost the
 // schema was shaped around, for a Library whose paths look like a real one's.
@@ -100,7 +102,10 @@ fn library() -> IndexSnapshotPayload {
     let entries = (0..ENTRIES)
         .map(|index| EntryLocation {
             container_id: synthetic_id(index / ENTRIES_PER_CONTAINER),
+            entry_number: EntryNumber::at_position(index % ENTRIES_PER_CONTAINER)
+                .expect("a synthetic Pack's table is short"),
             entry: located(
+                0,
                 0,
                 &path(index),
                 (index % ENTRIES_PER_CONTAINER) as u64 * 240_000,

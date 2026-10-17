@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, EntryLocation, EntryMetadata, EntryPath, IndexCheckpoint, JournalRecord,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    ControlObjectName, EntryMetadata, EntryPath, IndexCheckpoint, JournalRecord, KeyringCommitment,
+    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use crate::device_state::{
@@ -149,13 +149,9 @@ pub(super) fn snapshot(
     let mut summaries = Vec::with_capacity(containers.len());
     let mut entries = Vec::new();
     for addition in containers {
-        let (container, table) = addition.into_parts();
-        let container_id = container.id;
+        let (container, located) = addition.into_locations();
         summaries.push(container);
-        entries.extend(table.into_iter().map(|entry| EntryLocation {
-            container_id,
-            entry,
-        }));
+        entries.extend(located);
     }
     SnapshotContent::canonical(checkpoint(generation), adopted_from, summaries, entries)
         .expect("a fixture holds a Library an Index could stand at")

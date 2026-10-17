@@ -3,12 +3,12 @@
  * (spec: FM-9). On the wire each field travels under its field number
  * (`fieldNumbers.ts`).
  *
- * The values a later rename could move carry `captured_` names here: what the
- * Entry was called, when it was last modified, and when its file came into
- * being *as captured when this Container was written*, not the first name the
- * Entry ever had. A Container is one immutable object, so nothing rewrites
- * them; what the Library holds now is the Journal's business, and a record
- * spells the same values `catalogEntryMap.ts`'s way.
+ * The values the Library may later hold differently carry `captured_` names
+ * here: what the Entry was called, when it was last modified, and when its file
+ * came into being *as captured when this Container was written*, not the first
+ * name the Entry ever had. A Container is one immutable object, so nothing
+ * rewrites them; what the Library holds now is the Journal's business, and a
+ * record spells the same values `catalogEntryMap.ts`'s way.
  */
 
 import { optionalInt, requiredInt, type CborMap } from './cbor.js';

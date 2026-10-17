@@ -5,7 +5,7 @@ use coffret_model::{ContainerId, EntryLocation};
 
 use super::{
     IndexSnapshotPayload, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER, CONTAINERS, ENTRIES,
-    HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION, KEYRING_REPLICA_COUNT,
+    ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION, KEYRING_REPLICA_COUNT,
     KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
@@ -85,8 +85,8 @@ pub fn encode(payload: &IndexSnapshotPayload) -> Result<ControlPayload> {
     ))
 }
 
-/// One Entry: the catalog's entry map, plus the index of its Container
-/// (spec: FM-16).
+/// One Entry: the catalog's entry map, plus the index of its Container and its
+/// entry number there (spec: FM-16).
 fn entry_value(
     index: usize,
     location: &EntryLocation,
@@ -112,5 +112,9 @@ fn entry_value(
         other => unreachable!("an entry map serialized to {other:?}"),
     };
     fields.push((Value::Text(CONTAINER.to_owned()), Value::from(container)));
+    fields.push((
+        Value::Text(ENTRY.to_owned()),
+        Value::from(location.entry_number.get()),
+    ));
     Ok(Value::Map(fields))
 }

@@ -15,6 +15,12 @@ import type { EntryMetadata } from './entry.js';
 export interface EntryLocation {
   /** The Container holding this Entry. */
   containerId: ContainerId;
+  /**
+   * The Entry's 0-based position in that Container's entry table: with
+   * `containerId`, the name for this Entry that a rename leaves unchanged
+   * (spec: FM-9).
+   */
+  entryNumber: number;
   /** What that Container's entry table records about it (spec: FM-9). */
   entry: EntryMetadata;
 }

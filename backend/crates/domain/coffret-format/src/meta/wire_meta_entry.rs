@@ -12,13 +12,13 @@ use crate::stream_extent::stream_extent;
 /// One row of a Container's entry table, under the meta section's field names
 /// (spec: FM-9).
 ///
-/// The three values a later rename could move carry `captured_` names here:
-/// what the Entry was called, when it was last modified, and when its file came
-/// into being *as captured when this Container was written* — not the first
-/// name the Entry ever had. A Container is one immutable object, so nothing
-/// rewrites them; what the Library holds now is the Journal's business, and a
-/// record names the same values `WireCatalogEntry`'s way. The names are the
-/// specification's; on the wire each travels under its field number
+/// The three values the Library may later hold differently carry `captured_`
+/// names here: what the Entry was called, when it was last modified, and when
+/// its file came into being *as captured when this Container was written* — not
+/// the first name the Entry ever had. A Container is one immutable object, so
+/// nothing rewrites them; what the Library holds now is the Journal's business,
+/// and a record names the same values `WireCatalogEntry`'s way. The names are
+/// the specification's; on the wire each travels under its field number
 /// ([`crate::field_numbers::META_ENTRY`]).
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireMetaEntry {

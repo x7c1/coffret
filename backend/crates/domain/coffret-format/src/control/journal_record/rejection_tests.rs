@@ -4,8 +4,8 @@ use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
-use super::testing::{first_record, record, GENERATION};
-use super::{decode, encode, SCHEMA};
+use super::testing::{first_record, record, renamed_record, GENERATION};
+use super::{decode, encode, MIN_SCHEMA};
 use crate::control::testing::{
     array, body_map, field, raw_body, spelled_by_name, with_body_map, with_raw_body,
 };
@@ -15,7 +15,15 @@ use crate::ControlPayload;
 
 /// A record payload with one field changed by hand, as a reader meets it.
 fn tampered(change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
-    let payload = encode(&record()).expect("encoding succeeds");
+    tampered_from(&record(), change)
+}
+
+/// The same, starting from the record handed in.
+fn tampered_from(
+    record: &coffret_model::JournalRecord,
+    change: impl FnOnce(&mut Vec<(Value, Value)>),
+) -> ControlPayload {
+    let payload = encode(record).expect("encoding succeeds");
     let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
     change(&mut fields);
     with_body_map(
@@ -61,6 +69,114 @@ fn removals_out_of_container_id_order_are_rejected() {
             })
         ),
         "expected reversed removals to be refused, got {result:?}"
+    );
+}
+
+/// The renamed record's payload with one field of its rename at `index`
+/// changed by hand.
+fn tampered_rename(index: usize, change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
+    tampered_from(&renamed_record(), |fields| {
+        let Value::Map(rename) = &mut array(fields, "renames")[index] else {
+            panic!("a rename is a map");
+        };
+        change(rename);
+    })
+}
+
+// FM-15: `renames` is ordered by Container ID and then entry number, and a
+// payload that is not in it is refused rather than sorted — across Containers
+// and within one alike.
+#[test]
+fn renames_out_of_order_are_rejected() {
+    for swap in [(1, 2), (0, 1)] {
+        let payload = tampered_from(&renamed_record(), |fields| {
+            array(fields, "renames").swap(swap.0, swap.1)
+        });
+        let result = read(&payload);
+        assert!(
+            matches!(
+                result,
+                Err(Error::ControlPayloadOutOfOrder {
+                    array: "renames",
+                    index: _,
+                })
+            ),
+            "expected renames swapped at {swap:?} to be refused, got {result:?}"
+        );
+    }
+}
+
+// FM-15: `(Container ID, entry number)` names one Entry, so two renames of it
+// in one record are refused — by the same strict order.
+#[test]
+fn a_duplicate_rename_is_rejected() {
+    let payload = tampered_rename(1, |rename| *field(rename, "entry") = Value::from(0u64));
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::ControlPayloadOutOfOrder {
+                array: "renames",
+                index: 1,
+            })
+        ),
+        "expected the second rename of one Entry to be refused, got {result:?}"
+    );
+}
+
+// FM-15, EP-1, EP-2: a rename's path is a stored Entry Path, so one that is not
+// NFC or not in EP-2's shape is malformed rather than repaired.
+#[test]
+fn a_rename_whose_path_is_not_an_entry_path_is_rejected() {
+    let unnormalized = tampered_rename(0, |rename| {
+        *field(rename, "path") = Value::Text("albums/cafe\u{301}.jpg".to_owned());
+    });
+    let result = read(&unnormalized);
+    assert!(
+        matches!(result, Err(Error::UnnormalizedEntryPath { field: "path" })),
+        "expected a decomposed path to be refused, got {result:?}"
+    );
+
+    for malformed in ["albums/../etc", "/albums/a.jpg", "albums//a.jpg", ""] {
+        let payload = tampered_rename(0, |rename| {
+            *field(rename, "path") = Value::Text(malformed.to_owned());
+        });
+        let result = read(&payload);
+        assert!(
+            matches!(result, Err(Error::MalformedEntryPath { field: "path" })),
+            "expected {malformed:?} to be refused, got {result:?}"
+        );
+    }
+}
+
+// FM-15: derived Entries are not renamed by this version, so no rename gives an
+// Entry a path in their reserved namespace.
+#[test]
+fn a_rename_into_the_derived_namespace_is_rejected() {
+    let payload = tampered_rename(2, |rename| {
+        *field(rename, "path") = Value::Text(".coffret-derived/thumb/a.jpg".to_owned());
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::RenameIntoReservedNamespace { rename: 2 })
+        ),
+        "expected a rename into the derived namespace to be refused, got {result:?}"
+    );
+}
+
+// FM-9: an entry number is a u32, so a rename naming one past it names no
+// Entry of any table.
+#[test]
+fn a_rename_whose_entry_number_is_past_32_bits_is_rejected() {
+    let payload = tampered_rename(0, |rename| {
+        *field(rename, "entry") = Value::from(u64::from(u32::MAX) + 1);
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("entry")),
+        "expected an entry number past 32 bits to be refused, got {result:?}"
     );
 }
 
@@ -149,10 +265,11 @@ fn a_prev_on_the_first_record_is_rejected() {
     );
 }
 
-// FM-15: a reader refuses any schema below the one this build writes.
+// FM-15: a reader refuses any schema below the lowest it reads, which is the
+// schema before `renames`.
 #[test]
-fn a_schema_below_the_current_one_is_rejected() {
-    for schema in [0, SCHEMA - 1] {
+fn a_schema_below_the_lowest_readable_one_is_rejected() {
+    for schema in [0, MIN_SCHEMA - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read(&payload);
         assert!(

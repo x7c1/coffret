@@ -5,8 +5,9 @@
  * whole of what a device needs to replay that commit without opening a
  * Container: the Keyring tuple the commit selected (spec: CP-10), the two slots
  * the head reserves (spec: CP-2, CK-10), the Containers the batch added
- * with their entry tables (spec: CP-11), and the Container IDs it removed
- * (spec: CP-14).
+ * with their entry tables (spec: CP-11), the Container IDs it removed
+ * (spec: CP-14), and the Entries it gave a new current Entry Path, each named
+ * by its Container and entry number (spec: FM-15).
  *
  * Two of the record's fields are not in the map, because the framing already
  * carries them and one state must not have two answers: the record's own
@@ -15,8 +16,9 @@
  * encoder hands back a whole {@link ControlPayload}, and the decoder is told
  * the generation the header carried.
  *
- * Putting `additions` and `removals` in Container ID order is the encoder's job
- * and checking that order is the decoder's — see `canonicalOrder` for why a
+ * Putting `additions` and `removals` in Container ID order, and `renames` in
+ * Container ID and then entry number order, is the encoder's job and checking
+ * those orders is the decoder's — see `canonicalOrder` for why a
  * reader rejects a payload rather than sorting it.
  */
 
@@ -30,6 +32,7 @@ import {
   optionalText,
   optionalUint,
   requiredArray,
+  requiredBytes,
   requiredText,
   requiredUint,
   type CborMap,
@@ -41,16 +44,24 @@ import {
 import { takeExactly } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 import { CONTAINER_ID_LENGTH, ContainerId } from '../model/containerId.js';
+import { MAX_ENTRY_NUMBER, isDerivedPath, type EntryRename } from '../model/entryRename.js';
+import { storedPath } from '../internal/entryFields.js';
 import { Generation } from '../model/generation.js';
 import { requireKeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
 import { JOURNAL_RECORD, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for a Journal record payload, and the lowest
- * a reader accepts (spec: FM-15).
+ * The schema this package writes for a Journal record payload: 3, the first to
+ * carry `renames` (spec: FM-15).
  */
-export const JOURNAL_RECORD_SCHEMA = 2n;
+export const JOURNAL_RECORD_SCHEMA = 3n;
+
+/**
+ * The lowest schema a reader accepts. A record of schema 2 carries no `renames`
+ * and reads as one that renames nothing (spec: FM-15).
+ */
+const MIN_JOURNAL_RECORD_SCHEMA = 2n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
@@ -90,6 +101,11 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
     'removals',
     removals.map((id) => id.bytes()),
   );
+  // Left out where the record renames nothing, so a record without renames
+  // costs nothing for them (spec: FM-15).
+  if (record.renames.length > 0) {
+    map.set('renames', [...record.renames].sort(compareRenames).map(encodeRename));
+  }
 
   return {
     masterKeyEpoch: record.masterKeyEpoch,
@@ -115,6 +131,23 @@ function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
   return map;
 }
 
+/** The order FM-15 gives `renames`: Container ID bytes, then entry number. */
+function compareRenames(left: EntryRename, right: EntryRename): number {
+  return (
+    compareBytes(left.containerId.bytes(), right.containerId.bytes()) ||
+    left.entryNumber - right.entryNumber
+  );
+}
+
+/** One rename: the Container, the entry number, and the new path. */
+function encodeRename(rename: EntryRename): Map<string, unknown> {
+  return new Map<string, unknown>([
+    ['container', rename.containerId.bytes()],
+    ['entry', BigInt(rename.entryNumber)],
+    ['path', rename.path],
+  ]);
+}
+
 /**
  * Parses a Journal record out of the payload a control object carried
  * (spec: FM-15).
@@ -128,7 +161,10 @@ function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
  * (spec: FM-15).
  *
  * The array orders are verified rather than restored, for the reason FM-15
- * gives.
+ * gives. Of the rules FM-15 gives `renames`, this holds the ones the record
+ * alone shows — the order, a path that is an Entry Path outside the reserved
+ * derived namespace — and leaves the ones that need the catalog to whoever
+ * applies the record.
  */
 export function decodeJournalRecord(
   payload: ControlPayload,
@@ -141,7 +177,7 @@ export function decodeJournalRecord(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < JOURNAL_RECORD_SCHEMA) {
+  if (schema < MIN_JOURNAL_RECORD_SCHEMA) {
     fail('unsupported_journal_record_schema', `unsupported Journal record payload schema ${schema}`);
   }
 
@@ -162,6 +198,14 @@ export function decodeJournalRecord(
     compareBytes(left.bytes(), right.bytes()),
   );
 
+  // Absent on a record that renames nothing, which every record of schema 2 is.
+  const renames = map.has('renames')
+    ? requiredArray(map, 'renames', MALFORMED).map((rename, index) =>
+        decodeRename(asCborMap(rename, MALFORMED, `rename ${index}`), index),
+      )
+    : [];
+  requireStrictlyIncreasing('renames', renames, compareRenames);
+
   const record: JournalRecord = {
     generation,
     masterKeyEpoch: payload.masterKeyEpoch,
@@ -172,6 +216,7 @@ export function decodeJournalRecord(
     }),
     additions,
     removals,
+    renames,
   };
 
   const prev = optionalUint(map, 'prev', MALFORMED);
@@ -208,6 +253,27 @@ function requirePrev(generation: Generation, prev: bigint | undefined): void {
       ? `the Journal record at generation ${generation} states no head it succeeds`
       : `the Journal record at generation ${generation} states ${prev} as the head it succeeds`,
   );
+}
+
+/** One element of `renames`, the `index`-th (spec: FM-15). */
+function decodeRename(map: CborMap, index: number): EntryRename {
+  const container = requiredBytes(map, 'container', MALFORMED);
+  const entry = requiredUint(map, 'entry', MALFORMED);
+  if (entry > BigInt(MAX_ENTRY_NUMBER)) {
+    fail(MALFORMED, `entry is an entry number below 2^32, found ${entry}`);
+  }
+  const path = storedPath(map, 'path', MALFORMED, 'path');
+  if (isDerivedPath(path)) {
+    fail(
+      'rename_into_reserved_namespace',
+      `element ${index} of renames gives an Entry a path under the component reserved for derived Entries`,
+    );
+  }
+  return {
+    containerId: ContainerId.fromBytes(takeExactly(container, CONTAINER_ID_LENGTH, 'a Container ID')),
+    entryNumber: Number(entry),
+    path,
+  };
 }
 
 function decodeAddition(map: CborMap): ContainerAddition {

@@ -1,7 +1,8 @@
 //! Helpers shared by the Index Snapshot payload's tests.
 
 use coffret_model::{
-    Btime, ContainerKind, ContainerSummary, ControlObjectName, EntryLocation, SnapshotContent,
+    Btime, ContainerKind, ContainerSummary, ControlObjectName, EntryLocation, EntryNumber,
+    SnapshotContent,
 };
 
 use super::{IndexSnapshotPayload, SnapshotActivation};
@@ -49,7 +50,7 @@ pub(super) fn decoded_content() -> SnapshotContent {
 
 /// That Library's content, recorded as adopted from what the caller names.
 fn content_of(adopted_from: Option<ControlObjectName>) -> SnapshotContent {
-    let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
+    let mut born = located(0x40, 0, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(BORN);
     born.entry.captured_path = entry_path(CAPTURED_PATH);
     SnapshotContent::canonical(
@@ -61,10 +62,10 @@ fn content_of(adopted_from: Option<ControlObjectName>) -> SnapshotContent {
             summary(0x33, ContainerKind::Pack),
         ],
         vec![
-            located(0x33, "photos/2019/b.jpg", 0, 90),
+            located(0x33, 0, "photos/2019/b.jpg", 0, 90),
             born,
-            located(0x21, "books/atlas/page-001.png", 0, 200),
-            located(0x40, "photos/2019/a.jpg", 100, 80),
+            located(0x21, 0, "books/atlas/page-001.png", 0, 200),
+            located(0x40, 1, "photos/2019/a.jpg", 100, 80),
         ],
     )
     .expect("a fixture holds a Library an Index could stand at")
@@ -86,10 +87,12 @@ pub(super) fn activating() -> IndexSnapshotPayload {
     )
 }
 
-/// One Entry of the Library, held by the Container with the given seed.
-pub(super) fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
+/// One Entry of the Library: entry `number` of the Container with the given
+/// seed.
+pub(super) fn located(seed: u8, number: u32, path: &str, offset: u64, size: u64) -> EntryLocation {
     EntryLocation {
         container_id: container_id(seed),
+        entry_number: EntryNumber::new(u64::from(number)).expect("every u32 is an entry number"),
         entry: entry(path, offset, size),
     }
 }

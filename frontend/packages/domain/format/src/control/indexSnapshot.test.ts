@@ -57,6 +57,19 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     expect(decoded).toEqual({ content: canonical(content()) });
   });
 
+  // FM-9, FM-16: each Entry carries its entry number in its Container, which the
+  // Snapshot's path order would otherwise lose.
+  it('carries each entry number', () => {
+    const payload = encodeIndexSnapshot(ordinary());
+    const entries = arrayField(bodyMap(payload, INDEX_SNAPSHOT), 'entries');
+    expect(entries.map((entry) => Number((entry as Map<unknown, unknown>).get('entry')))).toEqual(
+      canonical(content()).entries.map((location) => location.entryNumber),
+    );
+    expect(readOrdinary(payload).content.entries.map((location) => location.entryNumber)).toContain(
+      1,
+    );
+  });
+
   // MR-2: an activation Snapshot carries the same content and, beyond it, which
   // head it fenced and the slot it won.
   it('round-trips an activation Snapshot', () => {
@@ -134,7 +147,17 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     const payload = encodeIndexSnapshot(ordinary());
     const entries = arrayField(bodyMap(payload, INDEX_SNAPSHOT), 'entries');
     expect([...mapAt(entries, 0).keys()].sort()).toEqual(
-      ['path', 'captured_path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
+      [
+        'path',
+        'captured_path',
+        'offset',
+        'size',
+        'mtime',
+        'btime',
+        'hash',
+        'container',
+        'entry',
+      ].sort(),
     );
     for (let index = 1; index < entries.length; index += 1) {
       expect([...mapAt(entries, index).keys()]).not.toContain('btime');
@@ -179,7 +202,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
   it('orders Entries by their UTF-8 bytes rather than by UTF-16 code units', () => {
     const paths = ['albums/\u{1f4f7}.jpg', 'albums/\ue000.jpg'];
     const source = content();
-    source.entries = paths.map((path) => located(0x21, path, 0n, 10n));
+    source.entries = paths.map((path, index) => located(0x21, index, path, 0n, 10n));
     source.containers = [summary(0x21, 'one-file')];
 
     const utf8 = new TextEncoder();
@@ -289,7 +312,7 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
   // Snapshot does not list has no index to write.
   it('refuses to write an Entry whose Container is not listed', () => {
     const source = content();
-    source.entries.push(located(0x77, 'zzz/orphan.jpg', 0n, 10n));
+    source.entries.push(located(0x77, 0, 'zzz/orphan.jpg', 0n, 10n));
     expect(errorCode(() => encodeIndexSnapshot({ content: source }))).toBe(
       'snapshot_entry_without_container',
     );
@@ -346,13 +369,59 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
   });
 
   // FM-16: a reader refuses any schema below the one this build writes.
-  it('refuses a schema below the current one', () => {
-    for (const schema of [0n, INDEX_SNAPSHOT_SCHEMA - 1n]) {
+  it('refuses a schema below the one before entry numbers', () => {
+    for (const schema of [0n, INDEX_SNAPSHOT_SCHEMA - 2n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => readOrdinary(payload)), `schema ${schema}`).toBe(
         'unsupported_index_snapshot_schema',
       );
     }
+  });
+
+  // A Snapshot of schema 2 carries no entry numbers, so it is no catalog to
+  // start from: it is refused with a refusal of its own, and never numbered from
+  // its path order. A reader replays the Journal instead.
+  it('does not use a schema 2 Snapshot for entry numbers', () => {
+    const payload = tampered((map) => {
+      map.set('schema', 2n);
+      for (const entry of arrayField(map, 'entries')) {
+        (entry as Map<unknown, unknown>).delete('entry');
+      }
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('snapshot_predates_entry_numbers');
+  });
+
+  // From schema 3 every Snapshot entry carries `entry`.
+  it('refuses an entry without its entry number', () => {
+    const payload = tampered((map) => {
+      mapAt(arrayField(map, 'entries'), 1).delete('entry');
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
+  });
+
+  // FM-9: an entry number is a u32.
+  it('refuses an entry number past 32 bits', () => {
+    const payload = tampered((map) => {
+      mapAt(arrayField(map, 'entries'), 0).set('entry', 0x1_0000_0000n);
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
+  });
+
+  // FM-9: a Container and an entry number name one Entry, so two entries
+  // carrying the same pair are refused.
+  it('refuses two entries naming one Entry', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(map, 'entries');
+      const first = mapAt(entries, 0);
+      const twin = entries
+        .slice(1)
+        .find((entry) => (entry as Map<unknown, unknown>).get('container') === first.get('container'));
+      if (!(twin instanceof Map)) {
+        throw new Error('the sample holds two Entries of one Pack');
+      }
+      twin.set('entry', first.get('entry'));
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('snapshot_names_one_entry_twice');
   });
 
   it('refuses a missing checkpoint field', () => {

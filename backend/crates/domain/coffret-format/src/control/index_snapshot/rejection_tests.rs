@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
-use super::{decode, encode, IndexSnapshotPayload, SCHEMA};
+use super::{decode, encode, IndexSnapshotPayload, SCHEMA_WITHOUT_ENTRY_NUMBERS};
 use crate::control::testing::{array, body_map, field, spelled_by_name, summary, with_body_map};
 use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
@@ -209,10 +209,11 @@ fn a_kind_that_is_no_index_snapshot_is_refused_outright() {
     }
 }
 
-// FM-16: a reader refuses any schema below the one this build writes.
+// FM-16: a reader refuses any schema below the one before entry numbers as one
+// it cannot read at all.
 #[test]
-fn a_schema_below_the_current_one_is_rejected() {
-    for schema in [0, SCHEMA - 1] {
+fn a_schema_below_the_one_before_entry_numbers_is_rejected() {
+    for schema in [0, SCHEMA_WITHOUT_ENTRY_NUMBERS - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read_ordinary(&payload);
         assert!(
@@ -223,6 +224,100 @@ fn a_schema_below_the_current_one_is_rejected() {
             "expected schema {schema} to be unreadable, got {result:?}"
         );
     }
+}
+
+// FM-16: a Snapshot of schema 2 carries no entry numbers, so it is no catalog
+// to start from. It is refused with a refusal of its own — the object is sound,
+// only too old — and never numbered from its path order.
+#[test]
+fn a_schema_2_snapshot_is_not_used_for_entry_numbers() {
+    let payload = tampered(|fields| {
+        *field(fields, "schema") = Value::from(SCHEMA_WITHOUT_ENTRY_NUMBERS);
+        for entry in array(fields, "entries") {
+            let Value::Map(entry) = entry else {
+                panic!("an entry is a map");
+            };
+            entry.retain(|(key, _)| key.as_text() != Some("entry"));
+        }
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::SnapshotPredatesEntryNumbers { schema: 2 })
+        ),
+        "expected a schema 2 Snapshot to be refused for entry numbers, got {result:?}"
+    );
+}
+
+// FM-16: from schema 3 every Snapshot entry carries `entry`, and one without it
+// is malformed rather than numbered by where it stands.
+#[test]
+fn an_entry_without_its_entry_number_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(entry) = &mut array(fields, "entries")[1] else {
+            panic!("an entry is a map");
+        };
+        entry.retain(|(key, _)| key.as_text() != Some("entry"));
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedIndexSnapshot { ref detail }) if detail.to_string().contains("entry")),
+        "expected an entry without its number to be refused, got {result:?}"
+    );
+}
+
+// FM-9: an entry number is a u32, so one past it names no Entry of any table.
+#[test]
+fn an_entry_number_past_32_bits_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(entry) = &mut array(fields, "entries")[0] else {
+            panic!("an entry is a map");
+        };
+        *field(entry, "entry") = Value::from(u64::from(u32::MAX) + 1);
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedIndexSnapshot { ref detail }) if detail.to_string().contains("entry")),
+        "expected an entry number past 32 bits to be refused, got {result:?}"
+    );
+}
+
+// FM-9, FM-16: a Container and an entry number name one Entry, so two Snapshot
+// entries carrying the same pair are refused.
+#[test]
+fn two_entries_naming_one_entry_are_rejected() {
+    let payload = tampered(|fields| {
+        let entries = array(fields, "entries");
+        let pack = |entry: &Value| {
+            entry
+                .as_map()
+                .and_then(|map| {
+                    map.iter()
+                        .find(|(key, _)| key.as_text() == Some("container"))
+                })
+                .map(|(_, value)| value.clone())
+        };
+        let first = entries[0].clone();
+        let other = entries
+            .iter_mut()
+            .skip(1)
+            .find(|entry| pack(entry) == pack(&first))
+            .expect("the sample holds two Entries of one Pack");
+        let Value::Map(other) = other else {
+            panic!("an entry is a map");
+        };
+        *field(other, "entry") = first
+            .as_map()
+            .and_then(|map| map.iter().find(|(key, _)| key.as_text() == Some("entry")))
+            .map(|(_, value)| value.clone())
+            .expect("the first entry carries its number");
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::SnapshotNamesOneEntryTwice { .. })),
+        "expected one Entry named twice to be refused, got {result:?}"
+    );
 }
 
 #[test]

@@ -72,18 +72,12 @@ impl State {
                 .retain(|_, entry| entry.container_id != *removed);
         }
         for addition in record.into_additions() {
-            let (container, entries) = addition.into_parts();
-            let container_id = container.id;
+            // Each Entry keeps the number its place in the table gives it
+            // (spec: FM-9, FM-15).
+            let (container, located) = addition.into_locations();
             insert_container(&mut self.containers, container)?;
-            for entry in entries {
-                insert_entry(
-                    &mut self.entries,
-                    &self.containers,
-                    EntryLocation {
-                        container_id,
-                        entry,
-                    },
-                )?;
+            for entry in located {
+                insert_entry(&mut self.entries, &self.containers, entry)?;
             }
         }
         self.checkpoint = Some(checkpoint);

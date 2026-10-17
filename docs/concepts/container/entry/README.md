@@ -101,14 +101,17 @@ for the current release.
 
 ## Technical Constraints
 
-Metadata-only rename is planned, not implemented. The current Catalog format
-and fetch paths do not yet carry and use an explicit entry number. Shipping
-rename requires that reference in Journal additions and Index Snapshots,
-ordinal-based reads with Catalog hash verification, and replay of explicit
-name changes. Rewriting the Entry Path a device's [Index](../../index/)
-caches would not implement rename either: every device takes current names
-from the Journal and its checkpoints, so a name changed only in one device's
-cache reaches no other device and is lost when that cache is rebuilt.
+Metadata-only rename is planned, not implemented. The control-object format
+now carries the entry number: a Journal addition carries it by the position of
+each Entry in the table it copies, an Index Snapshot states it beside each
+Entry, and a Journal record's renames name Entries by it (spec: FM-9, FM-15,
+FM-16). Fetch paths do not yet use it. Shipping rename still requires
+ordinal-based reads with Catalog hash verification, and replay that applies
+the explicit name changes. Rewriting the Entry Path a device's
+[Index](../../index/) caches would not implement rename either: every device
+takes current names from the Journal and its checkpoints, so a name changed
+only in one device's cache reaches no other device and is lost when that cache
+is rebuilt.
 
 The current format still encodes a derived origin as the parent's Container
 ID and captured Entry Path (spec: FM-9). The planned path-and-hash origin

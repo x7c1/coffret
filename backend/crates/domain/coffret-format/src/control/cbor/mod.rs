@@ -6,9 +6,9 @@
 //! two reasons.
 //! A field that is not the shape its rule gives it has to be reported as *that
 //! field* — `MalformedJournalRecord { detail }` naming it — and two of the maps
-//! are a shared map plus one field of their own (an addition is a Container
-//! plus its entry table, a Snapshot entry is a catalog entry map
-//! (spec: FM-16) plus its `container` index), which a struct would either
+//! are a shared map plus fields of their own (an addition is a Container plus
+//! its entry table, a Snapshot entry is a catalog entry map (spec: FM-16) plus
+//! its `container` index and `entry` number), which a struct would either
 //! duplicate or flatten.
 //!
 //! The readers and builders here speak field names throughout. The body is
@@ -20,7 +20,7 @@
 //! each reader takes that constructor and everything else here is shared.
 
 use ciborium::Value;
-use coffret_model::MAX_FORMAT_INTEGER;
+use coffret_model::{EntryNumber, MAX_FORMAT_INTEGER};
 
 use crate::error::{CborDecodeFailure, CborEncodeFailure, Error, MalformedDetail, Result};
 use crate::field_numbers::{self, MapFields};
@@ -90,6 +90,25 @@ pub(super) fn as_bounded_uint(value: &Value) -> Option<u64> {
         .as_integer()
         .and_then(|integer| u64::try_from(integer).ok())
         .filter(|number| *number <= MAX_FORMAT_INTEGER)
+}
+
+/// The field at `key` read as an entry number (spec: FM-9), or the malformed
+/// payload of whichever schema was reading it.
+///
+/// Both schemas that name an Entry by its position — a rename in a Journal
+/// record (spec: FM-15) and an Entry in an Index Snapshot (spec: FM-16) — read
+/// it through here, so the 32-bit bound is reported the same way in both.
+pub(super) fn entry_number(
+    fields: &Fields<'_>,
+    key: &str,
+    malformed: fn(String) -> Error,
+) -> Result<EntryNumber> {
+    let number = fields.uint(key)?;
+    EntryNumber::new(number).map_err(|_| {
+        malformed(format!(
+            "{key} is an entry number below 2^32, found {number}"
+        ))
+    })
 }
 
 /// Reports a struct this crate built that CBOR would not turn into an item,

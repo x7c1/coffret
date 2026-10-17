@@ -18,13 +18,13 @@ use crate::mtime::Mtime;
 /// struct makes of its own fields.
 ///
 /// These are the values as captured when the Container was written, which is
-/// why the meta section names the three of them a later rename could move —
-/// `path`, `mtime`, and `btime` — as `captured_path`, `captured_mtime`, and
-/// `captured_btime` (spec: FM-9). A Container is immutable, so nothing rewrites
-/// them; the Journal and its checkpoint carry the current spelling, which is
-/// why a record and a Snapshot name the same values `path`, `mtime`, and
-/// `btime` (spec: FM-15, FM-16). One struct serves both because the values
-/// are the same values — only the field differs.
+/// why the meta section names the three of them the Library may later hold
+/// differently — `path`, `mtime`, and `btime` — as `captured_path`,
+/// `captured_mtime`, and `captured_btime` (spec: FM-9). A Container is
+/// immutable, so nothing rewrites them; the Journal and its checkpoint carry
+/// the current spelling, which is why a record and a Snapshot name the same
+/// values `path`, `mtime`, and `btime` (spec: FM-15, FM-16). One struct serves
+/// both because the values are the same values — only the field differs.
 ///
 /// The one exception is the name. The catalog keeps both the Entry Path the
 /// Library holds now (`path`) and the one the owning Container's meta section
@@ -42,8 +42,8 @@ pub struct EntryMetadata {
     /// (spec: FM-9).
     ///
     /// The name it was captured under rather than where it stands. Equal to
-    /// `path` until a rename moves the Entry, and never moved by one, because
-    /// the Container it describes is never rewritten.
+    /// `path` until a rename gives the Entry a new path, and never changed by
+    /// one, because the Container it describes is never rewritten.
     pub captured_path: EntryPath,
     /// Where this Entry's plaintext lies in the Container's plaintext stream.
     pub extent: EntryExtent,

@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryPath,
-    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    ControlObjectName, DerivedFrom, EntryExtent, EntryMetadata, EntryPath, Generation,
+    IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
 
@@ -128,19 +128,12 @@ pub fn addition(seed: u8) -> ContainerAddition {
 
 /// The Snapshot of a Library whose head at `number` holds one Pack.
 pub fn snapshot(number: u64) -> SnapshotContent {
-    let (container, entries) = addition(1).into_parts();
-    let container_id = container.id;
+    let (container, entries) = addition(1).into_locations();
     SnapshotContent::canonical(
         checkpoint(number),
         Some(ControlObjectName::index_snapshot(generation(number))),
         vec![container],
-        entries
-            .into_iter()
-            .map(|entry| EntryLocation {
-                container_id,
-                entry,
-            })
-            .collect(),
+        entries,
     )
     .expect("a fixture holds a Library an Index could stand at")
 }

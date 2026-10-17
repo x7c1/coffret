@@ -127,7 +127,14 @@ export const JOURNAL_RECORD: MapFields = {
     field('keyring_set_digest', 7),
     field('additions', 8, () => ADDITION),
     field('removals', 9),
+    field('renames', 10, () => RENAME),
   ],
+};
+
+/** One element of a Journal record's `renames` (spec: FM-15). */
+export const RENAME: MapFields = {
+  map: 'rename',
+  fields: [field('container', 0), field('entry', 1), field('path', 2)],
 };
 
 /** One element of an Index Snapshot's `containers` (spec: FM-16). */
@@ -156,6 +163,7 @@ export const SNAPSHOT_ENTRY: MapFields = {
     field('derived_from', 7, () => DERIVED_FROM),
     field('captured_path', 8),
     field('container', 9),
+    field('entry', 10),
   ],
 };
 
@@ -200,6 +208,7 @@ export const ALL_MAP_FIELDS: readonly MapFields[] = [
   META_ENTRY,
   DERIVED_FROM,
   JOURNAL_RECORD,
+  RENAME,
   ADDITION,
   ADDITION_ENTRY,
   INDEX_SNAPSHOT,

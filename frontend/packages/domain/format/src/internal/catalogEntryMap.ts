@@ -2,17 +2,17 @@
  * One Entry as the catalog records it (spec: FM-15, FM-16).
  *
  * The same map the meta section writes — `offset`, `size`, `hash`, `mime`, and
- * `derived_from` are shared with it verbatim — except for the values a later
- * rename could move. Those are spelled `path`, `mtime`, and `btime` here,
- * without the `captured_` prefix FM-9 gives them, because a Journal record and
- * an Index Snapshot are the catalog's durable form: an addition's values are
- * what the Library holds now, not what one immutable object happened to
- * capture.
+ * `derived_from` are shared with it verbatim — except for the values the
+ * Library may later hold differently. Those are spelled `path`, `mtime`, and
+ * `btime` here, without the `captured_` prefix FM-9 gives them, because a
+ * Journal record and an Index Snapshot are the catalog's durable form: an
+ * addition's values are what the Library holds now, not what one immutable
+ * object happened to capture.
  *
  * The name is the one value that can be carried in both spellings: `path` is
  * where the Entry stands in the Library now, and `captured_path` is the Entry
  * Path the owning Container's meta section records — the name it was captured
- * under, which no rename moves. `captured_path` is written only where it
+ * under, which no rename changes. `captured_path` is written only where it
  * differs from `path`, so a map without it names an Entry whose two paths are
  * one. A map carrying it equal to `path` is a second spelling of that same
  * state and is refused.

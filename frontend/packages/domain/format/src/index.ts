@@ -194,6 +194,12 @@ export {
 export type { ContainerSummary } from './model/containerSummary.js';
 export type { EntryLocation } from './model/entryLocation.js';
 export {
+  DERIVED_COMPONENT,
+  MAX_ENTRY_NUMBER,
+  isDerivedPath,
+  type EntryRename,
+} from './model/entryRename.js';
+export {
   requireKeyringCommitment,
   type IndexCheckpoint,
   type KeyringCommitment,

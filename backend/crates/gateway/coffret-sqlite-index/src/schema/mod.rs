@@ -15,17 +15,20 @@ use crate::error::classify;
 /// each Entry's captured path beside its current one (spec: FM-15, FM-16), and
 /// version 14 a catalog filled from Storage objects whose maps carry their
 /// fields under field numbers, with that column under the name the
-/// specification now gives the field, `captured_path` (spec: FM-9).
-pub(crate) const SCHEMA_VERSION: i64 = 14;
+/// specification now gives the field, `captured_path` (spec: FM-9), and
+/// version 15 each Entry's entry number in its Container (spec: FM-9, FM-16).
+pub(crate) const SCHEMA_VERSION: i64 = 15;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 14 changed only the catalog, so a file at layout 13 keeps its device
-/// group as it is and has its catalog discarded and rebuilt from Storage
-/// (spec: RV-5) rather than migrated: the Storage objects an older catalog was
-/// filled from are in a format this build no longer reads, so a catalog carried
-/// forward would describe objects nothing here can open.
+/// Layouts 14 and 15 changed only the catalog, so a file at layout 13 or 14
+/// keeps its device group as it is and has its catalog discarded and rebuilt
+/// from Storage (spec: RV-5) rather than migrated. A layout-13 catalog was
+/// filled from objects in a format this build no longer reads, so carried
+/// forward it would describe objects nothing here can open. A layout-14 one
+/// holds no entry numbers, and nothing it holds says what they were: the
+/// rebuild replays them out of the Journal (spec: FM-16).
 ///
 /// Versions 7 to 12 have one explicit, transactional upgrade of their
 /// device-local group that preserves every row, treats old attempts as
@@ -53,10 +56,14 @@ CREATE TABLE entries (
     path                   TEXT PRIMARY KEY COLLATE BINARY,
     -- The Entry Path the owning Container's meta section records for this
     -- Entry: the name it was captured under when that Container was written,
-    -- which no rename moves, where `path` is where it stands now
+    -- which no rename changes, where `path` is where it stands now
     -- (spec: FM-9, FM-15, FM-16).
     captured_path          TEXT NOT NULL COLLATE BINARY,
     container_id           BLOB NOT NULL REFERENCES containers(id),
+    -- The Entry's 0-based position in its Container's entry table: with
+    -- `container_id`, the name for it that a rename leaves unchanged
+    -- (spec: FM-9).
+    entry_number           INTEGER NOT NULL,
     "offset"               INTEGER NOT NULL,
     size                   INTEGER NOT NULL,
     mtime                  INTEGER NOT NULL,
@@ -69,8 +76,9 @@ CREATE TABLE entries (
     derived_from_path      TEXT COLLATE BINARY
 ) STRICT;
 
--- Removing a Container removes its Entries, and a Pack holds many.
-CREATE INDEX entries_by_container ON entries (container_id);
+-- Removing a Container removes its Entries, and a Pack holds many; the
+-- entry number beside it finds one Entry of a Container by its position.
+CREATE INDEX entries_by_container ON entries (container_id, entry_number);
 "#
     };
 }
@@ -264,8 +272,9 @@ fn carries_a_readable_device_group(found: i64) -> bool {
 /// constants.
 ///
 /// Split out so the rule can be stated against a synthetic pair of versions: in
-/// this build the real window holds a single layout ([`DEVICE_SCHEMA_VERSION`]),
-/// so a case over the real constants cannot show where its two edges fall.
+/// this build the real window holds two layouts ([`DEVICE_SCHEMA_VERSION`] and
+/// the one after it), and the layouts below it take the upgrade instead, so a
+/// case over the real constants cannot show where its two edges fall.
 fn within(window: Range<i64>, found: i64) -> bool {
     window.contains(&found)
 }
@@ -387,7 +396,7 @@ mod tests {
     /// The rule is that a file stamped at or above the device-local floor and
     /// below the current layout keeps its device group and loses its catalog,
     /// and that everything outside is refused. In this build the real window
-    /// holds one layout, and the layouts below it take the upgrade instead, so
+    /// holds two layouts, and the layouts below it take the upgrade instead, so
     /// this is the one place the rule itself is stated — with numbers of its
     /// own, the way the suites beside this crate write their layout versions
     /// out rather than reading them off the constants.
@@ -411,11 +420,12 @@ mod tests {
         );
     }
 
-    /// This build's own window holds the one layout whose device group it
-    /// writes unchanged: layout 13 loses its catalog and keeps the rest, and
-    /// the layouts below it are upgraded rather than discarded (spec: OC-2).
+    /// This build's own window holds the layouts whose device group it writes
+    /// unchanged: layouts 13 and 14 lose their catalog and keep the rest, and
+    /// the layouts below them are upgraded rather than discarded (spec: OC-2).
     #[test]
-    fn this_builds_window_holds_the_previous_layout_alone() {
+    fn this_builds_window_holds_the_layouts_since_the_device_floor() {
+        assert!(carries_a_readable_device_group(DEVICE_SCHEMA_VERSION));
         assert!(carries_a_readable_device_group(SCHEMA_VERSION - 1));
         assert!(!carries_a_readable_device_group(SCHEMA_VERSION));
         assert!(!carries_a_readable_device_group(DEVICE_SCHEMA_VERSION - 1));

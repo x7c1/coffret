@@ -5,7 +5,7 @@
 //! event may be told in [`redacted`], and what the model's own refusal
 //! becomes in [`from`].
 
-use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation};
+use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, EntryNumber, Generation};
 
 use crate::account_cache_key_envelope::MAGIC_LEN as ACCOUNT_CACHE_KEY_ENVELOPE_MAGIC_LEN;
 use crate::control::ControlHeader;
@@ -458,6 +458,20 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
+    /// An Index Snapshot payload predates entry numbers, so it cannot be
+    /// adopted as a catalog (spec: FM-16).
+    ///
+    /// A Snapshot of schema 2 lists its Entries in Entry Path order and does
+    /// not carry each one's position in its Container's entry table, and
+    /// nothing a reader holds says what that position was: guessing it from
+    /// path order would name Entries a later rename could not find. A reader
+    /// meeting one rebuilds the catalog by replaying the Journal instead,
+    /// which is why this is a refusal of its own rather than a malformed
+    /// payload — the object is sound, only too old to start from.
+    SnapshotPredatesEntryNumbers {
+        /// The schema number found.
+        schema: u64,
+    },
     /// A Keyring replica's payload is not the CBOR shape FM-17 defines.
     MalformedKeyringReplica {
         /// Which field, and what was found there instead — or the CBOR
@@ -550,6 +564,28 @@ pub enum Error {
         addition: usize,
         /// Position of the second Entry naming a path the table already holds.
         entry: usize,
+    },
+    /// An element of a Journal record's `renames` gives an Entry a path under
+    /// the top-level component reserved for derived Entries (spec: FM-15).
+    ///
+    /// Only the position travels, for the reason
+    /// [`AdditionNamesOnePathTwice`](Self::AdditionNamesOnePathTwice)'s does.
+    RenameIntoReservedNamespace {
+        /// Position of the offending element in `renames`.
+        rename: usize,
+    },
+    /// An Index Snapshot payload names one Entry of one Container twice
+    /// (spec: FM-9, FM-16).
+    ///
+    /// `(Container ID, entry number)` names exactly one Entry, so two Snapshot
+    /// entries carrying the same pair are one Entry at two paths.
+    SnapshotNamesOneEntryTwice {
+        /// Position of the second Snapshot entry naming the pair.
+        entry: usize,
+        /// The Container both name.
+        container_id: ContainerId,
+        /// The entry number both name.
+        entry_number: EntryNumber,
     },
     /// An Index Snapshot payload's checkpoint claims to have applied a Journal
     /// generation past the head it stands at (spec: CK-1).

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::SnapshotContent;
 use crate::canonical_order::{require_strictly_increasing, CONTAINERS, ENTRIES};
 use crate::container_summary::ContainerSummary;
@@ -18,6 +20,9 @@ impl SnapshotContent {
     ///   EP-3).
     /// - [`Error::SnapshotEntryWithoutContainer`] where an Entry names a
     ///   Container `containers` does not list (spec: FM-16).
+    /// - [`Error::SnapshotNamesOneEntryTwice`] where two Entries name the same
+    ///   Container and entry number, which name exactly one Entry
+    ///   (spec: FM-9, FM-16).
     pub fn new(
         checkpoint: IndexCheckpoint,
         adopted_from: Option<ControlObjectName>,
@@ -32,6 +37,7 @@ impl SnapshotContent {
         })?;
         // The Containers are in ID order by the check just made, so membership
         // is a search rather than a second collection.
+        let mut named = BTreeSet::new();
         for (entry, location) in entries.iter().enumerate() {
             if containers
                 .binary_search_by_key(&location.container_id, |container| container.id)
@@ -40,6 +46,13 @@ impl SnapshotContent {
                 return Err(Error::SnapshotEntryWithoutContainer {
                     entry,
                     container_id: location.container_id,
+                });
+            }
+            if !named.insert((location.container_id, location.entry_number)) {
+                return Err(Error::SnapshotNamesOneEntryTwice {
+                    entry,
+                    container_id: location.container_id,
+                    entry_number: location.entry_number,
                 });
             }
         }

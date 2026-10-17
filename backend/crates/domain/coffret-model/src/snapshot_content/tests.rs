@@ -44,8 +44,8 @@ fn a_snapshot_out_of_canonical_order_cannot_exist() {
         None,
         vec![container_summary(1)],
         vec![
-            entry_location(1, "albums/one.jpg", 0, 4),
-            entry_location(1, "albums/one.jpg", 4, 4),
+            entry_location(1, 0, "albums/one.jpg", 0, 4),
+            entry_location(1, 1, "albums/one.jpg", 4, 4),
         ],
     );
     assert!(
@@ -70,8 +70,8 @@ fn a_snapshot_whose_entry_names_no_container_cannot_exist() {
         None,
         vec![container_summary(1)],
         vec![
-            entry_location(1, "albums/one.jpg", 0, 4),
-            entry_location(9, "albums/two.jpg", 0, 4),
+            entry_location(1, 0, "albums/one.jpg", 0, 4),
+            entry_location(9, 0, "albums/two.jpg", 0, 4),
         ],
     );
 
@@ -87,6 +87,34 @@ fn a_snapshot_whose_entry_names_no_container_cannot_exist() {
     );
 }
 
+// FM-9, FM-16: a Container and an entry number name exactly one Entry, so two
+// Snapshot entries carrying the same pair are one Entry standing at two paths.
+#[test]
+fn a_snapshot_naming_one_entry_twice_cannot_exist() {
+    let result = SnapshotContent::new(
+        checkpoint(),
+        None,
+        vec![container_summary(1)],
+        vec![
+            entry_location(1, 0, "albums/one.jpg", 0, 4),
+            entry_location(1, 0, "albums/two.jpg", 4, 4),
+        ],
+    );
+
+    assert!(
+        matches!(
+            result,
+            Err(Error::SnapshotNamesOneEntryTwice {
+                entry: 1,
+                container_id,
+                entry_number,
+            }) if container_id == crate::testing::container_id(1)
+                && entry_number.get() == 0
+        ),
+        "expected the second Entry naming the pair to be refused, got {result:?}",
+    );
+}
+
 // The one thing `canonical` adds is the sort, and the one thing it does not
 // add is tolerance: an input a sort cannot repair is refused exactly as
 // `new` refuses it.
@@ -94,8 +122,8 @@ fn a_snapshot_whose_entry_names_no_container_cannot_exist() {
 fn canonical_sorts_and_then_holds_to_the_same_rule() {
     let containers = vec![container_summary(2), container_summary(1)];
     let entries = vec![
-        entry_location(2, "albums/two.jpg", 0, 4),
-        entry_location(1, "albums/one.jpg", 0, 4),
+        entry_location(2, 0, "albums/two.jpg", 0, 4),
+        entry_location(1, 0, "albums/one.jpg", 0, 4),
     ];
     let sorted =
         SnapshotContent::canonical(checkpoint(), None, containers.clone(), entries.clone())
@@ -105,8 +133,8 @@ fn canonical_sorts_and_then_holds_to_the_same_rule() {
         None,
         vec![container_summary(1), container_summary(2)],
         vec![
-            entry_location(1, "albums/one.jpg", 0, 4),
-            entry_location(2, "albums/two.jpg", 0, 4),
+            entry_location(1, 0, "albums/one.jpg", 0, 4),
+            entry_location(2, 0, "albums/two.jpg", 0, 4),
         ],
     )
     .expect("the same content, handed over sorted");

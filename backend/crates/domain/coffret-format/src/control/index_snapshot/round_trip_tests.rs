@@ -9,7 +9,7 @@ use super::testing::{
     activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, CAPTURED_PATH,
     GENERATION,
 };
-use super::{decode, encode, IndexSnapshotPayload};
+use super::{decode, encode, IndexSnapshotPayload, SCHEMA};
 use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
 use crate::generations::generation;
 
@@ -168,7 +168,7 @@ fn unknown_fields_are_ignored() {
             map.push((Value::from(24u64), Value::from(1u64)));
         }
     }
-    *field(&mut fields, "schema") = Value::from(3u64);
+    *field(&mut fields, "schema") = Value::from(SCHEMA + 1);
 
     let extended = with_body_map(
         payload.master_key_epoch,
@@ -181,8 +181,9 @@ fn unknown_fields_are_ignored() {
 }
 
 // FM-16: a Snapshot's entry map is the catalog's spelling, plus the `container`
-// index that is the Snapshot's own — so `path` and `mtime` without the
-// `captured_` prefix FM-9 gives them, and `btime` for the Entries that have one.
+// index and the `entry` number that are the Snapshot's own — so `path` and
+// `mtime` without the `captured_` prefix FM-9 gives them, and `btime` for the
+// Entries that have one.
 #[test]
 fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
@@ -199,7 +200,8 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
             "mtime",
             "btime",
             "hash",
-            "container"
+            "container",
+            "entry"
         ],
     );
     for (index, entry) in entries.iter().enumerate() {
@@ -219,6 +221,42 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
     let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
     assert_eq!(decoded.content.entries()[BORN_AT].entry.btime, Some(BORN));
     assert_eq!(decoded.content.entries()[BORN_AT + 1].entry.btime, None);
+}
+
+// FM-9, FM-16: each Entry carries its entry number in its Container, which the
+// Snapshot's path order would otherwise lose, and it comes back as it went in.
+#[test]
+fn an_entry_carries_its_entry_number() {
+    let payload = encode(&ordinary()).expect("encoding succeeds");
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
+    let numbers: Vec<u64> = array(&mut fields, "entries")
+        .iter()
+        .map(|entry| {
+            let Value::Map(entry) = entry else {
+                panic!("an entry is a map");
+            };
+            entry
+                .iter()
+                .find(|(key, _)| key.as_text() == Some("entry"))
+                .and_then(|(_, value)| value.as_integer())
+                .and_then(|number| u64::try_from(number).ok())
+                .expect("every entry carries its entry number")
+        })
+        .collect();
+    let expected: Vec<u64> = ordinary()
+        .content
+        .entries()
+        .iter()
+        .map(|location| u64::from(location.entry_number.get()))
+        .collect();
+    assert_eq!(numbers, expected);
+    assert!(
+        numbers.contains(&1),
+        "the sample has an Entry past the first of its Pack"
+    );
+
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(decoded.content.entries(), ordinary().content.entries());
 }
 
 // FM-16: an Entry's captured path travels beside its current one, each under

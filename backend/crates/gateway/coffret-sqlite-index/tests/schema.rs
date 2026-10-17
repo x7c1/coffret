@@ -12,18 +12,18 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build that line falls one layout below the current one. Layout
-//! 14 changed only the catalog: its Entries are filled from Storage objects
-//! whose maps carry field numbers, and the column naming the path an Entry was
-//! captured under is `captured_path`. So a file at layout 13 keeps its device
-//! group and has its catalog discarded and rebuilt from Storage rather than
-//! migrated, which is the one older layout the discard path reaches. Older
-//! layouts from 7 up have their device group upgraded by the adapter's own
-//! provenance step, and the layouts below 7 used here are refused whole and
-//! left exactly as they were, which is what lets their mappings still be read
-//! out of them and recorded again. Where the two edges of the window fall is a
-//! unit case in the adapter's own `schema` module, against a synthetic pair of
-//! versions.
+//! In *this* build that line falls two layouts below the current one. Layouts
+//! 14 and 15 changed only the catalog: layout 14's Entries are filled from
+//! Storage objects whose maps carry field numbers, under a column named
+//! `captured_path`, and layout 15's also carry each Entry's entry number in its
+//! Container. So a file at layout 13 or 14 keeps its device group and has its
+//! catalog discarded and rebuilt from Storage rather than migrated, which are
+//! the older layouts the discard path reaches. Older layouts from 7 up have
+//! their device group upgraded by the adapter's own provenance step, and the
+//! layouts below 7 used here are refused whole and left exactly as they were,
+//! which is what lets their mappings still be read out of them and recorded
+//! again. Where the two edges of the window fall is a unit case in the
+//! adapter's own `schema` module, against a synthetic pair of versions.
 
 use std::path::{Path, PathBuf};
 
@@ -50,7 +50,7 @@ use support::{
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers that decide everything below.
-const SCHEMA_VERSION: i64 = 14;
+const SCHEMA_VERSION: i64 = 15;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -144,20 +144,34 @@ fn restamp(file: &Path, version: i64) {
 /// The layout before this one has its catalog discarded rather than migrated,
 /// and keeps its device-local group whole (spec: RV-5, EP-9, EP-10, OC-2).
 ///
-/// Its catalog was filled from Storage objects in the format this build no
-/// longer reads, under a column this build names otherwise, so nothing of it
-/// is carried forward: the file is stamped as the current layout with an empty
-/// catalog, which the next catch-up rebuilds from Storage, and a warning says
-/// so.
+/// Its catalog holds no entry numbers, and nothing it holds says what they
+/// were, so nothing of it is carried forward: the file is stamped as the
+/// current layout with an empty catalog, which the next catch-up rebuilds from
+/// Storage, and a warning says so.
 #[tokio::test]
 async fn the_layout_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
+    loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 1).await;
+}
+
+/// The layout two below this one, the oldest whose device-local group this
+/// build writes unchanged, takes the same discard (spec: RV-5, EP-9, EP-10,
+/// OC-2): its catalog was filled from Storage objects in a format this build no
+/// longer reads, and it holds no entry numbers either.
+#[tokio::test]
+async fn the_layout_two_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
+    loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 2).await;
+}
+
+/// Opens a file stamped `version`, and checks that its catalog was discarded,
+/// its device group kept, and the file stamped as the current layout.
+async fn loses_its_catalog_and_keeps_its_device_state(version: i64) {
     let scratch = Scratch::new();
     // The stamp alone decides, as it does for every case here: what the
     // catalog's columns were called is not looked at before it is dropped.
-    a_file_stamped(&scratch, SCHEMA_VERSION - 1).await;
+    a_file_stamped(&scratch, version).await;
 
     let logs = CapturedLogs::capture();
-    let index = SqliteIndex::open(scratch.file()).expect("the previous layout must open");
+    let index = SqliteIndex::open(scratch.file()).expect("an older layout in the window must open");
     assert!(
         index
             .checkpoint()

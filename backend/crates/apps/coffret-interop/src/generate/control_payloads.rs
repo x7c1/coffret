@@ -1,9 +1,10 @@
 //! The payloads the fixture set's control objects carry.
 //!
 //! Each is here because it pins something two implementations can disagree
-//! about: a record with additions carrying entry tables and a removal
-//! (spec: FM-15), a Snapshot whose Entries interleave across several Containers
-//! so that the two canonical orders are both exercised, the activation
+//! about: a record with additions carrying entry tables, removals, and renames
+//! naming Entries by Container and entry number (spec: FM-15), a Snapshot whose
+//! Entries interleave across several Containers so that the two canonical
+//! orders are both exercised and each carries its entry number, the activation
 //! Snapshot's two extra fields (spec: FM-16, MR-2), and a Keyring's key table
 //! holding both of the things a Keyring holds for a Container (spec: FM-17).
 //! Every array is handed over out of the canonical order on purpose and put in
@@ -17,9 +18,9 @@
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, IndexCheckpoint,
-    JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment, KeyringElement, MasterKeyEpoch, Mtime,
-    ObjectRef, SnapshotContent,
+    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryRename,
+    IndexCheckpoint, JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment, KeyringElement,
+    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
@@ -69,6 +70,10 @@ fn envelope(seed: u8) -> KeyEnvelope {
 }
 
 /// The record the `journal` fixture carries (spec: FM-15).
+///
+/// It renames three Entries of Containers an earlier record added — two in one
+/// Pack, so the order by entry number travels beside the order by Container —
+/// and one new path is not ASCII, so both sides carry the same NFC bytes.
 pub(super) fn journal_record() -> JournalRecord {
     JournalRecord::canonical(
         generation(JOURNAL_GENERATION),
@@ -85,7 +90,24 @@ pub(super) fn journal_record() -> JournalRecord {
         ],
         vec![container_id(0x99), container_id(0x11)],
     )
+    .and_then(|record| {
+        record.with_renames(vec![
+            rename(0x05, 0, "albums/renamed/first.jpg"),
+            rename(0x05, 3, "albums/renamed/caf\u{e9}.jpg"),
+            rename(0x30, 1, "notes/kept.txt"),
+        ])
+    })
     .expect("the generator's own record is one a commit could have written")
+}
+
+/// The rename of entry `number` of the Container `seed` names to `path`.
+fn rename(seed: u8, number: u32, path: &str) -> EntryRename {
+    EntryRename::new(container_id(seed), entry_number(number), entry_path(path))
+        .expect("the generator's own renames stay outside the reserved namespace")
+}
+
+fn entry_number(number: u32) -> EntryNumber {
+    EntryNumber::new(u64::from(number)).expect("every u32 is an entry number")
 }
 
 /// The Snapshot the `index-snapshot` fixture carries (spec: FM-16).
@@ -114,7 +136,9 @@ pub(super) fn activation_snapshot() -> IndexSnapshotPayload {
 ///
 /// Interleaving is the point: `entries` is in Entry Path order across the whole
 /// Library (spec: EP-3) rather than grouped by Container, so a reader that
-/// grouped them lands somewhere else.
+/// grouped them lands somewhere else. Each Entry carries its number in its
+/// Container's table, and the Pack `0x40` holds two, so a number other than 0
+/// travels.
 fn library(number: u64) -> SnapshotContent {
     let containers = vec![
         summary(0x40, ContainerKind::Pack),
@@ -125,14 +149,14 @@ fn library(number: u64) -> SnapshotContent {
     // carries both spellings of the optional field (spec: FM-16). The same
     // Entry stands at a path other than the one its Container recorded, so the
     // Snapshot carries `captured_path` for it and leaves it out for the rest.
-    let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
+    let mut born = located(0x40, 0, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(Btime::from_unix_seconds(1_600_000_000));
     born.entry.captured_path = entry_path("imports/a.jpg");
     let entries = vec![
-        located(0x33, "photos/2019/b.jpg", 0, 90),
+        located(0x33, 0, "photos/2019/b.jpg", 0, 90),
         born,
-        located(0x21, "books/atlas/page-001.png", 0, 200),
-        located(0x40, "photos/2019/a.jpg", 100, 80),
+        located(0x21, 0, "books/atlas/page-001.png", 0, 200),
+        located(0x40, 1, "photos/2019/a.jpg", 100, 80),
     ];
     SnapshotContent::canonical(
         IndexCheckpoint::at_head(
@@ -198,9 +222,10 @@ fn summary(seed: u8, kind: ContainerKind) -> ContainerSummary {
     }
 }
 
-fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
+fn located(seed: u8, number: u32, path: &str, offset: u64, size: u64) -> EntryLocation {
     EntryLocation {
         container_id: container_id(seed),
+        entry_number: entry_number(number),
         entry: entry(path, offset, size),
     }
 }

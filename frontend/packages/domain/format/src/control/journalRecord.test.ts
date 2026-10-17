@@ -18,6 +18,7 @@ import {
   firstRecord,
   mapAt,
   record,
+  renamedRecord,
   withBodyMap,
   spelledByName,
 } from './payloadSchemas.testing.js';
@@ -31,12 +32,22 @@ function canonical(source: JournalRecord): JournalRecord {
       left.container.id.toHex() < right.container.id.toHex() ? -1 : 1,
     ),
     removals: [...source.removals].sort((left, right) => (left.toHex() < right.toHex() ? -1 : 1)),
+    renames: [...source.renames].sort((left, right) =>
+      left.containerId.toHex() === right.containerId.toHex()
+        ? left.entryNumber - right.entryNumber
+        : left.containerId.toHex() < right.containerId.toHex()
+          ? -1
+          : 1,
+    ),
   };
 }
 
 /** A record payload with one field changed by hand, as a reader meets it. */
-function tampered(change: (map: Map<unknown, unknown>) => void): ControlPayload {
-  const payload = encodeJournalRecord(record());
+function tampered(
+  change: (map: Map<unknown, unknown>) => void,
+  source: JournalRecord = record(),
+): ControlPayload {
+  const payload = encodeJournalRecord(source);
   const map = bodyMap(payload, JOURNAL_RECORD);
   change(map);
   return withBodyMap(payload.masterKeyEpoch, map, JOURNAL_RECORD);
@@ -53,6 +64,36 @@ describe('Journal record payload (spec: FM-15)', () => {
   it('round-trips a record with everything', () => {
     const source = record();
     expect(read(encodeJournalRecord(source))).toEqual(canonical(source));
+  });
+
+  // Each rename comes back as it went in — the Container, the entry number and
+  // the new path, and nothing else, since the old name is the catalog's — in
+  // the order the encoder put them in.
+  it('round-trips a record with renames', () => {
+    const source = renamedRecord();
+    const payload = encodeJournalRecord(source);
+    expect(read(payload)).toEqual(canonical(source));
+
+    const renames = arrayField(bodyMap(payload, JOURNAL_RECORD), 'renames');
+    expect([...mapAt(renames, 0).keys()]).toEqual(['container', 'entry', 'path']);
+    expect(renames.map((rename) => Number((rename as Map<unknown, unknown>).get('entry')))).toEqual([
+      0, 3, 1,
+    ]);
+  });
+
+  // A record that renames nothing leaves `renames` out rather than writing it
+  // empty.
+  it('writes no renames field for a record that renames nothing', () => {
+    const payload = encodeJournalRecord(record());
+    expect([...bodyMap(payload, JOURNAL_RECORD).keys()]).not.toContain('renames');
+  });
+
+  // Libraries created since the field-number format hold records of schema 2,
+  // which carry no `renames`: a reader still takes them, as renaming nothing.
+  it('reads a schema 2 record as one that renames nothing', () => {
+    const decoded = read(tampered((map) => map.set('schema', 2n)));
+    expect(decoded).toEqual(canonical(record()));
+    expect(decoded.renames).toEqual([]);
   });
 
   // An addition's entry table is the catalog's own spelling — `path`, `mtime`,
@@ -232,13 +273,77 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
   });
 
   // FM-15: a reader refuses any schema below the one this build writes.
-  it('refuses a schema below the current one', () => {
-    for (const schema of [0n, JOURNAL_RECORD_SCHEMA - 1n]) {
+  it('refuses a schema below the lowest readable one', () => {
+    for (const schema of [0n, JOURNAL_RECORD_SCHEMA - 2n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => read(payload)), `schema ${schema}`).toBe(
         'unsupported_journal_record_schema',
       );
     }
+  });
+
+  // `renames` is ordered by Container ID and then entry number, across
+  // Containers and within one, and a payload out of it is refused rather than
+  // sorted.
+  it('refuses renames out of order', () => {
+    for (const [one, other] of [
+      [1, 2],
+      [0, 1],
+    ]) {
+      const payload = tampered((map) => {
+        const renames = arrayField(map, 'renames');
+        [renames[one], renames[other]] = [renames[other], renames[one]];
+      }, renamedRecord());
+      expect(errorCode(() => read(payload)), `swap ${one} ${other}`).toBe(
+        'control_payload_out_of_order',
+      );
+    }
+  });
+
+  // `(Container ID, entry number)` names one Entry, so two renames of it in one
+  // record are refused by the same strict order.
+  it('refuses a duplicate rename', () => {
+    const payload = tampered((map) => {
+      mapAt(arrayField(map, 'renames'), 1).set('entry', 0n);
+    }, renamedRecord());
+    expect(errorCode(() => read(payload))).toBe('control_payload_out_of_order');
+  });
+
+  // EP-1, EP-2: a rename's path is a stored Entry Path, refused rather than
+  // repaired when it is not NFC or not in EP-2's shape.
+  it('refuses a rename whose path is not an Entry Path', () => {
+    const unnormalized = tampered((map) => {
+      mapAt(arrayField(map, 'renames'), 0).set('path', 'albums/cafe\u0301.jpg');
+    }, renamedRecord());
+    expect(errorCode(() => read(unnormalized))).toBe('unnormalized_entry_path');
+
+    for (const malformed of ['albums/../etc', '/albums/a.jpg', 'albums//a.jpg', '']) {
+      const payload = tampered((map) => {
+        mapAt(arrayField(map, 'renames'), 0).set('path', malformed);
+      }, renamedRecord());
+      expect(errorCode(() => read(payload)), JSON.stringify(malformed)).toBe(
+        'malformed_entry_path',
+      );
+    }
+  });
+
+  // Derived Entries are not renamed by this version, so no rename gives an Entry
+  // a path in their reserved namespace.
+  it('refuses a rename into the derived namespace', () => {
+    for (const path of ['.coffret-derived/thumb/a.jpg', '.coffret-derived']) {
+      const payload = tampered((map) => {
+        mapAt(arrayField(map, 'renames'), 2).set('path', path);
+      }, renamedRecord());
+      expect(errorCode(() => read(payload)), path).toBe('rename_into_reserved_namespace');
+    }
+  });
+
+  // FM-9: an entry number is a u32.
+  it('refuses a rename whose entry number is past 32 bits', () => {
+    const payload = tampered((map) => {
+      mapAt(arrayField(map, 'renames'), 0).set('entry', 0x1_0000_0000n);
+    }, renamedRecord());
+    expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
   });
 
   it('refuses a missing field', () => {

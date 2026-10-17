@@ -229,6 +229,17 @@ fields until a coordinated implementation changes the format.
     contiguous from offset 0, without gaps or overlaps, and their sizes
     sum to the stream's unpadded length. A decoder rejects a table that
     does not.
+  - The entry table is an ordered array, and a Container is never rewritten,
+    so its order never changes once written. An Entry's **entry number** is
+    its 0-based position in that array: an unsigned integer below 2^32,
+    scoped to one Container, and assigned without gaps in the order the table
+    was written — a Pack's in its freeze's Entry Path order (PK-3), a
+    one-file Container's always 0. `(Container ID, entry number)` names
+    exactly one Entry, whatever path the catalog currently gives it, which is
+    what lets the catalog refer to an Entry without depending on its name
+    (FM-15, FM-16). The number is no field of the meta section: it is the
+    position itself. A reader refuses a reference to an entry number outside
+    the table it names.
   - `offset` and `size` place an Entry against chunk boundaries, which is
     what lets a client tell which parcels of a Pack one Entry overlaps and
     read just those (PK-16, PK-19).
@@ -371,7 +382,7 @@ fields until a coordinated implementation changes the format.
   to unwrap, so envelopes cannot be swapped between Containers.
   *(Form: test)*
 - **FM-15.** A Journal record's payload (kind `0x01`) is a CBOR map with:
-  `schema` (= 2); `prev`, the generation of the control head this record
+  `schema` (= 3); `prev`, the generation of the control head this record
   succeeds, omitted at generation 0 where there is none; `next_commit_slot`
   and `snapshot_slot`, each the Storage's own opaque token for the slot the
   record reserves — the successor's slot (CP-2) and this head's ordinary
@@ -381,8 +392,11 @@ fields until a coordinated implementation changes the format.
   the committed Keyring tuple this commit selects (CP-10, KL-3) — the digest
   as the lowercase hex text a replica's name carries it in (FM-12) rather
   than as the bytes that text spells, so one digest has one spelling wherever
-  it travels; `additions`, an array of the Containers the batch added; and
-  `removals`, an array of 16-byte Container IDs the batch removed (CP-14).
+  it travels; `additions`, an array of the Containers the batch added;
+  `removals`, an array of 16-byte Container IDs the batch removed (CP-14); and
+  `renames`, an array of the Entries the batch gave a new current Entry Path,
+  absent where it renames nothing. Beside the Keyring commitment those are the
+  record's four vocabularies.
   The header carries the record's own generation and the payload carries
   `master_key_epoch` (FM-11, FM-13), so neither is repeated here. Every
   field, at every level, is carried under the field number the registry gives
@@ -395,9 +409,9 @@ fields until a coordinated implementation changes the format.
     carries none. A reader rejects anything else — a `prev` naming another
     head, a missing one above generation 0, and a `prev` on the record at
     generation 0.
-  - `additions` and `removals` may both be empty. The record at generation 0
-    always is such a record: written when the Library is created, it commits
-    nothing but the slot it carries (CP-2).
+  - `additions` and `removals` may both be empty and `renames` absent. The
+    record at generation 0 always is such a record: written when the Library
+    is created, it commits nothing but the slot it carries (CP-2).
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
@@ -444,6 +458,37 @@ fields until a coordinated implementation changes the format.
     committing the same batch produce the same map, and a record does not
     change its bytes because a writer held its additions in a different
     order.
+  - Because an addition's `entries` keep the order of the Container's entry
+    table, each one carries its entry number implicitly, by its position
+    (FM-9): the first is number 0, and so on without gaps. No field states
+    it.
+  - Each element of `renames` is a map of `container` (the 16-byte Container
+    ID), `entry` (the entry number, FM-9), and `path` (the Entry's new current
+    Entry Path, NFC per EP-1). The path it leaves is not carried: the catalog
+    holds it, and a second copy would be a second statement that could
+    disagree.
+  - `renames` is ordered by Container ID, compared as the 16 raw bytes, and
+    then by entry number, and no two elements name the same
+    `(Container ID, entry number)`. Every `path` is a valid Entry Path (EP-1,
+    EP-2) and does not lie under the top-level component `.coffret-derived`,
+    which coffret reserves for derived Entries. A reader refuses a payload
+    that breaks any of these, as below, since the record alone shows each.
+  - The rest of `renames`' rules depend on the catalog the record is applied
+    to, and are held where it is applied: a record that breaks one is refused
+    there whole, and none of it is applied. Each element names a Container that
+    is current immediately before the record and is not among the same
+    record's `removals`, and an entry number inside that Container's table;
+    the Entry it names is not a derived Entry, since derived Entries are not
+    renamed by this version; and its `path` differs from the Entry's current
+    path. The state after the record — its removals taken out, all its renames
+    applied at once, its additions added — satisfies EP-5, so a swap of two
+    names is one valid record. A record's own additions write their own
+    `path` and are never targets of its renames. A rename changes the Entry's
+    current path alone: its captured path is what its Container recorded and
+    stays so, which is why an Entry that stood at its captured path carries
+    the path it leaves as its `captured_path` afterwards. An Entry renamed
+    back to its captured path carries no `captured_path` afterwards, by the
+    present-if-and-only-if-it-differs rule above.
   - A reader verifies those orders and rejects a payload that is not in them
     rather than sorting it into shape: a record that arrived out of order was
     written by something that does not follow this rule, and repairing it
@@ -451,8 +496,10 @@ fields until a coordinated implementation changes the format.
     circulation.
   - The maps are forward-open on FM-9's terms: a reader ignores fields it
     does not know, adding a field only increments `schema`, and a reader
-    accepts any `schema` of 2 or above and rejects anything lower.
-- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 2);
+    accepts any `schema` of 2 or above and rejects anything lower. A record of
+    schema 2 predates `renames` and reads as one that renames nothing;
+    Libraries created since field numbers hold such records.
+- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 3);
   the checkpoint the Snapshot stands at — `head_generation`,
   `journal_generation`, `next_commit_slot` (the same opaque token FM-15
   spells, absent where the name is the slot), `keyring_generation`,
@@ -463,7 +510,8 @@ fields until a coordinated implementation changes the format.
   array of every current Entry, each element the entry map an addition carries
   — `path`, `mtime`, optional `btime`, and FM-9's optional `captured_path`,
   `offset`, `size`, `hash`, optional `mime`, and optional `derived_from` — plus
-  `container`, the 0-based index of the owning element of `containers`. A
+  `container`, the 0-based index of the owning element of `containers`, and
+  `entry`, the Entry's entry number in that Container (FM-9). A
   Snapshot is a checkpoint of the catalog, so it spells those three the
   catalog's way, and carries `captured_path` where it differs from `path`,
   for the reasons FM-15 gives. The
@@ -475,6 +523,18 @@ fields until a coordinated implementation changes the format.
   - An Entry names its Container by index rather than by ID because a Library
     holds far more Entries than Containers, and the 16-byte ID would
     otherwise be repeated once per Entry.
+  - `entry` is carried because `entries` is in Entry Path order, which loses
+    the position an addition carried implicitly (FM-15). No two elements name
+    the same `(Container ID, entry number)`, and a reader rejects a Snapshot
+    of schema 3 or above whose element lacks `entry`.
+  - A Snapshot of schema 2 predates `entry`, and nothing a reader holds says
+    what each Entry's number was: path order is not table order. So a reader
+    does not use a schema-2 Snapshot for entry numbers and does not adopt it
+    as a starting point (CK-9). It starts from an older checkpoint that
+    carries the numbers, or rebuilds the catalog by replaying every Journal
+    record from `head-0` — exact for as long as the Journal is unpruned, as it
+    is while no implementation prunes (RV-1). It never guesses a number from
+    path order.
   - `containers` is ordered by Container ID and `entries` by the canonical
     UTF-8 bytes of the Entry Path (EP-3), so one Library state has one
     encoding and a reader can answer a prefix range over `entries` by binary
@@ -507,7 +567,9 @@ fields until a coordinated implementation changes the format.
     encoded and a decoded Snapshot reports none.
   - `captured_path` is present if and only if it differs from `path`, and a
     reader rejects one present and equal, as FM-15 has it for a record.
-  - The maps are forward-open on FM-9's terms, as FM-15's are.
+  - The maps are forward-open on FM-9's terms, as FM-15's are, and a reader
+    adopts a Snapshot of `schema` 3 or above, refuses one of schema 2 as a
+    starting point as above, and rejects anything lower.
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
   `schema` (= 1); and `mapping`, the generation's complete **key table** from
   every current Container to the key status the committed control state records

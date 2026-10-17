@@ -38,6 +38,8 @@ export type CoffretErrorCode =
   | 'entry_table_not_contiguous'
   // An Entry Path in a decoded entry table is not NFC (spec: EP-1).
   | 'unnormalized_entry_path'
+  // An Entry Path a decoded object carries is not in the shape EP-2 spells.
+  | 'malformed_entry_path'
   | 'stream_too_long'
   | 'plaintext_length_mismatch'
   | 'non_zero_padding'
@@ -83,6 +85,13 @@ export type CoffretErrorCode =
   | 'activation_field_on_ordinary_snapshot'
   | 'activation_snapshot_field_missing'
   | 'not_an_index_snapshot_kind'
+  // A Snapshot of schema 2 carries no entry numbers, so no catalog may start
+  // from it; a reader replays the Journal instead (spec: FM-16).
+  | 'snapshot_predates_entry_numbers'
+  // Two Snapshot entries name one Container and entry number (spec: FM-16).
+  | 'snapshot_names_one_entry_twice'
+  // A rename gives an Entry a path in the derived namespace (spec: FM-15).
+  | 'rename_into_reserved_namespace'
   // Stored Master Key
   | 'unknown_stored_master_key_magic'
   | 'unsupported_stored_master_key_version'
