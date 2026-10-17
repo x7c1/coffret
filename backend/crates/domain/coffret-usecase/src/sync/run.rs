@@ -5,6 +5,7 @@ use crate::commit::catch_up;
 use crate::departure::{discard_departed, EmptiedFolders};
 use crate::progress::{Phase, Step};
 use crate::relocate::{relocate_waiting, LocalDisk, Relocation};
+use crate::rename::RenamedPath;
 use crate::spooled_container::commit_spooled;
 use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
@@ -74,6 +75,14 @@ use crate::upload;
 /// the new path — is left where it stands and reported in
 /// [`SyncOutcome::relocations`], and the next run tries again (spec: EP-10).
 ///
+/// A file this device materialized that is gone, paired with the one file that
+/// appeared under the same mapped root holding exactly its Entry's content, is
+/// a file renamed on disk: the batch renames the Entry to where the file now
+/// stands, uploads nothing for it, and reports it in [`SyncOutcome::renamed`]
+/// rather than as a deletion and an addition. A pair the Library would refuse
+/// to rename is read as those two instead, and the refusal is reported beside
+/// them (spec: EP-10, FM-15).
+///
 /// A file this device materialized whose Entry has since left the Library is
 /// not carried back in as new (spec: EP-15). One that still holds what this
 /// device last made it match is discarded into the desktop's trash and its row
@@ -82,10 +91,10 @@ use crate::upload;
 /// what refused it, and is tried again by the next run — and fails nothing
 /// else.
 ///
-/// A run with nothing to upload commits nothing rather than committing an empty
-/// batch: a Journal record is a generation, and creating one for a batch that
-/// changes no Container would make every device replay a record that says
-/// nothing (spec: CP-1).
+/// A run with nothing to upload or rename commits nothing rather than
+/// committing an empty batch: a Journal record is a generation, and creating
+/// one for a batch that changes nothing would make every device replay a record
+/// that says nothing (spec: CP-1).
 ///
 /// The spools of a committed batch are removed at the end, and a removal that
 /// fails there is recorded and not raised. The Library has already changed and
@@ -220,6 +229,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
 
     // Nothing to speak for: a sync never reads the committed Keyring, so it
     // carries no finding about it into the commit.
+    let renames = std::mem::take(&mut survey.renames);
     let commit = commit_spooled(
         store,
         index,
@@ -229,10 +239,31 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         base,
         &spooled,
         &[],
+        renames.clone(),
         None,
         progress,
     )
     .await?;
+    let renamed: Vec<RenamedPath> = renames
+        .into_iter()
+        .map(|rename| RenamedPath {
+            from: rename.from,
+            to: rename.path,
+        })
+        .collect();
+    if commit.is_some() && !renamed.is_empty() {
+        // The record has given each Entry the path its file already stands at,
+        // so the record of the file follows it there and waits for nothing.
+        // Only after the commit: before it the Entry stood at the old path. An
+        // interruption between the two leaves the file at the new path agreeing
+        // with the old record, which the next run's relocation re-keys without
+        // renaming anything (spec: EP-10).
+        let rekeyed: Vec<_> = renamed
+            .iter()
+            .map(|one| (one.from.clone(), one.to.clone()))
+            .collect();
+        index.relocate_local_entries(&rekeyed).await?;
+    }
     if commit.is_some() {
         // The commit's refresh has already dropped their pending rows
         // (spec: OC-2), so the ciphertext on this device is the last thing
@@ -257,6 +288,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .iter()
             .flat_map(|container| container.replaces.iter().copied())
             .collect(),
+        renamed,
         unchanged: survey.unchanged,
         // Read here rather than taken from the scan, because it is an answer
         // about the device and not about what this run walked: a device that
@@ -292,6 +324,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     info!(
         added = outcome.added.len(),
         replaced = outcome.replaced.len(),
+        renamed = outcome.renamed.len(),
         unchanged = outcome.unchanged,
         // A count and nothing else: a mapping names a prefix and a local root,
         // and neither may reach a diagnostic event.

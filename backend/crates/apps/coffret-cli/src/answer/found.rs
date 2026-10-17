@@ -216,5 +216,7 @@ fn reason_name(reason: &FindingReason) -> &'static str {
         FindingReason::Relocated { .. } => "Relocated",
         FindingReason::RelocationDiscarded { .. } => "RelocationDiscarded",
         FindingReason::RelocationRefused { .. } => "RelocationRefused",
+        FindingReason::Renamed { .. } => "Renamed",
+        FindingReason::RenameRefused { .. } => "RenameRefused",
     }
 }

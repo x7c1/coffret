@@ -36,7 +36,8 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 - cache (the Catalog in an Index)
 - commit (a change to the Catalog through the Journal)
 - checkpoint (the Catalog in an Index Snapshot)
-- rename (an Entry, changing its current Entry Path)
+- rename (an Entry, changing its current Entry Path) — from the command line,
+  or by a sync carrying a file renamed on disk
 
 ## Domain Rules
 
@@ -88,7 +89,10 @@ does so right after the commit; until it can, the file stays where it was
 placed, and the device neither carries it in as a new file nor treats it as
 deleted (spec: EP-10). A rename is written as one record naming every Entry
 it renames, and no Container is replaced or uploaded for it
-(see [Library](../library/#domain-rules)).
+(see [Library](../library/#domain-rules)). A sync may write renames too: where
+a person renamed on disk a file this device placed, and no other file the sync
+scanned holds that content, the sync renames its Entry in the record that
+carries the rest of its batch (spec: EP-10).
 
 ## Related Concepts
 

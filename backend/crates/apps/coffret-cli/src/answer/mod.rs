@@ -151,7 +151,9 @@ answer, per command:
   mappings       mappings (prefix and local_root each; the root's prefix
                  is null), refused (an error, where the Index could not be
                  opened and the mappings were read out of the file)
-  sync           added, replaced, unchanged, committed_head, mappings
+  sync           added, replaced, renamed (files renamed on disk carried in
+                 as renames of their Entries, each also a \"Renamed\"
+                 finding), unchanged, committed_head, mappings
   freeze         packs, entries, absorbed, packed_already, committed_head,
                  mappings
   fetch          fetched, containers, skipped, mappings; with --entry,

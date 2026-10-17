@@ -4,7 +4,7 @@ use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, S
 use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
-use coffret_usecase::rename::RenameOutcome;
+use coffret_usecase::rename::{RenameOutcome, RenamedPath};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
 
@@ -85,6 +85,7 @@ impl From<&SyncOutcome> for Findings {
                 .relocations
                 .iter()
                 .map(relocation)
+                .chain(outcome.renamed.iter().map(renamed))
                 .chain(outcome.surfaced.iter().map(surfaced))
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
@@ -255,10 +256,34 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
                 cause: cause.clone(),
             },
         ),
+        Surfaced::RenameRefused {
+            path,
+            from,
+            refusal,
+        } => (
+            path,
+            FindingReason::RenameRefused {
+                from: from.clone(),
+                refusal: refusal.clone(),
+            },
+        ),
     };
     Finding::Surfaced {
         path: path.clone(),
         reason,
+    }
+}
+
+/// The finding for one file a sync found renamed on disk and carried into the
+/// Library as a rename of its Entry (spec: EP-10).
+///
+/// Said about where the file stands now, which is where the Entry stands too.
+fn renamed(renamed: &RenamedPath) -> Finding {
+    Finding::Surfaced {
+        path: renamed.to.clone(),
+        reason: FindingReason::Renamed {
+            from: renamed.from.clone(),
+        },
     }
 }
 
@@ -410,6 +435,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: vec![Surfaced::DeletedLocally {
@@ -460,6 +486,7 @@ mod tests {
             ],
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: Vec::new(),
@@ -504,6 +531,66 @@ mod tests {
         );
     }
 
+    // EP-10: a file renamed on disk and carried in as a rename of its Entry is
+    // said from the old path to the new one, as work done; a pair whose rename
+    // was refused is said with the refusal, beside the deletion it fell back to.
+    #[test]
+    fn a_detected_rename_is_said_from_the_old_path_to_the_new() {
+        let outcome = SyncOutcome {
+            relocations: Vec::new(),
+            added: Vec::new(),
+            replaced: Vec::new(),
+            renamed: vec![RenamedPath {
+                from: entry_path("inbox/a.jpg"),
+                to: entry_path("albums/a.jpg"),
+            }],
+            unchanged: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: None,
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(!findings.needs_attention(), "work done needs nobody");
+        assert_eq!(
+            findings.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            [
+                "renamed inbox/a.jpg → albums/a.jpg: this device's file of inbox/a.jpg was \
+                 renamed here, and its Entry was renamed to follow it without uploading anything"
+            ]
+        );
+
+        let refused = SyncOutcome {
+            renamed: Vec::new(),
+            surfaced: vec![
+                Surfaced::RenameRefused {
+                    path: entry_path("x/y.jpg"),
+                    from: entry_path("b.jpg"),
+                    refusal: coffret_usecase::rename::RenameRefusal::FileAndFolder {
+                        path: entry_path("x"),
+                    },
+                },
+                Surfaced::DeletedLocally {
+                    path: entry_path("b.jpg"),
+                },
+            ],
+            ..outcome
+        };
+        let findings = Findings::from(&refused);
+        assert!(findings.needs_attention(), "the deletion needs somebody");
+        assert_eq!(
+            findings.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            [
+                "surfaced x/y.jpg: it holds what this device's file of b.jpg held before that \
+                 file went, and renaming that Entry here was refused (the rename would make \
+                 \"x\" both a file and a folder); it is carried in as a new file instead",
+                "surfaced b.jpg: this device had it and it is gone from disk",
+            ]
+        );
+    }
+
     // EP-15's discarded copy is said as what was done, and still
     // opens on a kind word of its own, as every other finding does: the line is
     // what a script reading the CLI's `said` splits on.
@@ -513,6 +600,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: vec![Surfaced::Discarded {
@@ -547,6 +635,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: Vec::new(),
@@ -648,6 +737,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 3,
             mappings: 1,
             surfaced: Vec::new(),
@@ -759,6 +849,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: Vec::new(),
@@ -1160,6 +1251,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings: 1,
             surfaced: Vec::new(),

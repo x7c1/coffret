@@ -2,6 +2,7 @@ use coffret_model::ContainerId;
 
 use crate::commit::CommitOutcome;
 use crate::relocate::Relocation;
+use crate::rename::RenamedPath;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
@@ -33,6 +34,14 @@ pub struct SyncOutcome {
     /// rewritten, so nothing here also appears in [`added`](Self::added): a
     /// removed Container ID is never added again (spec: CP-14, PK-15).
     pub replaced: Vec<ContainerId>,
+    /// The files this device materialized that were renamed on disk and that
+    /// this run carried into the Library as renames of their Entries, in the
+    /// order of the path each left (spec: EP-10).
+    ///
+    /// No Container was uploaded for any of them: the commit gave each Entry
+    /// the path its file stands at, and this device's record of the file
+    /// follows it there. Empty unless [`commit`](Self::commit) is `Some`.
+    pub renamed: Vec<RenamedPath>,
     /// How many files were found unchanged.
     ///
     /// Both shapes of unchanged: a file whose length and modification time are

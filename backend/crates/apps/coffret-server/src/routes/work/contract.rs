@@ -117,6 +117,21 @@ fn every_finding() -> Vec<Finding> {
                 reason: coffret_device::RelocationRefused::DestinationTaken,
             },
         },
+        Found::Surfaced {
+            path: entry_path("albums/e.jpg"),
+            reason: FindingReason::Renamed {
+                from: entry_path("inbox/e.jpg"),
+            },
+        },
+        Found::Surfaced {
+            path: entry_path("x/f.jpg"),
+            reason: FindingReason::RenameRefused {
+                from: entry_path("inbox/f.jpg"),
+                refusal: coffret_device::RenameRefusal::FileAndFolder {
+                    path: entry_path("x"),
+                },
+            },
+        },
         unavailable(RootUnavailable::Missing),
         unavailable(RootUnavailable::AnotherFilesystem),
         Found::RefusedRoot {

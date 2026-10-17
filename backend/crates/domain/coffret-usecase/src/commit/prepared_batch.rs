@@ -59,7 +59,9 @@ impl PreparedBatch {
     /// The same batch, renaming `renames` as well.
     ///
     /// How a rename hands over the Entries it renames
-    /// ([`rename_entries`](crate::rename::rename_entries)).
+    /// ([`rename_entries`](crate::rename::rename_entries)), and how a sync
+    /// hands over the renames it detected on disk beside its uploads
+    /// ([`sync_folders`](crate::sync::sync_folders)).
     pub fn renaming(mut self, renames: Vec<PendingRename>) -> Self {
         self.renames = renames;
         self

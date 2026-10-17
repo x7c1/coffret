@@ -146,7 +146,9 @@ fn departed(outcome: &SyncOutcome) -> (Vec<&EntryPath>, Vec<&EntryPath>, Vec<&En
             Surfaced::Discarded { path } => discarded.push(path),
             Surfaced::KeptEdited { path } => kept.push(path),
             Surfaced::DiscardRefused { path, .. } => refused.push(path),
-            Surfaced::PackResident { .. } | Surfaced::DeletedLocally { .. } => {}
+            Surfaced::PackResident { .. }
+            | Surfaced::DeletedLocally { .. }
+            | Surfaced::RenameRefused { .. } => {}
         }
     }
     (discarded, kept, refused)

@@ -11,6 +11,9 @@ use super::committed_head;
 pub struct Synced {
     added: usize,
     replaced: usize,
+    /// The files renamed on disk that the run carried in as renames of their
+    /// Entries, each said once more as a finding of its own.
+    renamed: usize,
     unchanged: usize,
     committed_head: Option<u64>,
     mappings: usize,
@@ -21,6 +24,7 @@ impl From<&SyncOutcome> for Synced {
         Self {
             added: outcome.added.len(),
             replaced: outcome.replaced.len(),
+            renamed: outcome.renamed.len(),
             unchanged: outcome.unchanged,
             committed_head: committed_head(outcome.commit.as_ref()),
             mappings: outcome.mappings,

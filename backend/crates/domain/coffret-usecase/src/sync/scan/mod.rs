@@ -16,6 +16,9 @@ use deletions::deletions;
 mod examine;
 use examine::examine;
 
+mod renames;
+use renames::pair_renames;
+
 /// Walks the device's mapped folders and works out what has to happen.
 ///
 /// The comparison is the cheap one first and the expensive one only where it
@@ -39,6 +42,12 @@ use examine::examine;
 /// this step's own write rather than the walk's — [`LocalError`] has no
 /// vocabulary for a port failure and must not grow one for this, while this step
 /// already writes through the port for the observations it refreshes.
+///
+/// A file this device materialized that is gone, and a file that appeared under
+/// the same mapped root holding exactly its Entry's content, are one file
+/// renamed where nothing else the scan knows of holds that content: the pair
+/// becomes a rename of the Entry rather than a deletion and an upload, held to
+/// the rules a rename is (spec: EP-10, FM-15).
 ///
 /// [`LocalError`]: crate::local_error::LocalError
 pub(super) async fn scan(
@@ -83,7 +92,9 @@ pub(super) async fn scan(
             .and_then(|root| root.mapping.expected_root_id);
         examine(index, roots, &kinds, now, source, expected, &mut survey).await?;
     }
-    deletions(index, &walked, &found, &mut survey).await?;
+    let deletions = deletions(index, &walked, &found, &mut survey).await?;
+    // Once both halves are known: what is gone, and what appeared (spec: EP-10).
+    pair_renames(index, roots, deletions, &mut survey).await?;
     survey.unavailable = unavailable_roots(&walked);
 
     // Counts only: a prefix is an Entry Path component and a local root is a
@@ -92,6 +103,7 @@ pub(super) async fn scan(
         mappings = mappings.len(),
         files = found.len(),
         candidates = survey.candidates.len(),
+        renames = survey.renames.len(),
         unchanged = survey.unchanged,
         surfaced = survey.surfaced.len(),
         departed = survey.departed.len(),

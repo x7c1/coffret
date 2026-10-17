@@ -3,6 +3,7 @@ use std::sync::Arc;
 use coffret_model::{ContainerId, EntryPath};
 
 use crate::descent_error::DescentError;
+use crate::rename::RenameRefusal;
 
 /// A file the sync found needing work it does not do, or a file whose Entry
 /// left the Library and what the sync did about the copy on this device.
@@ -89,6 +90,23 @@ pub enum Surfaced {
         /// reported, never changed.
         cause: Arc<DescentError>,
     },
+    /// A file this device materialized is gone, and the file that appeared in
+    /// its place holds exactly its Entry's content, but renaming the Entry to
+    /// where that file stands is a rename the Library refuses (spec: EP-10,
+    /// FM-15).
+    ///
+    /// So the two are what they would have been had the scan not paired them:
+    /// the file that appeared is carried in as new, and the one that is gone is
+    /// reported deleted locally beside this finding. This is what says why the
+    /// rename was not carried instead.
+    RenameRefused {
+        /// Where in the Library the file that appeared stands.
+        path: EntryPath,
+        /// Where the Entry whose file is gone stands.
+        from: EntryPath,
+        /// What a rename from `from` to `path` is refused for.
+        refusal: RenameRefusal,
+    },
 }
 
 impl Surfaced {
@@ -99,7 +117,8 @@ impl Surfaced {
             | Self::DeletedLocally { path }
             | Self::Discarded { path }
             | Self::KeptEdited { path }
-            | Self::DiscardRefused { path, .. } => path,
+            | Self::DiscardRefused { path, .. }
+            | Self::RenameRefused { path, .. } => path,
         }
     }
 }

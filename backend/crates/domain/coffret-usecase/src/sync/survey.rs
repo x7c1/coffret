@@ -1,5 +1,6 @@
 use coffret_model::EntryPath;
 
+use crate::commit::PendingRename;
 use crate::departure::Departed;
 use crate::device_state::LocalObservation;
 use crate::sync::candidate::Candidate;
@@ -17,6 +18,13 @@ use crate::unavailable_root::UnavailableRoot;
 pub(super) struct Survey {
     /// The files to encode, in Entry Path order.
     pub(super) candidates: Vec<Candidate>,
+    /// The files this device materialized that were renamed on disk, each a
+    /// rename of its Entry to the path its file stands at now, in the order of
+    /// the path it left (spec: EP-10).
+    ///
+    /// None of them is among [`candidates`](Self::candidates) or reported as
+    /// deleted locally: the file is the Entry's, and only its name changed.
+    pub(super) renames: Vec<PendingRename>,
     /// What to write down about files this run found unchanged after reading
     /// them: they were touched, so the length and modification time this device
     /// last saw are stale even though the content is not (spec: EP-10).

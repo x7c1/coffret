@@ -64,6 +64,7 @@ mod tests {
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
+            renamed: Vec::new(),
             unchanged: 0,
             mappings,
             surfaced: Vec::new(),

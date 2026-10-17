@@ -334,6 +334,14 @@ fn said(reason: &FindingReason) -> &'static str {
              unedited copy was discarded into the trash"
         }
         FindingReason::RelocationRefused { reason, .. } => relocation_refused(reason),
+        FindingReason::Renamed { .. } => {
+            "this device's file was renamed here, and its Entry was renamed to follow it without \
+             uploading anything"
+        }
+        FindingReason::RenameRefused { .. } => {
+            "a file this device had put in place is gone and this file holds exactly its content, \
+             but renaming its Entry here was refused, so this file is carried in as a new one"
+        }
     }
 }
 
@@ -418,6 +426,10 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         FindingReason::Relocated { .. } => ("surfaced", "Relocated"),
         FindingReason::RelocationDiscarded { .. } => ("surfaced", "RelocationDiscarded"),
         FindingReason::RelocationRefused { .. } => ("surfaced", "RelocationRefused"),
+        // The two a sync reports about a file renamed on disk, which no
+        // declined fetch names either.
+        FindingReason::Renamed { .. } => ("surfaced", "Renamed"),
+        FindingReason::RenameRefused { .. } => ("surfaced", "RenameRefused"),
     }
 }
 
@@ -746,7 +758,16 @@ mod tests {
                         reason: coffret_device::RelocationRefused::Edited,
                     })
                 }
-                FindingReason::RelocationRefused { .. } => unavailable(RootUnavailable::Missing),
+                FindingReason::RelocationRefused { .. } => surfaced(FindingReason::Renamed {
+                    from: entry_path("inbox/a.jpg"),
+                }),
+                FindingReason::Renamed { .. } => surfaced(FindingReason::RenameRefused {
+                    from: entry_path("inbox/a.jpg"),
+                    refusal: coffret_device::RenameRefusal::FileAndFolder {
+                        path: entry_path("albums"),
+                    },
+                }),
+                FindingReason::RenameRefused { .. } => unavailable(RootUnavailable::Missing),
             }),
             Finding::UnavailableRoot { reason, .. } => Some(match reason {
                 RootUnavailable::Missing => unavailable(RootUnavailable::AnotherFilesystem),

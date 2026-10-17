@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_model::EntryPath;
+use coffret_usecase::rename::RenameRefusal;
 use coffret_usecase::{DescentError, RelocationRefused};
 
 use crate::finding::chained;
@@ -147,6 +148,28 @@ pub enum FindingReason {
         /// Why the file was not relocated.
         reason: RelocationRefused,
     },
+    /// A file this device had put in place was renamed on disk, and the sync
+    /// carried that into the Library as a rename of its Entry to the path the
+    /// file stands at now, uploading nothing (spec: EP-10).
+    ///
+    /// Work done rather than work left: nobody has to act on it.
+    Renamed {
+        /// Where the Entry, and the file, stood before.
+        from: EntryPath,
+    },
+    /// A file this device had put in place is gone, and the file standing here
+    /// holds exactly its Entry's content, but renaming that Entry here is a
+    /// rename the Library refuses (spec: EP-10, FM-15).
+    ///
+    /// So the file here was carried in as new, and the one that is gone is
+    /// reported deleted locally as well; this says why the rename was not
+    /// carried instead.
+    RenameRefused {
+        /// Where the Entry whose file is gone stands.
+        from: EntryPath,
+        /// What the rename was refused for.
+        refusal: RenameRefusal,
+    },
 }
 
 impl fmt::Display for FindingReason {
@@ -217,6 +240,23 @@ impl fmt::Display for FindingReason {
                      it ({}); it is left here, and the next run tries again",
                     to.as_str(),
                     chained(reason),
+                );
+            }
+            Self::Renamed { from } => {
+                return write!(
+                    f,
+                    "this device's file of {} was renamed here, and its Entry was renamed to \
+                     follow it without uploading anything",
+                    from.as_str(),
+                );
+            }
+            Self::RenameRefused { from, refusal } => {
+                return write!(
+                    f,
+                    "it holds what this device's file of {} held before that file went, and \
+                     renaming that Entry here was refused ({refusal}); it is carried in as a new \
+                     file instead",
+                    from.as_str(),
                 );
             }
             // The one reason with something of its own to name. Which folder it

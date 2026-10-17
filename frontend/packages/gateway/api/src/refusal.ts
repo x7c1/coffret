@@ -274,7 +274,20 @@ export type SurfacedFinding =
    * something else stands at the new path — and is left where it is. The
    * next sync or fetch tries again.
    */
-  | 'RelocationRefused';
+  | 'RelocationRefused'
+  /**
+   * A file this device had put in place was renamed on disk, and the sync
+   * carried that into the Library as a rename of its Entry, uploading nothing.
+   * Work done: nobody has to act on it.
+   */
+  | 'Renamed'
+  /**
+   * The file holds exactly what a file this device had put in place held
+   * before that file went, but renaming that Entry here is a rename the Library
+   * refuses, so the file was carried in as a new one and the other is reported
+   * deleted locally.
+   */
+  | 'RenameRefused';
 
 /**
  * What a placement under a folder this device has no folder for is told as
