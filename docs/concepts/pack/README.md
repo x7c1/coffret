@@ -113,7 +113,9 @@ the Entry count — decides `freeze` eligibility.
   is, since Pack path ranges overlap (spec: PK-8, PK-9). A Pack left with
   nothing is removed; one that keeps Entries is rebuilt by read-modify-replace,
   which reads and verifies the whole old Pack and carries the kept Entries
-  forward with what it recorded about them, in their order (spec: PK-10). A
+  forward with the times and hash it recorded for them, in their order, each
+  under its current Entry Path:
+  a rewrite captures the name current at the rewrite (spec: PK-10, FM-15). A
   Pack that cannot be read — one whose key is lost among them — is never
   rebuilt with part of its Entries invented or dropped: the deletion is
   refused for that Pack and reported (spec: PK-10, KL-17).

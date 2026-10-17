@@ -58,7 +58,9 @@ the Container's [Key Envelope](../key-envelope/) from the
     FM-15).
   - The entry table's order never changes once written. An Entry's 0-based
     position in it is its **entry number**, which with the Container ID names
-    one Entry whatever its current path (spec: FM-9).
+    one Entry whatever its current path (spec: FM-9). A reader finds an Entry
+    in the table by that number, never by the captured path the table
+    records, and a fetch places it at its current path (spec: EP-11, PK-10).
 - **Opaque**: a Container's name is drawn independently of its content, so it
   names nothing about what is inside (spec: FM-3). What the provider still
   sees despite opaque naming is listed under

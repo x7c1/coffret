@@ -308,6 +308,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
             meta_len: None,
             short_by: None,
             misrecorded: false,
+            unheld: None,
         },
     )
     .await;
@@ -438,6 +439,7 @@ pub async fn a_header_placing_chunks_past_its_object_is_not_asked_again(fixture:
             // one Entry needs ends a byte past the object.
             short_by: Some(1),
             misrecorded: false,
+            unheld: None,
         },
     )
     .await;

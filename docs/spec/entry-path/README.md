@@ -179,6 +179,16 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   reader ever observes a partial or unverified file. Every Entry a fetch
   declines to place is reported with the reason it was declined, on the same
   no-silent-selection posture EP-4 sets. *(Form: test)*
+  - A fetch finds the Entry in its Container's entry table by its entry
+    number (FM-9) and places the bytes at the Entry's current path. It never
+    finds an Entry by path: the table records the path the Entry was captured
+    under, which a rename leaves behind (FM-15), so a path lookup would miss a
+    renamed Entry or, after two Entries swapped names, find the other one.
+    This holds for a whole read and a parcel read alike (PK-16), and for the
+    other Entries a parcel read places alongside the one asked for. An entry
+    number outside the table is refused (FM-9), with no lookup by path in its
+    place, and the bytes found at the number are still held to the hash the
+    current catalog records for the Entry.
   - Writes and reads use the same confinement boundary. A fetch creates and
     publishes against directory handles reached below the mapped root without
     following links. A later local read, including the explorer's file route,

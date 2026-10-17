@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 
 use coffret_format::{ContainerOutline, Parcels};
-use coffret_model::{ContainerId, EntryMetadata, EntryPath};
+use coffret_model::{ContainerId, EntryMetadata, EntryNumber};
 
 use crate::device_state::HeldParcel;
 use crate::fetch::fetch_error::FetchResult;
@@ -27,9 +27,13 @@ impl ParcelRead<'_> {
         asked: &Member,
         held: &BTreeMap<u64, HeldParcel>,
     ) -> FetchResult<Vec<Member>> {
-        let mut covered: BTreeMap<EntryPath, (EntryMetadata, Range<u64>)> = BTreeMap::new();
-        for entry in outline.entries() {
-            if &entry.path == asked.target.path() {
+        // By entry number, which is how the catalog and the table name the
+        // same Entry: the table records the path each was captured under, and
+        // a rename gives an Entry a current path the table never records
+        // (spec: FM-9, FM-15).
+        let mut covered: BTreeMap<EntryNumber, (EntryMetadata, Range<u64>)> = BTreeMap::new();
+        for (number, entry) in outline.numbered_entries() {
+            if number == asked.target.location.entry_number {
                 continue;
             }
             let range = parcels.overlapping(outline, &entry.extent)?;
@@ -37,16 +41,25 @@ impl ParcelRead<'_> {
                 .clone()
                 .all(|index| asked.parcels.contains(&index) || held.contains_key(&index))
             {
-                covered.insert(entry.path.clone(), (entry.clone(), range));
+                covered.insert(number, (entry.clone(), range));
             }
         }
+        if covered.is_empty() {
+            return Ok(Vec::new());
+        }
 
+        // Where the catalog holds each covered Entry now. One the catalog does
+        // not hold in this Container is in another one now, or nowhere: not a
+        // companion.
         let mut targets = Vec::new();
-        for path in covered.keys() {
-            match translate::target_of(self.index, path).await {
-                Ok(target) if target.location.container_id == container_id => targets.push(target),
-                // In another Container now, or nowhere this device would put
-                // it: not a companion.
+        for location in self.index.entries_in(container_id).await? {
+            if !covered.contains_key(&location.entry_number) {
+                continue;
+            }
+            match translate::target_of(self.index, location.path()).await {
+                Ok(target) if target.location == location => targets.push(target),
+                // The catalog changed between the two questions: not a
+                // companion of this read.
                 Ok(_) => {}
                 Err(error) if never_placed(&error) => {}
                 Err(error) => return Err(error),
@@ -58,7 +71,7 @@ impl ParcelRead<'_> {
             .wanted
             .into_iter()
             .filter_map(|target| {
-                let (entry, parcels) = covered.remove(target.path())?;
+                let (entry, parcels) = covered.remove(&target.location.entry_number)?;
                 Some(Member {
                     target,
                     entry,

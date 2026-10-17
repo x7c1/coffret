@@ -33,8 +33,9 @@ pub enum Unverified {
     /// (spec: FM-2, FM-5, FM-8, FM-14).
     Unopenable(coffret_format::Error),
     /// The Container's own meta section does not describe what the catalog
-    /// records for it — another kind, or another entry table (spec: CP-11,
-    /// FM-9).
+    /// records for it — another kind, a table of another length, or an entry
+    /// whose captured path, extent, or hash is not that of the row with its
+    /// entry number (spec: CP-11, FM-9).
     ///
     /// The meta section is the authority on what a Container holds, and the
     /// record is a copy of it; a disagreement is a catalog that cannot be

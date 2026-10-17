@@ -120,7 +120,7 @@ async fn decode_into_place<'a>(
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
 
     let mut hasher = blake3::Hasher::new();
-    let mut decoding = ScratchGuard::armed(Decoding::new(summary.id, key, destinations, wanted));
+    let mut decoding = ScratchGuard::armed(Decoding::new(key, destinations, wanted));
     // The first refusal the decode made, kept until the object's own hash has
     // had its say (see the three checks above).
     let mut held: Option<FetchError> = None;

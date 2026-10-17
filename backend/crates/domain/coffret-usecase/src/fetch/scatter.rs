@@ -1,5 +1,4 @@
 use coffret_format::{ContainerOutline, Error as FormatError};
-use coffret_model::ContainerId;
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -38,10 +37,11 @@ impl<'a> Scatter<'a> {
     /// Creates a scratch for every wanted Entry of one Container.
     ///
     /// Where each Entry's bytes are is the Container's own account of itself —
-    /// the entry table inside the object — rather than the catalog's. An Entry
-    /// the catalog places in this Container and the table does not hold means
-    /// the two describe different states of the Library, and nothing is placed
-    /// for it (spec: CP-11).
+    /// the entry table inside the object — rather than the catalog's, and the
+    /// Entry is found in it by its entry number (see `Target::recorded_in`);
+    /// the file goes to the Entry's current path. An entry number the table
+    /// does not reach means the catalog and the Container describe different
+    /// states of the Library, and nothing is placed for it (spec: CP-11).
     ///
     /// An Entry whose mapped root will not vouch for itself creates nothing and
     /// stops nothing: the mapping is noted once and the Container's other
@@ -49,21 +49,17 @@ impl<'a> Scatter<'a> {
     /// folder fetch and what EP-13 asks of a refusal.
     pub(super) async fn create(
         outline: &ContainerOutline,
-        container_id: ContainerId,
         destinations: &dyn Destinations,
         wanted: &'a [Target],
     ) -> FetchResult<Self> {
         let mut placements: Vec<Placement<'a>> = Vec::with_capacity(wanted.len());
         let mut refused: Vec<RefusedRoot> = Vec::new();
         for target in wanted {
-            let entry = match outline.entry_at(target.path()) {
-                Some(entry) => entry.clone(),
-                None => {
+            let entry = match target.recorded_in(outline) {
+                Ok(entry) => entry.clone(),
+                Err(missing) => {
                     discard_all(placements);
-                    return Err(FetchError::EntryMissing {
-                        container_id,
-                        path: target.path().clone(),
-                    });
+                    return Err(missing);
                 }
             };
             match Placement::create(destinations, target, entry).await {

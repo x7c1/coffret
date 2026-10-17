@@ -289,6 +289,13 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn entries_in(&self, container_id: ContainerId) -> IndexResult<Vec<EntryLocation>> {
+        self.read("reading a Container's Entries", move |connection| {
+            library_state::entries_in(connection, container_id)
+        })
+        .await
+    }
+
     async fn containers_under(
         &self,
         prefix: Option<&EntryPath>,

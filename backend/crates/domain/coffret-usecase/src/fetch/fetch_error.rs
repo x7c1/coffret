@@ -3,7 +3,9 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{lowercase_hex, ContainerId, ContentHash, EntryPath, Mtime, Redacted};
+use coffret_model::{
+    lowercase_hex, ContainerId, ContentHash, EntryNumber, EntryPath, Mtime, Redacted,
+};
 
 use crate::below_root_error::BelowRootError;
 use crate::commit::CommitError;
@@ -316,7 +318,8 @@ pub enum FetchError {
         /// The hash of the bytes that arrived.
         actual: ContentHash,
     },
-    /// A Container the catalog says holds an Entry does not hold it.
+    /// A Container the catalog says holds an Entry does not hold it: its
+    /// entry table is shorter than the Entry's entry number.
     ///
     /// The entry table a record carried is what the Index answers from
     /// (spec: CP-11), so an authentic Container whose own table disagrees with
@@ -324,7 +327,9 @@ pub enum FetchError {
     EntryMissing {
         /// The Container that was opened.
         container_id: ContainerId,
-        /// The Entry Path the catalog places inside it.
+        /// The entry number the catalog gives the Entry in it.
+        entry_number: EntryNumber,
+        /// The Entry Path the catalog holds the Entry at now.
         path: EntryPath,
     },
     /// An Entry's plaintext is not the content the current catalog names.
@@ -574,9 +579,14 @@ impl fmt::Display for FetchError {
                 hex(actual),
                 hex(expected),
             ),
-            Self::EntryMissing { container_id, path } => write!(
+            Self::EntryMissing {
+                container_id,
+                entry_number,
+                path,
+            } => write!(
                 f,
-                "Container {container_id} does not hold the Entry the catalog places in it, {:?}",
+                "Container {container_id} holds no entry number {entry_number}, which the catalog \
+                 gives the Entry {:?}",
                 path.as_str()
             ),
             Self::ContentMismatch { container_id, path } => write!(
@@ -723,8 +733,13 @@ impl Redacted for FetchError {
                 hex(expected),
                 hex(actual),
             ),
-            Self::EntryMissing { container_id, path } => format!(
-                "Fetch::EntryMissing(container={container_id}, path_len={})",
+            Self::EntryMissing {
+                container_id,
+                entry_number,
+                path,
+            } => format!(
+                "Fetch::EntryMissing(container={container_id}, entry_number={entry_number}, \
+                 path_len={})",
                 path.as_str().len(),
             ),
             Self::ContentMismatch { container_id, path } => format!(

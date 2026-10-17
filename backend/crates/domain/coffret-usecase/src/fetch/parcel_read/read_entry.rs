@@ -67,13 +67,7 @@ impl ParcelRead<'_> {
             &key,
         )
         .await?;
-        let entry = outline
-            .entry_at(target.path())
-            .ok_or_else(|| FetchError::EntryMissing {
-                container_id,
-                path: target.path().clone(),
-            })?
-            .clone();
+        let entry = target.recorded_in(&outline)?.clone();
 
         let parcels = outline.parcels(self.kept.len);
         let asked = parcels.overlapping(&outline, &entry.extent)?;
@@ -196,7 +190,7 @@ impl ParcelRead<'_> {
 
         stroke.unheld = herald.into_unheld();
         stroke.parcels_read = read_from_storage;
-        let_go::let_go_settled(self.index, self.kept, container_id, outline.entries()).await?;
+        let_go::let_go_settled(self.index, self.kept, container_id).await?;
         debug!(
             container = %container_id,
             object = %container_id.object_name(),

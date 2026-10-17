@@ -21,6 +21,7 @@ pub use already_applied::a_record_below_the_checkpoint_is_refused_and_changes_no
 
 mod applied;
 pub use applied::{
+    a_containers_entries_are_listed_by_number_at_their_current_paths,
     a_folders_worth_of_renames_lands_in_one_record, a_rename_changes_one_files_current_path,
     a_rename_inside_a_pack_leaves_its_neighbours,
     a_replay_with_renames_reaches_what_a_restore_and_the_rest_would,

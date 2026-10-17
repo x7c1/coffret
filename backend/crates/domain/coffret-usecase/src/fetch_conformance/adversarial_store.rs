@@ -49,6 +49,7 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
             meta_len: Some(u32::MAX),
             short_by: None,
             misrecorded: false,
+            unheld: None,
         },
     )
     .await;
@@ -124,6 +125,7 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
             meta_len: Some(u32::MAX),
             short_by: None,
             misrecorded: false,
+            unheld: None,
         },
     )
     .await;

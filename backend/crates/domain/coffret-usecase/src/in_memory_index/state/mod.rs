@@ -81,6 +81,17 @@ impl State {
             .collect()
     }
 
+    pub(super) fn entries_in(&self, container_id: ContainerId) -> Vec<EntryLocation> {
+        let mut held: Vec<EntryLocation> = self
+            .entries
+            .values()
+            .filter(|entry| entry.container_id == container_id)
+            .cloned()
+            .collect();
+        held.sort_by_key(|entry| entry.entry_number);
+        held
+    }
+
     pub(super) fn containers_under(&self, prefix: Option<&EntryPath>) -> Vec<ContainerSummary> {
         let mut held: Vec<ContainerId> = self
             .entries

@@ -332,3 +332,77 @@ pub async fn a_replay_with_renames_reaches_what_a_restore_and_the_rest_would(
         ]
     );
 }
+
+/// A Container's Entries are listed in entry number order and at the paths
+/// the catalog holds them at now, whatever order a rename leaves those paths
+/// in — which is how a reader holding the Container's own table finds where
+/// each of its Entries stands (spec: FM-9, FM-15). A Container that is not
+/// current holds none.
+pub async fn a_containers_entries_are_listed_by_number_at_their_current_paths(
+    fixture: &IndexUnderTest,
+) {
+    let index = fixture.index();
+    index
+        .apply(record(
+            0,
+            vec![
+                addition(1, ContainerKind::OneFile, &["inbox/z.jpg"]),
+                addition(
+                    2,
+                    ContainerKind::Pack,
+                    &["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"],
+                ),
+            ],
+            vec![],
+        ))
+        .await
+        .expect("applying the first record must succeed");
+    index
+        .apply(renaming(
+            record(1, vec![], vec![]),
+            vec![rename(2, 0, "trip/a.jpg")],
+        ))
+        .await
+        .expect("applying a rename must succeed");
+
+    let listed = |entries: Vec<EntryLocation>| {
+        entries
+            .into_iter()
+            .map(|location| {
+                (
+                    location.container_id,
+                    location.entry_number,
+                    location.entry.path.as_str().to_owned(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let in_pack = index
+        .entries_in(container_id(2))
+        .await
+        .expect("listing a Container's Entries must succeed");
+    assert_eq!(
+        listed(in_pack),
+        [
+            (container_id(2), entry_number(0), "trip/a.jpg".to_owned()),
+            (container_id(2), entry_number(1), "albums/b.jpg".to_owned()),
+            (container_id(2), entry_number(2), "albums/c.jpg".to_owned()),
+        ],
+    );
+    let in_one_file = index
+        .entries_in(container_id(1))
+        .await
+        .expect("listing a Container's Entries must succeed");
+    assert_eq!(
+        listed(in_one_file),
+        [(container_id(1), entry_number(0), "inbox/z.jpg".to_owned())],
+    );
+    assert!(
+        index
+            .entries_in(container_id(9))
+            .await
+            .expect("listing a Container's Entries must succeed")
+            .is_empty(),
+        "a Container the catalog does not hold holds no Entry",
+    );
+}

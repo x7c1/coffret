@@ -63,6 +63,7 @@ pub use refusals::{
 
 mod renames;
 pub use renames::{
+    a_containers_entries_are_listed_by_number_at_their_current_paths,
     a_folders_worth_of_renames_lands_in_one_record,
     a_record_below_the_checkpoint_is_refused_and_changes_nothing,
     a_rename_changes_one_files_current_path,
@@ -148,6 +149,7 @@ macro_rules! index_conformance {
             a_rename_inside_a_pack_leaves_its_neighbours,
             a_folders_worth_of_renames_lands_in_one_record,
             two_entries_swap_their_names_in_one_record,
+            a_containers_entries_are_listed_by_number_at_their_current_paths,
             the_captured_path_stands_apart_exactly_where_a_rename_leaves_it,
             a_replay_with_renames_reaches_what_a_restore_and_the_rest_would,
             the_file_of_a_renamed_entry_waits_to_follow_it,

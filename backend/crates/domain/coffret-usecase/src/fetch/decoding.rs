@@ -1,5 +1,5 @@
 use coffret_format::{ChunkRunReader, ContainerOutline, Error as FormatError, Header};
-use coffret_model::{ContainerId, ContainerKey};
+use coffret_model::ContainerKey;
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -21,7 +21,6 @@ use crate::fetch::TRANSFER_BUFFER;
 /// bounded: the length the header declares is refused as the header is parsed if
 /// it is past what a meta section may be, and the front stops growing there.
 pub(super) struct Decoding<'k, 'a> {
-    container_id: ContainerId,
     key: &'k ContainerKey,
     /// Where each wanted Entry's file is written, which the scatter creates one
     /// scratch per Entry through.
@@ -40,13 +39,11 @@ pub(super) struct Decoding<'k, 'a> {
 
 impl<'k, 'a> Decoding<'k, 'a> {
     pub(super) fn new(
-        container_id: ContainerId,
         key: &'k ContainerKey,
         destinations: &'a dyn Destinations,
         wanted: &'a [Target],
     ) -> Self {
         Self {
-            container_id,
             key,
             destinations,
             wanted,
@@ -112,8 +109,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
     async fn open(&mut self) -> FetchResult<()> {
         let outline = ContainerOutline::open(&self.front, self.key)?;
         let run = outline.all_chunks();
-        let scatter =
-            Scatter::create(&outline, self.container_id, self.destinations, self.wanted).await?;
+        let scatter = Scatter::create(&outline, self.destinations, self.wanted).await?;
         self.chunks = Some(ChunkRunReader::begin(&outline, self.key, &run));
         self.scatter = Some(scatter);
         // A chunk's plaintext is the largest single buffer a fetch holds, and

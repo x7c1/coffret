@@ -1154,6 +1154,10 @@ impl Index for RefusingIndex<'_> {
         self.inner.entries_under(prefix).await
     }
 
+    async fn entries_in(&self, container_id: ContainerId) -> IndexResult<Vec<EntryLocation>> {
+        self.inner.entries_in(container_id).await
+    }
+
     async fn containers_under(
         &self,
         prefix: Option<&EntryPath>,

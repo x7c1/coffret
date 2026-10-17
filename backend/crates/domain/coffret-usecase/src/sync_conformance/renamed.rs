@@ -7,11 +7,10 @@
 //! Library — nor a new file to carry in, nor a departed copy to discard: the
 //! sync leaves it exactly where it is and says nothing of it.
 
-use coffret_format::{encode_control_object, encode_journal_record, ControlEncodeRequest, Purpose};
-use coffret_model::{ControlObjectKind, ControlObjectName, EntryRename, JournalRecord};
+use coffret_format::Purpose;
+use coffret_model::EntryRename;
 
-use crate::byte_stream::ByteStream;
-use crate::control_head::ControlHead;
+use crate::commit_conformance::commit_renames_in;
 use crate::device_state::{Mapping, RootMarkerId};
 use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, SyncOutcome};
@@ -41,60 +40,15 @@ async fn sync(fixture: &SyncUnderTest, run: i64) -> SyncOutcome {
 }
 
 /// Commits a record renaming `renames` on top of the head this device's
-/// catalog stands at, the way another device's rename would land: into the
-/// slot that head carries, with the successor's two slots reserved afresh
-/// (spec: CP-2, CK-10, FM-15).
-///
-/// Nothing in this build writes a rename yet, so the case writes the record
-/// itself.
+/// catalog stands at, the way another device's rename would land.
 async fn commit_renames(fixture: &SyncUnderTest, renames: Vec<EntryRename>) {
-    let store = fixture.store();
-    let standing = fixture
-        .index()
-        .checkpoint()
-        .await
-        .expect("reading the checkpoint must succeed")
-        .expect("the first sync left the catalog at a head");
-    let commit_slot = ControlHead::at(standing.head_generation())
-        .commit_slot(standing.next_commit_slot())
-        .expect("the head has a successor");
-    let generation = standing
-        .head_generation()
-        .next()
-        .expect("the head has a successor");
-    let head = ControlHead::at(generation);
-    let next_commit_slot = head
-        .reserve_commit_slot(store)
-        .await
-        .expect("reserving the successor's slot must succeed");
-    let snapshot_slot = head
-        .reserve_snapshot_slot(store)
-        .await
-        .expect("reserving the checkpoint's slot must succeed");
-    let record = JournalRecord::new(
-        generation,
-        Some(standing.head_generation()),
-        standing.master_key_epoch(),
-        standing.keyring().clone(),
-        next_commit_slot.as_provider_id().map(str::to_owned),
-        snapshot_slot.as_provider_id().map(str::to_owned),
-        Vec::new(),
-        Vec::new(),
-    )
-    .and_then(|record| record.with_renames(renames))
-    .expect("a record renaming one Entry is one a commit could write");
-    let name = ControlObjectName::head(generation);
-    let object = encode_control_object(&ControlEncodeRequest::new(
-        &name,
-        ControlObjectKind::Journal,
+    commit_renames_in(
+        fixture.store(),
+        fixture.index(),
         &purpose_key(Purpose::ControlJournal),
-        &encode_journal_record(&record).expect("a renaming record encodes"),
-    ))
-    .expect("sealing a Journal record must succeed");
-    store
-        .put_if_absent(&commit_slot, ByteStream::from(object.bytes().to_vec()))
-        .await
-        .expect("the renaming record takes the head's slot");
+        renames,
+    )
+    .await;
 }
 
 /// The file of an Entry another device renamed is left where it is: the next

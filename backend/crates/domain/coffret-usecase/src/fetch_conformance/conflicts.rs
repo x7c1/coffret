@@ -286,6 +286,7 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
                 meta_len: None,
                 short_by: None,
                 misrecorded: false,
+                unheld: None,
             },
         )
         .await;
@@ -397,6 +398,7 @@ pub async fn a_place_in_a_desktop_trash_folder_is_surfaced_and_nothing_is_placed
                 meta_len: None,
                 short_by: None,
                 misrecorded: false,
+                unheld: None,
             },
         )
         .await;
