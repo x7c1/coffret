@@ -150,12 +150,17 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     key a device records a mapping under and the spelling a scan composes its
     Entry Paths from are one string: there is no second spelling for a mapping
     to represent a subtree under, or for a fetch to narrow to and find nothing.
+  - Each mapping is its own folder to a scan. A file that leaves one mapped
+    root and appears under another is a deletion under the first and a new
+    file under the second, never a rename (EP-10): a scan pairs a file that
+    went with one that appeared only under the same mapped root.
 - **EP-10.** A device's mappings (EP-9) only translate Entry Paths into
   local paths; they do not assert that every Entry under a mapped subtree is
   present on the device. A scan discovers new and modified files under the
   mapped folders, and it reports an Entry as deleted locally only when the
   device itself had materialized it — uploaded it, or fetched it into place
-  — and the file is now gone. An Entry the device never materialized,
+  — and the file is now gone, unless the scan carries it as a local rename
+  (below). An Entry the device never materialized,
   whether or not a mapping covers it, is never reported as modified, never
   reported as deleted, never selected for `update` or `freeze`, never proposed
   for removal, and never used as the source of a replacement — a
@@ -254,6 +259,40 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     would have at the old path; otherwise it is forgotten, since it describes
     nothing standing at the new path. An absent record follows its Entry the
     same way.
+  - A scan **carries a local rename**: within one scan's scope, a file this
+    device materialized that is gone is paired with a file that appeared, and
+    the pair is a rename rather than a deletion and an addition, only where
+    all of these hold. The gone file's record names the current Entry at its
+    path and waits for no relocation. The appeared file stands where the
+    catalog holds no Entry and the device keeps no record, under the same
+    mapped root (EP-9). Its length and content hash are the gone file's
+    Entry's; the scan hashes only an appeared file whose length is some gone
+    file's Entry's. And the pairing is one to one: exactly one gone file and
+    exactly one appeared file share that length and hash, and no file this
+    device materialized and still has is recorded holding it. Any ambiguity —
+    two gone files with the content, two appeared ones, or one of each beside
+    a copy the device still has — pairs nothing, and every file involved is
+    what it would be without pairing: the appeared ones new, the gone ones
+    deleted locally.
+  - A pair becomes one rename (FM-15) in the batch the sync commits: the gone
+    file's Entry, named by `(Container ID, entry number)`, takes the appeared
+    file's Entry Path. Nothing is uploaded for either file and no Container is
+    written; the batch is rebased, or refused as a conflict, like any batch
+    carrying renames (EP-7). Once the record lands the gone file's record is
+    re-keyed to the new path with its observation unchanged, and waits for
+    nothing, since the file already stands there; an interruption between the
+    two leaves the case above where the file stands at the new path agreeing
+    with the old record, which the next run re-keys. The run reports each
+    pair as a rename from the old path to the new one, never silently.
+  - A pair is held to every rule a rename the person asks for is held to: the
+    reserved namespace, a destination held by an Entry the batch does not
+    rename away, a destination that would make a path both a file and a
+    folder, and FM-15's rename-set check. A pair one of them refuses is not
+    paired: its files are read as without pairing, and the run reports the
+    refusal beside them.
+  - A gone file that pairs with nothing keeps its record and is reported
+    deleted locally, so a later scan whose scope covers its partner can still
+    pair them. Pairing changes nothing about what a sync scans.
 - **EP-11.** A fetch places an Entry at a local path only where the device can
   vouch for what is there: either nothing at all, or this device's own
   materialization record (EP-10) agreeing with the file on disk. Any other

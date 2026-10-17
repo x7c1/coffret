@@ -12,11 +12,13 @@ At each committed Library state, a position may be occupied by a current
 [Entry](../container/entry/). Replacing a file's content or its
 [Container](../container/) puts a new Entry at the same position. For
 example, `books/some-novel/page-042.png` keeps the same Entry Path when an
-updated page replaces the Entry stored there. Moving a file on disk today
-moves nothing in the Library. A sync stores the file at its new position as a
-new Entry. The Entry at the old position stays current: a sync reports it as
+updated page replaces the Entry stored there. Renaming a file on disk renames
+nothing in the Library by itself. A sync stores the file at its new position as
+a new Entry. The Entry at the old position stays current: a sync reports it as
 deleted locally (see [Library](../library/#domain-rules)) but never removes an
-Entry because its file is gone. A rename in the Library instead keeps the same
+Entry because its file is gone. Only where which file became which is not a
+guess does a sync carry the local rename into the Library instead (spec:
+EP-10). A rename in the Library keeps the same
 Entry and changes only its Entry Path (see
 [Entry](../container/entry/#mental-model)), and the device's file follows it.
 

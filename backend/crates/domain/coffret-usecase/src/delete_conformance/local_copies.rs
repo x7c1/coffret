@@ -31,7 +31,9 @@ fn reported(outcome: &DeleteOutcome) -> (Vec<&EntryPath>, Vec<&EntryPath>, Vec<&
             Surfaced::Discarded { path } => discarded.push(path),
             Surfaced::KeptEdited { path } => kept.push(path),
             Surfaced::DiscardRefused { path, .. } => refused.push(path),
-            Surfaced::PackResident { .. } | Surfaced::DeletedLocally { .. } => {
+            Surfaced::PackResident { .. }
+            | Surfaced::DeletedLocally { .. }
+            | Surfaced::RenameRefused { .. } => {
                 panic!("a deletion reports nothing but what became of its copies: {surfaced:?}")
             }
         }

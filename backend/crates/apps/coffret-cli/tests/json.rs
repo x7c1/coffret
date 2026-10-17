@@ -345,6 +345,7 @@ fn sync_answers_its_counts_and_that_it_committed_nothing() {
             "answer": {
                 "added": 0,
                 "replaced": 0,
+                "renamed": 0,
                 "unchanged": 0,
                 "committed_head": null,
                 "mappings": 0,

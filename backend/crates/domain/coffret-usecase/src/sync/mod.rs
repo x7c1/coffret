@@ -49,7 +49,13 @@
 //!    still holds what this device last made it match goes to the desktop's
 //!    trash once the scan is over and its row is forgotten, one that changed
 //!    is kept and reported, and a row whose file is gone as well is forgotten
-//!    without a word. An Entry this device never materialized is outside its scope
+//!    without a word. A gone file and a new one under the same mapped root are
+//!    one file renamed where the new one holds exactly the gone one's Entry's
+//!    content and no other file the scan knows of holds it: the pair becomes a
+//!    rename of the Entry, held to every rule [`rename`](crate::rename) holds
+//!    one to, and neither an upload nor a deletion; a pair the Library refuses
+//!    to rename is reported and read as the two files it would otherwise be.
+//!    An Entry this device never materialized is outside its scope
 //!    and is never reported as modified or deleted, mapping or no mapping. A
 //!    mapping whose root the device cannot vouch for — one that is not there, or
 //!    one that is empty while standing on a filesystem the mapping does not
@@ -77,7 +83,8 @@
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy),
 //!    and compare the digest the provider reports for what it stored against
 //!    the one taken while writing the spool.
-//! 8. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
+//! 8. **Commit.** Hand the batch — the uploads, and the renames the scan
+//!    detected — to [`commit_batch`](crate::commit::commit_batch),
 //!    which is where the Library's state actually changes (spec: CP-1) — and
 //!    where a committed Keyring that has lost replicas is repaired, this being
 //!    the write KL-11 gates. What that repair found and rewrote travels back on
@@ -89,7 +96,10 @@
 //!    pending rows (spec: EP-10, OC-2). That refresh is also the one step after
 //!    the record whose failure is not the end of the story: what it would have
 //!    written down survives in the pending rows, and step 2 of the next run
-//!    completes it (spec: OC-7).
+//!    completes it (spec: OC-7). The records of the files renamed on disk
+//!    follow them to their new paths once the commit has landed; one left
+//!    behind by an interruption is re-keyed by the next run's relocation
+//!    (spec: EP-10).
 //!
 //! [`sync_folders`] is the whole of the public surface. The steps are private
 //! because none of them is a state a caller may stop at: a spooled Container

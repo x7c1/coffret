@@ -206,7 +206,8 @@ impl Finding {
     /// A deleted Entry's copy discarded into the trash is work the run did, and
     /// the person who wants it back knows where to look (spec: EP-15). So is a
     /// file relocated to follow a rename of its Entry, and a redundant one
-    /// discarded instead (spec: EP-10).
+    /// discarded instead, and a file renamed on disk whose Entry was renamed to
+    /// follow it (spec: EP-10).
     ///
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
@@ -222,6 +223,7 @@ impl Finding {
             Self::Surfaced {
                 reason: FindingReason::Discarded
                     | FindingReason::Relocated { .. }
+                    | FindingReason::Renamed { .. }
                     | FindingReason::RelocationDiscarded { .. },
                 ..
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
@@ -380,6 +382,13 @@ impl fmt::Display for Finding {
                 path,
                 reason: reason @ FindingReason::RelocationDiscarded { .. },
             } => write!(f, "discarded {path}: {reason}"),
+            // A file renamed on disk and carried in as a rename of its Entry is
+            // said as the rename it became, from the old path to the new one
+            // (spec: EP-10).
+            Self::Surfaced {
+                path,
+                reason: reason @ FindingReason::Renamed { from },
+            } => write!(f, "renamed {from} → {path}: {reason}"),
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
             Self::UnavailableRoot {
                 prefix,

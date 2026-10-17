@@ -560,6 +560,18 @@
           "surfaced": "RelocationRefused"
         },
         {
+          "message": "this device's file was renamed here, and its Entry was renamed to follow it without uploading anything",
+          "path": "albums/e.jpg",
+          "reason": "surfaced",
+          "surfaced": "Renamed"
+        },
+        {
+          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is carried in as a new one",
+          "path": "x/f.jpg",
+          "reason": "surfaced",
+          "surfaced": "RenameRefused"
+        },
+        {
           "message": "a folder this device maps is not there, so nothing in it was looked at",
           "path": null,
           "reason": "root_missing"
@@ -697,6 +709,18 @@
           "path": "inbox/d.jpg",
           "reason": "surfaced",
           "surfaced": "RelocationRefused"
+        },
+        {
+          "message": "this device's file was renamed here, and its Entry was renamed to follow it without uploading anything",
+          "path": "albums/e.jpg",
+          "reason": "surfaced",
+          "surfaced": "Renamed"
+        },
+        {
+          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is carried in as a new one",
+          "path": "x/f.jpg",
+          "reason": "surfaced",
+          "surfaced": "RenameRefused"
         },
         {
           "message": "a folder this device maps is not there, so nothing in it was looked at",

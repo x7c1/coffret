@@ -66,6 +66,20 @@ pub use departed::{
     the_folders_the_discards_emptied_are_removed,
 };
 
+mod detected_renames;
+pub use detected_renames::{
+    a_detected_rename_interrupted_before_its_record_follows_is_finished_by_the_next_run,
+    a_file_renamed_in_its_root_is_carried_as_a_rename,
+    a_file_renamed_into_a_sub_folder_is_carried_as_a_rename,
+    a_gone_file_paired_by_a_later_scan_is_carried_as_a_rename,
+    a_new_file_like_an_entry_never_placed_here_is_new, a_new_file_with_other_content_is_new,
+    a_refused_rename_falls_back_with_a_finding, a_rename_across_two_mapped_roots_pairs_nothing,
+    a_rename_beside_an_identical_file_pairs_nothing, a_renamed_folder_is_carried_file_by_file,
+    an_edited_and_renamed_file_is_new_and_its_old_path_deleted,
+    one_gone_file_and_two_identical_new_files_pair_nothing,
+    two_gone_files_with_one_content_pair_nothing,
+};
+
 // Visible to the freeze suite, which borrows the one helper that arranges an
 // identity mismatch: what an unmounted disk looks like to the guard is one
 // account, not one per suite.
@@ -260,6 +274,19 @@ macro_rules! sync_conformance {
             an_exchange_interrupted_before_its_records_is_finished_by_the_next_run,
             a_departed_file_is_not_claimed_by_an_entry_renamed_onto_its_path,
             a_snapshot_past_a_swap_and_a_removal_claims_neither_file,
+            a_file_renamed_in_its_root_is_carried_as_a_rename,
+            a_file_renamed_into_a_sub_folder_is_carried_as_a_rename,
+            a_renamed_folder_is_carried_file_by_file,
+            a_rename_beside_an_identical_file_pairs_nothing,
+            two_gone_files_with_one_content_pair_nothing,
+            one_gone_file_and_two_identical_new_files_pair_nothing,
+            a_new_file_like_an_entry_never_placed_here_is_new,
+            a_new_file_with_other_content_is_new,
+            an_edited_and_renamed_file_is_new_and_its_old_path_deleted,
+            a_rename_across_two_mapped_roots_pairs_nothing,
+            a_refused_rename_falls_back_with_a_finding,
+            a_detected_rename_interrupted_before_its_record_follows_is_finished_by_the_next_run,
+            a_gone_file_paired_by_a_later_scan_is_carried_as_a_rename,
             a_missing_mapped_root_is_reported_and_infers_no_deletion,
             an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
             an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,

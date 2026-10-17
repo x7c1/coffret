@@ -30,6 +30,7 @@ use crate::{InMemoryIndex, InMemoryStore};
 mod recording_store;
 use recording_store::RecordingStore;
 
+mod detected;
 mod races;
 mod refusals;
 mod renamed;

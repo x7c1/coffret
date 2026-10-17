@@ -14,8 +14,8 @@ use serde_json::{json, Value};
 use coffret_device::{
     CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryNumber, EntryPath, EntryRef,
     Error, FetchError, FetchOutcome, Finding, FindingReason, Findings, FormatError, IndexError,
-    PendingChange, ProviderSettings, RebaseRule, RenameError, RenameRefusal, StorageError,
-    SyncError, SyncOutcome,
+    PendingChange, ProviderSettings, RebaseRule, RenameError, RenameRefusal, RenamedPath,
+    StorageError, SyncError, SyncOutcome,
 };
 
 use super::*;
@@ -79,6 +79,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
         relocations: Vec::new(),
         added: vec![container(1), container(2)],
         replaced: vec![container(3)],
+        renamed: Vec::new(),
         unchanged: 4,
         mappings: 1,
         surfaced: Vec::new(),
@@ -103,6 +104,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
             "answer": {
                 "added": 2,
                 "replaced": 1,
+                "renamed": 0,
                 "unchanged": 4,
                 "committed_head": null,
                 "mappings": 1,
@@ -123,6 +125,96 @@ fn a_sync_answers_its_counts_and_its_findings() {
                          this device's unedited copy was discarded into the trash",
                 "path": "albums/b.jpg",
                 "reason": "Discarded",
+            }],
+        }),
+    );
+}
+
+// A sync that carried a file renamed on disk as a rename of its Entry: the
+// count in the answer, and the rename said once more as a finding from the old
+// path to the new one, which nobody has to act on. A pair whose rename was
+// refused is said too, under its own reason, beside the deletion it fell back
+// to (spec: EP-10).
+#[test]
+fn a_sync_answers_the_renames_it_detected() {
+    let outcome = SyncOutcome {
+        relocations: Vec::new(),
+        added: vec![container(1)],
+        replaced: Vec::new(),
+        renamed: vec![RenamedPath {
+            from: path("inbox/a.jpg"),
+            to: path("albums/a.jpg"),
+        }],
+        unchanged: 2,
+        mappings: 1,
+        surfaced: Vec::new(),
+        unavailable: Vec::new(),
+        settled: Vec::new(),
+        commit: None,
+    };
+    // Assembled as the device layer makes them out of the outcome: the rename
+    // first, then what the scan surfaced.
+    let findings = Findings::assembled([
+        Finding::Surfaced {
+            path: path("albums/a.jpg"),
+            reason: FindingReason::Renamed {
+                from: path("inbox/a.jpg"),
+            },
+        },
+        Finding::Surfaced {
+            path: path("x/y.jpg"),
+            reason: FindingReason::RenameRefused {
+                from: path("b.jpg"),
+                refusal: RenameRefusal::FileAndFolder { path: path("x") },
+            },
+        },
+        deleted("b.jpg"),
+    ]);
+    let ran = Ran::found(
+        crate::report::findings(&findings, Form::Json),
+        Answer::Synced(Synced::from(&outcome)),
+        &findings,
+    );
+
+    assert_eq!(
+        succeeded("sync", &ran),
+        json!({
+            "version": 1,
+            "command": "sync",
+            "exit_status": 2,
+            "log": LOG,
+            "answer": {
+                "added": 1,
+                "replaced": 0,
+                "renamed": 1,
+                "unchanged": 2,
+                "committed_head": null,
+                "mappings": 1,
+            },
+            "error": null,
+            "findings": [{
+                "kind": "surfaced",
+                "needs_attention": false,
+                "said": "renamed inbox/a.jpg → albums/a.jpg: this device's file of inbox/a.jpg \
+                         was renamed here, and its Entry was renamed to follow it without \
+                         uploading anything",
+                "path": "albums/a.jpg",
+                "reason": "Renamed",
+            }, {
+                "kind": "surfaced",
+                "needs_attention": true,
+                "said": "surfaced x/y.jpg: it holds what this device's file of b.jpg held \
+                         before that file went, and renaming that Entry here was refused (the \
+                         rename would make \"x\" both a file and a folder); it is carried in as \
+                         a new file instead",
+                "path": "x/y.jpg",
+                "reason": "RenameRefused",
+            }, {
+                "kind": "surfaced",
+                "needs_attention": true,
+                "said": "surfaced b.jpg: this device had it and it is gone from disk",
+                "path": "b.jpg",
+                "reason": "DeletedLocally",
             }],
         }),
     );

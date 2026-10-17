@@ -141,10 +141,13 @@ one Entry Path is refused whole, and the Catalog stays as it was
 (spec: FM-15, RV-5). A folder rename enumerates the current Entries being
 renamed; replay does not discover additional Entries by interpreting a prefix.
 Such a batch changes names without replacing or uploading Container
-ciphertext. A record that carries renames also names the schema a reader
-needs to apply it faithfully, and a device whose build implements less refuses
-the record and stops its replay there, rather than skipping it or applying the
-rest of it without the renames (spec: FM-9, FM-15).
+ciphertext. A rename is written by the rename operation, or by a sync that
+carries a file renamed on disk into the Library, in which case the same record
+also carries the sync's additions and removals (spec: EP-10). A record that
+carries renames also names the schema a reader needs to apply it faithfully,
+and a device whose build implements less refuses the record and stops its
+replay there, rather than skipping it or applying the rest of it without the
+renames (spec: FM-9, FM-15).
 
 **Rebase carries a batch over renames.** A batch remembers the head it was
 prepared against, and every commit of it examines the records committed

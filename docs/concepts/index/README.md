@@ -132,7 +132,8 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
   materialized file to follow a rename of its Entry)
 - carry over (a materialization record to the Entry that replaces its own)
 - re-key (a materialization record to the path its file was relocated to,
-  after the file is relocated)
+  after the file is relocated, or to the path a person renamed its file to on
+  disk, once a sync has carried that rename into the Library)
 - forget (a materialization record whose Entry left the Library, once its file
   has gone to the desktop's trash or from the disk, or at once where another
   Entry holds the path its file stands at)

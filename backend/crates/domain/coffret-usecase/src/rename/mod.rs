@@ -37,10 +37,15 @@
 //!    way a sync reports one, and the rename stands.
 //!
 //! What is deliberately not here: noticing that a person renamed a file on
-//! disk, which a sync still reads as a deletion and an addition; and derived
-//! Entries, which this version does not rename (spec: FM-15).
+//! disk, which is the [`sync`](crate::sync)'s to notice — it holds the pair it
+//! detects to the same plan's rules (`refuse_detected`) and commits it in its
+//! own batch (spec: EP-10); and derived Entries, which this version does not
+//! rename (spec: FM-15).
 
 mod plan;
+
+mod refuse_detected;
+pub(crate) use refuse_detected::refuse_detected;
 
 mod rename_error;
 pub use rename_error::{RenameError, RenameResult};
@@ -56,6 +61,8 @@ pub use rename_request::RenameRequest;
 
 mod renamed_path;
 pub use renamed_path::RenamedPath;
+
+mod rules;
 
 mod run;
 pub use run::rename_entries;

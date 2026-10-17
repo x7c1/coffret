@@ -138,7 +138,12 @@ and has a window of its own for entering the Passphrase.
 - rename (an Entry, or a folder — every Entry under it, each keeping the rest
   of its path — to a new Entry Path, in one [Journal](../journal/) record that
   names each Entry it renames; no Container is written and no file's content is
-  read or uploaded) — from the command line
+  read or uploaded) — from the command line, or by a sync that carries a local
+  rename into the Library
+- carry (a local rename into the Library, as a sync does when a file this device
+  placed is gone and the one file that appeared in its place under the same
+  mapped root holds exactly its Entry's content: the sync's batch renames the
+  Entry to where the file now stands, and uploads nothing for it)
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
@@ -537,6 +542,24 @@ and has a window of its own for entering the Passphrase.
   - A device whose build predates renames refuses a record carrying them and
     stops there rather than applying part of it, and says a newer build is
     needed (spec: FM-9, FM-15).
+- A sync **carries a local rename** into the Library, and only where which file
+  became which is not a guess (spec: EP-10). A file this device placed is gone,
+  a file appeared under the same mapped root where the Library holds no Entry
+  and this device keeps no record, the new file's length and content hash are
+  the gone file's Entry's, and within the scan no other file — another gone
+  one, another new one, or a copy this device still has — holds that content.
+  - The pair becomes one rename in the batch the sync commits, and nothing is
+    uploaded for it: the Entry takes the new file's path, this device's record
+    of the file follows it there, and the run reports `renamed <old> → <new>`
+    instead of a deletion and a new file. The rename is held to every rule a
+    rename from the command line is, and rebased or refused with the batch as
+    any rename is (spec: EP-7, FM-15).
+  - Anything short of that pairs nothing, and each file is what it was before:
+    a file edited as well as renamed, one renamed into another mapped folder,
+    two files with the same content. A pair whose rename the Library would
+    refuse is reported with the refusal, and its files are read the same way.
+  - A gone file that pairs with nothing keeps its record and is reported
+    deleted locally, so a later sync that sees its partner can still pair them.
 - A rename another device committed meanwhile is not by itself such a refusal.
   A run's update, Pack, or rebuilt Pack takes over the renamed Entry at its new
   path; only a write to the same Entry or Entry Path from both sides — a rename
@@ -557,11 +580,12 @@ A rename commits a change to the Catalog's names without replacing the
 affected Containers: replaying its record or adopting a Snapshot taken after it
 gives each Entry its new path, and a fetch finds an Entry in its Container by
 its entry number and places it at its current path (spec: FM-15, RV-5, EP-11).
-Renames are made from the command line; the explorer does not offer one yet.
-Mappings continue to translate names to local paths; they do not make local
-folders the authority for the namespace. The current implementation does not
-infer a rename from a local file being renamed: a file renamed on disk reads
-to a sync as one file gone and another added.
+A person asks for a rename from the command line; the explorer does not offer
+one yet. Mappings continue to translate names to local paths; they do not make
+local folders the authority for the namespace. A file renamed on disk is
+carried in as a rename only in the narrow case above, read within one sync's
+scan; every other local rename still reads to a sync as one file gone and
+another added.
 
 ## Related Concepts
 

@@ -175,6 +175,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         base,
         &spooled,
         &[],
+        Vec::new(),
         Some(&short),
         progress,
     )

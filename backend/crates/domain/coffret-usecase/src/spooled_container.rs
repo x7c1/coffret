@@ -8,7 +8,7 @@ use coffret_model::{
 
 use crate::commit::{
     commit_batch, CommitError, CommitFailure, CommitOutcome, CommitPolicy, CommitRequest,
-    ControlKeys, EntryRef, PreparedAddition, PreparedBatch, ShortReport,
+    ControlKeys, EntryRef, PendingRename, PreparedAddition, PreparedBatch, ShortReport,
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
@@ -147,13 +147,17 @@ impl SpooledContainer {
     }
 }
 
-/// Commits what a run uploaded and what it removes outright, or nothing where
-/// it has neither.
+/// Commits what a run uploaded, what it removes outright and what it renames,
+/// or nothing where it has none of them.
 ///
-/// A run with nothing to upload and nothing to remove commits nothing rather
+/// A run with nothing to upload, remove or rename commits nothing rather
 /// than committing an empty batch: a Journal record is a generation, and
-/// creating one for a batch that changes no Container would make every device
+/// creating one for a batch that changes nothing would make every device
 /// replay a record that says nothing (spec: CP-1).
+///
+/// `renames` are the Entries the batch gives a new current path without
+/// touching their content — the renames a sync detected on disk (spec: EP-10,
+/// FM-15). A freeze and a deletion pass none.
 ///
 /// `removals` are the Containers the batch takes out of the current set without
 /// anything in it replacing them — a deletion's (spec: PK-9). What an upload
@@ -181,10 +185,11 @@ pub(crate) async fn commit_spooled(
     base: Option<Generation>,
     spooled: &[SpooledContainer],
     removals: &[ContainerId],
+    renames: Vec<PendingRename>,
     short: Option<&ShortReport>,
     progress: &dyn Progress,
 ) -> Result<Option<CommitOutcome>, CommitFailure> {
-    if spooled.is_empty() && removals.is_empty() {
+    if spooled.is_empty() && removals.is_empty() && renames.is_empty() {
         return Ok(None);
     }
     let additions = spooled
@@ -199,6 +204,7 @@ pub(crate) async fn commit_spooled(
                 .chain(removals.iter().copied())
                 .collect(),
         )
+        .renaming(renames)
         .materializing(
             spooled
                 .iter()
