@@ -83,10 +83,12 @@ path, and a change that writes to the same Entry or Entry Path from the other
 side is a conflict (spec: CP-4, CP-7, EP-7).
 Fetch reads an Entry by its entry number and places it at its current path
 (spec: EP-11). A device relocates its file of a renamed Entry to the Entry's
-current path in its next sync or fetch; until it can, the file stays where it
-was placed, and the device neither carries it in as a new file nor treats it
-as deleted (spec: EP-10). Metadata-only rename is not complete yet: no
-operation writes a rename.
+current path in its next sync or fetch, and the device that made the rename
+does so right after the commit; until it can, the file stays where it was
+placed, and the device neither carries it in as a new file nor treats it as
+deleted (spec: EP-10). A rename is written as one record naming every Entry
+it renames, and no Container is replaced or uploaded for it
+(see [Library](../library/#domain-rules)).
 
 ## Related Concepts
 

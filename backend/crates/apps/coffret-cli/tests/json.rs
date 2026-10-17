@@ -466,6 +466,95 @@ fn a_mapping_that_cannot_be_opened_answers_its_kind() {
     );
 }
 
+// A rename of a path the Library holds nothing at is refused by its own kind,
+// with nothing committed, and answers no counts.
+#[test]
+fn a_rename_of_nothing_answers_nothing_to_rename() {
+    let output = on_a_device_mapping_nothing(&[
+        "--json",
+        "rename",
+        "--library",
+        "empty",
+        // Before the paths, which a positional path would have made read as
+        // a Passphrase typed after the flag.
+        "--passphrase-stdin",
+        "--from",
+        "albums/a.jpg",
+        "--to",
+        "albums/b.jpg",
+    ]);
+    assert_eq!(code(&output), 1, "{}", stderr(&output));
+    assert_eq!(
+        answer_logged(&output),
+        json!({
+            "version": 1,
+            "command": "rename",
+            "exit_status": 1,
+            "log": VARIES,
+            "answer": null,
+            "error": {
+                "kind": "nothing_to_rename",
+                "message": "the rename did not finish: the rename was refused: the Library \
+                            holds no Entry at or under \"albums/a.jpg\"",
+                "advice": [],
+            },
+            "findings": [],
+        }),
+    );
+}
+
+// The refusals that need no catalog say so in text too, on standard error,
+// and a path that is not an Entry Path is refused before the Passphrase is
+// read (spec: EP-2).
+#[test]
+fn a_rename_refused_in_text_says_why_on_standard_error() {
+    let device = Device::new();
+    created(&device, "text");
+
+    for (from, to, said) in [
+        (
+            "albums/a.jpg",
+            "albums/a.jpg",
+            "the rename was refused: the new Entry Path is the one it already has",
+        ),
+        (
+            "albums/a.jpg",
+            ".coffret-derived/a.jpg",
+            "lies under .coffret-derived, which coffret keeps for derived Entries",
+        ),
+    ] {
+        let output = device.run_with(
+            &[
+                "rename",
+                "--library",
+                "text",
+                "--from",
+                from,
+                "--to",
+                to,
+                "--passphrase-stdin",
+            ],
+            Some(PASSPHRASE),
+        );
+        assert_eq!(code(&output), 1, "{}", stderr(&output));
+        assert_eq!(stdout(&output), "", "a refusal answers nothing");
+        assert!(stderr(&output).contains(said), "{}", stderr(&output));
+    }
+
+    let output = device.run(&[
+        "--json",
+        "rename",
+        "--library",
+        "text",
+        "--from",
+        "albums/",
+        "--to",
+        "b",
+    ]);
+    assert_eq!(code(&output), 1, "{}", stderr(&output));
+    assert_eq!(answer_logged(&output)["error"]["kind"], "bad_path");
+}
+
 // What was typed wrongly is refused before any command runs, and a script that
 // asked for JSON still gets its one object.
 #[test]

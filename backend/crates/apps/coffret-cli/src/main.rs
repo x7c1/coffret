@@ -77,6 +77,8 @@ mod progress;
 
 mod recovery_code;
 
+mod rename;
+
 // What this binary refuses itself, before any flow is called.
 mod refusal;
 
@@ -133,6 +135,15 @@ enum Command {
     Freeze(freeze::FreezeArgs),
     /// Put the Library into the mapped folders
     Fetch(fetch::FetchArgs),
+    /// Give a file or a folder of the Library a new path, without uploading
+    /// anything
+    ///
+    /// Commits one change to the Library that names every renamed file; no
+    /// file's content is read, encrypted or uploaded. A folder's files keep the
+    /// rest of their paths under the new one, and files another device adds
+    /// under the folder meanwhile stay where they are. This device's own files
+    /// follow at once; other devices' follow on their next sync or fetch.
+    Rename(rename::RenameArgs),
 }
 
 impl Command {
@@ -150,6 +161,7 @@ impl Command {
             Self::Sync(_) => "sync",
             Self::Freeze(_) => "freeze",
             Self::Fetch(_) => "fetch",
+            Self::Rename(_) => "rename",
         }
     }
 }
@@ -255,6 +267,7 @@ async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
         Command::Sync(args) => sync::run(args, form).await,
         Command::Freeze(args) => freeze::run(args, form).await,
         Command::Fetch(args) => fetch::run(args, form).await,
+        Command::Rename(args) => rename::run(args, form).await,
     }
 }
 

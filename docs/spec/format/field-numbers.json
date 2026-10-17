@@ -76,6 +76,7 @@
     { "map": "rename", "name": "container", "number": 0 },
     { "map": "rename", "name": "entry", "number": 1 },
     { "map": "rename", "name": "path", "number": 2 },
-    { "map": "snapshot_entry", "name": "entry", "number": 10 }
+    { "map": "snapshot_entry", "name": "entry", "number": 10 },
+    { "map": "journal_record", "name": "required_schema", "number": 11 }
   ]
 }

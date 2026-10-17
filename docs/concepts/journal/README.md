@@ -132,16 +132,19 @@ would fence nobody (spec: FM-12).
 
 ## Technical Constraints
 
-**Replay applies renames; no operation writes one yet.** A record's renames
+**A rename is one record, and replay applies it.** A record's renames
 take effect together, after its removals and before its additions, and the
 state the whole record leaves keeps one Entry per Entry Path, so two Entries
 can swap names in one record. A record one of whose renames names no current
 Entry, changes nothing, names a derived Entry, or would leave two Entries at
 one Entry Path is refused whole, and the Catalog stays as it was
-(spec: FM-15, RV-5). A folder rename will enumerate the current Entries being
+(spec: FM-15, RV-5). A folder rename enumerates the current Entries being
 renamed; replay does not discover additional Entries by interpreting a prefix.
 Such a batch changes names without replacing or uploading Container
-ciphertext.
+ciphertext. A record that carries renames also names the schema a reader
+needs to apply it faithfully, and a device whose build implements less refuses
+the record and stops its replay there, rather than skipping it or applying the
+rest of it without the renames (spec: FM-9, FM-15).
 
 **Rebase carries a batch over renames.** A batch remembers the head it was
 prepared against, and every commit of it examines the records committed
@@ -160,13 +163,11 @@ picking one (spec: CP-7). Removals are carried over as they are, since they
 name Containers, and a folder rename is the Entries it was prepared with and
 no more.
 
-Fetching already finds an Entry by its entry number (spec: EP-11), and a
-device that catches a rename up relocates its file of the renamed Entry before
-its next sync or fetch scans or places anything; a relocation it cannot make
-keeps the old materialization record and stays pending for a later run
-(spec: EP-10). The rest of the rollout is planned: the rename operation that
-writes these batches. That is a requirement for rename, not a guarantee of the
-current implementation.
+Fetching finds an Entry by its entry number (spec: EP-11), and a device that
+catches a rename up relocates its file of the renamed Entry before its next
+sync or fetch scans or places anything — the device that made the rename,
+right after the commit; a relocation it cannot make keeps the old
+materialization record and stays pending for a later run (spec: EP-10).
 
 ## Related Concepts
 

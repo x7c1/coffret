@@ -27,11 +27,10 @@ IDs differ. The number does not identify a file across replacements. Captured
 metadata also includes modification time, optional birth time and media type,
 and an origin reference for derived data.
 
-The planned rename operation preserves the first and last answers while
-changing the second. For example, renaming `books/old/page.png` to
+The rename operation preserves the first and last answers while changing the
+second. For example, renaming `books/old/page.png` to
 `books/new/page.png` leaves the same bytes in the same Container, with
-`books/old/page.png` as that Container's captured name. The implementation
-status is stated below.
+`books/old/page.png` as that Container's captured name.
 
 ## Examples
 
@@ -101,8 +100,8 @@ for the current release.
 
 ## Technical Constraints
 
-Metadata-only rename is not complete yet. The control-object format
-carries the entry number: a Journal addition carries it by the position of
+A rename is metadata only. The control-object format carries the entry
+number: a Journal addition carries it by the position of
 each Entry in the table it copies, an Index Snapshot states it beside each
 Entry, and a Journal record's renames name Entries by it (spec: FM-9, FM-15,
 FM-16). Replay applies those renames, and every read of a Container finds an
@@ -110,8 +109,8 @@ Entry in its entry table by the entry number and holds its bytes to the hash
 the Catalog records; a fetch places it at its current path (spec: EP-11,
 PK-10). A rewrite of a Pack carries each kept Entry forward as a new Entry
 captured under the kept Entry's current path (spec: PK-10), and a device
-relocates its file of a renamed Entry to follow it (spec: EP-10). What remains
-is writing a rename.
+relocates its file of a renamed Entry to follow it (spec: EP-10). A rename
+writes one Journal record naming each Entry it renames, and no Container.
 Rewriting the Entry Path a device's [Index](../../index/)
 caches would not implement rename either: every device takes current names
 from the Journal and its checkpoints, so a name changed only in one device's

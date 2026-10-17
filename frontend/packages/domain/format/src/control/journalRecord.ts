@@ -52,16 +52,28 @@ import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js
 import { JOURNAL_RECORD, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for a Journal record payload: 3, the first to
- * carry `renames` (spec: FM-15).
+ * The schema this package writes for a Journal record payload, and the one it
+ * implements: 3, the first to carry `renames` (spec: FM-15).
  */
 export const JOURNAL_RECORD_SCHEMA = 3n;
 
 /**
  * The lowest schema a reader accepts. A record of schema 2 carries no `renames`
  * and reads as one that renames nothing (spec: FM-15).
+ *
+ * It is also the reader floor `required_schema` stands for where it is absent:
+ * every reader that accepts a record implements this much (spec: FM-9, FM-15).
  */
 const MIN_JOURNAL_RECORD_SCHEMA = 2n;
+
+/**
+ * The schema a reader has to implement to apply a record's `renames`
+ * faithfully, which a record carrying them names in `required_schema`
+ * (spec: FM-15). A reader below it would ignore `renames` as a field it does
+ * not know and hold a catalog every other device disagrees with; naming it is
+ * what makes such a reader stop instead.
+ */
+export const RENAMES_SCHEMA = 3n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
@@ -102,9 +114,12 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
     removals.map((id) => id.bytes()),
   );
   // Left out where the record renames nothing, so a record without renames
-  // costs nothing for them (spec: FM-15).
+  // costs nothing for them (spec: FM-15). A record carrying them names the
+  // schema a reader needs to apply them; one without leaves that out too, its
+  // absence being the reader floor (spec: FM-9, FM-15).
   if (record.renames.length > 0) {
     map.set('renames', [...record.renames].sort(compareRenames).map(encodeRename));
+    map.set('required_schema', RENAMES_SCHEMA);
   }
 
   return {
@@ -165,6 +180,11 @@ function encodeRename(rename: EntryRename): Map<string, unknown> {
  * alone shows — the order, a path that is an Entry Path outside the reserved
  * derived namespace — and leaves the ones that need the catalog to whoever
  * applies the record.
+ *
+ * `required_schema` is read before anything else the record holds, and a record
+ * naming a schema above the one this package implements is refused there as
+ * `journal_record_needs_newer_build`: never skipped, and never applied in part
+ * with the fields this package does not know ignored (spec: FM-9, FM-15).
  */
 export function decodeJournalRecord(
   payload: ControlPayload,
@@ -180,6 +200,7 @@ export function decodeJournalRecord(
   if (schema < MIN_JOURNAL_RECORD_SCHEMA) {
     fail('unsupported_journal_record_schema', `unsupported Journal record payload schema ${schema}`);
   }
+  const required = requiredSchema(map, generation);
 
   const additions = requiredArray(map, 'additions', MALFORMED).map((addition, index) =>
     decodeAddition(asCborMap(addition, MALFORMED, `addition ${index}`)),
@@ -205,6 +226,12 @@ export function decodeJournalRecord(
       )
     : [];
   requireStrictlyIncreasing('renames', renames, compareRenames);
+  if (renames.length > 0 && required < RENAMES_SCHEMA) {
+    fail(
+      MALFORMED,
+      `a record carrying renames names ${RENAMES_SCHEMA} or above as its required_schema`,
+    );
+  }
 
   const record: JournalRecord = {
     generation,
@@ -233,6 +260,36 @@ export function decodeJournalRecord(
     record.snapshotSlot = snapshotSlot;
   }
   return record;
+}
+
+/**
+ * The schema the record says its reader must implement, held against the one
+ * this package does (spec: FM-9, FM-15).
+ *
+ * Absent is the reader floor. Present, it names something above that floor: a
+ * value at or below it says what its absence already says, and a second
+ * spelling of one state is refused as every other one is.
+ */
+function requiredSchema(map: CborMap, generation: Generation): bigint {
+  const required = optionalUint(map, 'required_schema', MALFORMED);
+  if (required === undefined) {
+    return MIN_JOURNAL_RECORD_SCHEMA;
+  }
+  if (required > JOURNAL_RECORD_SCHEMA) {
+    fail(
+      'journal_record_needs_newer_build',
+      `the Journal record at generation ${generation} needs a reader of schema ${required}, ` +
+        `and this build implements schema ${JOURNAL_RECORD_SCHEMA}; a newer build of coffret ` +
+        'is needed to read the Library past it',
+    );
+  }
+  if (required <= MIN_JOURNAL_RECORD_SCHEMA) {
+    fail(
+      MALFORMED,
+      `required_schema is above the reader floor of ${MIN_JOURNAL_RECORD_SCHEMA} where present, found ${required}`,
+    );
+  }
+  return required;
 }
 
 /**

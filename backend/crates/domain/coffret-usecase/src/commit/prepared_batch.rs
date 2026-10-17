@@ -58,7 +58,8 @@ impl PreparedBatch {
 
     /// The same batch, renaming `renames` as well.
     ///
-    /// No operation writes renames yet; this is how one hands them over.
+    /// How a rename hands over the Entries it renames
+    /// ([`rename_entries`](crate::rename::rename_entries)).
     pub fn renaming(mut self, renames: Vec<PendingRename>) -> Self {
         self.renames = renames;
         self

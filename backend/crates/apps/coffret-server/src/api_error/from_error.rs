@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use coffret_device::{
     CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, IndexError, Redacted,
-    StorageError, SyncError, UnusableReplica,
+    RenameError, StorageError, SyncError, UnusableReplica,
 };
 
 use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE, UNAUTHENTICATED};
@@ -47,6 +47,7 @@ impl From<Error> for ApiError {
             Error::Sync { cause } => from_sync(*cause),
             Error::Freeze { cause } => from_freeze(*cause),
             Error::Delete { cause } => from_delete(*cause),
+            Error::Rename { cause } => from_rename(*cause),
             Error::CatchUp { cause } => from_commit(&cause, cause.redacted()),
             // The look at which heads there are walks the catch-up's own
             // listing, so what refuses it is answered as the catch-up's
@@ -157,6 +158,13 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         // commit never raises it; named anyway, so that the arm below keeps
         // accusing only the bytes whatever reaches it.
         CommitError::Format(FormatError::UnaddressableOnThisBuild { .. }) => {
+            ApiError::server(cause)
+        }
+        // A record this build is too old to apply: what Storage holds is the
+        // Library as a newer build wrote it, so nothing at the far end is to
+        // blame, and the remedy is this server's own build (spec: FM-9,
+        // FM-15).
+        CommitError::Format(FormatError::JournalRecordNeedsNewerBuild { .. }) => {
             ApiError::server(cause)
         }
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::unverified(
@@ -407,6 +415,26 @@ fn from_delete(cause: DeleteError) -> ApiError {
         DeleteError::Format(_) | DeleteError::Io { .. } | DeleteError::UnmappedContainer { .. } => {
             ApiError::server(cause.redacted())
         }
+    }
+}
+
+/// What a rename's own failure comes back as.
+///
+/// No route renames yet, so this is where the verdicts a rename shares with
+/// every other flow are placed — Storage, the commit, the catalog — and its own
+/// refusals wait for the route that will give a browser something to act on.
+/// Until then they are the server's, as every verdict nothing asked for is.
+fn from_rename(cause: RenameError) -> ApiError {
+    match cause {
+        RenameError::Storage(ref storage) => from_storage(storage, cause.redacted()),
+        RenameError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
+        RenameError::Index(IndexError::PendingRowsBusy { .. }) => {
+            ApiError::pending_rows_busy(cause.redacted())
+        }
+        RenameError::Index(_) | RenameError::NotRelocated { .. } => {
+            catalog_unusable(cause.redacted())
+        }
+        RenameError::Refused(_) => ApiError::server(cause.redacted()),
     }
 }
 

@@ -191,3 +191,22 @@ fn the_parent_is_everything_before_the_last_separator() {
     assert_eq!(parsed("albums/cover.png").parent(), Some(parsed("albums")));
     assert_eq!(parsed("notes.txt").parent(), None);
 }
+
+// EP-2: a rename of a subtree takes the path at its root and everything under
+// it, each keeping the rest of itself, and reaches nothing that merely starts
+// with the same letters.
+#[test]
+fn a_subtree_renamed_keeps_the_rest_of_each_path() {
+    let from = parsed("albums/2026");
+    let to = parsed("archive/old");
+    assert_eq!(
+        parsed("albums/2026").renamed_from(&from, &to),
+        Some(parsed("archive/old"))
+    );
+    assert_eq!(
+        parsed("albums/2026/spring/a.jpg").renamed_from(&from, &to),
+        Some(parsed("archive/old/spring/a.jpg"))
+    );
+    assert_eq!(parsed("albums/2026-b/a.jpg").renamed_from(&from, &to), None);
+    assert_eq!(parsed("albums").renamed_from(&from, &to), None);
+}

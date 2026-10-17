@@ -4,7 +4,12 @@ import { errorCode } from '../errors.testing.js';
 import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
-import { JOURNAL_RECORD_SCHEMA, decodeJournalRecord, encodeJournalRecord } from './journalRecord.js';
+import {
+  JOURNAL_RECORD_SCHEMA,
+  RENAMES_SCHEMA,
+  decodeJournalRecord,
+  encodeJournalRecord,
+} from './journalRecord.js';
 import type { ControlPayload } from './payload.js';
 import {
   BORN,
@@ -82,10 +87,48 @@ describe('Journal record payload (spec: FM-15)', () => {
   });
 
   // A record that renames nothing leaves `renames` out rather than writing it
-  // empty.
+  // empty, and names no required schema, since every reader applies it.
   it('writes no renames field for a record that renames nothing', () => {
     const payload = encodeJournalRecord(record());
-    expect([...bodyMap(payload, JOURNAL_RECORD).keys()]).not.toContain('renames');
+    const keys = [...bodyMap(payload, JOURNAL_RECORD).keys()];
+    expect(keys).not.toContain('renames');
+    expect(keys).not.toContain('required_schema');
+  });
+
+  // FM-9, FM-15: a record carrying renames names the schema a reader needs to
+  // apply them, above the reader floor.
+  it('names the schema renames need on a record carrying them', () => {
+    const payload = encodeJournalRecord(renamedRecord());
+    expect(BigInt(bodyMap(payload, JOURNAL_RECORD).get('required_schema') as number)).toBe(
+      RENAMES_SCHEMA,
+    );
+    expect(RENAMES_SCHEMA).toBeGreaterThan(2n);
+  });
+
+  // FM-9, FM-15: a record naming a schema above the one this package
+  // implements is refused as needing a newer build, never read in part.
+  it('refuses a record requiring a newer reader as needing a newer build', () => {
+    for (const source of [record(), renamedRecord()]) {
+      const payload = tampered(
+        (map) => map.set('required_schema', JOURNAL_RECORD_SCHEMA + 1n),
+        source,
+      );
+      expect(errorCode(() => read(payload))).toBe('journal_record_needs_newer_build');
+      expect(() => read(payload)).toThrow(/newer build/);
+    }
+  });
+
+  // A record carrying renames without naming the schema they need, or naming
+  // the reader floor (which its absence already says), is malformed.
+  it('refuses renames without a required schema, and a required schema at the floor', () => {
+    const bare = tampered((map) => map.delete('required_schema'), renamedRecord());
+    expect(errorCode(() => read(bare))).toBe('malformed_journal_record');
+    for (const required of [0n, 2n]) {
+      const payload = tampered((map) => map.set('required_schema', required));
+      expect(errorCode(() => read(payload)), `required ${required}`).toBe(
+        'malformed_journal_record',
+      );
+    }
   });
 
   // Libraries created since the field-number format hold records of schema 2,

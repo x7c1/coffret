@@ -9,7 +9,7 @@ use super::testing::{
     addition, addition_of, first_record, first_record_of, record, record_of, renamed_record, table,
     BORN, CAPTURED_DIR, GENERATION,
 };
-use super::{decode, encode};
+use super::{decode, encode, MIN_SCHEMA, RENAMES_SCHEMA};
 use crate::control::testing::{
     array, body_keys, body_map, container_id, field, map_keys, with_body_map,
 };
@@ -44,14 +44,40 @@ fn a_record_with_renames_round_trips() {
 }
 
 // FM-15: a record that renames nothing leaves `renames` out rather than writing
-// it empty, so a batch without renames costs nothing for them.
+// it empty, so a batch without renames costs nothing for them — and it names
+// no required schema either, since every reader applies it faithfully.
 #[test]
 fn a_record_without_renames_writes_no_renames_field() {
     let payload = encode(&record()).expect("encoding succeeds");
+    let keys = body_keys(&payload, &field_numbers::JOURNAL_RECORD);
     assert!(
-        !body_keys(&payload, &field_numbers::JOURNAL_RECORD).contains(&"renames".to_owned()),
+        !keys.contains(&"renames".to_owned()),
         "renames was written for a record that renames nothing"
     );
+    assert!(
+        !keys.contains(&"required_schema".to_owned()),
+        "required_schema was written for a record every reader applies"
+    );
+}
+
+// FM-9, FM-15: a record carrying renames names the schema a reader needs to
+// apply them, and reads back as it went in.
+#[test]
+fn a_record_with_renames_names_the_schema_they_need() {
+    let payload = encode(&renamed_record()).expect("encoding succeeds");
+    let fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    let required = fields
+        .iter()
+        .find(|(key, _)| key.as_text() == Some("required_schema"))
+        .and_then(|(_, value)| value.as_integer())
+        .map(|value| u64::try_from(value).expect("a schema is a u64"));
+    assert_eq!(required, Some(RENAMES_SCHEMA));
+    const {
+        assert!(
+            RENAMES_SCHEMA > MIN_SCHEMA,
+            "renames are above the reader floor"
+        )
+    };
 }
 
 // FM-15: Libraries created since the field-number format hold records of

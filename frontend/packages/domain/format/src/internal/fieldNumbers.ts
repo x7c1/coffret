@@ -128,6 +128,7 @@ export const JOURNAL_RECORD: MapFields = {
     field('additions', 8, () => ADDITION),
     field('removals', 9),
     field('renames', 10, () => RENAME),
+    field('required_schema', 11),
   ],
 };
 

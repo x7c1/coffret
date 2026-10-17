@@ -435,6 +435,23 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
+    /// A Journal record names, in `required_schema`, a schema above the one
+    /// this build implements: applying it faithfully takes a meaning this
+    /// build does not know (spec: FM-9, FM-15).
+    ///
+    /// Not a malformed record and not one to skip: a reader that ignored the
+    /// fields it does not know would apply part of the record and hold a
+    /// catalog every newer device disagrees with, without saying so. A replay
+    /// or a catch-up that meets one stops there, and a newer build is what
+    /// reads on past it.
+    JournalRecordNeedsNewerBuild {
+        /// The generation the object's header declared.
+        generation: Generation,
+        /// The schema the record says its reader must implement.
+        required: u64,
+        /// The schema this build implements.
+        implemented: u64,
+    },
     /// A Journal record's `prev` does not name the head it was built on
     /// (spec: FM-15).
     ///

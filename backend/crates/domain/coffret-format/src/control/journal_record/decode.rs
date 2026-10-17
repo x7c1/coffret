@@ -6,7 +6,8 @@ use coffret_model::{
 use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, MIN_SCHEMA,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, SNAPSHOT_SLOT,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, RENAMES_SCHEMA, REQUIRED_SCHEMA, SCHEMA,
+    SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -32,6 +33,13 @@ use crate::field_numbers;
 /// alone shows — the order, a path that is an Entry Path outside the reserved
 /// derived namespace — and leaves the ones that need the catalog the record is
 /// applied to to the Index that applies it.
+///
+/// `required_schema` is read before anything else the record holds, and a
+/// record naming a schema above the one this build implements is refused
+/// there with [`Error::JournalRecordNeedsNewerBuild`]: never skipped, and never
+/// applied in part with the fields this build does not know ignored
+/// (spec: FM-9, FM-15). A record that carries `renames` without naming the
+/// schema they need is malformed, since every writer of them names it.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
     let value = read_body(
         &payload.body,
@@ -44,6 +52,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     if schema < MIN_SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
+    let required = required_schema(&fields, generation)?;
 
     let additions = fields
         .array(ADDITIONS)?
@@ -69,6 +78,16 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
             .map(|(index, value)| rename::from_fields(index, &fields.map(value)?, malformed))
             .collect::<Result<Vec<_>>>()?,
     };
+    if !renames.is_empty() && required < RENAMES_SCHEMA {
+        return Err(malformed(format!(
+            "a record carrying renames names {RENAMES_SCHEMA} or above as its required_schema, \
+             found {}",
+            match required {
+                MIN_SCHEMA => "none".to_owned(),
+                other => other.to_string(),
+            }
+        )));
+    }
 
     JournalRecord::new(
         generation,
@@ -86,6 +105,28 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     )
     .and_then(|record| record.with_renames(renames))
     .map_err(refused_record)
+}
+
+/// The schema the record says its reader must implement, held against the one
+/// this build does (spec: FM-9, FM-15).
+///
+/// Absent is the reader floor, [`MIN_SCHEMA`]. Present, it names something
+/// above that floor: a value at or below it says what its absence already
+/// says, and a second spelling of one state is refused as every other one is.
+fn required_schema(fields: &Fields<'_>, generation: Generation) -> Result<u64> {
+    match fields.optional_uint(REQUIRED_SCHEMA)? {
+        None => Ok(MIN_SCHEMA),
+        Some(required) if required > SCHEMA => Err(Error::JournalRecordNeedsNewerBuild {
+            generation,
+            required,
+            implemented: SCHEMA,
+        }),
+        Some(required) if required <= MIN_SCHEMA => Err(malformed(format!(
+            "required_schema is above the reader floor of {MIN_SCHEMA} where present, \
+             found {required}"
+        ))),
+        Some(required) => Ok(required),
+    }
 }
 
 /// The record's own refusal, in this crate's vocabulary (spec: FM-15).

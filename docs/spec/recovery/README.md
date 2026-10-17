@@ -54,8 +54,10 @@ Concept background: [Library](../../concepts/library/),
     is applied, leaving the cached Catalog and device-local records as they
     were, and a replay steps over it: another replay into the same Index has
     applied it (CK-9, CK-13). A checkpoint that carries no entry numbers
-    is not a starting point for this rebuild (FM-16). No writer emits a
-    `renames` element yet.
+    is not a starting point for this rebuild (FM-16). A record that names in
+    `required_schema` a schema above the one the reader implements stops the
+    rebuild at that record, with the records before it applied and none of
+    it, and a newer build is what reads on (FM-9, FM-15).
 - **RV-6.** Authenticating Storage Objects proves their integrity, not their
   freshness: Storage can replay a coherent earlier Library state by
   withholding newer objects, so recent additions may disappear and removed

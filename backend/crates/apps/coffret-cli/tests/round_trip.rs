@@ -245,7 +245,86 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     );
     assert_eq!(answer["answer"]["committed_head"], Value::Null);
 
-    // 5. A Passphrase that is not the one the stored form was written under.
+    // 5. A file and a folder renamed on the first device, which uploads nothing
+    //    and commits one record each (spec: FM-15, CP-1). Its own files follow
+    //    at once, and the second device's follow on its next fetch, with
+    //    nothing fetched again (spec: EP-10).
+    let renamed = device.run_with(
+        &[
+            "rename",
+            "--library",
+            "a",
+            "--from",
+            &format!("{PREFIX}/second.txt"),
+            "--to",
+            &format!("{PREFIX}/renamed.txt"),
+            "--passphrase-stdin",
+        ],
+        Some(PASSPHRASE),
+    );
+    succeeded(&renamed, "rename");
+    assert_eq!(
+        stdout(&renamed),
+        format!(
+            "renamed 1, committed head {}\n\
+             relocated {PREFIX}/renamed.txt: this device's file was relocated here from \
+             {PREFIX}/second.txt to follow a rename of its Entry\n",
+            synced_head + 2
+        ),
+        "the count, then the relocation of this device's file, said as a sync says it",
+    );
+    let renamed_folder = device.run_with(
+        &[
+            "--json",
+            "rename",
+            "--library",
+            "a",
+            "--from",
+            &format!("{PREFIX}/nested"),
+            "--to",
+            &format!("{PREFIX}/deeper/nested"),
+            "--passphrase-stdin",
+        ],
+        Some(PASSPHRASE),
+    );
+    succeeded(&renamed_folder, "rename");
+    assert_eq!(
+        answered(&renamed_folder)["answer"],
+        json!({ "renamed": 1, "folder": true, "committed_head": synced_head + 3 }),
+    );
+    let mut expected = files.clone();
+    let second = expected.remove("second.txt").expect("written above");
+    let third = expected.remove("nested/third.txt").expect("written above");
+    expected.insert("renamed.txt".to_owned(), second);
+    expected.insert("deeper/nested/third.txt".to_owned(), third);
+    let mut on_source = expected.clone();
+    on_source.remove(wanted.as_str());
+    assert_eq!(
+        read_files(&source),
+        on_source,
+        "the renaming device's files follow the renames at once"
+    );
+
+    let refetched = device.run_with(
+        &[
+            "fetch",
+            "--library",
+            "b",
+            "--under",
+            PREFIX,
+            "--passphrase-stdin",
+        ],
+        Some(OWN_PASSPHRASE),
+    );
+    succeeded(&refetched, "fetch");
+    let said = summary(&refetched);
+    assert!(
+        said.starts_with("fetched 0, containers 0, "),
+        "nothing is fetched again for a rename: {said:?}"
+    );
+    assert_eq!(read_files(&elsewhere), expected);
+
+    // 6. A Passphrase that is not the one the stored form was written under.
     //    Nothing is read as key material on the way to finding out (spec: DK-5),
     //    so nothing reaches Storage either.
     let before = minio.keys_under(&prefix).await;

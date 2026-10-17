@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
 use super::testing::{first_record, record, renamed_record, GENERATION};
-use super::{decode, encode, MIN_SCHEMA};
+use super::{decode, encode, MIN_SCHEMA, SCHEMA};
 use crate::control::testing::{
     array, body_map, field, raw_body, spelled_by_name, with_body_map, with_raw_body,
 };
@@ -278,6 +278,71 @@ fn a_schema_below_the_lowest_readable_one_is_rejected() {
                 Err(Error::UnsupportedJournalRecordSchema { schema: found }) if found == schema
             ),
             "expected schema {schema} to be unreadable, got {result:?}"
+        );
+    }
+}
+
+// FM-9, FM-15: a record naming a schema above the one this build implements
+// is refused as needing a newer build, whatever else it carries — a reader that
+// ignored what it does not know would apply part of it. It is told apart from
+// a malformed record, and from one whose own `schema` is too old.
+#[test]
+fn a_record_requiring_a_newer_reader_is_refused_as_needing_a_newer_build() {
+    for record in [record(), renamed_record()] {
+        let payload = tampered_from(&record, |fields| {
+            fields.retain(|(key, _)| key.as_text() != Some("required_schema"));
+            fields.push((
+                Value::Text("required_schema".to_owned()),
+                Value::from(SCHEMA + 1),
+            ));
+        });
+        let result = read(&payload);
+        assert!(
+            matches!(
+                result,
+                Err(Error::JournalRecordNeedsNewerBuild {
+                    generation: found,
+                    required,
+                    implemented: SCHEMA,
+                }) if found == generation(GENERATION) && required == SCHEMA + 1
+            ),
+            "expected the record to need a newer build, got {result:?}"
+        );
+        let said = result.expect_err("refused").to_string();
+        assert!(said.contains("newer build"), "{said}");
+    }
+}
+
+// FM-15: a record carrying renames without naming the schema they need was
+// written by something that does not follow the rule, and is refused rather
+// than read as safe for every reader.
+#[test]
+fn renames_without_a_required_schema_are_rejected() {
+    let payload = tampered_from(&renamed_record(), |fields| {
+        fields.retain(|(key, _)| key.as_text() != Some("required_schema"))
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("required_schema")),
+        "expected renames without a required schema to be refused, got {result:?}"
+    );
+}
+
+// FM-15: absent is the reader floor, so naming the floor (or below it) is a
+// second spelling of one state and is refused.
+#[test]
+fn a_required_schema_at_or_below_the_floor_is_rejected() {
+    for required in [0, MIN_SCHEMA] {
+        let payload = tampered(|fields| {
+            fields.push((
+                Value::Text("required_schema".to_owned()),
+                Value::from(required),
+            ))
+        });
+        let result = read(&payload);
+        assert!(
+            matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("required_schema")),
+            "expected required_schema {required} to be refused, got {result:?}"
         );
     }
 }

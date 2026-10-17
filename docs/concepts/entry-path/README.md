@@ -16,9 +16,9 @@ updated page replaces the Entry stored there. Moving a file on disk today
 moves nothing in the Library. A sync stores the file at its new position as a
 new Entry. The Entry at the old position stays current: a sync reports it as
 deleted locally (see [Library](../library/#domain-rules)) but never removes an
-Entry because its file is gone. The planned rename will instead
-keep the same Entry and change only its Entry Path (see
-[Entry](../container/entry/#mental-model)).
+Entry because its file is gone. A rename in the Library instead keeps the same
+Entry and changes only its Entry Path (see
+[Entry](../container/entry/#mental-model)), and the device's file follows it.
 
 ## Collocations
 
