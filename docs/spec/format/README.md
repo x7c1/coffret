@@ -191,6 +191,19 @@ fields until a coordinated implementation changes the format.
     retired — and adding a field only adds a registry row and increments
     `schema`. A reader accepts any `schema` of 1 or above and rejects anything
     lower.
+  - Ignoring a field is safe only where the field adds something a reader
+    may go without. A field that changes what the rest of the object means —
+    one a reader that ignored it would apply wrongly, holding state every
+    newer reader disagrees with and saying nothing — is **must-understand**,
+    and the object that carries one says so in a field of its own: the
+    lowest `schema` a reader has to implement to apply it faithfully. A
+    reader implementing a lower schema than that refuses the object as a
+    typed error saying a newer build is needed, and stops wherever it was
+    reading — it never skips the object and never applies part of it. A
+    writer sets that field only on an object that carries a must-understand
+    field, and omits it otherwise; absent, it stands for the lowest schema a
+    reader accepts. A future field of this kind reuses the same field rather
+    than inventing another. FM-15 is the first map to carry one.
   - `captured_mtime` is a signed count of whole seconds from the Unix epoch;
     sub-second precision is not recorded, and negative values (before
     1970) are legal.
@@ -393,9 +406,12 @@ fields until a coordinated implementation changes the format.
   as the lowercase hex text a replica's name carries it in (FM-12) rather
   than as the bytes that text spells, so one digest has one spelling wherever
   it travels; `additions`, an array of the Containers the batch added;
-  `removals`, an array of 16-byte Container IDs the batch removed (CP-14); and
+  `removals`, an array of 16-byte Container IDs the batch removed (CP-14);
   `renames`, an array of the Entries the batch gave a new current Entry Path,
-  absent where it renames nothing. Beside the Keyring commitment those are the
+  absent where it renames nothing; and `required_schema`, the lowest schema a
+  reader has to implement to apply the record faithfully (FM-9), absent where
+  that is the reader floor of 2. Beside the Keyring commitment and
+  `required_schema`, which says how the rest is to be read, those are the
   record's four vocabularies.
   The header carries the record's own generation and the payload carries
   `master_key_epoch` (FM-11, FM-13), so neither is repeated here. Every
@@ -499,6 +515,17 @@ fields until a coordinated implementation changes the format.
     accepts any `schema` of 2 or above and rejects anything lower. A record of
     schema 2 predates `renames` and reads as one that renames nothing;
     Libraries created since field numbers hold such records.
+  - `renames` is must-understand on FM-9's terms: a reader that ignored it
+    would take the record's removals and additions and keep the renamed
+    Entries at their old paths. So a record carrying `renames` carries
+    `required_schema` of 3, and one without carries no `required_schema`. A
+    reader reads `required_schema` before anything else the record holds and
+    refuses a record naming a schema above the one it implements, as needing a
+    newer build; a replay or a catch-up that meets it stops there, with every
+    record before it applied and none of it. A reader also refuses, as
+    malformed, a record carrying `renames` without a `required_schema` of 3 or
+    above, and a `required_schema` of 2 or below, which its absence already
+    spells.
 - **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 3);
   the checkpoint the Snapshot stands at — `head_generation`,
   `journal_generation`, `next_commit_slot` (the same opaque token FM-15

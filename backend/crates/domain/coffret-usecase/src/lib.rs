@@ -216,14 +216,16 @@ pub mod delete;
 mod departure;
 
 // And what becomes of one whose Entry a rename gave another path: relocated to
-// follow it, decided once for the sync and the fetch that relocate before they
-// scan or place anything (spec: EP-10).
+// follow it, decided once for the sync, the fetch and the rename that relocate
+// it (spec: EP-10).
 mod relocate;
 pub use relocate::{Relocation, RelocationRefused};
 
 // The deletion's own contract, behind the same feature as the other flows'.
 #[cfg(feature = "conformance")]
 pub mod delete_conformance;
+
+pub mod rename;
 
 mod error;
 pub use error::{Error, Result};

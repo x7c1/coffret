@@ -72,6 +72,9 @@ pub use ran::Ran;
 mod recovery_code;
 pub use recovery_code::RecoveryCode;
 
+mod renamed;
+pub use renamed::Renamed;
+
 mod storage;
 use storage::Storage;
 
@@ -116,6 +119,11 @@ where it has one, is spelled as the explorer's server spells it, e.g.
 
 error is kind, message (the sentence the text form prints), advice (the
 lines printed after it), and found and supported for \"unsupported_schema\".
+A Journal record this build is too old to apply is
+\"newer_build_needed\". A rename refused before anything was written is
+\"nothing_to_rename\", \"same_path\", \"reserved_namespace\",
+\"into_itself\", \"destination_taken\", \"file_and_folder\" or
+\"rename_rule\".
 A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
@@ -150,6 +158,8 @@ answer, per command:
                  entry (\"placed\", \"already_present\" or \"surfaced\"),
                  fetched, skipped and alongside (the other files the
                  parcels read placed)
+  rename         renamed (how many Entries), folder (whether a folder was
+                 renamed), committed_head
 
 storage is {\"provider\": \"s3\", \"bucket\", \"prefix\"} or {\"provider\":
 \"drive\", \"folder_id\"}. committed_head is the generation committed, or
@@ -194,6 +204,8 @@ pub enum Answer {
     Fetched(Fetched),
     /// `fetch --entry`.
     FetchedEntry(FetchedEntry),
+    /// `rename`.
+    Renamed(Renamed),
 }
 
 /// The generation a run committed, or `None` where it committed nothing.

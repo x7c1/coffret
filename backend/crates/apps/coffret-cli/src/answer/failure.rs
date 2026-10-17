@@ -4,7 +4,10 @@ use std::error;
 
 use serde::Serialize;
 
-use coffret_device::{CommitError, CommitFailure, Error, IndexError, ModelError, StorageError};
+use coffret_device::{
+    CommitError, CommitFailure, Error, FormatError, IndexError, ModelError, RenameError,
+    RenameRefusal, StorageError,
+};
 
 use crate::fetch::UnmappedEntry;
 use crate::refusal::Refusal;
@@ -117,6 +120,17 @@ fn classified<'a>(
                 supported: Some(*supported),
             };
         }
+        // A record this build is too old to apply, whichever flow's catch-up
+        // met it: what a person does about it is install a newer build, and
+        // nothing else (spec: FM-9, FM-15).
+        if let Some(FormatError::JournalRecordNeedsNewerBuild { .. }) = link.downcast_ref() {
+            return Classified::kind("newer_build_needed");
+        }
+        // A rename refused before anything was written is the request's own,
+        // and each refusal is put right differently.
+        if let Some(RenameError::Refused(refusal)) = link.downcast_ref() {
+            return Classified::kind(rename_refusal_kind(refusal));
+        }
         if let Some(Error::NotAuthorized { .. }) = link.downcast_ref() {
             return Classified::kind("not_authorized");
         }
@@ -196,6 +210,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Sync { .. } if storage_below => "storage",
         Error::Freeze { .. } if storage_below => "storage",
         Error::Delete { .. } if storage_below => "storage",
+        Error::Rename { .. } if storage_below => "storage",
         Error::Fetch { .. } if storage_below => "storage",
         Error::CatchUp { .. } if storage_below => "storage",
         Error::RemoteHeadNotRead { .. } if storage_below => "storage",
@@ -203,6 +218,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Sync { .. } => "sync",
         Error::Freeze { .. } => "freeze",
         Error::Delete { .. } => "delete",
+        Error::Rename { .. } => "rename",
         Error::Fetch { .. } => "fetch",
         Error::CatchUp { .. } => "catch_up",
         Error::RemoteHeadNotRead { .. } => "remote_head_not_read",
@@ -256,6 +272,20 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::LocalFileNotOpened { .. } => "local_file_not_opened",
         Error::LibraryNotCreated { .. } => "library_not_created",
         Error::LibraryNotJoined { .. } => "library_not_joined",
+    }
+}
+
+/// A rename's refusal by its variant, snake-cased, for the reason
+/// [`device_kind`] lists every variant.
+fn rename_refusal_kind(refusal: &RenameRefusal) -> &'static str {
+    match refusal {
+        RenameRefusal::NothingAt { .. } => "nothing_to_rename",
+        RenameRefusal::SamePath => "same_path",
+        RenameRefusal::ReservedNamespace { .. } => "reserved_namespace",
+        RenameRefusal::IntoItself => "into_itself",
+        RenameRefusal::DestinationTaken { .. } => "destination_taken",
+        RenameRefusal::FileAndFolder { .. } => "file_and_folder",
+        RenameRefusal::Rule(_) => "rename_rule",
     }
 }
 

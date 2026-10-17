@@ -135,6 +135,10 @@ and has a window of its own for entering the Passphrase.
   rebuilding each [Pack](../pack/) that keeps other Entries around them) — from
   the explorer's "Delete…" on a folder or on a file the Library holds, once the
   person has seen its preview
+- rename (an Entry, or a folder — every Entry under it, each keeping the rest
+  of its path — to a new Entry Path, in one [Journal](../journal/) record that
+  names each Entry it renames; no Container is written and no file's content is
+  read or uploaded) — from the command line
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
@@ -146,7 +150,8 @@ and has a window of its own for entering the Passphrase.
   Entry's path, including its folder, and the device holding its file
   relocates it
 - relocate (a file awaiting relocation to its Entry's current path, during a
-  sync or a fetch and before either scans or places anything) — one rename on
+  sync or a fetch and before either scans or places anything, or right after
+  the commit of the rename this device made) — one rename on
   this device's disk, under the mapped root it stands in, and its
   materialization record after it; never *move*, for the reason above
 - remove (a folder below a mapped root that a run's discards or relocations
@@ -167,8 +172,9 @@ and has a window of its own for entering the Passphrase.
   whose [marker](../mapping/#definition) the mapping recorded)
 - refuse (to place into a mapped root that will not vouch for itself; any step
   a run cannot take safely, saying why — a freeze, a file that changed after
-  its survey; a deletion, a [Pack](../pack/) it cannot rebuild; a commit, when
-  another device committed underneath its batch)
+  its survey; a deletion, a [Pack](../pack/) it cannot rebuild; a rename, a
+  destination another Entry holds or a path it would leave both a file and a
+  folder; a commit, when another device committed underneath its batch)
 - surface (a file a run reports rather than silently skips)
 - remedy (a refusal, or a state a run keeps reporting, by the gesture its report
   names — renaming a folder, naming a different Entry Path, recording a mapping
@@ -263,7 +269,8 @@ and has a window of its own for entering the Passphrase.
     this device put it there: a scan neither reports it nor carries it in, and
     no run selects it for update or freeze. It stays where it was placed, and
     the record notes where its Entry stands now. A sync or a fetch relocates it
-    before it scans or places anything: one rename to the Entry's current
+    before it scans or places anything, and the device that made the rename
+    relocates its own right after the commit: one rename to the Entry's current
     path, under the same mapped root, and then the record follows, which ends
     the wait. A file that cannot be relocated — its root unavailable; the file
     edited since it was placed; the new path taken by something this device
@@ -504,6 +511,32 @@ and has a window of its own for entering the Passphrase.
   reports the refusal and leaves the Library as it was: no record of its batch
   is created, and the batch is dropped. Running it again catches up first, so it
   plans from the Library as that other commit left it (spec: CP-1, CP-4, CP-18).
+- A **rename** gives Entries a new Entry Path and changes nothing else: one
+  Journal record names each Entry it renames by its Container and entry
+  number, with the path it now stands at, and no Container is written, read,
+  or uploaded — the Entry's content, its Container, and the path that
+  Container captured it under stay as they were (spec: FM-15, CP-1).
+  - Renaming a path renames the Entry standing at it and every Entry under it
+    as a folder, each keeping the rest of its path under the new one. The
+    record enumerates them as the Catalog held them when the rename was
+    planned, so an Entry another device adds under the folder meanwhile is not
+    swept in and stays where it was added (spec: EP-7).
+  - A rename is refused, with nothing committed and nothing uploaded, when the
+    path names no current Entry; when the new path is the old one; when either
+    lies in the namespace reserved for derived Entries; when a folder would be
+    renamed to a path under itself; when an Entry the rename leaves where it is
+    already stands at a new path; and when the rename would leave one path both
+    a file and a folder. The rules every Catalog holds a record's renames to are
+    asked of it before anything is written, so a rename that commits is one
+    every device can apply (spec: EP-4, EP-5, FM-15).
+  - The device that made the rename relocates its own files of the renamed
+    Entries right after the commit; a file that cannot follow is reported as a
+    sync reports one, and the rename stands. Every other device's files follow
+    on its next sync or fetch, which fetches nothing again for them
+    (spec: EP-10).
+  - A device whose build predates renames refuses a record carrying them and
+    stops there rather than applying part of it, and says a newer build is
+    needed (spec: FM-9, FM-15).
 - A rename another device committed meanwhile is not by itself such a refusal.
   A run's update, Pack, or rebuilt Pack takes over the renamed Entry at its new
   path; only a write to the same Entry or Entry Path from both sides — a rename
@@ -520,17 +553,15 @@ and has a window of its own for entering the Passphrase.
 
 ## Technical Constraints
 
-Metadata-only rename is not complete yet. A rename commits a change to the
-Catalog's names without replacing the affected Containers, and replaying a
-record or adopting a Snapshot already applies one: the Catalog takes each
-Entry's new path, and a file this device placed for a renamed Entry waits at
-its old path until a sync or a fetch relocates it (spec: FM-15, RV-5, EP-10).
-A fetch already finds an Entry by its entry number and places it at its
-current path (spec: EP-11). What remains is writing renames — no writer emits
-one yet, though a batch carrying one is already rebased onto a newer head
-(spec: EP-7). Mappings will continue to translate names to local paths; they
-do not make local folders the authority for the namespace. The current
-implementation does not infer a rename from a local file being renamed.
+A rename commits a change to the Catalog's names without replacing the
+affected Containers: replaying its record or adopting a Snapshot taken after it
+gives each Entry its new path, and a fetch finds an Entry in its Container by
+its entry number and places it at its current path (spec: FM-15, RV-5, EP-11).
+Renames are made from the command line; the explorer does not offer one yet.
+Mappings continue to translate names to local paths; they do not make local
+folders the authority for the namespace. The current implementation does not
+infer a rename from a local file being renamed: a file renamed on disk reads
+to a sync as one file gone and another added.
 
 ## Related Concepts
 

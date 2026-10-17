@@ -16,6 +16,12 @@ Concept background: [Journal](../../concepts/journal/),
   - A record's renames take effect with the record, never partially: before
     it exists every Entry it renames stands at its old Entry Path, and once
     it exists every one stands at its new one (FM-15).
+  - A rename is a batch of renames alone: it adds and removes no Container,
+    so it reads, encrypts and uploads no Entry's content, and the only
+    objects its commit stores are the ones every commit stores — its record,
+    and the Keyring replicas and the Index Snapshot the commit is due to write
+    (CP-8, CK-8). It is prepared against the head its planning read, and a
+    commit another writer makes before it is rebased onto (CP-4, EP-7).
 - **CP-2.** Each authenticated control head determines exactly one next
   commit slot, and exactly one successor may consume it: an ordinary Journal
   record, or the Index Snapshot that activates a new Master Key epoch. The

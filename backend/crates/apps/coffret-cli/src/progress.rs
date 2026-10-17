@@ -95,6 +95,8 @@ pub enum Units {
     Freezing,
     /// A fetch, which packs nothing at all.
     Fetching,
+    /// A rename, which packs nothing either and uploads nothing.
+    Renaming,
 }
 
 impl Units {
@@ -106,7 +108,7 @@ impl Units {
             // Never reached: a fetch reports no packing phase, and a word it
             // could not mislead anybody with is better than a panic in a
             // progress line.
-            Self::Fetching => "containers",
+            Self::Fetching | Self::Renaming => "containers",
         }
     }
 }

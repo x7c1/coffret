@@ -301,6 +301,9 @@ pub use read_fronts::FRONTS_PER_LISTING;
 mod run_freeze;
 pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 
+mod run_rename;
+pub use run_rename::run_rename;
+
 mod run_sync;
 pub use run_sync::run_sync;
 
@@ -394,15 +397,15 @@ pub use coffret_format::{
     CborDecodeFailure, Error as FormatError, MalformedDetail, Purpose, RecoveryCode,
 };
 pub use coffret_model::{
-    lowercase_hex, ContainerId, ContainerKind, ContentHash, EntryPath, Error as ModelError,
-    Generation, Mtime, Passphrase, PathDefect, Redacted,
+    lowercase_hex, ContainerId, ContainerKind, ContentHash, EntryNumber, EntryPath,
+    Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_model::{ControlObjectKind, ControlObjectName};
 pub use coffret_usecase::catch_up::{CatchUpOutcome, RemoteHead};
 pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
-    CheckpointFailure, CommitError, CommitFailure, CommitOutcome, KeyringRepair, RewrittenReplicas,
-    ShortKeyring, UnrepairedReplica, UnusableReplica,
+    CheckpointFailure, CommitError, CommitFailure, CommitOutcome, EntryRef, KeyringRepair,
+    PendingChange, RebaseRule, RewrittenReplicas, ShortKeyring, UnrepairedReplica, UnusableReplica,
 };
 pub use coffret_usecase::delete::{
     DeleteError, DeleteOutcome, DeletePreview, DeleteSelection, PackRefusal, RebuiltPack,
@@ -414,6 +417,7 @@ pub use coffret_usecase::fetch::{
     Surfaced, UnheldParcel, UnheldReason,
 };
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, FreezePreview, SourceChange};
+pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
 pub use coffret_usecase::{
     DescentError, LocalOperation, Missing, RefusedRoot, Relocation, RelocationRefused, RootRefused,

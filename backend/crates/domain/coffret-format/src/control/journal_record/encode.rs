@@ -4,7 +4,8 @@ use coffret_model::{ContainerAddition, JournalRecord};
 use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, SCHEMA, SNAPSHOT_SLOT,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, RENAMES_SCHEMA, REQUIRED_SCHEMA, SCHEMA,
+    SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -27,6 +28,12 @@ use crate::field_numbers;
 /// here would make this a second statement of that rule. `renames` is left out
 /// where the record renames nothing, so a record without renames costs nothing
 /// for them.
+///
+/// A record that carries `renames` also names, in `required_schema`, the schema
+/// a reader has to implement to apply it faithfully, so that a reader that
+/// would ignore them stops at the record instead (spec: FM-9, FM-15). One
+/// without them leaves the field out: its absence is the reader floor every
+/// reader implements, and one state has one encoding.
 pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
     let mut map = MapBuilder::new();
     map.uint(SCHEMA_FIELD, SCHEMA)
@@ -63,7 +70,8 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
         map.value(
             RENAMES,
             Value::Array(record.renames().iter().map(rename::to_value).collect()),
-        );
+        )
+        .uint(REQUIRED_SCHEMA, RENAMES_SCHEMA);
     }
 
     Ok(ControlPayload::new(

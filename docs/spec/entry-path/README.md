@@ -64,6 +64,24 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   replacement, or a current Container and an uncommitted orphan, may contain
   the same Entry Path while only one belongs to the current state.
   *(Form: test)*
+  - A rename (FM-15) names a path, and renames the current Entry standing at
+    it and every current Entry under it, each by its own element of the
+    record and keeping the rest of its path under the new one. The record
+    enumerates them as the catalog the rename was planned against holds
+    them, so an Entry added under the path by another writer before the
+    rename commits is not renamed (EP-7, rule 8).
+  - A rename is refused before anything is written where the state it would
+    leave breaks this rule — a new path held by an Entry the same record does
+    not rename away — and where it would leave one Entry Path both an Entry
+    and a folder of Entries: a new path under a path an Entry the rename
+    leaves in place stands at, or with such an Entry under it. No device can
+    materialize both (EP-4); a Library already holding such a pair keeps it,
+    and a rename does not make one. So is a rename to the same path, a path
+    renamed to one under itself while Entries stand under it, and one either
+    of whose paths lies under the top-level component reserved for derived
+    Entries (FM-15). Every rule FM-15 holds a record's renames to against the
+    catalog is asked of the rename then too, so a rename that commits is one
+    every catalog applies (RV-5).
 - **EP-6.** Before a Journal commit, coffret removes every Entry owned by the
   record's removals from the current path map, then inserts every Entry owned
   by its additions. The commit is rejected if an insertion finds an existing

@@ -71,6 +71,7 @@ export type CoffretErrorCode =
   // Control-object payload schemas
   | 'malformed_journal_record'
   | 'unsupported_journal_record_schema'
+  | 'journal_record_needs_newer_build'
   | 'journal_record_prev_mismatch'
   | 'malformed_index_snapshot'
   | 'unsupported_index_snapshot_schema'

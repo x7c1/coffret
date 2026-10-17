@@ -96,6 +96,9 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
                 })
                 .collect(),
         ));
+        // And the schema a reader needs to apply them, which only a record
+        // carrying them names (spec: FM-9, FM-15).
+        fields.push(BodyField::uint("required_schema", 3));
     }
     fields
 }

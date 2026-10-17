@@ -38,13 +38,26 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload: 3, the first to
-/// carry `renames` (spec: FM-15).
+/// The schema this crate writes for a Journal record payload, and the one it
+/// implements: 3, the first to carry `renames` (spec: FM-15).
 const SCHEMA: u64 = 3;
 
 /// The lowest schema a reader accepts. A record of schema 2 carries no
 /// `renames` and reads as one that renames nothing (spec: FM-15).
+///
+/// It is also the reader floor `required_schema` stands for where it is
+/// absent: every reader that accepts a record implements this much
+/// (spec: FM-9, FM-15).
 const MIN_SCHEMA: u64 = 2;
+
+/// The schema a reader has to implement to apply a record's `renames`
+/// faithfully, which a record carrying them names in `required_schema`
+/// (spec: FM-15).
+///
+/// A reader below it would ignore `renames` as a field it does not know, apply
+/// the rest, and hold a catalog every other device disagrees with without
+/// saying so; naming it is what makes such a reader stop instead.
+const RENAMES_SCHEMA: u64 = 3;
 
 const PREV: &str = "prev";
 const NEXT_COMMIT_SLOT: &str = "next_commit_slot";
@@ -56,3 +69,4 @@ const ADDITIONS: &str = "additions";
 const ENTRIES: &str = "entries";
 const REMOVALS: &str = "removals";
 const RENAMES: &str = "renames";
+const REQUIRED_SCHEMA: &str = "required_schema";

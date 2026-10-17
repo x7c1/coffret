@@ -4,6 +4,7 @@ use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, S
 use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
+use coffret_usecase::rename::RenameOutcome;
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
 
@@ -141,6 +142,26 @@ impl From<&DeleteOutcome> for Findings {
                 .chain(committed(outcome.commit.as_ref()))
                 .chain(repaired(outcome.commit.as_ref()))
                 .chain(short(outcome.short.as_ref()))
+                .collect(),
+        )
+    }
+}
+
+/// What a rename still has to say beside what it renamed: what became of this
+/// device's files of the renamed Entries (spec: EP-10), and what its commit
+/// left for later and the Keyring repairs it performed (spec: KL-15).
+///
+/// The files are said in the words a sync says its relocations in, because it
+/// is the same relocation of the same files, made sooner.
+impl From<&RenameOutcome> for Findings {
+    fn from(outcome: &RenameOutcome) -> Self {
+        Self(
+            outcome
+                .relocations
+                .iter()
+                .map(relocation)
+                .chain(committed(Some(&outcome.commit)))
+                .chain(repaired(Some(&outcome.commit)))
                 .collect(),
         )
     }

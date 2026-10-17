@@ -165,6 +165,7 @@ impl Redacted for Error {
             Self::Sync { cause } => format!("Device::Sync: {}", cause.redacted()),
             Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
             Self::Delete { cause } => format!("Device::Delete: {}", cause.redacted()),
+            Self::Rename { cause } => format!("Device::Rename: {}", cause.redacted()),
             Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
             Self::LocalPathNotResolved { cause } => {
                 format!("Device::LocalPathNotResolved: {}", cause.redacted())

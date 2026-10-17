@@ -169,6 +169,16 @@ impl fmt::Display for Error {
             Self::UnsupportedJournalRecordSchema { schema } => {
                 write!(f, "unsupported Journal record payload schema {schema}")
             }
+            Self::JournalRecordNeedsNewerBuild {
+                generation,
+                required,
+                implemented,
+            } => write!(
+                f,
+                "the Journal record at generation {generation} needs a reader of schema \
+                 {required}, and this build implements schema {implemented}; a newer build of \
+                 coffret is needed to read the Library past it"
+            ),
             Self::JournalRecordPrevMismatch { generation, prev } => match prev {
                 Some(prev) => write!(
                     f,

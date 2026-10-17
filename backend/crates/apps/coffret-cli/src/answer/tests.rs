@@ -12,8 +12,9 @@ use std::path::Path;
 use serde_json::{json, Value};
 
 use coffret_device::{
-    CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryPath, Error, FetchError,
-    FetchOutcome, Finding, FindingReason, Findings, IndexError, ProviderSettings, StorageError,
+    CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryNumber, EntryPath, EntryRef,
+    Error, FetchError, FetchOutcome, Finding, FindingReason, Findings, FormatError, IndexError,
+    PendingChange, ProviderSettings, RebaseRule, RenameError, RenameRefusal, StorageError,
     SyncError, SyncOutcome,
 };
 
@@ -353,6 +354,143 @@ fn an_entry_no_mapping_reaches_answers_unmapped() {
         said[0].ends_with("run this again"),
         "the next step is part of the sentence: {said:?}"
     );
+}
+
+// A rename that committed: how many Entries, whether a folder, and the head —
+// and a finding about this device's files beside them, which turns the exit
+// status as it does for a sync.
+#[test]
+fn a_rename_answers_what_it_renamed_and_the_head() {
+    let findings = Findings::assembled([deleted("albums/front.jpg")]);
+    let ran = Ran::found(
+        crate::report::Report::Findings,
+        Answer::Renamed(Renamed::assembled(3, true, 7)),
+        &findings,
+    );
+
+    let answered = succeeded("rename", &ran);
+    assert_eq!(answered["command"], "rename");
+    assert_eq!(answered["exit_status"], 2);
+    assert_eq!(
+        answered["answer"],
+        json!({ "renamed": 3, "folder": true, "committed_head": 7 }),
+    );
+    assert_eq!(answered["findings"][0]["kind"], "surfaced", "{answered}");
+    assert_eq!(answered["error"], Value::Null);
+}
+
+// Each refusal of a rename is named by its own kind, with the sentence the
+// text form prints, and none of them is mistaken for the flow failing.
+#[test]
+fn each_rename_refusal_answers_its_own_kind() {
+    for (refusal, kind, said) in [
+        (
+            RenameRefusal::NothingAt {
+                path: path("albums/a.jpg"),
+            },
+            "nothing_to_rename",
+            "the Library holds no Entry at or under \"albums/a.jpg\"",
+        ),
+        (
+            RenameRefusal::SamePath,
+            "same_path",
+            "the new Entry Path is the one it already has",
+        ),
+        (
+            RenameRefusal::ReservedNamespace {
+                path: path(".coffret-derived/a.jpg"),
+            },
+            "reserved_namespace",
+            "keeps for derived Entries",
+        ),
+        (
+            RenameRefusal::IntoItself,
+            "into_itself",
+            "a folder cannot be renamed to a path under itself",
+        ),
+        (
+            RenameRefusal::DestinationTaken {
+                path: path("albums/b.jpg"),
+            },
+            "destination_taken",
+            "another Entry already stands at \"albums/b.jpg\"",
+        ),
+        (
+            RenameRefusal::FileAndFolder {
+                path: path("notes"),
+            },
+            "file_and_folder",
+            "would make \"notes\" both a file and a folder",
+        ),
+    ] {
+        let error = Error::from(RenameError::Refused(refusal));
+        let answered = failed("rename", error);
+        assert_eq!(answered["error"]["kind"], kind, "{answered}");
+        assert_eq!(answered["exit_status"], 1);
+        let message = answered["error"]["message"]
+            .as_str()
+            .expect("a message is a string");
+        assert!(
+            message.starts_with("the rename did not finish: the rename was refused: "),
+            "{message}"
+        );
+        assert!(message.contains(said), "{message}");
+    }
+}
+
+// A rename another device's commit leaves no way to carry over is the commit's
+// conflict, whose sentence says to run it again; it is the rename's failure,
+// not a refusal of what was asked.
+#[test]
+fn a_rename_that_lost_a_race_says_to_run_it_again() {
+    let error = Error::from(RenameError::Commit(coffret_device::CommitFailure {
+        error: Box::new(CommitError::RebaseConflict {
+            pending: PendingChange::Rename(EntryRef::new(container(0x11), EntryNumber::FIRST)),
+            record: coffret_device::Generation::new(7).expect("a small generation is one"),
+            rule: RebaseRule::RenamedEntryRenamed,
+            path: path("albums/cover.jpg"),
+        }),
+        repairs: Vec::new(),
+    }));
+
+    let answered = failed("rename", error);
+    assert_eq!(answered["error"]["kind"], "rename", "{answered}");
+    assert_eq!(answered["exit_status"], 1);
+    let message = answered["error"]["message"]
+        .as_str()
+        .expect("a message is a string");
+    assert!(
+        message.starts_with("the rename did not finish: "),
+        "{message}"
+    );
+    assert!(message.contains("renamed the same Entry"), "{message}");
+    assert!(message.contains("running again plans afresh"), "{message}");
+}
+
+// A Journal record this build is too old to apply stops the catch-up, whichever
+// flow met it, and is named for what a person does about it (spec: FM-9,
+// FM-15).
+#[test]
+fn a_record_needing_a_newer_build_answers_newer_build_needed() {
+    let error = Error::CatchUp {
+        cause: Box::new(CommitError::Format(
+            FormatError::JournalRecordNeedsNewerBuild {
+                generation: coffret_device::Generation::FIRST,
+                required: 4,
+                implemented: 3,
+            },
+        )),
+    };
+
+    let answered = failed("sync", error);
+    assert_eq!(
+        answered["error"]["kind"], "newer_build_needed",
+        "{answered}"
+    );
+    let message = answered["error"]["message"]
+        .as_str()
+        .expect("a message is a string");
+    assert!(message.contains("newer build of coffret"), "{message}");
 }
 
 // An epoch this device holds no key for, whichever flow met it, by the kind the

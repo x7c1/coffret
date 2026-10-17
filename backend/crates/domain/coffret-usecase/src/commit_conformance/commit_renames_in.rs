@@ -13,8 +13,10 @@ use crate::object_store::ObjectStore;
 /// carries, with the successor's two slots reserved afresh (spec: CP-2, CK-10,
 /// FM-15).
 ///
-/// Nothing in this build writes a rename yet, so the suites whose cases need
-/// one write the record themselves, sealed under `journal_key` (spec: KD-4).
+/// The suites whose cases need another device's rename write the record
+/// themselves, sealed under `journal_key` (spec: KD-4), rather than run a
+/// rename on a second catalog: what a case arranges is the record, not the
+/// run that produced it.
 /// The renames go in the order a record holds them, whatever order they come
 /// in (spec: FM-15).
 /// `index` is only asked where the head stands; it catches the record up the

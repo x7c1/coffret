@@ -4,6 +4,8 @@ use crate::PathDefect;
 
 mod parse;
 
+mod renamed_from;
+
 mod stored;
 
 #[cfg(test)]
