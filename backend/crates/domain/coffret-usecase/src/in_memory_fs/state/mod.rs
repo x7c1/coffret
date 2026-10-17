@@ -29,6 +29,10 @@ mod trash;
 // root is the one a mapping was recorded against (spec: EP-12, EP-13).
 mod roots;
 
+// Where a file goes to follow its Entry, by one rename, and which folders stand
+// on another filesystem than the rest (spec: EP-10).
+mod relocation;
+
 /// The fake's state, taken even from a lock a panicking case poisoned: what is
 /// behind it is a case's own bookkeeping, and a poisoned lock would replace the
 /// failure that panicked with one about the lock.
@@ -79,6 +83,13 @@ pub(super) struct State {
     files: BTreeMap<PathBuf, FileNode>,
     others: BTreeSet<PathBuf>,
     identities: BTreeMap<PathBuf, RootIdentity>,
+    /// The folders that are the tops of other filesystems than the fake's
+    /// own, which no rename crosses.
+    mounts: BTreeSet<PathBuf>,
+    /// Those of the mounts whose filesystem offers no rename that never
+    /// replaces, and none that exchanges — what FAT volumes and network
+    /// shares can be.
+    without_atomic_rename: BTreeSet<PathBuf>,
     discarded: Vec<PathBuf>,
     script: Vec<Fault>,
     attempts: BTreeMap<u8, usize>,

@@ -38,11 +38,15 @@ use crate::index_error::IndexResult;
 ///   (spec: EP-9), which Entries it has actually put on disk (spec: EP-10),
 ///   what it has spooled before committing (spec: OC-2), and which parcels of
 ///   the Containers it read it still holds (spec: PK-21). None of it is ever
-///   uploaded, and no Library-wide operation touches it — save that a rename,
-///   replayed or reached through an adopted Snapshot, marks the file this
-///   device has of the renamed Entry to follow it, since the file stays where
-///   it was placed, and removing that Entry clears the mark again
-///   (spec: FM-15, EP-10).
+///   uploaded, and no Library-wide operation touches it — save that each
+///   materialization record is kept about the Entry it names
+///   ([`LocalObservation::entry`]): a rename, replayed or reached through an
+///   adopted Snapshot, marks the file this device has of the renamed Entry to
+///   follow it, since the file stays where it was placed; a replacement carries
+///   the record over to the Entry that takes its Entry's place; removing the
+///   Entry clears the mark again; and a record whose path another Entry comes
+///   to hold is forgotten rather than read as that Entry's (spec: FM-15,
+///   EP-10).
 ///
 /// # Catching up
 ///
@@ -75,12 +79,21 @@ pub trait Index: Send + Sync {
     /// replacement and not a merge: the previous Containers and Entries are
     /// gone, whatever the Snapshot does not mention included (spec: RV-1).
     ///
-    /// Device state is left as it was, save which Entry each local file waits
-    /// to follow: a file whose Entry the Snapshot holds at another path than
-    /// the catalog it replaces did is marked to follow it there, as replaying
-    /// the renames in between would have, and a mark naming a path the
-    /// Snapshot holds no Entry at is cleared ([`LocalEntry::relocate_to`],
-    /// spec: FM-15, EP-10). Nothing else of this device's is touched. That is
+    /// Device state is left as it was, save what each materialization record
+    /// says about its Entry ([`LocalObservation::entry`]): a file whose Entry
+    /// the Snapshot holds at another path than its own is marked to follow it
+    /// there, as replaying the renames in between would have, and one whose
+    /// Entry stands at its own path waits for nothing
+    /// ([`LocalEntry::relocate_to`]). A record whose Entry the Snapshot no
+    /// longer holds is carried over to the Entry standing where its Entry
+    /// stood, where that Entry's Container is one the replaced catalog did not
+    /// hold — the shape every replacement has, an update, a freeze absorbing a
+    /// file or a rebuilt Pack, since each brings a new Container (spec: EP-6).
+    /// Any other record of an Entry that left waits for nothing, and is
+    /// forgotten where another Entry now holds the path it stands at: an Entry
+    /// that was already current, a rename brought there, is never one the
+    /// record's file is a copy of (spec: FM-15, EP-10, EP-15). Nothing else of
+    /// this device's is touched. That is
     /// what lets a Snapshot another device wrote be adopted unchanged: it
     /// carries no local root mappings, no local paths, and no record of what
     /// any device has materialized, so two devices laid out differently adopt
@@ -114,10 +127,17 @@ pub trait Index: Send + Sync {
     /// the catalog and this device's rows exactly as they were. The row of a
     /// file this device has of a renamed Entry stays keyed by the path the
     /// file stands at, and records where the Entry stands now
-    /// ([`LocalEntry::relocate_to`]) until the file is placed afresh — or
-    /// until a later record removes the Entry, which clears the mark unless
-    /// the path it waited for passes to a Container that record adds in its
-    /// place (spec: EP-6, EP-10).
+    /// ([`LocalEntry::relocate_to`]) until the file is relocated or placed
+    /// afresh.
+    ///
+    /// A record whose Entry this record replaces — removes its Container and
+    /// adds, at the path the Entry stood at, an Entry of a Container the
+    /// record adds — is carried over to the replacement (spec: EP-6). One whose
+    /// Entry the record removes outright waits for nothing any more, and is
+    /// forgotten where another Entry holds the path its file stands at; so is
+    /// one whose Entry left earlier and whose path this record gives to another
+    /// Entry, by an addition or a rename. Such a file is not a copy of that
+    /// Entry, and a record kept there would claim it (spec: EP-10, EP-15).
     ///
     /// A record whose generation is at or below the head this Index stands at
     /// is refused before any of it is looked at, with
@@ -238,10 +258,16 @@ pub trait Index: Send + Sync {
     async fn mappings(&self) -> IndexResult<Vec<Mapping>>;
 
     /// Records that this device now has the file at an Entry Path on disk,
-    /// having uploaded or fetched it there (spec: EP-10).
+    /// having uploaded or fetched it there, as a copy of the Entry the
+    /// observation names (spec: EP-10).
     ///
-    /// The file is the Entry at that path, so whatever the row there waited
-    /// to follow before is cleared ([`LocalEntry::relocate_to`]).
+    /// Whatever row stood at the path is replaced. The new one waits to follow
+    /// its Entry where the catalog holds that Entry at another path
+    /// ([`LocalEntry::relocate_to`]) — the file of an update a rebase carried
+    /// over a rename — and waits for nothing where it holds it at this one.
+    /// One recorded for an Entry the catalog no longer holds is kept only
+    /// where no other Entry holds the path, as every record of such an Entry
+    /// is.
     async fn mark_present(&self, observation: LocalObservation) -> IndexResult<()>;
 
     /// Records that a file this device had is gone.
@@ -289,6 +315,35 @@ pub trait Index: Send + Sync {
     /// ([`LocalEntry::relocate_to`]) is not the Entry at its own path, and is
     /// not among them.
     async fn present_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>>;
+
+    /// Every row whose file waits to follow its Entry to another path
+    /// ([`LocalEntry::relocate_to`]), ordered by the path it stands at
+    /// (spec: EP-10).
+    ///
+    /// What a run that relocates reads before it scans or places anything:
+    /// absent rows among them, whose files are gone, as well as present ones.
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>>;
+
+    /// Re-keys this device's rows to the paths their files now stand at, all
+    /// of them at once (spec: EP-10).
+    ///
+    /// Each `(from, to)` takes the row at `from` to `to`: the observation keeps
+    /// what it said — the file a relocation renames keeps its length and modification
+    /// time — and only its path changes, and the row then waits for whatever
+    /// its Entry's current path still asks of it, nothing where the Entry
+    /// stands at `to`. Every row a `from` names is taken out before any is put
+    /// back, so two rows may exchange their paths, the way two files exchange
+    /// theirs on disk. A row already at a `to` that no `from` takes out is
+    /// replaced: the file the caller relocated is what stands there now. A
+    /// `from` with no row is passed over, so an interrupted relocation is
+    /// simply re-keyed again.
+    ///
+    /// Called only after the files have been relocated on disk: a record changes
+    /// after its file, so an interruption between the two leaves the old
+    /// record with the file at the new path, which the next run recognizes,
+    /// and never a record pointing at a path with no file.
+    async fn relocate_local_entries(&self, relocated: &[(EntryPath, EntryPath)])
+        -> IndexResult<()>;
 
     /// The files this device has on disk at Entry Paths the Library no longer
     /// holds a current Entry for.

@@ -31,7 +31,13 @@
 //!    the settled row leaves uncommitted is spooled afresh by the scan below —
 //!    the whole file where the batch never committed, and nothing at all where
 //!    it did and the file has not changed since.
-//! 3. **Scan** (spec: EP-8, EP-9, EP-10). Walk each of the device's mappings
+//! 3. **Relocate** (spec: EP-10). Every file this device placed whose Entry a
+//!    rename has given another path is relocated to follow it, one rename inside
+//!    its mapped root, and its record after it — before the scan, so the scan
+//!    reads the folder the way the Library names it. A file that cannot be
+//!    relocated is left where it stands, reported, and asked about again by the
+//!    next run.
+//! 4. **Scan** (spec: EP-8, EP-9, EP-10). Walk each of the device's mappings
 //!    and translate the regular files under it into Entry Paths. A path the
 //!    Library holds no current Entry for is new. A path whose file no longer
 //!    matches the size and modification time this device last observed is a
@@ -53,7 +59,7 @@
 //!    [`SyncOutcome::unavailable`] instead, and the device's other mappings scan
 //!    normally. A root that holds files on a filesystem the mapping does not
 //!    record is available, and the scan re-stamps the mapping with what it saw.
-//! 4. **Decide, and surface what is not decided here** (spec: PK-14). A new
+//! 5. **Decide, and surface what is not decided here** (spec: PK-14). A new
 //!    file becomes a one-file Container. A changed file whose current Entry
 //!    lives in a one-file Container becomes a replacement Container, the old
 //!    one going into the batch's removals (spec: CP-14, PK-12, PK-15). A
@@ -62,16 +68,16 @@
 //!    read-modify-replace over a Pack is the half of `update` this flow does
 //!    not do (spec: PK-10, PK-11) and propagating a deletion is an explicit
 //!    flow of its own. Reporting them is not optional.
-//! 5. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
+//! 6. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
 //!    FM-14, OC-2). Encode each Container under a Container Key of its own,
 //!    write the ciphertext to a file in the spool directory, and record it as
 //!    a pending row before a byte goes out — the local provenance that
 //!    makes cleaning up after an interrupted run possible at all.
-//! 6. **Upload** (spec: FM-3). Put each spool file under the name its Container
+//! 7. **Upload** (spec: FM-3). Put each spool file under the name its Container
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy),
 //!    and compare the digest the provider reports for what it stored against
 //!    the one taken while writing the spool.
-//! 7. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
+//! 8. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
 //!    which is where the Library's state actually changes (spec: CP-1) — and
 //!    where a committed Keyring that has lost replicas is repaired, this being
 //!    the write KL-11 gates. What that repair found and rewrote travels back on
@@ -139,3 +145,6 @@ pub use sync_request::SyncRequest;
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
 pub use crate::unavailable_root::{RootUnavailable, UnavailableRoot};
+// What became of a file that waited to follow a rename of its Entry, shared
+// with the fetch that relocates the same files (spec: EP-10).
+pub use crate::relocate::{Relocation, RelocationRefused};

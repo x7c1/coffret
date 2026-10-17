@@ -134,6 +134,9 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   Discarded: 'finding',
   KeptEdited: 'finding',
   DiscardRefused: 'finding',
+  Relocated: 'finding',
+  RelocationDiscarded: 'finding',
+  RelocationRefused: 'finding',
 };
 
 const FINDING_REASONS: Literals<FindingReason> = {

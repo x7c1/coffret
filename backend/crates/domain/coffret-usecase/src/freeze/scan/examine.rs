@@ -4,6 +4,7 @@ use coffret_format::EntryPlan;
 use coffret_model::{ContainerId, ContainerKind, ContentHash, EntryLocation};
 
 use crate::device_state::{DeviceTime, LocalEntry, LocalEntryState, LocalObservation};
+use crate::entry_ref::EntryRef;
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::freeze::selected::Selected;
@@ -81,8 +82,9 @@ pub(super) async fn judge(
     };
 
     // Packing a file this device never put there would propose replacing an
-    // Entry from a file this device never placed (spec: EP-10).
-    let Some(local) = local else {
+    // Entry from a file this device never placed — and a row recording a copy
+    // of another Entry is no copy of this one (spec: EP-10).
+    let Some(local) = local.filter(|local| local.is_copy_of(&location)) else {
         return Ok(Verdict::NotMaterialized);
     };
     let container_id = location.container_id;
@@ -165,6 +167,7 @@ pub(super) async fn examine(
                     size: source.size,
                     mtime: source.mtime,
                     at: now,
+                    entry: EntryRef::of(&location),
                     hash: Some(location.entry.hash),
                 });
             } else {

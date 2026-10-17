@@ -584,6 +584,7 @@ mod tests {
     use crate::commit::control_fixtures::commitment;
     use crate::device_state::{DeviceTime, LocalObservation};
     use crate::entry_paths::entry_path;
+    use crate::entry_ref::EntryRef;
     use crate::generations::generation;
     use crate::in_memory_index::InMemoryIndex;
     use crate::index_error::RenameRule;
@@ -766,6 +767,10 @@ mod tests {
                     size: 10,
                     mtime: Mtime::from_unix_seconds(1_700_000_000),
                     at: DeviceTime::from_unix_seconds(1_700_000_500),
+                    entry: EntryRef::new(
+                        ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
+                        EntryNumber::FIRST,
+                    ),
                     hash: Some(ContentHash::from_bytes([seed; ContentHash::BYTE_LEN])),
                 })
                 .await

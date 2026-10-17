@@ -1,7 +1,9 @@
 use coffret_model::ContainerKind;
 
 use crate::device_state::{DeviceTime, LocalEntryState};
-use crate::index_conformance::fixtures::{addition, container_id, observation, path, record};
+use crate::index_conformance::fixtures::{
+    addition, container_id, entry, observation, observation_of, path, record,
+};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 /// A file this device has, at a path the Library no longer holds, is reported.
@@ -27,11 +29,11 @@ pub async fn a_file_left_behind_by_the_library_is_reported(fixture: &IndexUnderT
         .await
         .expect("replaying a record must succeed");
     index
-        .mark_present(observation("albums/a.jpg", 100))
+        .mark_present(observation_of("albums/a.jpg", 100, entry(1, 0)))
         .await
         .expect("recording a materialized file must succeed");
     index
-        .mark_present(observation("albums/b.jpg", 101))
+        .mark_present(observation_of("albums/b.jpg", 101, entry(1, 1)))
         .await
         .expect("recording a materialized file must succeed");
 
@@ -66,6 +68,11 @@ pub async fn a_file_left_behind_by_the_library_is_reported(fixture: &IndexUnderT
         2,
         "the row survives the removal, got {present:?}"
     );
+    // The replacement at `a.jpg` takes the place of the Entry its file is a
+    // copy of, so the record is carried over to it (spec: EP-6, EP-10).
+    assert_eq!(present[0].observation.path.as_str(), "albums/a.jpg");
+    assert_eq!(present[0].observation.entry, entry(2, 0));
+    assert_eq!(present[1].observation.entry, entry(1, 1));
 }
 
 /// Only a file this device put in place can be reported as gone.

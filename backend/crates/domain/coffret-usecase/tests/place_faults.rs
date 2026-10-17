@@ -204,6 +204,7 @@ async fn library_of(paths: &[&str]) -> (InMemoryStore, Device) {
             &source.fs,
             &source.fs,
             &source.fs,
+            &source.fs,
             SPOOL_DIR,
             BatchId::new("run-1"),
             at(1),
@@ -265,8 +266,11 @@ async fn fetch(
     // A folder fetch reads whole objects and keeps no parcel, so the directory
     // is named and never made (spec: PK-16).
     let parcels = KeptParcels::new(fs, Path::new("/target-state/parcels"));
-    fetch_folders(FetchRequest::new(store, index, &keys, fs, parcels, at(2)).with_policy(policy()))
-        .await
+    fetch_folders(
+        FetchRequest::new(store, index, &keys, fs, fs, fs, fs, parcels, at(2))
+            .with_policy(policy()),
+    )
+    .await
 }
 
 /// One scan of the target device's folder, through its own disk.
@@ -281,6 +285,7 @@ async fn sync(store: &InMemoryStore, index: &dyn Index, fs: &InMemoryFs) -> Sync
             store,
             index,
             &keys(),
+            fs,
             fs,
             fs,
             fs,
@@ -1195,6 +1200,17 @@ impl Index for RefusingIndex<'_> {
 
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>> {
         self.inner.present_without_entry().await
+    }
+
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.awaiting_relocation().await
+    }
+
+    async fn relocate_local_entries(
+        &self,
+        relocated: &[(EntryPath, EntryPath)],
+    ) -> IndexResult<()> {
+        self.inner.relocate_local_entries(relocated).await
     }
 
     async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {

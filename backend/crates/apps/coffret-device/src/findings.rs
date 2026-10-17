@@ -5,7 +5,7 @@ use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
-use coffret_usecase::{RefusedRoot, UnavailableRoot};
+use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
 
 use crate::finding::Finding;
 use crate::finding_reason::FindingReason;
@@ -81,9 +81,10 @@ impl From<&SyncOutcome> for Findings {
 
         Self(
             outcome
-                .surfaced
+                .relocations
                 .iter()
-                .map(surfaced)
+                .map(relocation)
+                .chain(outcome.surfaced.iter().map(surfaced))
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
                 .chain(committed(outcome.commit.as_ref()))
@@ -156,9 +157,10 @@ impl From<&FetchOutcome> for Findings {
 
         Self(
             outcome
-                .surfaced
+                .relocations
                 .iter()
-                .map(declined)
+                .map(relocation)
+                .chain(outcome.surfaced.iter().map(declined))
                 .chain(refused(&outcome.refused))
                 .chain(key_lost)
                 .chain(short(outcome.short.as_ref()))
@@ -230,6 +232,32 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
             path,
             FindingReason::DiscardRefused {
                 cause: cause.clone(),
+            },
+        ),
+    };
+    Finding::Surfaced {
+        path: path.clone(),
+        reason,
+    }
+}
+
+/// The finding for one file a sync or a fetch relocated to follow a rename of
+/// its Entry, or could not (spec: EP-10).
+///
+/// Said about the file a person would go and look at: where it stands now for
+/// one relocated, and where it still stands — or stood, for one discarded —
+/// for the others.
+fn relocation(relocation: &Relocation) -> Finding {
+    let (path, reason) = match relocation {
+        Relocation::Relocated { from, to } => (to, FindingReason::Relocated { from: from.clone() }),
+        Relocation::Discarded { from, to } => {
+            (from, FindingReason::RelocationDiscarded { to: to.clone() })
+        }
+        Relocation::Refused { from, to, reason } => (
+            from,
+            FindingReason::RelocationRefused {
+                to: to.clone(),
+                reason: reason.clone(),
             },
         ),
     };
@@ -345,7 +373,9 @@ mod tests {
         CheckpointFailure, CommitError, KeyringRepair, RewrittenReplicas, UntrashedRemoval,
     };
     use coffret_usecase::sync::{Disposal, Settled, SyncError};
-    use coffret_usecase::{root_marker, Error as StorageError, RootRefused, RootUnavailable};
+    use coffret_usecase::{
+        root_marker, Error as StorageError, RelocationRefused, RootRefused, RootUnavailable,
+    };
 
     use super::*;
     use crate::testing::entry_path;
@@ -356,6 +386,7 @@ mod tests {
     #[test]
     fn a_sync_reports_what_it_left_alone_and_what_it_could_not_read() {
         let outcome = SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
@@ -389,12 +420,76 @@ mod tests {
         );
     }
 
+    // EP-10: a sync's relocations are said before its other findings, each
+    // with a kind word of its own — what was done for a file relocated or a
+    // redundant copy discarded, and "surfaced" for one that could not be relocated,
+    // which is the one somebody has to act on.
+    #[test]
+    fn a_relocation_is_said_as_what_became_of_the_file() {
+        let outcome = SyncOutcome {
+            relocations: vec![
+                Relocation::Relocated {
+                    from: entry_path("inbox/a.jpg"),
+                    to: entry_path("albums/a.jpg"),
+                },
+                Relocation::Discarded {
+                    from: entry_path("inbox/b.jpg"),
+                    to: entry_path("albums/b.jpg"),
+                },
+            ],
+            added: Vec::new(),
+            replaced: Vec::new(),
+            unchanged: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: None,
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(!findings.needs_attention(), "work done needs nobody");
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered,
+            [
+                "relocated albums/a.jpg: this device's file was relocated here from inbox/a.jpg to \
+                 follow a rename of its Entry",
+                "discarded inbox/b.jpg: its Entry was renamed to albums/b.jpg, where this device \
+                 already had it, so this unedited copy was discarded into the trash",
+            ]
+        );
+
+        let refused = SyncOutcome {
+            relocations: vec![Relocation::Refused {
+                from: entry_path("inbox/c.jpg"),
+                to: entry_path("albums/c.jpg"),
+                reason: RelocationRefused::Edited,
+            }],
+            ..outcome
+        };
+        let findings = Findings::from(&refused);
+        assert!(
+            findings.needs_attention(),
+            "a file left behind needs somebody"
+        );
+        assert_eq!(
+            findings.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            [
+                "surfaced inbox/c.jpg: its Entry was renamed to albums/c.jpg, and this device's \
+                 file was not relocated to follow it (the file changed since this device placed \
+                 it); it is left here, and the next run tries again"
+            ]
+        );
+    }
+
     // EP-15's discarded copy is said as what was done, and still
     // opens on a kind word of its own, as every other finding does: the line is
     // what a script reading the CLI's `said` splits on.
     #[test]
     fn a_discarded_copy_is_said_as_discarded() {
         let outcome = SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
@@ -428,6 +523,7 @@ mod tests {
     #[test]
     fn an_unavailable_root_is_a_finding_that_names_the_mapping() {
         let outcome = |prefix| SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
@@ -508,6 +604,7 @@ mod tests {
     #[test]
     fn a_run_that_left_nothing_alone_has_no_findings() {
         let outcome = FetchOutcome {
+            relocations: Vec::new(),
             fetched: vec![entry_path("albums/kept.jpg")],
             containers: Vec::new(),
             skipped: 0,
@@ -527,6 +624,7 @@ mod tests {
     #[test]
     fn a_run_that_only_settled_a_leftover_batch_needs_no_attention() {
         let outcome = SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 3,
@@ -637,6 +735,7 @@ mod tests {
     fn what_a_commit_left_unfinished_is_said_and_not_escalated() {
         let container_id = ContainerId::from_bytes([6; ContainerId::BYTE_LEN]);
         let outcome = SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
@@ -733,6 +832,7 @@ mod tests {
     fn a_fetch_reports_a_key_lost_container_as_well_as_its_entries() {
         let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);
         let outcome = FetchOutcome {
+            relocations: Vec::new(),
             fetched: Vec::new(),
             containers: Vec::new(),
             skipped: 0,
@@ -768,6 +868,7 @@ mod tests {
     #[test]
     fn a_place_the_run_could_not_reach_is_a_finding_that_names_the_folder() {
         let outcome = FetchOutcome {
+            relocations: Vec::new(),
             fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
@@ -801,6 +902,7 @@ mod tests {
     #[test]
     fn a_refused_root_is_a_finding_that_names_the_mapping_and_the_gesture() {
         let outcome = FetchOutcome {
+            relocations: Vec::new(),
             fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
@@ -928,6 +1030,7 @@ mod tests {
     #[test]
     fn a_short_keyring_is_reported_by_every_run_that_read_it_and_needs_no_attention() {
         let fetch = FetchOutcome {
+            relocations: Vec::new(),
             fetched: vec![entry_path("albums/kept.jpg")],
             containers: Vec::new(),
             skipped: 0,
@@ -1033,6 +1136,7 @@ mod tests {
             ..unfinished_commit(ContainerId::from_bytes([3; ContainerId::BYTE_LEN]))
         };
         let sync = SyncOutcome {
+            relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,

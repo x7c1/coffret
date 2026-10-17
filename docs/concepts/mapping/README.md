@@ -98,6 +98,10 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   root itself if the person named it through a symbolic link, and below it
   descends without following links, so a mapping reaches the folder the person
   pointed it at and nothing a link inside it points to (spec: EP-8).
+- A rename can give an Entry a current path under another mapping. The device
+  does not relocate its file across: a file is relocated only within the
+  mapped root it stands in, so it stays where it was placed, waiting, and is
+  reported (spec: EP-9, EP-10).
 - Recording a mapping needs no [Passphrase](../passphrase/): it is device state
   kept unencrypted in this device's Index, and what a device calls its own
   folders says nothing the Library keeps secret.

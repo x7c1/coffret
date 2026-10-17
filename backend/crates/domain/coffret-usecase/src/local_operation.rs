@@ -71,6 +71,13 @@ pub enum LocalOperation {
     /// person reading which of the two refused has a different place to look —
     /// a volume without a trash is not a file that could not be deleted.
     Discarding,
+    /// A file this device placed was being relocated to the current path a rename
+    /// gave its Entry (spec: EP-10).
+    ///
+    /// Not [`Renaming`](Self::Renaming), which is a fetch publishing what it
+    /// verified: a person reading which of the two refused has a different file
+    /// to look at.
+    Relocating,
     /// A lock was being taken on a file a device keeps for itself, so that one
     /// process at a time holds what that file stands for.
     ///
@@ -93,6 +100,7 @@ impl fmt::Display for LocalOperation {
             Self::Renaming => "renamed",
             Self::Removing => "removed",
             Self::Discarding => "discarded into the trash",
+            Self::Relocating => "relocated to follow its Entry's new path",
             Self::Locking => "locked",
         })
     }

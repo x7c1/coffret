@@ -183,6 +183,7 @@ impl Devices {
                 &self.local,
                 &self.local,
                 &self.local,
+                &self.local,
                 &self.spool_dir,
                 BatchId::new("run-1"),
                 at(1),
@@ -206,6 +207,9 @@ impl Devices {
                 &self.store,
                 &self.target,
                 &keys,
+                &self.local,
+                &self.local,
+                &self.local,
                 &self.local,
                 // A folder fetch reads whole objects and keeps no parcel, so
                 // the directory is named and never made (spec: PK-16).

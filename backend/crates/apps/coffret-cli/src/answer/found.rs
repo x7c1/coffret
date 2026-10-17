@@ -213,5 +213,8 @@ fn reason_name(reason: &FindingReason) -> &'static str {
         FindingReason::DiscardRefused { .. } => "DiscardRefused",
         FindingReason::UnreachablePlace { .. } => "UnreachablePlace",
         FindingReason::ReservedComponent => "ReservedComponent",
+        FindingReason::Relocated { .. } => "Relocated",
+        FindingReason::RelocationDiscarded { .. } => "RelocationDiscarded",
+        FindingReason::RelocationRefused { .. } => "RelocationRefused",
     }
 }

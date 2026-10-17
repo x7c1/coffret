@@ -11,8 +11,9 @@ use crate::device_state::{
 use crate::index::Index;
 use crate::index_error::{IndexError, IndexResult};
 
-/// A catalog that refuses the one write only the committer can do, wrapped
-/// around the real one.
+/// A catalog that refuses the one write only the committer can do — or the
+/// one a relocation makes after its file is relocated — wrapped around the real
+/// one.
 ///
 /// [`Index::refresh`] is the post-commit step whose failure leaves the device
 /// out of step with a Library that has already changed, and that state cannot be
@@ -21,18 +22,42 @@ use crate::index_error::{IndexError, IndexResult};
 /// would test something else — what is being checked is that the run stops there
 /// and that what it leaves behind is enough for the next one to finish the job.
 ///
+/// [`Index::relocate_local_entries`] is the same shape on a relocation's side:
+/// the file is relocated on disk and its record has not followed, which only a
+/// catalog failing between the two arranges (spec: EP-10).
+///
 /// Everything else is passed straight through to the catalog the backend handed
 /// the suite, which is the same catalog the run afterwards uses directly: what
 /// the interrupted run wrote down really is what the next one finds.
 pub(crate) struct RefusingIndex<'a> {
     inner: &'a dyn Index,
+    refused: Refused,
+}
+
+/// Which write the catalog refuses.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Refused {
+    Refresh,
+    Relocation,
 }
 
 impl<'a> RefusingIndex<'a> {
     /// Refuses every [`refresh`](Index::refresh) and answers everything else
     /// honestly.
     pub(crate) fn around(inner: &'a dyn Index) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            refused: Refused::Refresh,
+        }
+    }
+
+    /// Refuses every [`relocate_local_entries`](Index::relocate_local_entries)
+    /// and answers everything else honestly.
+    pub(crate) fn refusing_relocations(inner: &'a dyn Index) -> Self {
+        Self {
+            inner,
+            refused: Refused::Relocation,
+        }
     }
 }
 
@@ -64,8 +89,11 @@ impl Index for RefusingIndex<'_> {
         self.inner.apply(record).await
     }
 
-    async fn refresh(&self, _batch: CommittedBatch) -> IndexResult<()> {
-        Err(refused())
+    async fn refresh(&self, batch: CommittedBatch) -> IndexResult<()> {
+        match self.refused {
+            Refused::Refresh => Err(refused()),
+            Refused::Relocation => self.inner.refresh(batch).await,
+        }
     }
 
     async fn snapshot(&self) -> IndexResult<SnapshotContent> {
@@ -125,6 +153,20 @@ impl Index for RefusingIndex<'_> {
 
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>> {
         self.inner.present_without_entry().await
+    }
+
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.awaiting_relocation().await
+    }
+
+    async fn relocate_local_entries(
+        &self,
+        relocated: &[(EntryPath, EntryPath)],
+    ) -> IndexResult<()> {
+        match self.refused {
+            Refused::Relocation => Err(refused()),
+            Refused::Refresh => self.inner.relocate_local_entries(relocated).await,
+        }
     }
 
     async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {

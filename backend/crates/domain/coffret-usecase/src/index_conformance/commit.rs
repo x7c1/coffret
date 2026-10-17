@@ -2,7 +2,9 @@ use coffret_model::ContainerKind;
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::LocalEntryState;
-use crate::index_conformance::fixtures::{addition, library_state, observation, pending, record};
+use crate::index_conformance::fixtures::{
+    addition, entry, library_state, observation_of, pending, record,
+};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 /// This device's own commit lands the Library-wide state another device's
@@ -29,8 +31,8 @@ pub async fn a_refresh_lands_where_a_replay_of_its_record_does(fixture: &IndexUn
         .refresh(CommittedBatch {
             record: committed.clone(),
             materialized: vec![
-                observation("albums/a.jpg", 100),
-                observation("albums/b.jpg", 101),
+                observation_of("albums/a.jpg", 100, entry(1, 0)),
+                observation_of("albums/b.jpg", 101, entry(1, 1)),
             ],
         })
         .await
@@ -83,7 +85,7 @@ pub async fn a_refresh_marks_its_files_present_and_clears_its_spools(fixture: &I
                 vec![addition(1, ContainerKind::Pack, &["albums/a.jpg"])],
                 vec![],
             ),
-            materialized: vec![observation("albums/a.jpg", 100)],
+            materialized: vec![observation_of("albums/a.jpg", 100, entry(1, 0))],
         })
         .await
         .expect("refreshing after a commit must succeed");

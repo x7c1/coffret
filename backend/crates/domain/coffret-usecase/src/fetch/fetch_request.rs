@@ -6,8 +6,11 @@ use crate::device_state::DeviceTime;
 use crate::fetch::kept_parcels::KeptParcels;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::local_trash::LocalTrash;
+use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
+use crate::relocations::Relocations;
 
 /// Everything one run of [`fetch_folders`](super::fetch_folders) works from.
 ///
@@ -34,6 +37,15 @@ pub struct FetchRequest<'a> {
     /// about an interrupted placement can only be held to what the thing
     /// underneath it actually does when it fails (spec: EP-11).
     pub destinations: &'a dyn Destinations,
+    /// The mapped folders as a walk reads them, the rename a file follows a
+    /// renamed Entry by, and the trash a redundant copy goes to: what the run
+    /// relocates this device's files of renamed Entries through before it
+    /// selects anything (spec: EP-10).
+    pub roots: &'a dyn MappedRoots,
+    /// See [`roots`](Self::roots).
+    pub relocations: &'a dyn Relocations,
+    /// See [`roots`](Self::roots).
+    pub trash: &'a dyn LocalTrash,
     /// The parcels this device holds of earlier reads (spec: PK-21).
     ///
     /// A folder fetch reads whole objects and keeps none of them, but what it
@@ -73,12 +85,17 @@ pub struct FetchRequest<'a> {
 
 impl<'a> FetchRequest<'a> {
     /// A run against `store` and `index` covering everything the mappings cover,
-    /// under the default policy.
+    /// placing through `destinations` and relocating through `roots`,
+    /// `relocations` and `trash`, under the default policy.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
         destinations: &'a dyn Destinations,
+        roots: &'a dyn MappedRoots,
+        relocations: &'a dyn Relocations,
+        trash: &'a dyn LocalTrash,
         parcels: KeptParcels<'a>,
         now: DeviceTime,
     ) -> Self {
@@ -87,6 +104,9 @@ impl<'a> FetchRequest<'a> {
             index,
             keys,
             destinations,
+            roots,
+            relocations,
+            trash,
             parcels,
             prefix: None,
             now,

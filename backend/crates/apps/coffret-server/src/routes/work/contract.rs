@@ -98,6 +98,25 @@ fn every_finding() -> Vec<Finding> {
                 ),
             )),
         }),
+        Found::Surfaced {
+            path: entry_path("albums/b.jpg"),
+            reason: FindingReason::Relocated {
+                from: entry_path("inbox/b.jpg"),
+            },
+        },
+        Found::Surfaced {
+            path: entry_path("inbox/c.jpg"),
+            reason: FindingReason::RelocationDiscarded {
+                to: entry_path("albums/c.jpg"),
+            },
+        },
+        Found::Surfaced {
+            path: entry_path("inbox/d.jpg"),
+            reason: FindingReason::RelocationRefused {
+                to: entry_path("albums/d.jpg"),
+                reason: coffret_device::RelocationRefused::DestinationTaken,
+            },
+        },
         unavailable(RootUnavailable::Missing),
         unavailable(RootUnavailable::AnotherFilesystem),
         Found::RefusedRoot {

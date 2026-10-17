@@ -5,13 +5,14 @@ use std::path::PathBuf;
 
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, EntryMetadata, EntryPath, IndexCheckpoint, JournalRecord, KeyringCommitment,
-    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    ControlObjectName, EntryMetadata, EntryNumber, EntryPath, IndexCheckpoint, JournalRecord,
+    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity, SpoolState,
 };
+use crate::entry_ref::EntryRef;
 use crate::generations::generation;
 
 // The values the cases are built out of.
@@ -175,13 +176,33 @@ pub(super) fn library_state(content: SnapshotContent) -> SnapshotContent {
         .expect("content that held together still holds without its provenance")
 }
 
-/// What this device saw of a local file it put in place.
+/// The Entry at `position` in the table of the Container `addition` lays down
+/// for `seed` (spec: FM-9).
+pub(super) fn entry(seed: u8, position: usize) -> EntryRef {
+    EntryRef::new(
+        container_id(seed),
+        EntryNumber::at_position(position).expect("a fixture's table is short"),
+    )
+}
+
+/// The seed of a Container no case's catalog holds.
+const UNCATALOGED: u8 = 0xfe;
+
+/// What this device saw of a local file it put in place, as a copy of an
+/// Entry no case's catalog holds: the record of a case that is about the row
+/// rather than about the Entry.
 pub(super) fn observation(text: &str, size: u64) -> LocalObservation {
+    observation_of(text, size, entry(UNCATALOGED, 0))
+}
+
+/// What this device saw of a local file it put in place as a copy of `entry`.
+pub(super) fn observation_of(text: &str, size: u64, entry: EntryRef) -> LocalObservation {
     LocalObservation {
         path: path(text),
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_500),
+        entry,
         // What every writer records beside a materialization: the content the
         // file was made to match (spec: EP-15).
         hash: Some(ContentHash::from_bytes([0x3c; ContentHash::BYTE_LEN])),

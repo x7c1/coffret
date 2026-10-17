@@ -2,7 +2,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_usecase::DescentError;
+use coffret_model::EntryPath;
+use coffret_usecase::{DescentError, RelocationRefused};
 
 use crate::finding::chained;
 
@@ -117,6 +118,35 @@ pub enum FindingReason {
     /// the run is unaffected: no scan of this device makes such a path, so it is
     /// one another device committed.
     ReservedComponent,
+    /// This device's file of an Entry a rename gave another path was relocated
+    /// here, to the Entry's current path, to follow it (spec: EP-10).
+    ///
+    /// Work done rather than work left: nobody has to act on it.
+    Relocated {
+        /// Where the file stood before.
+        from: EntryPath,
+    },
+    /// The file here was this device's copy of an Entry a rename gave another
+    /// path, and this device already had its own copy at that path, so this
+    /// one, unedited, was discarded into the desktop's trash (spec: EP-10,
+    /// EP-15).
+    ///
+    /// Work done rather than work left, as a discard always is.
+    RelocationDiscarded {
+        /// Where the Entry, and the copy that stands, are now.
+        to: EntryPath,
+    },
+    /// The file here is this device's copy of an Entry a rename gave another
+    /// path, and it was not relocated to follow it (spec: EP-10).
+    ///
+    /// Left where it stands and never overwritten, copied or uploaded; the
+    /// next run tries again, and the reason says what stands in the way.
+    RelocationRefused {
+        /// Where the Entry stands now.
+        to: EntryPath,
+        /// Why the file was not relocated.
+        reason: RelocationRefused,
+    },
 }
 
 impl fmt::Display for FindingReason {
@@ -161,6 +191,32 @@ impl fmt::Display for FindingReason {
                     "it was deleted from the Library, and discarding this device's copy into the \
                      trash was refused ({}); it is left here, and the next run tries again",
                     chained(cause.as_ref()),
+                );
+            }
+            Self::Relocated { from } => {
+                return write!(
+                    f,
+                    "this device's file was relocated here from {} to follow a rename of its Entry",
+                    from.as_str(),
+                );
+            }
+            Self::RelocationDiscarded { to } => {
+                return write!(
+                    f,
+                    "its Entry was renamed to {}, where this device already had it, so this \
+                     unedited copy was discarded into the trash",
+                    to.as_str(),
+                );
+            }
+            // What stands in the way is said in full, chain and all, for the
+            // reason a refused discard's is: it is what a person acts on.
+            Self::RelocationRefused { to, reason } => {
+                return write!(
+                    f,
+                    "its Entry was renamed to {}, and this device's file was not relocated to follow \
+                     it ({}); it is left here, and the next run tries again",
+                    to.as_str(),
+                    chained(reason),
                 );
             }
             // The one reason with something of its own to name. Which folder it

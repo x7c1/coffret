@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::commit::entry_ref::EntryRef;
+use crate::entry_ref::EntryRef;
 
 /// Which of a batch's pending changes a rebase could not carry onto the new
 /// head (spec: EP-7).

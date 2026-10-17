@@ -138,6 +138,17 @@ impl Index for TruncatingIndex<'_> {
         self.inner.present_without_entry().await
     }
 
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.awaiting_relocation().await
+    }
+
+    async fn relocate_local_entries(
+        &self,
+        relocated: &[(EntryPath, EntryPath)],
+    ) -> IndexResult<()> {
+        self.inner.relocate_local_entries(relocated).await
+    }
+
     /// Shortens the file as the first Pack is announced, then records the row.
     ///
     /// A panic rather than a returned error: a case that could not arrange the

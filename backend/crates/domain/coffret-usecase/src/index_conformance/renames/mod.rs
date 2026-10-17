@@ -49,7 +49,7 @@ pub use relocation::{
 
 /// The rename of the Entry numbered `number` in the Container of `seed` to
 /// `to`.
-fn rename(seed: u8, number: u32, to: &str) -> EntryRename {
+pub(super) fn rename(seed: u8, number: u32, to: &str) -> EntryRename {
     EntryRename::new(container_id(seed), entry_number(number), path(to))
         .expect("a fixture renames into an ordinary path")
 }
@@ -59,7 +59,7 @@ fn entry_number(number: u32) -> EntryNumber {
 }
 
 /// `record` renaming `renames` as well, given in the order FM-15 fixes.
-fn renaming(record: JournalRecord, renames: Vec<EntryRename>) -> JournalRecord {
+pub(super) fn renaming(record: JournalRecord, renames: Vec<EntryRename>) -> JournalRecord {
     record
         .with_renames(renames)
         .expect("a fixture lists its renames in canonical order")

@@ -1,8 +1,9 @@
 use coffret_model::ContainerKind;
 
+use crate::device_state::LocalObservation;
 use crate::index::Index;
 use crate::index_conformance::fixtures::{
-    addition, observation, pending, record, snapshot, snapshot_name, stamped,
+    addition, entry, observation_of, pending, record, snapshot, snapshot_name, stamped,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
@@ -44,6 +45,12 @@ pub use pending_rows::{
 /// [`RootIdentity`]: crate::device_state::RootIdentity
 const STAMPED: &str = "the-filesystem-a-scan-saw";
 
+/// The seeded file: a copy of the first Entry of Container 1, which every case
+/// seeding it holds, or comes to hold, at that file's path.
+fn seeded_file() -> LocalObservation {
+    observation_of("albums/a.jpg", 100, entry(1, 0))
+}
+
 /// Puts one of each piece of device state into a catalog.
 ///
 /// The mapping carries a recorded filesystem identity, so every case that
@@ -54,7 +61,7 @@ pub(super) async fn seed_device_state(index: &dyn Index) {
         .await
         .expect("recording a mapping must succeed");
     index
-        .mark_present(observation("albums/a.jpg", 100))
+        .mark_present(seeded_file())
         .await
         .expect("recording a materialized file must succeed");
     index
@@ -95,7 +102,7 @@ pub(super) async fn assert_device_state_intact(index: &dyn Index) {
         1,
         "one file was materialized, got {present:?}"
     );
-    assert_eq!(present[0].observation, observation("albums/a.jpg", 100));
+    assert_eq!(present[0].observation, seeded_file());
     assert_eq!(
         index
             .pending_rows()

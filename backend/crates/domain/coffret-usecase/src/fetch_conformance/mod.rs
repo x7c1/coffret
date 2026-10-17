@@ -71,7 +71,7 @@ mod counting_store;
 
 mod entry_numbers;
 pub use entry_numbers::{
-    a_fetch_leaves_a_file_awaiting_relocation_where_it_stands,
+    a_fetch_relocates_the_files_of_renamed_entries_before_it_places,
     a_renamed_entry_is_fetched_whole_at_its_current_path,
     a_renamed_entry_is_read_by_its_parcels_at_its_current_path,
     an_entry_number_its_container_does_not_reach_is_refused,
@@ -219,7 +219,7 @@ macro_rules! fetch_conformance {
             a_parcel_read_is_not_held_to_the_ciphertext_hash_and_a_whole_read_is,
             an_entry_of_no_bytes_is_placed_by_its_parcel,
             a_renamed_entry_is_fetched_whole_at_its_current_path,
-            a_fetch_leaves_a_file_awaiting_relocation_where_it_stands,
+            a_fetch_relocates_the_files_of_renamed_entries_before_it_places,
             a_renamed_entry_is_read_by_its_parcels_at_its_current_path,
             entries_of_no_bytes_are_each_fetched_whole_after_a_rename,
             entries_of_no_bytes_are_each_read_by_their_parcel_after_a_rename,

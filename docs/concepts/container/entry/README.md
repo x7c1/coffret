@@ -109,8 +109,9 @@ FM-16). Replay applies those renames, and every read of a Container finds an
 Entry in its entry table by the entry number and holds its bytes to the hash
 the Catalog records; a fetch places it at its current path (spec: EP-11,
 PK-10). A rewrite of a Pack carries each kept Entry forward as a new Entry
-captured under the kept Entry's current path (spec: PK-10). What remains is
-writing a rename and relocating a device's file of a renamed Entry.
+captured under the kept Entry's current path (spec: PK-10), and a device
+relocates its file of a renamed Entry to follow it (spec: EP-10). What remains
+is writing a rename.
 Rewriting the Entry Path a device's [Index](../../index/)
 caches would not implement rename either: every device takes current names
 from the Journal and its checkpoints, so a name changed only in one device's

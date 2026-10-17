@@ -63,10 +63,10 @@ async fn a_pack_takes_over_an_absorbed_entry_at_the_path_a_rename_gave_it() {
         (2, ContainerKind::OneFile, &["albums/b.jpg"]),
     ])
     .await;
-    for text in ["albums/a.jpg", "albums/b.jpg"] {
+    for (text, seed) in [("albums/a.jpg", 1), ("albums/b.jpg", 2)] {
         devices
             .ours
-            .mark_present(observed(text))
+            .mark_present(observed(text, entry(seed, 0)))
             .await
             .expect("recording the placed file must succeed");
     }
@@ -78,7 +78,10 @@ async fn a_pack_takes_over_an_absorbed_entry_at_the_path_a_rename_gave_it() {
         &[(0, entry(1, 0)), (1, entry(2, 0))],
     )])
     .removing(vec![container_id(1), container_id(2)])
-    .materializing(vec![observed("albums/a.jpg"), observed("albums/b.jpg")]);
+    .materializing(vec![
+        observed("albums/a.jpg", entry(3, 0)),
+        observed("albums/b.jpg", entry(3, 1)),
+    ]);
 
     devices
         .rival(renaming(vec![rename(

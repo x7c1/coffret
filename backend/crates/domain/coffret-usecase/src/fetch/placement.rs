@@ -6,6 +6,7 @@ use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
 use crate::device_state::{DeviceTime, LocalObservation};
+use crate::entry_ref::EntryRef;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::flushed_file::FlushedFile;
@@ -329,6 +330,7 @@ impl<'a> Placement<'a> {
                 size: self.entry.extent.size(),
                 mtime: self.entry.mtime,
                 at: now,
+                entry: EntryRef::of(&self.target.location),
                 hash: Some(self.entry.hash),
             })
             .await?;

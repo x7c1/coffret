@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{Generation, Mtime, ObjectRef};
+use coffret_model::{EntryNumber, Generation, Mtime, ObjectRef};
 use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
     Mapping, PendingRow, RootIdentity, RootMarkerId, SpoolState,
 };
-use coffret_usecase::{IndexError, IndexResult};
+use coffret_usecase::{EntryRef, IndexError, IndexResult};
 use rusqlite::Row;
 
 use super::columns::{
@@ -73,6 +73,11 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
             size: from_integer(row, "observed_size", OPERATION)?,
             mtime: Mtime::from_unix_seconds(integer(row, "observed_mtime", OPERATION)?),
             at: DeviceTime::from_unix_seconds(integer(row, "observed_at", OPERATION)?),
+            entry: EntryRef::new(
+                container_id(row, "entry_container", OPERATION)?,
+                EntryNumber::new(from_integer(row, "entry_number", OPERATION)?)
+                    .map_err(unreadable_model(OPERATION))?,
+            ),
             hash: optional_content_hash(row, "hash", OPERATION)?,
         },
         state: match text(row, "state", OPERATION)?.as_str() {

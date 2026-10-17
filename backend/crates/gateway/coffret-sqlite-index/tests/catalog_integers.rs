@@ -17,14 +17,14 @@
 
 use std::path::Path;
 
-use coffret_model::Mtime;
+use coffret_model::{EntryNumber, Mtime};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{DeviceTime, LocalObservation};
-use coffret_usecase::{Index, IndexError};
+use coffret_usecase::{EntryRef, Index, IndexError};
 
 mod support;
 
-use support::{entry_path, rows_in, snapshot, Scratch};
+use support::{container_id, entry_path, rows_in, snapshot, Scratch};
 
 /// The first size a signed 64-bit column has no spelling for.
 const PAST_THE_RANGE: u64 = 1 << 63;
@@ -66,6 +66,7 @@ fn an_observation_past_the_range() -> LocalObservation {
         size: PAST_THE_RANGE,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_400),
+        entry: EntryRef::new(container_id(1), EntryNumber::FIRST),
         hash: None,
     }
 }

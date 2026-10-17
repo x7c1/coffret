@@ -358,6 +358,25 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
+        self.read(
+            "reading what waits to be relocated",
+            device_state::awaiting_relocation,
+        )
+        .await
+    }
+
+    async fn relocate_local_entries(
+        &self,
+        relocated: &[(EntryPath, EntryPath)],
+    ) -> IndexResult<()> {
+        let relocated = relocated.to_vec();
+        self.write("re-keying relocated files' rows", move |connection| {
+            device_state::relocate_local_entries(connection, &relocated)
+        })
+        .await
+    }
+
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>> {
         self.read(
             "reading what the Library left behind",

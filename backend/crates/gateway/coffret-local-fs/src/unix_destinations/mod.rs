@@ -74,6 +74,10 @@ mod trash;
 // anything below it (spec: EP-13).
 mod vouch;
 
+// The same descent asked for a rename: relocating a file this device placed to the
+// path a rename gave its Entry (spec: EP-10).
+mod relocation;
+
 #[async_trait]
 impl Destinations for UnixFs {
     async fn reach(

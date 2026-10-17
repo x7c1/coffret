@@ -542,6 +542,24 @@
           "surfaced": "DiscardRefused"
         },
         {
+          "message": "this device's file was relocated here to follow a rename of its Entry",
+          "path": "albums/b.jpg",
+          "reason": "surfaced",
+          "surfaced": "Relocated"
+        },
+        {
+          "message": "this file's Entry was renamed to where this device already had it, so this unedited copy was discarded into the trash",
+          "path": "inbox/c.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationDiscarded"
+        },
+        {
+          "message": "this file's Entry was renamed, and this device's file could not be relocated to follow it: a file this device did not place stands at its new path; it is left in place, and the next run tries again",
+          "path": "inbox/d.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationRefused"
+        },
+        {
           "message": "a folder this device maps is not there, so nothing in it was looked at",
           "path": null,
           "reason": "root_missing"
@@ -661,6 +679,24 @@
           "path": "albums/a.jpg",
           "reason": "surfaced",
           "surfaced": "DiscardRefused"
+        },
+        {
+          "message": "this device's file was relocated here to follow a rename of its Entry",
+          "path": "albums/b.jpg",
+          "reason": "surfaced",
+          "surfaced": "Relocated"
+        },
+        {
+          "message": "this file's Entry was renamed to where this device already had it, so this unedited copy was discarded into the trash",
+          "path": "inbox/c.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationDiscarded"
+        },
+        {
+          "message": "this file's Entry was renamed, and this device's file could not be relocated to follow it: a file this device did not place stands at its new path; it is left in place, and the next run tries again",
+          "path": "inbox/d.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationRefused"
         },
         {
           "message": "a folder this device maps is not there, so nothing in it was looked at",

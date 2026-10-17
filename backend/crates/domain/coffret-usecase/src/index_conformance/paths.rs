@@ -1,6 +1,8 @@
 use coffret_model::ContainerKind;
 
-use crate::index_conformance::fixtures::{addition, container_id, observation, path, record};
+use crate::index_conformance::fixtures::{
+    addition, container_id, entry, observation_of, path, record,
+};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 /// One Entry Path spelled with a half-width character, and the same name with
@@ -212,11 +214,11 @@ pub async fn a_prefix_reports_only_what_this_device_materialized(fixture: &Index
         .await
         .expect("replaying a record must succeed");
     index
-        .mark_present(observation("albums/a.jpg", 100))
+        .mark_present(observation_of("albums/a.jpg", 100, entry(1, 0)))
         .await
         .expect("recording a materialized file must succeed");
     index
-        .mark_present(observation("books/page-001.png", 102))
+        .mark_present(observation_of("books/page-001.png", 102, entry(1, 2)))
         .await
         .expect("recording a materialized file must succeed");
 

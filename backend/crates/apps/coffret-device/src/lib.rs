@@ -416,7 +416,8 @@ pub use coffret_usecase::fetch::{
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, FreezePreview, SourceChange};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
 pub use coffret_usecase::{
-    DescentError, LocalOperation, Missing, RefusedRoot, RootRefused, RootUnavailable,
+    DescentError, LocalOperation, Missing, RefusedRoot, Relocation, RelocationRefused, RootRefused,
+    RootUnavailable,
 };
 
 /// The catalog's own refusal, under the name a shell reads it by.

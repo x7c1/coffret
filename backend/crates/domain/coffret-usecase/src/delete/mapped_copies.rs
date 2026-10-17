@@ -196,7 +196,7 @@ pub(super) async fn discard_mapped_copies(
             }
         };
         if matches!(surfaced, Surfaced::Discarded { .. }) {
-            emptied.discarded(&root, expected, &relative);
+            emptied.vacated(&root, expected, &relative);
         }
         found.surfaced.push(surfaced);
     }

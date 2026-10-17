@@ -96,6 +96,7 @@ impl Device {
                 &self.fs,
                 &self.fs,
                 &self.fs,
+                &self.fs,
                 SPOOL_DIR,
                 BatchId::new(format!("run-{run}")),
                 at(run),

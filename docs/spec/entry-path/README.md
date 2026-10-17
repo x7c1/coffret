@@ -103,9 +103,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
        by an intervening commit stays where it is. A pending addition is never
        remapped by prefix.
   - A file a followed update or Pack was drawn from stays at the path it was
-    captured from and keeps waiting to be relocated, as the replay of the
-    rename left it (EP-10); the commit does not record it as the Entry at its
-    own path.
+    captured from. The commit records it as this device's copy of the Entry
+    that took over, waiting to be relocated to that Entry's path (EP-10), and
+    not as the Entry at its own path.
 - **EP-8.** The prototype scans and reads regular files only. The configured
   mapped root is resolved as the user named it and may itself pass through a
   symbolic link. Every component below that resolved root is then descended
@@ -149,6 +149,25 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     therefore holds a partial subtree without the rest counting as deleted;
     a device with no mapping under `books/` leaves it untouched the same way,
     while its Index still lists all of it.
+  - A materialization record names the Entry it is a copy of by
+    `(Container ID, entry number)` (FM-9), never by the path its file stands
+    at, and the device keeps that name current. A record of an Entry that a
+    record replaces — removes its Container and adds, at the path the Entry
+    stood at, an Entry of a Container that record adds (EP-6): an update, a
+    freeze absorbing a file, a rebuilt Pack — names the replacement. A record
+    of an Entry an adopted Snapshot no longer holds names the Entry standing
+    where its own stood, where that Entry's Container is one the replaced
+    catalog did not hold, which a replacement's always is; an Entry that was
+    current already is never taken for the record's own. Wherever a record's
+    Entry has left the Library and another current Entry holds the path its
+    file stands at — a rename brought it there, or an addition after the
+    record's own Entry left — the device forgets the record: the file is not a
+    copy it placed of that Entry, so a scan reports nothing for it, `update`
+    never selects it, and a fetch of that Entry to that path is refused rather
+    than overwriting it (EP-11). An Index file written before records named
+    their Entry has each record named after the Entry its catalog holds where
+    the record stands, or where it waits to follow; a record the catalog holds
+    no Entry for there is dropped and the drop reported, never guessed at.
   - A file whose Entry a replayed or adopted rename gave another current path
     (FM-15, RV-5) stays at the path it was placed, under its materialization
     record, and the record notes the Entry's new path. Until the file is
@@ -161,11 +180,62 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     later record removes the Entry the wait ends too, and EP-15 decides what
     the file is at the path it stands at, unless an addition of that record
     takes the path the file waited for; an adopted Snapshot that holds no
-    Entry at that path ends the wait the same way. Where another current Entry
-    holds the path the file stands at, the device forgets the record instead
-    of keeping it there: the file is not a copy it placed of that Entry, so a
-    scan reports nothing for it, `update` never selects it, and a fetch of
-    that Entry to that path is refused rather than overwriting it (EP-11). Relocating the file is not implemented yet.
+    Entry at that path ends the wait the same way.
+  - A sync, and a folder fetch, **relocate** every file awaiting relocation
+    before they scan or place anything: the file is renamed from where it
+    stands to the local path the Entry's current path translates to, with one
+    filesystem rename that makes the folders the new path needs and never
+    replaces anything standing there, and only then does the record follow
+    it to the new path, ending the wait. A relocation never uploads,
+    re-encrypts, or commits anything. A folder the run's relocations left with
+    nothing in it is removed as EP-15 removes the folders its discards empty.
+    Files whose Entries traded paths among themselves, which no rename of one
+    of them can start, are exchanged into place, each exchange one rename
+    that replaces neither file. A fetch of one Entry relocates nothing: it
+    reads one file for the person who asked, and what it places at the new
+    path is met by the next run as the destination already holding this
+    device's copy.
+  - A relocation is **refused**, the file left where it stands and the record
+    still waiting, and the refusal reported with its reason on every run that
+    meets it: where the mapped root holding either path is unavailable
+    (EP-12), or stands on another filesystem than the one recorded for it
+    until a scan re-stamps it; where the two paths do not lie under one mapped
+    root (EP-9), or the new path passes through a name a mapped folder keeps
+    for itself (EP-14, EP-16, the scratch prefix of EP-11); where either path
+    crosses a symbolic link or anything else that is not a folder of the root
+    (EP-8); where the file was edited since it was placed — its length and
+    modification time differ from the record's and its content does not hash
+    to the hash the record carries (EP-15); where something stands at the new
+    path that is not this device's placed copy of the same Entry; where the
+    two paths stand on different filesystems, since nothing is copied and
+    deleted in a rename's place; where their filesystem offers no rename that
+    never replaces, or no exchange, since none is emulated by checking that the
+    new path is free and then renaming onto it; and where the root does not
+    vouch for itself (EP-13) or the disk refuses. A later run, once the cause
+    is gone, relocates the file.
+  - Where the new path already holds this device's own copy of the same
+    Entry, its record agreeing with the file there (EP-11) — a fetch placed
+    it while the old file waited — the old file is redundant: an unedited one
+    is discarded into the desktop's trash as EP-15 discards a departed file
+    and its record is forgotten, and an edited one is kept where it stands and
+    reported as refused for its edit. The record of the new path is the one
+    that stands.
+  - The record changes only after the file is relocated, so an interrupted
+    relocation never leaves a record pointing at a path its file was not
+    relocated to. Interrupted before the rename, it leaves the file and the
+    record as they were. Interrupted after the rename and before the record
+    follows, it leaves the file at the new path agreeing with the old record,
+    and no record there: the next run re-keys the record without renaming
+    anything.
+    Interrupted between an exchange and its two records, it leaves each file
+    where the other's record says, agreeing with that record and not with its
+    own, and the next run exchanges the records rather than the files.
+  - A record whose file is gone from where it stands has nothing to relocate.
+    It follows the Entry to its new path where nothing stands there and no
+    record does, so a scan reports the Entry deleted locally there as it
+    would have at the old path; otherwise it is forgotten, since it describes
+    nothing standing at the new path. An absent record follows its Entry the
+    same way.
 - **EP-11.** A fetch places an Entry at a local path only where the device can
   vouch for what is there: either nothing at all, or this device's own
   materialization record (EP-10) agreeing with the file on disk. Any other
@@ -289,12 +359,13 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   mapping whose root is missing, or whose root holds nothing and stands on a
   filesystem other than the recorded one, is unavailable: nothing under it is
   walked, no Entry under it is reported as deleted locally, no file under it is
-  selected for `update` or `freeze`, and the run reports the mapping and the
-  reason rather than returning silently — an unplugged disk or an unmounted
-  share must never read as the user having emptied the folder. The device's
-  other mappings scan normally, and a top-level mapping that is unavailable
-  still represents its subtree, so the Library-root mapping neither walks it nor
-  infers deletions under it (EP-9). *(Form: test)*
+  selected for `update` or `freeze` or relocated (EP-10), and the run reports
+  the mapping and the reason rather than returning silently — an unplugged
+  disk or an unmounted share must never read as the user having emptied the
+  folder. The device's other mappings scan normally, and a top-level mapping
+  that is unavailable still represents its subtree, so the Library-root
+  mapping neither walks it nor infers deletions under it (EP-9).
+  *(Form: test)*
   - A root that holds files and stands on a filesystem other than the recorded
     one is available and is re-stamped: a device number that moved across a
     reboot or a remount is not evidence that a folder went away. The two
@@ -304,6 +375,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     leaves for a person is a folder genuinely emptied whose filesystem identity
     also moved, and the gesture is recording the mapping again, which clears the
     identity so the next scan stamps what is there.
+  - A relocation is stricter about a root than a scan: a root standing on a
+    filesystem other than the recorded one is not relocated in whether or not
+    it holds files, until a scan has re-stamped it. Relocating a file is a
+    write into a folder the device has not yet recognized, and
+    waiting one run costs nothing but the wait (EP-10).
   - What the rule does not cover: a mount point whose underlying directory is
     not empty reads as available and is re-stamped, because there is nothing to
     distinguish it from a folder holding files. That is the behavior of a device

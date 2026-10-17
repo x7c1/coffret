@@ -16,7 +16,10 @@
 //!    lets a second enrolled device fetch with an empty catalog; neither step
 //!    opens a Container, because a record carries what the Containers it adds
 //!    hold (spec: CP-11, RV-5). A fetch that cannot read the head fails rather
-//!    than serving a catalog it knows may be stale.
+//!    than serving a catalog it knows may be stale. Then every file this device
+//!    placed whose Entry a rename has given another path is relocated to follow
+//!    it, as a sync does before its scan, so the steps below find each one
+//!    where its Entry stands (spec: EP-10).
 //! 2. **Translate Entry Paths into local paths** (spec: EP-9). Each mapping
 //!    says where a subtree's Entry Paths would go locally, and the request's
 //!    prefix narrows that — it intersects the mappings rather than replacing
@@ -287,6 +290,9 @@ pub use crate::below_root_error::BelowRootError;
 pub use crate::descent_error::DescentError;
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
+// What became of a file that waited to follow a rename of its Entry, shared
+// with the sync that relocates the same files (spec: EP-10).
+pub use crate::relocate::{Relocation, RelocationRefused};
 
 /// How much of a transfer is held at once.
 ///

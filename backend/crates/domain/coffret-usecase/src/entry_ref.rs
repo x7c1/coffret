@@ -8,7 +8,9 @@ use coffret_model::{ContainerId, EntryLocation, EntryNumber, EntryRename};
 /// A batch's pending changes name the Entries they act on this way, so a
 /// rebase can apply what intervening records did to those Entries without
 /// asking what they were called: a record's renames name the Entry by the
-/// same pair (spec: FM-15, EP-7).
+/// same pair (spec: FM-15, EP-7). A materialization record names the Entry
+/// its file is a copy of the same way, so a rename changing the Entry's path and
+/// another Entry arriving at the file's path are told apart (spec: EP-10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntryRef {
     /// The Container holding the Entry.

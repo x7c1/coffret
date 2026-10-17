@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use coffret_model::EntryPath;
 
 use crate::device_state::Mapping;
@@ -37,8 +39,28 @@ pub(crate) async fn mapped_source(
     mapping: &Mapping,
     path: &EntryPath,
 ) -> Result<Option<SourceFile>, LocalIoError> {
+    Ok(match mapped_file(roots, mapping, path).await? {
+        MappedFile::File(source) => Some(source),
+        MappedFile::Nothing | MappedFile::Folder | MappedFile::Fenced { .. } => None,
+    })
+}
+
+/// What stands for `path` under `mapping`, read the way
+/// [`mapped_source`] reads it, with what the walk would not have found told
+/// apart: nothing at all, a folder, and a name on the way — or at the path
+/// itself — that is not a folder of the root (spec: EP-8).
+///
+/// What a relocation asks of both the path a file stands at and the path it is
+/// to go to: a symbolic link on the way to either is a fence it is refused at,
+/// and a folder standing where it would go is a destination already taken
+/// (spec: EP-10).
+pub(crate) async fn mapped_file(
+    roots: &dyn MappedRoots,
+    mapping: &Mapping,
+    path: &EntryPath,
+) -> Result<MappedFile, LocalIoError> {
     let Some(relative) = relative_below(mapping, path) else {
-        return Ok(None);
+        return Ok(MappedFile::Nothing);
     };
     let wanted: Vec<&str> = relative.as_str().split('/').collect();
     if wanted
@@ -48,7 +70,7 @@ pub(crate) async fn mapped_source(
             .iter()
             .any(|name| root_marker::is_management_area(name) || scratch::is_scratch(name))
     {
-        return Ok(None);
+        return Ok(MappedFile::Nothing);
     }
 
     let root = mapping.local_root.as_path();
@@ -56,7 +78,7 @@ pub(crate) async fn mapped_source(
     for (depth, component) in wanted.iter().enumerate() {
         let last = depth + 1 == wanted.len();
         let Some(entries) = roots.list_folder(root, below.as_ref()).await? else {
-            return Ok(None);
+            return Ok(MappedFile::Nothing);
         };
         // The name the folder spells this component with, read as the walk
         // reads one: a name that is not text, or that no Entry Path can be made
@@ -68,7 +90,7 @@ pub(crate) async fn mapped_source(
                 .and_then(|text| EntryPath::parse(text).ok())
                 .is_some_and(|name| name.as_str() == *component)
         }) else {
-            return Ok(None);
+            return Ok(MappedFile::Nothing);
         };
         let location = match &below {
             None => MappedRelativeLocation::from_component(entry.name.clone()),
@@ -77,7 +99,7 @@ pub(crate) async fn mapped_source(
         match (entry.kind, last) {
             (FolderEntryKind::Folder, false) => below = Some(location),
             (FolderEntryKind::File { size, mtime, btime }, true) => {
-                return Ok(Some(SourceFile {
+                return Ok(MappedFile::File(SourceFile {
                     path: path.clone(),
                     root: mapping.local_root.clone(),
                     relative: location,
@@ -86,11 +108,35 @@ pub(crate) async fn mapped_source(
                     btime,
                 }))
             }
-            // A file where a folder was due, a folder where the file was, or a
-            // link or anything else that is neither: not followed, and not the
-            // file the Entry was materialized as (spec: EP-8).
-            _ => return Ok(None),
+            (FolderEntryKind::Folder, true) => return Ok(MappedFile::Folder),
+            // A file where a folder was due, or a link or anything else that is
+            // neither: not followed, and not the file the Entry was
+            // materialized as (spec: EP-8).
+            _ => {
+                return Ok(MappedFile::Fenced {
+                    stopped_at: root.join(location.to_path_buf()),
+                })
+            }
         }
     }
-    Ok(None)
+    Ok(MappedFile::Nothing)
+}
+
+/// What stands for one Entry Path under a mapping, as [`mapped_file`] reads
+/// it.
+#[derive(Debug)]
+pub(crate) enum MappedFile {
+    /// A regular file, as the walk would have found it.
+    File(SourceFile),
+    /// Nothing: no name at the path or at a folder on the way to it, or a path
+    /// through what the walk steps over.
+    Nothing,
+    /// A folder, standing where a file would.
+    Folder,
+    /// A name at the path or on the way to it that is not a folder of the
+    /// root: a symbolic link, or a file where a folder is due.
+    Fenced {
+        /// The local path of that name.
+        stopped_at: PathBuf,
+    },
 }

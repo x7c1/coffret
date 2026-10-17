@@ -44,6 +44,15 @@ pub use device_state::{
 
 mod fixtures;
 
+mod identity;
+pub use identity::{
+    a_departed_file_is_forgotten_where_a_rename_brings_another_entry,
+    a_record_of_an_entry_standing_elsewhere_waits_for_it, a_relocated_record_follows_its_file,
+    a_restore_carries_a_record_over_to_a_replacement,
+    a_restore_past_a_swap_and_a_removal_claims_neither_entry,
+    an_addition_after_a_removal_is_not_the_departed_files_entry,
+};
+
 mod index_under_test;
 pub use index_under_test::IndexUnderTest;
 
@@ -165,6 +174,12 @@ macro_rules! index_conformance {
             a_rename_onto_a_standing_entry_is_refused,
             two_renames_onto_one_path_are_refused,
             a_rename_onto_the_records_own_addition_is_refused,
+            a_departed_file_is_forgotten_where_a_rename_brings_another_entry,
+            an_addition_after_a_removal_is_not_the_departed_files_entry,
+            a_restore_past_a_swap_and_a_removal_claims_neither_entry,
+            a_restore_carries_a_record_over_to_a_replacement,
+            a_record_of_an_entry_standing_elsewhere_waits_for_it,
+            a_relocated_record_follows_its_file,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

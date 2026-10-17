@@ -55,7 +55,7 @@ async fn an_update_follows_a_rename_of_its_entry() {
     let devices = Devices::holding(&[(1, ContainerKind::OneFile, &["albums/a.jpg"])]).await;
     devices
         .ours
-        .mark_present(observed("albums/a.jpg"))
+        .mark_present(observed("albums/a.jpg", entry(1, 0)))
         .await
         .expect("recording the placed file must succeed");
     devices.upload(3).await;

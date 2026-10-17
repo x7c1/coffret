@@ -30,6 +30,8 @@ keep the same Entry and change only its Entry Path (see
 - descend (validated relative components from an open mapped root, without
   following links)
 - place (an Entry at its local path during a fetch)
+- relocate (this device's file of a renamed Entry from the local path its old
+  Entry Path translates to, to the one its current Entry Path does)
 - decline (to place an Entry, reporting the reason)
 - vouch (for what stands at a local path, as the device, before a local writer
   puts a file there)
@@ -114,6 +116,16 @@ keep the same Entry and change only its Entry Path (see
   - Reporting one also requires the root its path translates under to be
     available, because a path under a missing or swapped root says nothing
     about its file, only about the root (spec: EP-12).
+- A rename changes an Entry's current Entry Path and nothing on any disk. A
+  device that placed a file for the Entry **relocates** it: one rename on its
+  own disk, from the local path the old Entry Path translates to, to the one
+  the current Entry Path does, under one mapped root and never through a
+  symbolic link, and never onto anything standing there. The device's record
+  of the file follows only once the file is relocated, so an interruption
+  leaves the record at the file's old path and the next run finishes the
+  relocation without renaming or overwriting anything twice. A relocation it
+  cannot make leaves the file where it is and is reported (spec: EP-8, EP-10,
+  EP-12).
 - A fetch **places** an Entry only where this device can vouch for what is at
   the path — nothing there, or a file its own materialization record still
   agrees with — and **declines** every other Entry, reporting the reason,

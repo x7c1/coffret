@@ -4,6 +4,7 @@ use tracing::{info, warn};
 use crate::commit::catch_up;
 use crate::departure::{discard_departed, EmptiedFolders};
 use crate::progress::{Phase, Step};
+use crate::relocate::{relocate_waiting, LocalDisk, Relocation};
 use crate::spooled_container::commit_spooled;
 use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
@@ -66,6 +67,13 @@ use crate::upload;
 /// unplugged disk must never read as the user having emptied the folder
 /// (spec: EP-12). The device's other mappings scan normally.
 ///
+/// A file this device placed whose Entry a rename has given another path is
+/// relocated to follow it after the settling and before the scan, with one
+/// rename inside its mapped root, and its record follows it; one that cannot be
+/// relocated — its root unavailable, the file edited, something of the person's at
+/// the new path — is left where it stands and reported in
+/// [`SyncOutcome::relocations`], and the next run tries again (spec: EP-10).
+///
 /// A file this device materialized whose Entry has since left the Library is
 /// not carried back in as new (spec: EP-15). One that still holds what this
 /// device last made it match is discarded into the desktop's trash and its row
@@ -95,6 +103,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         spool: local,
         roots,
         trash,
+        relocations,
         spool_dir,
         batch,
         now,
@@ -139,6 +148,19 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // none of its own to give: a folder's files are known once it has walked
     // them.
     progress.step(Step::begun(Phase::Scanning));
+    // The files of Entries a rename gave another path follow them first, so
+    // the scan finds each where its Entry stands. After the settling, which can
+    // record a file waiting to follow its Entry, and never through a root the
+    // run cannot vouch for (spec: EP-10, EP-12).
+    let relocations = relocate_waiting(
+        index,
+        LocalDisk {
+            roots,
+            relocations,
+            trash,
+        },
+    )
+    .await?;
     let mut survey = scan::scan(index, roots, births, now).await?;
 
     // Only now, with the scan over: every departed file stands under a root the
@@ -155,7 +177,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         let relative = departed.source.relative.clone();
         let surfaced = discard_departed(index, trash, departed).await?;
         if matches!(surfaced, Surfaced::Discarded { .. }) {
-            emptied.discarded(&root, expected, &relative);
+            emptied.vacated(&root, expected, &relative);
         }
         survey.surfaced.push(surfaced);
     }
@@ -241,6 +263,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // maps nothing walks nothing whatever is on its disk, and those are
         // two different empty answers (spec: EP-9).
         mappings: index.mappings().await?.len(),
+        relocations,
         surfaced: survey.surfaced,
         unavailable: survey.unavailable,
         settled,
@@ -273,6 +296,16 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // A count and nothing else: a mapping names a prefix and a local root,
         // and neither may reach a diagnostic event.
         mappings = outcome.mappings,
+        relocated = outcome
+            .relocations
+            .iter()
+            .filter(|one| matches!(one, Relocation::Relocated { .. }))
+            .count(),
+        relocations_refused = outcome
+            .relocations
+            .iter()
+            .filter(|one| matches!(one, Relocation::Refused { .. }))
+            .count(),
         surfaced = outcome.surfaced.len(),
         discarded = outcome
             .surfaced

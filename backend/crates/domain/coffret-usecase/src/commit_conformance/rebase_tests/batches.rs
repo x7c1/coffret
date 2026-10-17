@@ -62,7 +62,7 @@ pub(super) fn updating(new: u8, old: u8, text: &str) -> PreparedBatch {
         &[(0, entry(old, 0))],
     )])
     .removing(vec![container_id(old)])
-    .materializing(vec![observed(text)])
+    .materializing(vec![observed(text, entry(new, 0))])
 }
 
 /// A deletion's rebuild of Pack `old` around the Entries it keeps: Pack `new`
@@ -84,13 +84,14 @@ pub(super) fn rebuilding(new: u8, old: u8, kept: &[(&str, u64)]) -> PreparedBatc
     .removing(vec![container_id(old)])
 }
 
-/// What this device sees of its own file at `text`.
-pub(super) fn observed(text: &str) -> LocalObservation {
+/// What this device sees of its own file at `text`, a copy of `entry`.
+pub(super) fn observed(text: &str, entry: EntryRef) -> LocalObservation {
     LocalObservation {
         path: path(text),
         size: 100,
         mtime: Mtime::from_unix_seconds(1_700_000_100),
         at: DeviceTime::from_unix_seconds(1_700_000_200),
+        entry,
         hash: None,
     }
 }

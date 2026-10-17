@@ -11,8 +11,8 @@ impl InMemoryFs {
     ///
     /// The count is per operation, so scripting the second
     /// [`Writing`](LocalOperation::Writing) fails the second write whatever else
-    /// the run did in between. Ten operations are worth scripting, and they are
-    /// the ones the four capabilities perform:
+    /// the run did in between. The operations worth scripting are the ones the
+    /// capabilities perform:
     ///
     /// - [`Creating`](LocalOperation::Creating) for
     ///   [`create`](crate::Spool::create),
@@ -53,6 +53,10 @@ impl InMemoryFs {
     /// - [`Discarding`](LocalOperation::Discarding) for
     ///   [`discard`](crate::LocalTrash::discard), which leaves the
     ///   file where it was (spec: EP-15).
+    /// - [`Relocating`](LocalOperation::Relocating) for
+    ///   [`relocate`](crate::Relocations::relocate) and
+    ///   [`exchange`](crate::Relocations::exchange), which leave both files
+    ///   where they were (spec: EP-10).
     ///
     /// [`prepare_dir`](crate::Spool::prepare_dir) is deliberately not counted or
     /// scripted: it is one call at the top of a run, and a case that wants the
@@ -157,5 +161,37 @@ impl InMemoryFs {
     /// this where the *difference* between two roots is what it is about.
     pub fn set_root_identity(&self, path: &Path, identity: RootIdentity) {
         lock(&self.state).set_root_identity(path, identity);
+    }
+
+    /// Makes the folder at `path`, and the folders above it, and makes it the
+    /// top of a filesystem of its own, which no rename crosses.
+    ///
+    /// What a disk mounted below a mapped root looks like to a relocation
+    /// (spec: EP-10).
+    pub fn mount(&self, path: &Path) {
+        lock(&self.state).mount(path);
+    }
+
+    /// Makes the folder at `path` the top of a filesystem of its own, as
+    /// [`mount`](Self::mount) does, and one that offers no rename that never
+    /// replaces what stands at the new name, and no exchange.
+    ///
+    /// What a FAT volume or a network share mounted below a mapped root looks
+    /// like to a relocation: every rename on it is refused with
+    /// [`RelocateError::NoAtomicRename`](crate::RelocateError::NoAtomicRename)
+    /// (spec: EP-10).
+    pub fn mount_without_atomic_rename(&self, path: &Path) {
+        lock(&self.state).mount_without_atomic_rename(path);
+    }
+
+    /// Makes the folder at `path` part of the filesystem above it again,
+    /// whichever renames it offered.
+    pub fn unmount(&self, path: &Path) {
+        lock(&self.state).unmount(path);
+    }
+
+    /// Takes away a name [`plant_other`](Self::plant_other) planted.
+    pub fn remove_other(&self, path: &Path) {
+        lock(&self.state).remove_other(path);
     }
 }

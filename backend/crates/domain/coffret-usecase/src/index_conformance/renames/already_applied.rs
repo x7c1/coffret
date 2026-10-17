@@ -2,7 +2,7 @@ use coffret_model::{ContainerKind, JournalRecord};
 
 use super::{names, relocate_to, rename, renaming};
 use crate::index::Index;
-use crate::index_conformance::fixtures::{addition, container_id, observation, record};
+use crate::index_conformance::fixtures::{addition, container_id, entry, observation_of, record};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 use crate::index_error::IndexError;
 
@@ -91,9 +91,9 @@ async fn past_a_swap(index: &dyn Index) -> [JournalRecord; 4] {
         .apply(first.clone())
         .await
         .expect("applying the first record must succeed");
-    for text in ["albums/a.jpg", "albums/b.jpg"] {
+    for (text, seed) in [("albums/a.jpg", 1), ("albums/b.jpg", 2)] {
         index
-            .mark_present(observation(text, 100))
+            .mark_present(observation_of(text, 100, entry(seed, 0)))
             .await
             .expect("recording a materialized file must succeed");
     }

@@ -8,7 +8,11 @@ use crate::path_prefix::subtree_range;
 use crate::query::{collect, first};
 use crate::rows;
 
-/// Records that this device now has a file on disk (spec: EP-10).
+/// Records that this device now has a file on disk, as a copy of the Entry
+/// the observation names (spec: EP-10).
+///
+/// The row then waits for whatever that Entry's current path asks of it, which
+/// [`reconcile`] reads off the catalog in the same transaction.
 pub(crate) fn mark_present(
     connection: &Connection,
     observation: &LocalObservation,
@@ -17,15 +21,18 @@ pub(crate) fn mark_present(
     connection
         .execute(
             "INSERT INTO local_entries (
-                 path, state, observed_size, observed_mtime, observed_at, hash, relocate_to
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL)
+                 path, state, observed_size, observed_mtime, observed_at, hash, relocate_to,
+                 entry_container, entry_number
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)
              ON CONFLICT (path) DO UPDATE SET
                  state = excluded.state,
                  observed_size = excluded.observed_size,
                  observed_mtime = excluded.observed_mtime,
                  observed_at = excluded.observed_at,
                  hash = excluded.hash,
-                 relocate_to = NULL",
+                 relocate_to = NULL,
+                 entry_container = excluded.entry_container,
+                 entry_number = excluded.entry_number",
             params![
                 observation.path.as_str(),
                 rows::state_text(LocalEntryState::Present),
@@ -36,10 +43,133 @@ pub(crate) fn mark_present(
                     .hash
                     .as_ref()
                     .map(|hash| hash.as_bytes().as_slice()),
+                observation.entry.container_id.as_bytes().as_slice(),
+                observation.entry.entry_number.get(),
             ],
         )
         .map_err(classify(OPERATION))?;
+    reconcile(connection, [observation.path.as_str()], OPERATION)
+}
+
+/// Every row whose file waits to follow its Entry elsewhere (spec: EP-10).
+pub(crate) fn awaiting_relocation(connection: &Connection) -> IndexResult<Vec<LocalEntry>> {
+    collect(
+        connection,
+        "SELECT * FROM local_entries WHERE relocate_to IS NOT NULL ORDER BY path",
+        [],
+        "reading what waits to be relocated",
+        rows::local_entry,
+    )
+}
+
+/// Re-keys rows to the paths their files now stand at, every row a relocation names
+/// taken out before any is put back (spec: EP-10).
+pub(crate) fn relocate_local_entries(
+    connection: &Connection,
+    relocated: &[(EntryPath, EntryPath)],
+) -> IndexResult<()> {
+    const OPERATION: &str = "re-keying relocated files' rows";
+    let mut taken = Vec::with_capacity(relocated.len());
+    for (from, to) in relocated {
+        if let Some(local) = local_entry_at(connection, from)? {
+            taken.push((local, to));
+        }
+    }
+    for (local, _) in &taken {
+        forget_local_entry(connection, &local.observation.path)?;
+    }
+    for (local, to) in &taken {
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO local_entries (
+                     path, state, observed_size, observed_mtime, observed_at, hash, relocate_to,
+                     entry_container, entry_number
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)",
+                params![
+                    to.as_str(),
+                    rows::state_text(local.state),
+                    rows::to_integer(OPERATION, "observed_size", local.observation.size)?,
+                    local.observation.mtime.as_unix_seconds(),
+                    local.observation.at.as_unix_seconds(),
+                    local
+                        .observation
+                        .hash
+                        .as_ref()
+                        .map(|hash| hash.as_bytes().as_slice()),
+                    local.observation.entry.container_id.as_bytes().as_slice(),
+                    local.observation.entry.entry_number.get(),
+                ],
+            )
+            .map_err(classify(OPERATION))?;
+    }
+    reconcile(
+        connection,
+        taken.iter().map(|(_, to)| to.as_str()),
+        OPERATION,
+    )
+}
+
+/// Brings the rows at `paths` in line with where the catalog holds the Entry
+/// each of them is a copy of (spec: EP-10, FM-15).
+///
+/// A row whose Entry is current waits to follow it where it stands at another
+/// path, and waits for nothing where it stands at the row's own. A row whose
+/// Entry has left the Library waits for nothing either, and where no current
+/// Entry stands at its path it stays, and the file is departed there
+/// (spec: EP-15). Where one does, it is another Entry than the one the file is
+/// a copy of, so the row is forgotten: a record kept there would claim that
+/// Entry present and offer this file's bytes as its edit. Forgotten, the file
+/// is one this device never placed for it (spec: EP-11).
+pub(crate) fn reconcile<'p>(
+    connection: &Connection,
+    paths: impl IntoIterator<Item = &'p str>,
+    operation: &'static str,
+) -> IndexResult<()> {
+    let mut follow = connection
+        .prepare_cached(
+            "UPDATE local_entries SET relocate_to = (
+                 SELECT NULLIF(entries.path, local_entries.path) FROM entries
+                 WHERE entries.container_id = local_entries.entry_container
+                 AND entries.entry_number = local_entries.entry_number
+             ) WHERE path = ?1",
+        )
+        .map_err(classify(operation))?;
+    let mut forget = connection
+        .prepare_cached(
+            "DELETE FROM local_entries WHERE path = ?1
+             AND EXISTS (SELECT 1 FROM entries WHERE entries.path = ?1)
+             AND NOT EXISTS (
+                 SELECT 1 FROM entries
+                 WHERE entries.container_id = local_entries.entry_container
+                 AND entries.entry_number = local_entries.entry_number
+             )",
+        )
+        .map_err(classify(operation))?;
+    for path in paths {
+        follow.execute(params![path]).map_err(classify(operation))?;
+        forget.execute(params![path]).map_err(classify(operation))?;
+    }
     Ok(())
+}
+
+/// [`reconcile`] over every row this device holds.
+pub(crate) fn reconcile_all(connection: &Connection, operation: &'static str) -> IndexResult<()> {
+    connection
+        .execute_batch(
+            "UPDATE local_entries SET relocate_to = (
+                 SELECT NULLIF(entries.path, local_entries.path) FROM entries
+                 WHERE entries.container_id = local_entries.entry_container
+                 AND entries.entry_number = local_entries.entry_number
+             );
+             DELETE FROM local_entries
+             WHERE EXISTS (SELECT 1 FROM entries WHERE entries.path = local_entries.path)
+             AND NOT EXISTS (
+                 SELECT 1 FROM entries
+                 WHERE entries.container_id = local_entries.entry_container
+                 AND entries.entry_number = local_entries.entry_number
+             );",
+        )
+        .map_err(classify(operation))
 }
 
 /// Records that a file this device had is gone (spec: EP-10).

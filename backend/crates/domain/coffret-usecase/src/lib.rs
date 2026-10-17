@@ -215,6 +215,12 @@ pub mod delete;
 // removed it (spec: EP-15).
 mod departure;
 
+// And what becomes of one whose Entry a rename gave another path: relocated to
+// follow it, decided once for the sync and the fetch that relocate before they
+// scan or place anything (spec: EP-10).
+mod relocate;
+pub use relocate::{Relocation, RelocationRefused};
+
 // The deletion's own contract, behind the same feature as the other flows'.
 #[cfg(feature = "conformance")]
 pub mod delete_conformance;
@@ -239,6 +245,12 @@ pub mod freeze;
 // The freeze's own contract, behind the same feature as the other five.
 #[cfg(feature = "conformance")]
 pub mod freeze_conformance;
+
+// One Entry named by what no rename changes: its Container and its entry
+// number there (spec: FM-9). A batch's pending changes name the Entries they act
+// on this way, and so does this device's record of the file it has of one.
+mod entry_ref;
+pub use entry_ref::EntryRef;
 
 mod index;
 pub use index::Index;
@@ -353,6 +365,16 @@ pub use local_trash::LocalTrash;
 // of promise — about absence and interruption.
 mod parcel_files;
 pub use parcel_files::ParcelFiles;
+
+// A sixth, beside the trash and for the same reason: where a file this device
+// placed goes once a rename has given its Entry another current path. One
+// rename inside one mapped root, and what refuses it is its own vocabulary
+// around the descent's (spec: EP-10).
+mod relocations;
+pub use relocations::Relocations;
+
+mod relocate_error;
+pub use relocate_error::RelocateError;
 
 // The mapped-roots capability's own contract, behind the same feature as the
 // spool capability's.
