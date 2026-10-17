@@ -111,3 +111,59 @@ fn what_the_index_store_reported_is_named_by_its_operation() {
         "Index::Backend(operation=recording a mapping)",
     );
 }
+
+// FM-15, EL-1: a refused rename says which element broke which rule, in the
+// message and in a diagnostic event alike, and neither carries an Entry Path:
+// the element's position is what identifies it.
+#[test]
+fn a_refused_rename_names_its_element_and_its_rule_and_no_path() {
+    let container_id = coffret_model::ContainerId::from_bytes([0xab; 16]);
+    let error = IndexError::RenameRefused {
+        element: 2,
+        rule: RenameRule::EntryNumberOutsideTable {
+            container_id,
+            entry_number: 7,
+        },
+    };
+
+    let message = error.to_string();
+    assert!(
+        message.starts_with("rename 2 of the record is refused"),
+        "{message}"
+    );
+    assert!(message.contains("numbered 7"), "{message}");
+    assert_eq!(
+        error.redacted(),
+        format!(
+            "Index::RenameRefused(element=2, rule=EntryNumberOutsideTable(container={container_id}, entry=7))"
+        )
+    );
+    assert_eq!(
+        IndexError::RenameRefused {
+            element: 1,
+            rule: RenameRule::PathClaimedTwice { earlier: 0 },
+        }
+        .redacted(),
+        "Index::RenameRefused(element=1, rule=PathClaimedTwice(earlier=0))"
+    );
+}
+
+// CK-9, EL-1: a record refused as already applied says which generation it was
+// and where the Index stands, and nothing else — two numbers are the whole of
+// what a reader needs to see the replay was a second one.
+#[test]
+fn an_already_applied_record_names_its_generation_and_the_checkpoint() {
+    let error = IndexError::AlreadyApplied {
+        generation: Generation::new(3).expect("a literal generation"),
+        checkpoint: Generation::new(5).expect("a literal generation"),
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "the Journal record at generation 3 is already applied: the Index stands at head 5"
+    );
+    assert_eq!(
+        error.redacted(),
+        "Index::AlreadyApplied(generation=3, checkpoint=5)"
+    );
+}

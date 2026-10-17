@@ -264,6 +264,9 @@ pub(super) async fn preview(
             // Neither in the Library nor going into it: the sync is what says
             // what becomes of it (spec: EP-15).
             Verdict::Departed => {}
+            // A copy of an Entry that stands elsewhere now, waiting to follow
+            // it rather than to be frozen (spec: FM-15).
+            Verdict::AwaitsRelocation => {}
             Verdict::KeyLostInPack(_) | Verdict::InPack => preview.in_pack += 1,
             Verdict::InPackTouched(_) => preview.changed_in_pack += 1,
         }

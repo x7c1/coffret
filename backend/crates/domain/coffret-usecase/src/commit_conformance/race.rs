@@ -243,11 +243,9 @@ pub async fn two_writers_on_one_head_leave_one_successor(fixture: &CommitUnderTe
 /// A catalog is held by every process that has the Library open, and each of
 /// them lists the Journal from its own reading of the checkpoint — so a server
 /// answering a browser and a `sync` in a terminal reach the same records. The
-/// Index refuses the second application of a record and must: one Entry Path
-/// admits one current Entry (spec: EP-5). What the refusal means is the
-/// replay's to decide, and the checkpoint is what decides it — a catalog
-/// standing past the record says somebody applied it, which is the outcome this
-/// device wanted anyway.
+/// Index refuses a record at or below the checkpoint it stands at as already
+/// applied (spec: RV-5), and the replay steps over that refusal: somebody
+/// applied the record, which is the outcome this device wanted anyway.
 ///
 /// The rival lands two records while this device is applying the first of them,
 /// so the case covers both halves of the convergence: the refusal itself, and

@@ -122,6 +122,9 @@ pub use progress::a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can;
 
 pub(crate) mod refusing_index;
 
+mod renamed;
+pub use renamed::a_file_whose_entry_was_renamed_is_neither_deleted_nor_added;
+
 mod repeat;
 pub use repeat::{
     a_touched_file_with_equal_content_commits_nothing, an_unchanged_second_sync_commits_nothing,
@@ -221,6 +224,7 @@ macro_rules! sync_conformance {
             nothing_is_discarded_through_a_refused_root,
             nothing_is_discarded_under_an_unavailable_root,
             a_freeze_leaves_a_departed_file_to_the_sync,
+            a_file_whose_entry_was_renamed_is_neither_deleted_nor_added,
             a_missing_mapped_root_is_reported_and_infers_no_deletion,
             an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
             an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,

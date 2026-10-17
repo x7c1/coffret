@@ -12,18 +12,16 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build that line falls two layouts below the current one. Layouts
-//! 14 and 15 changed only the catalog: layout 14's Entries are filled from
-//! Storage objects whose maps carry field numbers, under a column named
-//! `captured_path`, and layout 15's also carry each Entry's entry number in its
-//! Container. So a file at layout 13 or 14 keeps its device group and has its
-//! catalog discarded and rebuilt from Storage rather than migrated, which are
-//! the older layouts the discard path reaches. Older layouts from 7 up have
-//! their device group upgraded by the adapter's own provenance step, and the
-//! layouts below 7 used here are refused whole and left exactly as they were,
-//! which is what lets their mappings still be read out of them and recorded
-//! again. Where the two edges of the window fall is a unit case in the
-//! adapter's own `schema` module, against a synthetic pair of versions.
+//! In *this* build that line falls at the current layout. Layout 16 changed
+//! the device group: a materialized file's row records the Entry Path it waits
+//! to follow once a rename has changed its Entry's current path. So no older
+//! layout keeps its device group as it is, and every layout from 7 up has that
+//! group upgraded by the adapter's own provenance step and its catalog
+//! discarded and rebuilt from Storage rather than migrated. The layouts below 7
+//! used here are refused whole and left exactly as they were, which is what
+//! lets their mappings still be read out of them and recorded again. Where the
+//! two edges of the window fall is a unit case in the adapter's own `schema`
+//! module, against a synthetic pair of versions.
 
 use std::path::{Path, PathBuf};
 
@@ -50,7 +48,7 @@ use support::{
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers that decide everything below.
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -134,29 +132,37 @@ async fn a_file_stamped(scratch: &Scratch, version: i64) {
 }
 
 /// Stamps a layout version into a file, behind the adapter's back.
+///
+/// An older layout's file loses the one device-local column layout 16 added,
+/// so the upgrade meets the shape a build before it left behind.
 fn restamp(file: &Path, version: i64) {
-    rusqlite::Connection::open(file)
-        .expect("the Index file must open")
+    let connection = rusqlite::Connection::open(file).expect("the Index file must open");
+    if version < SCHEMA_VERSION {
+        connection
+            .execute_batch("ALTER TABLE local_entries DROP COLUMN relocate_to;")
+            .expect("dropping a column must succeed");
+    }
+    connection
         .pragma_update(None, "user_version", version)
         .expect("stamping a version must succeed");
 }
 
-/// The layout before this one has its catalog discarded rather than migrated,
-/// and keeps its device-local group whole (spec: RV-5, EP-9, EP-10, OC-2).
+/// The layout before this one has its device-local group upgraded and its
+/// catalog discarded rather than migrated (spec: RV-5, EP-9, EP-10, OC-2).
 ///
-/// Its catalog holds no entry numbers, and nothing it holds says what they
-/// were, so nothing of it is carried forward: the file is stamped as the
-/// current layout with an empty catalog, which the next catch-up rebuilds from
-/// Storage, and a warning says so.
+/// Its device group lacks the column that says which files wait to follow a
+/// rename, and none of them does: no build before this one applied a rename.
+/// Its catalog would still read, and is discarded with every older layout's:
+/// the file is stamped as the current layout with an empty catalog, which the
+/// next catch-up rebuilds from Storage, and a warning says so.
 #[tokio::test]
 async fn the_layout_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
     loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 1).await;
 }
 
-/// The layout two below this one, the oldest whose device-local group this
-/// build writes unchanged, takes the same discard (spec: RV-5, EP-9, EP-10,
-/// OC-2): its catalog was filled from Storage objects in a format this build no
-/// longer reads, and it holds no entry numbers either.
+/// The layout two below this one takes the same upgrade (spec: RV-5, EP-9,
+/// EP-10, OC-2): its catalog holds no entry numbers, and nothing it holds says
+/// what they were.
 #[tokio::test]
 async fn the_layout_two_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
     loses_its_catalog_and_keeps_its_device_state(SCHEMA_VERSION - 2).await;
@@ -171,7 +177,7 @@ async fn loses_its_catalog_and_keeps_its_device_state(version: i64) {
     a_file_stamped(&scratch, version).await;
 
     let logs = CapturedLogs::capture();
-    let index = SqliteIndex::open(scratch.file()).expect("an older layout in the window must open");
+    let index = SqliteIndex::open(scratch.file()).expect("an older layout from 7 up must open");
     assert!(
         index
             .checkpoint()
@@ -196,6 +202,16 @@ async fn loses_its_catalog_and_keeps_its_device_state(version: i64) {
             .len(),
         1,
         "and so is the spool it has not committed"
+    );
+    let materialized = index
+        .local_entry_at(&observation().path)
+        .await
+        .expect("reading a local file's row must succeed")
+        .expect("and so is the file it has on disk");
+    assert_eq!(materialized.observation, observation());
+    assert_eq!(
+        materialized.relocate_to, None,
+        "which waits to follow no rename"
     );
     assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
     assert_eq!(rows_in(&scratch.file(), "entries"), 0);

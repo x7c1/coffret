@@ -115,6 +115,23 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     therefore holds a partial subtree without the rest counting as deleted;
     a device with no mapping under `books/` leaves it untouched the same way,
     while its Index still lists all of it.
+  - A file whose Entry a replayed or adopted rename gave another current path
+    (FM-15, RV-5) stays at the path it was placed, under its materialization
+    record, and the record notes the Entry's new path. Until the file is
+    relocated the record is not the Entry at its own path: a scan neither
+    reports the file as deleted or departed nor carries it in as a new file,
+    `update` and `freeze` never select it, a deletion does not take it for a
+    departed copy, and a fetch to that path treats the file as one this device
+    never placed (EP-11). Two Entries that swap names swap what their files
+    wait for, and a rename back to where the file stands ends the wait. When a
+    later record removes the Entry the wait ends too, and EP-15 decides what
+    the file is at the path it stands at, unless an addition of that record
+    takes the path the file waited for; an adopted Snapshot that holds no
+    Entry at that path ends the wait the same way. Where another current Entry
+    holds the path the file stands at, the device forgets the record instead
+    of keeping it there: the file is not a copy it placed of that Entry, so a
+    scan reports nothing for it, `update` never selects it, and a fetch of
+    that Entry to that path is refused rather than overwriting it (EP-11). Relocating the file is not implemented yet.
 - **EP-11.** A fetch places an Entry at a local path only where the device can
   vouch for what is there: either nothing at all, or this device's own
   materialization record (EP-10) agreeing with the file on disk. Any other

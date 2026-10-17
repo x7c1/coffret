@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use coffret_model::{ContainerId, ContainerKind, ContentHash};
 
 use crate::departure::{self, Departed};
-use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation, RootMarkerId};
+use crate::device_state::{
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, RootMarkerId,
+};
 use crate::index::Index;
 use crate::local_scan::SourceFile;
 use crate::mapped_roots::MappedRoots;
@@ -26,14 +28,22 @@ pub(super) async fn examine(
     expected: Option<RootMarkerId>,
     survey: &mut Survey,
 ) -> SyncResult<()> {
+    let local = index.local_entry_at(&source.path).await?;
+    // A copy of an Entry a rename has given another path since this device
+    // placed it is neither the Entry at its own path nor a new file: its Entry
+    // is still in the Library, elsewhere. It stays where it is, unreported,
+    // until it is relocated to follow (spec: FM-15, EP-10).
+    if local.as_ref().is_some_and(LocalEntry::awaits_relocation) {
+        return Ok(());
+    }
     let Some(location) = index.entry_at(&source.path).await? else {
-        return without_entry(index, roots, source, expected, survey).await;
+        return without_entry(roots, source, local, expected, survey).await;
     };
 
     // A current Entry this device never materialized is outside its scope,
     // whether or not a mapping covers it (spec: EP-10). Reporting it as changed
     // would propose replacing an Entry from a file this device never put there.
-    let Some(local) = index.local_entry_at(&source.path).await? else {
+    let Some(local) = local else {
         return Ok(());
     };
     if local.state == LocalEntryState::Present
@@ -81,16 +91,13 @@ pub(super) async fn examine(
 /// absent is not this: the file standing there now is one the person put back,
 /// and new is all this device can say of it (spec: EP-10).
 async fn without_entry(
-    index: &dyn Index,
     roots: &dyn MappedRoots,
     source: &SourceFile,
+    local: Option<LocalEntry>,
     expected: Option<RootMarkerId>,
     survey: &mut Survey,
 ) -> SyncResult<()> {
-    let materialized = index
-        .local_entry_at(&source.path)
-        .await?
-        .filter(|local| local.state == LocalEntryState::Present);
+    let materialized = local.filter(|local| local.state == LocalEntryState::Present);
     let Some(local) = materialized else {
         survey.candidates.push(Candidate {
             source: source.clone(),

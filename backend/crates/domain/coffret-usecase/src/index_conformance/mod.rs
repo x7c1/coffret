@@ -61,6 +61,26 @@ pub use refusals::{
     two_entries_at_one_path_are_refused,
 };
 
+mod renames;
+pub use renames::{
+    a_folders_worth_of_renames_lands_in_one_record,
+    a_record_below_the_checkpoint_is_refused_and_changes_nothing,
+    a_rename_changes_one_files_current_path,
+    a_rename_in_a_container_that_is_not_current_is_refused,
+    a_rename_in_a_container_the_record_removes_is_refused,
+    a_rename_inside_a_pack_leaves_its_neighbours, a_rename_of_a_derived_entry_is_refused,
+    a_rename_onto_a_standing_entry_is_refused, a_rename_onto_the_records_own_addition_is_refused,
+    a_rename_past_the_entry_table_is_refused, a_rename_that_changes_nothing_is_refused,
+    a_replay_with_renames_reaches_what_a_restore_and_the_rest_would,
+    a_restore_past_a_rename_marks_the_file_to_follow_it,
+    a_restore_past_the_removal_forgets_the_file_under_a_renamed_entry,
+    the_captured_path_stands_apart_exactly_where_a_rename_leaves_it,
+    the_file_of_a_removed_entry_is_forgotten_under_a_renamed_one,
+    the_file_of_a_removed_entry_stops_waiting_for_it,
+    the_file_of_a_renamed_entry_waits_to_follow_it, two_entries_swap_their_names_in_one_record,
+    two_renames_onto_one_path_are_refused,
+};
+
 mod replay;
 pub use replay::{
     a_birth_time_survives_a_replay_and_a_query, a_captured_path_survives_a_replay_and_a_restore,
@@ -122,7 +142,27 @@ macro_rules! index_conformance {
             two_entries_at_one_path_are_refused,
             one_container_added_twice_is_refused,
             a_record_already_applied_is_refused_and_the_checkpoint_stands,
+            a_record_below_the_checkpoint_is_refused_and_changes_nothing,
             a_refused_operation_leaves_the_whole_catalog_as_it_was,
+            a_rename_changes_one_files_current_path,
+            a_rename_inside_a_pack_leaves_its_neighbours,
+            a_folders_worth_of_renames_lands_in_one_record,
+            two_entries_swap_their_names_in_one_record,
+            the_captured_path_stands_apart_exactly_where_a_rename_leaves_it,
+            a_replay_with_renames_reaches_what_a_restore_and_the_rest_would,
+            the_file_of_a_renamed_entry_waits_to_follow_it,
+            the_file_of_a_removed_entry_stops_waiting_for_it,
+            the_file_of_a_removed_entry_is_forgotten_under_a_renamed_one,
+            a_restore_past_a_rename_marks_the_file_to_follow_it,
+            a_restore_past_the_removal_forgets_the_file_under_a_renamed_entry,
+            a_rename_in_a_container_that_is_not_current_is_refused,
+            a_rename_in_a_container_the_record_removes_is_refused,
+            a_rename_past_the_entry_table_is_refused,
+            a_rename_that_changes_nothing_is_refused,
+            a_rename_of_a_derived_entry_is_refused,
+            a_rename_onto_a_standing_entry_is_refused,
+            two_renames_onto_one_path_are_refused,
+            a_rename_onto_the_records_own_addition_is_refused,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

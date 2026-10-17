@@ -139,25 +139,24 @@ pub async fn a_refused_operation_leaves_the_whole_catalog_as_it_was(fixture: &In
     assert_device_state_intact(index).await;
 }
 
-/// A record the catalog already holds is refused, and the catalog is left
-/// standing at it (spec: CP-1, EP-5).
+/// A record at the head the catalog stands at is refused as already applied,
+/// and nothing of the catalog or of this device's rows changes (spec: CK-9,
+/// RV-5).
 ///
-/// This is the pair of facts a device catching up leans on when it is not the
-/// only one replaying into this catalog — a server answering a browser while a
-/// `sync` runs in a terminal is two processes over one Index file, each having
-/// listed the Journal from its own reading of the checkpoint. The refusal is
-/// what keeps a record from being taken in twice, and the checkpoint standing
-/// past it is the only thing that tells the loser its refusal is somebody else's
-/// replay rather than a Library state no commit could have produced.
-///
-/// Which of the two collisions is reported is left to the implementation: a
-/// record is taken in as its Containers and then their Entries, so either the
-/// Container in the current set or the path already holding its Entry is the
-/// first thing met, and both say the same thing about the record.
+/// This is what a device catching up leans on when it is not the only one
+/// replaying into this catalog — a server answering a browser while a `sync`
+/// runs in a terminal is two processes over one Index file, each having listed
+/// the Journal from its own reading of the checkpoint. The refusal names the
+/// record's generation and the checkpoint, rather than whatever the record
+/// would have collided on, so the loser of the race knows its refusal is
+/// somebody else's replay and not a Library state no commit could have
+/// produced. A record below the checkpoint is refused the same way: see
+/// [`a_record_below_the_checkpoint_is_refused_and_changes_nothing`](crate::index_conformance::a_record_below_the_checkpoint_is_refused_and_changes_nothing).
 pub async fn a_record_already_applied_is_refused_and_the_checkpoint_stands(
     fixture: &IndexUnderTest,
 ) {
     let index = fixture.index();
+    seed_device_state(index).await;
     let once = record(
         0,
         vec![addition(1, ContainerKind::Pack, &["albums/a.jpg"])],
@@ -177,9 +176,10 @@ pub async fn a_record_already_applied_is_refused_and_the_checkpoint_stands(
     assert!(
         matches!(
             &result,
-            Err(IndexError::DuplicateContainer { .. } | IndexError::DuplicatePath { .. })
+            Err(IndexError::AlreadyApplied { generation, checkpoint })
+                if generation.get() == 0 && checkpoint.get() == 0
         ),
-        "expected a record already in the catalog to collide, got {result:?}"
+        "expected a record at the checkpoint to be refused as already applied, got {result:?}"
     );
 
     assert_eq!(
@@ -188,7 +188,7 @@ pub async fn a_record_already_applied_is_refused_and_the_checkpoint_stands(
             .await
             .expect("an applied catalog has a state to checkpoint"),
         stood_at,
-        "the refused replay leaves the catalog standing at the record it holds, \
-         which is what a second replayer reads to see the refusal explained",
+        "the refused replay leaves the catalog standing at the record it holds",
     );
+    assert_device_state_intact(index).await;
 }

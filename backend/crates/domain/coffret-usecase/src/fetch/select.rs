@@ -108,7 +108,13 @@ pub(super) async fn select(
             continue;
         }
 
-        let local = index.local_entry_at(target.path()).await?;
+        // A row waiting to follow a rename is about a copy of another Entry,
+        // not of this one: to this Entry the file standing there is one this
+        // device never placed (spec: FM-15, EP-10).
+        let local = index
+            .local_entry_at(target.path())
+            .await?
+            .filter(|local| !local.awaits_relocation());
         let standing = match target.place.look(destinations).await {
             Ok(standing) => standing,
             // A folder on the way to the place is not a folder of the mapped

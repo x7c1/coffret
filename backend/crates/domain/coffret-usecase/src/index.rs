@@ -38,7 +38,11 @@ use crate::index_error::IndexResult;
 ///   (spec: EP-9), which Entries it has actually put on disk (spec: EP-10),
 ///   what it has spooled before committing (spec: OC-2), and which parcels of
 ///   the Containers it read it still holds (spec: PK-21). None of it is ever
-///   uploaded, and no Library-wide operation touches it.
+///   uploaded, and no Library-wide operation touches it — save that a rename,
+///   replayed or reached through an adopted Snapshot, marks the file this
+///   device has of the renamed Entry to follow it, since the file stays where
+///   it was placed, and removing that Entry clears the mark again
+///   (spec: FM-15, EP-10).
 ///
 /// # Catching up
 ///
@@ -71,11 +75,16 @@ pub trait Index: Send + Sync {
     /// replacement and not a merge: the previous Containers and Entries are
     /// gone, whatever the Snapshot does not mention included (spec: RV-1).
     ///
-    /// Device state is left exactly as it was. That is what lets a Snapshot
-    /// another device wrote be adopted unchanged: it carries no local root
-    /// mappings, no local paths, and no record of what any device has
-    /// materialized, so two devices laid out differently adopt the same content
-    /// (spec: CK-7). What makes adopting another device's Snapshot *safe* is a
+    /// Device state is left as it was, save which Entry each local file waits
+    /// to follow: a file whose Entry the Snapshot holds at another path than
+    /// the catalog it replaces did is marked to follow it there, as replaying
+    /// the renames in between would have, and a mark naming a path the
+    /// Snapshot holds no Entry at is cleared ([`LocalEntry::relocate_to`],
+    /// spec: FM-15, EP-10). Nothing else of this device's is touched. That is
+    /// what lets a Snapshot another device wrote be adopted unchanged: it
+    /// carries no local root mappings, no local paths, and no record of what
+    /// any device has materialized, so two devices laid out differently adopt
+    /// the same content (spec: CK-7). What makes adopting another device's Snapshot *safe* is a
     /// separate matter and not this operation's: the Snapshot is authenticated
     /// under a purpose key derived from the Master Key, and its checkpoint names
     /// the committed Keyring tuple it depends on (spec: CK-9, CK-3, RV-3).
@@ -88,11 +97,40 @@ pub trait Index: Send + Sync {
 
     /// Replays one committed Journal record.
     ///
-    /// The record's removals leave the current set first and its additions
-    /// enter after, which is the order the commit's own uniqueness check runs
-    /// in — a path may move from a replaced Container to its replacement in one
-    /// record (spec: EP-6). The checkpoint then advances to the head this
+    /// The record's removals leave the current set first, its renames then
+    /// change the current paths of the Entries they name all at once, and its
+    /// additions enter last, which is the order the commit's own uniqueness
+    /// check runs in — a path may pass from a replaced Container to its
+    /// replacement in one record (spec: EP-6), and two Entries may swap their
+    /// names (spec: FM-15). The checkpoint then advances to the head this
     /// record became (spec: CP-1, CK-1).
+    ///
+    /// A rename changes an Entry's current path and nothing else: its
+    /// Container, its entry number and the captured path its Container
+    /// recorded stay as they were. Each one is held to FM-15's state rules
+    /// against this catalog, and one that breaks any of them refuses the whole
+    /// record with
+    /// [`IndexError::RenameRefused`](crate::IndexError::RenameRefused), leaving
+    /// the catalog and this device's rows exactly as they were. The row of a
+    /// file this device has of a renamed Entry stays keyed by the path the
+    /// file stands at, and records where the Entry stands now
+    /// ([`LocalEntry::relocate_to`]) until the file is placed afresh — or
+    /// until a later record removes the Entry, which clears the mark unless
+    /// the path it waited for passes to a Container that record adds in its
+    /// place (spec: EP-6, EP-10).
+    ///
+    /// A record whose generation is at or below the head this Index stands at
+    /// is refused before any of it is looked at, with
+    /// [`IndexError::AlreadyApplied`](crate::IndexError::AlreadyApplied), and
+    /// the catalog and this device's rows stay exactly as they were. The check
+    /// is part of the same atomic operation as the apply it guards, so another
+    /// process replaying into the same catalog cannot land the record between
+    /// the two: a second application is refused by its generation rather than
+    /// by whatever it would have collided on, and a record no collision would
+    /// stop — one carrying only removals, or the two halves of a swap — never
+    /// carries the catalog back (spec: CK-9, RV-5). With that refusal set
+    /// apart, a duplicate or a refused rename always reports a record no
+    /// commit could have produced from this catalog.
     ///
     /// No Container is opened: the record carries each new Container's kind and
     /// entry table (spec: CP-11).
@@ -114,7 +152,9 @@ pub trait Index: Send + Sync {
     /// (spec: OC-2).
     ///
     /// It is never called for a batch whose record was not created: before that
-    /// the batch has changed nothing (spec: CP-1).
+    /// the batch has changed nothing (spec: CP-1). Being [`apply`](Self::apply)
+    /// of the record first, it refuses a record the Index already stands at or
+    /// past the same way, recording nothing of the batch's own.
     async fn refresh(&self, batch: CommittedBatch) -> IndexResult<()>;
 
     /// The whole Library-wide state, in canonical order, ready to be encoded
@@ -190,6 +230,9 @@ pub trait Index: Send + Sync {
 
     /// Records that this device now has the file at an Entry Path on disk,
     /// having uploaded or fetched it there (spec: EP-10).
+    ///
+    /// The file is the Entry at that path, so whatever the row there waited
+    /// to follow before is cleared ([`LocalEntry::relocate_to`]).
     async fn mark_present(&self, observation: LocalObservation) -> IndexResult<()>;
 
     /// Records that a file this device had is gone.
@@ -232,7 +275,10 @@ pub trait Index: Send + Sync {
     /// Path bytes.
     ///
     /// These are the only ones a scan may report as deleted locally, and the
-    /// only ones it may select for `update` or `freeze` (spec: EP-10).
+    /// only ones it may select for `update` or `freeze` (spec: EP-10). A file
+    /// waiting to follow a rename of its Entry elsewhere
+    /// ([`LocalEntry::relocate_to`]) is not the Entry at its own path, and is
+    /// not among them.
     async fn present_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>>;
 
     /// The files this device has on disk at Entry Paths the Library no longer
@@ -241,6 +287,8 @@ pub trait Index: Send + Sync {
     /// Another device's commit can remove the Container an Entry lived in, and
     /// the local file stays where it is. The row survives the removal so that
     /// the file can be reported rather than silently left behind (spec: EP-10).
+    /// A file waiting to follow a rename of its Entry is not one: its Entry has
+    /// not left the Library (spec: FM-15).
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>>;
 
     /// Records the pending row of a Container this device is about to spool, has

@@ -130,18 +130,19 @@ would fence nobody (spec: FM-12).
 
 ## Technical Constraints
 
-**Rename is planned, not implemented.** The format already carries the rename
-vocabulary above, but no operation writes a rename yet and replay does not yet
-apply one. Once it does, a record's renames take effect together, after its
-removals and before its additions, and the state the whole record leaves
-keeps one Entry per Entry Path, so two Entries can swap names in one record
+**Replay applies renames; no operation writes one yet.** A record's renames
+take effect together, after its removals and before its additions, and the
+state the whole record leaves keeps one Entry per Entry Path, so two Entries
+can swap names in one record. A record one of whose renames names no current
+Entry, changes nothing, names a derived Entry, or would leave two Entries at
+one Entry Path is refused whole, and the Catalog stays as it was
 (spec: FM-15, RV-5). A folder rename will enumerate the current Entries being
-renamed; replay will not discover additional Entries by interpreting a prefix.
+renamed; replay does not discover additional Entries by interpreting a prefix.
 Such a batch changes names without replacing or uploading Container
 ciphertext.
 
-The rest of the rollout must cover applying renames on replay, rebase, and
-device-local materialization relocations together. A content update prepared
+The rest of the rollout must cover writing renames, rebase, and device-local
+materialization relocations together. A content update prepared
 while another device renames the same Entry must, once rebased, land at the
 Entry's new Entry Path rather than bring back the old one; competing renames
 or an occupied destination must surface a conflict. A failed local relocation

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use coffret_format::EntryPlan;
 use coffret_model::{ContainerId, ContainerKind, ContentHash, EntryLocation};
 
-use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation};
+use crate::device_state::{DeviceTime, LocalEntry, LocalEntryState, LocalObservation};
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::freeze::selected::Selected;
@@ -33,6 +33,13 @@ pub(super) enum Verdict {
     /// decide, since only the sync reads it against what this device last made
     /// it match.
     Departed,
+    /// A copy of an Entry a rename has given another path since this device
+    /// placed it, waiting to be relocated to follow it (spec: FM-15).
+    ///
+    /// Never selected. It is no longer the Entry at its own path, if any stands
+    /// there, and it is not a new file either: its Entry is still in the
+    /// Library.
+    AwaitsRelocation,
     /// Held by a one-file Container, which the Pack absorbs however the local
     /// file compares and whether or not the Container's key survives
     /// (spec: PK-1, PK-13).
@@ -60,11 +67,12 @@ pub(super) async fn judge(
     key_lost: &BTreeSet<ContainerId>,
     source: &SourceFile,
 ) -> FreezeResult<Verdict> {
+    let local = index.local_entry_at(&source.path).await?;
+    if local.as_ref().is_some_and(LocalEntry::awaits_relocation) {
+        return Ok(Verdict::AwaitsRelocation);
+    }
     let Some(location) = index.entry_at(&source.path).await? else {
-        let materialized = index
-            .local_entry_at(&source.path)
-            .await?
-            .is_some_and(|local| local.state == LocalEntryState::Present);
+        let materialized = local.is_some_and(|local| local.state == LocalEntryState::Present);
         return Ok(if materialized {
             Verdict::Departed
         } else {
@@ -74,7 +82,7 @@ pub(super) async fn judge(
 
     // Packing a file this device never put there would propose replacing an
     // Entry from a file this device never placed (spec: EP-10).
-    let Some(local) = index.local_entry_at(&source.path).await? else {
+    let Some(local) = local else {
         return Ok(Verdict::NotMaterialized);
     };
     let container_id = location.container_id;
@@ -135,7 +143,7 @@ pub(super) async fn examine(
                 absorbs: Some(container_id),
             });
         }
-        Verdict::NotMaterialized | Verdict::Departed => {}
+        Verdict::NotMaterialized | Verdict::Departed | Verdict::AwaitsRelocation => {}
         // What is left to decide for a Pack-held Entry is whether the file
         // needs an update, because that is what may not be passed over
         // quietly (spec: PK-14).

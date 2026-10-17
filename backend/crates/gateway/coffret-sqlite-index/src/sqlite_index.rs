@@ -11,7 +11,7 @@ use coffret_usecase::device_state::{
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
 };
-use rusqlite::Connection;
+use rusqlite::{Connection, TransactionBehavior};
 use tracing::warn;
 
 use crate::error::classify;
@@ -98,6 +98,11 @@ impl SqliteIndex {
     }
 
     /// Runs a write on a blocking thread, in one transaction.
+    ///
+    /// The transaction is immediate: it takes the write lock before the work
+    /// reads anything, so a write that reads the checkpoint and then writes
+    /// waits for another process's write instead of failing at its first
+    /// statement with a snapshot it can no longer extend (spec: CK-13).
     async fn write<T>(
         &self,
         operation: &'static str,
@@ -111,7 +116,9 @@ impl SqliteIndex {
             operation,
             tokio::task::spawn_blocking(move || {
                 let mut guard = locked(&connection);
-                let transaction = guard.transaction().map_err(classify(operation))?;
+                let transaction = guard
+                    .transaction_with_behavior(TransactionBehavior::Immediate)
+                    .map_err(classify(operation))?;
                 let outcome = work(&transaction)?;
                 transaction.commit().map_err(classify(operation))?;
                 Ok(outcome)

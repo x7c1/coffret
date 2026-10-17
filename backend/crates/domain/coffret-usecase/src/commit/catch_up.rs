@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use coffret_format::{decode_index_snapshot, decode_journal_record, DecodedControlObject};
-use coffret_model::{ControlObjectKind, ControlObjectName, Generation, Redacted, SnapshotContent};
+use coffret_model::{
+    ControlObjectKind, ControlObjectName, Generation, JournalRecord, Redacted, SnapshotContent,
+};
 use tracing::{debug, warn};
 
 use crate::commit::commit_error::{CommitError, CommitResult, ControlObjectFault};
@@ -370,26 +372,19 @@ fn skippable(error: &CommitError) -> bool {
 /// answering a browser while a `sync` runs in a terminal — and each of them
 /// listed the Journal from its own reading of the checkpoint, so two of them
 /// arrive at the same records. Nothing in the process prevents that: a lock here
-/// would not reach the other process, and the Index deliberately refuses a
-/// record it already holds rather than absorbing it, because one Entry Path
-/// admits one current Entry and one Container enters the current set once
-/// (spec: EP-5, EP-6). So the convergence is this loop's, and it is convergence
-/// and not tolerance — the checkpoint is what decides, in both directions.
+/// would not reach the other process. So the convergence is this loop's, and the
+/// checkpoint is what decides it.
 ///
-/// Before each record the loop asks where the catalog stands. One the checkpoint
-/// already covers is one somebody applied, and it is stepped over rather than
-/// applied again — which matters most for the records that would *not* be
-/// refused: a record carrying only removals is idempotent in everything except
-/// the checkpoint it writes, so re-applying one would carry the catalog
-/// backwards, and a replay only ever goes forwards (spec: CK-9).
-///
+/// Before each record the loop asks where the catalog stands, and one the
+/// checkpoint already covers is stepped over rather than handed to the Index.
 /// What that reading cannot cover is the rival that commits in the instant
-/// between it and the apply, and that arrives as the refusal. Then the
-/// checkpoint is read again: if it now covers the record, the refusal means
-/// "somebody else already did this" and the replay carries on. If it does not,
-/// nothing explains the refusal and it is reported unchanged — a catalog that
-/// genuinely holds two Entries at one path is not a race, and swallowing it
-/// would hide the one failure this loop must not hide.
+/// between it and the apply. The Index closes that window itself: it refuses a
+/// record at or below the head it stands at with
+/// [`IndexError::AlreadyApplied`], inside the same operation and changing
+/// nothing (spec: CK-9, RV-5), and that refusal is stepped over too. Every
+/// other refusal is reported unchanged — a catalog that genuinely holds two
+/// Entries at one path, or a rename no state rule admits, is not a race, and
+/// swallowing it would hide the one failure this loop must not hide.
 async fn replay(
     reading: &Reading<'_>,
     index: &dyn Index,
@@ -426,12 +421,9 @@ async fn replay(
                     continue;
                 }
                 let record = decode_journal_record(&decoded.payload, generation)?;
-                match index.apply(record).await {
-                    Ok(()) => replayed += 1,
-                    Err(refusal) => {
-                        step_over(index, generation, refusal).await?;
-                        stepped_over += 1;
-                    }
+                match replay_record(index, record).await? {
+                    Replayed::Applied => replayed += 1,
+                    Replayed::AlreadyApplied => stepped_over += 1,
                 }
             }
             // The slot this device would have committed into was taken by an
@@ -479,69 +471,57 @@ async fn covered_by_checkpoint(index: &dyn Index, generation: Generation) -> Com
         .is_some_and(|at| generation <= at.head_generation()))
 }
 
-/// Steps over a record another replayer applied first, and reports the refusal
-/// where nothing explains it.
-///
-/// The only refusal another replayer accounts for is the collision a record
-/// already in the catalog produces, and the only proof that this is what
-/// happened is a checkpoint that has since moved past the record. Both have to
-/// hold: a refusal of another shape says what it says whoever else is running,
-/// and a duplicate over a catalog that stands where it did is a Library state no
-/// commit could have produced (spec: EP-5, EP-6) rather than a race.
-async fn step_over(
-    index: &dyn Index,
-    generation: Generation,
-    refusal: IndexError,
-) -> CommitResult<()> {
-    if !is_already_held(&refusal) {
-        return Err(refusal.into());
-    }
-    match index.checkpoint().await {
-        Ok(Some(at)) if generation <= at.head_generation() => {
-            debug!(
-                generation = generation.get(),
-                stands_at = at.head_generation().get(),
-                "stepping over a record another replayer applied first",
-            );
-            Ok(())
-        }
-        Ok(_) => Err(refusal.into()),
-        // Reading where the catalog stands is what would have explained the
-        // refusal, and it did not answer — so the refusal stands, and why it
-        // could not be explained is logged rather than reported in its place.
-        Err(unreadable) => {
-            warn!(
-                generation = generation.get(),
-                reason = %unreadable.redacted(),
-                "could not read where the catalog stands after a refused replay",
-            );
-            Err(refusal.into())
-        }
-    }
+/// What replaying one record came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Replayed {
+    /// The catalog took it in.
+    Applied,
+    /// The catalog already stood at or past it, and is left as it was.
+    AlreadyApplied,
 }
 
-/// Whether a refusal is the one a record the catalog already holds produces.
+/// Hands one record to the Index, stepping over it where another replayer
+/// applied it first.
 ///
-/// A record is taken in as its Containers and then their Entries, so a second
-/// application of it collides on the first of the two: the Container is in the
-/// current set already, or the path already holds the Entry it would put there.
-/// Nothing else in the Index's vocabulary can mean that — an Entry naming no
-/// Container, a catalog this build cannot read, a store that failed, all say the
-/// same thing however many replayers there are.
-fn is_already_held(refusal: &IndexError) -> bool {
-    matches!(
-        refusal,
-        IndexError::DuplicateContainer { .. } | IndexError::DuplicatePath { .. }
-    )
+/// [`IndexError::AlreadyApplied`] is the one refusal another replayer accounts
+/// for: the Index raises it from its own checkpoint, inside the operation that
+/// would otherwise have applied the record, and changes nothing when it does
+/// (spec: CK-9, RV-5). Every other refusal says what it says whoever else is
+/// running, and is reported.
+async fn replay_record(index: &dyn Index, record: JournalRecord) -> CommitResult<Replayed> {
+    match index.apply(record).await {
+        Ok(()) => Ok(Replayed::Applied),
+        Err(IndexError::AlreadyApplied {
+            generation,
+            checkpoint,
+        }) => {
+            debug!(
+                generation = generation.get(),
+                stands_at = checkpoint.get(),
+                "stepping over a record another replayer applied first",
+            );
+            Ok(Replayed::AlreadyApplied)
+        }
+        Err(refusal) => Err(refusal.into()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use coffret_format::ControlPayload;
-    use coffret_model::{MasterKeyEpoch, ReplicaPosition};
+    use coffret_model::{
+        CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
+        ContentHash, EntryExtent, EntryMetadata, EntryNumber, EntryPath, EntryRename,
+        MasterKeyEpoch, Mtime, ReplicaPosition,
+    };
 
     use super::*;
+    use crate::commit::control_fixtures::commitment;
+    use crate::device_state::{DeviceTime, LocalObservation};
+    use crate::entry_paths::entry_path;
     use crate::generations::generation;
+    use crate::in_memory_index::InMemoryIndex;
+    use crate::index_error::RenameRule;
 
     /// One decoded Journal record whose payload weighs `bytes`.
     ///
@@ -629,5 +609,187 @@ mod tests {
 
         let corrupt = CommitError::Format(coffret_format::Error::AuthenticationFailed);
         assert!(skippable(&corrupt));
+    }
+
+    /// A Library holding one Entry per Container, `inbox/a.jpg` in the first
+    /// and `inbox/b.jpg` in the second, at its first head.
+    fn two_files() -> JournalRecord {
+        let one_file = |seed: u8, text: &str| {
+            ContainerAddition::new(
+                ContainerSummary {
+                    id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
+                    kind: ContainerKind::OneFile,
+                    ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
+                    ciphertext_len: CiphertextLenClaim::new(128).expect("a literal length"),
+                    object_ref: None,
+                },
+                vec![EntryMetadata {
+                    path: entry_path(text),
+                    captured_path: entry_path(text),
+                    extent: EntryExtent::new(0, 10).expect("a literal extent"),
+                    mtime: Mtime::from_unix_seconds(1_700_000_000),
+                    btime: None,
+                    hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
+                    derived_from: None,
+                    mime: None,
+                }],
+            )
+            .expect("a one-file table tiles")
+        };
+        JournalRecord::new(
+            Generation::FIRST,
+            None,
+            MasterKeyEpoch::FIRST,
+            commitment(),
+            None,
+            None,
+            vec![one_file(0x21, "inbox/a.jpg"), one_file(0x31, "inbox/b.jpg")],
+            Vec::new(),
+        )
+        .expect("the first head succeeds nothing")
+    }
+
+    /// The record at `number` renaming the only Entry of the Container of each
+    /// seed in `renames` to the path beside it, in that order.
+    fn renaming(number: u64, renames: &[(u8, &str)]) -> JournalRecord {
+        JournalRecord::new(
+            generation(number),
+            Some(generation(number - 1)),
+            MasterKeyEpoch::FIRST,
+            commitment(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .and_then(|record| {
+            record.with_renames(
+                renames
+                    .iter()
+                    .map(|(seed, to)| {
+                        EntryRename::new(
+                            ContainerId::from_bytes([*seed; ContainerId::BYTE_LEN]),
+                            EntryNumber::FIRST,
+                            entry_path(*to),
+                        )
+                    })
+                    .collect::<Result<_, _>>()?,
+            )
+        })
+        .expect("a record renaming Entries in canonical order")
+    }
+
+    // CK-9, RV-5, FM-15: two replayers over one catalog, the slower of which
+    // read the checkpoint before the faster applied the record it then hands
+    // the Index. No state rule refuses either record the second time — the
+    // swap would swap its two Entries back, and the rename of an Entry a later
+    // record renamed again would carry it back to where it was — so it is the
+    // Index's refusal by generation that the slower one steps over, and the
+    // catalog and the files waiting to follow their Entries stay where the
+    // faster one left them.
+    #[tokio::test]
+    async fn the_slower_of_two_replayers_steps_over_what_the_faster_applied() {
+        let index = InMemoryIndex::new();
+        index
+            .apply(two_files())
+            .await
+            .expect("the first head applies");
+        for (text, seed) in [("inbox/a.jpg", 0x21), ("inbox/b.jpg", 0x31)] {
+            index
+                .mark_present(LocalObservation {
+                    path: entry_path(text),
+                    size: 10,
+                    mtime: Mtime::from_unix_seconds(1_700_000_000),
+                    at: DeviceTime::from_unix_seconds(1_700_000_500),
+                    hash: Some(ContentHash::from_bytes([seed; ContentHash::BYTE_LEN])),
+                })
+                .await
+                .expect("recording a materialized file must succeed");
+        }
+        let swap = renaming(1, &[(0x21, "inbox/b.jpg"), (0x31, "inbox/a.jpg")]);
+        let rename = renaming(2, &[(0x21, "albums/a.jpg")]);
+        let rename_again = renaming(3, &[(0x21, "albums/z.jpg")]);
+
+        for (raced, ahead) in [
+            (swap.clone(), vec![swap]),
+            (rename.clone(), vec![rename, rename_again]),
+        ] {
+            // The slower replayer reads where the catalog stands first ...
+            assert!(!covered_by_checkpoint(&index, raced.generation())
+                .await
+                .expect("reading the checkpoint must succeed"));
+            // ... and the faster one replays ahead of it before it gets on.
+            for record in ahead {
+                assert_eq!(
+                    replay_record(&index, record)
+                        .await
+                        .expect("the faster replayer applies each record"),
+                    Replayed::Applied,
+                );
+            }
+            let stood_at = index
+                .snapshot()
+                .await
+                .expect("an applied catalog has a state to checkpoint");
+            let waited_for = waiting(&index).await;
+
+            assert_eq!(
+                replay_record(&index, raced)
+                    .await
+                    .expect("a record another replayer applied first is not a failure"),
+                Replayed::AlreadyApplied,
+            );
+            assert_eq!(
+                index
+                    .snapshot()
+                    .await
+                    .expect("an applied catalog has a state to checkpoint"),
+                stood_at,
+                "the slower replay does not carry the catalog back",
+            );
+            assert_eq!(waiting(&index).await, waited_for);
+        }
+        assert_eq!(
+            waiting(&index).await,
+            [
+                Some(entry_path("albums/z.jpg")),
+                Some(entry_path("inbox/a.jpg"))
+            ],
+            "each file waits for where its Entry stands now",
+        );
+    }
+
+    /// Where the files at `inbox/a.jpg` and `inbox/b.jpg` wait to follow
+    /// their Entries to.
+    async fn waiting(index: &InMemoryIndex) -> [Option<EntryPath>; 2] {
+        let mut waiting = [None, None];
+        for (slot, text) in waiting.iter_mut().zip(["inbox/a.jpg", "inbox/b.jpg"]) {
+            *slot = index
+                .local_entry_at(&entry_path(text))
+                .await
+                .expect("reading a local file's row must succeed")
+                .expect("this device keeps a row for each file")
+                .relocate_to;
+        }
+        waiting
+    }
+
+    // CK-9, FM-15: a rename the catalog refuses by a state rule is not one
+    // somebody else applied — it is reported as it stands.
+    #[tokio::test]
+    async fn a_refused_rename_is_reported_as_it_stands() {
+        let index = InMemoryIndex::new();
+        index
+            .apply(two_files())
+            .await
+            .expect("the first head applies");
+
+        match replay_record(&index, renaming(1, &[(0x21, "inbox/a.jpg")])).await {
+            Err(CommitError::Index(IndexError::RenameRefused {
+                element: 0,
+                rule: RenameRule::PathUnchanged,
+            })) => {}
+            other => panic!("expected the refusal to be reported as it stands, got {other:?}"),
+        }
     }
 }

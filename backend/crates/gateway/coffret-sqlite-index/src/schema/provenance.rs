@@ -23,10 +23,13 @@ use crate::error::classify;
 /// (spec: PK-21). Layouts 7 to 11 recorded no commit slot, so the table of
 /// attempted slots starts empty, and a row they marked attempted stays one
 /// whose outcome is unknown: nothing says where its create may have landed
-/// (spec: OC-2, OC-3). The catalog every one of these layouts holds is not
-/// carried forward: it was filled from Storage objects in a format this build no
-/// longer reads, so it is discarded and the next catch-up rebuilds it from
-/// Storage (spec: RV-5). The transaction leaves either complete layout after
+/// (spec: OC-2, OC-3). No layout before 16 applied a rename, so no file any of
+/// them recorded waits to follow one (spec: FM-15). The catalog every one of
+/// these layouts holds is not carried forward: up to layout 14 it holds no
+/// entry numbers, or was filled from Storage objects in a format this build no
+/// longer reads, and a layout-15 one is discarded with them so that every older
+/// file takes one path; the next catch-up rebuilds it from Storage
+/// (spec: RV-5). The transaction leaves either complete layout after
 /// interruption.
 pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<()> {
     const OPERATION: &str = "preserving device state from an older layout";
@@ -35,7 +38,7 @@ pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<
         .map_err(classify(OPERATION))?;
     let found = match stamp(&transaction)? {
         SCHEMA_VERSION => return Ok(()),
-        found @ 7..=12 => found,
+        found @ 7..=15 => found,
         found => return Err(unsupported(found)),
     };
     if found == 7 {
@@ -62,6 +65,9 @@ pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<
             .execute_batch(ATTEMPTED_SLOTS_DDL)
             .map_err(classify(OPERATION))?;
     }
+    transaction
+        .execute_batch("ALTER TABLE local_entries ADD COLUMN relocate_to TEXT COLLATE BINARY;")
+        .map_err(classify(OPERATION))?;
     replace_the_catalog(&transaction)?;
     transaction.commit().map_err(classify(OPERATION))?;
     report_the_discard(OPERATION, found);
