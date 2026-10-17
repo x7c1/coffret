@@ -18,6 +18,12 @@ Concept background: [Library](../../concepts/library/),
     under an `idx-` name and an activation one under a `head-` name carry the
     same checkpoint (CK-1, CK-2, CK-3), so a scan for the newest valid
     checkpoint considers both (FM-12).
+  - A restore recovers each Entry under its current path, renames included.
+    A Container records only the path its Entry was captured under (FM-9);
+    the current path is the Journal's and its checkpoint's (FM-15, FM-16), so
+    the restore names each Entry as the checkpoint names it — or, from the
+    complete history, as the record that added it does — with every later
+    record's renames applied (RV-5).
 - **RV-2.** A restore additionally requires at least one committed valid
   Keyring replica matching the tuple the checkpoint records (KL-3, CK-3) and
   the current Containers themselves; a degraded replica set permits the
@@ -36,6 +42,13 @@ Concept background: [Library](../../concepts/library/),
   Containers but cannot distinguish current Containers from removed,
   replaced, or uncommitted candidates. Salvage performs no automatic cleanup,
   never authorizes deletion or mutation, and is not a restore. *(Form: test)*
+  - Salvage presents each Entry under the captured path its Container's meta
+    section records (FM-9). Renames are carried only by Journal records and
+    Index Snapshots (FM-15, FM-16), so salvage cannot know an Entry's current
+    name and never presents a name as current. A Pack rebuilt after a rename
+    records the name current at the rebuild as its captured path (PK-10), so
+    salvage of that Pack shows that name — still a captured path, which a
+    later rename leaves behind in turn.
 - **RV-5.** An exact rebuild of the Index's cached Catalog follows RV-1 and
   opens no Container: the complete unpruned Journal, or a checkpoint and later
   records, carries every current Entry (CK-7, CP-11). Device-local mappings,

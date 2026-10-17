@@ -7,8 +7,8 @@ use crate::commit_conformance::commit_renames_in;
 
 use crate::delete_conformance::delete_under_test::DeleteUnderTest;
 use crate::delete_conformance::fixtures::{
-    current, current_containers, delete, filler, folder, freeze, map, master_key, opened, paths,
-    spooled, stored, table, write,
+    current, current_containers, delete, filler, folder, freeze, map, master_key, opened,
+    opened_at_head, paths, spooled, stored, table, write,
 };
 use crate::entry_paths::entry_path;
 
@@ -275,6 +275,11 @@ pub async fn a_folder_spanning_several_packs_is_deleted_in_one_batch(fixture: &D
 /// path: a rewrite captures the name current at the rewrite, so the catalog
 /// no longer holds a captured path apart from it.
 ///
+/// RV-4, FM-9: until the rebuild the rename lives only in control state. The
+/// old Pack's meta section still names the Entry by the path it was captured
+/// under, so a salvage reading that Pack could show only that name; reading
+/// the replacement's shows the current one.
+///
 /// The rename lands behind this device's catalog, so the deletion catches it
 /// up before it plans, and the rebuild then holds each row against the old
 /// Pack's meta entry at the same entry number — where the path that Pack
@@ -304,6 +309,16 @@ pub async fn a_pack_whose_kept_entry_was_renamed_is_rebuilt_under_its_current_pa
         .expect("an ordinary path is a rename's target")],
     )
     .await;
+    let before = opened_at_head(store, index, old).await;
+    assert_eq!(
+        before
+            .entries
+            .iter()
+            .map(|entry| entry.metadata.captured_path.as_str())
+            .collect::<Vec<_>>(),
+        ["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"],
+        "the renamed Entry's own Container still records the path it was captured under",
+    );
 
     let outcome = delete(store, fixture, paths(&["albums/b.jpg"]), 2).await;
 

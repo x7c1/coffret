@@ -40,7 +40,7 @@ mod local_copies;
 pub use local_copies::{
     a_copy_gone_from_disk_is_left_alone,
     a_deletion_on_another_device_leaves_this_devices_copies_to_its_sync,
-    a_refused_move_leaves_the_deletion_committed_and_is_reported,
+    a_refused_discard_leaves_the_deletion_committed_and_is_reported,
     a_root_that_does_not_vouch_for_itself_leaves_the_copy_to_the_next_sync,
     an_edited_copy_is_kept_and_reported, an_unavailable_root_is_reported_and_its_copies_left_alone,
     the_deleting_devices_unedited_copies_go_to_the_trash_after_the_commit,
@@ -124,7 +124,7 @@ macro_rules! delete_conformance {
             a_copy_gone_from_disk_is_left_alone,
             a_root_that_does_not_vouch_for_itself_leaves_the_copy_to_the_next_sync,
             an_unavailable_root_is_reported_and_its_copies_left_alone,
-            a_refused_move_leaves_the_deletion_committed_and_is_reported,
+            a_refused_discard_leaves_the_deletion_committed_and_is_reported,
             a_deletion_on_another_device_leaves_this_devices_copies_to_its_sync,
         );
     };

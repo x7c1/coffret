@@ -17,8 +17,8 @@ use crate::uploaded_object::UploadedObject;
 /// Six of the cases are about what a commit does when Storage does not
 /// cooperate, and none of those states can be reached by driving the flow: a
 /// replica that never arrives, a head that refuses the create, a snapshot slot
-/// another device got to first, a provider that will not move anything to the
-/// trash, a replica write it refuses, an object it will not hand over. Setting
+/// another device got to first, a provider that will not trash anything, a
+/// replica write it refuses, an object it will not hand over. Setting
 /// them up by hand afterwards would not be the same test — what is being checked
 /// is where the flow *stops*, or that it declines to, which only shows if the
 /// fault happens while it is running.
@@ -50,7 +50,7 @@ enum Fault {
     /// what makes it a faithful sibling: two Snapshots of one head are the same
     /// checkpoint (spec: CK-11).
     SiblingSnapshot,
-    /// Refuses to move anything to the trash, permanently.
+    /// Refuses to trash anything, permanently.
     ///
     /// What a Library on credentials that may write but not delete looks like.
     /// The commit itself is untouched — trashing happens after the record exists
@@ -102,7 +102,7 @@ impl<'a> FaultyStore<'a> {
         }
     }
 
-    /// Refuses every move to the trash.
+    /// Refuses to trash anything.
     pub(crate) fn refusing_to_trash(inner: &'a dyn ObjectStore) -> Self {
         Self {
             inner,

@@ -283,10 +283,10 @@ pub async fn an_unavailable_root_is_reported_and_its_copies_left_alone(fixture: 
     );
 }
 
-/// CP-1, EP-15: a trash that refuses leaves the deletion committed — the
-/// Entry is gone from the Library — and the copy and its row where they are,
-/// with the refusal reported; the next sync asks again.
-pub async fn a_refused_move_leaves_the_deletion_committed_and_is_reported(
+/// CP-1, EP-15: a discard the desktop's trash refuses leaves the deletion
+/// committed — the Entry is gone from the Library — and the copy and its row
+/// where they are, with the refusal reported; the next sync asks again.
+pub async fn a_refused_discard_leaves_the_deletion_committed_and_is_reported(
     fixture: &DeleteUnderTest,
 ) {
     let index = fixture.index();

@@ -121,7 +121,7 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
                 disposal: Disposal::Trashed,
             }] if *settled == abandoned
         ),
-        "a Container abandoned before a commit attempt is moved out of the way: {:?}",
+        "a Container abandoned before a commit attempt is trashed: {:?}",
         outcome.settled,
     );
     assert!(
@@ -220,7 +220,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
 ///
 /// The same abandoned batch as
 /// [`an_uploaded_container_is_settled_by_the_next_run`], on a provider that will
-/// not move anything to the trash. The row survives the refusal so later
+/// not trash anything. The row survives the refusal so later
 /// settlement can retry using the same proof (spec: OC-2, OC-3). The outcome
 /// carries Storage's refusal rather than claiming the object was removed.
 pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
@@ -257,7 +257,7 @@ pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
 
     assert!(
         Library::read(store).await.holds_container(abandoned),
-        "the object the provider would not move is exactly where it was",
+        "the object the provider would not trash is exactly where it was",
     );
     assert!(
         pending(index).await.len() == 1,
