@@ -7,7 +7,9 @@ pub(crate) struct Replacing<'a> {
     /// The envelope the committed Keyring maps it to (spec: KL-7).
     pub(crate) envelope: &'a KeyEnvelope,
     /// Its rows as the catalog records them, in the order they occupy its
-    /// stream (spec: FM-9).
+    /// stream (spec: FM-9). Every one of them, so that a row's position here
+    /// is its entry number, which is how the replacement names the Entries it
+    /// carries forward.
     pub(crate) table: &'a [EntryMetadata],
     /// Which of those rows the replacement carries, one flag per row. At least
     /// one is set: a Container with nothing left to carry is removed, never

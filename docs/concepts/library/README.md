@@ -480,6 +480,11 @@ and has a window of its own for entering the Passphrase.
   reports the refusal and leaves the Library as it was: no record of its batch
   is created, and the batch is dropped. Running it again catches up first, so it
   plans from the Library as that other commit left it (spec: CP-1, CP-4, CP-18).
+- A rename another device committed meanwhile is not by itself such a refusal.
+  A run's update, Pack, or rebuilt Pack takes over the renamed Entry at its new
+  path; only a write to the same Entry or Entry Path from both sides — a rename
+  onto a path the run adds, two renames of one Entry, a rename onto a path the
+  other side filled — is refused as a conflict (spec: CP-7, EP-7).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation
@@ -496,13 +501,14 @@ Catalog's names without replacing the affected Containers, and replaying a
 record or adopting a Snapshot already applies one: the Catalog takes each
 Entry's new path, and a file this device placed for a renamed Entry waits at
 its old path to be relocated (spec: FM-15, RV-5, EP-10). What remains is
-writing renames — no writer emits one yet — fetching an Entry by its entry
-number, relocating a waiting file on this device, and rebasing a rename onto a
-newer head. Mappings will continue to translate names to local paths; they do
-not make local folders the authority for the namespace. A device following a
-rename must protect local changes and retry a refused relocation without
-prematurely relabeling its materialization record. The current implementation
-does not infer a rename from a local file being renamed.
+writing renames — no writer emits one yet, though a batch carrying one is
+already rebased onto a newer head (spec: EP-7) — fetching an Entry by its
+entry number, and relocating a waiting file on this device. Mappings will
+continue to translate names to local paths; they do not make local folders the
+authority for the namespace. A device following a rename must protect local
+changes and retry a refused relocation without prematurely relabeling its
+materialization record. The current implementation does not infer a rename
+from a local file being renamed.
 
 ## Related Concepts
 

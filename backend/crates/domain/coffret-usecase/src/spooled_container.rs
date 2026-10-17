@@ -1,13 +1,14 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use coffret_model::{
     CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, EntryMetadata, KeyEnvelope, ObjectRef,
+    ContentHash, EntryMetadata, EntryNumber, Generation, KeyEnvelope, ObjectRef,
 };
 
 use crate::commit::{
     commit_batch, CommitError, CommitFailure, CommitOutcome, CommitPolicy, CommitRequest,
-    ControlKeys, PreparedAddition, PreparedBatch, ShortReport,
+    ControlKeys, EntryRef, PreparedAddition, PreparedBatch, ShortReport,
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
@@ -68,6 +69,14 @@ pub(crate) struct SpooledContainer {
     /// Entry; a freeze's Pack supersedes every one-file Container it absorbed;
     /// a newly imported file supersedes nothing (spec: PK-7).
     pub(crate) replaces: Vec<ContainerId>,
+    /// Which current Entry each of its Entries takes the place of, by its
+    /// entry number here: the Entry of the one-file Container a sync's
+    /// replacement updates, the one-file Entries a freeze's Pack absorbs, the
+    /// kept Entries of the Pack a rebuild replaces (spec: PK-7, PK-10).
+    ///
+    /// What a rebase follows when another writer renamed one of them since the
+    /// run read the catalog (spec: EP-7).
+    pub(crate) supersedes: BTreeMap<EntryNumber, EntryRef>,
     /// Whether the Entries it holds are files this device put into it from its
     /// own disk — which is what its commit records as materialized, and what
     /// the pending row naming it says for a later completion (spec: OC-7,
@@ -102,7 +111,7 @@ impl SpooledContainer {
         let addition = ContainerAddition::new(container, self.entries.clone())
             .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
 
-        Ok(PreparedAddition::new(addition, self.envelope))
+        Ok(PreparedAddition::new(addition, self.envelope).superseding(self.supersedes.clone()))
     }
 
     /// The local files this device has in place for the Entries this Container
@@ -142,6 +151,9 @@ impl SpooledContainer {
 /// supersedes travels on the upload itself, in
 /// [`replaces`](SpooledContainer::replaces), so a sync and a freeze pass none.
 ///
+/// `base` is the head the run's catch-up reached, which is what it read the
+/// catalog at and so what the batch was prepared against (spec: CP-4, EP-7).
+///
 /// `short` is the finding a caller's own read of the committed Keyring left,
 /// for the commit to speak for where it examines that same set (spec: KL-15). A
 /// run that read nothing of the Keyring, or that ends here with nothing to
@@ -157,6 +169,7 @@ pub(crate) async fn commit_spooled(
     keys: &ControlKeys,
     policy: &CommitPolicy,
     now: DeviceTime,
+    base: Option<Generation>,
     spooled: &[SpooledContainer],
     removals: &[ContainerId],
     short: Option<&ShortReport>,
@@ -182,7 +195,8 @@ pub(crate) async fn commit_spooled(
                 .iter()
                 .flat_map(|one| one.materialized(now))
                 .collect(),
-        );
+        )
+        .prepared_at(base);
 
     let request = CommitRequest::new(store, index, keys, batch)
         .with_policy(policy.clone())

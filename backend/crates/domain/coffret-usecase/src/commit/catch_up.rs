@@ -140,6 +140,18 @@ pub(crate) struct CaughtUp {
     pub(super) newest_checkpoint: Option<Generation>,
 }
 
+impl CaughtUp {
+    /// The generation of the head the catch-up reached, or `None` in a Library
+    /// that has committed nothing (spec: FM-13).
+    ///
+    /// What a flow that reads the catalog after its catch-up prepares its
+    /// batch against, and so where the batch's rebase starts from
+    /// (spec: CP-4, EP-7).
+    pub(crate) fn head_generation(&self) -> Option<Generation> {
+        self.head.map(|head| head.generation())
+    }
+}
+
 /// Brings the Index to the Library's current head (spec: CK-9).
 ///
 /// The starting point is the newer of two: this Index, or the newest valid
@@ -456,6 +468,59 @@ async fn replay(
         );
     }
     Ok(())
+}
+
+/// Reads the Journal records of every generation in `generations`, in order,
+/// off the listing a catch-up took.
+///
+/// What a rebase examines: the records committed after the head a batch was
+/// prepared against, up to the head the catch-up reached (spec: CP-4, EP-7).
+/// They are read here rather than taken from the replay, because the replay
+/// does not see every one of them — another process may have applied them to
+/// the shared catalog first, or a Snapshot covering them may have been
+/// adopted (spec: CK-9).
+///
+/// Every generation has to hold a Journal record: a gap is the
+/// [`CommitError::MissingHead`] a replay meets, and an activation is the
+/// [`CommitError::EpochActivated`] it stops at (spec: CP-5).
+pub(super) async fn read_records(
+    store: &dyn ObjectStore,
+    keys: &ControlKeys,
+    retry: &RetryPolicy,
+    listing: &ControlListing,
+    generations: impl IntoIterator<Item = Generation>,
+) -> CommitResult<Vec<JournalRecord>> {
+    let reading = Reading {
+        store,
+        keys,
+        retry,
+        listing,
+    };
+    let mut records = Vec::new();
+    for generation in generations {
+        let name = ControlObjectName::head(generation);
+        let decoded = reading
+            .open(&name)
+            .await?
+            .ok_or(CommitError::MissingHead { generation })?;
+        match decoded.kind {
+            ControlObjectKind::Journal => {
+                records.push(decode_journal_record(&decoded.payload, generation)?);
+            }
+            ControlObjectKind::ActivationSnapshot => {
+                return Err(CommitError::EpochActivated { generation })
+            }
+            ControlObjectKind::IndexSnapshot | ControlObjectKind::Keyring => {
+                return Err(CommitError::CorruptControlObject {
+                    object: name,
+                    fault: ControlObjectFault::KindNotAdmitted {
+                        found: decoded.kind,
+                    },
+                })
+            }
+        }
+    }
+    Ok(records)
 }
 
 /// Whether the catalog already stands at or past one record's head.

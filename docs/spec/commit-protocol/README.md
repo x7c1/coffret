@@ -13,6 +13,9 @@ Concept background: [Journal](../../concepts/journal/),
 - **CP-1.** The Journal record is the commit point of a batch: before the
   record exists, the batch has not changed the current Container set; once it
   exists, its additions and removals are part of that set. *(Form: test)*
+  - A record's renames take effect with the record, never partially: before
+    it exists every Entry it renames stands at its old Entry Path, and once
+    it exists every one stands at its new one (FM-15).
 - **CP-2.** Each authenticated control head determines exactly one next
   commit slot, and exactly one successor may consume it: an ordinary Journal
   record, or the Index Snapshot that activates a new Master Key epoch. The
@@ -57,6 +60,12 @@ Concept background: [Journal](../../concepts/journal/),
 - **CP-4.** A writer whose slot was consumed by another Journal record has
   not committed; it refreshes the head, rebases its batch onto it (EP-7), and
   retries. *(Form: test)*
+  - A rebase starts from the head the batch was prepared against, not from
+    the attempt that lost: every record committed after that head is
+    examined, up to the head the refresh reached, and its renames are applied
+    to the batch's pending changes by `(Container ID, entry number)` (FM-15)
+    under EP-7's rules. The first attempt does the same, since the head may
+    have moved between preparing the batch and committing it.
 - **CP-5.** A writer whose slot was consumed by an activation Index Snapshot
   stops until it is re-enrolled in the new epoch. *(Form: test)*
 - **CP-6.** A successful activation Index Snapshot carries the new epoch's
@@ -66,6 +75,16 @@ Concept background: [Journal](../../concepts/journal/),
   silently applies last-write-wins. If both sides changed the same Entry
   Path, the conflict requires explicit resolution before retrying (rebase
   recheck: EP-7). *(Form: test)*
+  - Changing the same Entry Path includes doing so by a rename: one side
+    renaming an Entry onto a path the other adds an Entry at or renames an
+    Entry onto, and both sides renaming one Entry. An update or a rebuilt
+    Pack meeting a rename of the Entry it replaces is not such a change — the
+    two change different things about one Entry, its content and its name —
+    and the rebase carries the one over the other (EP-7).
+  - A conflict is refused with what identifies it: the batch's pending
+    change, the record it conflicts with, and the rule; the batch is not
+    committed (CP-1), and `sync`, `freeze`, and `delete` end the run with the
+    refusal as with any other refused commit (CP-18).
 - **CP-8.** Before a Journal commit, the writer computes the post-commit
   Container set as `(current - removals) union additions`, then writes and
   read-back verifies a complete candidate Keyring replica set (KL-2) whose

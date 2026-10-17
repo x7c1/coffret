@@ -5,8 +5,10 @@ use coffret_model::{
     ContainerId, ControlObjectKind, ControlObjectName, EntryPath, Generation, Redacted,
 };
 
+use crate::commit::pending_change::PendingChange;
+use crate::commit::rebase_rule::RebaseRule;
 use crate::error::Error;
-use crate::index_error::IndexError;
+use crate::index_error::{IndexError, RenameRule};
 
 /// Result alias for the commit flow.
 pub type CommitResult<T> = std::result::Result<T, CommitError>;
@@ -66,6 +68,46 @@ pub enum CommitError {
     RemovalNotCurrent {
         /// Every removal the current set no longer holds, ascending.
         container_ids: Vec<ContainerId>,
+    },
+    /// A record committed since the batch was prepared and one of the batch's
+    /// pending changes write to one Entry or one Entry Path from two sides.
+    ///
+    /// A rebase examines every record after the head the batch was prepared
+    /// against and applies their renames to the batch by `(Container ID, entry
+    /// number)`: an update or a rebuilt Pack takes over the Entry at the path a
+    /// rename gave it, and a rename follows the Entry an update replaced its
+    /// Entry with. What it cannot carry over is this: a rename onto the path an
+    /// addition wants, a rename of an Entry another writer renamed or replaced
+    /// under another name, a rename onto a path another writer filled. Neither
+    /// side is picked, so the batch is refused before anything is written and
+    /// is not offered again; the next run plans from the Library as that record
+    /// left it (spec: CP-4, CP-7, EP-7).
+    RebaseConflict {
+        /// The batch's change the rebase could not carry over.
+        pending: PendingChange,
+        /// The generation of the record it conflicts with.
+        record: Generation,
+        /// What that record did that conflicts with it.
+        rule: RebaseRule,
+        /// The Entry Path the two sides meet at: the path the addition wants,
+        /// the name the rename was prepared against, or the path it gives.
+        path: EntryPath,
+    },
+    /// A rename of the batch breaks one of the rules a record's renames are
+    /// held to, against the head the batch would commit onto, and no record
+    /// committed since the batch was prepared accounts for it (spec: FM-15).
+    ///
+    /// A record that broke one would be refused whole by every catalog that
+    /// applied it, the committing device's own included, so it is never
+    /// created; nothing has been written when this is raised. A rebase reports
+    /// what another writer did as [`RebaseConflict`](Self::RebaseConflict)
+    /// instead, so this is a batch its producer assembled against a catalog it
+    /// misread.
+    RenameRefused {
+        /// The rename's position in the batch's renames.
+        element: usize,
+        /// Which rule it breaks.
+        rule: RenameRule,
     },
     /// A Container that survives the batch has no entry in the committed
     /// Keyring.
@@ -443,6 +485,25 @@ impl fmt::Display for CommitError {
                 },
                 listed(container_ids),
             ),
+            // The path is what a person recognizes the conflict by, as with a
+            // collision, so the sentence carries it and the diagnostic event
+            // renders this through [`Redacted`]. The sentence ends the chain,
+            // so the next step is spoken here, as a stale removal speaks it.
+            Self::RebaseConflict {
+                pending,
+                record,
+                rule,
+                path,
+            } => write!(
+                f,
+                "{pending} at the Entry Path {:?} conflicts with the commit at generation \
+                 {record}, which {rule}; nothing of this batch was committed, and running \
+                 again plans afresh from the Library as it stands now",
+                path.as_str()
+            ),
+            Self::RenameRefused { element, rule } => {
+                write!(f, "rename {element} of the batch is refused: {rule}")
+            }
             Self::UnmappedContainer { container_id } => write!(
                 f,
                 "the committed Keyring holds neither an envelope nor a key-lost \
@@ -737,10 +798,11 @@ impl Redacted for CommitError {
     ///
     /// Almost all of this vocabulary is already log-safe by what it is about:
     /// a commit's own bookkeeping is generations, replica positions, attempt
-    /// counts and control-object names, none of which anybody chose. The one
-    /// exception is [`EntryPathCollision`](Self::EntryPathCollision), which is
-    /// *identified* by a path — and it is enough on its own to make rendering
-    /// this type with `Display` unsafe.
+    /// counts and control-object names, none of which anybody chose. The
+    /// exceptions are [`EntryPathCollision`](Self::EntryPathCollision) and
+    /// [`RebaseConflict`](Self::RebaseConflict), which are *identified* by a
+    /// path — and either is enough on its own to make rendering this type with
+    /// `Display` unsafe.
     fn redacted(&self) -> String {
         match self {
             Self::Storage(error) => format!("Commit::Storage: {}", error.redacted()),
@@ -753,6 +815,21 @@ impl Redacted for CommitError {
             Self::RemovalNotCurrent { container_ids } => format!(
                 "Commit::RemovalNotCurrent(containers=[{}])",
                 listed(container_ids)
+            ),
+            Self::RebaseConflict {
+                pending,
+                record,
+                rule,
+                path,
+            } => format!(
+                "Commit::RebaseConflict(pending={}, record={record}, rule={rule:?}, \
+                 path_len={})",
+                pending.redacted(),
+                path.as_str().len()
+            ),
+            Self::RenameRefused { element, rule } => format!(
+                "Commit::RenameRefused(element={element}, rule={})",
+                rule.redacted()
             ),
             Self::UnmappedContainer { container_id } => {
                 format!("Commit::UnmappedContainer(container={container_id})")
@@ -883,6 +960,7 @@ mod tests {
     use std::error::Error as _;
 
     use super::*;
+    use crate::commit::EntryRef;
     use crate::entry_paths::entry_path;
 
     /// What a provider that failed on its own side leaves behind.
@@ -951,6 +1029,55 @@ mod tests {
 
         assert!(error.to_string().contains("albums/spring.jpg"));
         assert_eq!(error.redacted(), "Commit::EntryPathCollision(path_len=17)");
+    }
+
+    // EP-7: a rebase conflict names the change, the record and the rule to a
+    // person along with the path the two sides meet at, and a diagnostic event
+    // gets everything but the path.
+    #[test]
+    fn a_rebase_conflict_is_recorded_without_its_path() {
+        let entry = EntryRef::new(
+            ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]),
+            coffret_model::EntryNumber::FIRST,
+        );
+        let error = CommitError::RebaseConflict {
+            pending: PendingChange::Rename(entry),
+            record: Generation::new(7).expect("a small generation is one"),
+            rule: RebaseRule::RenamedEntryRenamed,
+            path: entry_path("albums/spring.jpg"),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains("albums/spring.jpg"), "{said}");
+        assert!(said.contains("generation 7"), "{said}");
+        assert!(said.contains("renamed the same Entry"), "{said}");
+        assert_eq!(
+            error.redacted(),
+            format!(
+                "Commit::RebaseConflict(pending=Rename(container={}, entry=0), record=7, \
+                 rule=RenamedEntryRenamed, path_len=17)",
+                entry.container_id
+            ),
+        );
+    }
+
+    // FM-15: a rename of the batch's own that the head does not admit says
+    // which one and which rule, and no path either way.
+    #[test]
+    fn a_refused_rename_names_its_position_and_rule() {
+        let error = CommitError::RenameRefused {
+            element: 2,
+            rule: RenameRule::PathTaken,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "rename 2 of the batch is refused: another Entry would stand at the same path"
+        );
+        assert_eq!(
+            error.redacted(),
+            "Commit::RenameRefused(element=2, rule=PathTaken)"
+        );
     }
 
     // CP-18: the Containers a refused batch would have removed are what a

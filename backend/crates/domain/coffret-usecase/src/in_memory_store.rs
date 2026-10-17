@@ -42,6 +42,8 @@ pub struct InMemoryStore {
 struct Objects {
     live: BTreeMap<String, Vec<u8>>,
     trashed: BTreeMap<String, Vec<u8>>,
+    /// How many unconditional writes each name has taken, overwrites included.
+    puts: BTreeMap<String, usize>,
 }
 
 impl InMemoryStore {
@@ -67,6 +69,22 @@ impl InMemoryStore {
         self.page_size
     }
 
+    /// How many times [`put`](ObjectStore::put) has written under `name`.
+    ///
+    /// For a case that has to show an object went up once and no more: what a
+    /// store holds afterwards is the same whether it was written once or twice.
+    pub fn puts_of(&self, name: &str) -> usize {
+        self.objects().puts.get(name).copied().unwrap_or(0)
+    }
+
+    /// How many times [`put`](ObjectStore::put) has written, under any name.
+    ///
+    /// For a case that has to show a refusal came before anything was
+    /// uploaded: a write a later step removed again leaves no name behind.
+    pub fn puts(&self) -> usize {
+        self.objects().puts.values().sum()
+    }
+
     fn objects(&self) -> std::sync::MutexGuard<'_, Objects> {
         self.objects
             .lock()
@@ -79,7 +97,9 @@ impl ObjectStore for InMemoryStore {
     async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         let bytes = body.into_bytes().await?;
         let hash = ProviderHash::new(digest(&bytes));
-        self.objects().live.insert(name.to_owned(), bytes);
+        let mut objects = self.objects();
+        objects.live.insert(name.to_owned(), bytes);
+        *objects.puts.entry(name.to_owned()).or_insert(0) += 1;
         Ok(UploadedObject {
             object_ref: ObjectRef::new(name),
             hash: Some(hash),

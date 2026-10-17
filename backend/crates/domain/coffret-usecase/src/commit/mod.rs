@@ -30,7 +30,11 @@
 //!    (spec: CP-1, CP-2, CP-3, CP-15, CP-16).
 //! 6. **Rebase on a conflict.** A consumed slot is a normal outcome, not a
 //!    failure: the flow catches up onto the new head and starts again, capped at
-//!    [`CommitPolicy::attempts`] (spec: CP-4, CP-7).
+//!    [`CommitPolicy::attempts`] (spec: CP-4, CP-7). Every attempt carries the
+//!    batch over the records committed since the head it was prepared against
+//!    before step 2: their renames are applied to its pending changes by
+//!    `(Container ID, entry number)`, and a write to one Entry or Entry Path
+//!    from two sides is refused as a conflict (spec: EP-7).
 //! 7. **After the commit.** Refresh the Index with the batch, trash what the
 //!    batch removed, and write the checkpoint if the policy asks for one
 //!    (spec: CK-8, CK-10, CK-11).
@@ -110,6 +114,9 @@ pub(crate) use control_listing::ControlListing;
 
 mod control_object;
 
+mod entry_ref;
+pub use entry_ref::EntryRef;
+
 // A Library's first head, written when the Library is created so that no
 // commit ever starts from no head (spec: CP-2, FM-13).
 mod first_head;
@@ -149,6 +156,20 @@ pub use prepared_addition::PreparedAddition;
 
 mod prepared_batch;
 pub use prepared_batch::PreparedBatch;
+
+mod pending_change;
+pub use pending_change::PendingChange;
+
+mod pending_rename;
+pub use pending_rename::PendingRename;
+
+// Carrying a batch over the records committed since it was prepared: their
+// renames applied to its pending changes, and the conflicts they cause
+// (spec: CP-4, EP-7).
+mod rebase;
+
+mod rebase_rule;
+pub use rebase_rule::RebaseRule;
 
 mod rewritten_replicas;
 pub use rewritten_replicas::RewrittenReplicas;

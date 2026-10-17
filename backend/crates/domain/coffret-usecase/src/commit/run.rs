@@ -1,14 +1,19 @@
+use coffret_model::{Generation, JournalRecord};
 use tracing::debug;
 
+use crate::commit::catch_up::CaughtUp;
 use crate::commit::commit_error::{CommitError, CommitResult};
 use crate::commit::commit_failure::CommitFailure;
 use crate::commit::commit_outcome::CommitOutcome;
+use crate::commit::commit_policy::CommitPolicy;
 use crate::commit::commit_request::CommitRequest;
 use crate::commit::committing::Committing;
+use crate::commit::control_keys::ControlKeys;
 use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
-use crate::commit::{after_commit, candidate, catch_up, first_head, journal, keyring};
+use crate::commit::{after_commit, candidate, catch_up, first_head, journal, keyring, rebase};
 use crate::committed_batch::CommittedBatch;
+use crate::object_store::ObjectStore;
 
 /// Makes a prepared batch the Library's next committed state.
 ///
@@ -45,6 +50,13 @@ use crate::committed_batch::CommittedBatch;
 /// generation over the new current set — and tries again, up to
 /// [`CommitPolicy::attempts`](super::CommitPolicy::attempts). Nothing is ever
 /// resolved by comparing timestamps (spec: CP-4, CP-7, CP-18, EP-7).
+///
+/// Every attempt, the first included, carries the batch over the records
+/// committed after the head it was prepared against: their renames are applied
+/// to its pending changes by `(Container ID, entry number)`, so an update lands
+/// at the path a rename gave its Entry rather than bringing the old name back,
+/// and a write to one Entry or Entry Path from two sides is refused as
+/// [`CommitError::RebaseConflict`] (spec: EP-7).
 ///
 /// Every commit starts from a head, because creating a Library writes its first
 /// one ([`write_first_head`](super::write_first_head)). A Library created before
@@ -121,6 +133,17 @@ async fn attempt_until_committed(
     // Whether this run has written the Library's first head, or found it
     // created by another writer first; it tries at most once (see below).
     let mut wrote_first_head = false;
+    // The head the batch was prepared against, and the records committed
+    // since, read once each however many attempts the run takes
+    // (spec: CP-4, EP-7).
+    let base = match batch.base {
+        Some(base) => Some(base),
+        None => index
+            .checkpoint()
+            .await?
+            .map(|checkpoint| checkpoint.head_generation()),
+    };
+    let mut intervening: Vec<JournalRecord> = Vec::new();
 
     let mut attempt = 0;
     while attempt < policy.attempts {
@@ -152,6 +175,11 @@ async fn attempt_until_committed(
         }
         attempt += 1;
 
+        // Shadowed for the rest of the attempt, so that nothing below commits
+        // the batch as prepared rather than as it stands on this head; the
+        // next attempt rebases from the prepared one again (spec: EP-7).
+        read_intervening(store, keys, &policy, &caught, base, &mut intervening).await?;
+        let batch = rebase::rebase(index, &batch, &intervening).await?;
         candidate::check(index, &batch).await?;
 
         let committed = index.checkpoint().await?;
@@ -236,6 +264,39 @@ async fn attempt_until_committed(
     Err(CommitError::ConflictLimitReached {
         attempts: policy.attempts,
     })
+}
+
+/// Extends `held` with the Journal records after the last one it holds — or
+/// after `base`, where it holds none — up to the head `caught` reached.
+///
+/// These are the records the batch did not see: committed after the head it
+/// was prepared against (spec: CP-4, EP-7). An attempt that lost the slot
+/// keeps what it read, so the next one reads only the records committed since.
+async fn read_intervening(
+    store: &dyn ObjectStore,
+    keys: &ControlKeys,
+    policy: &CommitPolicy,
+    caught: &CaughtUp,
+    base: Option<Generation>,
+    held: &mut Vec<JournalRecord>,
+) -> CommitResult<()> {
+    let Some(head) = caught.head_generation() else {
+        return Ok(());
+    };
+    let after = held.last().map(JournalRecord::generation).or(base);
+    let from = match after {
+        Some(after) => after.next()?.get(),
+        // Prepared against a Library with no head: every record is one the
+        // batch did not see (spec: FM-13).
+        None => Generation::FIRST.get(),
+    };
+    let generations = (from..=head.get()).map(|number| {
+        Generation::new(number).expect("a number no larger than the head is a generation")
+    });
+    held.extend(
+        catch_up::read_records(store, keys, &policy.retry, &caught.listing, generations).await?,
+    );
+    Ok(())
 }
 
 /// Whether an examination has said its piece about the committed set, whatever

@@ -81,6 +81,9 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
 
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // What the plan reads the catalog at, and so what the batch is prepared
+    // against (spec: CP-4, EP-7).
+    let base = caught.head_generation();
     let (key_table, short) = match index.checkpoint().await? {
         Some(checkpoint) => {
             let read = read_committed(
@@ -172,6 +175,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         keys.control(),
         &policy,
         now,
+        base,
         &spooled,
         &removed,
         Some(&short),

@@ -74,7 +74,9 @@ would fence nobody (spec: FM-12).
 
 - prepare (a batch's Containers before any commit)
 - append (a Journal record at the end of a batch)
-- rebase (a losing writer's batch onto the new head)
+- rebase (a batch onto a head newer than the one it was prepared against)
+- take over (an Entry, by the addition that replaces it, at the path a rename
+  gave it meanwhile)
 - replay (the Journal to determine the current Containers)
 - consume (a commit slot, by creating the successor it admits)
 - checkpoint (the Journal into an Index Snapshot)
@@ -82,9 +84,9 @@ would fence nobody (spec: FM-12).
 
 ## Domain Rules
 
-- The Journal record is the **commit point** of a batch: its additions and
-  removals take effect exactly when the record is created, never partially
-  (spec: CP-1).
+- The Journal record is the **commit point** of a batch: its additions,
+  removals and renames take effect exactly when the record is created, never
+  partially (spec: CP-1).
 - A record also reserves where its own checkpoint goes, so the Index
   Snapshot of a head has exactly one home on Storage, under a name of the
   checkpoint's own rather than the head's (spec: CK-10, FM-12).
@@ -141,14 +143,28 @@ renamed; replay does not discover additional Entries by interpreting a prefix.
 Such a batch changes names without replacing or uploading Container
 ciphertext.
 
-The rest of the rollout must cover writing renames, rebase, and device-local
-materialization relocations together. A content update prepared
-while another device renames the same Entry must, once rebased, land at the
-Entry's new Entry Path rather than bring back the old one; competing renames
-or an occupied destination must surface a conflict. A failed local relocation
-must retain its old materialization record and remain pending for a later
-catch-up. These are requirements for rename, not guarantees of the current
-implementation.
+**Rebase carries a batch over renames.** A batch remembers the head it was
+prepared against, and every commit of it examines the records committed
+since and applies their renames to its pending changes by Container ID and
+entry number (spec: CP-4, EP-7). A content update, a [Pack](../pack/)
+absorbing a file, or a Pack rebuilt by a deletion takes over the Entry at
+the path another device's rename gave it, rather than bringing the old name
+back; its Container still records the name it was written under. A batch
+renaming an Entry that another device then replaced follows the replacement
+where the name it was prepared against now names it. Two writes to one
+Entry or one Entry Path — a rename onto the path an addition wants, two
+renames of one Entry, a rename of an Entry replaced under another name or
+removed, a rename onto a path another device filled — are refused as a
+conflict naming the change, the record and the rule, never resolved by
+picking one (spec: CP-7). Removals are carried over as they are, since they
+name Containers, and a folder rename is the Entries it was prepared with and
+no more.
+
+The rest of the rollout is planned: the rename operation that writes these
+batches, fetching an Entry by its entry number, and device-local
+materialization relocations. A failed local relocation must retain its old
+materialization record and remain pending for a later catch-up. These are
+requirements for rename, not guarantees of the current implementation.
 
 ## Related Concepts
 

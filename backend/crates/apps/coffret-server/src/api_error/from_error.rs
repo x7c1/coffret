@@ -113,24 +113,26 @@ impl From<Error> for ApiError {
 /// the control again will never clear it. [`ApiError::epoch`] says why it has
 /// the status it has.
 ///
-/// Three of the commit's own verdicts are `conflict`: the Library moved
+/// Four of the commit's own verdicts are `conflict`: the Library moved
 /// underneath the batch while it was being assembled. A path another device's
 /// commit claimed meanwhile, a removal another commit already made
-/// (spec: CP-18), and the slot lost to other devices on every attempt the
-/// commit makes, every rebase clean (spec: CP-4) — each says another device
-/// changed the Library, and the batch was not committed (spec: CP-1). Running
-/// the same thing again catches up first and plans from the Library as it now
-/// stands, so unlike the rest a person can do something about them, and the
-/// refusal says what ([`ApiError::conflict`]).
+/// (spec: CP-18), a change of the batch's that cannot be carried over another
+/// commit's renames (spec: EP-7), and the slot lost to other devices on every
+/// attempt the commit makes, every rebase clean (spec: CP-4) — each says
+/// another device changed the Library, and the batch was not committed
+/// (spec: CP-1). Running the same thing again catches up first and plans from
+/// the Library as it now stands, so unlike the rest a person can do something
+/// about them, and the refusal says what ([`ApiError::conflict`]).
 ///
 /// The rest are `500`. A catalog that would not take a record is this device's
 /// own. The commit's other verdicts — a Keyring left incomplete, a committed
 /// Keyring it could not repair (spec: KL-16), a Container no catalog maps, a
-/// control value it assembled that the rules do not admit — are about what this
-/// device assembled, and nothing a browser can do differently about; a
-/// catch-up, which writes nothing, never reaches them at all. All of them travel
-/// to the log, where whoever is keeping the Library will read them, and none of
-/// them says anything further to a screen.
+/// control value it assembled that the rules do not admit, a rename of its own
+/// the head does not admit and no other commit explains (spec: FM-15) — are
+/// about what this device assembled, and nothing a browser can do differently
+/// about; a catch-up, which writes nothing, never reaches them at all. All of
+/// them travel to the log, where whoever is keeping the Library will read them,
+/// and none of them says anything further to a screen.
 fn from_commit(commit: &CommitError, cause: String) -> ApiError {
     match commit {
         CommitError::Storage(storage) => from_storage(storage, cause),
@@ -173,8 +175,10 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         CommitError::Index(_) => catalog_unusable(cause),
         CommitError::EntryPathCollision { .. }
         | CommitError::RemovalNotCurrent { .. }
+        | CommitError::RebaseConflict { .. }
         | CommitError::ConflictLimitReached { .. } => ApiError::conflict(cause),
-        CommitError::UnmappedContainer { .. }
+        CommitError::RenameRefused { .. }
+        | CommitError::UnmappedContainer { .. }
         | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }
         | CommitError::UnrepairedKeyring { .. } => ApiError::server(cause),

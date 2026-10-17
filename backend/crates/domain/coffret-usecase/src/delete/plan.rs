@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_format::{ChunkSize, ContainerFootprint, EntryPlan};
-use coffret_model::{ContainerId, ContainerSummary, EntryMetadata, EntryPath};
+use coffret_model::{ContainerId, ContainerSummary, EntryMetadata, EntryNumber, EntryPath};
 
 use crate::delete::delete_selection::DeleteSelection;
 use crate::delete::pack_refusal::PackRefusal;
@@ -133,13 +133,13 @@ pub(super) async fn plan(
     // A Pack's other Entries may lie anywhere in the namespace — path ranges of
     // Packs from different invocations overlap and interleave (spec: PK-8) — so
     // the tables are read off the whole catalog rather than off the selection.
-    let mut tables: BTreeMap<ContainerId, Vec<EntryMetadata>> = BTreeMap::new();
+    let mut tables: BTreeMap<ContainerId, Vec<(EntryNumber, EntryMetadata)>> = BTreeMap::new();
     for location in index.entries_under(None).await? {
         if touched.contains(&location.container_id) {
             tables
                 .entry(location.container_id)
                 .or_default()
-                .push(location.entry);
+                .push((location.entry_number, location.entry));
         }
     }
     let summaries: BTreeMap<ContainerId, ContainerSummary> = index
@@ -159,10 +159,12 @@ pub(super) async fn plan(
             .get(&container_id)
             .cloned()
             .ok_or_else(|| unheld(container_id))?;
-        let mut table = tables.remove(&container_id).unwrap_or_default();
-        // The catalog answers in path order; a Container's own order is the
-        // order its rows occupy its stream (spec: FM-9).
-        table.sort_by_key(|row| row.extent.range().start);
+        let mut numbered = tables.remove(&container_id).unwrap_or_default();
+        // The catalog answers in path order; a Container's own order is its
+        // entry numbers (spec: FM-9). Offsets cannot stand in for them: Entries
+        // of length zero share one, and a rename has made path order no guide.
+        numbered.sort_by_key(|(number, _)| *number);
+        let table: Vec<EntryMetadata> = numbered.into_iter().map(|(_, entry)| entry).collect();
         let keep: Vec<bool> = table.iter().map(|row| !named.contains(&row.path)).collect();
 
         if !keep.iter().any(|keep| *keep) {
@@ -199,5 +201,141 @@ fn unheld(container_id: ContainerId) -> IndexError {
             "an Entry names Container {container_id}, which the catalog does not hold"
         ))
         .into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_model::{
+        ContainerAddition, ContainerKind, ContentHash, EntryRename, JournalRecord,
+        KeyringCommitment, MasterKeyEpoch, Mtime,
+    };
+
+    use super::*;
+    use crate::ciphertext_len_claims::ciphertext_len;
+    use crate::entry_extents::entry_extent;
+    use crate::entry_paths::entry_path;
+    use crate::generations::generation;
+    use crate::in_memory_index::InMemoryIndex;
+
+    fn pack() -> ContainerId {
+        ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN])
+    }
+
+    fn number(n: u64) -> EntryNumber {
+        EntryNumber::new(n).expect("a small number is an entry number")
+    }
+
+    /// The head at `number`, adding `additions` and renaming `renames`.
+    fn record(
+        number: u64,
+        additions: Vec<ContainerAddition>,
+        renames: Vec<EntryRename>,
+    ) -> JournalRecord {
+        JournalRecord::canonical(
+            generation(number),
+            number.checked_sub(1).map(generation),
+            MasterKeyEpoch::FIRST,
+            KeyringCommitment::new(generation(number), 3, "beef")
+                .expect("a lowercase hex digest and a non-zero count are a commitment"),
+            None,
+            None,
+            additions,
+            vec![],
+        )
+        .and_then(|record| record.with_renames(renames))
+        .expect("a fixture holds a record a commit could have written")
+    }
+
+    /// A Pack whose table is `rows` — `(path, offset, size)` — in entry
+    /// number order.
+    fn addition(rows: &[(&str, u64, u64)]) -> ContainerAddition {
+        let entries = rows
+            .iter()
+            .map(|(text, offset, size)| EntryMetadata {
+                path: entry_path(*text),
+                captured_path: entry_path(*text),
+                extent: entry_extent(*offset, *size),
+                mtime: Mtime::from_unix_seconds(1_700_000_000),
+                btime: None,
+                hash: ContentHash::from_bytes([0x22; ContentHash::BYTE_LEN]),
+                derived_from: None,
+                mime: None,
+            })
+            .collect();
+        ContainerAddition::new(
+            ContainerSummary {
+                id: pack(),
+                kind: ContainerKind::Pack,
+                ciphertext_hash: ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),
+                ciphertext_len: ciphertext_len(164),
+                object_ref: None,
+            },
+            entries,
+        )
+        .expect("the fixture's table tiles its stream")
+    }
+
+    // FM-9, PK-10: a rebuild's table is the old Pack's in entry number order,
+    // which is what the replacement's record of the Entries it carries forward
+    // counts by. Three Entries begin at offset 0 — two of them empty — and a
+    // rename has sent the third to the front of path order, so neither offsets
+    // nor paths would recover the order the Pack holds them in.
+    #[tokio::test]
+    async fn a_rebuild_table_follows_entry_numbers_past_shared_offsets_and_a_rename() {
+        let index = InMemoryIndex::new();
+        let table = [
+            ("albums/c.jpg", 0, 0),
+            ("albums/a.jpg", 0, 0),
+            ("albums/b.jpg", 0, 100),
+        ];
+        index
+            .apply(record(0, vec![addition(&table)], vec![]))
+            .await
+            .expect("applying the Pack's record must succeed");
+        let renamed = EntryRename::new(pack(), number(2), entry_path("albums/0.jpg"))
+            .expect("an ordinary path is a rename target");
+        index
+            .apply(record(1, vec![], vec![renamed]))
+            .await
+            .expect("applying the rename must succeed");
+
+        let selection = DeleteSelection::paths([entry_path("albums/a.jpg")].into());
+        let plan = plan(&index, &selection, &BTreeSet::new())
+            .await
+            .expect("planning from the catalog must succeed");
+
+        assert!(plan.removals.is_empty() && plan.refused.is_empty());
+        let [rebuild] = plan.rebuilds.as_slice() else {
+            panic!("one Pack is rebuilt, got {:?}", plan.rebuilds);
+        };
+        let rows: Vec<(&str, &str, u64)> = rebuild
+            .table
+            .iter()
+            .map(|row| {
+                (
+                    row.path.as_str(),
+                    row.captured_path.as_str(),
+                    row.extent.size(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("albums/c.jpg", "albums/c.jpg", 0),
+                ("albums/a.jpg", "albums/a.jpg", 0),
+                ("albums/0.jpg", "albums/b.jpg", 100),
+            ],
+            "the rows stand in entry number order",
+        );
+        assert_eq!(rebuild.keep, [true, false, true]);
+        assert_eq!(
+            rebuild
+                .kept()
+                .map(|row| row.path.as_str())
+                .collect::<Vec<_>>(),
+            ["albums/c.jpg", "albums/0.jpg"],
+        );
     }
 }

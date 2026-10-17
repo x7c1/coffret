@@ -72,6 +72,40 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   head and repeats the same uniqueness check, so two concurrent writes to one
   Entry Path become an explicit conflict rather than last-write-wins (CP-7).
   *(Form: test)*
+  - A pending change remembers the Entry it acts on by `(Container ID, entry
+    number)` (FM-9) and the current name it was prepared against. The rebase
+    examines every record between the batch's base and the new head (CP-4)
+    and applies their renames to the pending change by that pair:
+    1. A pending addition meets a rename that gave another Entry the path it
+       adds an Entry at: conflict, as an addition at that path already is.
+    2. A pending update — replacing Container C at its Entry's path — meets a
+       rename of that Entry: the update follows the rename, and commits as the
+       replacement of the same Entry at its new current path. The new
+       Container's captured path stays the name the update was prepared
+       under, which is what its meta section records (FM-9, FM-15).
+    3. A pending rename meets an update that replaced the renamed Entry's
+       Container: if the name the rename was prepared against now names the
+       update's new Entry (D, m), the rename is retargeted to (D, m) and
+       committed; otherwise conflict.
+    4. A pending rename meets a rename of the same Entry: conflict.
+    5. A pending rename meets an addition or a rename that now holds its
+       destination path: conflict.
+    6. A pending removal with a read-modify-replace rebuild (PK-10) meets a
+       rename of an Entry the rebuild keeps: the rebuilt Pack is kept, with
+       no second upload, and the record carries the kept Entry under its
+       renamed current path, its captured path again the name it was rebuilt
+       under. A Pack absorbing a one-file Container (PK-7) follows a rename of
+       the absorbed Entry the same way.
+    7. A pending removal meets a rename of an Entry it removes: the removal
+       still applies, since it names the Container, and nothing else changes.
+    8. Folder renames are not extended: a pending rename names exactly the
+       Entries it was prepared with, and an Entry added under the old folder
+       by an intervening commit stays where it is. A pending addition is never
+       remapped by prefix.
+  - A file a followed update or Pack was drawn from stays at the path it was
+    captured from and keeps waiting to be relocated, as the replay of the
+    rename left it (EP-10); the commit does not record it as the Entry at its
+    own path.
 - **EP-8.** The prototype scans and reads regular files only. The configured
   mapped root is resolved as the user named it and may itself pass through a
   symbolic link. Every component below that resolved root is then descended
