@@ -43,6 +43,7 @@ import {
 } from './model/kinds.js';
 import type { Argon2Params } from './storedMasterKey/argon2Params.js';
 import type { DerivedFrom } from './model/entry.js';
+import { namedView, type MapFields } from './internal/fieldNumbers.js';
 
 /** The manifest schema both implementations write and read. */
 export const MANIFEST_SCHEMA = 1;
@@ -257,9 +258,15 @@ export type BodyField = BodyValue & { key: string };
  * choice and not part of the format. Array order is left alone, because the
  * order of every array in a payload is part of what its rule states
  * (spec: FM-15, FM-16).
+ *
+ * The body carries its fields under the field numbers the field-number registry
+ * assigns them and the manifest states them by name, so the body is read
+ * through `kind` first: a field number the registry names becomes that name,
+ * and anything else — an integer it does not name for that map, or a text key,
+ * which is no field's spelling — is kept in a form no manifest name matches.
  */
-export function decodeBodyFields(body: Uint8Array): BodyField[] {
-  const map = decodeCborExact(body, 'malformed_control_payload');
+export function decodeBodyFields(body: Uint8Array, kind: MapFields): BodyField[] {
+  const map = namedView(decodeCborExact(body, 'malformed_control_payload'), kind);
   if (!(map instanceof Map)) {
     throw new Error('a control-object payload body is a CBOR map');
   }
@@ -287,10 +294,8 @@ function sortBodyValue(value: BodyValue): BodyValue {
 function fieldsOf(map: Map<unknown, unknown>): BodyField[] {
   return sortBodyFields(
     [...map].map(([key, value]) => {
-      if (typeof key !== 'string') {
-        throw new Error('a payload body key is text');
-      }
-      return { key, ...bodyValue(value, key) } as BodyField;
+      const name = typeof key === 'string' ? key : `${String(key)}`;
+      return { key: name, ...bodyValue(value, name) } as BodyField;
     }),
   );
 }

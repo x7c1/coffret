@@ -5,12 +5,13 @@ use coffret_model::{
 
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, OLDEST_SCHEMA, PREV, REMOVALS, SNAPSHOT_SLOT,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, MalformedDetail, Result};
+use crate::field_numbers;
 
 /// Parses a Journal record out of the payload a control object carried
 /// (spec: FM-15).
@@ -28,11 +29,15 @@ use crate::error::{Error, MalformedDetail, Result};
 /// The array orders are verified rather than restored, for the reason FM-15
 /// gives.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
-    let value = read_body(&payload.body, malformed_detail)?;
+    let value = read_body(
+        &payload.body,
+        malformed_detail,
+        &field_numbers::JOURNAL_RECORD,
+    )?;
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < OLDEST_SCHEMA {
+    if schema < SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
 

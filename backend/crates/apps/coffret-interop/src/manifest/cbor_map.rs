@@ -3,6 +3,7 @@
 
 use anyhow::{bail, Context, Result};
 use ciborium::Value;
+use coffret_format::field_numbers::{named_view, MapFields};
 
 use super::{BodyField, BodyValue};
 
@@ -14,10 +15,24 @@ use super::{BodyField, BodyValue};
 /// name too — while an array is compared in order, because the order of every
 /// array in a payload is part of what its rule states
 /// (spec: FM-15, FM-16, FM-17).
-pub fn check_cbor_map(bytes: &[u8], expected: &[BodyField]) -> Result<()> {
+///
+/// The body carries its fields under the field numbers the field-number
+/// registry assigns them, and the manifest states them by name, which is what
+/// keeps a manifest readable without the registry beside it. So the body is
+/// read through the registry first, as the map kind `kind`: a field number the
+/// registry names becomes that name, and anything else — an integer it does not
+/// name for that map, or a text key, which is no field's spelling — is kept in
+/// a form no manifest name can match, so the field count or the name lookup
+/// below fails on it.
+pub fn check_cbor_map(bytes: &[u8], expected: &[BodyField], kind: &MapFields) -> Result<()> {
     let value: Value =
         ciborium::from_reader(bytes).context("the payload body is not readable CBOR")?;
-    check_map(&value, expected, "the payload body")
+    check_named_map(&named_view(value, kind), expected)
+}
+
+/// The comparison itself, over a body whose keys are already names.
+fn check_named_map(found: &Value, expected: &[BodyField]) -> Result<()> {
+    check_map(found, expected, "the payload body")
 }
 
 fn check_map(found: &Value, expected: &[BodyField], what: &str) -> Result<()> {
@@ -85,15 +100,28 @@ mod tests {
     /// `coffret-format`'s own encoder wrote — so it exists to put a body of a
     /// known shape in front of [`check_cbor_map`] and nowhere else.
     fn to_cbor_map(fields: &[BodyField]) -> Result<Vec<u8>> {
-        let entries = fields
-            .iter()
-            .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
-            .collect::<Result<Vec<_>>>()?;
-
         let mut bytes = Vec::new();
-        ciborium::into_writer(&Value::Map(entries), &mut bytes)
+        ciborium::into_writer(&named_map(fields)?, &mut bytes)
             .context("serializing a control-payload body")?;
         Ok(bytes)
+    }
+
+    /// The fields as a map keyed by their names, the shape the comparison
+    /// reads once a body's keys have been named.
+    fn named_map(fields: &[BodyField]) -> Result<Value> {
+        Ok(Value::Map(
+            fields
+                .iter()
+                .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
+                .collect::<Result<Vec<_>>>()?,
+        ))
+    }
+
+    /// What the comparison makes of bytes holding a map already keyed by
+    /// name: the cases below are about the comparison, not the registry.
+    fn check_named_bytes(bytes: &[u8], expected: &[BodyField]) -> Result<()> {
+        let value: Value = ciborium::from_reader(bytes).context("readable CBOR")?;
+        check_named_map(&value, expected)
     }
 
     fn fields() -> Vec<BodyField> {
@@ -129,13 +157,13 @@ mod tests {
     #[test]
     fn a_body_the_manifest_describes_checks_out() {
         let bytes = to_cbor_map(&fields()).expect("the fields serialize");
-        check_cbor_map(&bytes, &fields()).expect("the body matches the manifest");
+        check_named_bytes(&bytes, &fields()).expect("the body matches the manifest");
     }
 
     #[test]
     fn a_nested_body_the_manifest_describes_checks_out() {
         let bytes = to_cbor_map(&nested()).expect("the fields serialize");
-        check_cbor_map(&bytes, &nested()).expect("the body matches the manifest");
+        check_named_bytes(&bytes, &nested()).expect("the body matches the manifest");
     }
 
     // The two encoders order map keys as they please, so the check must not
@@ -145,7 +173,7 @@ mod tests {
         let mut reordered = fields();
         reordered.reverse();
         let bytes = to_cbor_map(&reordered).expect("the fields serialize");
-        check_cbor_map(&bytes, &fields()).expect("the body matches the manifest");
+        check_named_bytes(&bytes, &fields()).expect("the body matches the manifest");
     }
 
     #[test]
@@ -159,7 +187,7 @@ mod tests {
         };
         value.reverse();
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        check_cbor_map(&bytes, &nested()).expect("the body matches the manifest");
+        check_named_bytes(&bytes, &nested()).expect("the body matches the manifest");
     }
 
     // Array order, on the other hand, is exactly what FM-15, FM-16, and FM-17
@@ -173,7 +201,7 @@ mod tests {
         };
         value.reverse();
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &nested()).expect_err("the order differs");
+        let error = check_named_bytes(&bytes, &nested()).expect_err("the order differs");
         assert!(format!("{error:#}").contains("additions"), "{error:#}");
     }
 
@@ -182,7 +210,7 @@ mod tests {
         let mut written = fields();
         written[2] = BodyField::bytes("checksum", &[0xa1, 0xb2]);
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &fields()).expect_err("a field is missing");
+        let error = check_named_bytes(&bytes, &fields()).expect_err("a field is missing");
         assert!(format!("{error:#}").contains("digest"), "{error:#}");
     }
 
@@ -197,7 +225,7 @@ mod tests {
         };
         value[1] = BodyField::int("modified", -1);
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &nested()).expect_err("a field is missing");
+        let error = check_named_bytes(&bytes, &nested()).expect_err("a field is missing");
         assert!(format!("{error:#}").contains("mtime"), "{error:#}");
     }
 
@@ -208,7 +236,7 @@ mod tests {
         let mut written = fields();
         written.pop();
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &fields()).expect_err("a field is missing");
+        let error = check_named_bytes(&bytes, &fields()).expect_err("a field is missing");
         assert!(format!("{error:#}").contains("2 fields"), "{error:#}");
     }
 
@@ -217,7 +245,7 @@ mod tests {
         let mut written = fields();
         written[0] = BodyField::uint("records", 3);
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &fields()).expect_err("a value differs");
+        let error = check_named_bytes(&bytes, &fields()).expect_err("a value differs");
         assert!(format!("{error:#}").contains("records"), "{error:#}");
     }
 
@@ -229,7 +257,54 @@ mod tests {
         };
         value.pop();
         let bytes = to_cbor_map(&written).expect("the fields serialize");
-        let error = check_cbor_map(&bytes, &nested()).expect_err("an element is missing");
+        let error = check_named_bytes(&bytes, &nested()).expect_err("an element is missing");
         assert!(format!("{error:#}").contains("1 element"), "{error:#}");
+    }
+
+    // The registry is what turns a body's field numbers into the names a
+    // manifest states: a Keyring body keyed by field numbers reads as `schema`
+    // and `mapping`.
+    #[test]
+    fn field_numbers_are_read_as_the_names_the_registry_gives_them() {
+        let body = Value::Map(vec![
+            (Value::from(1u64), Value::from(1u64)),
+            (
+                Value::from(2u64),
+                Value::Array(vec![Value::Map(vec![
+                    (Value::from(0u64), Value::Bytes(vec![0x21; 16])),
+                    (Value::from(2u64), Value::Bool(true)),
+                ])]),
+            ),
+        ]);
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&body, &mut bytes).expect("the body serializes");
+        let expected = vec![
+            BodyField::uint("schema", 1),
+            BodyField::array(
+                "mapping",
+                vec![BodyValue::Map {
+                    value: vec![
+                        BodyField::bytes("id", &[0x21; 16]),
+                        BodyField::bool("key_lost", true),
+                    ],
+                }],
+            ),
+        ];
+        check_cbor_map(&bytes, &expected, &coffret_format::field_numbers::KEYRING)
+            .expect("the body matches the manifest");
+    }
+
+    // A text key is no field's spelling, so a body that carries a field under
+    // its name does not match a manifest stating that field.
+    #[test]
+    fn a_field_under_a_text_key_does_not_match() {
+        let bytes = to_cbor_map(&[BodyField::uint("schema", 1)]).expect("the fields serialize");
+        let error = check_cbor_map(
+            &bytes,
+            &[BodyField::uint("schema", 1)],
+            &coffret_format::field_numbers::KEYRING,
+        )
+        .expect_err("a text key is not the field");
+        assert!(format!("{error:#}").contains("schema"), "{error:#}");
     }
 }

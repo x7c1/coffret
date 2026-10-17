@@ -10,7 +10,7 @@ small control [Storage Object](../storage-object/). The current format carries:
 
 - the Containers the batch added, with their ciphertext hashes and the
   Entries each one holds — each Entry under its current
-  [Entry Path](../entry-path/) and, where it differs, the original path its
+  [Entry Path](../entry-path/) and, where it differs, the captured path its
   Container recorded (see [Catalog](../catalog/#domain-rules))
 - the Containers it removed
 - the exact [Keyring](../keyring/) commitment the batch selected

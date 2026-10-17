@@ -12,16 +12,18 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build the line falls at the current layout itself. The change that
-//! renamed the table of pending rows (spec: OC-2) changed a device-local table,
-//! so both versions moved together and the window between
-//! them is empty: no older file is opened at all, and the discard path below is
-//! unreachable here. That is the intended consequence rather than an accident,
-//! so the cases say it outright — an older file is refused whole and left
-//! exactly as it was, which is what lets its mappings still be read out of it
-//! and recorded again. Where the two edges of the window fall when it is not
-//! empty is a unit case in the adapter's own `schema` module, against a
-//! synthetic pair of versions.
+//! In *this* build that line falls one layout below the current one. Layout
+//! 14 changed only the catalog: its Entries are filled from Storage objects
+//! whose maps carry field numbers, and the column naming the path an Entry was
+//! captured under is `captured_path`. So a file at layout 13 keeps its device
+//! group and has its catalog discarded and rebuilt from Storage rather than
+//! migrated, which is the one older layout the discard path reaches. Older
+//! layouts from 7 up have their device group upgraded by the adapter's own
+//! provenance step, and the layouts below 7 used here are refused whole and
+//! left exactly as they were, which is what lets their mappings still be read
+//! out of them and recorded again. Where the two edges of the window fall is a
+//! unit case in the adapter's own `schema` module, against a synthetic pair of
+//! versions.
 
 use std::path::{Path, PathBuf};
 
@@ -47,9 +49,8 @@ use support::{
 ///
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
-/// numbers, and it is the numbers — here, two that are equal — that decide
-/// everything below.
-const SCHEMA_VERSION: i64 = 13;
+/// numbers, and it is the numbers that decide everything below.
+const SCHEMA_VERSION: i64 = 14;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -138,6 +139,58 @@ fn restamp(file: &Path, version: i64) {
         .expect("the Index file must open")
         .pragma_update(None, "user_version", version)
         .expect("stamping a version must succeed");
+}
+
+/// The layout before this one has its catalog discarded rather than migrated,
+/// and keeps its device-local group whole (spec: RV-5, EP-9, EP-10, OC-2).
+///
+/// Its catalog was filled from Storage objects in the format this build no
+/// longer reads, under a column this build names otherwise, so nothing of it
+/// is carried forward: the file is stamped as the current layout with an empty
+/// catalog, which the next catch-up rebuilds from Storage, and a warning says
+/// so.
+#[tokio::test]
+async fn the_layout_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
+    let scratch = Scratch::new();
+    // The stamp alone decides, as it does for every case here: what the
+    // catalog's columns were called is not looked at before it is dropped.
+    a_file_stamped(&scratch, SCHEMA_VERSION - 1).await;
+
+    let logs = CapturedLogs::capture();
+    let index = SqliteIndex::open(scratch.file()).expect("the previous layout must open");
+    assert!(
+        index
+            .checkpoint()
+            .await
+            .expect("reading the checkpoint must succeed")
+            .is_none(),
+        "the catalog was discarded, not migrated"
+    );
+    assert_eq!(
+        index
+            .mappings()
+            .await
+            .expect("reading the mappings must succeed"),
+        vec![mapping()],
+        "the device's own mapping is kept"
+    );
+    assert_eq!(
+        index
+            .pending_rows()
+            .await
+            .expect("reading the pending rows must succeed")
+            .len(),
+        1,
+        "and so is the spool it has not committed"
+    );
+    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
+    assert_eq!(rows_in(&scratch.file(), "entries"), 0);
+    assert_eq!(logs.at(Level::WARN).len(), 1, "{}", logs.text());
+
+    index
+        .restore(snapshot(4))
+        .await
+        .expect("the rebuilt catalog takes a Snapshot like a fresh one");
 }
 
 /// A fresh file gets the layout, and keeps what is written into it.

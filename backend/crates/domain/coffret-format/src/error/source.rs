@@ -19,6 +19,10 @@ impl error::Error for Error {
             | Self::MalformedKeyringReplica { detail } => detail
                 .cause()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
+            Self::MetaEncodeFailed { detail } => detail
+                .cause()
+                .map(|cause| cause as &(dyn error::Error + 'static)),
+            Self::ControlPayloadEncodeFailed { cause } => Some(cause),
             _ => None,
         }
     }

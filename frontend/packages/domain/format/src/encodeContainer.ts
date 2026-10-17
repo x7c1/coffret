@@ -69,7 +69,7 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
       path: source.path,
       // The name a Container records is the one the Entry has as it is written
       // (spec: FM-9).
-      originalPath: source.path,
+      capturedPath: source.path,
       offset,
       size,
       mtimeSeconds: source.mtimeSeconds,

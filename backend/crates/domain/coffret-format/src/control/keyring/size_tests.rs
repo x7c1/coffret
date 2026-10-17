@@ -9,8 +9,8 @@
 //! So the per-Container cost is the number the schema was shaped around, and
 //! almost all of it is content the format cannot compress away: a 16-byte
 //! Container ID and a 72-byte Key Envelope. What is pinned here is what the
-//! *schema* spends beyond those 88 bytes — the two field names, the CBOR
-//! headers, and the element map itself. A field added per Container shows up in
+//! *schema* spends beyond those 88 bytes — the two one-byte field numbers, the
+//! CBOR headers, and the element map itself. A field added per Container shows up in
 //! that number and nowhere else.
 
 use coffret_model::{ContainerId, KeyTable, KeyringElement};
@@ -32,7 +32,7 @@ const DESIGN_BUDGET: usize = 110;
 /// share of the array. It is pinned rather than bounded loosely, because it is
 /// the number a change to the schema moves — and every rotation and every
 /// repair pays it R times over.
-const PINNED_COST_BEYOND_THE_ID_AND_ENVELOPE: usize = 16;
+const PINNED_COST_BEYOND_THE_ID_AND_ENVELOPE: usize = 6;
 
 /// The bytes one Container contributes as content rather than as schema: its
 /// ID (spec: FM-3) and its Key Envelope (spec: FM-14).

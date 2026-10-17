@@ -9,7 +9,7 @@ Concept vocabulary lives in [Entry](../../concepts/container/entry/).
 
 | Meaning | Current encoding | Planned encoding |
 | --- | --- | --- |
-| Source name at generation time | `derived_from.original_path` | `derived_from.original_path`, still immutable provenance |
+| Source name at generation time | `derived_from.captured_path` | `derived_from.captured_path`, still immutable provenance |
 | Source identity used by the origin | `derived_from.container_id` | `derived_from.hash`, the source plaintext BLAKE3-256, 32 bytes |
 | Current source after rename | No defined rename relationship | A Catalog resolution rule still to be decided |
 
@@ -28,7 +28,7 @@ ordinary one-file sync does not upload thumbnail Entries.
 
 ## Decisions still required
 
-A renamed source cannot be looked up through immutable `original_path` alone.
+A renamed source cannot be looked up through immutable `captured_path` alone.
 Define the current-source relationship, rename of the mirrored derived path,
 and behavior when the source is deleted or its old path is reused. The rule
 must distinguish unrelated files with identical bytes and survive repack,

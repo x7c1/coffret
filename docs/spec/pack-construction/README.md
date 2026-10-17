@@ -85,7 +85,7 @@ Concept background: [Pack](../../concepts/pack/),
   the writer must not commit the replacement; if no Entry remains, the old
   Pack is removed without creating an empty replacement. *(Form: test)*
   - A carried Entry keeps what the old Pack recorded for it — its Entry Path,
-    `original_mtime`, `original_btime`, and hash (FM-9) — and the carried
+    `captured_mtime`, `captured_btime`, and hash (FM-9) — and the carried
     Entries keep their order. The replacement is encrypted under a new
     Container Key (KD-2).
   - A writer that cannot read and verify the old Pack commits nothing for it:

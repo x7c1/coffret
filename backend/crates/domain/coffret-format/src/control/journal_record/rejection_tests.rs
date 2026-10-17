@@ -1,11 +1,14 @@
 //! Journal record payloads a reader refuses (spec: FM-15).
 
+use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
 use super::testing::{first_record, record, GENERATION};
-use super::{decode, encode};
-use crate::control::testing::{array, body_map, field, with_body_map};
+use super::{decode, encode, SCHEMA};
+use crate::control::testing::{
+    array, body_map, field, raw_body, spelled_by_name, with_body_map, with_raw_body,
+};
 use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
 use crate::ControlPayload;
@@ -13,9 +16,13 @@ use crate::ControlPayload;
 /// A record payload with one field changed by hand, as a reader meets it.
 fn tampered(change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
     let payload = encode(&record()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
     change(&mut fields);
-    with_body_map(payload.master_key_epoch, fields)
+    with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    )
 }
 
 fn read(payload: &ControlPayload) -> crate::Result<coffret_model::JournalRecord> {
@@ -122,9 +129,13 @@ fn a_record_above_generation_zero_without_prev_is_rejected() {
 #[test]
 fn a_prev_on_the_first_record_is_rejected() {
     let payload = encode(&first_record()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
     fields.push((Value::Text("prev".to_owned()), Value::from(0u64)));
-    let payload = with_body_map(payload.master_key_epoch, fields);
+    let payload = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    );
     let result = decode(&payload, Generation::FIRST);
     assert!(
         matches!(
@@ -138,20 +149,20 @@ fn a_prev_on_the_first_record_is_rejected() {
     );
 }
 
-// FM-9's rule for the meta section, applied here: a reader accepts any schema
-// of 1 or above and refuses anything lower, since a lower one is a form this
-// build never learned.
+// FM-15: a reader refuses any schema below the one this build writes.
 #[test]
-fn a_schema_below_one_is_rejected() {
-    let payload = tampered(|fields| *field(fields, "schema") = Value::from(0u64));
-    let result = read(&payload);
-    assert!(
-        matches!(
-            result,
-            Err(Error::UnsupportedJournalRecordSchema { schema: 0 })
-        ),
-        "expected schema 0 to be unreadable, got {result:?}"
-    );
+fn a_schema_below_the_current_one_is_rejected() {
+    for schema in [0, SCHEMA - 1] {
+        let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
+        let result = read(&payload);
+        assert!(
+            matches!(
+                result,
+                Err(Error::UnsupportedJournalRecordSchema { schema: found }) if found == schema
+            ),
+            "expected schema {schema} to be unreadable, got {result:?}"
+        );
+    }
 }
 
 #[test]
@@ -350,38 +361,38 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
-// EP-2, FM-9: an Entry's original path is the name a Container's meta section
+// EP-2, FM-9: an Entry's captured path is the name a Container's meta section
 // records, and FM-9 holds that name to EP-1 as well, so one outside the shape
 // is refused in the same way, naming the field that carried it.
 #[test]
-fn an_original_path_with_a_shape_ep_2_excludes_is_rejected() {
+fn a_captured_path_with_a_shape_ep_2_excludes_is_rejected() {
     let payload = tampered(|fields| {
-        *entry_field(fields, "original_path") = Value::Text("../x".to_owned());
+        *entry_field(fields, "captured_path") = Value::Text("../x".to_owned());
     });
     let result = read(&payload);
     assert!(
         matches!(
             result,
             Err(Error::MalformedEntryPath {
-                field: "original_path"
+                field: "captured_path"
             })
         ),
         "expected a `..` component to be refused, got {result:?}"
     );
 }
 
-// FM-15, FM-16: `original_path` is written only where it differs from `path`,
+// FM-15, FM-16: `captured_path` is written only where it differs from `path`,
 // so one state has one encoding. A map carrying it equal to `path` is a second
 // spelling of a map without it, and is refused rather than accepted as one.
 #[test]
-fn an_original_path_equal_to_the_path_is_rejected() {
+fn a_captured_path_equal_to_the_path_is_rejected() {
     let payload = tampered(|fields| {
         let path = entry_field(fields, "path").clone();
         let Value::Map(entry) = entry_map(fields) else {
             panic!("an entry is a CBOR map");
         };
-        entry.retain(|(key, _)| key.as_text() != Some("original_path"));
-        entry.push((Value::Text("original_path".to_owned()), path));
+        entry.retain(|(key, _)| key.as_text() != Some("captured_path"));
+        entry.push((Value::Text("captured_path".to_owned()), path));
     });
     let result = read(&payload);
     let Err(Error::MalformedJournalRecord {
@@ -390,7 +401,7 @@ fn an_original_path_equal_to_the_path_is_rejected() {
     else {
         panic!("expected a second spelling of one state to be refused, got {result:?}");
     };
-    assert!(detail.contains("original_path"), "{detail}");
+    assert!(detail.contains("captured_path"), "{detail}");
 }
 
 // FM-9, FM-15, FM-19: an addition carries the entry table of the Container it
@@ -513,4 +524,66 @@ fn an_addition_whose_entries_do_not_tile_is_rejected() {
         ),
         "expected a gap in an entry table to be refused, got {result:?}"
     );
+}
+
+// FM-15: every field travels under the field number the registry assigns it,
+// and a text key is no field's spelling, so a map that carries its fields only
+// under their names is missing them — refused by the name of the first one the
+// reader asks for.
+#[test]
+fn a_record_whose_fields_are_keyed_by_name_is_missing_them() {
+    let payload = spelled_by_name(
+        &encode(&record()).expect("encoding succeeds"),
+        &field_numbers::JOURNAL_RECORD,
+    );
+    let result = read(&payload);
+    let Err(Error::MalformedJournalRecord { detail }) = result else {
+        panic!("expected a record keyed by name to be refused, got {result:?}");
+    };
+    assert!(detail.to_string().contains("schema is missing"), "{detail}");
+}
+
+// FM-15: the same holds a level down: an entry whose `path` is carried under
+// its name rather than its field number has no `path`.
+#[test]
+fn an_entry_whose_path_is_keyed_by_name_is_missing_it() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let mut fields = raw_body(&payload);
+    let additions_key = Value::from(
+        field_numbers::JOURNAL_RECORD
+            .number_of("additions")
+            .unwrap(),
+    );
+    let entries_key = Value::from(field_numbers::ADDITION.number_of("entries").unwrap());
+    let path_key = Value::from(field_numbers::ADDITION_ENTRY.number_of("path").unwrap());
+    let (_, Value::Array(additions)) = fields
+        .iter_mut()
+        .find(|(key, _)| *key == additions_key)
+        .expect("the record carries additions")
+    else {
+        panic!("additions is an array");
+    };
+    let Value::Map(addition) = &mut additions[0] else {
+        panic!("an addition is a map");
+    };
+    let (_, Value::Array(entries)) = addition
+        .iter_mut()
+        .find(|(key, _)| *key == entries_key)
+        .expect("an addition carries its entry table")
+    else {
+        panic!("an entry table is an array");
+    };
+    let Value::Map(entry) = &mut entries[0] else {
+        panic!("an entry is a map");
+    };
+    for (key, _) in entry.iter_mut() {
+        if *key == path_key {
+            *key = Value::Text("path".to_owned());
+        }
+    }
+    let result = read(&with_raw_body(payload.master_key_epoch, Value::Map(fields)));
+    let Err(Error::MalformedJournalRecord { detail }) = result else {
+        panic!("expected an entry keyed by name to be refused, got {result:?}");
+    };
+    assert!(detail.to_string().contains("`path`"), "{detail}");
 }

@@ -10,26 +10,28 @@ use crate::stream_extent::stream_extent;
 ///
 /// The same map as the meta section's `WireMetaEntry` — `offset`, `size`,
 /// `hash`, `mime`, and `derived_from` are shared with it verbatim — except the
-/// values a later rename could move. Those are spelled `path`, `mtime`, and
-/// `btime` here, without the `original_` prefix FM-9 gives them, because a
+/// values a later rename could move. Those are named `path`, `mtime`, and
+/// `btime` here, without the `captured_` prefix FM-9 gives them, because a
 /// record and a Snapshot are the catalog's durable form: an addition's values
 /// are what the Library holds now, not what one immutable object happened to
-/// capture. That is also why the two spellings are two structs rather than one
-/// with serde renames: the sharing is of the values, not of the keys.
+/// capture. That is also why the two are two structs rather than one with
+/// serde renames: the sharing is of the values, not of the fields. On the wire
+/// each field travels under the field number the registry gives it in the map kind that
+/// carries it ([`crate::field_numbers::ADDITION_ENTRY`],
+/// [`crate::field_numbers::SNAPSHOT_ENTRY`]).
 ///
 /// The name is the one value that can be carried in both spellings: `path` is
-/// where the Entry stands in the Library now, and `original_path` is the Entry
+/// where the Entry stands in the Library now, and `captured_path` is the Entry
 /// Path the owning Container's meta section records — the name it was captured
-/// under, which no rename moves. `original_path` is written only where it
+/// under, which no rename moves. `captured_path` is written only where it
 /// differs from `path`, so a map without it names an Entry whose two paths are
-/// one, which is also what every map written before the field existed means. A
-/// map carrying it equal to `path` is a second spelling of that same state and
-/// is refused.
+/// one. A map carrying it equal to `path` is a second spelling of that same
+/// state and is refused.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireCatalogEntry {
     path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    original_path: Option<String>,
+    captured_path: Option<String>,
     offset: u64,
     size: u64,
     mtime: i64,
@@ -49,8 +51,8 @@ impl From<&EntryMetadata> for WireCatalogEntry {
             path: entry.path.as_str().to_owned(),
             // Present only where a rename has set the two apart (spec: FM-15,
             // FM-16), so one state has one encoding.
-            original_path: (entry.original_path != entry.path)
-                .then(|| entry.original_path.as_str().to_owned()),
+            captured_path: (entry.captured_path != entry.path)
+                .then(|| entry.captured_path.as_str().to_owned()),
             offset: entry.extent.offset(),
             size: entry.extent.size(),
             mtime: entry.mtime.as_unix_seconds(),
@@ -74,23 +76,23 @@ impl WireCatalogEntry {
         let path = stored_path(&self.path, "path")?;
         // Absent where the two paths are one, which every map an earlier
         // schema wrote also is (spec: FM-15, FM-16).
-        let original_path = match &self.original_path {
-            Some(original_path) => {
-                let original_path = stored_path(original_path, "original_path")?;
-                if original_path == path {
+        let captured_path = match &self.captured_path {
+            Some(captured_path) => {
+                let captured_path = stored_path(captured_path, "captured_path")?;
+                if captured_path == path {
                     return Err(malformed(
-                        "an entry map carries an `original_path` equal to its `path`, \
+                        "an entry map carries a `captured_path` equal to its `path`, \
                          which is written by leaving it out"
                             .to_owned(),
                     ));
                 }
-                original_path
+                captured_path
             }
             None => path.clone(),
         };
         Ok(EntryMetadata {
             path,
-            original_path,
+            captured_path,
             extent: stream_extent(
                 bounded_uint("offset", self.offset, malformed)?,
                 bounded_uint("size", self.size, malformed)?,

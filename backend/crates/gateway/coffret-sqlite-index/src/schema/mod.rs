@@ -1,4 +1,3 @@
-mod add_original_paths;
 mod provenance;
 
 use std::ops::Range;
@@ -12,36 +11,37 @@ use crate::error::classify;
 /// the marker saying whether a pending Container's Entries are files this
 /// device put into it, version 10 the content hash a materialized file was
 /// made to match, version 11 the parcels this device holds (spec: PK-21),
-/// version 12 the commit slots a batch attempted (spec: OC-2, OC-3), and
-/// version 13 each Entry's original path beside its current one
-/// (spec: FM-15, FM-16).
-pub(crate) const SCHEMA_VERSION: i64 = 13;
+/// version 12 the commit slots a batch attempted (spec: OC-2, OC-3), version 13
+/// each Entry's captured path beside its current one (spec: FM-15, FM-16), and
+/// version 14 a catalog filled from Storage objects whose maps carry their
+/// fields under field numbers, with that column under the name the
+/// specification now gives the field, `captured_path` (spec: FM-9).
+pub(crate) const SCHEMA_VERSION: i64 = 14;
 
-/// The device-local layout floor. Versions 7 to 12 have one explicit,
-/// transactional upgrade that preserves every row, treats old attempts as
+/// The device-local layout floor: the oldest layout whose device-local group is
+/// the one this build writes.
+///
+/// Layout 14 changed only the catalog, so a file at layout 13 keeps its device
+/// group as it is and has its catalog discarded and rebuilt from Storage
+/// (spec: RV-5) rather than migrated: the Storage objects an older catalog was
+/// filled from are in a format this build no longer reads, so a catalog carried
+/// forward would describe objects nothing here can open.
+///
+/// Versions 7 to 12 have one explicit, transactional upgrade of their
+/// device-local group that preserves every row, treats old attempts as
 /// unknown, takes every old pending row to name a Container built out of this
 /// device's own files — the only kind a build before version 9 could spool —
 /// leaves every old materialization without a recorded hash, which is what a
 /// build before version 10 never wrote down, starts with no parcel held, which
-/// is what a build before version 11 never kept, records no commit slot for
+/// is what a build before version 11 never kept, and records no commit slot for
 /// any batch, which is what a build before version 12 never kept — so an old
-/// attempt stays one whose outcome is unknown (spec: OC-2) — and takes every
-/// Entry's original path to be its current one, which is what every Entry a
-/// build before version 13 cataloged had, since nothing could rename one
-/// (spec: FM-15, FM-16). That last step is the catalog's rather than the
-/// device's, and it is an upgrade too rather than a discard, so that no device
-/// has to catch up from Storage again for a column it can fill on its own.
-/// Every older layout this build reads is therefore upgraded whole, and the
-/// floor stands at the current layout. Other unreadable device layouts are
-/// refused rather than discarded, because Storage cannot reconstruct mappings,
-/// materializations, or provenance.
+/// attempt stays one whose outcome is unknown (spec: OC-2). Their catalog is
+/// discarded in the same transaction, for the reason above. Other unreadable
+/// device layouts are refused rather than discarded, because Storage cannot
+/// reconstruct mappings, materializations, or provenance.
 pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 13;
 
 /// The table of current Entries, part of the Library-wide group below.
-///
-/// A macro rather than a constant so that the group can be spelled as one
-/// literal around it while the upgrade from a layout before 13 lays this table
-/// out on its own (spec: FM-15, FM-16).
 macro_rules! entries_ddl {
     () => {
         r#"
@@ -52,9 +52,10 @@ CREATE TABLE entries (
     -- claiming otherwise.
     path                   TEXT PRIMARY KEY COLLATE BINARY,
     -- The Entry Path the owning Container's meta section records for this
-    -- Entry: the name it was captured under, which no rename moves, where
-    -- `path` is where it stands now (spec: FM-9, FM-15, FM-16).
-    original_path          TEXT NOT NULL COLLATE BINARY,
+    -- Entry: the name it was captured under when that Container was written,
+    -- which no rename moves, where `path` is where it stands now
+    -- (spec: FM-9, FM-15, FM-16).
+    captured_path          TEXT NOT NULL COLLATE BINARY,
     container_id           BLOB NOT NULL REFERENCES containers(id),
     "offset"               INTEGER NOT NULL,
     size                   INTEGER NOT NULL,
@@ -73,10 +74,6 @@ CREATE INDEX entries_by_container ON entries (container_id);
 "#
     };
 }
-
-/// The table of current Entries on its own, which the upgrade from a layout
-/// before 13 lays out again with the column it lacked.
-pub(crate) const ENTRIES_DDL: &str = entries_ddl!();
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -237,9 +234,11 @@ CREATE UNIQUE INDEX attempted_slots_by_batch
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5). Anything else — older than that, or written by a build that
-/// came after this one — is refused, because guessing at a layout this build
-/// does not know is how a cache turns into wrong answers.
+/// (spec: RV-5). Layouts 7 to 12 have their device-local group upgraded in
+/// place and lose their catalog the same way. Anything else — older than that,
+/// or written by a build that came after this one — is refused, because
+/// guessing at a layout this build does not know is how a cache turns into
+/// wrong answers.
 pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     // An Entry may only name a Container the catalog holds, and SQLite enforces
     // that only when asked to — per connection, not per file.
@@ -265,8 +264,8 @@ fn carries_a_readable_device_group(found: i64) -> bool {
 /// constants.
 ///
 /// Split out so the rule can be stated against a synthetic pair of versions: in
-/// this build the real window is empty ([`DEVICE_SCHEMA_VERSION`]), so a case
-/// over the real constants can no longer show where its two edges fall.
+/// this build the real window holds a single layout ([`DEVICE_SCHEMA_VERSION`]),
+/// so a case over the real constants cannot show where its two edges fall.
 fn within(window: Range<i64>, found: i64) -> bool {
     window.contains(&found)
 }
@@ -328,6 +327,18 @@ fn discard_the_catalog(connection: &mut Connection) -> IndexResult<()> {
         found => return Err(unsupported(found)),
     };
 
+    replace_the_catalog(&transaction)?;
+    transaction
+        .commit()
+        .map_err(classify("committing the discarded catalog"))?;
+    report_the_discard(SUMMARY, found);
+    Ok(())
+}
+
+/// Drops an older layout's catalog and lays a current, empty one out in its
+/// place, stamping the file as the current layout — inside the caller's
+/// transaction, which is what keeps a crash from leaving half of it done.
+pub(super) fn replace_the_catalog(transaction: &Connection) -> IndexResult<()> {
     // The Entries before the Containers they refer to, and the checkpoint last:
     // foreign keys are on for this connection, so a parent dropped out from
     // under its children is a violation rather than a cascade.
@@ -339,22 +350,23 @@ fn discard_the_catalog(connection: &mut Connection) -> IndexResult<()> {
         .map_err(classify("recreating the Index catalog"))?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(classify("stamping the Index file's schema version"))?;
-    transaction
-        .commit()
-        .map_err(classify("committing the discarded catalog"))?;
+        .map_err(classify("stamping the Index file's schema version"))
+}
 
-    // The two versions and what was done with them, and nothing that names a
-    // file: the Index lives under the state directory and its path is the
-    // owner's own, which is one of the things an event may never carry.
+/// Says that a catalog was thrown away, once the transaction that did it has
+/// committed.
+///
+/// The two versions and what was done with them, and nothing that names a
+/// file: the Index lives under the state directory and its path is the owner's
+/// own, which is one of the things an event may never carry.
+pub(super) fn report_the_discard(operation: &'static str, found: i64) {
     tracing::warn!(
-        operation = SUMMARY,
+        operation,
         found,
         supported = SCHEMA_VERSION,
         "the Index file held a catalog of an older layout; it has been discarded, and the \
          next catch-up rebuilds it from Storage"
     );
-    Ok(())
 }
 
 /// A file this build can neither read nor carry forward.
@@ -374,11 +386,11 @@ mod tests {
     ///
     /// The rule is that a file stamped at or above the device-local floor and
     /// below the current layout keeps its device group and loses its catalog,
-    /// and that everything outside is refused. In this build the real pair is
-    /// equal and the window empty, so this is the one place the rule itself is
-    /// still stated — with numbers of its own, the way the suites beside this
-    /// crate write their layout versions out rather than reading them off the
-    /// constants.
+    /// and that everything outside is refused. In this build the real window
+    /// holds one layout, and the layouts below it take the upgrade instead, so
+    /// this is the one place the rule itself is stated — with numbers of its
+    /// own, the way the suites beside this crate write their layout versions
+    /// out rather than reading them off the constants.
     #[test]
     fn the_window_takes_the_floor_and_stops_below_the_current_layout() {
         let window = 4..6;
@@ -399,20 +411,13 @@ mod tests {
         );
     }
 
-    /// An empty window keeps nothing, which is what this build's own pair makes
-    /// of it: every older file is refused whole (spec: OC-2).
+    /// This build's own window holds the one layout whose device group it
+    /// writes unchanged: layout 13 loses its catalog and keeps the rest, and
+    /// the layouts below it are upgraded rather than discarded (spec: OC-2).
     #[test]
-    fn an_empty_window_keeps_no_older_file() {
-        for found in [5, 6, 7, 8] {
-            assert!(
-                !within(7..7, found),
-                "a window with no versions in it holds {found} no more than any other"
-            );
-        }
-        assert_eq!(
-            DEVICE_SCHEMA_VERSION, SCHEMA_VERSION,
-            "this build upgrades every older layout it reads in place, so its own window is empty"
-        );
-        assert!(!carries_a_readable_device_group(SCHEMA_VERSION - 1));
+    fn this_builds_window_holds_the_previous_layout_alone() {
+        assert!(carries_a_readable_device_group(SCHEMA_VERSION - 1));
+        assert!(!carries_a_readable_device_group(SCHEMA_VERSION));
+        assert!(!carries_a_readable_device_group(DEVICE_SCHEMA_VERSION - 1));
     }
 }

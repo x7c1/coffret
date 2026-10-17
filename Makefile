@@ -86,6 +86,13 @@ lint:
 # INTEROP: Rust writes one, the TypeScript suite opens it and writes one back,
 # and Rust opens that. A failure here means the specification or one
 # implementation is wrong — never a reason to loosen a check.
+#
+# The same binary prints one control object fetched from a real Library with
+# its payload keyed by field name rather than by the registry's field numbers
+# (docs/spec/format/field-numbers.json), for checking what a device wrote:
+#
+#   cd backend && cargo run -p coffret-interop -- dump --object <file> \
+#     --name <object name> --recovery-code <file holding the Recovery Code>
 .PHONY: interop
 interop:
 	rm -rf $(INTEROP)
@@ -714,6 +721,29 @@ spec-rule-ids:
 spec-rule-ids-test:
 	./scripts/spec-rule-ids-test.sh
 
+## field-numbers-guard: refuse a field-number registry edit that changes a row origin/main already holds
+#
+# docs/spec/format/field-numbers.json gives every field of every stored CBOR
+# map the field number it travels under (spec: FM-9), and a row on main says
+# for good what that field number means: Storage Objects outlive the build that
+# wrote them.
+# The script compares the registry with its version on the merge base of HEAD
+# and origin/main and accepts only added rows and rows newly marked retired; its
+# header says what it cannot see. It needs origin/main fetched, which is why
+# CI's `spec` job checks out the whole history.
+.PHONY: field-numbers-guard
+field-numbers-guard:
+	./scripts/field-numbers-guard.sh
+
+## field-numbers-guard-test: show field-numbers-guard refusing every forbidden registry edit and taking the allowed ones
+#
+# The guard passes whenever nobody has edited the registry, which says nothing
+# about whether it would refuse anything, so the script runs it against
+# throwaway repositories of its own, one per kind of edit.
+.PHONY: field-numbers-guard-test
+field-numbers-guard-test:
+	./scripts/field-numbers-guard-test.sh
+
 ## shell-lint: shellcheck and shfmt over every shell script in the repository
 #
 # The scripts under scripts/ include the real-Drive targets, which run only when
@@ -756,7 +786,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -821,6 +851,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

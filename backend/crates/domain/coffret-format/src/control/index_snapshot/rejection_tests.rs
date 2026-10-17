@@ -1,11 +1,12 @@
 //! Index Snapshot payloads a reader refuses (spec: FM-16).
 
+use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
-use super::{decode, encode, IndexSnapshotPayload};
-use crate::control::testing::{array, body_map, field, summary, with_body_map};
+use super::{decode, encode, IndexSnapshotPayload, SCHEMA};
+use crate::control::testing::{array, body_map, field, spelled_by_name, summary, with_body_map};
 use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
 use crate::ControlPayload;
@@ -20,9 +21,13 @@ fn tampered_payload(
     change: impl FnOnce(&mut Vec<(Value, Value)>),
 ) -> ControlPayload {
     let payload = encode(snapshot).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
     change(&mut fields);
-    with_body_map(payload.master_key_epoch, fields)
+    with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::INDEX_SNAPSHOT,
+    )
 }
 
 fn read_ordinary(payload: &ControlPayload) -> crate::Result<IndexSnapshotPayload> {
@@ -204,17 +209,20 @@ fn a_kind_that_is_no_index_snapshot_is_refused_outright() {
     }
 }
 
+// FM-16: a reader refuses any schema below the one this build writes.
 #[test]
-fn a_schema_below_one_is_rejected() {
-    let payload = tampered(|fields| *field(fields, "schema") = Value::from(0u64));
-    let result = read_ordinary(&payload);
-    assert!(
-        matches!(
-            result,
-            Err(Error::UnsupportedIndexSnapshotSchema { schema: 0 })
-        ),
-        "expected schema 0 to be unreadable, got {result:?}"
-    );
+fn a_schema_below_the_current_one_is_rejected() {
+    for schema in [0, SCHEMA - 1] {
+        let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
+        let result = read_ordinary(&payload);
+        assert!(
+            matches!(
+                result,
+                Err(Error::UnsupportedIndexSnapshotSchema { schema: found }) if found == schema
+            ),
+            "expected schema {schema} to be unreadable, got {result:?}"
+        );
+    }
 }
 
 #[test]
@@ -309,38 +317,38 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
-// EP-2, FM-9: an Entry's original path is the name a Container's meta section
+// EP-2, FM-9: an Entry's captured path is the name a Container's meta section
 // records, and FM-9 holds that name to EP-1 as well, so one outside the shape
 // is refused in the same way, naming the field that carried it.
 #[test]
-fn an_original_path_with_a_shape_ep_2_excludes_is_rejected() {
+fn a_captured_path_with_a_shape_ep_2_excludes_is_rejected() {
     let payload = tampered(|fields| {
-        *entry_field(fields, "original_path") = Value::Text("../x".to_owned());
+        *entry_field(fields, "captured_path") = Value::Text("../x".to_owned());
     });
     let result = read_ordinary(&payload);
     assert!(
         matches!(
             result,
             Err(Error::MalformedEntryPath {
-                field: "original_path"
+                field: "captured_path"
             })
         ),
         "expected a `..` component to be refused, got {result:?}"
     );
 }
 
-// FM-15, FM-16: `original_path` is written only where it differs from `path`,
+// FM-15, FM-16: `captured_path` is written only where it differs from `path`,
 // so one state has one encoding. A map carrying it equal to `path` is a second
 // spelling of a map without it, and is refused rather than accepted as one.
 #[test]
-fn an_original_path_equal_to_the_path_is_rejected() {
+fn a_captured_path_equal_to_the_path_is_rejected() {
     let payload = tampered(|fields| {
         let path = entry_field(fields, "path").clone();
         let Value::Map(entry) = entry_map(fields) else {
             panic!("an entry is a CBOR map");
         };
-        entry.retain(|(key, _)| key.as_text() != Some("original_path"));
-        entry.push((Value::Text("original_path".to_owned()), path));
+        entry.retain(|(key, _)| key.as_text() != Some("captured_path"));
+        entry.push((Value::Text("captured_path".to_owned()), path));
     });
     let result = read_ordinary(&payload);
     let Err(Error::MalformedIndexSnapshot {
@@ -349,7 +357,7 @@ fn an_original_path_equal_to_the_path_is_rejected() {
     else {
         panic!("expected a second spelling of one state to be refused, got {result:?}");
     };
-    assert!(detail.contains("original_path"), "{detail}");
+    assert!(detail.contains("captured_path"), "{detail}");
 }
 
 // FM-9, FM-16, FM-19: a Snapshot lists every current Entry with the same values
@@ -490,4 +498,20 @@ fn an_activation_naming_a_base_head_that_is_not_earlier_is_rejected() {
             "expected a base head of {base} to be refused, got {result:?}"
         );
     }
+}
+
+// FM-16: every field travels under the field number the registry assigns it,
+// and a text key is no field's spelling, so a Snapshot that carries its fields
+// only under their names is missing them, and is refused by name.
+#[test]
+fn a_snapshot_whose_fields_are_keyed_by_name_is_missing_them() {
+    let payload = spelled_by_name(
+        &encode(&ordinary()).expect("encoding succeeds"),
+        &field_numbers::INDEX_SNAPSHOT,
+    );
+    let result = read_ordinary(&payload);
+    let Err(Error::MalformedIndexSnapshot { detail }) = result else {
+        panic!("expected a Snapshot keyed by name to be refused, got {result:?}");
+    };
+    assert!(detail.to_string().contains("schema is missing"), "{detail}");
 }

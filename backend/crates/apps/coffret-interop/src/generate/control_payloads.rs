@@ -124,10 +124,10 @@ fn library(number: u64) -> SnapshotContent {
     // One Entry records a birth time and the rest record none, so a Snapshot
     // carries both spellings of the optional field (spec: FM-16). The same
     // Entry stands at a path other than the one its Container recorded, so the
-    // Snapshot carries `original_path` for it and leaves it out for the rest.
+    // Snapshot carries `captured_path` for it and leaves it out for the rest.
     let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(Btime::from_unix_seconds(1_600_000_000));
-    born.entry.original_path = entry_path("imports/a.jpg");
+    born.entry.captured_path = entry_path("imports/a.jpg");
     let entries = vec![
         located(0x33, "photos/2019/b.jpg", 0, 90),
         born,
@@ -159,12 +159,12 @@ fn library(number: u64) -> SnapshotContent {
 /// exercises the optional fields and the signed times the meta section's does
 /// (spec: FM-9, FM-15). The first Entry records no birth time, so the absent
 /// spelling travels beside the present one; it also stands at a path other
-/// than the one its Container recorded, so `original_path` travels for it and
+/// than the one its Container recorded, so `captured_path` travels for it and
 /// is left out for the derived Entry.
 fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     let label = format!("{seed:02x}");
     let mut cover = entry(&format!("albums/{label}/cover.jpg"), 0, 120);
-    cover.original_path = entry_path(format!("imports/{label}/cover.jpg"));
+    cover.captured_path = entry_path(format!("imports/{label}/cover.jpg"));
     let mut entries = vec![cover];
     if kind == ContainerKind::Pack {
         let mut derived = entry(&format!("albums/{label}/.thumbs/cover.jpg"), 120, 40);
@@ -208,7 +208,7 @@ fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
 fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
-        original_path: entry_path(path),
+        captured_path: entry_path(path),
         extent: EntryExtent::new(offset, size)
             .expect("the generator's own literals lay an Entry inside the address space"),
         mtime: Mtime::from_unix_seconds(1_700_000_000),

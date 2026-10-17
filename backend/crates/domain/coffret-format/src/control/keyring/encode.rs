@@ -5,6 +5,7 @@ use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::ControlPayload;
 use crate::error::Result;
+use crate::field_numbers;
 
 /// Serializes a Keyring's key table to the payload a replica carries (spec: FM-17).
 ///
@@ -28,7 +29,7 @@ pub fn encode(key_table: &KeyTable, master_key_epoch: MasterKeyEpoch) -> Result<
 
     Ok(ControlPayload::new(
         master_key_epoch,
-        write_body(&map.build())?,
+        write_body(map.build(), &field_numbers::KEYRING)?,
     ))
 }
 
@@ -47,10 +48,12 @@ pub(super) fn mapping_value(key_table: &KeyTable) -> Value {
 ///
 /// The two fields are written in that order deliberately. FM-17 hashes this
 /// array as deterministic CBOR, whose map keys are ordered by their encoded
-/// bytes: `id` is two characters and both `envelope` and `key_lost` are eight,
-/// so `id` comes first. A writer that emitted the fields the other way round
+/// bytes: the map keys are the field numbers the registry gives the element's
+/// fields, each one byte, so their order is the numeric order and `id`'s field
+/// number is the lowest. A writer that emitted the fields the other way round
 /// would produce a payload every reader still accepts — the maps are read by
-/// name — and a `set_digest` no other implementation computes.
+/// field number, in any order — and a `set_digest` no other implementation
+/// computes.
 fn element(element: &KeyringElement) -> Value {
     let mut map = MapBuilder::new();
     map.bytes(ID, element.container_id.as_bytes());

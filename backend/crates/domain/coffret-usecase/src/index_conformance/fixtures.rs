@@ -76,7 +76,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
         let size = 100 + position as u64;
         entries.push(EntryMetadata {
             path: path(text),
-            original_path: path(text),
+            captured_path: path(text),
             extent: entry_extent(offset, size),
             mtime: Mtime::from_unix_seconds(1_700_000_000 + position as i64),
             btime: (position == 0).then(|| Btime::from_unix_seconds(BORN)),
@@ -99,22 +99,22 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
     .expect("a fixture holds a table that tiles its Container's stream")
 }
 
-/// `addition` with the Entry at each `(path, original)` pair carrying
-/// `original` as the Entry Path its Container's meta section records.
+/// `addition` with the Entry at each `(path, captured)` pair carrying
+/// `captured` as the Entry Path its Container's meta section records.
 pub(super) fn written_as(
     addition: ContainerAddition,
-    originals: &[(&str, &str)],
+    captured: &[(&str, &str)],
 ) -> ContainerAddition {
     let (container, mut entries) = addition.into_parts();
-    for (current, original) in originals {
+    for (current, captured_at) in captured {
         let entry = entries
             .iter_mut()
             .find(|entry| entry.path.as_str() == *current)
             .expect("a fixture renames only an Entry its addition holds");
-        entry.original_path = path(original);
+        entry.captured_path = path(captured_at);
     }
     ContainerAddition::new(container, entries)
-        .expect("naming an Entry's original path leaves its table one that tiles")
+        .expect("naming an Entry's captured path leaves its table one that tiles")
 }
 
 /// The Journal record that commits `additions` and `removals` as the head at

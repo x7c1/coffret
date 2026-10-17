@@ -1,23 +1,29 @@
 //! Reading and writing the CBOR maps a control-object payload is made of.
 //!
-//! The payload schemas (spec: FM-15, FM-16, FM-17) are maps with text keys
-//! whose fields are read one at a time rather than deserialized as a whole
-//! struct, for two reasons. A field that is not the shape its rule gives it
-//! has to be reported as *that field* — `MalformedJournalRecord { detail }`
-//! naming the key — and two of the maps are a shared map plus one field of
-//! their own (an addition is a Container plus its entry table, a Snapshot
-//! entry is a catalog entry map (spec: FM-16) plus its `container` index),
-//! which a struct would either duplicate or flatten.
+//! The payload schemas (spec: FM-15, FM-16, FM-17) are maps whose fields travel
+//! under the field numbers the field-number registry assigns them, and which
+//! are read one field at a time rather than deserialized as a whole struct, for
+//! two reasons.
+//! A field that is not the shape its rule gives it has to be reported as *that
+//! field* — `MalformedJournalRecord { detail }` naming it — and two of the maps
+//! are a shared map plus one field of their own (an addition is a Container
+//! plus its entry table, a Snapshot entry is a catalog entry map
+//! (spec: FM-16) plus its `container` index), which a struct would either
+//! duplicate or flatten.
+//!
+//! The readers and builders here speak field names throughout. The body is
+//! turned from names into field numbers as it is written and back as it is read
+//! ([`crate::field_numbers`]), so every refusal names the field the way the
+//! specification does.
 //!
 //! Which map is being read only changes the error a malformed field raises, so
 //! each reader takes that constructor and everything else here is shared.
 
-use std::fmt::Display;
-
 use ciborium::Value;
 use coffret_model::MAX_FORMAT_INTEGER;
 
-use crate::error::{CborDecodeFailure, Error, MalformedDetail, Result};
+use crate::error::{CborDecodeFailure, CborEncodeFailure, Error, MalformedDetail, Result};
+use crate::field_numbers::{self, MapFields};
 use crate::malformed_cbor::malformed_cbor;
 
 mod fields;
@@ -30,21 +36,35 @@ pub(super) use map_builder::MapBuilder;
 /// (spec: FM-9, FM-15, FM-16, FM-17).
 pub(super) const SCHEMA_FIELD: &str = "schema";
 
-/// Serializes a payload body map to the CBOR bytes the framing seals.
+/// Serializes a payload body map, keyed by field names, to the CBOR bytes the
+/// framing seals, every field under the field number `kind` assigns it.
 ///
 /// The framing adds `master_key_epoch` and the padding around what this returns
 /// (spec: FM-11, FM-13), so the bytes here are the kind's own map alone.
-pub(super) fn write_body(value: &Value) -> Result<Vec<u8>> {
+pub(super) fn write_body(value: Value, kind: &MapFields) -> Result<Vec<u8>> {
+    let wire = field_numbers::to_wire(value, kind)?;
     let mut bytes = Vec::new();
-    ciborium::into_writer(value, &mut bytes).map_err(serialization_failed)?;
+    ciborium::into_writer(&wire, &mut bytes).map_err(|error| {
+        Error::ControlPayloadEncodeFailed {
+            cause: CborEncodeFailure::writing(error),
+        }
+    })?;
     Ok(bytes)
 }
 
-/// Reads a payload body back as one CBOR item, rejecting anything after it.
+/// Reads a payload body back as one CBOR item keyed by field names, rejecting
+/// anything after it.
 ///
 /// The framing has already taken the padding off (spec: FM-11), so a body with
-/// bytes trailing its map is one no writer following the rule produced.
-pub(super) fn read_body(bytes: &[u8], malformed: fn(MalformedDetail) -> Error) -> Result<Value> {
+/// bytes trailing its map is one no writer following the rule produced. Map
+/// keys `kind` does not name — unknown field numbers, retired ones, and text —
+/// are dropped on the way, so a field carried under anything but its field
+/// number reaches the reader as missing.
+pub(super) fn read_body(
+    bytes: &[u8],
+    malformed: fn(MalformedDetail) -> Error,
+    kind: &MapFields,
+) -> Result<Value> {
     let mut remaining = bytes;
     let value: Value =
         ciborium::from_reader(&mut remaining).map_err(|error| malformed_cbor(error, malformed))?;
@@ -54,7 +74,7 @@ pub(super) fn read_body(bytes: &[u8], malformed: fn(MalformedDetail) -> Error) -
             remaining.len()
         ))));
     }
-    Ok(value)
+    Ok(field_numbers::from_wire(value, kind))
 }
 
 /// One CBOR item read as an unsigned integer the format admits (spec: FM-19).
@@ -72,10 +92,11 @@ pub(super) fn as_bounded_uint(value: &Value) -> Option<u64> {
         .filter(|number| *number <= MAX_FORMAT_INTEGER)
 }
 
-/// Reports a value this crate built that CBOR would not take.
-pub(super) fn serialization_failed(error: impl Display) -> Error {
+/// Reports a struct this crate built that CBOR would not turn into an item,
+/// carried as the value ciborium reported.
+pub(super) fn serialization_failed(error: ciborium::value::Error) -> Error {
     Error::ControlPayloadEncodeFailed {
-        detail: error.to_string(),
+        cause: CborEncodeFailure::converting(error),
     }
 }
 

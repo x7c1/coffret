@@ -20,7 +20,9 @@ import {
   keyTable,
   pinnedKeyTable,
   withBodyMap,
+  spelledByName,
 } from './payloadSchemas.testing.js';
+import { KEYRING } from '../internal/fieldNumbers.js';
 
 /**
  * The digest of {@link pinnedKeyTable}, which the Rust suite pins too.
@@ -31,7 +33,7 @@ import {
  * once. A digest that moved in only one of them is exactly the drift the interop
  * exchange exists to catch, caught before the exchange runs.
  */
-const PINNED_SET_DIGEST = '6e6018ce7522ab4f82f4e43d51463efa48a0f57b1862d67b1a439c3d329c783a';
+const PINNED_SET_DIGEST = '3c11874f8b5aa9cb62bdc684c430b21de985c20f61bbedf20700aae1828fe655';
 
 /** The key table as the encoder puts it on the wire: elements in ID order. */
 function canonical(source: KeyTable): KeyTable {
@@ -45,9 +47,9 @@ function canonical(source: KeyTable): KeyTable {
 /** A Keyring payload with one thing changed by hand, as a reader meets it. */
 function tampered(change: (map: Map<unknown, unknown>) => void): ControlPayload {
   const payload = encodeKeyring(keyTable(), EPOCH);
-  const map = bodyMap(payload);
+  const map = bodyMap(payload, KEYRING);
   change(map);
-  return withBodyMap(payload.masterKeyEpoch, map);
+  return withBodyMap(payload.masterKeyEpoch, map, KEYRING);
 }
 
 /** The fields of one element of `mapping`, for a case that has to change them. */
@@ -92,28 +94,24 @@ describe('Keyring payload (spec: FM-17)', () => {
   // having if the bytes behind it are the ones the rule names.
   //
   // Definite lengths, shortest-form arguments, and each element's keys in
-  // encoded order: `id` (two characters) before `envelope` or `key_lost`
-  // (eight).
+  // encoded order: the registry's field numbers, one byte each, so `id` (0)
+  // before `envelope` (1) or `key_lost` (2).
   it('hashes the mapping array as deterministic CBOR', () => {
     const expected = Uint8Array.from([
       0x82, // an array of two elements
       0xa2, // a map of two pairs
-      0x62,
-      ...utf8('id'),
+      0x00, // `id`
       0x50, // a byte string of 16
       ...new Uint8Array(CONTAINER_ID_LENGTH).fill(0x11),
-      0x68,
-      ...utf8('envelope'),
+      0x01, // `envelope`
       0x58,
       0x48, // a byte string of 72
       ...new Uint8Array(KEY_ENVELOPE_LENGTH).fill(0x22),
       0xa2, // the marker's element is a map of two pairs as well
-      0x62,
-      ...utf8('id'),
+      0x00, // `id`
       0x50,
       ...new Uint8Array(CONTAINER_ID_LENGTH).fill(0x33),
-      0x68,
-      ...utf8('key_lost'),
+      0x02, // `key_lost`
       0xf5, // true
     ]);
     // Copied into a plain `Uint8Array`: what the encoder hands back is a view
@@ -125,7 +123,7 @@ describe('Keyring payload (spec: FM-17)', () => {
   // FM-17: the digest covers the key table, so it cannot also be inside it. The
   // payload carries `mapping` and `schema` and nothing else.
   it('leaves the digest out of the payload', () => {
-    expect([...bodyMap(encodeKeyring(keyTable(), EPOCH)).keys()]).toEqual(['schema', 'mapping']);
+    expect([...bodyMap(encodeKeyring(keyTable(), EPOCH), KEYRING).keys()]).toEqual(['schema', 'mapping']);
   });
 
   // FM-12: the digest is the lowercase hex token a replica's name is built
@@ -142,7 +140,7 @@ describe('Keyring payload (spec: FM-17)', () => {
   // map. The epoch still travels, on the payload the framing hands back.
   it('leaves the generation, the replica, and the epoch to the framing', () => {
     const payload = encodeKeyring(keyTable(), EPOCH);
-    const map = bodyMap(payload);
+    const map = bodyMap(payload, KEYRING);
     for (const absent of ['generation', 'replica_index', 'replica_count', 'epoch']) {
       expect(map.has(absent), absent).toBe(false);
     }
@@ -153,10 +151,10 @@ describe('Keyring payload (spec: FM-17)', () => {
   // over — at the payload's own level and inside an element.
   it('ignores unknown fields', () => {
     const payload = tampered((map) => {
-      map.set('future_field', 'whatever');
+      map.set(23, 'whatever');
       map.set('schema', 2n);
       for (const [index] of arrayField(map, 'mapping').entries()) {
-        element(map, index).set('future_element_field', 1n);
+        element(map, index).set(24, 1n);
       }
     });
     expect(decodeKeyring(payload)).toEqual(canonical(keyTable()));
@@ -246,6 +244,14 @@ describe('Keyring payload (spec: FM-17)', () => {
   });
 });
 
-function utf8(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
-}
+describe('a Keyring replica keyed by field name (spec: FM-17)', () => {
+  // Every field travels under the field number the registry assigns it, and a
+  // text key is no field's spelling, so a map carrying its fields only under
+  // their names is missing them — refused by the name of the first one asked
+  // for.
+  it('is refused as missing its fields, by name', () => {
+    const read = (): unknown => decodeKeyring(spelledByName(encodeKeyring(keyTable(), EPOCH), KEYRING));
+    expect(errorCode(read)).toBe('malformed_keyring_replica');
+    expect(read).toThrow(/schema/);
+  });
+});

@@ -1,12 +1,13 @@
 //! What survives a trip through a Journal record payload and back
 //! (spec: FM-15).
 
+use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::{ContainerKind, Generation};
 
 use super::testing::{
     addition, addition_of, first_record, first_record_of, record, record_of, table, BORN,
-    GENERATION, ORIGINAL_DIR,
+    CAPTURED_DIR, GENERATION,
 };
 use super::{decode, encode};
 use crate::control::testing::{
@@ -48,7 +49,7 @@ fn absent_optional_fields_are_not_written_at_all() {
     let payload = encode(&first_record()).expect("encoding succeeds");
     for absent in ["prev", "next_commit_slot", "snapshot_slot"] {
         assert!(
-            !body_keys(&payload).contains(&absent.to_owned()),
+            !body_keys(&payload, &field_numbers::JOURNAL_RECORD).contains(&absent.to_owned()),
             "{absent} was written for a record that carries none"
         );
     }
@@ -80,7 +81,7 @@ fn the_same_content_in_a_different_order_encodes_identically() {
 #[test]
 fn the_generation_and_the_epoch_come_from_the_framing() {
     let payload = encode(&record()).expect("encoding succeeds");
-    let written = body_keys(&payload);
+    let written = body_keys(&payload, &field_numbers::JOURNAL_RECORD);
     assert!(!written.contains(&"generation".to_owned()), "{written:?}");
     assert!(
         !written.contains(&"master_key_epoch".to_owned()),
@@ -103,29 +104,28 @@ fn a_record_that_only_removes_round_trips() {
     assert_eq!(decoded.removals().len(), 2);
 }
 
-// FM-9: the maps are forward-open, so a field a newer writer added is stepped
+// FM-9: the maps are forward-open, so a field a newer writer added — under an
+// field number this build does not know — is stepped
 // over rather than refused — at the record's own level and inside an addition.
 #[test]
 fn unknown_fields_are_ignored() {
     let payload = encode(&record()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
-    fields.push((
-        Value::Text("future_field".to_owned()),
-        Value::Text("whatever".to_owned()),
-    ));
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    fields.push((Value::from(23u64), Value::Text("whatever".to_owned())));
     for addition in array(&mut fields, "additions") {
         let Value::Map(map) = addition else {
             panic!("an addition is a map");
         };
-        map.push((
-            Value::Text("future_addition_field".to_owned()),
-            Value::from(1u64),
-        ));
+        map.push((Value::from(24u64), Value::from(1u64)));
     }
     // A newer writer would also have bumped `schema`.
     *field(&mut fields, "schema") = Value::from(3u64);
 
-    let extended = with_body_map(payload.master_key_epoch, fields);
+    let extended = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    );
     let decoded = decode(&extended, generation(GENERATION)).expect("unknown fields are ignored");
     assert_eq!(decoded, record());
 }
@@ -135,7 +135,7 @@ fn unknown_fields_are_ignored() {
 #[test]
 fn a_removal_is_the_container_id_alone() {
     let payload = encode(&record()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
     let removals = array(&mut fields, "removals");
     assert_eq!(
         removals,
@@ -163,7 +163,7 @@ fn a_singleton_pack_stays_a_pack() {
 }
 
 // FM-15: a record's entry table is the catalog's own spelling — `path`,
-// `mtime`, and an optional `btime`, without the `original_` prefix FM-9 gives
+// `mtime`, and an optional `btime`, without the `captured_` prefix FM-9 gives
 // the meta section's copy of the same values. An addition listing them under
 // FM-9's keys would be a record no replay could read.
 #[test]
@@ -185,10 +185,10 @@ fn an_entry_table_carries_the_catalog_spelling() {
     );
 }
 
-// FM-15: an Entry's original path travels beside its current one, each under
-// its own key, and each comes back as the one it went in as.
+// FM-15: an Entry's captured path travels beside its current one, each under
+// its own field number, and each comes back as the one it went in as.
 #[test]
-fn an_original_path_travels_beside_the_current_path() {
+fn a_captured_path_travels_beside_the_current_path() {
     let payload = encode(&record()).expect("encoding succeeds");
     let table = entry_table(&payload, PACK);
     let Value::Map(cover) = &table[0] else {
@@ -203,20 +203,20 @@ fn an_original_path_travels_beside_the_current_path() {
     };
     assert_eq!(text("path").as_deref(), Some("albums/40/cover.jpg"));
     assert_eq!(
-        text("original_path"),
-        Some(format!("{ORIGINAL_DIR}/40/cover.jpg"))
+        text("captured_path"),
+        Some(format!("{CAPTURED_DIR}/40/cover.jpg"))
     );
 
     let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
     let entries = decoded.additions()[PACK].entries();
     assert_eq!(entries[0].path.as_str(), "albums/40/cover.jpg");
     assert_eq!(
-        entries[0].original_path.as_str(),
-        format!("{ORIGINAL_DIR}/40/cover.jpg")
+        entries[0].captured_path.as_str(),
+        format!("{CAPTURED_DIR}/40/cover.jpg")
     );
     assert_eq!(
-        entries[1].original_path, entries[1].path,
-        "an Entry never moved carries its current path as its original one",
+        entries[1].captured_path, entries[1].path,
+        "an Entry never moved carries its current path as its captured one",
     );
     let Value::Map(unmoved) = &table[1] else {
         panic!("an entry is a map");
@@ -224,57 +224,9 @@ fn an_original_path_travels_beside_the_current_path() {
     assert!(
         !unmoved
             .iter()
-            .any(|(key, _)| key.as_text() == Some("original_path")),
-        "an Entry whose two paths are one is written without `original_path`",
+            .any(|(key, _)| key.as_text() == Some("captured_path")),
+        "an Entry whose two paths are one is written without `captured_path`",
     );
-}
-
-// FM-15: a record of schema 1 was written before `original_path` existed, when
-// nothing could rename an Entry, so a reader takes each Entry's original path
-// to be its current one. Everything else in the record reads as it did.
-#[test]
-fn a_schema_1_record_reads_each_original_path_as_its_path() {
-    let payload = encode(&record()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
-    for addition in array(&mut fields, "additions") {
-        let Value::Map(addition) = addition else {
-            panic!("an addition is a map");
-        };
-        let Value::Array(entries) = field(addition, "entries") else {
-            panic!("an entry table is an array");
-        };
-        for entry in entries {
-            let Value::Map(entry) = entry else {
-                panic!("an entry is a map");
-            };
-            entry.retain(|(key, _)| key.as_text() != Some("original_path"));
-        }
-    }
-    *field(&mut fields, "schema") = Value::from(1u64);
-
-    let older = with_body_map(payload.master_key_epoch, fields);
-    let decoded = decode(&older, generation(GENERATION)).expect("a schema 1 record reads back");
-
-    let as_written_then = |record: &coffret_model::JournalRecord| {
-        record
-            .additions()
-            .iter()
-            .flat_map(|addition| addition.entries())
-            .map(|entry| coffret_model::EntryMetadata {
-                original_path: entry.path.clone(),
-                ..entry.clone()
-            })
-            .collect::<Vec<_>>()
-    };
-    for entry in decoded
-        .additions()
-        .iter()
-        .flat_map(|addition| addition.entries())
-    {
-        assert_eq!(entry.original_path, entry.path);
-    }
-    assert_eq!(as_written_then(&decoded), as_written_then(&record()));
-    assert_eq!(decoded.removals(), record().removals());
 }
 
 // FM-15: `btime` is optional, so a record carries it for the Entries whose
@@ -301,7 +253,7 @@ const PACK: usize = 1;
 
 /// The entry table of one addition, as the encoder wrote it.
 fn entry_table(payload: &ControlPayload, addition: usize) -> Vec<Value> {
-    let mut fields = body_map(payload);
+    let mut fields = body_map(payload, &field_numbers::JOURNAL_RECORD);
     let Value::Map(addition) = &mut array(&mut fields, "additions")[addition] else {
         panic!("an addition is a map");
     };
@@ -309,4 +261,22 @@ fn entry_table(payload: &ControlPayload, addition: usize) -> Vec<Value> {
         panic!("an entry table is an array");
     };
     entries.clone()
+}
+
+// FM-15: on the wire every field of the record travels under its field number,
+// and no map key is text, at any level.
+#[test]
+fn every_key_on_the_wire_is_an_integer() {
+    fn integer_keyed(value: &Value) -> bool {
+        match value {
+            Value::Map(fields) => fields
+                .iter()
+                .all(|(key, value)| key.is_integer() && integer_keyed(value)),
+            Value::Array(items) => items.iter().all(integer_keyed),
+            _ => true,
+        }
+    }
+    let payload = encode(&record()).expect("encoding succeeds");
+    let body: Value = ciborium::from_reader(payload.body.as_slice()).expect("the body is CBOR");
+    assert!(integer_keyed(&body), "{body:?}");
 }

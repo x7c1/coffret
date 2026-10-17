@@ -1,13 +1,15 @@
 //! The meta section: one CBOR map, encrypted as a single AEAD message.
 //!
 //! Container-level fields are `schema`, `kind`, `pad_len`, and `entries`; each
-//! entry records `original_path`, `offset`, `size`, `original_mtime`, and
-//! `hash`, plus optional `original_btime`, `derived_from`, and `mime`. The
-//! `original_` prefix says what those values are: the Entry Path and the two
-//! times as of the moment this Container was written, which is all an
-//! immutable object can state about them. The maps are forward-open — a
-//! reader ignores fields it does not know, and adding a field only increments
-//! `schema`.
+//! entry records `captured_path`, `offset`, `size`, `captured_mtime`, and
+//! `hash`, plus optional `captured_btime`, `derived_from`, and `mime`. The
+//! `captured_` prefix says what those values are: the Entry Path and the two
+//! times as captured when this Container was written, which is all an
+//! immutable object can state about them. Every field travels under the
+//! field number the field-number registry gives it in its map
+//! ([`crate::field_numbers`]). The maps are forward-open — a reader ignores
+//! field numbers it does not know, and
+//! adding a field only adds a registry row and increments `schema`.
 //!
 //! The plaintext is that map followed by zero padding up to its Padmé bucket, so
 //! the length the header records is not a proxy for how many Entries the

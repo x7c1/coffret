@@ -12,6 +12,7 @@ use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
+use crate::field_numbers;
 
 /// Serializes an Index Snapshot to the payload a control object carries
 /// (spec: FM-16).
@@ -80,7 +81,7 @@ pub fn encode(payload: &IndexSnapshotPayload) -> Result<ControlPayload> {
     // Snapshot carries no device state (spec: CK-7).
     Ok(ControlPayload::new(
         checkpoint.master_key_epoch(),
-        write_body(&map.build())?,
+        write_body(map.build(), &field_numbers::INDEX_SNAPSHOT)?,
     ))
 }
 

@@ -40,7 +40,12 @@ pub(super) fn check_control_object(
         &opened.payload.master_key_epoch,
         &fixture.master_key_epoch()?,
     )?;
-    check_cbor_map(&opened.payload.body, &fixture.body).context("body")?;
+    check_cbor_map(
+        &opened.payload.body,
+        &fixture.body,
+        coffret_format::field_numbers::payload_map(kind),
+    )
+    .context("body")?;
     check_payload_schema(&opened, &fixture.object_name).context("payload schema")
 }
 

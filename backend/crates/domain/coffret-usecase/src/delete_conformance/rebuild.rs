@@ -18,7 +18,7 @@ use crate::entry_paths::entry_path;
 /// The replacement is opened the long way round, under the envelope the
 /// committed Keyring maps it to, so the claim is about what another device
 /// finds rather than what the run reported. Nothing of the kept Entries'
-/// metadata is re-derived — paths, `original_mtime`, `original_btime`, hashes —
+/// metadata is re-derived — paths, `captured_mtime`, `captured_btime`, hashes —
 /// because a replacement that wrote down a different time for a file it never
 /// saw would be inventing one.
 pub async fn a_pack_that_keeps_entries_is_rebuilt_with_exactly_them(fixture: &DeleteUnderTest) {

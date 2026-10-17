@@ -81,7 +81,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
             .enumerate()
             .map(|(at, path)| EntryMetadata {
                 path: entry_path(*path),
-                original_path: entry_path(*path),
+                captured_path: entry_path(*path),
                 extent: EntryExtent::new(at as u64 * 100, 100)
                     .expect("a case's own Entries lie inside the address space"),
                 mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),

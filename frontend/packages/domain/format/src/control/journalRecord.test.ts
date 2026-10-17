@@ -4,13 +4,13 @@ import { errorCode } from '../errors.testing.js';
 import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
-import { decodeJournalRecord, encodeJournalRecord } from './journalRecord.js';
+import { JOURNAL_RECORD_SCHEMA, decodeJournalRecord, encodeJournalRecord } from './journalRecord.js';
 import type { ControlPayload } from './payload.js';
 import {
   BORN,
   EPOCH,
   GENERATION,
-  ORIGINAL_DIR,
+  CAPTURED_DIR,
   addition,
   arrayField,
   bodyMap,
@@ -19,7 +19,9 @@ import {
   mapAt,
   record,
   withBodyMap,
+  spelledByName,
 } from './payloadSchemas.testing.js';
+import { JOURNAL_RECORD } from '../internal/fieldNumbers.js';
 
 /** The record as the encoder puts it on the wire: arrays in Container ID order. */
 function canonical(source: JournalRecord): JournalRecord {
@@ -35,9 +37,9 @@ function canonical(source: JournalRecord): JournalRecord {
 /** A record payload with one field changed by hand, as a reader meets it. */
 function tampered(change: (map: Map<unknown, unknown>) => void): ControlPayload {
   const payload = encodeJournalRecord(record());
-  const map = bodyMap(payload);
+  const map = bodyMap(payload, JOURNAL_RECORD);
   change(map);
-  return withBodyMap(payload.masterKeyEpoch, map);
+  return withBodyMap(payload.masterKeyEpoch, map, JOURNAL_RECORD);
 }
 
 function read(payload: ControlPayload): JournalRecord {
@@ -54,54 +56,32 @@ describe('Journal record payload (spec: FM-15)', () => {
   });
 
   // An addition's entry table is the catalog's own spelling — `path`, `mtime`,
-  // and an optional `btime`, without the `original_` prefix FM-9 gives the meta
+  // and an optional `btime`, without the `captured_` prefix FM-9 gives the meta
   // section's copy of the same values. A record listing them under FM-9's keys
   // would be one no replay could read.
   it('writes an entry table in the catalog spelling', () => {
     const payload = encodeJournalRecord(record());
     // The one addition whose table holds two Entries, once the encoder has put
     // `additions` in Container ID order.
-    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload, JOURNAL_RECORD), 'additions'), 1), 'entries');
     expect([...mapAt(entries, 1).keys()].sort()).toEqual(
       ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'derived_from', 'mime'].sort(),
     );
   });
 
-  // An Entry's original path travels beside its current one, each under its
+  // An Entry's captured path travels beside its current one, each under its
   // own key, and each comes back as the one it went in as.
-  it('carries an original path beside the current path', () => {
+  it('carries a captured path beside the current path', () => {
     const payload = encodeJournalRecord(record());
-    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload, JOURNAL_RECORD), 'additions'), 1), 'entries');
     expect(mapAt(entries, 0).get('path')).toBe('albums/40/cover.jpg');
-    expect(mapAt(entries, 0).get('original_path')).toBe(`${ORIGINAL_DIR}/40/cover.jpg`);
+    expect(mapAt(entries, 0).get('captured_path')).toBe(`${CAPTURED_DIR}/40/cover.jpg`);
 
     const decoded = read(payload).additions[1].entries;
     expect(decoded[0].path).toBe('albums/40/cover.jpg');
-    expect(decoded[0].originalPath).toBe(`${ORIGINAL_DIR}/40/cover.jpg`);
-    expect(decoded[1].originalPath).toBe(decoded[1].path);
-    expect([...mapAt(entries, 1).keys()]).not.toContain('original_path');
-  });
-
-  // A record of schema 1 was written before `original_path` existed, when
-  // nothing could rename an Entry, so a reader takes each Entry's original path
-  // to be its current one. Everything else in the record reads as it did.
-  it('reads each original path of a schema 1 record as its path', () => {
-    const payload = tampered((map) => {
-      for (const item of arrayField(map, 'additions')) {
-        for (const entry of arrayField(item as Map<unknown, unknown>, 'entries')) {
-          (entry as Map<unknown, unknown>).delete('original_path');
-        }
-      }
-      map.set('schema', 1n);
-    });
-    const asWrittenThen = (source: JournalRecord): JournalRecord => ({
-      ...source,
-      additions: source.additions.map((item) => ({
-        ...item,
-        entries: item.entries.map((entry) => ({ ...entry, originalPath: entry.path })),
-      })),
-    });
-    expect(read(payload)).toEqual(asWrittenThen(canonical(record())));
+    expect(decoded[0].capturedPath).toBe(`${CAPTURED_DIR}/40/cover.jpg`);
+    expect(decoded[1].capturedPath).toBe(decoded[1].path);
+    expect([...mapAt(entries, 1).keys()]).not.toContain('captured_path');
   });
 
   // `btime` is optional, so a record carries it for the Entries whose files had
@@ -109,7 +89,7 @@ describe('Journal record payload (spec: FM-15)', () => {
   // back the way they went in.
   it('carries a birth time only for the entry that has one', () => {
     const payload = encodeJournalRecord(record());
-    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload, JOURNAL_RECORD), 'additions'), 1), 'entries');
     expect([...mapAt(entries, 0).keys()]).not.toContain('btime');
 
     const decoded = read(payload);
@@ -132,7 +112,7 @@ describe('Journal record payload (spec: FM-15)', () => {
   // The optional fields are left out of the map rather than written as
   // something empty, so a reader never has two spellings of "nothing".
   it('leaves absent optional fields out of the map', () => {
-    const map = bodyMap(encodeJournalRecord(firstRecord()));
+    const map = bodyMap(encodeJournalRecord(firstRecord()), JOURNAL_RECORD);
     for (const absent of ['prev', 'next_commit_slot', 'snapshot_slot']) {
       expect(map.has(absent), absent).toBe(false);
     }
@@ -158,9 +138,9 @@ describe('Journal record payload (spec: FM-15)', () => {
   // head that never existed.
   it('rejects a prev on the first record', () => {
     const encoded = encodeJournalRecord(firstRecord());
-    const map = bodyMap(encoded);
+    const map = bodyMap(encoded, JOURNAL_RECORD);
     map.set('prev', 0n);
-    const payload = withBodyMap(encoded.masterKeyEpoch, map);
+    const payload = withBodyMap(encoded.masterKeyEpoch, map, JOURNAL_RECORD);
     expect(errorCode(() => decodeJournalRecord(payload, Generation.FIRST))).toBe(
       'journal_record_prev_mismatch',
     );
@@ -178,7 +158,7 @@ describe('Journal record payload (spec: FM-15)', () => {
   // neither is repeated in the map.
   it('takes the generation and the epoch from the framing', () => {
     const payload = encodeJournalRecord(record());
-    const map = bodyMap(payload);
+    const map = bodyMap(payload, JOURNAL_RECORD);
     expect(map.has('generation')).toBe(false);
     expect(map.has('master_key_epoch')).toBe(false);
 
@@ -198,7 +178,7 @@ describe('Journal record payload (spec: FM-15)', () => {
 
   // CP-14: a removal is the Container ID and nothing else.
   it('writes a removal as the Container ID alone', () => {
-    const removals = arrayField(bodyMap(encodeJournalRecord(record())), 'removals');
+    const removals = arrayField(bodyMap(encodeJournalRecord(record()), JOURNAL_RECORD), 'removals');
     expect(removals).toEqual([containerId(0x11).bytes(), containerId(0x99).bytes()]);
   });
 
@@ -217,9 +197,9 @@ describe('Journal record payload (spec: FM-15)', () => {
   // over rather than refused.
   it('ignores fields it does not know', () => {
     const payload = tampered((map) => {
-      map.set('future_field', 'whatever');
+      map.set(23, 'whatever');
       for (const item of arrayField(map, 'additions')) {
-        (item as Map<unknown, unknown>).set('future_addition_field', 1n);
+        (item as Map<unknown, unknown>).set(24, 1n);
       }
       map.set('schema', 3n);
     });
@@ -251,10 +231,14 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
     expect(errorCode(() => read(payload))).toBe('control_payload_out_of_order');
   });
 
-  // FM-9's rule for the meta section, applied here.
-  it('refuses a schema below one', () => {
-    const payload = tampered((map) => map.set('schema', 0n));
-    expect(errorCode(() => read(payload))).toBe('unsupported_journal_record_schema');
+  // FM-15: a reader refuses any schema below the one this build writes.
+  it('refuses a schema below the current one', () => {
+    for (const schema of [0n, JOURNAL_RECORD_SCHEMA - 1n]) {
+      const payload = tampered((map) => map.set('schema', schema));
+      expect(errorCode(() => read(payload)), `schema ${schema}`).toBe(
+        'unsupported_journal_record_schema',
+      );
+    }
   });
 
   it('refuses a missing field', () => {
@@ -309,24 +293,24 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
   });
 
-  // EP-1, FM-9: an Entry's original path is the name a Container's meta section
+  // EP-1, FM-9: an Entry's captured path is the name a Container's meta section
   // records, and FM-9 holds that name to EP-1 as well, so a decomposed one is
   // refused the way a decomposed current path is.
-  it('refuses an original path that is not in NFC', () => {
+  it('refuses a captured path that is not in NFC', () => {
     const payload = tampered((map) => {
       const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
-      mapAt(entries, 0).set('original_path', 'cafe\u0301.txt');
+      mapAt(entries, 0).set('captured_path', 'cafe\u0301.txt');
     });
     expect(errorCode(() => read(payload))).toBe('unnormalized_entry_path');
   });
 
-  // FM-15: `original_path` is written only where it differs from `path`, so
+  // FM-15: `captured_path` is written only where it differs from `path`, so
   // one state has one encoding; a map carrying it equal to `path` is a second
   // spelling of a map without it, and is refused.
-  it('refuses an original path equal to the path', () => {
+  it('refuses a captured path equal to the path', () => {
     const payload = tampered((map) => {
       const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
-      mapAt(entries, 0).set('original_path', mapAt(entries, 0).get('path'));
+      mapAt(entries, 0).set('captured_path', mapAt(entries, 0).get('path'));
     });
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
   });
@@ -402,5 +386,17 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
     const body = new Uint8Array(payload.body.length + 1);
     body.set(payload.body, 0);
     expect(errorCode(() => read({ ...payload, body }))).toBe('malformed_journal_record');
+  });
+});
+
+describe('a Journal record keyed by field name (spec: FM-15)', () => {
+  // Every field travels under the field number the registry assigns it, and a
+  // text key is no field's spelling, so a map carrying its fields only under
+  // their names is missing them — refused by the name of the first one asked
+  // for.
+  it('is refused as missing its fields, by name', () => {
+    const read = (): unknown => decodeJournalRecord(spelledByName(encodeJournalRecord(record()), JOURNAL_RECORD), GENERATION);
+    expect(errorCode(read)).toBe('malformed_journal_record');
+    expect(read).toThrow(/schema/);
   });
 });

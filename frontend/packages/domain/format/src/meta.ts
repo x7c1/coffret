@@ -3,12 +3,15 @@
  * (spec: FM-9).
  *
  * Container-level fields are `schema`, `kind`, `pad_len`, and `entries`; each
- * entry records `original_path`, `offset`, `size`, `original_mtime`, and
- * `hash`, plus optional `original_btime`, `derived_from`, and `mime`. The
- * `original_` prefix says what those values are: the Entry Path and the times
- * as of the moment this Container was written, which is all an immutable object
- * can state about them. The maps are forward-open — a reader ignores fields it
- * does not know, and adding a field only increments `schema`.
+ * entry records `captured_path`, `offset`, `size`, `captured_mtime`, and
+ * `hash`, plus optional `captured_btime`, `derived_from`, and `mime`. The
+ * `captured_` prefix says what those values are: the Entry Path and the times
+ * as captured when this Container was written, which is all an immutable object
+ * can state about them. Every field travels under the field number the
+ * field-number registry gives it in its map (`internal/fieldNumbers.ts`). The
+ * maps are forward-open — a reader ignores field numbers it does not know, and
+ * adding a field
+ * only adds a registry row and increments `schema`.
  *
  * The plaintext is that map followed by zero padding up to its Padmé bucket, so
  * the length the header records is not a proxy for how many Entries the
@@ -33,6 +36,7 @@ import { fail } from './errors.js';
 import { paddedLength } from './padme.js';
 import { type EntryMetadata } from './model/entry.js';
 import { isContainerKind, type ContainerKind } from './model/kinds.js';
+import { META, fromWire, toWire } from './internal/fieldNumbers.js';
 
 /** The meta section schema this package writes. */
 export const META_SCHEMA = 1n;
@@ -63,7 +67,7 @@ export function encodeMeta(meta: Meta): Uint8Array {
   map.set('kind', meta.kind);
   setUint(map, 'pad_len', meta.padLength, 'meta_encode_failed');
   map.set('entries', meta.entries.map(encodeMetaEntryMap));
-  return encodeCbor(map, 'meta_encode_failed');
+  return encodeCbor(toWire(map, META, 'meta_encode_failed'), 'meta_encode_failed');
 }
 
 /**
@@ -88,7 +92,11 @@ export function decodeMeta(plaintext: Uint8Array): Meta {
   if (!isAllZero(padding)) {
     fail('non_zero_meta_padding', 'meta section padding is not zero-filled');
   }
-  const map = asCborMap(value, 'malformed_meta', 'the meta section');
+  // The fields travel under their field numbers and are read here by name: a
+  // map key the registry does not give this map, text included, is dropped on
+  // the way, so a field carried under anything but its field number is refused
+  // as missing (spec: FM-9).
+  const map = asCborMap(fromWire(value, META), 'malformed_meta', 'the meta section');
 
   const schema = requiredUint(map, 'schema', 'malformed_meta');
   if (schema < META_SCHEMA) {

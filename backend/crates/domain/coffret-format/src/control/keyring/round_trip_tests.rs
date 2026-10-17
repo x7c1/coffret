@@ -1,5 +1,6 @@
 //! What survives a trip through a Keyring payload and back (spec: FM-17).
 
+use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::{
     ContainerId, ContainerKeyStatus, ControlObjectName, KeyEnvelope, KeyTable, ReplicaPosition,
@@ -18,7 +19,7 @@ use crate::generations::generation;
 /// CBOR spelling of a length — moves it here and in `keyring.test.ts` at once.
 /// A digest that moved in only one of them is exactly the drift the interop
 /// exchange exists to catch, caught before the exchange runs.
-const PINNED_SET_DIGEST: &str = "6e6018ce7522ab4f82f4e43d51463efa48a0f57b1862d67b1a439c3d329c783a";
+const PINNED_SET_DIGEST: &str = "3c11874f8b5aa9cb62bdc684c430b21de985c20f61bbedf20700aae1828fe655";
 
 // FM-17, KL-7: both of the things a Keyring holds for a Container — an
 // envelope and the explicit key-lost marker — come back as they went in, in
@@ -77,24 +78,23 @@ fn the_digest_of_one_key_table_is_pinned() {
 // read back out of the encoder would agree with any spelling it chose.
 //
 // Definite lengths, shortest-form arguments, and each element's keys in encoded
-// order: `id` (two characters) before `envelope` or `key_lost` (eight).
+// order: the registry's field numbers, each one byte, so `id` (0) comes before
+// `envelope` (1) or `key_lost` (2).
 #[test]
 fn the_bytes_the_digest_covers_are_deterministic_cbor() {
     let mut expected = vec![0x82]; // an array of two elements
     expected.push(0xa2); // a map of two pairs
-    expected.extend_from_slice(&[0x62, b'i', b'd']); // "id"
+    expected.push(0x00); // `id`
     expected.push(0x50); // a byte string of 16
     expected.extend_from_slice(&[0x11; ContainerId::BYTE_LEN]);
-    expected.push(0x68); // "envelope"
-    expected.extend_from_slice(b"envelope");
+    expected.push(0x01); // `envelope`
     expected.extend_from_slice(&[0x58, 0x48]); // a byte string of 72
     expected.extend_from_slice(&[0x22; KeyEnvelope::BYTE_LEN]);
     expected.push(0xa2); // the marker's element is a map of two pairs as well
-    expected.extend_from_slice(&[0x62, b'i', b'd']);
+    expected.push(0x00); // `id`
     expected.push(0x50);
     expected.extend_from_slice(&[0x33; ContainerId::BYTE_LEN]);
-    expected.push(0x68); // "key_lost"
-    expected.extend_from_slice(b"key_lost");
+    expected.push(0x02); // `key_lost`
     expected.push(0xf5); // true
 
     assert_eq!(
@@ -108,7 +108,7 @@ fn the_bytes_the_digest_covers_are_deterministic_cbor() {
 #[test]
 fn the_digest_is_not_a_field_of_the_payload() {
     let payload = encode(&key_table(), key_table_epoch()).expect("encoding succeeds");
-    let keys: Vec<String> = body_map(&payload)
+    let keys: Vec<String> = body_map(&payload, &field_numbers::KEYRING)
         .iter()
         .map(|(key, _)| key.as_text().expect("keys are text").to_owned())
         .collect();
@@ -135,7 +135,7 @@ fn the_digest_is_the_token_a_replica_name_carries() {
 #[test]
 fn the_generation_the_replica_and_the_epoch_stay_in_the_framing() {
     let payload = encode(&key_table(), key_table_epoch()).expect("encoding succeeds");
-    let fields = body_map(&payload);
+    let fields = body_map(&payload, &field_numbers::KEYRING);
     for absent in ["generation", "replica_index", "replica_count", "epoch"] {
         assert!(
             !fields.iter().any(|(key, _)| key.as_text() == Some(absent)),
@@ -154,28 +154,23 @@ fn one_payload_serves_every_replica_of_a_generation() {
     assert_eq!(one.body, other.body);
 }
 
-// FM-9: the maps are forward-open, so a field a newer writer added is stepped
+// FM-9: the maps are forward-open, so a field a newer writer added — under an
+// field number this build does not know — is stepped
 // over — at the payload's own level and inside an element.
 #[test]
 fn unknown_fields_are_ignored() {
     let payload = encode(&key_table(), key_table_epoch()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
-    fields.push((
-        Value::Text("future_field".to_owned()),
-        Value::Text("whatever".to_owned()),
-    ));
+    let mut fields = body_map(&payload, &field_numbers::KEYRING);
+    fields.push((Value::from(23u64), Value::Text("whatever".to_owned())));
     for element in array(&mut fields, "mapping") {
         let Value::Map(map) = element else {
             panic!("mapping holds maps");
         };
-        map.push((
-            Value::Text("future_element_field".to_owned()),
-            Value::from(1u64),
-        ));
+        map.push((Value::from(24u64), Value::from(1u64)));
     }
     *field(&mut fields, "schema") = Value::from(2u64);
 
-    let extended = with_body_map(payload.master_key_epoch, fields);
+    let extended = with_body_map(payload.master_key_epoch, fields, &field_numbers::KEYRING);
     let decoded = decode(&extended).expect("unknown fields are ignored");
     assert_eq!(decoded, key_table());
 }

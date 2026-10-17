@@ -207,8 +207,8 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
 ///
 /// The same values a Container's own meta section records, under the keys a
 /// record and a Snapshot give them: `path`, `mtime`, and an optional `btime`
-/// rather than FM-9's `original_` names. The prefix survives in two places,
-/// both naming what an object already written records: `original_path`
+/// rather than FM-9's `captured_` names. The prefix survives in two places,
+/// both naming what an object already written records: `captured_path`
 /// beside `path`, the owning Container's own name for the Entry, written only
 /// where it differs from `path`, and the one inside `derived_from`, the
 /// parent's.
@@ -219,10 +219,10 @@ fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
         BodyField::uint("size", entry.extent.size()),
         BodyField::int("mtime", entry.mtime.as_unix_seconds()),
     ];
-    if entry.original_path != entry.path {
+    if entry.captured_path != entry.path {
         fields.push(BodyField::text(
-            "original_path",
-            entry.original_path.as_str(),
+            "captured_path",
+            entry.captured_path.as_str(),
         ));
     }
     if let Some(btime) = entry.btime {
@@ -234,7 +234,7 @@ fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
             "derived_from",
             vec![
                 BodyField::bytes("container_id", derived_from.container_id.as_bytes()),
-                BodyField::text("original_path", derived_from.path.as_str()),
+                BodyField::text("captured_path", derived_from.path.as_str()),
             ],
         ));
     }

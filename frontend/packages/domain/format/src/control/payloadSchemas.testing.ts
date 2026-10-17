@@ -11,6 +11,8 @@
  */
 
 import { decodeCborExact, encodeCbor } from '../internal/cbor.js';
+import { fromWire, type MapFields } from '../internal/fieldNumbers.js';
+import { toWireLenient } from '../internal/fieldNumbers.testing.js';
 import { ContainerId } from '../model/containerId.js';
 import { Generation } from '../model/generation.js';
 import { KEY_ENVELOPE_LENGTH, KeyEnvelope } from '../model/keyEnvelope.js';
@@ -66,7 +68,7 @@ export function summary(seed: number, kind: ContainerKind): ContainerSummary {
 export function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
-    originalPath: path,
+    capturedPath: path,
     offset,
     size,
     mtimeSeconds: 1_700_000_000n,
@@ -94,7 +96,7 @@ export function checkpoint(generation: bigint): IndexCheckpoint {
  * The folder the first Entry of every table was written into, before whatever
  * moved it to the path it holds now.
  */
-export const ORIGINAL_DIR = 'imports';
+export const CAPTURED_DIR = 'imports';
 
 /** The birth time the one Entry that has one was created at. */
 export const BORN = 1_600_000_000n;
@@ -106,7 +108,7 @@ export const BORN = 1_600_000_000n;
  * A Pack's table carries one Entry whose file had a birth time when the
  * Container was written and one whose file had none, so both spellings of the
  * optional field travel (spec: FM-15). The first Entry of every table carries
- * an original path apart from its current one, as a renamed Entry would, so a
+ * a captured path apart from its current one, as a renamed Entry would, so a
  * codec that wrote one name as the other is caught (spec: FM-15).
  */
 export function addition(seed: number, kind: ContainerKind): ContainerAddition {
@@ -114,7 +116,7 @@ export function addition(seed: number, kind: ContainerKind): ContainerAddition {
   const entries = [
     {
       ...entry(`albums/${label}/cover.jpg`, 0n, 120n),
-      originalPath: `${ORIGINAL_DIR}/${label}/cover.jpg`,
+      capturedPath: `${CAPTURED_DIR}/${label}/cover.jpg`,
     },
   ];
   if (kind === 'pack') {
@@ -210,7 +212,7 @@ export function pinnedKeyTable(): KeyTable {
  * The Entry Path the sample Snapshot's first Entry was written at, before
  * whatever moved it to the path it holds now.
  */
-export const ORIGINAL_PATH = 'imports/a.jpg';
+export const CAPTURED_PATH = 'imports/a.jpg';
 
 /**
  * A Library of three Containers whose Entries interleave across them.
@@ -222,13 +224,13 @@ export const ORIGINAL_PATH = 'imports/a.jpg';
  *
  * One Entry's file had a birth time when its Container was written and the rest
  * had none, so both spellings of the optional field travel (spec: FM-16). The
- * same Entry carries an original path apart from its current one, as a renamed
+ * same Entry carries a captured path apart from its current one, as a renamed
  * Entry would, and the rest carry their current one.
  */
 export function content(): SnapshotContent {
   const born = located(0x40, 'albums/spring/a.jpg', 0n, 100n);
   born.entry.btimeSeconds = BORN;
-  born.entry.originalPath = ORIGINAL_PATH;
+  born.entry.capturedPath = CAPTURED_PATH;
   return {
     checkpoint: checkpoint(GENERATION.value),
     containers: [summary(0x40, 'pack'), summary(0x21, 'one-file'), summary(0x33, 'pack')],
@@ -286,21 +288,46 @@ export function canonical(source: SnapshotContent): SnapshotContent {
   };
 }
 
-/** The fields of a payload body, for a case that has to change one of them. */
-export function bodyMap(payload: ControlPayload): Map<unknown, unknown> {
-  const map = decodeCborExact(payload.body, 'malformed_control_payload');
+/**
+ * The fields of a payload body, keyed by name, for a case that has to change
+ * one of them: the reader's translation of the body's field numbers for the map
+ * kind `kind` (spec: FM-9).
+ */
+export function bodyMap(payload: ControlPayload, kind: MapFields): Map<unknown, unknown> {
+  const map = fromWire(decodeCborExact(payload.body, 'malformed_control_payload'), kind);
   if (!(map instanceof Map)) {
     throw new Error('a payload body is a CBOR map');
   }
   return map;
 }
 
-/** A payload carrying the fields a case built by hand. */
+/**
+ * A payload carrying the fields a case built by hand: each name `kind`
+ * declares under its field number, and any other map key as the case wrote it.
+ */
 export function withBodyMap(
   masterKeyEpoch: MasterKeyEpoch,
   map: Map<unknown, unknown>,
+  kind: MapFields,
 ): ControlPayload {
-  return { masterKeyEpoch, body: encodeCbor(map, 'control_payload_encode_failed') };
+  return withRawBody(masterKeyEpoch, toWireLenient(map, kind));
+}
+
+/** A payload carrying exactly the value handed in, keys and all. */
+export function withRawBody(masterKeyEpoch: MasterKeyEpoch, body: unknown): ControlPayload {
+  return { masterKeyEpoch, body: encodeCbor(body, 'control_payload_encode_failed') };
+}
+
+/**
+ * The same payload with every field, at every level, carried under its name as
+ * a text key — the spelling a map keyed by field names would have, which is no
+ * field's spelling (spec: FM-9).
+ */
+export function spelledByName(payload: ControlPayload, kind: MapFields): ControlPayload {
+  return withRawBody(
+    payload.masterKeyEpoch,
+    fromWire(decodeCborExact(payload.body, 'malformed_control_payload'), kind),
+  );
 }
 
 /** The elements one array field of a map carries. */

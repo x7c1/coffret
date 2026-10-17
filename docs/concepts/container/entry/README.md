@@ -18,7 +18,7 @@ current name need not change the stored representation.
 | --- | --- |
 | Which stored representation is this? | Its Container ID and entry number: the zero-based position in that Container's immutable [entry table](../#domain-rules) |
 | What is it called in the current Library? | The Entry Path recorded by the Catalog |
-| What name was captured when it was stored? | The Container entry table's `original_path`, which the Catalog also keeps beside the current Entry Path |
+| What name was captured when it was stored? | The Container entry table's `captured_path`, which the Catalog also keeps beside the current Entry Path |
 | What content was stored? | The plaintext extent and content hash in the entry table |
 
 An entry number is local to one Container. Every one-file Container has an
@@ -52,9 +52,9 @@ status is stated below.
 - **Metadata is captured, not maintained**: what an Entry records is what was
   true when its Container was written, and a Container is never rewritten. The
   [Journal](../../journal/) and its checkpoints are the authority for what the
-  Library holds now, which is why the entry table spells the recorded name and
-  times `original_*` while a record and a checkpoint spell the current ones
-  plainly, and carry the recorded name too, as `original_path`, wherever it
+  Library holds now, which is why the entry table names the recorded name and
+  times `captured_*` while a record and a checkpoint name the current ones
+  plainly, and carry the recorded name too, as `captured_path`, wherever it
   differs from the current one (see [Catalog](../../catalog/#domain-rules);
   spec: FM-9, FM-15, FM-16).
 - **Birth time is capture-only**: the moment a file came into being is read

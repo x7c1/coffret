@@ -1,10 +1,11 @@
 /**
- * One row of a Container's entry table, in the meta section's spelling
- * (spec: FM-9).
+ * One row of a Container's entry table, under the meta section's field names
+ * (spec: FM-9). On the wire each field travels under its field number
+ * (`fieldNumbers.ts`).
  *
- * The values a later rename could move carry `original_` names here: what the
+ * The values a later rename could move carry `captured_` names here: what the
  * Entry was called, when it was last modified, and when its file came into
- * being *as of the moment this Container was written*, not the first name the
+ * being *as captured when this Container was written*, not the first name the
  * Entry ever had. A Container is one immutable object, so nothing rewrites
  * them; what the Library holds now is the Journal's business, and a record
  * spells the same values `catalogEntryMap.ts`'s way.
@@ -24,11 +25,11 @@ import type { EntryMetadata } from '../model/entry.js';
 
 /** Serializes one Entry to the map FM-9 gives it. */
 export function encodeMetaEntryMap(entry: EntryMetadata): Map<string, unknown> {
-  const map = new Map<string, unknown>([['original_path', entry.originalPath]]);
+  const map = new Map<string, unknown>([['captured_path', entry.capturedPath]]);
   encodeExtent(map, entry, 'meta_encode_failed');
-  map.set('original_mtime', entry.mtimeSeconds);
+  map.set('captured_mtime', entry.mtimeSeconds);
   if (entry.btimeSeconds !== undefined) {
-    map.set('original_btime', entry.btimeSeconds);
+    map.set('captured_btime', entry.btimeSeconds);
   }
   encodeTrailingFields(map, entry);
   return map;
@@ -41,17 +42,17 @@ export function encodeMetaEntryMap(entry: EntryMetadata): Map<string, unknown> {
  * stepped over rather than refused.
  */
 export function decodeMetaEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
-  const originalPath = storedPath(map, 'original_path', code, 'original_path');
+  const capturedPath = storedPath(map, 'captured_path', code, 'captured_path');
   const entry: EntryMetadata = {
     // What this Container records is the name the Entry had when it was
     // written, and that is all a meta section can say about where it stands.
-    path: originalPath,
-    originalPath,
+    path: capturedPath,
+    capturedPath,
     ...decodeExtent(map, code),
-    mtimeSeconds: requiredInt(map, 'original_mtime', code),
+    mtimeSeconds: requiredInt(map, 'captured_mtime', code),
     hash: decodeHash(map, code),
   };
-  const btime = optionalInt(map, 'original_btime', code);
+  const btime = optionalInt(map, 'captured_btime', code);
   if (btime !== undefined) {
     entry.btimeSeconds = btime;
   }

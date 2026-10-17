@@ -1,7 +1,11 @@
 use ciborium::Value;
 
-use super::{as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{
+    as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH,
+    MASTER_KEY_EPOCH_FIELD,
+};
 use crate::error::{Error, Result};
+use crate::field_numbers::field_number;
 use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
@@ -17,7 +21,7 @@ pub(in crate::control) fn encode(payload: &ControlPayload) -> Result<Vec<u8>> {
     let mut entries = read_map(&payload.body)?;
     if entries
         .iter()
-        .any(|(key, _)| key.as_text() == Some(MASTER_KEY_EPOCH))
+        .any(|(key, _)| field_number(key) == Some(MASTER_KEY_EPOCH_FIELD))
     {
         return Err(malformed(format!(
             "the body already carries {MASTER_KEY_EPOCH}"
@@ -28,7 +32,7 @@ pub(in crate::control) fn encode(payload: &ControlPayload) -> Result<Vec<u8>> {
     entries.insert(
         0,
         (
-            Value::Text(MASTER_KEY_EPOCH.to_owned()),
+            Value::from(MASTER_KEY_EPOCH_FIELD),
             Value::from(payload.master_key_epoch.get()),
         ),
     );
@@ -76,11 +80,11 @@ mod tests {
             .expect("encoding succeeds");
         let value: Value = ciborium::from_reader(bytes.as_slice()).expect("the payload is CBOR");
         let entries = value.as_map().expect("the payload is a map");
-        let keys: Vec<&str> = entries
-            .iter()
-            .map(|(key, _)| key.as_text().expect("keys are text"))
-            .collect();
-        assert_eq!(keys, ["master_key_epoch", "records"]);
+        // The body here is the framing's opaque map, spelled with a text key
+        // for the case; the epoch is the framing's own and travels under its
+        // field number.
+        assert_eq!(entries[0].0, Value::from(MASTER_KEY_EPOCH_FIELD));
+        assert_eq!(entries[1].0.as_text(), Some("records"));
         assert_eq!(
             entries[0].1.as_integer(),
             Some(ciborium::value::Integer::from(5u64))
@@ -93,7 +97,7 @@ mod tests {
     fn a_body_that_claims_the_epoch_field_is_rejected() {
         let mut payload = ControlPayload::empty(epoch(1));
         payload.body = to_bytes(&Value::Map(vec![(
-            Value::Text(MASTER_KEY_EPOCH.to_owned()),
+            Value::from(MASTER_KEY_EPOCH_FIELD),
             Value::from(9u64),
         )]))
         .expect("the map serializes");

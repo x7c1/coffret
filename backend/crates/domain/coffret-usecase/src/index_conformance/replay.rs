@@ -324,7 +324,7 @@ pub async fn a_birth_time_survives_a_replay_and_a_query(fixture: &IndexUnderTest
     );
 }
 
-/// An Entry's original path survives a replay, a query, a checkpoint, and a
+/// An Entry's captured path survives a replay, a query, a checkpoint, and a
 /// restore of that checkpoint, apart from its current one.
 ///
 /// The catalog keeps both names so that a device can say what an Entry is
@@ -333,7 +333,7 @@ pub async fn a_birth_time_survives_a_replay_and_a_query(fixture: &IndexUnderTest
 /// commit writes the two equal; the record here carries them apart for one
 /// Entry and equal for the other, so a catalog that stored one name in place
 /// of the other fails here.
-pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnderTest) {
+pub async fn a_captured_path_survives_a_replay_and_a_restore(fixture: &IndexUnderTest) {
     let index = fixture.index();
 
     index
@@ -354,16 +354,16 @@ pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnd
         .expect("looking a path up must succeed")
         .expect("the record added it");
     assert_eq!(
-        renamed.entry.original_path,
+        renamed.entry.captured_path,
         path("inbox/a.jpg"),
-        "the original path the record carried, not the current one",
+        "the captured path the record carried, not the current one",
     );
     let unrenamed = index
         .entry_at(&path("albums/b.jpg"))
         .await
         .expect("looking a path up must succeed")
         .expect("the record added it");
-    assert_eq!(unrenamed.entry.original_path, path("albums/b.jpg"));
+    assert_eq!(unrenamed.entry.captured_path, path("albums/b.jpg"));
 
     let expected: Vec<EntryPath> = vec![path("inbox/a.jpg"), path("albums/b.jpg")];
     assert_eq!(
@@ -372,7 +372,7 @@ pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnd
             .await
             .expect("listing a folder must succeed")
             .into_iter()
-            .map(|location| location.entry.original_path)
+            .map(|location| location.entry.captured_path)
             .collect::<Vec<_>>(),
         expected,
         "a listing answers what a lookup does",
@@ -388,7 +388,7 @@ pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnd
         snapshot
             .entries()
             .iter()
-            .map(|location| location.entry.original_path.clone())
+            .map(|location| location.entry.captured_path.clone())
             .collect::<Vec<_>>(),
         expected,
     );
@@ -405,8 +405,8 @@ pub async fn an_original_path_survives_a_replay_and_a_restore(fixture: &IndexUnd
             .expect("looking a path up must succeed")
             .expect("the Snapshot holds it")
             .entry
-            .original_path,
+            .captured_path,
         path("inbox/a.jpg"),
-        "a restore fills the original path from the Snapshot",
+        "a restore fills the captured path from the Snapshot",
     );
 }

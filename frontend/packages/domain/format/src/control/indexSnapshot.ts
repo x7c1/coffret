@@ -45,17 +45,13 @@ import type { ContainerSummary } from '../model/containerSummary.js';
 import type { EntryLocation } from '../model/entryLocation.js';
 import type { ControlObjectKind } from '../model/kinds.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
-
-/** The schema this package writes for an Index Snapshot payload (spec: FM-16). */
-export const INDEX_SNAPSHOT_SCHEMA = 2n;
+import { INDEX_SNAPSHOT, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The oldest schema a reader accepts: the first. Schema 2 added
- * `original_path` to the entry map, present only where it differs from `path`,
- * and a reader takes a schema 1 map, which lacks it, to name its current path
- * as its original one, as it does for any map without it.
+ * The schema this package writes for an Index Snapshot payload, and the lowest
+ * a reader accepts (spec: FM-16).
  */
-const OLDEST_INDEX_SNAPSHOT_SCHEMA = 1n;
+export const INDEX_SNAPSHOT_SCHEMA = 2n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_index_snapshot';
@@ -171,7 +167,10 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
 
   return {
     masterKeyEpoch: checkpoint.masterKeyEpoch,
-    body: encodeCbor(map, 'control_payload_encode_failed'),
+    body: encodeCbor(
+      toWire(map, INDEX_SNAPSHOT, 'control_payload_encode_failed'),
+      'control_payload_encode_failed',
+    ),
   };
 }
 
@@ -198,13 +197,13 @@ export function decodeIndexSnapshot(
   const activating = kind === 'activation-snapshot';
 
   const map = asCborMap(
-    decodeCborExact(payload.body, MALFORMED),
+    fromWire(decodeCborExact(payload.body, MALFORMED), INDEX_SNAPSHOT),
     MALFORMED,
     'an Index Snapshot payload',
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < OLDEST_INDEX_SNAPSHOT_SCHEMA) {
+  if (schema < INDEX_SNAPSHOT_SCHEMA) {
     fail('unsupported_index_snapshot_schema', `unsupported Index Snapshot payload schema ${schema}`);
   }
 

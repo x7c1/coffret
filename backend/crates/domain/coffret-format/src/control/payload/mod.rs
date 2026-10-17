@@ -1,7 +1,7 @@
 use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
-use crate::error::{Error, MalformedDetail, Result};
+use crate::error::{CborEncodeFailure, Error, MalformedDetail, Result};
 
 mod decode;
 pub(super) use decode::decode;
@@ -30,8 +30,14 @@ pub struct ControlPayload {
     pub body: Vec<u8>,
 }
 
-/// The one payload field the framing itself defines.
+/// The one payload field the framing itself defines, by name.
+///
+/// It travels under [`MASTER_KEY_EPOCH_FIELD`], the field number every payload
+/// map kind in the registry gives it, so the framing can find it before it knows whose
+/// map it holds (spec: FM-13).
 const MASTER_KEY_EPOCH: &str = "master_key_epoch";
+
+use crate::field_numbers::MASTER_KEY_EPOCH_FIELD;
 
 impl ControlPayload {
     /// A payload of `body` — a CBOR map — written under `master_key_epoch`.
@@ -81,7 +87,7 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     ciborium::into_writer(value, &mut bytes).map_err(|error| {
         Error::ControlPayloadEncodeFailed {
-            detail: error.to_string(),
+            cause: CborEncodeFailure::writing(error),
         }
     })?;
     Ok(bytes)

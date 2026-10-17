@@ -12,7 +12,7 @@ use crate::local_scan::source_file::SourceFile;
 /// its modification time: a browser does not say when the person's own file
 /// was created. The file the drop writes has a birth time all the same — the
 /// moment the drop wrote it — and on a filesystem that reports one, a scan
-/// would read that moment off it and record it as the Entry's `original_btime`.
+/// would read that moment off it and record it as the Entry's `captured_btime`.
 /// That is the one value FM-9 says is never filled in, and this one would not
 /// even be a stand-in: it is a fact about the copy and not about the file.
 ///
