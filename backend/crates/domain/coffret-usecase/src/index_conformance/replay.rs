@@ -410,3 +410,81 @@ pub async fn a_captured_path_survives_a_replay_and_a_restore(fixture: &IndexUnde
         "a restore fills the captured path from the Snapshot",
     );
 }
+
+/// Each Entry keeps the entry number its place in its addition's table gives
+/// it, through a replay, a query, a checkpoint, and a restore of that
+/// checkpoint (spec: FM-9, FM-15, FM-16).
+///
+/// The Pack's table lists its Entries in an order that is not their Entry Path
+/// order, so a catalog that numbered Entries by where they sort rather than by
+/// where they stand in the table fails here — which is the guess FM-16 forbids.
+pub async fn an_entry_number_survives_a_replay_and_a_restore(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .apply(record(
+            0,
+            vec![
+                addition(
+                    1,
+                    ContainerKind::Pack,
+                    &["albums/c.jpg", "albums/a.jpg", "albums/b.jpg"],
+                ),
+                addition(2, ContainerKind::OneFile, &["notes/only.txt"]),
+            ],
+            Vec::new(),
+        ))
+        .await
+        .expect("applying the first record must succeed");
+
+    let numbered = |locations: Vec<coffret_model::EntryLocation>| {
+        locations
+            .into_iter()
+            .map(|location| {
+                (
+                    location.entry.path.as_str().to_owned(),
+                    location.container_id,
+                    location.entry_number.get(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = vec![
+        ("albums/a.jpg".to_owned(), container_id(1), 1),
+        ("albums/b.jpg".to_owned(), container_id(1), 2),
+        ("albums/c.jpg".to_owned(), container_id(1), 0),
+        ("notes/only.txt".to_owned(), container_id(2), 0),
+    ];
+    assert_eq!(
+        numbered(
+            index
+                .entries_under(None)
+                .await
+                .expect("listing the Library must succeed")
+        ),
+        expected,
+        "each Entry is numbered by its place in its Container's table",
+    );
+
+    let snapshot = index
+        .snapshot()
+        .await
+        .expect("an applied catalog has a state to checkpoint");
+    assert_eq!(numbered(snapshot.entries().to_vec()), expected);
+
+    let other = fixture.other();
+    other
+        .restore(snapshot)
+        .await
+        .expect("restoring a Snapshot must succeed");
+    assert_eq!(
+        numbered(
+            other
+                .entries_under(None)
+                .await
+                .expect("listing the Library must succeed")
+        ),
+        expected,
+        "a restore takes each Entry's number from the Snapshot",
+    );
+}

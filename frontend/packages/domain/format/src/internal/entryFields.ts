@@ -4,11 +4,11 @@
  * A Container's meta section and the control payloads record the same Entry,
  * and all but three of the keys are the same keys: `offset`, `size`, `hash`,
  * `mime`, and `derived_from` are written and read identically wherever the map
- * travels. Only the values a later rename could move are spelled differently —
- * `captured_path` / `captured_mtime` / `captured_btime` in the meta section,
- * where they state what one immutable object captured, against `path` /
- * `mtime` / `btime` in a record and a Snapshot, where they state what the
- * Library holds now; a record and a Snapshot carry the meta section's
+ * travels. Only the values the Library may later hold differently are spelled
+ * differently — `captured_path` / `captured_mtime` / `captured_btime` in the
+ * meta section, where they state what one immutable object captured, against
+ * `path` / `mtime` / `btime` in a record and a Snapshot, where they state what
+ * the Library holds now; a record and a Snapshot carry the meta section's
  * `captured_path` beside their `path` wherever the two differ. Those live in
  * `metaEntryMap.ts` and `catalogEntryMap.ts`; everything neither spelling
  * changes lives here, so a field added to an Entry cannot arrive in one shape
@@ -159,5 +159,23 @@ export function storedPath(
   if (path !== path.normalize('NFC')) {
     fail('unnormalized_entry_path', `the ${label} of an entry is not normalized to NFC`);
   }
+  requireEntryPathShape(path, label);
   return path;
+}
+
+/**
+ * Refuses a stored path outside the shape EP-2 spells: non-empty, relative,
+ * `/`-separated, with no empty, `.` or `..` component and no NUL.
+ *
+ * Nothing holding to EP-2 writes such a path, so a decoded one is malformed
+ * rather than trimmed or resolved into something admissible. As above, the path
+ * stays out of the message.
+ */
+function requireEntryPathShape(path: string, label: string): void {
+  const admissible =
+    !path.includes('\u0000') &&
+    path.split('/').every((component) => component !== '' && component !== '.' && component !== '..');
+  if (!admissible) {
+    fail('malformed_entry_path', `the ${label} of an entry is not an Entry Path`);
+  }
 }

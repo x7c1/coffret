@@ -104,6 +104,16 @@ impl EntryPath {
         self.0.split('/').next().unwrap_or(&self.0)
     }
 
+    /// The top-level component coffret reserves for derived Entries, such as
+    /// thumbnails (spec: FM-15).
+    pub const DERIVED_COMPONENT: &'static str = ".coffret-derived";
+
+    /// Whether this path occupies the reserved derived namespace: the
+    /// component itself, or anything beneath it (spec: FM-15).
+    pub fn is_derived(&self) -> bool {
+        self.top_level() == Self::DERIVED_COMPONENT
+    }
+
     /// Whether this path is `prefix` itself or lies beneath it.
     ///
     /// A prefix covers the Entry at exactly that path and everything under

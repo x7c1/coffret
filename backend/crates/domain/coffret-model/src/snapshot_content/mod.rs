@@ -26,11 +26,11 @@ mod tests;
 ///
 /// The rules the rest of it holds to are FM-16's, and they are held here rather
 /// than at each reader: the Containers are in ID order, the Entries in the
-/// canonical order of their Entry Path bytes (spec: EP-3), and every Entry
-/// names a Container this content lists. A device restoring from one of these
-/// therefore has nothing left to check. All three are [`new`](Self::new)'s to
-/// state, so everything this type answers below answers without a refusal to
-/// report.
+/// canonical order of their Entry Path bytes (spec: EP-3), every Entry names a
+/// Container this content lists, and no two Entries carry one Container and
+/// entry number (spec: FM-9). A device restoring from one of these therefore
+/// has nothing left to check. All four are [`new`](Self::new)'s to state, so
+/// everything this type answers below answers without a refusal to report.
 ///
 /// It is a domain value here. Encoding it, encrypting it under a purpose key,
 /// and framing it as a control object is the format layer's business

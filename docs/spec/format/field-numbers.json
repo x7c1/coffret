@@ -71,6 +71,11 @@
     { "map": "keyring", "name": "mapping", "number": 2 },
     { "map": "keyring_element", "name": "id", "number": 0 },
     { "map": "keyring_element", "name": "envelope", "number": 1 },
-    { "map": "keyring_element", "name": "key_lost", "number": 2 }
+    { "map": "keyring_element", "name": "key_lost", "number": 2 },
+    { "map": "journal_record", "name": "renames", "number": 10 },
+    { "map": "rename", "name": "container", "number": 0 },
+    { "map": "rename", "name": "entry", "number": 1 },
+    { "map": "rename", "name": "path", "number": 2 },
+    { "map": "snapshot_entry", "name": "entry", "number": 10 }
   ]
 }

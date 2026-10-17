@@ -6,10 +6,11 @@ use coffret_model::{
 
 use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
-    CONTAINERS, ENTRIES, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
+    CONTAINERS, ENTRIES, ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
     KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
+    SCHEMA_WITHOUT_ENTRY_NUMBERS,
 };
-use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
+use crate::control::cbor::{deserialization_failed, entry_number, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, MalformedDetail, Result};
@@ -43,6 +44,10 @@ use crate::field_numbers;
 ///
 /// The array orders and every `container` index are verified rather than
 /// repaired, for the reason FM-16 gives.
+///
+/// A Snapshot of schema 2 carries no entry numbers and is refused with
+/// [`Error::SnapshotPredatesEntryNumbers`], which a catch-up meets by replaying
+/// the Journal instead of starting from it (spec: FM-16).
 pub fn decode(
     payload: &ControlPayload,
     kind: ControlObjectKind,
@@ -62,8 +67,13 @@ pub fn decode(
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < SCHEMA_WITHOUT_ENTRY_NUMBERS {
         return Err(Error::UnsupportedIndexSnapshotSchema { schema });
+    }
+    if schema < SCHEMA {
+        // Its Entries are in path order and carry no position, and nothing
+        // here may make one up (spec: FM-16).
+        return Err(Error::SnapshotPredatesEntryNumbers { schema });
     }
 
     let containers = fields
@@ -129,6 +139,15 @@ fn refused_content(error: coffret_model::Error) -> Error {
             entry,
             container_id,
         },
+        coffret_model::Error::SnapshotNamesOneEntryTwice {
+            entry,
+            container_id,
+            entry_number,
+        } => Error::SnapshotNamesOneEntryTwice {
+            entry,
+            container_id,
+            entry_number,
+        },
         coffret_model::Error::CheckpointJournalAheadOfHead {
             head_generation,
             journal_generation,
@@ -172,8 +191,8 @@ fn activation(
     }))
 }
 
-/// One Entry: the catalog's entry map, plus the Container it names by index
-/// (spec: FM-16).
+/// One Entry: the catalog's entry map, plus the Container it names by index and
+/// its entry number in that Container (spec: FM-16).
 fn entry(
     index: usize,
     value: &Value,
@@ -192,11 +211,13 @@ fn entry(
             containers: containers.len(),
         });
     };
+    let entry_number = entry_number(&fields, ENTRY, malformed)?;
     Ok(EntryLocation {
         container_id: containers[position].id,
-        // `container` is the Snapshot's own field and no part of the entry
-        // map, and `WireCatalogEntry` ignores what it does not know, so the
-        // whole map is handed over as it stands.
+        entry_number,
+        // `container` and `entry` are the Snapshot's own fields and no part of
+        // the entry map, and `WireCatalogEntry` ignores what it does not know,
+        // so the whole map is handed over as it stands.
         entry: value
             .deserialized::<WireCatalogEntry>()
             .map_err(|error| deserialization_failed(error, malformed_detail))?

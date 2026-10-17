@@ -1,6 +1,7 @@
 use crate::container_id::ContainerId;
 use crate::entry_extent::EntryExtent;
 use crate::entry_metadata::EntryMetadata;
+use crate::entry_number::EntryNumber;
 use crate::entry_path::EntryPath;
 
 /// Where the Entry currently at one Entry Path lives.
@@ -17,6 +18,10 @@ use crate::entry_path::EntryPath;
 pub struct EntryLocation {
     /// The Container holding this Entry.
     pub container_id: ContainerId,
+    /// The Entry's position in that Container's entry table: with
+    /// `container_id`, the name for this Entry that a rename leaves
+    /// unchanged (spec: FM-9).
+    pub entry_number: EntryNumber,
     /// What that Container's entry table records about it (spec: FM-9).
     pub entry: EntryMetadata,
 }

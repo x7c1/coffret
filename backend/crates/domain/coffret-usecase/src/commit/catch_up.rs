@@ -233,6 +233,9 @@ pub(crate) async fn catch_up(
 /// still usable. A Storage failure is not a verdict about validity and is
 /// reported. Which of the two a refusal is, is [`skippable`]'s to say.
 ///
+/// A Snapshot from before entry numbers is passed over too, though it opens: it
+/// is a sound object, only not one a catalog may start from (spec: FM-16).
+///
 /// That skipping covers a candidate this device could not open at all. One that
 /// opens and then carries a payload no writer could have written — a Snapshot
 /// checkpointing a head other than the one its name is for, say — is reported
@@ -275,11 +278,31 @@ async fn adoptable(
                 // the rule that a Snapshot checkpoints the head it is named for
                 // is held (spec: CK-10): a candidate that checkpoints another
                 // head is not one this device may start from.
-                let payload = decode_index_snapshot(&decoded.payload, decoded.kind, generation)
-                    .map_err(|error| CommitError::CorruptControlObject {
-                        object: name.clone(),
-                        fault: ControlObjectFault::Unopenable(error),
-                    })?;
+                let payload =
+                    match decode_index_snapshot(&decoded.payload, decoded.kind, generation) {
+                        Ok(payload) => payload,
+                        // Sound, but from before entry numbers: its Entries carry no
+                        // position in their Container, and nothing here may make one
+                        // up from path order. So it is no starting point, and the
+                        // walk goes on down — to an older checkpoint that has them,
+                        // or to none, and a replay of every record from `head-0`,
+                        // which numbers each Entry by its place in its addition
+                        // (spec: FM-16).
+                        Err(coffret_format::Error::SnapshotPredatesEntryNumbers { schema }) => {
+                            debug!(
+                                object = %spelling,
+                                schema,
+                                "passing over a checkpoint that predates entry numbers",
+                            );
+                            continue;
+                        }
+                        Err(error) => {
+                            return Err(CommitError::CorruptControlObject {
+                                object: name.clone(),
+                                fault: ControlObjectFault::Unopenable(error),
+                            })
+                        }
+                    };
                 return Ok(Some((name, payload.content)));
             }
             // A head that is an ordinary commit: not a checkpoint, but exactly

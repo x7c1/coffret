@@ -20,12 +20,13 @@ export interface DerivedFrom {
  * never the Entry.
  *
  * These are the values as of the moment the Container was written, which is why
- * the meta section spells the ones a rename could move `captured_path`,
- * `captured_mtime`, and `captured_btime` (spec: FM-9). A Container is
- * immutable, so nothing rewrites them; the Journal and its checkpoint carry the
- * current spelling, which is why a record and a Snapshot say `path`, `mtime`,
- * and `btime` for the same values (spec: FM-15, FM-16). One interface serves
- * both because the values are the same values — only the map key differs.
+ * the meta section spells the ones the Library may later hold differently
+ * `captured_path`, `captured_mtime`, and `captured_btime` (spec: FM-9). A
+ * Container is immutable, so nothing rewrites them; the Journal and its
+ * checkpoint carry the current spelling, which is why a record and a Snapshot
+ * say `path`, `mtime`, and `btime` for the same values (spec: FM-15, FM-16).
+ * One interface serves both because the values are the same values — only the
+ * map key differs.
  *
  * The one exception is the name. The catalog keeps both the Entry Path the
  * Library holds now (`path`) and the one the owning Container's meta section
@@ -43,8 +44,8 @@ export interface EntryMetadata {
    * its name as of the moment that Container was written (spec: FM-9).
    *
    * The name it was captured under rather than where it stands. Equal to `path`
-   * until a rename moves the Entry, and never moved by one, because the
-   * Container it describes is never rewritten.
+   * until a rename gives the Entry a new path, and never changed by one, because
+   * the Container it describes is never rewritten.
    */
   capturedPath: string;
   /** Byte offset of this Entry's plaintext in the Container's plaintext stream. */

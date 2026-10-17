@@ -6,13 +6,18 @@
 [Catalog](../catalog/). A **batch** is the unit it
 records: the changes one run prepares together and
 commits all at once or not at all. Each batch appends one Journal record, a
-small control [Storage Object](../storage-object/). The current format carries:
+small control [Storage Object](../storage-object/). The current format carries
+four vocabularies:
 
 - the Containers the batch added, with their ciphertext hashes and the
   Entries each one holds — each Entry under its current
   [Entry Path](../entry-path/) and, where it differs, the captured path its
-  Container recorded (see [Catalog](../catalog/#domain-rules))
+  Container recorded (see [Catalog](../catalog/#domain-rules)), and in the
+  order of its Container's entry table, so its position is its entry number
 - the Containers it removed
+- the Entries it renamed, each named by its Container ID and
+  [entry number](../container/entry/#mental-model) and given a new current
+  Entry Path — the old name is the Catalog's and is not repeated
 - the exact [Keyring](../keyring/) commitment the batch selected
 
 Replaying the Journal reconstructs the Catalog, including the current Container
@@ -92,8 +97,9 @@ would fence nobody (spec: FM-12).
   Container's own meta section stays the authority on what it holds
   (spec: CP-11, CK-9, FM-15).
   - The record's byte form lists its additions and removals in Container ID
-    order, so one committed state has exactly one encoding whichever device
-    wrote it (spec: FM-15).
+    order, and its renames in Container ID and then entry number order, so one
+    committed state has exactly one encoding whichever device wrote it
+    (spec: FM-15).
 - Each commit selects the exact Keyring generation whose key table matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage
@@ -124,20 +130,24 @@ would fence nobody (spec: FM-12).
 
 ## Technical Constraints
 
-**Planned rename vocabulary:** a batch will also carry explicit name changes
-from a Container ID and entry number to a new Entry Path. A folder rename
-will enumerate the current Entries being renamed; replay will not discover
-additional Entries by interpreting a prefix. Such a batch changes names
-without replacing or uploading Container ciphertext.
+**Rename is planned, not implemented.** The format already carries the rename
+vocabulary above, but no operation writes a rename yet and replay does not yet
+apply one. Once it does, a record's renames take effect together, after its
+removals and before its additions, and the state the whole record leaves
+keeps one Entry per Entry Path, so two Entries can swap names in one record
+(spec: FM-15, RV-5). A folder rename will enumerate the current Entries being
+renamed; replay will not discover additional Entries by interpreting a prefix.
+Such a batch changes names without replacing or uploading Container
+ciphertext.
 
-The current Journal format does not yet encode these changes. Their rollout
-must cover rebase, checkpoint replay, and device-local materialization
-relocations together. A content update prepared while another device renames
-the same Entry must, once rebased, land at the Entry's new Entry Path rather
-than bring back the old one; competing renames or an occupied destination must
-surface a conflict. A failed local relocation must retain its old
-materialization record and remain pending for a later catch-up. These are
-requirements for rename, not guarantees of the current implementation.
+The rest of the rollout must cover applying renames on replay, rebase, and
+device-local materialization relocations together. A content update prepared
+while another device renames the same Entry must, once rebased, land at the
+Entry's new Entry Path rather than bring back the old one; competing renames
+or an occupied destination must surface a conflict. A failed local relocation
+must retain its old materialization record and remain pending for a later
+catch-up. These are requirements for rename, not guarantees of the current
+implementation.
 
 ## Related Concepts
 

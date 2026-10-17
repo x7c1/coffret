@@ -52,7 +52,14 @@ pub static JOURNAL_RECORD: MapFields = MapFields {
         field("keyring_set_digest", 7),
         holding("additions", 8, &ADDITION),
         field("removals", 9),
+        holding("renames", 10, &RENAME),
     ],
+};
+
+/// One element of a Journal record's `renames` (spec: FM-15).
+pub static RENAME: MapFields = MapFields {
+    map: "rename",
+    fields: &[field("container", 0), field("entry", 1), field("path", 2)],
 };
 
 /// One element of a Journal record's `additions` (spec: FM-15).
@@ -130,6 +137,7 @@ pub static SNAPSHOT_ENTRY: MapFields = MapFields {
         holding("derived_from", 7, &DERIVED_FROM),
         field("captured_path", 8),
         field("container", 9),
+        field("entry", 10),
     ],
 };
 
@@ -152,11 +160,12 @@ pub static KEYRING_ELEMENT: MapFields = MapFields {
 /// Every map kind this crate declares, which is every map kind the registry
 /// lists.
 #[cfg(test)]
-pub(crate) static ALL: [&MapFields; 11] = [
+pub(crate) static ALL: [&MapFields; 12] = [
     &META,
     &META_ENTRY,
     &DERIVED_FROM,
     &JOURNAL_RECORD,
+    &RENAME,
     &ADDITION,
     &ADDITION_ENTRY,
     &INDEX_SNAPSHOT,

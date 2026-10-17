@@ -1,5 +1,6 @@
 use crate::container_addition::ContainerAddition;
 use crate::container_id::ContainerId;
+use crate::entry_rename::EntryRename;
 use crate::generation::Generation;
 use crate::index_checkpoint::IndexCheckpoint;
 use crate::keyring_commitment::KeyringCommitment;
@@ -20,8 +21,9 @@ mod tests;
 /// they name hold (spec: CP-11, CK-9).
 ///
 /// Two rules FM-15 states are held here rather than at each reader: the record
-/// names the head it succeeds, and its two collections are in Container ID
-/// order. A device replaying one of these therefore follows the head chain and
+/// names the head it succeeds, and its collections are in canonical order —
+/// `additions` and `removals` by Container ID, `renames` by the Entry they
+/// name. A device replaying one of these therefore follows the head chain and
 /// re-encodes the same bytes without checking either again. Both are
 /// [`new`](Self::new)'s to state, so everything this type answers below answers
 /// without a refusal to report.
@@ -39,6 +41,7 @@ pub struct JournalRecord {
     snapshot_slot: Option<String>,
     additions: Vec<ContainerAddition>,
     removals: Vec<ContainerId>,
+    renames: Vec<EntryRename>,
 }
 
 impl JournalRecord {
@@ -115,6 +118,17 @@ impl JournalRecord {
     /// twice (spec: CP-14).
     pub fn removals(&self) -> &[ContainerId] {
         &self.removals
+    }
+
+    /// The Entries the batch gave a new current Entry Path, ordered by
+    /// Container ID and then entry number (spec: FM-15).
+    ///
+    /// Empty on a record that renames nothing, which is every record a schema
+    /// before 3 wrote. Whether each one names a current Entry, and whether the
+    /// state they leave keeps one Entry per path, is asked where the record is
+    /// applied, since it depends on the catalog it is applied to.
+    pub fn renames(&self) -> &[EntryRename] {
+        &self.renames
     }
 
     /// The additions, for a replay that consumes each Container and the Entries

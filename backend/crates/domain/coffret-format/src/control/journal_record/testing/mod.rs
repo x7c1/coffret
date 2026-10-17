@@ -1,8 +1,8 @@
 //! Helpers shared by the Journal record payload's tests.
 
 use coffret_model::{
-    Btime, ContainerAddition, ContainerId, ContainerKind, EntryMetadata, Generation, JournalRecord,
-    MasterKeyEpoch,
+    Btime, ContainerAddition, ContainerId, ContainerKind, EntryMetadata, EntryNumber, EntryRename,
+    Generation, JournalRecord, MasterKeyEpoch,
 };
 
 use crate::control::testing::{container_id, entry, epoch, keyring, summary};
@@ -42,6 +42,31 @@ pub(super) fn record() -> JournalRecord {
         ],
         vec![container_id(0x99), container_id(0x11)],
     )
+}
+
+/// The same record, also renaming three Entries of Containers a catalog
+/// already holds (spec: FM-15).
+///
+/// Two of them are in one Container, so the order within a Container — by
+/// entry number — travels as well as the order across Containers.
+pub(super) fn renamed_record() -> JournalRecord {
+    record()
+        .with_renames(vec![
+            rename(0x05, 0, "albums/renamed/first.jpg"),
+            rename(0x05, 3, "albums/renamed/fourth.jpg"),
+            rename(0x30, 1, "notes/kept.txt"),
+        ])
+        .expect("a fixture renames in canonical order")
+}
+
+/// The rename of entry `number` of the Container `seed` names to `path`.
+pub(super) fn rename(seed: u8, number: u32, path: &str) -> EntryRename {
+    EntryRename::new(
+        container_id(seed),
+        EntryNumber::new(u64::from(number)).expect("every u32 is an entry number"),
+        entry_path(path),
+    )
+    .expect("a fixture renames outside the reserved namespace")
 }
 
 /// The record at [`GENERATION`] adding and removing what the two lists name,

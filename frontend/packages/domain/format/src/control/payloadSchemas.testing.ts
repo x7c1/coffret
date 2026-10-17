@@ -147,6 +147,26 @@ export function record(): JournalRecord {
     snapshotSlot: 'minted-idx-7',
     additions: [addition(0x40, 'pack'), addition(0x21, 'one-file')],
     removals: [containerId(0x99), containerId(0x11)],
+    renames: [],
+  };
+}
+
+/**
+ * The same record, also renaming three Entries of Containers a catalog already
+ * holds (spec: FM-15).
+ *
+ * Two are in one Container, so the order by entry number travels beside the
+ * order by Container, and they are handed over out of that order so a case
+ * comparing bytes compares what the encoder ordered.
+ */
+export function renamedRecord(): JournalRecord {
+  return {
+    ...record(),
+    renames: [
+      { containerId: containerId(0x30), entryNumber: 1, path: 'notes/kept.txt' },
+      { containerId: containerId(0x05), entryNumber: 3, path: 'albums/renamed/fourth.jpg' },
+      { containerId: containerId(0x05), entryNumber: 0, path: 'albums/renamed/first.jpg' },
+    ],
   };
 }
 
@@ -164,6 +184,7 @@ export function firstRecord(): JournalRecord {
     keyring: keyring(0n),
     additions: [addition(0x40, 'pack')],
     removals: [],
+    renames: [],
   };
 }
 
@@ -228,17 +249,17 @@ export const CAPTURED_PATH = 'imports/a.jpg';
  * Entry would, and the rest carry their current one.
  */
 export function content(): SnapshotContent {
-  const born = located(0x40, 'albums/spring/a.jpg', 0n, 100n);
+  const born = located(0x40, 0, 'albums/spring/a.jpg', 0n, 100n);
   born.entry.btimeSeconds = BORN;
   born.entry.capturedPath = CAPTURED_PATH;
   return {
     checkpoint: checkpoint(GENERATION.value),
     containers: [summary(0x40, 'pack'), summary(0x21, 'one-file'), summary(0x33, 'pack')],
     entries: [
-      located(0x33, 'photos/2019/b.jpg', 0n, 90n),
+      located(0x33, 0, 'photos/2019/b.jpg', 0n, 90n),
       born,
-      located(0x21, 'books/atlas/page-001.png', 0n, 200n),
-      located(0x40, 'photos/2019/a.jpg', 100n, 80n),
+      located(0x21, 0, 'books/atlas/page-001.png', 0n, 200n),
+      located(0x40, 1, 'photos/2019/a.jpg', 100n, 80n),
     ],
   };
 }
@@ -259,14 +280,15 @@ export function activating(): IndexSnapshotPayload {
   };
 }
 
-/** One Entry of the Library, held by the Container with the given seed. */
+/** One Entry of the Library: entry `entryNumber` of the Container with the given seed. */
 export function located(
   seed: number,
+  entryNumber: number,
   path: string,
   offset: bigint,
   size: bigint,
 ): EntryLocation {
-  return { containerId: containerId(seed), entry: entry(path, offset, size) };
+  return { containerId: containerId(seed), entryNumber, entry: entry(path, offset, size) };
 }
 
 /**

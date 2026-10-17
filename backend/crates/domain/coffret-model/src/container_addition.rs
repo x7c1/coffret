@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::container_summary::ContainerSummary;
+use crate::entry_location::EntryLocation;
 use crate::entry_metadata::EntryMetadata;
+use crate::entry_number::EntryNumber;
 use crate::entry_path::EntryPath;
 use crate::error::{Error, Result};
 
@@ -48,10 +50,13 @@ impl ContainerAddition {
     ///   where the walk had reached (spec: FM-9).
     /// - [`Error::AdditionNamesOnePathTwice`] where two Entries of the table
     ///   name one Entry Path (spec: EP-5).
+    /// - [`Error::EntryNumberOutOfRange`] where the table is longer than entry
+    ///   numbers reach, so that some Entry of it would have none (spec: FM-9).
     pub fn new(container: ContainerSummary, entries: Vec<EntryMetadata>) -> Result<Self> {
         if entries.is_empty() {
             return Err(Error::AdditionWithoutEntries);
         }
+        EntryNumber::at_position(entries.len() - 1)?;
         let mut expected = 0u64;
         let mut named: BTreeSet<&EntryPath> = BTreeSet::new();
         for (entry, metadata) in entries.iter().enumerate() {
@@ -87,6 +92,29 @@ impl ContainerAddition {
     pub fn into_parts(self) -> (ContainerSummary, Vec<EntryMetadata>) {
         (self.container, self.entries)
     }
+
+    /// The Container and its Entries as the catalog locates them, each with
+    /// the entry number its position in the table gives it (spec: FM-9,
+    /// FM-15).
+    ///
+    /// An addition carries its numbers implicitly, in the order of the table it
+    /// copies, so this is where a replay reads them off: the first Entry is
+    /// number 0, and so on without gaps.
+    pub fn into_locations(self) -> (ContainerSummary, Vec<EntryLocation>) {
+        let container_id = self.container.id;
+        let locations = self
+            .entries
+            .into_iter()
+            .enumerate()
+            .map(|(position, entry)| EntryLocation {
+                container_id,
+                entry_number: EntryNumber::at_position(position)
+                    .expect("`new` refused a table longer than entry numbers reach"),
+                entry,
+            })
+            .collect();
+        (self.container, locations)
+    }
 }
 
 #[cfg(test)]
@@ -96,6 +124,22 @@ mod tests {
 
     // FM-10: a Container is built out of Entries, so a table holding none
     // describes a Container no writer produces.
+    #[test]
+    fn an_addition_numbers_its_entries_by_position() {
+        let addition =
+            ContainerAddition::new(container_summary(1), table(&[(0, 4), (4, 4), (8, 0)]))
+                .expect("a table that tiles");
+        let (_, locations) = addition.into_locations();
+        let numbers: Vec<u32> = locations
+            .iter()
+            .map(|location| location.entry_number.get())
+            .collect();
+        assert_eq!(numbers, [0, 1, 2]);
+        assert!(locations
+            .iter()
+            .all(|location| location.container_id == container_summary(1).id));
+    }
+
     #[test]
     fn an_addition_with_no_entries_cannot_exist() {
         let result = ContainerAddition::new(container_summary(1), Vec::new());

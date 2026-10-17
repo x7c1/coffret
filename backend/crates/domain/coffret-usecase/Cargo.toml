@@ -60,6 +60,11 @@ tracing = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+# Rewriting a Snapshot body into the schema-2 form an older build wrote, which
+# no encoder in the workspace writes any more, for the catch-up cases that meet
+# one (spec: FM-16).
+ciborium = { workspace = true }
+
 # The crate itself, with the contract suites turned on: an integration test
 # cannot enable a feature of the crate it tests any other way, and the in-memory
 # store and catalog the suites run against live behind the same feature.

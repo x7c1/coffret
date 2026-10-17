@@ -56,6 +56,11 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
   Control state carries the captured path only where it differs from the
   current one, so an Entry pays for its second name only once it has been
   renamed (spec: FM-9, FM-15, FM-16).
+- The Catalog refers to an Entry by its Container ID and **entry number**,
+  the Entry's position in that Container's immutable entry table, and not by
+  its name: the pair names one Entry whatever path it currently stands at,
+  which is what lets a change of name be recorded without the name it
+  replaces (spec: FM-9, FM-15, FM-16).
 - Reconstructing the Catalog proves the state described by the available
   authenticated history; Storage can withhold newer history, so cleanup needs
   separate proof before deleting a suspected orphan (spec: RV-6, OC-1, OC-3).
@@ -68,9 +73,10 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 The planned rename operation changes an Entry's current path while preserving
 its stored identity, the Container ID and entry number. Restore must recover
 that name from control state; [salvage](../journal/#domain-rules) can recover
-only the name captured in the Container. The current implementation does not
-yet support metadata-only rename; its Journal, Snapshot, fetch, and local
-relocation changes must land together.
+only the name captured in the Container. The Journal and Snapshot formats
+already carry entry numbers and renames, but the current implementation does
+not yet support metadata-only rename: applying renames on replay, fetch by
+entry number, and local relocation must land together.
 
 ## Related Concepts
 

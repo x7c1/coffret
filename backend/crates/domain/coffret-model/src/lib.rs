@@ -78,8 +78,14 @@ pub use entry_location::EntryLocation;
 mod entry_metadata;
 pub use entry_metadata::EntryMetadata;
 
+mod entry_number;
+pub use entry_number::EntryNumber;
+
 mod entry_path;
 pub use entry_path::EntryPath;
+
+mod entry_rename;
+pub use entry_rename::EntryRename;
 
 mod error;
 pub use error::{Error, Result};

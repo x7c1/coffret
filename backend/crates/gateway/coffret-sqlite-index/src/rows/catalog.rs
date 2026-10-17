@@ -1,7 +1,7 @@
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ControlObjectName,
-    DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryPath, Generation,
+    IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
@@ -63,6 +63,8 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
 
     Ok(EntryLocation {
         container_id: container_id(row, "container_id", OPERATION)?,
+        entry_number: EntryNumber::new(from_integer(row, "entry_number", OPERATION)?)
+            .map_err(unreadable_model(OPERATION))?,
         entry: EntryMetadata {
             path: entry_path(row, "path", OPERATION)?,
             captured_path: entry_path(row, "captured_path", OPERATION)?,

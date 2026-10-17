@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::{ContainerId, Generation, PathDefect, Redacted};
+use crate::{ContainerId, EntryNumber, Generation, PathDefect, Redacted};
 
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -175,7 +175,7 @@ pub enum Error {
     /// rather than handing it over unsorted: that is what `canonical` is for.
     CollectionOutOfCanonicalOrder {
         /// The collection, as the rule that orders it names it: `additions`,
-        /// `removals`, `containers`, `entries`, or `mapping`.
+        /// `removals`, `renames`, `containers`, `entries`, or `mapping`.
         collection: &'static str,
         /// Position of the first element that does not follow its predecessor.
         index: usize,
@@ -251,6 +251,35 @@ pub enum Error {
         /// The Container it named.
         container_id: ContainerId,
     },
+    /// An Index Snapshot names one Entry of one Container twice
+    /// (spec: FM-16).
+    ///
+    /// `(Container ID, entry number)` names exactly one Entry (spec: FM-9), so
+    /// two Snapshot entries carrying the same pair are one Entry at two paths.
+    SnapshotNamesOneEntryTwice {
+        /// Position of the second Snapshot entry naming the pair.
+        entry: usize,
+        /// The Container both name.
+        container_id: ContainerId,
+        /// The entry number both name.
+        entry_number: EntryNumber,
+    },
+    /// An entry number past the 32 bits the format gives one (spec: FM-9).
+    ///
+    /// The number travels: it is a position in a table, the format's own
+    /// bookkeeping, and names nothing a person chose.
+    EntryNumberOutOfRange {
+        /// The number as it was presented.
+        number: u64,
+    },
+    /// A rename's new Entry Path lies under the top-level component reserved
+    /// for derived Entries (spec: FM-15).
+    ///
+    /// Derived Entries are not renamed by this version, and an Entry renamed
+    /// into their namespace would become one. Nothing about the path travels:
+    /// which path it was is Library content, and the caller placing the
+    /// refusal knows which element carried it.
+    RenameIntoReservedNamespace,
 }
 
 impl fmt::Display for Error {
@@ -341,6 +370,21 @@ impl fmt::Display for Error {
             Self::SnapshotEntryWithoutContainer { entry, container_id } => write!(
                 f,
                 "entry {entry} is held by {container_id}, which this Snapshot does not list",
+            ),
+            Self::SnapshotNamesOneEntryTwice {
+                entry,
+                container_id,
+                entry_number,
+            } => write!(
+                f,
+                "entry {entry} names entry number {entry_number} of {container_id}, which an earlier entry already names",
+            ),
+            Self::EntryNumberOutOfRange { number } => write!(
+                f,
+                "{number} is past the largest entry number the format admits",
+            ),
+            Self::RenameIntoReservedNamespace => f.write_str(
+                "a rename's new Entry Path lies under the component reserved for derived Entries",
             ),
         }
     }
@@ -437,6 +481,17 @@ impl Redacted for Error {
             Self::SnapshotEntryWithoutContainer { entry, container_id } => format!(
                 "Model::SnapshotEntryWithoutContainer(entry={entry}, container_id={container_id})"
             ),
+            Self::SnapshotNamesOneEntryTwice {
+                entry,
+                container_id,
+                entry_number,
+            } => format!(
+                "Model::SnapshotNamesOneEntryTwice(entry={entry}, container_id={container_id}, entry_number={entry_number})"
+            ),
+            Self::EntryNumberOutOfRange { number } => {
+                format!("Model::EntryNumberOutOfRange(number={number})")
+            }
+            Self::RenameIntoReservedNamespace => "Model::RenameIntoReservedNamespace".to_owned(),
         }
     }
 }

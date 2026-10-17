@@ -1,6 +1,7 @@
 import type { ContainerId } from './containerId.js';
 import type { ContainerSummary } from './containerSummary.js';
 import type { EntryMetadata } from './entry.js';
+import type { EntryRename } from './entryRename.js';
 import type { Generation } from './generation.js';
 import type { KeyringCommitment } from './indexCheckpoint.js';
 import type { MasterKeyEpoch } from './masterKeyEpoch.js';
@@ -69,4 +70,11 @@ export interface JournalRecord {
    * (spec: CP-14).
    */
   removals: ContainerId[];
+  /**
+   * The Entries the batch gave a new current Entry Path, each named by its
+   * Container and entry number (spec: FM-15).
+   *
+   * Empty on a record that renames nothing, as every record of schema 2 is.
+   */
+  renames: EntryRename[];
 }

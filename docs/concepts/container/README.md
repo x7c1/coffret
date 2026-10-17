@@ -56,6 +56,9 @@ the Container's [Key Envelope](../key-envelope/) from the
     for it, and the [Journal](../journal/) and
     its checkpoints are what say which is the Library's now (spec: FM-9,
     FM-15).
+  - The entry table's order never changes once written. An Entry's 0-based
+    position in it is its **entry number**, which with the Container ID names
+    one Entry whatever its current path (spec: FM-9).
 - **Opaque**: a Container's name is drawn independently of its content, so it
   names nothing about what is inside (spec: FM-3). What the provider still
   sees despite opaque naming is listed under

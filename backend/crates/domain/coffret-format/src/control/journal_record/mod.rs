@@ -4,8 +4,9 @@
 //! whole of what a device needs to replay that commit without opening a
 //! Container: the Keyring tuple the commit selected (spec: CP-10), the two
 //! slots the head reserves (spec: CP-2, CK-10), the Containers the batch
-//! added with their entry tables (spec: CP-11), and the Container IDs it
-//! removed (spec: CP-14).
+//! added with their entry tables (spec: CP-11), the Container IDs it
+//! removed (spec: CP-14), and the Entries it gave a new current Entry Path,
+//! each named by its Container and entry number (spec: FM-15).
 //!
 //! Two of the record's fields are not here, because the framing already carries
 //! them and one state must not have two answers: the record's own generation is
@@ -14,8 +15,8 @@
 //! whole [`ControlPayload`](crate::ControlPayload), and [`decode()`] is told
 //! the generation the header carried.
 //!
-//! Neither half of this module states the Container ID order `additions` and
-//! `removals` are written in: [`JournalRecord`](coffret_model::JournalRecord)
+//! Neither half of this module states the order `additions`, `removals`, and
+//! `renames` are written in: [`JournalRecord`](coffret_model::JournalRecord)
 //! holds them in it, so the encoder writes them out as they stand and the
 //! decoder hands what it read to that constructor. A payload out of order is
 //! therefore rejected rather than sorted into shape — sorting it would accept
@@ -27,6 +28,8 @@ pub use encode::encode;
 mod decode;
 pub use decode::decode;
 
+mod rename;
+
 #[cfg(test)]
 mod rejection_tests;
 #[cfg(test)]
@@ -35,9 +38,13 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload, and the lowest a
-/// reader accepts (spec: FM-15).
-const SCHEMA: u64 = 2;
+/// The schema this crate writes for a Journal record payload: 3, the first to
+/// carry `renames` (spec: FM-15).
+const SCHEMA: u64 = 3;
+
+/// The lowest schema a reader accepts. A record of schema 2 carries no
+/// `renames` and reads as one that renames nothing (spec: FM-15).
+const MIN_SCHEMA: u64 = 2;
 
 const PREV: &str = "prev";
 const NEXT_COMMIT_SLOT: &str = "next_commit_slot";
@@ -48,3 +55,4 @@ const KEYRING_SET_DIGEST: &str = "keyring_set_digest";
 const ADDITIONS: &str = "additions";
 const ENTRIES: &str = "entries";
 const REMOVALS: &str = "removals";
+const RENAMES: &str = "renames";

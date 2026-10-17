@@ -10,20 +10,21 @@ use crate::stream_extent::stream_extent;
 ///
 /// The same map as the meta section's `WireMetaEntry` — `offset`, `size`,
 /// `hash`, `mime`, and `derived_from` are shared with it verbatim — except the
-/// values a later rename could move. Those are named `path`, `mtime`, and
-/// `btime` here, without the `captured_` prefix FM-9 gives them, because a
-/// record and a Snapshot are the catalog's durable form: an addition's values
-/// are what the Library holds now, not what one immutable object happened to
-/// capture. That is also why the two are two structs rather than one with
-/// serde renames: the sharing is of the values, not of the fields. On the wire
-/// each field travels under the field number the registry gives it in the map kind that
-/// carries it ([`crate::field_numbers::ADDITION_ENTRY`],
+/// values the Library may later hold differently. Those are named `path`,
+/// `mtime`, and `btime` here, without the `captured_` prefix FM-9 gives them,
+/// because a record and a Snapshot are the catalog's durable form: an
+/// addition's values are what the Library holds now, not what one immutable
+/// object happened to capture. That is also why the two are two structs
+/// rather than one with serde renames: the sharing is of the values, not of
+/// the fields. On the wire each field travels under the field number the
+/// registry gives it in the map kind that carries it
+/// ([`crate::field_numbers::ADDITION_ENTRY`],
 /// [`crate::field_numbers::SNAPSHOT_ENTRY`]).
 ///
 /// The name is the one value that can be carried in both spellings: `path` is
 /// where the Entry stands in the Library now, and `captured_path` is the Entry
 /// Path the owning Container's meta section records — the name it was captured
-/// under, which no rename moves. `captured_path` is written only where it
+/// under, which no rename changes. `captured_path` is written only where it
 /// differs from `path`, so a map without it names an Entry whose two paths are
 /// one. A map carrying it equal to `path` is a second spelling of that same
 /// state and is refused.

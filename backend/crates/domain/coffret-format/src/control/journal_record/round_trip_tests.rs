@@ -6,8 +6,8 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, Generation};
 
 use super::testing::{
-    addition, addition_of, first_record, first_record_of, record, record_of, table, BORN,
-    CAPTURED_DIR, GENERATION,
+    addition, addition_of, first_record, first_record_of, record, record_of, renamed_record, table,
+    BORN, CAPTURED_DIR, GENERATION,
 };
 use super::{decode, encode};
 use crate::control::testing::{
@@ -25,6 +25,52 @@ fn a_record_with_everything_round_trips() {
     let payload = encode(&record).expect("encoding succeeds");
     let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
     assert_eq!(decoded, record);
+}
+
+// FM-15: a record's renames come back as they went in, each a map of the
+// Container, the entry number and the new path — and nothing else, since the
+// old name is the catalog's.
+#[test]
+fn a_record_with_renames_round_trips() {
+    let record = renamed_record();
+    let payload = encode(&record).expect("encoding succeeds");
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
+    assert_eq!(decoded, record);
+    assert_eq!(decoded.renames().len(), 3);
+
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    let renames = array(&mut fields, "renames");
+    assert_eq!(map_keys(&renames[0]), ["container", "entry", "path"]);
+}
+
+// FM-15: a record that renames nothing leaves `renames` out rather than writing
+// it empty, so a batch without renames costs nothing for them.
+#[test]
+fn a_record_without_renames_writes_no_renames_field() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    assert!(
+        !body_keys(&payload, &field_numbers::JOURNAL_RECORD).contains(&"renames".to_owned()),
+        "renames was written for a record that renames nothing"
+    );
+}
+
+// FM-15: Libraries created since the field-number format hold records of
+// schema 2, which carry no `renames`. A reader still accepts them, as records
+// that rename nothing.
+#[test]
+fn a_schema_2_record_reads_as_one_that_renames_nothing() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    *field(&mut fields, "schema") = Value::from(2u64);
+    let payload = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    );
+
+    let decoded = decode(&payload, generation(GENERATION)).expect("a schema 2 record reads");
+    assert_eq!(decoded, record());
+    assert!(decoded.renames().is_empty());
 }
 
 // FM-15, CP-2, CP-15: at generation 0 there is no predecessor, and a name-keyed

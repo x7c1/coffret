@@ -15,6 +15,12 @@
 //! reader has to check beyond the field shapes: an index past the end of
 //! `containers` is a Snapshot that cannot be read back into an Index at all.
 //!
+//! Beside it each Entry carries `entry`, its entry number in that Container's
+//! table (spec: FM-9). The Snapshot's own order is the Entry Path order, so the
+//! position would otherwise be lost, and a Snapshot of schema 2, which predates
+//! the field, is refused as a starting point rather than numbered by guesswork
+//! (spec: FM-16).
+//!
 //! What a Snapshot never carries is device state (spec: CK-7) — including
 //! [`SnapshotContent::adopted_from`](coffret_model::SnapshotContent::adopted_from),
 //! which is this Index's own provenance rather than Library content. The
@@ -42,8 +48,13 @@ mod size_tests;
 mod testing;
 
 /// The schema this crate writes for an Index Snapshot payload, and the lowest
-/// a reader accepts (spec: FM-16).
-const SCHEMA: u64 = 2;
+/// a reader adopts: 3, the first to carry each Entry's entry number
+/// (spec: FM-16).
+const SCHEMA: u64 = 3;
+
+/// The schema before entry numbers. A Snapshot of it is a sound object that
+/// no reader may start a catalog from (spec: FM-16).
+const SCHEMA_WITHOUT_ENTRY_NUMBERS: u64 = 2;
 
 const HEAD_GENERATION: &str = "head_generation";
 const JOURNAL_GENERATION: &str = "journal_generation";
@@ -54,6 +65,7 @@ const KEYRING_SET_DIGEST: &str = "keyring_set_digest";
 const CONTAINERS: &str = "containers";
 const ENTRIES: &str = "entries";
 const CONTAINER: &str = "container";
+const ENTRY: &str = "entry";
 const BASE_HEAD_GENERATION: &str = "base_head_generation";
 const ACTIVATION_SLOT: &str = "activation_slot";
 

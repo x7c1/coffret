@@ -62,17 +62,12 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
             .map_err(classify("removing a Container"))?;
     }
     for addition in record.into_additions() {
-        let (container, entries) = addition.into_parts();
-        let container_id = container.id;
+        // Each Entry keeps the number its place in the table gives it
+        // (spec: FM-9, FM-15).
+        let (container, located) = addition.into_locations();
         insert_container(connection, &container)?;
-        for entry in entries {
-            insert_entry(
-                connection,
-                &EntryLocation {
-                    container_id,
-                    entry,
-                },
-            )?;
+        for entry in &located {
+            insert_entry(connection, entry)?;
         }
     }
     // The checkpoint the record reaches; which Snapshot this catalog once
@@ -315,12 +310,13 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
     connection
         .execute(
             "INSERT INTO entries (
-                 path, container_id, \"offset\", size, mtime, btime, hash, mime,
-                 derived_from_container, derived_from_path, captured_path
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 path, container_id, entry_number, \"offset\", size, mtime, btime, hash,
+                 mime, derived_from_container, derived_from_path, captured_path
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
+                entry.entry_number.get(),
                 rows::to_integer(OPERATION, "offset", entry.entry.extent.offset())?,
                 rows::to_integer(OPERATION, "size", entry.entry.extent.size())?,
                 entry.entry.mtime.as_unix_seconds(),

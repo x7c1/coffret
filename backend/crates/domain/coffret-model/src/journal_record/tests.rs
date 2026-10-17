@@ -1,9 +1,11 @@
 //! What a record refuses to be built out of, and what one answers once built.
 
 use super::*;
+use crate::entry_number::EntryNumber;
 use crate::error::{Error, Result};
 use crate::testing::{
-    container_id, container_summary, generation, keyring_commitment, master_key_epoch, table,
+    container_id, container_summary, entry_path, generation, keyring_commitment, master_key_epoch,
+    table,
 };
 
 /// The addition of the Container `seed` names, holding one Entry.
@@ -89,6 +91,53 @@ fn a_journal_record_out_of_canonical_order_cannot_exist() {
         ),
         "expected a repeated removal to be refused, got {repeated:?}",
     );
+}
+
+/// The rename of entry `entry` of the Container `seed` names to `path`.
+fn rename(seed: u8, entry: u64, path: &str) -> EntryRename {
+    EntryRename::new(
+        container_id(seed),
+        EntryNumber::new(entry).expect("a fixture holds a literal entry number"),
+        entry_path(path),
+    )
+    .expect("a fixture renames outside the reserved namespace")
+}
+
+// FM-15: `renames` is ordered by Container ID and then entry number, strictly
+// — two elements naming one Entry are one Entry renamed twice in one record.
+// A record built without them renames nothing.
+#[test]
+fn a_journal_record_renames_in_canonical_order_or_cannot_exist() {
+    let plain = record(1, Some(0), Vec::new(), Vec::new()).expect("a plain record");
+    assert!(
+        plain.renames().is_empty(),
+        "a record renames nothing by default"
+    );
+
+    let renames = vec![rename(1, 0, "b"), rename(1, 2, "a"), rename(2, 0, "c")];
+    let renamed = plain
+        .clone()
+        .with_renames(renames.clone())
+        .expect("renames in order are held");
+    assert_eq!(renamed.renames(), renames.as_slice());
+
+    for (refused, index) in [
+        (vec![rename(1, 2, "a"), rename(1, 0, "b")], 1),
+        (vec![rename(2, 0, "a"), rename(1, 5, "b")], 1),
+        (vec![rename(1, 0, "a"), rename(1, 0, "b")], 1),
+    ] {
+        let result = plain.clone().with_renames(refused);
+        assert!(
+            matches!(
+                result,
+                Err(Error::CollectionOutOfCanonicalOrder {
+                    collection: "renames",
+                    index: found,
+                }) if found == index
+            ),
+            "expected renames out of order to be refused, got {result:?}",
+        );
+    }
 }
 
 // The writers gather their additions in spool order and their removals in

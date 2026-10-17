@@ -307,10 +307,10 @@ describe('the meta section', () => {
     expect(decodeMeta(padded(encodeMeta(meta))).entries[0].mtimeSeconds).toBe(-86_400n);
   });
 
-  // FM-9: the entry map spells the values a rename could move with the
-  // `captured_` prefix — they are what this immutable object captured, not what
-  // the Library holds now — and a writer that used the catalog's own keys would
-  // be writing a meta section no reader accepts.
+  // FM-9: the entry map spells the values the Library may later hold
+  // differently with the `captured_` prefix — they are what this immutable
+  // object captured, not what the Library holds now — and a writer that used
+  // the catalog's own keys would be writing a meta section no reader accepts.
   it('writes the entry keys the rule names', () => {
     // The keys and not their order: CBOR maps this package writes are in
     // canonical key order, so what a case can hold the writer to is which keys

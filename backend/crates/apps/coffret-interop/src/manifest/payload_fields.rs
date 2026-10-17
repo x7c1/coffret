@@ -27,7 +27,7 @@ use super::{BodyField, BodyValue};
 
 /// The fields FM-15 gives the payload of `record`.
 pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
-    let mut fields = vec![BodyField::uint("schema", 2)];
+    let mut fields = vec![BodyField::uint("schema", 3)];
     if let Some(prev) = record.prev() {
         fields.push(BodyField::uint("prev", prev.get()));
     }
@@ -80,6 +80,23 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
             })
             .collect(),
     ));
+    // Left out where the record renames nothing, as the encoder leaves it.
+    if !record.renames().is_empty() {
+        fields.push(BodyField::array(
+            "renames",
+            record
+                .renames()
+                .iter()
+                .map(|rename| BodyValue::Map {
+                    value: vec![
+                        BodyField::bytes("container", rename.container_id().as_bytes()),
+                        BodyField::uint("entry", u64::from(rename.entry_number().get())),
+                        BodyField::text("path", rename.path().as_str()),
+                    ],
+                })
+                .collect(),
+        ));
+    }
     fields
 }
 
@@ -89,7 +106,7 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     let containers = snapshot.content.containers();
 
     let mut fields = vec![
-        BodyField::uint("schema", 2),
+        BodyField::uint("schema", 3),
         BodyField::uint("head_generation", checkpoint.head_generation().get()),
         BodyField::uint("journal_generation", checkpoint.journal_generation().get()),
     ];
@@ -130,6 +147,10 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
                     .position(|container| container.id == location.container_id)
                     .expect("a fixture Entry is held by a Container the fixture lists");
                 map.push(BodyField::uint("container", position as u64));
+                map.push(BodyField::uint(
+                    "entry",
+                    u64::from(location.entry_number.get()),
+                ));
                 BodyValue::Map { value: map }
             })
             .collect(),

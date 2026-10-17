@@ -1,9 +1,10 @@
 use ciborium::Value;
 use coffret_model::{ContainerAddition, JournalRecord};
 
+use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -19,11 +20,13 @@ use crate::field_numbers;
 /// (spec: FM-13). The record's generation is the header's and appears nowhere
 /// in here.
 ///
-/// `additions` and `removals` are written in the order the record holds them,
-/// which is the Container ID order FM-15 fixes: putting them in it is
+/// `additions`, `removals`, and `renames` are written in the order the record
+/// holds them, which is the order FM-15 fixes: putting them in it is
 /// [`JournalRecord`]'s own business, and a writer whose collections arrive in
 /// spool order sorts through its `canonical` rather than here. Sorting again
-/// here would make this a second statement of that rule.
+/// here would make this a second statement of that rule. `renames` is left out
+/// where the record renames nothing, so a record without renames costs nothing
+/// for them.
 pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
     let mut map = MapBuilder::new();
     map.uint(SCHEMA_FIELD, SCHEMA)
@@ -56,6 +59,12 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
                     .collect(),
             ),
         );
+    if !record.renames().is_empty() {
+        map.value(
+            RENAMES,
+            Value::Array(record.renames().iter().map(rename::to_value).collect()),
+        );
+    }
 
     Ok(ControlPayload::new(
         record.master_key_epoch(),
