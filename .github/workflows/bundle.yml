@@ -147,6 +147,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bundle-
 
+      # A restored target may hold builds of this workspace newer than the
+      # checkout; scripts/forget-workspace-builds.sh says why that matters.
+      - name: Rebuild the workspace's own crates
+        working-directory: .
+        run: scripts/forget-workspace-builds.sh backend
+
       - name: Cache the Tauri CLI
         id: cache-tauri-cli
         uses: actions/cache@v4
