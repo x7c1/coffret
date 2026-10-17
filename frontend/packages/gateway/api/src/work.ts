@@ -517,8 +517,8 @@ interface DeleteOfItsOwn {
   /** Named files the Library held nothing at. */
   missing: string[];
   /**
-   * What became of this device's own copies of the deleted files — moved to
-   * the trash, kept because they changed, or a move that was refused — and the
+   * What became of this device's own copies of the deleted files — discarded
+   * into the trash, kept because they changed, or a discard that was refused — and the
    * mapped folders it could not vouch for when it came to them, said as a
    * sync's findings are; then what its commit left for later, and the Keyring
    * repairs it performed.

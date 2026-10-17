@@ -211,7 +211,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
     // ordinary materialized file (spec: EP-15).
     let local_copies = match copies {
         Some(copies) if commit.is_some() => {
-            mapped_copies::move_mapped_copies_to_trash(index, copies, &deleted).await
+            mapped_copies::discard_mapped_copies(index, copies, &deleted).await
         }
         _ => MappedCopiesOutcome::default(),
     };

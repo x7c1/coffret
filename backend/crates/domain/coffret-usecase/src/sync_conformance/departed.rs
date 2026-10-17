@@ -31,7 +31,7 @@ fn registered() -> RootMarkerId {
 /// Maps the fixture's folder onto the Library root the way recording a mapping
 /// does: a marker in the root, and the same identity expected of it.
 ///
-/// A move to the trash is a write into the mapped folder, and a write is only
+/// A discard is a write into the mapped folder, and a write is only
 /// ever made through a root that vouches for itself (spec: EP-13), so every case
 /// here needs a registered root rather than one that merely exists.
 async fn map_registered(fixture: &SyncUnderTest) {
@@ -135,21 +135,21 @@ async fn row(index: &dyn Index, path: &str) -> Option<(LocalEntryState, Option<C
         .map(|local| (local.state, local.observation.hash))
 }
 
-/// The paths a run reported as moved to the trash, kept, or refused by the
+/// The paths a run reported as discarded, kept, or refused by the
 /// trash, in that order of kinds.
 fn departed(outcome: &SyncOutcome) -> (Vec<&EntryPath>, Vec<&EntryPath>, Vec<&EntryPath>) {
-    let mut moved = Vec::new();
+    let mut discarded = Vec::new();
     let mut kept = Vec::new();
     let mut refused = Vec::new();
     for surfaced in &outcome.surfaced {
         match surfaced {
-            Surfaced::MovedToTrash { path } => moved.push(path),
+            Surfaced::Discarded { path } => discarded.push(path),
             Surfaced::KeptEdited { path } => kept.push(path),
-            Surfaced::MoveToTrashRefused { path, .. } => refused.push(path),
+            Surfaced::DiscardRefused { path, .. } => refused.push(path),
             Surfaced::PackResident { .. } | Surfaced::DeletedLocally { .. } => {}
         }
     }
-    (moved, kept, refused)
+    (discarded, kept, refused)
 }
 
 /// Asserts the run uploaded and committed nothing.
@@ -167,15 +167,15 @@ pub async fn an_unedited_file_this_device_deleted_goes_to_the_trash(fixture: &Sy
     let outcome = sync(fixture, 3).await;
 
     uploaded_nothing(&outcome);
-    let (moved, kept, refused) = departed(&outcome);
+    let (discarded, kept, refused) = departed(&outcome);
     assert_eq!(
-        moved,
+        discarded,
         [&entry_path("a.jpg")],
-        "the move is reported with the path"
+        "the discard is reported with the path"
     );
     assert!(kept.is_empty() && refused.is_empty());
     assert_eq!(
-        fixture.fs().moved_to_trash(),
+        fixture.fs().discarded(),
         std::slice::from_ref(&path),
         "the file went to the trash"
     );
@@ -192,7 +192,7 @@ pub async fn an_unedited_file_this_device_deleted_goes_to_the_trash(fixture: &Sy
 }
 
 /// The same for an Entry another device deleted: catching up is what tells
-/// this device, and the copy is moved the same way (spec: EP-15).
+/// this device, and the copy is discarded the same way (spec: EP-15).
 pub async fn an_unedited_file_another_device_deleted_goes_to_the_trash(fixture: &SyncUnderTest) {
     let path = materialized(fixture, "a.jpg", b"the file's bytes").await;
     let elsewhere = InMemoryIndex::new();
@@ -201,9 +201,9 @@ pub async fn an_unedited_file_another_device_deleted_goes_to_the_trash(fixture: 
     let outcome = sync(fixture, 3).await;
 
     uploaded_nothing(&outcome);
-    let (moved, _, _) = departed(&outcome);
-    assert_eq!(moved, [&entry_path("a.jpg")]);
-    assert_eq!(fixture.fs().moved_to_trash(), [path]);
+    let (discarded, _, _) = departed(&outcome);
+    assert_eq!(discarded, [&entry_path("a.jpg")]);
+    assert_eq!(fixture.fs().discarded(), [path]);
     assert_eq!(row(fixture.index(), "a.jpg").await, None);
 }
 
@@ -221,15 +221,15 @@ pub async fn an_edited_departed_file_is_kept_and_reported_every_run(fixture: &Sy
         let outcome = sync(fixture, run).await;
 
         uploaded_nothing(&outcome);
-        let (moved, kept, refused) = departed(&outcome);
+        let (discarded, kept, refused) = departed(&outcome);
         assert_eq!(
             kept,
             [&entry_path("a.jpg")],
             "run {run} reports the kept file"
         );
-        assert!(moved.is_empty() && refused.is_empty());
+        assert!(discarded.is_empty() && refused.is_empty());
         assert!(
-            fixture.fs().moved_to_trash().is_empty(),
+            fixture.fs().discarded().is_empty(),
             "nothing went to the trash"
         );
         assert_eq!(
@@ -259,14 +259,14 @@ pub async fn a_touched_departed_file_with_its_recorded_content_is_unedited(
     let outcome = sync(fixture, 3).await;
 
     uploaded_nothing(&outcome);
-    let (moved, kept, _) = departed(&outcome);
+    let (discarded, kept, _) = departed(&outcome);
     assert_eq!(
-        moved,
+        discarded,
         [&entry_path("a.jpg")],
         "the content is what was recorded"
     );
     assert!(kept.is_empty());
-    assert_eq!(fixture.fs().moved_to_trash(), [path]);
+    assert_eq!(fixture.fs().discarded(), [path]);
 }
 
 /// A row with no recorded hash — one an older build wrote — leaves nothing to
@@ -298,9 +298,9 @@ pub async fn a_departed_file_with_no_recorded_hash_is_kept_once_it_changed(
     let outcome = sync(fixture, 3).await;
 
     uploaded_nothing(&outcome);
-    let (moved, kept, _) = departed(&outcome);
+    let (discarded, kept, _) = departed(&outcome);
     assert_eq!(kept, [&entry_path("a.jpg")]);
-    assert!(moved.is_empty());
+    assert!(discarded.is_empty());
     assert!(fixture.fs().holds(&path), "the file is kept");
 }
 
@@ -340,13 +340,13 @@ pub async fn a_path_a_new_entry_arrived_at_is_not_departed(fixture: &SyncUnderTe
         outcome.unchanged, 1,
         "the file is what this device last saw"
     );
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(fixture.fs().holds(&path));
 }
 
 /// Once a departed file has gone to the trash, a file put back at the same path
 /// is new: no present row stands behind it (spec: EP-15, EP-10).
-pub async fn a_file_put_where_one_was_moved_to_the_trash_is_new(fixture: &SyncUnderTest) {
+pub async fn a_file_put_where_one_was_discarded_is_new(fixture: &SyncUnderTest) {
     let path = materialized(fixture, "a.jpg", b"the file's bytes").await;
     delete(fixture, fixture.index(), "a.jpg", 2).await;
     sync(fixture, 3).await;
@@ -378,9 +378,9 @@ pub async fn a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_ba
     materialized(fixture, "a.jpg", content).await;
     delete(fixture, fixture.index(), "a.jpg", 2).await;
     let trashed = sync(fixture, 3).await;
-    let (moved, _, _) = departed(&trashed);
+    let (discarded, _, _) = departed(&trashed);
     assert_eq!(
-        moved,
+        discarded,
         [&entry_path("a.jpg")],
         "the departed file went to the trash"
     );
@@ -409,10 +409,10 @@ pub async fn a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_ba
     );
 }
 
-/// A folder the run's moves to the trash left with nothing in it is removed,
+/// A folder the run's discards left with nothing in it is removed,
 /// and so is each folder above it they emptied, up to but never including the
 /// mapped root (spec: EP-15).
-pub async fn the_folders_the_moves_to_the_trash_emptied_are_removed(fixture: &SyncUnderTest) {
+pub async fn the_folders_the_discards_emptied_are_removed(fixture: &SyncUnderTest) {
     all_materialized(
         fixture,
         &[
@@ -428,8 +428,8 @@ pub async fn the_folders_the_moves_to_the_trash_emptied_are_removed(fixture: &Sy
     let outcome = sync(fixture, 3).await;
 
     uploaded_nothing(&outcome);
-    let (moved, _, _) = departed(&outcome);
-    assert_eq!(moved.len(), 3, "the folder's files went to the trash");
+    let (discarded, _, _) = departed(&outcome);
+    assert_eq!(discarded.len(), 3, "the folder's files were discarded");
     let root = fixture.folder();
     assert!(
         !fixture.fs().holds(&root.join("album/sub")),
@@ -443,7 +443,7 @@ pub async fn the_folders_the_moves_to_the_trash_emptied_are_removed(fixture: &Sy
     assert!(fixture.fs().holds(&root.join("d.jpg")));
 }
 
-/// A folder that still holds a file the run did not move — an edited copy
+/// A folder that still holds a file the run did not discard — an edited copy
 /// kept where it was — stays, and so does every folder above it (spec: EP-15).
 pub async fn a_folder_that_still_holds_an_edited_copy_stays(fixture: &SyncUnderTest) {
     let paths = all_materialized(
@@ -463,8 +463,8 @@ pub async fn a_folder_that_still_holds_an_edited_copy_stays(fixture: &SyncUnderT
 
     let outcome = sync(fixture, 3).await;
 
-    let (moved, kept, _) = departed(&outcome);
-    assert_eq!(moved, [&entry_path("album/sub/a.jpg")]);
+    let (discarded, kept, _) = departed(&outcome);
+    assert_eq!(discarded, [&entry_path("album/sub/a.jpg")]);
     assert_eq!(kept, [&entry_path("album/sub/b.jpg")]);
     assert!(
         fixture.fs().holds(edited),
@@ -474,7 +474,7 @@ pub async fn a_folder_that_still_holds_an_edited_copy_stays(fixture: &SyncUnderT
     assert!(fixture.fs().holds(&fixture.folder().join("album")));
 }
 
-/// A folder that was already empty before the run held nothing the run moved,
+/// A folder that was already empty before the run held nothing the run discarded,
 /// so it stays — and keeps the folder it stands in, which still holds it
 /// (spec: EP-15).
 pub async fn a_folder_empty_before_the_run_stays(fixture: &SyncUnderTest) {
@@ -486,8 +486,8 @@ pub async fn a_folder_empty_before_the_run_stays(fixture: &SyncUnderTest) {
 
     let outcome = sync(fixture, 3).await;
 
-    let (moved, _, _) = departed(&outcome);
-    assert_eq!(moved, [&entry_path("album/a.jpg")]);
+    let (discarded, _, _) = departed(&outcome);
+    assert_eq!(discarded, [&entry_path("album/a.jpg")]);
     assert!(
         fixture.fs().holds(&root.join("empty")),
         "a folder empty before the run is not the run's to remove"
@@ -519,16 +519,16 @@ pub async fn a_departed_path_whose_file_is_gone_is_forgotten(fixture: &SyncUnder
 
 /// A trash that refuses leaves the file and its row, reports what it said,
 /// fails nothing else, and is asked again by the next run (spec: EP-15).
-pub async fn a_refused_move_to_the_trash_leaves_the_file_and_is_retried(fixture: &SyncUnderTest) {
+pub async fn a_refused_discard_leaves_the_file_and_is_retried(fixture: &SyncUnderTest) {
     let path = materialized(fixture, "a.jpg", b"the file's bytes").await;
     delete(fixture, fixture.index(), "a.jpg", 2).await;
     let other = write(fixture.fs(), fixture.folder(), "b.jpg", b"a new file");
-    fixture.fs().fail_on(LocalOperation::MovingToTrash, 1);
+    fixture.fs().fail_on(LocalOperation::Discarding, 1);
 
     let refused = sync(fixture, 3).await;
 
-    let (moved, kept, failed) = departed(&refused);
-    assert!(moved.is_empty() && kept.is_empty());
+    let (discarded, kept, failed) = departed(&refused);
+    assert!(discarded.is_empty() && kept.is_empty());
     assert_eq!(
         failed,
         [&entry_path("a.jpg")],
@@ -537,9 +537,9 @@ pub async fn a_refused_move_to_the_trash_leaves_the_file_and_is_retried(fixture:
     assert!(
         refused.surfaced.iter().any(|surfaced| matches!(
             surfaced,
-            Surfaced::MoveToTrashRefused { cause, .. }
+            Surfaced::DiscardRefused { cause, .. }
                 if matches!(cause.as_ref(), DescentError::Io(io)
-                    if matches!(io.operation, LocalOperation::MovingToTrash))
+                    if matches!(io.operation, LocalOperation::Discarding))
         )),
         "with the reason it was refused for",
     );
@@ -559,15 +559,15 @@ pub async fn a_refused_move_to_the_trash_leaves_the_file_and_is_retried(fixture:
 
     let retried = sync(fixture, 4).await;
 
-    let (moved, _, failed) = departed(&retried);
-    assert_eq!(moved, [&entry_path("a.jpg")], "the next run asks again");
+    let (discarded, _, failed) = departed(&retried);
+    assert_eq!(discarded, [&entry_path("a.jpg")], "the next run asks again");
     assert!(failed.is_empty());
-    assert_eq!(fixture.fs().moved_to_trash(), [path]);
+    assert_eq!(fixture.fs().discarded(), [path]);
 }
 
 /// Nothing goes to the trash through a root that does not vouch for itself:
-/// the move is refused and reported, and the file stays (spec: EP-13, EP-15).
-pub async fn nothing_is_moved_to_the_trash_through_a_refused_root(fixture: &SyncUnderTest) {
+/// the discard is refused and reported, and the file stays (spec: EP-13, EP-15).
+pub async fn nothing_is_discarded_through_a_refused_root(fixture: &SyncUnderTest) {
     let path = materialized(fixture, "a.jpg", b"the file's bytes").await;
     delete(fixture, fixture.index(), "a.jpg", 2).await;
     // Another registration's marker now stands in the root: the folder is not
@@ -581,23 +581,23 @@ pub async fn nothing_is_moved_to_the_trash_through_a_refused_root(fixture: &Sync
     assert!(
         outcome.surfaced.iter().any(|surfaced| matches!(
             surfaced,
-            Surfaced::MoveToTrashRefused { cause, .. }
+            Surfaced::DiscardRefused { cause, .. }
                 if matches!(cause.as_ref(), DescentError::Refused {
                     reason: RootRefused::MarkerMismatch,
                     ..
                 })
         )),
-        "the move is refused for the root: {:?}",
+        "the discard is refused for the root: {:?}",
         outcome.surfaced,
     );
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(fixture.fs().holds(&path));
 }
 
 /// Nothing goes to the trash under a root the scan could not read, and no row
 /// under it is forgotten: an unplugged disk is not a folder emptied
 /// (spec: EP-12, EP-15).
-pub async fn nothing_is_moved_to_the_trash_under_an_unavailable_root(fixture: &SyncUnderTest) {
+pub async fn nothing_is_discarded_under_an_unavailable_root(fixture: &SyncUnderTest) {
     let root = fixture.folder().join("disk");
     fixture.fs().create_dir(&root);
     fixture.fs().plant_marker(&root, &registered());
@@ -619,7 +619,7 @@ pub async fn nothing_is_moved_to_the_trash_under_an_unavailable_root(fixture: &S
         "the root is reported unavailable"
     );
     assert!(outcome.surfaced.is_empty(), "{:?}", outcome.surfaced);
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(
         matches!(
             row(fixture.index(), "a.jpg").await,
@@ -630,7 +630,7 @@ pub async fn nothing_is_moved_to_the_trash_under_an_unavailable_root(fixture: &S
 }
 
 /// A freeze never carries a departed file back in either: it leaves the file,
-/// its row, and the trash alone, and the next sync is what moves it
+/// its row, and the trash alone, and the next sync is what discards it
 /// (spec: EP-15).
 pub async fn a_freeze_leaves_a_departed_file_to_the_sync(fixture: &SyncUnderTest) {
     let path = materialized(fixture, "a.jpg", b"the file's bytes").await;
@@ -658,8 +658,8 @@ pub async fn a_freeze_leaves_a_departed_file_to_the_sync(fixture: &SyncUnderTest
     assert!(frozen.commit.is_none(), "and nothing is committed");
     assert!(fixture.fs().holds(&path), "the file is left where it was");
     assert!(
-        fixture.fs().moved_to_trash().is_empty(),
-        "a freeze moves nothing to the trash"
+        fixture.fs().discarded().is_empty(),
+        "a freeze discards nothing"
     );
     assert!(
         matches!(
@@ -671,9 +671,9 @@ pub async fn a_freeze_leaves_a_departed_file_to_the_sync(fixture: &SyncUnderTest
 
     let outcome = sync(fixture, 4).await;
 
-    let (moved, _, _) = departed(&outcome);
-    assert_eq!(moved, [&entry_path("a.jpg")], "the sync moves it");
-    assert_eq!(fixture.fs().moved_to_trash(), [path]);
+    let (discarded, _, _) = departed(&outcome);
+    assert_eq!(discarded, [&entry_path("a.jpg")], "the sync discards it");
+    assert_eq!(fixture.fs().discarded(), [path]);
 }
 
 /// A Pack size every freeze here stays under, since the case packs nothing.

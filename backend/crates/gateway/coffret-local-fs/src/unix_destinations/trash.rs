@@ -1,4 +1,4 @@
-//! Moving a file out of a mapped folder into the desktop's own trash
+//! Discarding a file out of a mapped folder into the desktop's own trash
 //! (spec: EP-15).
 //!
 //! The same descent a placement makes, asked for a different write: the root is
@@ -10,14 +10,14 @@
 //! The trash is asked by path, because that is the only way any platform's trash
 //! can be asked: the freedesktop.org Trash records the original path in the
 //! entry it writes and renames the file into the trash directory of the volume
-//! it stands on, and the Finder's takes a URL. So the move resolves the path
+//! it stands on, and the Finder's takes a URL. So the discard resolves the path
 //! once more after the descent has vouched for it, and a folder swapped for a
 //! symbolic link in that interval would be followed. What that costs is a file
-//! of the person's moved to their own trash rather than deleted, which is the
+//! of the person's discarded into their own trash rather than deleted, which is the
 //! least any race here can do; it is said so that nobody reads the descent as
 //! the whole of the guarantee.
 //!
-//! The folders those moves empty are removed here too, and without that
+//! The folders those discards empty are removed here too, and without that
 //! interval: the folder is removed relative to the handle the descent opened,
 //! so nothing between the walk and the removal is resolved again.
 
@@ -38,7 +38,7 @@ use crate::unix_fs::UnixFs;
 
 #[async_trait]
 impl LocalTrash for UnixFs {
-    async fn move_to_trash(
+    async fn discard(
         &self,
         root: &Path,
         expected: Option<&RootMarkerId>,
@@ -47,11 +47,11 @@ impl LocalTrash for UnixFs {
         let owned = root.to_path_buf();
         let expected = expected.copied();
         let relative = relative.clone();
-        blocking(LocalOperation::MovingToTrash, root, move || {
+        blocking(LocalOperation::Discarding, root, move || {
             let file = vouched(&owned, expected.as_ref(), &relative)?;
             to_trash(&file).map_err(|cause| {
                 DescentError::Io(LocalIoError::new(
-                    LocalOperation::MovingToTrash,
+                    LocalOperation::Discarding,
                     &file,
                     io::Error::other(cause),
                 ))
@@ -81,7 +81,7 @@ impl LocalTrash for UnixFs {
 ///
 /// `unlinkat` with `AT_REMOVEDIR` is the whole of the check and the removal in
 /// one step: the kernel refuses a folder with anything in it, so a file that
-/// arrives after the run's moves keeps the folder, and it refuses a symbolic
+/// arrives after the run's discards keeps the folder, and it refuses a symbolic
 /// link standing at the name rather than following it.
 fn remove_if_empty(
     root: &Path,
@@ -154,7 +154,7 @@ fn vouched(
         .map_err(|cause| refusal(&at, LocalOperation::Stating, cause))?;
     if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
         return Err(DescentError::Io(LocalIoError::new(
-            LocalOperation::MovingToTrash,
+            LocalOperation::Discarding,
             &at,
             io::Error::other("what stands at this path is not a regular file"),
         )));
@@ -167,7 +167,7 @@ fn vouched(
 ///
 /// The scripted way is the `trash` crate's default, and it is the wrong one for
 /// a sync: it asks the person to let coffret control the Finder, and plays the
-/// Finder's sound for every file a run moves. The file manager's way does
+/// Finder's sound for every file a run discards. The file manager's way does
 /// neither and still puts the file in the same trash.
 #[cfg(target_os = "macos")]
 fn to_trash(file: &Path) -> Result<(), trash::Error> {

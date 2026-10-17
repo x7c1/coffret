@@ -50,8 +50,8 @@ impl InMemoryFs {
     ///   a case that scripts a read partway through a Pack's member stream
     ///   counts the scan's own opens and reads on the way there.
     ///
-    /// - [`MovingToTrash`](LocalOperation::MovingToTrash) for
-    ///   [`move_to_trash`](crate::LocalTrash::move_to_trash), which leaves the
+    /// - [`Discarding`](LocalOperation::Discarding) for
+    ///   [`discard`](crate::LocalTrash::discard), which leaves the
     ///   file where it was (spec: EP-15).
     ///
     /// [`prepare_dir`](crate::Spool::prepare_dir) is deliberately not counted or

@@ -56,8 +56,8 @@ mod state;
 /// folder that will not list, a spool that will not flush, and a rename that
 /// will not go against the same thing, and the mapped folders, the spool
 /// directory and the folders a fetch places into are simply places in it. Its
-/// trash is a list of what was moved into it, so a case asks what a run moved
-/// there and never reaches the trash of the desktop it runs on.
+/// trash is a list of what was discarded into it, so a case asks what a run
+/// discarded there and never reaches the trash of the desktop it runs on.
 ///
 /// What it models of a filesystem is only what the flows above can tell apart:
 /// which directories were made, what each file holds and when it was last

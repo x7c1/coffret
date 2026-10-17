@@ -5,7 +5,7 @@ use std::sync::Arc;
 use coffret_model::{EntryPath, Redacted};
 use tracing::{info, warn};
 
-use crate::departure::{mapped_source, move_departed_to_trash, unedited, Departed, EmptiedFolders};
+use crate::departure::{discard_departed, mapped_source, unedited, Departed, EmptiedFolders};
 use crate::descent_error::DescentError;
 use crate::device_state::{LocalEntry, LocalEntryState, Mapping};
 use crate::fetch::reaching;
@@ -21,7 +21,7 @@ use crate::unavailable_root::UnavailableRoot;
 /// What a deletion reaches this device's own copies of the Entries it deleted
 /// through (spec: EP-15).
 ///
-/// The two capabilities a sync moves a departed file with, and for the same
+/// The two capabilities a sync discards a departed file with, and for the same
 /// reason each is one: the folders are read to find the file and to tell an
 /// unedited copy from an edited one, and the trash is asked to take it.
 #[derive(Clone, Copy)]
@@ -36,8 +36,8 @@ pub struct MappedCopies<'a> {
 /// deletion's commit had landed (spec: EP-15).
 #[derive(Debug, Default)]
 pub(super) struct MappedCopiesOutcome {
-    /// Each copy moved to the trash, kept because it was edited, or whose move
-    /// was refused, in Entry Path order.
+    /// Each copy discarded into the trash, kept because it was edited, or whose
+    /// discard was refused, in Entry Path order.
     pub(super) surfaced: Vec<Surfaced>,
     /// The mappings whose roots this device could not vouch for, whose copies
     /// were left untouched for the next sync (spec: EP-12).
@@ -62,14 +62,14 @@ enum Verdict {
 ///
 /// The decision is the sync's, through the same shared steps
 /// ([`departure`](crate::departure)): a copy whose row says present and that
-/// still holds what this device last made it match goes to the desktop's
-/// trash and its row is forgotten, and the folders those moves emptied are
-/// removed; an edited one is kept and reported; one whose file is gone from
-/// disk too has its row forgotten and nothing said of it. The same root checks
-/// guard it as a sync's: a root that is missing, or empty on a filesystem the
-/// mapping does not record, is reported and nothing under it is touched or
-/// forgotten (spec: EP-12), and every move holds the root to the identity its
-/// mapping expects before it writes (spec: EP-13).
+/// still holds what this device last made it match is discarded into the
+/// desktop's trash and its row is forgotten, and the folders those discards
+/// emptied are removed; an edited one is kept and reported; one whose file is
+/// gone from disk too has its row forgotten and nothing said of it. The same
+/// root checks guard it as a sync's: a root that is missing, or empty on a
+/// filesystem the mapping does not record, is reported and nothing under it is
+/// touched or forgotten (spec: EP-12), and every discard holds the root to the
+/// identity its mapping expects before it writes (spec: EP-13).
 ///
 /// Nothing here fails the run. The commit has already landed, and a deletion
 /// reported as failed after its batch committed would tell the person their
@@ -77,7 +77,7 @@ enum Verdict {
 /// reported with the copy it was about, and a catalog that would not answer is
 /// logged, and either way what was left is the next sync's to finish: it finds
 /// the same rows and asks the same questions.
-pub(super) async fn move_mapped_copies_to_trash(
+pub(super) async fn discard_mapped_copies(
     index: &dyn Index,
     copies: MappedCopies<'_>,
     deleted: &[EntryPath],
@@ -132,7 +132,7 @@ pub(super) async fn move_mapped_copies_to_trash(
             Verdict::Available => {}
             Verdict::Unavailable => continue,
             Verdict::Unasked(cause) => {
-                found.surfaced.push(Surfaced::MoveToTrashRefused {
+                found.surfaced.push(Surfaced::DiscardRefused {
                     path: path.clone(),
                     cause: cause.clone(),
                 });
@@ -182,34 +182,33 @@ pub(super) async fn move_mapped_copies_to_trash(
         let root = source.root.clone();
         let relative = source.relative.clone();
         let expected = mapping.expected_root_id;
-        let surfaced =
-            match move_departed_to_trash(index, trash, Departed { source, expected }).await {
-                Ok(surfaced) => surfaced,
-                Err(error) => {
-                    // The file did go; only its row stayed, and the next sync,
-                    // finding a row and no file, forgets it.
-                    warn!(
-                        reason = %error.redacted(),
-                        "a deleted Entry's local file went to the trash and its row could not be \
-                         forgotten; the next sync forgets it",
-                    );
-                    Surfaced::MovedToTrash { path: path.clone() }
-                }
-            };
-        if matches!(surfaced, Surfaced::MovedToTrash { .. }) {
-            emptied.moved(&root, expected, &relative);
+        let surfaced = match discard_departed(index, trash, Departed { source, expected }).await {
+            Ok(surfaced) => surfaced,
+            Err(error) => {
+                // The file did go; only its row stayed, and the next sync,
+                // finding a row and no file, forgets it.
+                warn!(
+                    reason = %error.redacted(),
+                    "a deleted Entry's local file was discarded and its row could not be \
+                     forgotten; the next sync forgets it",
+                );
+                Surfaced::Discarded { path: path.clone() }
+            }
+        };
+        if matches!(surfaced, Surfaced::Discarded { .. }) {
+            emptied.discarded(&root, expected, &relative);
         }
         found.surfaced.push(surfaced);
     }
-    // Once every move is made, so a folder several copies stood in is asked
+    // Once every discard is made, so a folder several copies stood in is asked
     // about after the last of them left it.
     emptied.remove(trash).await;
 
     info!(
-        moved_to_trash = found
+        discarded = found
             .surfaced
             .iter()
-            .filter(|one| matches!(one, Surfaced::MovedToTrash { .. }))
+            .filter(|one| matches!(one, Surfaced::Discarded { .. }))
             .count(),
         kept_edited = found
             .surfaced
@@ -219,7 +218,7 @@ pub(super) async fn move_mapped_copies_to_trash(
         refused = found
             .surfaced
             .iter()
-            .filter(|one| matches!(one, Surfaced::MoveToTrashRefused { .. }))
+            .filter(|one| matches!(one, Surfaced::DiscardRefused { .. }))
             .count(),
         // A count and nothing else: a mapping names a prefix and a local root,
         // and neither may reach a diagnostic event.
@@ -282,7 +281,7 @@ async fn assessed(
     }
 }
 
-/// A copy whose move was not made, with what stopped it.
+/// A copy whose discard was not made, with what stopped it.
 fn refused_with(path: &EntryPath, cause: DescentError) -> Surfaced {
     // What refused and of what kind, and nothing that names the file: the path
     // stays in the finding, for whoever asked for the run.
@@ -291,13 +290,13 @@ fn refused_with(path: &EntryPath, cause: DescentError) -> Surfaced {
         "a deleted Entry's local file could not be looked at; it is left in place for the next \
          sync",
     );
-    Surfaced::MoveToTrashRefused {
+    Surfaced::DiscardRefused {
         path: path.clone(),
         cause: Arc::new(cause),
     }
 }
 
-/// What reading a mapped folder failed with, in the words a refused move is
+/// What reading a mapped folder failed with, in the words a refused discard is
 /// reported in.
 ///
 /// A refusal of the disk is what it is. A name in the root that folds to the

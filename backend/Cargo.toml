@@ -169,7 +169,7 @@ time = { version = "0.3", default-features = false, features = [
   "std",
 ] }
 tokio = { version = "1", features = ["full"] }
-# Moving a file a deleted Entry left on this device into the desktop's own
+# Discarding a file a deleted Entry left on this device into the desktop's own
 # trash: the freedesktop.org Trash on Linux, the Finder's on macOS
 # (spec: EP-15). `chrono` is what writes the deletion date a freedesktop trash
 # lists a file by; the default set's other member is a Windows COM setting

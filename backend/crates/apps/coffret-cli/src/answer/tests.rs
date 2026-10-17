@@ -60,12 +60,12 @@ fn deleted(literal: &str) -> Finding {
     }
 }
 
-/// A file deleted from the Library whose unedited copy here went to the trash,
-/// as a sync settles it.
-fn moved(literal: &str) -> Finding {
+/// A file deleted from the Library whose unedited copy here was discarded into
+/// the trash, as a sync settles it.
+fn discarded(literal: &str) -> Finding {
     Finding::Surfaced {
         path: path(literal),
-        reason: FindingReason::MovedToTrash,
+        reason: FindingReason::Discarded,
     }
 }
 
@@ -84,7 +84,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
         settled: Vec::new(),
         commit: None,
     };
-    let findings = Findings::assembled([deleted("albums/a.jpg"), moved("albums/b.jpg")]);
+    let findings = Findings::assembled([deleted("albums/a.jpg"), discarded("albums/b.jpg")]);
     let ran = Ran::found(
         crate::report::findings(&findings, Form::Json),
         Answer::Synced(Synced::from(&outcome)),
@@ -117,10 +117,10 @@ fn a_sync_answers_its_counts_and_its_findings() {
                 // script splitting `said` finds one on every finding.
                 "kind": "surfaced",
                 "needs_attention": false,
-                "said": "moved albums/b.jpg: it was deleted from the Library, and this \
-                         device's unedited copy was moved to the trash",
+                "said": "discarded albums/b.jpg: it was deleted from the Library, and \
+                         this device's unedited copy was discarded into the trash",
                 "path": "albums/b.jpg",
-                "reason": "MovedToTrash",
+                "reason": "Discarded",
             }],
         }),
     );

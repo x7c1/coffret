@@ -11,9 +11,9 @@
 //!
 //! - whether the file is **unedited** — still holding what this device last
 //!   made it match — which is [`unedited`];
-//! - moving an unedited one to the desktop's trash and forgetting its row,
-//!   which is [`move_departed_to_trash`];
-//! - and removing the folders those moves emptied, which is
+//! - discarding an unedited one into the desktop's trash and forgetting its
+//!   row, which is [`discard_departed`];
+//! - and removing the folders those discards emptied, which is
 //!   [`EmptiedFolders`].
 //!
 //! The sync finds its departed files by walking the mapped folders; a deletion
@@ -30,8 +30,8 @@ pub(crate) use emptied_folders::EmptiedFolders;
 mod mapped_source;
 pub(crate) use mapped_source::mapped_source;
 
-mod move_departed_to_trash;
-pub(crate) use move_departed_to_trash::move_departed_to_trash;
+mod discard_departed;
+pub(crate) use discard_departed::discard_departed;
 
 mod unedited;
 pub(crate) use unedited::unedited;

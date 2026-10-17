@@ -43,7 +43,7 @@ pub struct SyncRequest<'a> {
     /// (spec: EP-8, EP-12).
     pub roots: &'a dyn MappedRoots,
     /// The desktop's trash, which a file a deleted Entry left behind unedited is
-    /// moved into (spec: EP-15).
+    /// discarded into (spec: EP-15).
     ///
     /// A capability like the two above it, so a case asks what the run does
     /// when the trash will not take a file without reaching the trash of the
@@ -85,8 +85,9 @@ pub struct SyncRequest<'a> {
 
 impl<'a> SyncRequest<'a> {
     /// A run against `store` and `index`, reading the mapped folders through
-    /// `roots`, moving departed files to the desktop's trash through `trash`,
-    /// and spooling into `spool_dir` of `spool`, under the default policy.
+    /// `roots`, discarding departed files into the desktop's trash through
+    /// `trash`, and spooling into `spool_dir` of `spool`, under the default
+    /// policy.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,

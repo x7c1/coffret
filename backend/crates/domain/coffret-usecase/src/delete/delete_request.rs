@@ -52,8 +52,8 @@ pub struct DeleteRequest<'a> {
     /// The decisions Storage does not make, for the commit this run ends in
     /// and for the reads and uploads that precede it.
     pub policy: CommitPolicy,
-    /// This device's mapped folders and trash, where the run is to move its own
-    /// unedited copies of the deleted Entries to the trash after the commit,
+    /// This device's mapped folders and trash, where the run is to discard its
+    /// own unedited copies of the deleted Entries after the commit,
     /// and `None` where it is to leave them to the next sync (spec: EP-15).
     pub copies: Option<MappedCopies<'a>>,
 }
@@ -101,8 +101,8 @@ impl<'a> DeleteRequest<'a> {
         self
     }
 
-    /// The same request moving this device's own unedited copies of the
-    /// Entries it deletes to `trash` once its commit has landed, finding them
+    /// The same request discarding this device's own unedited copies of the
+    /// Entries it deletes into `trash` once its commit has landed, finding them
     /// in the folders `roots` reads (spec: EP-15).
     pub fn with_mapped_copies(
         mut self,

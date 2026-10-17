@@ -53,13 +53,13 @@ impl InMemoryFs {
         lock(&self.state).holds(path)
     }
 
-    /// Every file a run moved into the fake's trash, in the order it moved them
+    /// Every file a run discarded into the fake's trash, in the order it did
     /// (spec: EP-15).
     ///
     /// What a case asks instead of looking for the file in a desktop trash: the
-    /// fake has one of its own, and a moved file is gone from the folder it
+    /// fake has one of its own, and a discarded file is gone from the folder it
     /// stood in and listed here.
-    pub fn moved_to_trash(&self) -> Vec<PathBuf> {
-        lock(&self.state).moved_to_trash()
+    pub fn discarded(&self) -> Vec<PathBuf> {
+        lock(&self.state).discarded()
     }
 }

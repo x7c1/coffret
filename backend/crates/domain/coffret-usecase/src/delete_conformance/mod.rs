@@ -17,9 +17,9 @@
 //! person's Library is actually in. Three states no flow produces are borrowed
 //! from the suites that already arrange them: a committed key-lost marker
 //! (spec: KL-7), a Container damaged in transit, and a provider that will not
-//! move anything to the trash — and a fourth, a catalog that refuses the
-//! refresh after a commit has landed, which is where a rebuilt Pack's own
-//! bookkeeping is put to the test (spec: OC-7).
+//! trash anything — and a fourth, a catalog that refuses the refresh after a
+//! commit has landed, which is where a rebuilt Pack's own bookkeeping is put
+//! to the test (spec: OC-7).
 //!
 //! And it can leave the deleting device's own copies of what it deleted
 //! standing in the folder as if the deletion had not happened, or take one the

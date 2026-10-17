@@ -202,10 +202,10 @@ async fn walk(
             if relative.is_none() && elsewhere.contains(name.as_str()) {
                 continue;
             }
-            // A folder a desktop keeps its trash in, which it puts at the top of
-            // a volume a mapped root may be the top of — the move of a departed
-            // file included. Asked of the name before what it is, like the two
-            // names above, so the walk never enters it (spec: EP-16).
+            // A folder a desktop keeps its trash in, which it puts at the top
+            // of a volume a mapped root may be the top of — the discard of a
+            // departed file included. Asked of the name before what it is, like
+            // the two names above, so the walk never enters it (spec: EP-16).
             if relative.is_none() && trash_folders::is_trash_folder(name.as_str()) {
                 continue;
             }

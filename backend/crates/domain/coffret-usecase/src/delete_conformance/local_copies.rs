@@ -20,23 +20,23 @@ use crate::sync::Surfaced;
 use crate::sync_conformance::fixtures::{touch, NEWER};
 use crate::unavailable_root::RootUnavailable;
 
-/// The paths the run reported as moved to the trash, kept because edited, and
+/// The paths the run reported as discarded, kept because edited, and
 /// refused, in that order of kinds.
 fn reported(outcome: &DeleteOutcome) -> (Vec<&EntryPath>, Vec<&EntryPath>, Vec<&EntryPath>) {
-    let mut moved = Vec::new();
+    let mut discarded = Vec::new();
     let mut kept = Vec::new();
     let mut refused = Vec::new();
     for surfaced in &outcome.local {
         match surfaced {
-            Surfaced::MovedToTrash { path } => moved.push(path),
+            Surfaced::Discarded { path } => discarded.push(path),
             Surfaced::KeptEdited { path } => kept.push(path),
-            Surfaced::MoveToTrashRefused { path, .. } => refused.push(path),
+            Surfaced::DiscardRefused { path, .. } => refused.push(path),
             Surfaced::PackResident { .. } | Surfaced::DeletedLocally { .. } => {
                 panic!("a deletion reports nothing but what became of its copies: {surfaced:?}")
             }
         }
     }
-    (moved, kept, refused)
+    (discarded, kept, refused)
 }
 
 /// Whether this device still holds a row saying it put a file at `path`.
@@ -58,7 +58,7 @@ async fn any_row(index: &dyn Index, path: &str) -> bool {
 }
 
 /// EP-15: the deleting device's unedited copies go to the trash as soon as the
-/// deletion commits, their rows are forgotten, and the folders the moves
+/// deletion commits, their rows are forgotten, and the folders the discards
 /// emptied are removed — never the mapped root, and never a folder that still
 /// holds anything.
 ///
@@ -79,20 +79,20 @@ pub async fn the_deleting_devices_unedited_copies_go_to_the_trash_after_the_comm
 
     assert!(outcome.commit.is_some(), "the deletion committed");
     assert_eq!(outcome.deleted.len(), 3);
-    let (moved, kept, refused) = reported(&outcome);
+    let (discarded, kept, refused) = reported(&outcome);
     assert_eq!(
-        moved,
+        discarded,
         [
             &entry_path("album/c.jpg"),
             &entry_path("album/sub/a.jpg"),
             &entry_path("album/sub/b.jpg"),
         ],
-        "each copy is reported moved, in Entry Path order",
+        "each copy is reported discarded, in Entry Path order",
     );
     assert!(kept.is_empty() && refused.is_empty());
     assert!(outcome.unavailable.is_empty());
 
-    let mut in_trash = fixture.fs().moved_to_trash();
+    let mut in_trash = fixture.fs().discarded();
     in_trash.sort();
     let mut expected = vec![a, b, c];
     expected.sort();
@@ -141,15 +141,15 @@ pub async fn an_edited_copy_is_kept_and_reported(fixture: &DeleteUnderTest) {
 
     let outcome = delete_with_copies(fixture.store(), index, fixture, folder("album"), 2).await;
 
-    let (moved, kept, refused) = reported(&outcome);
-    assert_eq!(moved, [&entry_path("album/a.jpg")]);
+    let (discarded, kept, refused) = reported(&outcome);
+    assert_eq!(discarded, [&entry_path("album/a.jpg")]);
     assert_eq!(
         kept,
         [&entry_path("album/b.jpg")],
         "the edited copy is reported as kept",
     );
     assert!(refused.is_empty());
-    assert_eq!(fixture.fs().moved_to_trash(), [a]);
+    assert_eq!(fixture.fs().discarded(), [a]);
     assert_eq!(
         fixture.fs().content(&b).as_deref(),
         Some(&b"what the person wrote since"[..]),
@@ -178,7 +178,7 @@ pub async fn an_edited_copy_is_kept_and_reported(fixture: &DeleteUnderTest) {
     );
 }
 
-/// EP-15: a copy already gone from the disk is nothing to move and nothing to
+/// EP-15: a copy already gone from the disk is nothing to discard and nothing to
 /// report; its row goes, as the next sync would forget it.
 pub async fn a_copy_gone_from_disk_is_left_alone(fixture: &DeleteUnderTest) {
     let index = fixture.index();
@@ -196,14 +196,14 @@ pub async fn a_copy_gone_from_disk_is_left_alone(fixture: &DeleteUnderTest) {
         outcome.local,
     );
     assert!(outcome.unavailable.is_empty());
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(!any_row(index, "a.jpg").await, "the row is forgotten");
 }
 
-/// EP-13, EP-15: nothing is moved out of a root that is not the folder its
+/// EP-13, EP-15: nothing is discarded out of a root that is not the folder its
 /// mapping was recorded against. The copy and its row stay, the refusal is
 /// reported with what refused it, and the next sync — under the right root —
-/// moves it.
+/// discards it.
 pub async fn a_root_that_does_not_vouch_for_itself_leaves_the_copy_to_the_next_sync(
     fixture: &DeleteUnderTest,
 ) {
@@ -226,34 +226,35 @@ pub async fn a_root_that_does_not_vouch_for_itself_leaves_the_copy_to_the_next_s
     assert!(
         outcome.local.iter().any(|one| matches!(
             one,
-            Surfaced::MoveToTrashRefused { path, cause }
+            Surfaced::DiscardRefused { path, cause }
                 if path == &entry_path("a.jpg")
                     && matches!(cause.as_ref(), DescentError::Refused {
                         reason: RootRefused::MarkerMismatch,
                         ..
                     })
         )),
-        "the move is refused for the root, and said so: {:?}",
+        "the discard is refused for the root, and said so: {:?}",
         outcome.local,
     );
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(fixture.fs().holds(&a), "the copy stays");
     assert!(present(index, "a.jpg").await, "and its row with it");
 
     fixture.fs().plant_marker(fixture.folder(), &registered());
     let after = sync(fixture, 3).await;
     assert!(
-        after.surfaced.iter().any(
-            |one| matches!(one, Surfaced::MovedToTrash { path } if path == &entry_path("a.jpg"))
-        ),
-        "the next sync moves it: {:?}",
+        after
+            .surfaced
+            .iter()
+            .any(|one| matches!(one, Surfaced::Discarded { path } if path == &entry_path("a.jpg"))),
+        "the next sync discards it: {:?}",
         after.surfaced,
     );
-    assert_eq!(fixture.fs().moved_to_trash(), [a]);
+    assert_eq!(fixture.fs().discarded(), [a]);
 }
 
 /// EP-12, EP-15: a mapped root that is not there is reported, and nothing
-/// under it is moved or forgotten — an unplugged disk is not a folder emptied.
+/// under it is discarded or forgotten — an unplugged disk is not a folder emptied.
 pub async fn an_unavailable_root_is_reported_and_its_copies_left_alone(fixture: &DeleteUnderTest) {
     let index = fixture.index();
     let root = fixture.folder().join("disk");
@@ -273,7 +274,7 @@ pub async fn an_unavailable_root_is_reported_and_its_copies_left_alone(fixture: 
     assert_eq!(outcome.unavailable.len(), 1, "the root is reported");
     assert_eq!(outcome.unavailable[0].reason, RootUnavailable::Missing);
     assert!(outcome.local.is_empty(), "{:?}", outcome.local);
-    assert!(fixture.fs().moved_to_trash().is_empty());
+    assert!(fixture.fs().discarded().is_empty());
     assert!(
         present(index, "a.jpg").await,
         "the row is nobody's evidence while the root is away, and stays",
@@ -290,7 +291,7 @@ pub async fn a_refused_move_leaves_the_deletion_committed_and_is_reported(
     map_registered(fixture).await;
     let a = write(fixture, "a.jpg", b"the file's bytes");
     sync(fixture, 1).await;
-    fixture.fs().fail_on(LocalOperation::MovingToTrash, 1);
+    fixture.fs().fail_on(LocalOperation::Discarding, 1);
 
     let outcome = delete_with_copies(fixture.store(), index, fixture, paths(&["a.jpg"]), 2).await;
 
@@ -300,10 +301,10 @@ pub async fn a_refused_move_leaves_the_deletion_committed_and_is_reported(
     assert!(
         outcome.local.iter().any(|one| matches!(
             one,
-            Surfaced::MoveToTrashRefused { path, cause }
+            Surfaced::DiscardRefused { path, cause }
                 if path == &entry_path("a.jpg")
                     && matches!(cause.as_ref(), DescentError::Io(io)
-                        if matches!(io.operation, LocalOperation::MovingToTrash))
+                        if matches!(io.operation, LocalOperation::Discarding))
         )),
         "the refusal is reported with what refused it: {:?}",
         outcome.local,
@@ -313,13 +314,14 @@ pub async fn a_refused_move_leaves_the_deletion_committed_and_is_reported(
 
     let after = sync(fixture, 3).await;
     assert!(
-        after.surfaced.iter().any(
-            |one| matches!(one, Surfaced::MovedToTrash { path } if path == &entry_path("a.jpg"))
-        ),
+        after
+            .surfaced
+            .iter()
+            .any(|one| matches!(one, Surfaced::Discarded { path } if path == &entry_path("a.jpg"))),
         "the next sync asks again: {:?}",
         after.surfaced,
     );
-    assert_eq!(fixture.fs().moved_to_trash(), [a]);
+    assert_eq!(fixture.fs().discarded(), [a]);
 }
 
 /// EP-15: a deletion made on another device touches nothing of this one's,
@@ -351,11 +353,12 @@ pub async fn a_deletion_on_another_device_leaves_this_devices_copies_to_its_sync
 
     let after = sync(fixture, 3).await;
     assert!(
-        after.surfaced.iter().any(
-            |one| matches!(one, Surfaced::MovedToTrash { path } if path == &entry_path("a.jpg"))
-        ),
-        "its own next sync moves it: {:?}",
+        after
+            .surfaced
+            .iter()
+            .any(|one| matches!(one, Surfaced::Discarded { path } if path == &entry_path("a.jpg"))),
+        "its own next sync discards it: {:?}",
         after.surfaced,
     );
-    assert_eq!(fixture.fs().moved_to_trash(), [a]);
+    assert_eq!(fixture.fs().discarded(), [a]);
 }

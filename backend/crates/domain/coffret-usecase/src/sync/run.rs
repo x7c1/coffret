@@ -2,7 +2,7 @@ use coffret_model::Redacted;
 use tracing::{info, warn};
 
 use crate::commit::catch_up;
-use crate::departure::{move_departed_to_trash, EmptiedFolders};
+use crate::departure::{discard_departed, EmptiedFolders};
 use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
 use crate::sync::disposal::Disposal;
@@ -68,10 +68,11 @@ use crate::upload;
 ///
 /// A file this device materialized whose Entry has since left the Library is
 /// not carried back in as new (spec: EP-15). One that still holds what this
-/// device last made it match is moved to the desktop's trash and its row is
-/// forgotten; one that changed is kept and reported by every run; a move that
-/// is refused leaves the file and its row where they are, is reported with what
-/// refused it, and is tried again by the next run — and fails nothing else.
+/// device last made it match is discarded into the desktop's trash and its row
+/// is forgotten; one that changed is kept and reported by every run; a discard
+/// that is refused leaves the file and its row where they are, is reported with
+/// what refused it, and is tried again by the next run — and fails nothing
+/// else.
 ///
 /// A run with nothing to upload commits nothing rather than committing an empty
 /// batch: a Journal record is a generation, and creating one for a batch that
@@ -138,7 +139,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     let mut survey = scan::scan(index, roots, births, now).await?;
 
     // Only now, with the scan over: every departed file stands under a root the
-    // walk could read (spec: EP-12), and the move holds that root against its
+    // walk could read (spec: EP-12), and the discard holds that root against its
     // mapping before it writes (spec: EP-13). Before the encoding, so that what
     // went to the trash is settled whatever becomes of the batch.
     for path in std::mem::take(&mut survey.forgotten) {
@@ -149,14 +150,14 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         let root = departed.source.root.clone();
         let expected = departed.expected;
         let relative = departed.source.relative.clone();
-        let surfaced = move_departed_to_trash(index, trash, departed).await?;
-        if matches!(surfaced, Surfaced::MovedToTrash { .. }) {
-            emptied.moved(&root, expected, &relative);
+        let surfaced = discard_departed(index, trash, departed).await?;
+        if matches!(surfaced, Surfaced::Discarded { .. }) {
+            emptied.discarded(&root, expected, &relative);
         }
         survey.surfaced.push(surfaced);
     }
-    // Once every move is made, so a folder several departed files stood in is
-    // asked about after the last of them left it.
+    // Once every discard is made, so a folder several departed files stood in
+    // is asked about after the last of them left it.
     emptied.remove(trash).await;
     local.prepare_dir(&spool_dir).await?;
 
@@ -269,10 +270,10 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // and neither may reach a diagnostic event.
         mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
-        moved_to_trash = outcome
+        discarded = outcome
             .surfaced
             .iter()
-            .filter(|one| matches!(one, Surfaced::MovedToTrash { .. }))
+            .filter(|one| matches!(one, Surfaced::Discarded { .. }))
             .count(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.

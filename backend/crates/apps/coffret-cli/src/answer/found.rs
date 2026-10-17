@@ -208,9 +208,9 @@ fn reason_name(reason: &FindingReason) -> &'static str {
         FindingReason::ForeignFile => "ForeignFile",
         FindingReason::LocallyChanged => "LocallyChanged",
         FindingReason::WitnessedDeletion => "WitnessedDeletion",
-        FindingReason::MovedToTrash => "MovedToTrash",
+        FindingReason::Discarded => "Discarded",
         FindingReason::KeptEdited => "KeptEdited",
-        FindingReason::MoveToTrashRefused { .. } => "MoveToTrashRefused",
+        FindingReason::DiscardRefused { .. } => "DiscardRefused",
         FindingReason::UnreachablePlace { .. } => "UnreachablePlace",
         FindingReason::ReservedComponent => "ReservedComponent",
     }

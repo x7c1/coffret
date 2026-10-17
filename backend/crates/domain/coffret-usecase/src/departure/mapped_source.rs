@@ -22,7 +22,7 @@ use crate::trash_folders;
 /// name is read the way the walk reads it — into NFC before it is compared
 /// (spec: EP-1) — so the [`SourceFile`] that comes back carries the length and
 /// modification time the walk would have, and the location below the root
-/// spelled the way the folder spells it, which is what a move to the trash is
+/// spelled the way the folder spells it, which is what a discard is
 /// asked for (spec: EP-8).
 ///
 /// `None` for everything the walk would not have found: nothing at the path, a

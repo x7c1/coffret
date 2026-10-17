@@ -126,19 +126,18 @@ would fence nobody (spec: FM-12).
 
 **Planned rename vocabulary:** a batch will also carry explicit name changes
 from a Container ID and entry number to a new Entry Path. A folder rename
-will enumerate the current Entries being moved; replay will not discover
+will enumerate the current Entries being renamed; replay will not discover
 additional Entries by interpreting a prefix. Such a batch changes names
 without replacing or uploading Container ciphertext.
 
 The current Journal format does not yet encode these changes. Their rollout
 must cover rebase, checkpoint replay, and device-local materialization
-moves together. A content update prepared while another device renames the
-same Entry must, once rebased, land at the Entry's new Entry Path rather than
-bring back the old one; competing renames or an occupied destination must
-surface a conflict. A failed
-local move must retain its old materialization record and remain pending for a
-later catch-up. These are requirements for rename, not guarantees of the
-current implementation.
+relocations together. A content update prepared while another device renames
+the same Entry must, once rebased, land at the Entry's new Entry Path rather
+than bring back the old one; competing renames or an occupied destination must
+surface a conflict. A failed local relocation must retain its old
+materialization record and remain pending for a later catch-up. These are
+requirements for rename, not guarantees of the current implementation.
 
 ## Related Concepts
 

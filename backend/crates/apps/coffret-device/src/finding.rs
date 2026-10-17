@@ -149,7 +149,7 @@ pub enum Finding {
     /// said as that, and not as a disposal: its object is still in Storage.
     Settled(Settled),
     /// A Container this run's commit removed whose object Storage would not
-    /// move to the trash (spec: OC-6, CP-14).
+    /// trash (spec: OC-6, CP-14).
     ///
     /// The commit stands — the record already took the Container out of the
     /// current set — and what is left is an object the record proves removed,
@@ -203,8 +203,8 @@ impl Finding {
     /// Failed trash keeps its provenance for a later retry (spec: OC-2), and
     /// the next qualifying commit retries a checkpoint (spec: CK-8).
     ///
-    /// A deleted Entry's copy moved to the trash is work the run did, and the
-    /// person who wants it back knows where to look (spec: EP-15).
+    /// A deleted Entry's copy discarded into the trash is work the run did, and
+    /// the person who wants it back knows where to look (spec: EP-15).
     ///
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
@@ -218,7 +218,7 @@ impl Finding {
         !matches!(
             self,
             Self::Surfaced {
-                reason: FindingReason::MovedToTrash,
+                reason: FindingReason::Discarded,
                 ..
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::UntrashedRemoval { .. }
@@ -358,14 +358,14 @@ impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             // Said as what was done rather than as something left alone, since
-            // that is what it is (spec: EP-15): "moved" and not "surfaced" — and
-            // not "trashed" either, which is Storage's verb for an object.
+            // that is what it is (spec: EP-15): "discarded" and not "surfaced" —
+            // and not "trashed" either, which is Storage's verb for an object.
             // Still a kind word first, as every other finding has, because the
             // line is read by scripts that split on it.
             Self::Surfaced {
                 path,
-                reason: reason @ FindingReason::MovedToTrash,
-            } => write!(f, "moved {path}: {reason}"),
+                reason: reason @ FindingReason::Discarded,
+            } => write!(f, "discarded {path}: {reason}"),
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
             Self::UnavailableRoot {
                 prefix,
@@ -441,7 +441,7 @@ impl fmt::Display for Finding {
             }) => write!(
                 f,
                 "settled container {container_id}: nothing committed it, and Storage would not \
-                 move its object to the trash ({}); the object is still in Storage, and its \
+                 trash its object ({}); the object is still in Storage, and its \
                  provenance is kept for retry",
                 chained(cause),
             ),
@@ -455,7 +455,7 @@ impl fmt::Display for Finding {
                 // this removal, so it is no orphan, and the trash is any later
                 // run's to retry (spec: OC-6).
                 "untrashed container {container_id}: the commit removed it and stands, and \
-                 Storage would not move its object to the trash ({}); the object is still in \
+                 Storage would not trash its object ({}); the object is still in \
                  Storage, and any later run may trash it",
                 chained(cause),
             ),

@@ -6,10 +6,10 @@
 // would rebuild, that is shown, and only Delete arms it. Cancel arms nothing.
 //
 // What is shown is what leaves the Library. Once that has committed, the server
-// moves this device's own unedited copies of the deleted files to the trash and
-// keeps any it finds edited, and the finished line says which, so a file the
-// person has just deleted does not go on standing in the folder as one the
-// Library does not hold.
+// discards this device's own unedited copies of the deleted files into the
+// trash and keeps any it finds edited, and the finished line says which, so a
+// file the person has just deleted does not go on standing in the folder as one
+// the Library does not hold.
 //
 // A deletion names one folder, or any number of files: a row's menu names its
 // own, and the explorer's selection (see [`selection`](./selection)) names
@@ -290,24 +290,24 @@ export function deletedLine(run: Delete): DeleteNotice | null {
  * What became of this device's own copies of the deleted files, and anything
  * else the run reported beside them.
  *
- * The moves are counted rather than named: they are what the person asked for,
+ * The discards are counted rather than named: they are what the person asked for,
  * and the line already names what was deleted. A copy kept because it changed
  * is named, because it is the one the person has to do something about; so is
- * anything else — a refused move, a folder this device could not vouch for, a
+ * anything else — a refused discard, a folder this device could not vouch for, a
  * Keyring repair — said in the server's own sentence, the first of them and
  * how many more, as a sync's findings are.
  */
 function findingLines(findings: readonly Finding[]): string[] {
-  const moved = findings.filter((finding) => finding.surfaced === 'MovedToTrash').length;
+  const discarded = findings.filter((finding) => finding.surfaced === 'Discarded').length;
   const kept = findings
     .filter((finding) => finding.surfaced === 'KeptEdited')
     .map((finding) => lastOf(finding.path ?? ''));
   const others = findings.filter(
-    (finding) => finding.surfaced !== 'MovedToTrash' && finding.surfaced !== 'KeptEdited',
+    (finding) => finding.surfaced !== 'Discarded' && finding.surfaced !== 'KeptEdited',
   );
   const lines: string[] = [];
-  if (moved > 0) {
-    lines.push(`${count(moved)} moved to the trash on this device`);
+  if (discarded > 0) {
+    lines.push(`${count(discarded)} discarded into the trash on this device`);
   }
   if (kept.length > 0) {
     lines.push(`kept on this device because ${kept.length === 1 ? 'it' : 'they'} changed: ${kept.join(', ')}`);

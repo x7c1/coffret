@@ -131,9 +131,9 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   ReservedComponent: 'refusal',
   ChangedInPack: 'finding',
   DeletedLocally: 'finding',
-  MovedToTrash: 'finding',
+  Discarded: 'finding',
   KeptEdited: 'finding',
-  MoveToTrashRefused: 'finding',
+  DiscardRefused: 'finding',
 };
 
 const FINDING_REASONS: Literals<FindingReason> = {

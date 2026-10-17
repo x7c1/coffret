@@ -72,8 +72,8 @@ refuses the run. Findings have two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a refused move of a departed file to the desktop's trash | While a later run still observes the condition |
-| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file moved to the desktop's trash | As the result of that attempt; later attempts report their own results |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused | While a later run still observes the condition |
+| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
 leaving the reported conditions for attention (spec: PK-14, EP-10, EP-12,
@@ -137,12 +137,15 @@ and has a window of its own for entering the Passphrase.
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
   the Library)
-- move (a departed file to the desktop's trash, during a sync, or right after
-  the commit of the deletion this device made) — never *trash*, which is
-  Storage's verb: a [Storage Object](../storage-object/) is trashed
-- remove (a folder below a mapped root that a run's moves to the trash
-  emptied, once every move is made) — never *delete*, which is the Library's
-  verb for Entries
+- discard (a departed file into the desktop's trash, during a sync, or right
+  after the commit of the deletion this device made) — never *trash*, which is
+  Storage's verb: a [Storage Object](../storage-object/) is trashed; and never
+  *move*: no act on an Entry or a file is called that — a rename changes an
+  Entry's path, including its folder, and the device holding its file
+  relocates it
+- remove (a folder below a mapped root that a run's discards emptied, once
+  every discard is made) — never *delete*, which is the Library's verb for
+  Entries
 - take (the turn at this device's pending work, as a server's sync, freeze or
   deletion does before it asks for the Library; a run armed while another holds
   it waits for the holder)
@@ -236,8 +239,8 @@ and has a window of its own for entering the Passphrase.
     another removed it — while the file this device materialized for it stayed
     on disk. It is not added: the record says this device put it there, and
     carrying it back in would undo the deletion, so no run uploads it. A sync
-    moves an **unedited** one — still holding what this device last made it
-    match — to the desktop's trash and forgets the record, so the path is
+    discards an **unedited** one — still holding what this device last made it
+    match — into the desktop's trash and forgets the record, so the path is
     outside this device's scope again; the device that made the deletion does
     the same for its own copies right after the commit. An **edited** one is the person's change to a
     file the Library no longer has: it stays where it is and every run reports
@@ -245,10 +248,9 @@ and has a window of its own for entering the Passphrase.
     removes it. Telling the two apart takes the content hash this device
     records whenever it materializes a file, because the Entry's own leaves the
     Catalog with the Entry (spec: EP-15). A folder below the mapped root that
-    those moves to the trash leave with nothing at all in it is removed with
-    them, and each folder above it emptied in turn — never the mapped root, and
-    never a folder that was empty before the run or still holds anything
-    (spec: EP-15).
+    those discards leave with nothing at all in it is removed with them, and
+    each folder above it emptied in turn — never the mapped root, and never a
+    folder that was empty before the run or still holds anything (spec: EP-15).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
@@ -455,12 +457,12 @@ and has a window of its own for entering the Passphrase.
   never comes back under its ID, and the provider's trash keeps its ciphertext
   only until it is purged — putting it back from there restores neither its
   place in the Library nor its key (spec: CP-14, OC-6). A device holding a
-  local copy of a deleted Entry moves it to the desktop's trash once it has
-  caught up, unless the copy changed since the device last made it match — then
-  it keeps it and says so — so the deletion reaches every device's disk without
-  any of them losing an edit. The device that made the deletion does this for
-  its own copies right after the commit; every other device does it at its
-  next sync (spec: EP-15).
+  local copy of a deleted Entry discards it into the desktop's trash once it
+  has caught up, unless the copy changed since the device last made it match —
+  then it keeps it and says so — so the deletion reaches every device's disk
+  without any of them losing an edit. The device that made the deletion does
+  this for its own copies right after the commit; every other device does it
+  at its next sync (spec: EP-15).
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).
@@ -483,7 +485,7 @@ Metadata-only rename is planned. It will commit a change to the Catalog's
 names without replacing the affected Containers. Mappings will continue to
 translate names to local paths; they do not make local folders the authority
 for the namespace. A device following a rename must protect local changes and
-retry a refused move without prematurely relabeling its materialization
+retry a refused relocation without prematurely relabeling its materialization
 record. The current implementation does not provide this operation or infer
 it from a local file being renamed.
 
