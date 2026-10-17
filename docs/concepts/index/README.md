@@ -13,7 +13,7 @@ The Index keeps three kinds of information with different recovery properties:
 
 | Part | What it records | After loss |
 | --- | --- | --- |
-| Cached Catalog | Current Containers, Entries with their current and captured paths, and the checkpoint reached | Reconstruct from intact control state |
+| Cached Catalog | Current Containers, Entries with their current and captured paths and their entry numbers, and the checkpoint reached | Reconstruct from intact control state |
 | Device-local records | Mappings, materializations, and pending work | Restore the Index from a backup of this device, or re-establish the records on this device |
 | Held parcels | Which parcels of which Containers this device keeps the ciphertext of | Nothing to recover: the parcels are read from Storage again when next wanted |
 
@@ -49,8 +49,11 @@ silence, because that second read is one the provider observes (spec: PK-20,
 PK-21).
 
 For a current Entry, **present** means this device recorded materializing it
-and has not witnessed its file go. **Remote** means every other current Entry:
-never materialized here, or recorded absent. These states describe local
+at its current path and has not witnessed its file go. **Remote** means every
+other current Entry: never materialized here, or recorded absent. An Entry a
+rename gave a new path is therefore remote until its file is relocated there:
+the record at the old path still says its file is present, but that does not
+make the Entry present (spec: EP-10). These states describe local
 availability; key-lost describes whether the Container can be decrypted, and
 locked describes whether the running Library holds its Master Key.
 
@@ -62,6 +65,19 @@ Entry's own hash leaves the cached Catalog with it. The device forgets the
 record once the file has gone to the desktop's trash or from the disk; a
 forgotten record is not an absent one, because it witnesses no deletion
 (spec: EP-15).
+
+The Index keeps each Entry's entry number beside its paths, which is how it
+finds the Entry a replayed rename names (spec: FM-9, FM-15). A rename changes
+an Entry's current path and leaves this device's file where it was placed, so
+the materialization record stays with the file and records the Entry's new
+path until the file is relocated to follow it. While it waits, the file is not
+the Entry at its own path: a scan neither reports it as deleted or departed nor
+carries it in as a new file (spec: FM-15, EP-10). A device that adopts a
+Snapshot past the rename records the new path the same way. Once the Entry
+leaves the Library the wait ends, and the file is judged where it stands like
+any other: departed where no current Entry stands there (spec: EP-15). Where
+another Entry stands there, the device forgets the record instead, since the
+file is not a copy of that Entry (spec: EP-10, EP-11).
 
 A **spool** holds a new Container's ciphertext on this device. A **pending row**
 is its local provenance: which batch created it, where its spool and uploaded
@@ -97,9 +113,11 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - restore (the cached Catalog from an Index Snapshot)
 - adopt (a checkpoint into an Index)
 - announce (a spool by recording its pending row)
-- mark (a recorded spool complete, or a materialized file present or absent)
+- mark (a recorded spool complete, a materialized file present or absent, or a
+  materialized file to follow a rename of its Entry)
 - forget (a materialization record whose Entry left the Library, once its file
-  has gone to the desktop's trash or from the disk)
+  has gone to the desktop's trash or from the disk, or at once where another
+  Entry holds the path its file stands at)
 - complete (an interrupted commit's local records from its pending row)
 - hold (a parcel this device read, by recording it beside its ciphertext)
 - let go (of a held parcel whose mapped Entries are all present or witnessed
@@ -119,6 +137,10 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - Catch-up starts from the newer of the device's cached state and a valid
   checkpoint, then replays later Journal records without opening Containers
   (spec: CK-9, CP-11).
+  - The Index refuses a record at or below the head it stands at, changing
+    nothing, and catch-up steps over that refusal. Two processes catching up
+    one Index therefore converge on the head instead of one of them carrying
+    the catalog back (spec: CK-9, CK-13, RV-5).
 - A read from a stale Index answers what the Index lists, which may be an
   Entry's earlier version, while the Container holding it stays within reach:
   readable while it is an untrashed removal, and after trash through a handle

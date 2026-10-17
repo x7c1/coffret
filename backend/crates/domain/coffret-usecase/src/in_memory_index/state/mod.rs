@@ -2,15 +2,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{
     ContainerId, ContainerSummary, ControlObjectName, EntryLocation, EntryPath, IndexCheckpoint,
-    JournalRecord, SnapshotContent,
+    SnapshotContent,
 };
 
-use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
     Mapping, PendingRow, SpoolState,
 };
 use crate::index_error::{IndexError, IndexResult};
+
+mod apply;
+
+mod restore;
 
 /// Everything one in-memory Index holds.
 ///
@@ -26,7 +29,8 @@ pub(super) struct State {
     containers: BTreeMap<ContainerId, ContainerSummary>,
     entries: BTreeMap<EntryPath, EntryLocation>,
 
-    // Device-local: never uploaded, never touched by the operations above.
+    // Device-local: never uploaded, and touched by the operations above only
+    // in which Entry a file is marked to follow (spec: FM-15, EP-10).
     // Keyed by prefix, and holding the whole mapping: one per prefix is what the
     // port promises (spec: EP-9), and the local root is no longer the only thing
     // a mapping carries (spec: EP-12).
@@ -42,68 +46,6 @@ pub(super) struct State {
 }
 
 impl State {
-    /// Replaces the Library-wide half with a Snapshot's content, leaving device
-    /// state alone (spec: CK-7, RV-1).
-    pub(super) fn restore(&mut self, snapshot: SnapshotContent) -> IndexResult<()> {
-        let (checkpoint, adopted_from, held, located) = snapshot.into_parts();
-        let mut containers = BTreeMap::new();
-        for container in held {
-            insert_container(&mut containers, container)?;
-        }
-        let mut entries = BTreeMap::new();
-        for entry in located {
-            insert_entry(&mut entries, &containers, entry)?;
-        }
-        self.containers = containers;
-        self.entries = entries;
-        self.checkpoint = Some(checkpoint);
-        self.adopted_from = adopted_from;
-        Ok(())
-    }
-
-    /// Replays one committed Journal record (spec: CP-1, CP-11, EP-6).
-    pub(super) fn apply(&mut self, record: JournalRecord) -> IndexResult<()> {
-        // Removals leave first: a path may move from a replaced Container to
-        // its replacement within one record (spec: EP-6).
-        let checkpoint = record.checkpoint();
-        for removed in record.removals() {
-            self.containers.remove(removed);
-            self.entries
-                .retain(|_, entry| entry.container_id != *removed);
-        }
-        for addition in record.into_additions() {
-            // Each Entry keeps the number its place in the table gives it
-            // (spec: FM-9, FM-15).
-            let (container, located) = addition.into_locations();
-            insert_container(&mut self.containers, container)?;
-            for entry in located {
-                insert_entry(&mut self.entries, &self.containers, entry)?;
-            }
-        }
-        self.checkpoint = Some(checkpoint);
-        Ok(())
-    }
-
-    /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2).
-    pub(super) fn refresh(&mut self, batch: CommittedBatch) -> IndexResult<()> {
-        let uploaded: Vec<ContainerId> = batch
-            .record
-            .additions()
-            .iter()
-            .map(|addition| addition.container().id)
-            .collect();
-
-        self.apply(batch.record)?;
-
-        for observation in batch.materialized {
-            self.mark_present(observation);
-        }
-        for container_id in uploaded {
-            self.clear_pending_row(container_id);
-        }
-        Ok(())
-    }
-
     /// The Library-wide half, in the canonical order the maps already hold it
     /// in (spec: CK-8, EP-3).
     pub(super) fn snapshot(&self) -> IndexResult<SnapshotContent> {
@@ -174,6 +116,7 @@ impl State {
             LocalEntry {
                 observation,
                 state: LocalEntryState::Present,
+                relocate_to: None,
             },
         );
     }
@@ -287,10 +230,30 @@ impl State {
         self.held_parcels.remove(&(container_id, index));
     }
 
+    /// Ends the wait of the file at `path`, whose Entry has left the Library
+    /// (spec: EP-10, EP-15).
+    ///
+    /// Where no current Entry stands at that path the row stays, following
+    /// nothing, and the file is departed there. Where one does, it is another
+    /// Entry than the one the file is a copy of, so the row is forgotten: a
+    /// record kept there would claim that Entry present and offer this file's
+    /// bytes as its edit. Forgotten, the file is one this device never placed
+    /// for it (spec: EP-11).
+    fn end_wait(&mut self, path: &EntryPath) {
+        if self.entries.contains_key(path) {
+            self.local_entries.remove(path);
+        } else if let Some(local) = self.local_entries.get_mut(path) {
+            local.relocate_to = None;
+        }
+    }
+
+    /// The rows of files this device has on disk as copies of the Entries at
+    /// their own paths: a file waiting to follow a rename elsewhere is neither
+    /// (spec: EP-10).
     fn present(&self) -> impl Iterator<Item = &LocalEntry> {
         self.local_entries
             .values()
-            .filter(|local| local.state == LocalEntryState::Present)
+            .filter(|local| local.state == LocalEntryState::Present && !local.awaits_relocation())
     }
 }
 

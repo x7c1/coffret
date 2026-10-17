@@ -80,6 +80,7 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
             "absent" => LocalEntryState::Absent,
             found => return Err(unreadable(OPERATION, "local file state", found)),
         },
+        relocate_to: optional_entry_path(row, "relocate_to", OPERATION)?,
     })
 }
 

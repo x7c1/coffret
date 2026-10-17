@@ -139,6 +139,10 @@
 mod byte_stream;
 pub use byte_stream::ByteStream;
 
+// What a Journal record's renames ask of a catalog, stated once for every Index
+// that applies them (spec: FM-15, RV-5).
+pub mod catalog_renames;
+
 // Where a Storage answer's length is held to what it declared and to what it
 // had to be, for every reader of one.
 mod answer_length;
@@ -248,7 +252,7 @@ pub use pending_rows_guard::PendingRowsGuard;
 pub mod index_conformance;
 
 mod index_error;
-pub use index_error::{IndexError, IndexResult};
+pub use index_error::{IndexError, IndexResult, RenameRule};
 
 // What the flows that touch this device's disk need and none of them owns: the
 // keys one Master Key epoch's Containers are sealed and opened with, the word

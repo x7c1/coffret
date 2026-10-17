@@ -233,13 +233,14 @@ pub(super) async fn discard_mapped_copies(
 /// (spec: EP-15).
 ///
 /// `None` for a path whose row is absent or gone, which holds nothing of this
-/// device's, and for one another device has since added an Entry at again,
-/// which the existing rules decide (spec: EP-10).
+/// device's, for one whose file is a copy of an Entry a rename has given
+/// another path (spec: FM-15), and for one another device has since added an
+/// Entry at again, which the existing rules decide (spec: EP-10).
 async fn departed_row(index: &dyn Index, path: &EntryPath) -> IndexResult<Option<LocalEntry>> {
     let Some(local) = index
         .local_entry_at(path)
         .await?
-        .filter(|local| local.state == LocalEntryState::Present)
+        .filter(|local| local.state == LocalEntryState::Present && !local.awaits_relocation())
     else {
         return Ok(None);
     };

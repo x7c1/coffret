@@ -50,13 +50,15 @@ disks a device happens to have.
 | Question | State |
 | --- | --- |
 | Does the Catalog contain this Entry? | Current, or outside the current Catalog |
-| Has this device materialized its file and not witnessed it go? | Present, or remote |
+| Has this device materialized its file at its current path and not witnessed it go? | Present, or remote |
 | Can the committed Keyring supply its Container Key? | An envelope, or a key-lost marker |
 | Does this running Library hold its Master Key? | Unlocked, or locked |
 
 These are independent axes. A current Entry can be remote and key-lost: its
 name remains in the Catalog, this device has no local file, and its stored
-ciphertext cannot be opened. A Library lock describes the running device;
+ciphertext cannot be opened. An Entry a rename gave a new path is remote until
+this device relocates its file there: the file left at the old path is
+awaiting relocation (below), not the Entry present. A Library lock describes the running device;
 it does not change Catalog membership or turn an available envelope into a
 key-lost marker (spec: EP-10, KL-7, DK-4).
 
@@ -251,6 +253,14 @@ and has a window of its own for entering the Passphrase.
     those discards leave with nothing at all in it is removed with them, and
     each folder above it emptied in turn — never the mapped root, and never a
     folder that was empty before the run or still holds anything (spec: EP-15).
+  - A file is **awaiting relocation** when a rename in the Library has given
+    its Entry another path since this device placed it. It is not departed,
+    since its Entry is still current, and not added, since the record says
+    this device put it there: a scan neither reports it nor carries it in, and
+    no run selects it for update or freeze. It stays where it was placed, and
+    the record notes where its Entry stands now, until the device relocates it
+    to follow — a later change. If the Entry leaves the Library first, the
+    file is departed instead (spec: EP-10, FM-15).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
@@ -481,13 +491,18 @@ and has a window of its own for entering the Passphrase.
 
 ## Technical Constraints
 
-Metadata-only rename is planned. It will commit a change to the Catalog's
-names without replacing the affected Containers. Mappings will continue to
-translate names to local paths; they do not make local folders the authority
-for the namespace. A device following a rename must protect local changes and
-retry a refused relocation without prematurely relabeling its materialization
-record. The current implementation does not provide this operation or infer
-it from a local file being renamed.
+Metadata-only rename is not complete yet. A rename commits a change to the
+Catalog's names without replacing the affected Containers, and replaying a
+record or adopting a Snapshot already applies one: the Catalog takes each
+Entry's new path, and a file this device placed for a renamed Entry waits at
+its old path to be relocated (spec: FM-15, RV-5, EP-10). What remains is
+writing renames — no writer emits one yet — fetching an Entry by its entry
+number, relocating a waiting file on this device, and rebasing a rename onto a
+newer head. Mappings will continue to translate names to local paths; they do
+not make local folders the authority for the namespace. A device following a
+rename must protect local changes and retry a refused relocation without
+prematurely relabeling its materialization record. The current implementation
+does not infer a rename from a local file being renamed.
 
 ## Related Concepts
 

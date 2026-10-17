@@ -28,6 +28,17 @@ impl fmt::Display for IndexError {
             Self::UnknownContainer { container_id } => {
                 write!(f, "no current Container {container_id} to hold this Entry")
             }
+            Self::AlreadyApplied {
+                generation,
+                checkpoint,
+            } => write!(
+                f,
+                "the Journal record at generation {generation} is already applied: the Index \
+                 stands at head {checkpoint}"
+            ),
+            Self::RenameRefused { element, rule } => {
+                write!(f, "rename {element} of the record is refused: {rule}")
+            }
             // The path stays out of the message, and stays in the value: see
             // the variant.
             Self::UnrepresentablePath { operation, .. } => write!(

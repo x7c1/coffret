@@ -12,37 +12,43 @@ use crate::error::classify;
 /// device put into it, version 10 the content hash a materialized file was
 /// made to match, version 11 the parcels this device holds (spec: PK-21),
 /// version 12 the commit slots a batch attempted (spec: OC-2, OC-3), version 13
-/// each Entry's captured path beside its current one (spec: FM-15, FM-16), and
+/// each Entry's captured path beside its current one (spec: FM-15, FM-16),
 /// version 14 a catalog filled from Storage objects whose maps carry their
 /// fields under field numbers, with that column under the name the
-/// specification now gives the field, `captured_path` (spec: FM-9), and
-/// version 15 each Entry's entry number in its Container (spec: FM-9, FM-16).
-pub(crate) const SCHEMA_VERSION: i64 = 15;
+/// specification now gives the field, `captured_path` (spec: FM-9), version 15
+/// each Entry's entry number in its Container (spec: FM-9, FM-16), and version
+/// 16 the Entry Path a materialized file waits to follow once a rename has
+/// changed its Entry's current path (spec: FM-15, EP-10).
+pub(crate) const SCHEMA_VERSION: i64 = 16;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layouts 14 and 15 changed only the catalog, so a file at layout 13 or 14
-/// keeps its device group as it is and has its catalog discarded and rebuilt
-/// from Storage (spec: RV-5) rather than migrated. A layout-13 catalog was
-/// filled from objects in a format this build no longer reads, so carried
-/// forward it would describe objects nothing here can open. A layout-14 one
-/// holds no entry numbers, and nothing it holds says what they were: the
-/// rebuild replays them out of the Journal (spec: FM-16).
+/// Layout 16 changed the device-local group, so the floor is the current
+/// layout and no older file keeps its device group as it is. A layout from 13
+/// to 15 has the one column it lacks added by the same upgrade the older ones
+/// take, and loses its catalog with them: a layout-13 catalog was filled from
+/// objects in a format this build no longer reads, a layout-14 one holds no
+/// entry numbers, and nothing either holds says what they were, so the rebuild
+/// from Storage replays them out of the Journal (spec: RV-5, FM-16). A
+/// layout-15 catalog would still read, and is discarded all the same: the
+/// catalog is a cache, and one path for every older file is one path to keep
+/// right.
 ///
-/// Versions 7 to 12 have one explicit, transactional upgrade of their
+/// Versions 7 to 15 have one explicit, transactional upgrade of their
 /// device-local group that preserves every row, treats old attempts as
 /// unknown, takes every old pending row to name a Container built out of this
 /// device's own files — the only kind a build before version 9 could spool —
 /// leaves every old materialization without a recorded hash, which is what a
 /// build before version 10 never wrote down, starts with no parcel held, which
-/// is what a build before version 11 never kept, and records no commit slot for
+/// is what a build before version 11 never kept, records no commit slot for
 /// any batch, which is what a build before version 12 never kept — so an old
-/// attempt stays one whose outcome is unknown (spec: OC-2). Their catalog is
-/// discarded in the same transaction, for the reason above. Other unreadable
-/// device layouts are refused rather than discarded, because Storage cannot
-/// reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 13;
+/// attempt stays one whose outcome is unknown (spec: OC-2) — and has no file
+/// waiting to follow a rename, which no build before version 16 applied. Their
+/// catalog is discarded in the same transaction, for the reason above. Other
+/// unreadable device layouts are refused rather than discarded, because
+/// Storage cannot reconstruct mappings, materializations, or provenance.
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 16;
 
 /// The table of current Entries, part of the Library-wide group below.
 macro_rules! entries_ddl {
@@ -160,13 +166,18 @@ CREATE TABLE local_entries (
     -- is the content hash of the Entry this device last made the file match,
     -- which is what tells a file left as the Library had it from one edited
     -- since, once the Entry itself has left the catalog (spec: EP-15); NULL only
-    -- on a row an older layout wrote, which never recorded one.
+    -- on a row an older layout wrote, which never recorded one. `relocate_to`
+    -- is where the Entry this file is a copy of stands now, once a rename has
+    -- changed its current path and the file has not followed it, and NULL
+    -- otherwise: the row stays keyed by `path`, where the file is
+    -- (spec: FM-15, EP-10).
     path           TEXT PRIMARY KEY COLLATE BINARY,
     state          TEXT NOT NULL,
     observed_size  INTEGER NOT NULL,
     observed_mtime INTEGER NOT NULL,
     observed_at    INTEGER NOT NULL,
-    hash           BLOB
+    hash           BLOB,
+    relocate_to    TEXT COLLATE BINARY
 ) STRICT;
 
 CREATE TABLE pending_rows (
@@ -242,11 +253,11 @@ CREATE UNIQUE INDEX attempted_slots_by_batch
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5). Layouts 7 to 12 have their device-local group upgraded in
-/// place and lose their catalog the same way. Anything else — older than that,
-/// or written by a build that came after this one — is refused, because
-/// guessing at a layout this build does not know is how a cache turns into
-/// wrong answers.
+/// (spec: RV-5) — a window this build leaves empty. Layouts 7 to 15 have their
+/// device-local group upgraded in place and lose their catalog the same way.
+/// Anything else — older than that, or written by a build that came after this
+/// one — is refused, because guessing at a layout this build does not know is
+/// how a cache turns into wrong answers.
 pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     // An Entry may only name a Container the catalog holds, and SQLite enforces
     // that only when asked to — per connection, not per file.
@@ -257,7 +268,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7..=12 => provenance::preserve_device_state(connection),
+        7..=15 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }
@@ -396,8 +407,8 @@ mod tests {
     /// The rule is that a file stamped at or above the device-local floor and
     /// below the current layout keeps its device group and loses its catalog,
     /// and that everything outside is refused. In this build the real window
-    /// holds two layouts, and the layouts below it take the upgrade instead, so
-    /// this is the one place the rule itself is stated — with numbers of its
+    /// is empty, and the layouts below it take the upgrade instead, so this is
+    /// the one place the rule itself is stated — with numbers of its
     /// own, the way the suites beside this crate write their layout versions
     /// out rather than reading them off the constants.
     #[test]
@@ -420,14 +431,15 @@ mod tests {
         );
     }
 
-    /// This build's own window holds the layouts whose device group it writes
-    /// unchanged: layouts 13 and 14 lose their catalog and keep the rest, and
-    /// the layouts below them are upgraded rather than discarded (spec: OC-2).
+    /// This build's own window is empty: layout 16 changed the device-local
+    /// group, so no older layout keeps its device group unchanged, and every
+    /// layout from 7 up takes the upgrade rather than the discard
+    /// (spec: OC-2, EP-10).
     #[test]
-    fn this_builds_window_holds_the_layouts_since_the_device_floor() {
-        assert!(carries_a_readable_device_group(DEVICE_SCHEMA_VERSION));
-        assert!(carries_a_readable_device_group(SCHEMA_VERSION - 1));
-        assert!(!carries_a_readable_device_group(SCHEMA_VERSION));
-        assert!(!carries_a_readable_device_group(DEVICE_SCHEMA_VERSION - 1));
+    fn this_builds_window_is_empty() {
+        assert_eq!(DEVICE_SCHEMA_VERSION, SCHEMA_VERSION);
+        for found in 0..=SCHEMA_VERSION + 1 {
+            assert!(!carries_a_readable_device_group(found), "layout {found}");
+        }
     }
 }

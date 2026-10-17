@@ -2,7 +2,7 @@ use std::error;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::{ContainerId, EntryPath, Generation};
 
 /// Result alias for [`Index`](crate::Index) operations.
 pub type IndexResult<T> = std::result::Result<T, IndexError>;
@@ -55,6 +55,38 @@ pub enum IndexError {
     UnknownContainer {
         /// The Container the Entry names.
         container_id: ContainerId,
+    },
+    /// A Journal record at or below the head this Index already stands at,
+    /// refused before any of it is applied.
+    ///
+    /// The checkpoint is a head generation and a replay only goes forwards, so
+    /// a record at or below it is one this catalog has taken in already — from
+    /// another process replaying the same Journal into this Index file, or
+    /// through a Snapshot adopted at or after it (spec: CK-9, RV-5). Applying
+    /// it again would not always collide: a record carrying only removals, or
+    /// the two halves of a swap, would go through and carry the catalog back.
+    /// So it is refused by its generation, and nothing of the catalog or of
+    /// this device's rows changes. A replay steps over it; every other refusal
+    /// says what it says however many replayers there are.
+    AlreadyApplied {
+        /// The generation of the refused record.
+        generation: Generation,
+        /// The head generation the Index stands at.
+        checkpoint: Generation,
+    },
+    /// One of a Journal record's renames breaks a state rule against the
+    /// catalog the record is applied to, and the record is refused whole.
+    ///
+    /// A record's removals, renames and additions are one change, so a rename
+    /// the catalog cannot take refuses the rest of the record with it and the
+    /// catalog stays exactly where it was (spec: CP-1, FM-15, RV-5). A record
+    /// that reaches a catalog this way describes a state no commit could have
+    /// produced from it.
+    RenameRefused {
+        /// The element's position in the record's `renames`.
+        element: usize,
+        /// Which rule it breaks.
+        rule: RenameRule,
     },
     /// A local path the catalog has no way to keep.
     ///
@@ -150,6 +182,8 @@ pub enum IndexError {
 
 mod display;
 mod redacted;
+mod rename_rule;
+pub use rename_rule::RenameRule;
 mod source;
 
 #[cfg(test)]

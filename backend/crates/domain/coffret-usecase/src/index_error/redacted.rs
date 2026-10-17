@@ -30,6 +30,14 @@ impl Redacted for IndexError {
             Self::UnknownContainer { container_id } => {
                 format!("Index::UnknownContainer(container={container_id})")
             }
+            Self::AlreadyApplied {
+                generation,
+                checkpoint,
+            } => format!("Index::AlreadyApplied(generation={generation}, checkpoint={checkpoint})"),
+            Self::RenameRefused { element, rule } => format!(
+                "Index::RenameRefused(element={element}, rule={})",
+                rule.redacted()
+            ),
             Self::UnrepresentablePath { operation, .. } => {
                 format!("Index::UnrepresentablePath(operation={operation})")
             }

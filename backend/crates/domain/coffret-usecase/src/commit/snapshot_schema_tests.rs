@@ -16,8 +16,8 @@ use coffret_format::{
 };
 use coffret_model::{
     CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, ControlObjectKind, ControlObjectName, EntryExtent, EntryMetadata, EntryPath,
-    Generation, JournalRecord, MasterKeyEpoch, Mtime, SnapshotContent,
+    ContentHash, ControlObjectKind, ControlObjectName, EntryExtent, EntryMetadata, EntryNumber,
+    EntryPath, EntryRename, Generation, JournalRecord, MasterKeyEpoch, Mtime, SnapshotContent,
 };
 
 use super::catch_up;
@@ -234,4 +234,148 @@ async fn a_schema_2_snapshot_is_passed_over_for_a_replay_from_the_first_head() {
     );
     assert_eq!(standing.checkpoint().head_generation(), generation(2));
     assert_eq!(numbers(&index).await, by_table_position());
+}
+
+/// A record at `head` renaming `renames` of [`pack`]'s Entries, each given as
+/// its entry number and the path it takes.
+fn renaming_at(head: u64, renames: &[(u32, &str)]) -> JournalRecord {
+    let id = pack().container().id;
+    JournalRecord::new(
+        generation(head),
+        Some(generation(head - 1)),
+        MasterKeyEpoch::FIRST,
+        commitment(),
+        None,
+        None,
+        Vec::new(),
+        Vec::new(),
+    )
+    .and_then(|record| {
+        record.with_renames(
+            renames
+                .iter()
+                .map(|(number, path)| {
+                    EntryRename::new(
+                        id,
+                        EntryNumber::new(u64::from(*number))?,
+                        EntryPath::parse(*path).expect("a fixture holds a literal Entry Path"),
+                    )
+                })
+                .collect::<Result<_, _>>()?,
+        )
+    })
+    .expect("a fixture holds a record renaming the pack's Entries")
+}
+
+/// Every Entry's current and captured path, in Entry Path order.
+async fn names(index: &InMemoryIndex) -> Vec<(String, String)> {
+    index
+        .entries_under(None)
+        .await
+        .expect("listing the catalog must succeed")
+        .into_iter()
+        .map(|location| {
+            (
+                location.entry.path.as_str().to_owned(),
+                location.entry.captured_path.as_str().to_owned(),
+            )
+        })
+        .collect()
+}
+
+// RV-5, FM-15, FM-16: renames replay. A device replaying the whole Journal and
+// one adopting a schema-3 Snapshot taken between two renaming records, then
+// replaying the record after it, stand at one catalog — current paths, captured
+// paths, and entry numbers alike — because the Snapshot carries the numbers the
+// later renames name their Entries by.
+#[tokio::test]
+async fn a_schema_3_snapshot_and_the_renames_after_it_reach_what_a_full_replay_does() {
+    let records = [
+        record_at(Generation::FIRST),
+        adding_the_pack(),
+        // A swap and a third Entry leaving its path in one record…
+        renaming_at(
+            2,
+            &[
+                (0, "albums/b.jpg"),
+                (1, "albums/z.jpg"),
+                (2, "albums/c.jpg"),
+            ],
+        ),
+        // …and, after the checkpoint, one renamed again and one renamed back.
+        renaming_at(3, &[(0, "2024/c.jpg"), (1, "albums/a.jpg")]),
+    ];
+    let keys = control_keys();
+
+    let replayed_store = InMemoryStore::new(PAGE_SIZE);
+    let adopted_store = InMemoryStore::new(PAGE_SIZE);
+    for store in [&replayed_store, &adopted_store] {
+        for record in &records {
+            store_control(
+                store,
+                &keys,
+                &ControlObjectName::head(record.generation()),
+                ControlObjectKind::Journal,
+                &encode_journal_record(record).expect("a fixture record encodes"),
+            )
+            .await;
+        }
+    }
+    // The checkpoint of the third head, as a device standing there writes it.
+    let standing = InMemoryIndex::new();
+    for record in &records[..3] {
+        standing
+            .apply(record.clone())
+            .await
+            .expect("the records up to the checkpoint apply");
+    }
+    store_control(
+        &adopted_store,
+        &keys,
+        &ControlObjectName::index_snapshot(generation(2)),
+        ControlObjectKind::IndexSnapshot,
+        &encode_index_snapshot(&IndexSnapshotPayload::ordinary(
+            standing
+                .snapshot()
+                .await
+                .expect("the catalog stands at the third head"),
+        ))
+        .expect("a fixture Snapshot encodes"),
+    )
+    .await;
+
+    let replayed = InMemoryIndex::new();
+    catch_up(&replayed_store, &replayed, &keys, &once())
+        .await
+        .expect("a catch-up replaying every record succeeds");
+    let adopted = InMemoryIndex::new();
+    catch_up(&adopted_store, &adopted, &keys, &once())
+        .await
+        .expect("a catch-up from the checkpoint succeeds");
+
+    let replayed_state = replayed
+        .snapshot()
+        .await
+        .expect("the replay stands somewhere");
+    let adopted_state = adopted
+        .snapshot()
+        .await
+        .expect("the adoption stands somewhere");
+    assert_eq!(replayed_state.adopted_from(), None);
+    assert_eq!(
+        adopted_state.adopted_from(),
+        Some(&ControlObjectName::index_snapshot(generation(2))),
+        "the second device started from the checkpoint",
+    );
+    assert_eq!(replayed_state.checkpoint(), adopted_state.checkpoint());
+    assert_eq!(replayed_state.containers(), adopted_state.containers());
+    assert_eq!(replayed_state.entries(), adopted_state.entries());
+    assert_eq!(
+        names(&replayed).await,
+        [
+            ("2024/c.jpg".to_owned(), "albums/c.jpg".to_owned()),
+            ("albums/a.jpg".to_owned(), "albums/a.jpg".to_owned()),
+            ("albums/c.jpg".to_owned(), "albums/b.jpg".to_owned()),
+        ]
+    );
 }

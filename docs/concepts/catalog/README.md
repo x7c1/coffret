@@ -36,6 +36,7 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 - cache (the Catalog in an Index)
 - commit (a change to the Catalog through the Journal)
 - checkpoint (the Catalog in an Index Snapshot)
+- rename (an Entry, changing its current Entry Path)
 
 ## Domain Rules
 
@@ -70,13 +71,16 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 
 ## Technical Constraints
 
-The planned rename operation changes an Entry's current path while preserving
-its stored identity, the Container ID and entry number. Restore must recover
-that name from control state; [salvage](../journal/#domain-rules) can recover
-only the name captured in the Container. The Journal and Snapshot formats
-already carry entry numbers and renames, but the current implementation does
-not yet support metadata-only rename: applying renames on replay, fetch by
-entry number, and local relocation must land together.
+A rename changes an Entry's current path while preserving its stored identity,
+the Container ID and entry number. Restore recovers that name from control
+state; [salvage](../journal/#domain-rules) can recover only the name captured
+in the Container. Replaying the Journal applies the renames its records carry,
+so every device that catches up reaches the same current paths, and a record
+whose renames the Catalog does not admit is refused whole (spec: FM-15, RV-5).
+Metadata-only rename is not complete yet: no operation writes a rename, fetch
+does not yet read by entry number, and a device does not yet relocate its file
+of a renamed Entry. Until it does, that file stays where it was placed, and
+the device neither carries it in as a new file nor treats it as deleted.
 
 ## Related Concepts
 

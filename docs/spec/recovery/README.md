@@ -47,10 +47,15 @@ Concept background: [Library](../../concepts/library/),
   - Replay applies each record's `renames` with the rest of it: the record's
     removals are taken out, then all its renames are applied at once — each
     Entry named by `(Container ID, entry number)` takes its new `path` — then
-    its additions are added, and the result holds to EP-5 (FM-15). A
-    checkpoint that carries no entry numbers is not a starting point for this
-    rebuild (FM-16). Applying renames is specified ahead of its
-    implementation: no writer emits a `renames` element yet.
+    its additions are added, and the result holds to EP-5 (FM-15). A record
+    one of whose renames breaks an FM-15 state rule is refused whole, and the
+    cached Catalog stays as it was. A record whose generation is at or below
+    the head the cached Catalog already stands at is refused before any of it
+    is applied, leaving the cached Catalog and device-local records as they
+    were, and a replay steps over it: another replay into the same Index has
+    applied it (CK-9, CK-13). A checkpoint that carries no entry numbers
+    is not a starting point for this rebuild (FM-16). No writer emits a
+    `renames` element yet.
 - **RV-6.** Authenticating Storage Objects proves their integrity, not their
   freshness: Storage can replay a coherent earlier Library state by
   withholding newer objects, so recent additions may disappear and removed
