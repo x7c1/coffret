@@ -66,12 +66,12 @@ Concept background: [Journal](../../concepts/journal/),
 - **OC-5.** If an available authenticated Key Envelope makes a retained
   suspected orphan decryptable, coffret may present its authenticated
   contents in isolation; after warning that a withheld Journal record could
-  still make it current, coffret may let the user explicitly move it to
-  trash. *(Form: test)*
+  still make it current, coffret may let the user explicitly trash it.
+  *(Form: test)*
 - **OC-6.** An **untrashed removal** is a Container a committed Journal record
-  took out of the current set whose object no device has yet moved to the
-  provider's trash. Any later run may trash it, and proven orphan cleanup and
-  that trashing are both idempotent (CP-14). *(Form: test)*
+  took out of the current set whose object no device has yet trashed. Any
+  later run may trash it, and proven orphan cleanup and that trashing are both
+  idempotent (CP-14). *(Form: test)*
   - An untrashed removal is not a suspected orphan (OC-1): its removal is proven
     by the record rather than inferred from absence, so the no-delete posture of
     OC-1 and OC-4 does not apply to it.

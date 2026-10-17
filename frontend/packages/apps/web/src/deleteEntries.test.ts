@@ -204,7 +204,7 @@ describe('the lines a deletion stands under', () => {
     });
   });
 
-  it('says what became of this device’s copies: counted when moved, named when kept', () => {
+  it('says what became of this device’s copies: counted when discarded, named when kept', () => {
     const finding = (path: string | null, surfaced: Finding['surfaced'], message: string) =>
       ({ path, message, reason: surfaced === null ? 'root_missing' : 'surfaced', surfaced }) as Finding;
     expect(
@@ -214,10 +214,10 @@ describe('the lines a deletion stands under', () => {
           entries: 4,
           bytes: 4_000,
           findings: [
-            finding('albums/a.jpg', 'MovedToTrash', 'moved'),
-            finding('albums/b.jpg', 'MovedToTrash', 'moved'),
+            finding('albums/a.jpg', 'Discarded', 'discarded'),
+            finding('albums/b.jpg', 'Discarded', 'discarded'),
             finding('albums/c.jpg', 'KeptEdited', 'kept'),
-            finding('albums/d.jpg', 'MoveToTrashRefused', 'moving it to the trash was refused'),
+            finding('albums/d.jpg', 'DiscardRefused', 'discarding it into the trash was refused'),
             finding(null, null, 'a folder this device maps is not there'),
           ],
         }),
@@ -225,9 +225,9 @@ describe('the lines a deletion stands under', () => {
     ).toEqual({
       text:
         '📁 albums — 4 files, 4.0 kB removed from the Library; ' +
-        '2 files moved to the trash on this device; ' +
+        '2 files discarded into the trash on this device; ' +
         'kept on this device because it changed: c.jpg; ' +
-        'd.jpg — moving it to the trash was refused (and 1 more)',
+        'd.jpg — discarding it into the trash was refused (and 1 more)',
       retry: null,
     });
   });

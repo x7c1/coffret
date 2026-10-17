@@ -647,9 +647,9 @@ function lineOf(flow: TurnTaker, turns: Turns): { text: string; colour: string }
       // The bar has no *try again* beside it, so it takes the sentence alone.
       const text =
         run.status === 'deleting' ? deletingLine(run, waits) : (deletedLine(run)?.text ?? null);
-      // A copy moved to the trash is what the person asked for, said as news
+      // A discarded copy is what the person asked for, said as news
       // rather than as something to look at, so it alone does not warn.
-      const findings = run.findings.filter((finding) => finding.surfaced !== 'MovedToTrash');
+      const findings = run.findings.filter((finding) => finding.surfaced !== 'Discarded');
       return shown(
         text,
         toneOf(run.status, findings.length + run.refused.length + run.missing.length),

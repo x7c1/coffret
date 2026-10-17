@@ -21,7 +21,7 @@ mod folders;
 // changing it.
 mod inspecting;
 
-// What the fake's trash has taken, and the move that put it there
+// What the fake's trash has taken, and the discard that put it there
 // (spec: EP-15).
 mod trash;
 
@@ -79,7 +79,7 @@ pub(super) struct State {
     files: BTreeMap<PathBuf, FileNode>,
     others: BTreeSet<PathBuf>,
     identities: BTreeMap<PathBuf, RootIdentity>,
-    moved_to_trash: Vec<PathBuf>,
+    discarded: Vec<PathBuf>,
     script: Vec<Fault>,
     attempts: BTreeMap<u8, usize>,
 }

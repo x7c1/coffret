@@ -93,7 +93,7 @@ export function rowFill(
   // did in the status bar rather than row by row. A file in this state was
   // either never in the Library, and the next sync or freeze of its folder sees
   // it as new, or is a copy this device kept of an Entry since deleted, which
-  // the next sync moves to the trash or keeps and reports instead (spec: EP-15);
+  // the next sync discards or keeps and reports instead (spec: EP-15);
   // the sentence stops short of promising the Entry, because a name the run
   // refuses is not taken in, and the run is what says so.
   if (file.state === 'added') {

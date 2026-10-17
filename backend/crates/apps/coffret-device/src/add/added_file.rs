@@ -10,7 +10,7 @@ use coffret_model::{EntryPath, Mtime};
 /// Two things put a file in this state, and to this listing they are the same
 /// state. One is a file just added to the folder, which the next sync will carry
 /// in; the other is a file whose Entry left the Library while this device's copy
-/// stayed on disk — departed, which the next sync moves to the trash or, where
+/// stayed on disk — departed, which the next sync discards into the trash or, where
 /// the copy changed, keeps and reports rather than carrying back in
 /// (spec: EP-15). Neither is in the Library now, and the answer for both is the
 /// same: it is here, and the Library does not have it.

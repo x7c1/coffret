@@ -224,11 +224,11 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
     let (path, reason) = match surfaced {
         Surfaced::PackResident { path, .. } => (path, FindingReason::ChangedInPack),
         Surfaced::DeletedLocally { path } => (path, FindingReason::DeletedLocally),
-        Surfaced::MovedToTrash { path } => (path, FindingReason::MovedToTrash),
+        Surfaced::Discarded { path } => (path, FindingReason::Discarded),
         Surfaced::KeptEdited { path } => (path, FindingReason::KeptEdited),
-        Surfaced::MoveToTrashRefused { path, cause } => (
+        Surfaced::DiscardRefused { path, cause } => (
             path,
-            FindingReason::MoveToTrashRefused {
+            FindingReason::DiscardRefused {
                 cause: cause.clone(),
             },
         ),
@@ -389,17 +389,17 @@ mod tests {
         );
     }
 
-    // EP-15's copy moved to the trash is said as what was done, and still
+    // EP-15's discarded copy is said as what was done, and still
     // opens on a kind word of its own, as every other finding does: the line is
     // what a script reading the CLI's `said` splits on.
     #[test]
-    fn a_copy_moved_to_the_trash_is_said_as_moved() {
+    fn a_discarded_copy_is_said_as_discarded() {
         let outcome = SyncOutcome {
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
             mappings: 1,
-            surfaced: vec![Surfaced::MovedToTrash {
+            surfaced: vec![Surfaced::Discarded {
                 path: entry_path("albums/old.jpg"),
             }],
             unavailable: Vec::new(),
@@ -414,8 +414,8 @@ mod tests {
         assert_eq!(
             rendered,
             [
-                "moved albums/old.jpg: it was deleted from the Library, and this device's \
-              unedited copy was moved to the trash"
+                "discarded albums/old.jpg: it was deleted from the Library, and this device's \
+              unedited copy was discarded into the trash"
             ]
         );
     }
@@ -590,7 +590,7 @@ mod tests {
             ),
             format!(
                 "settled container {container_id}: nothing committed it, and Storage would not \
-                 move its object to the trash (Storage refused access: these credentials may \
+                 trash its object (Storage refused access: these credentials may \
                  write but not delete); the object is still in Storage, and its provenance is \
                  kept for retry"
             ),
@@ -665,7 +665,7 @@ mod tests {
             rendered[1],
             format!(
                 "untrashed container {container_id}: the commit removed it and stands, and \
-                 Storage would not move its object to the trash (Storage refused access: \
+                 Storage would not trash its object (Storage refused access: \
                  these credentials may write but not delete); the object is still in Storage, \
                  and any later run may trash it"
             ),

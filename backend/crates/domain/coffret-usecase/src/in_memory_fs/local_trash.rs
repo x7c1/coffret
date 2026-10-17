@@ -11,13 +11,13 @@ use crate::mapped_relative_location::MappedRelativeLocation;
 
 #[async_trait]
 impl LocalTrash for InMemoryFs {
-    async fn move_to_trash(
+    async fn discard(
         &self,
         root: &Path,
         expected: Option<&RootMarkerId>,
         relative: &MappedRelativeLocation,
     ) -> Result<(), DescentError> {
-        lock(&self.state).move_to_trash(root, expected, relative)
+        lock(&self.state).discard(root, expected, relative)
     }
 
     async fn remove_emptied_folder(

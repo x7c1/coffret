@@ -413,18 +413,18 @@ fields until a coordinated implementation changes the format.
     prefix, though an addition takes them from the same entry table: the
     difference is what the map is for. A record is the catalog, and those
     values are what the Library holds from this commit onward, which a later
-    record may move. `captured_path` keeps the prefix because it is not the
-    catalog's to move: it is the Entry Path the owning Container's meta section
-    records, the name it was captured under, so one map can carry both names
-    — `path` for where the Entry stands now, `captured_path` for what its
+    record may change. `captured_path` keeps the prefix because it is not the
+    catalog's to change: it is the Entry Path the owning Container's meta
+    section records, the name it was captured under, so one map can carry both
+    names — `path` for where the Entry stands now, `captured_path` for what its
     Container calls it. Keeping one spelling for both would leave a reader
     with no way to say which of the two it had in hand.
   - `captured_path` is present if and only if it differs from `path`: a map
     without it names an Entry whose captured path is its current one, so an
-    Entry no rename has moved costs nothing for it. One Library state
-    therefore has one encoding, as with the orders below, and a reader rejects
-    a map whose `captured_path` is present and equal to its `path` rather than
-    accepting a second spelling of it.
+    Entry no rename has given a new path costs nothing for it. One Library
+    state therefore has one encoding, as with the orders below, and a reader
+    rejects a map whose `captured_path` is present and equal to its `path`
+    rather than accepting a second spelling of it.
   - A commit takes each captured path from the entry table of the Container it
     adds, as that Container's meta section records it, and not from the paths
     its batch was asked to commit; a checkpoint copies it from the catalog

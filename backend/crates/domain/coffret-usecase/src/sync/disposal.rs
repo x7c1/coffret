@@ -6,7 +6,7 @@ use crate::error::Error;
 /// Three answers rather than a yes or a no, because two of them are opposite
 /// states that a `false` would read alike. A spool that never left the device
 /// put nothing on Storage, so there was nothing to remove; an object Storage
-/// would not move to the trash is still there, named by no current state, for
+/// would not trash is still there, named by no current state, for
 /// orphan cleanup to find (spec: OC-1, OC-4). Only the refused trash leaves
 /// anything behind, and a caller that is told "disposed of" for both tells a
 /// person the Library's Storage holds less than it does.
@@ -20,9 +20,9 @@ pub enum Disposal {
     /// The earlier run never uploaded the Container, so nothing of it was on
     /// Storage to remove.
     NeverUploaded,
-    /// Its object was moved to the provider's trash.
+    /// Its object was trashed on Storage.
     Trashed,
-    /// Storage refused to move its object to the trash, so it is still there.
+    /// Storage refused to trash its object, so it is still there.
     ///
     /// The row that was the provenance for it goes regardless, so what is left
     /// is an object no current state names, which is orphan cleanup's to find

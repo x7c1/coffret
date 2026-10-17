@@ -30,18 +30,19 @@
 //!    replaced Packs in removals, the replacements in additions.
 //!    [`commit_batch`](crate::commit::commit_batch) supplies the rest — the
 //!    Keyring repair and pre-replication, the Entry Path check, the rebase —
-//!    and, after the commit, moves every removed object to the provider's
-//!    trash, reporting one that would not go without un-committing anything
+//!    and, after the commit, trashes every removed object on Storage,
+//!    reporting one that would not go without un-committing anything
 //!    (spec: OC-6).
 //! 6. **This device's copies** (spec: EP-15). Where the caller hands over the
 //!    device's mapped folders and trash
 //!    ([`DeleteRequest::with_mapped_copies`]), the run decides right away what
 //!    the next sync would otherwise decide for this device's own files of the
-//!    deleted Entries: an unedited copy goes to the desktop's trash and its row
-//!    is forgotten, the folders those moves emptied are removed, and an edited
-//!    one is kept and reported — under the same root checks a sync's moves
-//!    answer to (spec: EP-12, EP-13). Nothing here un-commits anything or fails
-//!    the run: a refusal is reported, and the next sync tries again.
+//!    deleted Entries: an unedited copy is discarded into the desktop's trash
+//!    and its row is forgotten, the folders those discards emptied are removed,
+//!    and an edited one is kept and reported — under the same root checks a
+//!    sync's discards answer to (spec: EP-12, EP-13). Nothing here un-commits
+//!    anything or fails the run: a refusal is reported, and the next sync tries
+//!    again.
 //!
 //! Deletion is not undoable in the Library. A removed Container ID is never
 //! added again (spec: CP-14), and the provider's trash keeps the removed

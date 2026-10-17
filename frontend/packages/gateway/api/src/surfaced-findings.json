@@ -7,7 +7,7 @@
   "ReservedComponent",
   "ChangedInPack",
   "DeletedLocally",
-  "MovedToTrash",
+  "Discarded",
   "KeptEdited",
-  "MoveToTrashRefused"
+  "DiscardRefused"
 ]

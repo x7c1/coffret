@@ -241,10 +241,10 @@ export type SurfacedFinding =
   | 'DeletedLocally'
   /**
    * The Entry this device had put there left the Library, and the file, still
-   * holding what this device last made it match, was moved to the desktop's
-   * trash. Work done: nobody has to act on it.
+   * holding what this device last made it match, was discarded into the
+   * desktop's trash. Work done: nobody has to act on it.
    */
-  | 'MovedToTrash'
+  | 'Discarded'
   /**
    * The Entry this device had put there left the Library, and the file changed
    * since, so it is kept where it is — and never carried back in — until the
@@ -252,11 +252,11 @@ export type SurfacedFinding =
    */
   | 'KeptEdited'
   /**
-   * The Entry this device had put there left the Library, and moving the file
-   * to the trash was refused — by the mapped folder, a folder on the way down,
+   * The Entry this device had put there left the Library, and discarding the
+   * file into the trash was refused — by the mapped folder, a folder on the way down,
    * or the trash itself. It is left where it is, and the next sync tries again.
    */
-  | 'MoveToTrashRefused';
+  | 'DiscardRefused';
 
 /**
  * What a placement under a folder this device has no folder for is told as

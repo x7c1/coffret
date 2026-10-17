@@ -87,8 +87,8 @@ pub(crate) fn folder() -> &'static Path {
 ///
 /// The disk is handed to every part of the request that is about it, because it
 /// is one disk: the spool it writes, the mapped folders it reads and the trash
-/// it moves a departed file into are places in the same fake, the way they are
-/// places on a device.
+/// it discards a departed file into are places in the same fake, the way they
+/// are places on a device.
 ///
 /// The store travels separately from the fixture because one case runs against
 /// a wrapper around it.

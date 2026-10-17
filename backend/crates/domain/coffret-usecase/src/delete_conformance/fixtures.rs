@@ -55,7 +55,7 @@ pub(super) async fn map(fixture: &DeleteUnderTest) {
         .expect("recording a mapping must succeed");
 }
 
-/// The identity a case that moves files out of the folder registers its root
+/// The identity a case that discards files out of the folder registers its root
 /// under (spec: EP-13).
 pub(super) fn registered() -> RootMarkerId {
     RootMarkerId::from_bytes([0xde, 0x1e, 0x7e, 0x00, 0x15, 0x0e, 0x01, 0x05])
@@ -64,9 +64,9 @@ pub(super) fn registered() -> RootMarkerId {
 /// Maps the device's folder onto the Library root the way recording a mapping
 /// does: a marker in the root, and the same identity expected of it.
 ///
-/// What a case needs whose deletion moves this device's copies to the trash:
-/// a move is a write into the mapped folder, made only through a root that
-/// vouches for itself (spec: EP-13, EP-15).
+/// What a case needs whose deletion discards this device's copies into the
+/// trash: a discard is a write into the mapped folder, made only through a root
+/// that vouches for itself (spec: EP-13, EP-15).
 pub(super) async fn map_registered(fixture: &DeleteUnderTest) {
     fixture.fs().plant_marker(fixture.folder(), &registered());
     fixture

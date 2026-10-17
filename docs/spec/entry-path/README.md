@@ -389,14 +389,14 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - **Unedited** — it still holds what the device last made it match: its byte
     length and modification time equal the recorded ones, or, where either
     differs, its plaintext hashes to the content hash recorded beside the
-    materialization. It is moved to the desktop's own trash — the freedesktop.org
-    Trash on Linux, the Finder's on macOS — its record is forgotten, so the
-    path is outside the device's scope again, and the run reports it as moved
-    to the trash with its Entry Path. A folder below the mapped root that the
-    run's moves emptied — it holds nothing at all once they are made — is
-    removed, and so is each folder above it that is emptied in turn, never the
-    mapped root itself; a folder that was empty before the run, or still holds
-    anything the run did not move, stays.
+    materialization. It is discarded into the desktop's own trash — the
+    freedesktop.org Trash on Linux, the Finder's on macOS — its record is
+    forgotten, so the path is outside the device's scope again, and the run
+    reports it as discarded with its Entry Path. A folder below the mapped root
+    that the run's discards emptied — it holds nothing at all once they are
+    made — is removed, and so is each folder above it that is emptied in turn,
+    never the mapped root itself; a folder that was empty before the run, or
+    still holds anything the run did not discard, stays.
   - **Edited** — anything else. It is left where it is and reported by every
     run as deleted from the Library and kept because it changed, until the
     person moves or removes it. Moved to another path it is an ordinary new
@@ -407,11 +407,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     leaves the catalog with the Entry. A record that carries no hash, made by a
     build that did not keep one, judges the file by length and modification
     time alone: a file whose either differs is kept rather than guessed about.
-  - The move is made only under a root the scan found available (EP-12), and
+  - The discard is made only under a root the scan found available (EP-12), and
     only after the root has vouched for itself against the mapping's expected
     identity, each folder below it has been entered without following links,
     and the name has been stated as a regular file (EP-8, EP-13). Nothing here
-    ever deletes a file outright. A move that is refused — the root does not
+    ever deletes a file outright. A discard that is refused — the root does not
     vouch for itself, the volume has no trash, a permission — leaves the file
     and its record where they are, is reported with what refused it, fails
     nothing else in the run, and is tried again by the next run.
@@ -425,10 +425,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     longer holds.
   - The device that deletes Entries (PK-9) applies this rule to its own files
     of those Entries right after the deletion's commit, rather than leaving
-    them to its next sync: an unedited one goes to the trash and its record is
-    forgotten, the folders those moves emptied are removed, and an edited one
-    is kept, each reported with the deletion's outcome, under the same root
-    checks and the same handling of a refused move. Nothing there fails the
+    them to its next sync: an unedited one is discarded and its record is
+    forgotten, the folders those discards emptied are removed, and an edited
+    one is kept, each reported with the deletion's outcome, under the same root
+    checks and the same handling of a refused discard. Nothing there fails the
     deletion, which has already committed, and whatever it leaves is the next
     sync's to decide as above. Every other device applies the rule at its own
     next sync, once it has caught up.
@@ -449,11 +449,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   that folder as the one on the way that is not a folder of the mapped root
   (EP-11). *(Form: test)*
   - A mapped root may be a volume's own top — a disk mounted at the folder the
-    person mapped — and a desktop moving a file to the trash on that volume
+    person mapped — and a desktop sending a file to the trash on that volume
     keeps the trash there: `.Trash-<uid>` or `.Trash/<uid>` under the
     freedesktop.org Trash specification, `.Trashes` on macOS, and `.Trash` for
-    a home folder mapped as a whole. The move of a departed file (EP-15) lands
-    there too. Without the rule the next sync would carry the trash back into
+    a home folder mapped as a whole. The discard of a departed file (EP-15)
+    lands there too. Without the rule the next sync would carry the trash back into
     the Library.
   - Only the first component under a mapped root, because that is the one
     place a desktop puts them; a folder of the same name anywhere deeper is the

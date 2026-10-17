@@ -15,7 +15,7 @@ use crate::sync::sync_error::SyncResult;
 /// Decides what one local file means for the Library.
 ///
 /// `expected` is the identity the mapping the file was found under expects of
-/// its root, which a file this step sends to the trash carries to the move
+/// its root, which a file this step sends to the trash carries to the discard
 /// (spec: EP-13, EP-15).
 pub(super) async fn examine(
     index: &dyn Index,

@@ -9,21 +9,21 @@ use crate::local_operation::LocalOperation;
 use crate::mapped_relative_location::MappedRelativeLocation;
 
 impl State {
-    /// Moves one regular file below a vouched root into the fake's trash
+    /// Discards one regular file below a vouched root into the fake's trash
     /// (spec: EP-13, EP-15).
     ///
     /// The same order the real one keeps: the scripted refusal first, so a
-    /// refused move leaves the file exactly where it was; then the root and its
-    /// marker; then every folder on the way down, each of which has to be a
+    /// refused discard leaves the file exactly where it was; then the root and
+    /// its marker; then every folder on the way down, each of which has to be a
     /// folder; and last the file itself, which has to be a file.
-    pub(in crate::in_memory_fs) fn move_to_trash(
+    pub(in crate::in_memory_fs) fn discard(
         &mut self,
         root: &Path,
         expected: Option<&RootMarkerId>,
         relative: &MappedRelativeLocation,
     ) -> Result<(), DescentError> {
         let path = root.join(relative.to_path_buf());
-        self.attempt(LocalOperation::MovingToTrash, &path)
+        self.attempt(LocalOperation::Discarding, &path)
             .map_err(DescentError::Io)?;
         if !self.is_dir(root) {
             return Err(DescentError::Io(LocalIoError::new(
@@ -55,12 +55,12 @@ impl State {
                 io::ErrorKind::NotFound
             };
             return Err(DescentError::Io(LocalIoError::new(
-                LocalOperation::MovingToTrash,
+                LocalOperation::Discarding,
                 &path,
                 io::Error::new(kind, "no regular file is at this path"),
             )));
         }
-        self.moved_to_trash.push(path);
+        self.discarded.push(path);
         Ok(())
     }
 
@@ -113,7 +113,7 @@ impl State {
     }
 
     /// Everything the fake's trash has taken, in the order it took it.
-    pub(in crate::in_memory_fs) fn moved_to_trash(&self) -> Vec<PathBuf> {
-        self.moved_to_trash.clone()
+    pub(in crate::in_memory_fs) fn discarded(&self) -> Vec<PathBuf> {
+        self.discarded.clone()
     }
 }

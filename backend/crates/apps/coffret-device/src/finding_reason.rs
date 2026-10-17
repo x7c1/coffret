@@ -45,12 +45,12 @@ pub enum FindingReason {
     /// (spec: EP-10).
     DeletedLocally,
     /// The Entry this device had put here left the Library, the file still held
-    /// what this device last made it match, and the run moved it to the
+    /// what this device last made it match, and the run discarded it into the
     /// desktop's trash (spec: EP-15).
     ///
     /// Work done rather than work left: nobody has to act on it, and the trash
     /// is where a person who meant to keep the file takes it back from.
-    MovedToTrash,
+    Discarded,
     /// The Entry this device had put here left the Library, and the file has
     /// changed since, so it is kept where it is (spec: EP-15).
     ///
@@ -59,12 +59,12 @@ pub enum FindingReason {
     /// another path it is an ordinary new file — or remove it.
     KeptEdited,
     /// The Entry this device had put here left the Library, the file was due to
-    /// go to the trash, and the move was refused (spec: EP-15).
+    /// be discarded, and the discard was refused (spec: EP-15).
     ///
     /// Left where it is and never deleted in the trash's place; the next run
     /// tries again.
-    MoveToTrashRefused {
-        /// What the move was refused with.
+    DiscardRefused {
+        /// What the discard was refused with.
         ///
         /// Shared, because a refusal is not a value that can be copied; it is
         /// reported, never changed.
@@ -132,9 +132,9 @@ impl fmt::Display for FindingReason {
             // next to a sync that says of the same file that it is gone.
             Self::LocallyChanged => "what this device wrote there has since changed or gone",
             Self::WitnessedDeletion => "this device witnessed its deletion",
-            Self::MovedToTrash => {
-                "it was deleted from the Library, and this device's unedited copy was moved to \
-                 the trash"
+            Self::Discarded => {
+                "it was deleted from the Library, and this device's unedited copy was \
+                 discarded into the trash"
             }
             Self::KeptEdited => {
                 "it was deleted from the Library, and this device's copy is kept here because it \
@@ -155,10 +155,10 @@ impl fmt::Display for FindingReason {
             // What refused is what a person acts on — a root that is not the
             // one recorded, a link on the way, a volume with no trash, a
             // permission — so the cause is said in full, chain and all.
-            Self::MoveToTrashRefused { cause } => {
+            Self::DiscardRefused { cause } => {
                 return write!(
                     f,
-                    "it was deleted from the Library, and moving this device's copy to the \
+                    "it was deleted from the Library, and discarding this device's copy into the \
                      trash was refused ({}); it is left here, and the next run tries again",
                     chained(cause.as_ref()),
                 );

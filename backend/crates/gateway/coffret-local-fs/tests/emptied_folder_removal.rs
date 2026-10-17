@@ -1,10 +1,10 @@
-//! What removing a folder a sync's moves to the trash emptied does against a
+//! What removing a folder a sync's discards emptied does against a
 //! real directory (spec: EP-13, EP-15).
 //!
-//! Unlike the move itself, the removal never reaches the desktop's trash, so
+//! Unlike the discard itself, the removal never reaches the desktop's trash, so
 //! the cases here can let it through: a folder with nothing in it goes, and a
 //! folder holding anything at all — a dotfile among them — stays. The rest are
-//! the refusals the move makes too: a root that does not vouch for itself, and
+//! the refusals the discard makes too: a root that does not vouch for itself, and
 //! a symbolic link, which is never followed and never removed in place of a
 //! folder.
 

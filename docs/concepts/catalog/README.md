@@ -46,8 +46,8 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
   a name to the stored representation it needs (spec: EP-5, EP-6).
 - Beside its current Entry Path, the Catalog keeps each Entry's **captured
   path**: the Entry Path the Container holding it recorded when it was
-  written. The two are equal until a rename moves the Entry, and only the
-  current one moves then, because a Container is never rewritten. The
+  written. The two are equal until a rename changes the Entry's path, and only
+  the current one changes then, because a Container is never rewritten. The
   captured path changes only when a new Container takes the Entry and records
   the name current at that write, so it is not necessarily the first name the
   Entry ever had. Keeping the captured
@@ -69,8 +69,8 @@ The planned rename operation changes an Entry's current path while preserving
 its stored identity, the Container ID and entry number. Restore must recover
 that name from control state; [salvage](../journal/#domain-rules) can recover
 only the name captured in the Container. The current implementation does not
-yet support metadata-only rename; its Journal, Snapshot, fetch, and local-move
-changes must land together.
+yet support metadata-only rename; its Journal, Snapshot, fetch, and local
+relocation changes must land together.
 
 ## Related Concepts
 

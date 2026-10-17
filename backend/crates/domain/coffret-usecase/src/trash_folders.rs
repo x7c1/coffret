@@ -1,12 +1,12 @@
 //! The folders a desktop keeps its trash in at the top of a volume.
 //!
 //! A mapped root may be a volume's own top — a disk mounted at the folder the
-//! person mapped — and a desktop moving a file to the trash on that volume
+//! person mapped — and a desktop sending a file to the trash on that volume
 //! keeps the trash there: `.Trash-<uid>` or `.Trash/<uid>` under the
 //! freedesktop.org Trash specification, `.Trashes` on macOS, and `.Trash` again
-//! for the trash in a home folder mapped as a whole. A sync's move of a departed
-//! file (spec: EP-15) lands there too. None of it is Library content, so a scan
-//! never enters such a folder and a fetch never places a file in it
+//! for the trash in a home folder mapped as a whole. A sync's discard of a
+//! departed file (spec: EP-15) lands there too. None of it is Library content,
+//! so a scan never enters such a folder and a fetch never places a file in it
 //! (spec: EP-16).
 //!
 //! Only as the first component under a mapped root, because that is the one

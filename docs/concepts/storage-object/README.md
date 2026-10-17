@@ -97,7 +97,7 @@ in this sense.
     ID never re-enters the current set, and the Keyring stops mapping it once
     it is removed (spec: CP-14, KL-7).
   - A committed Journal record can take a Container out of the current set
-    before any device has moved its object to trash. Such a Container is an
+    before any device has trashed its object. Such a Container is an
     **untrashed removal**: any later run may trash it, and doing so is
     idempotent, because the record rather than an inference is what proves the
     removal (spec: OC-6, CP-14).

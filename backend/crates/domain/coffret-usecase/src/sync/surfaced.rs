@@ -12,7 +12,7 @@ use crate::descent_error::DescentError;
 /// Silently skipping a file needing an update is the one outcome the rule
 /// forbids outright — it makes the user believe stale content is safely backed
 /// up (spec: PK-14). A file a deletion reached on this device's disk is said
-/// the same way, whether the run moved it to the trash or kept it, because a
+/// the same way, whether the run discarded it or kept it, because a
 /// file that went from a person's folder without a word is the other half of
 /// that same silence (spec: EP-15).
 ///
@@ -21,7 +21,7 @@ use crate::descent_error::DescentError;
 ///
 /// There is deliberately no `PartialEq`, for the reason
 /// [`Disposal`](crate::sync::Disposal) has none: one shape carries the refusal
-/// a move to the trash met, and a caller decides from the variant and the path
+/// a discard met, and a caller decides from the variant and the path
 /// rather than by comparing two refusals.
 #[derive(Debug, Clone)]
 pub enum Surfaced {
@@ -50,14 +50,14 @@ pub enum Surfaced {
         path: EntryPath,
     },
     /// The Entry this device materialized here left the Library, the file still
-    /// held what this device last made it match, and the run moved it to the
-    /// desktop's trash (spec: EP-15).
+    /// held what this device last made it match, and the run discarded it into
+    /// the desktop's trash (spec: EP-15).
     ///
     /// Work done rather than work left: the row is gone with the file, so the
     /// path is outside this device's scope again and nothing more is said of it.
     /// The trash is where a person who meant to keep the file takes it back
     /// from.
-    MovedToTrash {
+    Discarded {
         /// Where in the Library the file stood.
         path: EntryPath,
     },
@@ -72,17 +72,17 @@ pub enum Surfaced {
         /// Where in the Library the file stood.
         path: EntryPath,
     },
-    /// The file was due to go to the trash, and the move was refused — by the
+    /// The file was due to be discarded, and the discard was refused — by the
     /// root, the way down, or the trash itself (spec: EP-15).
     ///
     /// Left exactly where it is — never deleted outright in the trash's place —
     /// and its row with it, so the next run finds it as this one did and tries
     /// again. Nothing else in the run is held up by it.
-    MoveToTrashRefused {
+    DiscardRefused {
         /// Where in the Library the file stands.
         path: EntryPath,
-        /// What the move was refused with: a root that could not be vouched for
-        /// (spec: EP-13), a folder on the way down that is not one, or what
+        /// What the discard was refused with: a root that could not be vouched
+        /// for (spec: EP-13), a folder on the way down that is not one, or what
         /// the trash or the disk answered.
         ///
         /// Shared rather than owned so the finding can be cloned; a refusal is
@@ -97,9 +97,9 @@ impl Surfaced {
         match self {
             Self::PackResident { path, .. }
             | Self::DeletedLocally { path }
-            | Self::MovedToTrash { path }
+            | Self::Discarded { path }
             | Self::KeptEdited { path }
-            | Self::MoveToTrashRefused { path, .. } => path,
+            | Self::DiscardRefused { path, .. } => path,
         }
     }
 }

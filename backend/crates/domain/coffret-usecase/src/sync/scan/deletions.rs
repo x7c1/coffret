@@ -31,11 +31,11 @@ use crate::sync::sync_error::SyncResult;
 /// mapping stands for belongs to that mapping, and if that mapping is
 /// unavailable the row is nobody's evidence.
 ///
-/// A row whose Entry has left the Library is no deletion to report: the
-/// Library no longer holds what the file was a copy of, and the disk no longer
-/// holds the file. Whether the sync moved it to the trash or the person moved or
-/// removed it themselves, nothing is left for a finding to be about, so the row
-/// goes into [`Survey::forgotten`] instead (spec: EP-15).
+/// A row whose Entry has left the Library is no deletion to report: the Library
+/// no longer holds what the file was a copy of, and the disk no longer holds
+/// the file. Whether the sync discarded it or the person moved or removed it
+/// themselves, nothing is left for a finding to be about, so the row goes into
+/// [`Survey::forgotten`] instead (spec: EP-15).
 pub(super) async fn deletions(
     index: &dyn Index,
     roots: &[WalkedRoot],
