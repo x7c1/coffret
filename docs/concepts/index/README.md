@@ -13,7 +13,7 @@ The Index keeps three kinds of information with different recovery properties:
 
 | Part | What it records | After loss |
 | --- | --- | --- |
-| Cached Catalog | Current Containers, Entries with their current and original paths, and the checkpoint reached | Reconstruct from intact control state |
+| Cached Catalog | Current Containers, Entries with their current and captured paths, and the checkpoint reached | Reconstruct from intact control state |
 | Device-local records | Mappings, materializations, and pending work | Restore the Index from a backup of this device, or re-establish the records on this device |
 | Held parcels | Which parcels of which Containers this device keeps the ciphertext of | Nothing to recover: the parcels are read from Storage again when next wanted |
 

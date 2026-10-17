@@ -28,21 +28,28 @@ const ENTRIES: usize = 10_000;
 /// rather than one Container per Entry or one Container for everything.
 const ENTRIES_PER_CONTAINER: usize = 50;
 
-/// The ceiling this format was sized on: 120 bytes per Entry before padding.
-const DESIGN_BUDGET: usize = 120;
+/// The ceiling this format is sized on: 90 bytes per Entry before padding.
+///
+/// It stood at 120 while the maps were keyed by field-name text, when this
+/// sample cost 119 bytes per Entry, 94 of them beyond the path. With the fields
+/// carried under one-byte field numbers (spec: FM-16) the same sample costs 86,
+/// 61 beyond the path, and the budget follows the encoding down so that the
+/// room it leaves is a few bytes rather than the old key strings' worth.
+const DESIGN_BUDGET: usize = 90;
 
 /// What one Entry costs beyond its own Entry Path.
 ///
-/// Everything the schema itself spends: the entry map's keys and their values —
+/// Everything the schema itself spends: the entry map's one-byte field numbers
+/// and their values —
 /// `offset`, `size`, `mtime`, the 32-byte `hash`, and the `container` index —
 /// plus this Entry's share of the `containers` array and the checkpoint. It is
 /// pinned rather than bounded loosely, because it is the number a change to the
 /// schema moves: a field added per Entry, or a Container named by ID again,
 /// shows up here and nowhere else.
 ///
-/// The sample renames nothing, so no Entry in it carries `original_path`: the
+/// The sample renames nothing, so no Entry in it carries `captured_path`: the
 /// field is written only where it differs from `path` (spec: FM-16).
-const PINNED_COST_BEYOND_THE_PATH: usize = 94;
+const PINNED_COST_BEYOND_THE_PATH: usize = 61;
 
 // FM-16: a Snapshot of ten thousand Entries stays inside the per-Entry cost the
 // schema was shaped around, for a Library whose paths look like a real one's.

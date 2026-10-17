@@ -9,23 +9,25 @@ use crate::bounded_uint::bounded_uint;
 use crate::error::Result;
 use crate::stream_extent::stream_extent;
 
-/// One row of a Container's entry table, in the meta section's spelling
+/// One row of a Container's entry table, under the meta section's field names
 /// (spec: FM-9).
 ///
-/// The three values a later rename could move carry `original_` names here:
+/// The three values a later rename could move carry `captured_` names here:
 /// what the Entry was called, when it was last modified, and when its file came
-/// into being *as of the moment this Container was written* — not the first
+/// into being *as captured when this Container was written* — not the first
 /// name the Entry ever had. A Container is one immutable object, so nothing
 /// rewrites them; what the Library holds now is the Journal's business, and a
-/// record spells the same values `WireCatalogEntry`'s way.
+/// record names the same values `WireCatalogEntry`'s way. The names are the
+/// specification's; on the wire each travels under its field number
+/// ([`crate::field_numbers::META_ENTRY`]).
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireMetaEntry {
-    original_path: String,
+    captured_path: String,
     offset: u64,
     size: u64,
-    original_mtime: i64,
+    captured_mtime: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    original_btime: Option<i64>,
+    captured_btime: Option<i64>,
     #[serde(with = "serde_bytes")]
     hash: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -37,11 +39,11 @@ pub(crate) struct WireMetaEntry {
 impl From<&EntryMetadata> for WireMetaEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
-            original_path: entry.original_path.as_str().to_owned(),
+            captured_path: entry.captured_path.as_str().to_owned(),
             offset: entry.extent.offset(),
             size: entry.extent.size(),
-            original_mtime: entry.mtime.as_unix_seconds(),
-            original_btime: entry.btime.map(|btime| btime.as_unix_seconds()),
+            captured_mtime: entry.mtime.as_unix_seconds(),
+            captured_btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
             derived_from: entry.derived_from.as_ref().map(WireDerivedFrom::from),
             mime: entry.mime.clone(),
@@ -51,19 +53,19 @@ impl From<&EntryMetadata> for WireMetaEntry {
 
 impl WireMetaEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
-        let original_path = stored_path(&self.original_path, "original_path")?;
+        let captured_path = stored_path(&self.captured_path, "captured_path")?;
         Ok(EntryMetadata {
             // What this Container records is the name the Entry had when it was
             // written, and that is all a meta section can say about where it
             // stands.
-            path: original_path.clone(),
-            original_path,
+            path: captured_path.clone(),
+            captured_path,
             extent: stream_extent(
                 bounded_uint("offset", self.offset, malformed)?,
                 bounded_uint("size", self.size, malformed)?,
             )?,
-            mtime: Mtime::from_unix_seconds(self.original_mtime),
-            btime: self.original_btime.map(Btime::from_unix_seconds),
+            mtime: Mtime::from_unix_seconds(self.captured_mtime),
+            btime: self.captured_btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,
             derived_from: self
                 .derived_from

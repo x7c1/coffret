@@ -49,6 +49,7 @@ import {
   encodeControlPayload,
   type ControlPayload,
 } from './payload.js';
+import { MASTER_KEY_EPOCH_FIELD } from '../internal/fieldNumbers.js';
 
 const MASTER_KEY = MasterKey.fromBytes(new Uint8Array(32).fill(0x7c));
 const SET_DIGEST = '9f0c';
@@ -396,7 +397,7 @@ describe('control objects', () => {
     const object = sealPayload(
       objectName,
       'journal',
-      padded(encodeCborValue(new Map<string, unknown>([['master_key_epoch', 0]]))),
+      padded(encodeCborValue(new Map<number, unknown>([[MASTER_KEY_EPOCH_FIELD, 0]]))),
     );
     expect(
       errorCode(() =>
@@ -426,7 +427,7 @@ describe('control objects', () => {
           key: key('journal'),
           payload: {
             masterKeyEpoch: MasterKeyEpoch.FIRST,
-            body: encodeCborValue(new Map<string, unknown>([['master_key_epoch', 9]])),
+            body: encodeCborValue(new Map<number, unknown>([[MASTER_KEY_EPOCH_FIELD, 9]])),
           },
         }),
       ),

@@ -1,9 +1,13 @@
 use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
-use super::{as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{
+    as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH,
+    MASTER_KEY_EPOCH_FIELD,
+};
 use crate::control::cbor::as_bounded_uint;
 use crate::error::{Error, Result};
+use crate::field_numbers::field_number;
 use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
@@ -12,7 +16,7 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
     let mut entries = read_padded_map(plaintext)?;
     let position = entries
         .iter()
-        .position(|(key, _)| key.as_text() == Some(MASTER_KEY_EPOCH))
+        .position(|(key, _)| field_number(key) == Some(MASTER_KEY_EPOCH_FIELD))
         .ok_or(Error::MissingMasterKeyEpoch)?;
     let (_, epoch) = entries.remove(position);
     // The epoch is read before the body, so it does not pass through `Fields`;
@@ -79,6 +83,22 @@ mod tests {
         );
     }
 
+    // FM-13: the epoch travels under its field number, and a text key is no
+    // field's spelling, so an epoch spelled by name is no epoch at all.
+    #[test]
+    fn an_epoch_under_a_text_key_is_missing() {
+        let bytes = to_bytes(&Value::Map(vec![(
+            Value::Text(MASTER_KEY_EPOCH.to_owned()),
+            Value::from(1u64),
+        )]))
+        .expect("the map serializes");
+        let result = decode(&padded(bytes));
+        assert!(
+            matches!(result, Err(Error::MissingMasterKeyEpoch)),
+            "expected an epoch under a text key to be missing, got {result:?}"
+        );
+    }
+
     #[test]
     fn a_payload_that_is_not_a_map_is_rejected() {
         let bytes = to_bytes(&Value::Text("not a map".to_owned())).expect("text serializes");
@@ -94,7 +114,7 @@ mod tests {
     #[test]
     fn an_epoch_below_one_is_rejected() {
         let bytes = to_bytes(&Value::Map(vec![(
-            Value::Text(MASTER_KEY_EPOCH.to_owned()),
+            Value::from(MASTER_KEY_EPOCH_FIELD),
             Value::from(0u64),
         )]))
         .expect("the map serializes");
@@ -113,7 +133,7 @@ mod tests {
     #[test]
     fn a_non_integer_epoch_is_rejected() {
         let bytes = to_bytes(&Value::Map(vec![(
-            Value::Text(MASTER_KEY_EPOCH.to_owned()),
+            Value::from(MASTER_KEY_EPOCH_FIELD),
             Value::Text("first".to_owned()),
         )]))
         .expect("the map serializes");
@@ -128,7 +148,11 @@ mod tests {
     // produces.
     #[test]
     fn a_plaintext_longer_than_the_bucket_is_rejected() {
-        let mut bytes = encode(&ControlPayload::empty(epoch(1))).expect("encoding succeeds");
+        let mut bytes = encode(&ControlPayload::new(
+            epoch(1),
+            body(&[("records", 2), ("x", 1)]),
+        ))
+        .expect("encoding succeeds");
         let padded = bytes.len() as u64;
         bytes.push(0x00);
         assert!(
@@ -145,7 +169,11 @@ mod tests {
     // byte of it is checked.
     #[test]
     fn a_non_zero_byte_in_the_padding_is_rejected() {
-        let plaintext = encode(&ControlPayload::empty(epoch(1))).expect("encoding succeeds");
+        let plaintext = encode(&ControlPayload::new(
+            epoch(1),
+            body(&[("records", 2), ("x", 1)]),
+        ))
+        .expect("encoding succeeds");
         let mut padding = plaintext.as_slice();
         let _: Value = ciborium::from_reader(&mut padding).expect("the map is CBOR");
         let map_len = plaintext.len() - padding.len();
@@ -166,7 +194,11 @@ mod tests {
     // exists to blur, so its object is refused rather than quietly read.
     #[test]
     fn an_unpadded_payload_is_rejected() {
-        let plaintext = encode(&ControlPayload::empty(epoch(1))).expect("encoding succeeds");
+        let plaintext = encode(&ControlPayload::new(
+            epoch(1),
+            body(&[("records", 2), ("x", 1)]),
+        ))
+        .expect("encoding succeeds");
         let mut padding = plaintext.as_slice();
         let _: Value = ciborium::from_reader(&mut padding).expect("the map is CBOR");
         let map_len = plaintext.len() - padding.len();

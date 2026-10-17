@@ -248,7 +248,10 @@ jobs:
   # code: a rule is cited with the `spec:` prefix outside the register, every
   # cited rule has exactly one home, and that second check still refuses what it
   # exists to refuse. They need git and a shell and nothing else, so they run on
-  # their own instead of waiting on a toolchain.
+  # their own instead of waiting on a toolchain. The field-number registry guard
+  # sits beside them for the same reason, needing jq beyond those, which the
+  # runner carries: an edit to docs/spec/format/field-numbers.json may add rows
+  # and retire them, never change one main already holds.
   #
   # The shell scripts' lint and format check runs here for the same reason,
   # needing curl beyond those: it fetches the shellcheck and shfmt that
@@ -260,9 +263,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The field-number registry guard compares the registry with its
+          # version on the merge base with origin/main, which a shallow clone
+          # lacks.
+          fetch-depth: 0
 
       - name: Spec citations and rule homes
         run: make spec-citations spec-rule-ids spec-rule-ids-test
+
+      - name: Field-number registry guard
+        run: make field-numbers-guard field-numbers-guard-test
 
       - name: Shell scripts, shellcheck and shfmt
         run: make shell-lint

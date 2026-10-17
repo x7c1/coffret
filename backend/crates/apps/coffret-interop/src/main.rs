@@ -31,11 +31,31 @@ enum Command {
         #[arg(long = "in")]
         input: PathBuf,
     },
+    /// Print one control object's payload, keyed by field name
+    Dump {
+        /// File holding the object's bytes, as fetched from Storage
+        #[arg(long)]
+        object: PathBuf,
+        /// The name the object is stored under, e.g. `head-00000000000000000003`
+        #[arg(long)]
+        name: String,
+        /// File holding the Library's Recovery Code
+        #[arg(long)]
+        recovery_code: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
     match Args::parse().command {
         Command::Generate { out } => coffret_interop::generate(&out),
         Command::Verify { input } => coffret_interop::verify(&input),
+        Command::Dump {
+            object,
+            name,
+            recovery_code,
+        } => {
+            println!("{}", coffret_interop::dump(&object, &name, &recovery_code)?);
+            Ok(())
+        }
     }
 }

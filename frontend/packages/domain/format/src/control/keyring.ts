@@ -49,6 +49,7 @@ import { ContainerId } from '../model/containerId.js';
 import { KeyEnvelope } from '../model/keyEnvelope.js';
 import type { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import type { KeyringElement, KeyTable } from '../model/keyTable.js';
+import { KEYRING, KEYRING_ELEMENT, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /** The schema this package writes for a Keyring payload (spec: FM-17). */
 export const KEYRING_SCHEMA = 1n;
@@ -80,7 +81,13 @@ export function encodeKeyring(
     ['schema', KEYRING_SCHEMA],
     [MAPPING, mappingValue(keyTable)],
   ]);
-  return { masterKeyEpoch, body: encodeCbor(map, 'control_payload_encode_failed') };
+  return {
+    masterKeyEpoch,
+    body: encodeCbor(
+      toWire(map, KEYRING, 'control_payload_encode_failed'),
+      'control_payload_encode_failed',
+    ),
+  };
 }
 
 /**
@@ -114,7 +121,10 @@ export function keyringSetDigest(keyTable: KeyTable): string {
  * spelling, because a second one would be a second digest for one key table.
  */
 export function keyringDigestInput(keyTable: KeyTable): Uint8Array {
-  return encodeCbor(mappingValue(keyTable), 'control_payload_encode_failed');
+  return encodeCbor(
+    toWire(mappingValue(keyTable), KEYRING_ELEMENT, 'control_payload_encode_failed'),
+    'control_payload_encode_failed',
+  );
 }
 
 /**
@@ -132,7 +142,7 @@ export function keyringDigestInput(keyTable: KeyTable): Uint8Array {
  */
 export function decodeKeyring(payload: ControlPayload): KeyTable {
   const map = asCborMap(
-    decodeCborExact(payload.body, MALFORMED),
+    fromWire(decodeCborExact(payload.body, MALFORMED), KEYRING),
     MALFORMED,
     'a Keyring payload',
   );
@@ -172,10 +182,11 @@ function mappingValue(keyTable: KeyTable): Map<string, unknown>[] {
  *
  * The two fields are inserted in that order deliberately. FM-17 hashes this
  * array as deterministic CBOR, whose map keys are ordered by their encoded
- * bytes: `id` is two characters and both `envelope` and `key_lost` are eight, so
- * `id` comes first. A writer that emitted them the other way round would produce
- * a payload every reader still accepts — the maps are read by name — and a
- * `set_digest` no other implementation computes.
+ * bytes: the map keys are the field numbers the registry gives the element's
+ * fields, each one byte, so their order is the numeric order and `id`'s field
+ * number is the lowest. A writer that emitted them the other way round would
+ * produce a payload every reader still accepts — the maps are read by field
+ * number, in any order — and a `set_digest` no other implementation computes.
  */
 function encodeElement(element: KeyringElement): Map<string, unknown> {
   const map = new Map<string, unknown>([[ID, element.containerId.bytes()]]);

@@ -1,12 +1,13 @@
 //! What survives a trip through an Index Snapshot payload and back
 //! (spec: FM-16).
 
+use crate::field_numbers;
 use ciborium::Value;
 use coffret_model::ControlObjectKind;
 
 use super::testing::{
-    activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, GENERATION,
-    ORIGINAL_PATH,
+    activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, CAPTURED_PATH,
+    GENERATION,
 };
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
@@ -83,7 +84,7 @@ fn adopted_from_is_neither_written_nor_read_back() {
     );
     let encoded = encode(&payload).expect("encoding succeeds");
     assert!(
-        !body_keys(&encoded)
+        !body_keys(&encoded, &field_numbers::INDEX_SNAPSHOT)
             .iter()
             .any(|key| key.contains("adopted")),
         "an Index Snapshot payload carries a field naming what it was adopted from"
@@ -111,7 +112,7 @@ fn the_same_content_in_a_different_order_encodes_identically() {
 #[test]
 fn an_entry_names_its_container_by_index() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
     let containers = ordered_containers();
     let expected: Vec<u64> = decoded_content()
         .entries()
@@ -151,30 +152,29 @@ fn an_entry_names_its_container_by_index() {
     }
 }
 
-// FM-9: the maps are forward-open, so a field a newer writer added is stepped
+// FM-9: the maps are forward-open, so a field a newer writer added — under an
+// field number this build does not know — is stepped
 // over — at the Snapshot's own level, inside a Container, and inside an Entry.
 #[test]
 fn unknown_fields_are_ignored() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
-    fields.push((
-        Value::Text("future_field".to_owned()),
-        Value::Text("whatever".to_owned()),
-    ));
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
+    fields.push((Value::from(23u64), Value::Text("whatever".to_owned())));
     for array_name in ["containers", "entries"] {
         for item in array(&mut fields, array_name) {
             let Value::Map(map) = item else {
                 panic!("{array_name} holds maps");
             };
-            map.push((
-                Value::Text("future_element_field".to_owned()),
-                Value::from(1u64),
-            ));
+            map.push((Value::from(24u64), Value::from(1u64)));
         }
     }
     *field(&mut fields, "schema") = Value::from(3u64);
 
-    let extended = with_body_map(payload.master_key_epoch, fields);
+    let extended = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::INDEX_SNAPSHOT,
+    );
     let decoded =
         read(&extended, ControlObjectKind::IndexSnapshot).expect("unknown fields are ignored");
     assert_eq!(decoded.content, decoded_content());
@@ -182,18 +182,18 @@ fn unknown_fields_are_ignored() {
 
 // FM-16: a Snapshot's entry map is the catalog's spelling, plus the `container`
 // index that is the Snapshot's own — so `path` and `mtime` without the
-// `original_` prefix FM-9 gives them, and `btime` for the Entries that have one.
+// `captured_` prefix FM-9 gives them, and `btime` for the Entries that have one.
 #[test]
 fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
     let entries = array(&mut fields, "entries").clone();
 
     assert_eq!(
         map_keys(&entries[BORN_AT]),
         [
             "path",
-            "original_path",
+            "captured_path",
             "offset",
             "size",
             "mtime",
@@ -211,8 +211,8 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
             "entry {index} carries a birth time no file of its reported",
         );
         assert!(
-            !map_keys(entry).contains(&"original_path"),
-            "entry {index} was never renamed, so it carries no original path",
+            !map_keys(entry).contains(&"captured_path"),
+            "entry {index} was never renamed, so it carries no captured path",
         );
     }
 
@@ -221,73 +221,32 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
     assert_eq!(decoded.content.entries()[BORN_AT + 1].entry.btime, None);
 }
 
-// FM-16: an Entry's original path travels beside its current one, each under
-// its own key, and each comes back as the one it went in as.
+// FM-16: an Entry's captured path travels beside its current one, each under
+// its own field number, and each comes back as the one it went in as.
 #[test]
-fn an_original_path_travels_beside_the_current_path() {
+fn a_captured_path_travels_beside_the_current_path() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::INDEX_SNAPSHOT);
     let Value::Map(renamed) = &array(&mut fields, "entries")[BORN_AT] else {
         panic!("an entry is a map");
     };
     assert_eq!(
         renamed
             .iter()
-            .find(|(key, _)| key.as_text() == Some("original_path"))
+            .find(|(key, _)| key.as_text() == Some("captured_path"))
             .and_then(|(_, value)| value.as_text()),
-        Some(ORIGINAL_PATH),
+        Some(CAPTURED_PATH),
     );
 
     let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
     let entries = decoded.content.entries();
     assert_eq!(entries[BORN_AT].entry.path.as_str(), "albums/spring/a.jpg");
-    assert_eq!(entries[BORN_AT].entry.original_path.as_str(), ORIGINAL_PATH);
+    assert_eq!(entries[BORN_AT].entry.captured_path.as_str(), CAPTURED_PATH);
     for (index, location) in entries.iter().enumerate() {
         if index != BORN_AT {
-            assert_eq!(location.entry.original_path, location.entry.path);
+            assert_eq!(location.entry.captured_path, location.entry.path);
         }
     }
-}
-
-// FM-16: a Snapshot of schema 1 was written before `original_path` existed,
-// when nothing could rename an Entry, so a reader takes each Entry's original
-// path to be its current one. Everything else in the Snapshot reads as it did.
-#[test]
-fn a_schema_1_snapshot_reads_each_original_path_as_its_path() {
-    let payload = encode(&ordinary()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
-    for entry in array(&mut fields, "entries") {
-        let Value::Map(entry) = entry else {
-            panic!("an entry is a map");
-        };
-        entry.retain(|(key, _)| key.as_text() != Some("original_path"));
-    }
-    *field(&mut fields, "schema") = Value::from(1u64);
-
-    let older = with_body_map(payload.master_key_epoch, fields);
-    let decoded =
-        read(&older, ControlObjectKind::IndexSnapshot).expect("a schema 1 Snapshot reads back");
-
-    let as_written_then = |content: &coffret_model::SnapshotContent| {
-        content
-            .entries()
-            .iter()
-            .map(|location| {
-                let mut location = location.clone();
-                location.entry.original_path = location.entry.path.clone();
-                location
-            })
-            .collect::<Vec<_>>()
-    };
-    for location in decoded.content.entries() {
-        assert_eq!(location.entry.original_path, location.entry.path);
-    }
-    assert_eq!(
-        as_written_then(&decoded.content),
-        as_written_then(&decoded_content())
-    );
-    assert_eq!(decoded.content.containers(), decoded_content().containers());
-    assert_eq!(decoded.content.checkpoint(), decoded_content().checkpoint());
 }
 
 /// The payload as a reader fetching it under the sample's own name meets it.

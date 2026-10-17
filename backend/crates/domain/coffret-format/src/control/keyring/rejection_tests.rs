@@ -1,19 +1,20 @@
 //! Keyring payloads a reader refuses (spec: FM-17).
 
+use crate::field_numbers;
 use ciborium::Value;
 
 use super::testing::{envelope, key_table, key_table_epoch};
 use super::{decode, encode};
-use crate::control::testing::{array, body_map, field, with_body_map};
+use crate::control::testing::{array, body_map, field, spelled_by_name, with_body_map};
 use crate::error::Error;
 use crate::ControlPayload;
 
 /// A Keyring payload with one thing changed by hand, as a reader meets it.
 fn tampered(change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
     let payload = encode(&key_table(), key_table_epoch()).expect("encoding succeeds");
-    let mut fields = body_map(&payload);
+    let mut fields = body_map(&payload, &field_numbers::KEYRING);
     change(&mut fields);
-    with_body_map(payload.master_key_epoch, fields)
+    with_body_map(payload.master_key_epoch, fields, &field_numbers::KEYRING)
 }
 
 /// The fields of one element of `mapping`, for a case that has to change them.
@@ -188,4 +189,20 @@ fn an_element_that_is_not_a_map_is_rejected() {
         matches!(result, Err(Error::MalformedKeyringReplica { .. })),
         "expected an element that is not a map to be refused, got {result:?}"
     );
+}
+
+// FM-17: every field travels under the field number the registry assigns it,
+// and a text key is no field's spelling, so a replica that carries its fields
+// only under their names is missing them, and is refused by name.
+#[test]
+fn a_keyring_whose_fields_are_keyed_by_name_is_missing_them() {
+    let payload = spelled_by_name(
+        &encode(&key_table(), key_table_epoch()).expect("encoding succeeds"),
+        &field_numbers::KEYRING,
+    );
+    let result = decode(&payload);
+    let Err(Error::MalformedKeyringReplica { detail }) = result else {
+        panic!("expected a Keyring keyed by name to be refused, got {result:?}");
+    };
+    assert!(detail.to_string().contains("schema is missing"), "{detail}");
 }

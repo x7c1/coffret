@@ -17,7 +17,13 @@ use crate::token_cache::MAGIC_LEN as TOKEN_CACHE_MAGIC_LEN;
 mod cbor_decode_failure;
 pub use cbor_decode_failure::CborDecodeFailure;
 
+mod cbor_encode_failure;
+pub use cbor_encode_failure::CborEncodeFailure;
+
 mod display;
+
+mod encode_detail;
+pub use encode_detail::EncodeDetail;
 
 mod from;
 
@@ -52,9 +58,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// A value a dependency reported is the third case: a failure this crate
 /// observed as a Rust error travels as that error, so an entropy or an Argon2id
-/// refusal goes into a `cause`, and a CBOR decoder's refusal into
-/// [`MalformedDetail::Undecodable`], and each reaches a caller through
-/// `source()` rather than flattened into a `detail`.
+/// refusal goes into a `cause`, a CBOR decoder's refusal into
+/// [`MalformedDetail::Undecodable`], and a CBOR encoder's into a
+/// [`CborEncodeFailure`], and each reaches a caller through `source()` rather
+/// than flattened into a `detail`.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Fewer bytes than a Container header occupies.
@@ -113,8 +120,9 @@ pub enum Error {
     },
     /// The meta section could not be serialized.
     MetaEncodeFailed {
-        /// What the CBOR writer reported.
-        detail: String,
+        /// Which number the section could not carry — or the CBOR encoder's
+        /// refusal of the value.
+        detail: EncodeDetail,
     },
     /// The meta section declares a schema this build cannot read.
     UnsupportedMetaSchema {
@@ -160,9 +168,9 @@ pub enum Error {
     /// this enum states above.
     UnnormalizedEntryPath {
         /// The field the offending path stood in, as the map carrying it
-        /// names it: `original_path` in a meta section, `path` or
-        /// `original_path` in a record or a Snapshot, and
-        /// `derived_from.original_path` in either (spec: FM-9, FM-15, FM-16).
+        /// names it: `captured_path` in a meta section, `path` or
+        /// `captured_path` in a record or a Snapshot, and
+        /// `derived_from.captured_path` in either (spec: FM-9, FM-15, FM-16).
         field: &'static str,
     },
     /// An Entry Path in a decoded entry table is not in the shape every Entry
@@ -393,8 +401,22 @@ pub enum Error {
     MissingMasterKeyEpoch,
     /// A control-object payload could not be serialized.
     ControlPayloadEncodeFailed {
-        /// What the CBOR writer reported.
-        detail: String,
+        /// The CBOR encoder's refusal of the value.
+        cause: CborEncodeFailure,
+    },
+    /// A writer put a field in a stored map that the field-number registry
+    /// gives that map kind no live field number for (spec: FM-9).
+    ///
+    /// Only a writer bug produces it: every map this crate writes is built
+    /// from field names its own declaration of the registry carries, and a
+    /// retired name is refused here rather than written under a number no
+    /// reader will read again.
+    UnregisteredField {
+        /// The map kind, as the registry's `map` column spells it.
+        map: &'static str,
+        /// The map key the writer used: the field name, or — for a key that
+        /// is not text — its CBOR value's `Debug` spelling.
+        field: String,
     },
     /// A control-object payload carried to its Padmé bucket is longer than this
     /// platform can address.

@@ -4,6 +4,7 @@ use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
 use crate::control::ControlPayload;
 use crate::error::{Error, MalformedDetail, Result};
+use crate::field_numbers;
 
 /// Parses a Keyring's key table out of the payload a replica carried (spec: FM-17).
 ///
@@ -18,7 +19,7 @@ use crate::error::{Error, MalformedDetail, Result};
 /// this returns against the name it fetched the replica under
 /// (spec: FM-12, KL-1).
 pub fn decode(payload: &ControlPayload) -> Result<KeyTable> {
-    let value = read_body(&payload.body, malformed_detail)?;
+    let value = read_body(&payload.body, malformed_detail, &field_numbers::KEYRING)?;
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;

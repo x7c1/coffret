@@ -27,8 +27,14 @@ import { isAllZero } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 import { paddedLength } from '../padme.js';
 import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
+import { MASTER_KEY_EPOCH_FIELD, fieldNumber } from '../internal/fieldNumbers.js';
 
-/** The one payload field the framing itself defines. */
+/**
+ * The one payload field the framing itself defines, by name. It travels under
+ * {@link MASTER_KEY_EPOCH_FIELD}, the field number every payload map kind in the
+ * registry gives it, so the framing finds it before it knows whose map it holds
+ * (spec: FM-13).
+ */
 const MASTER_KEY_EPOCH = 'master_key_epoch';
 
 /** A control-object payload: the epoch that wrote it, and the kind's own map. */
@@ -59,10 +65,10 @@ export function emptyPayloadBody(): Uint8Array {
  */
 export function encodeControlPayload(payload: ControlPayload): Uint8Array {
   const map = readPayloadMap(payload.body);
-  if (map.has(MASTER_KEY_EPOCH)) {
+  if ([...map.keys()].some((key) => fieldNumber(key) === MASTER_KEY_EPOCH_FIELD)) {
     fail('malformed_control_payload', `the body already carries ${MASTER_KEY_EPOCH}`);
   }
-  map.set(MASTER_KEY_EPOCH, payload.masterKeyEpoch.value);
+  map.set(MASTER_KEY_EPOCH_FIELD, payload.masterKeyEpoch.value);
   return padToBucket(encodeCbor(map, 'control_payload_encode_failed'));
 }
 
@@ -91,11 +97,12 @@ function padToBucket(map: Uint8Array): Uint8Array {
  */
 export function decodeControlPayload(plaintext: Uint8Array): ControlPayload {
   const map = readPaddedPayloadMap(plaintext);
-  if (!map.has(MASTER_KEY_EPOCH)) {
+  const epochKey = [...map.keys()].find((key) => fieldNumber(key) === MASTER_KEY_EPOCH_FIELD);
+  if (epochKey === undefined) {
     fail('missing_master_key_epoch', 'control-object payload carries no master_key_epoch');
   }
-  const epoch = asUint(map.get(MASTER_KEY_EPOCH), MASTER_KEY_EPOCH, 'malformed_control_payload');
-  map.delete(MASTER_KEY_EPOCH);
+  const epoch = asUint(map.get(epochKey), MASTER_KEY_EPOCH, 'malformed_control_payload');
+  map.delete(epochKey);
   return {
     masterKeyEpoch: MasterKeyEpoch.of(epoch),
     body: encodeCbor(map, 'control_payload_encode_failed'),

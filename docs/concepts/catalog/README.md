@@ -44,13 +44,16 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
   (spec: CP-1, RV-4, RV-5).
 - Every current Entry has one unique current Entry Path, so a device can resolve
   a name to the stored representation it needs (spec: EP-5, EP-6).
-- Beside its current Entry Path, the Catalog keeps each Entry's **original
+- Beside its current Entry Path, the Catalog keeps each Entry's **captured
   path**: the Entry Path the Container holding it recorded when it was
   written. The two are equal until a rename moves the Entry, and only the
-  current one moves then, because a Container is never rewritten. Keeping the
-  original path in the Catalog lets every device name both from control state
+  current one moves then, because a Container is never rewritten. The
+  captured path changes only when a new Container takes the Entry and records
+  the name current at that write, so it is not necessarily the first name the
+  Entry ever had. Keeping the captured
+  path in the Catalog lets every device name both from control state
   alone, rather than by fetching and decrypting the Container that recorded it.
-  Control state carries the original path only where it differs from the
+  Control state carries the captured path only where it differs from the
   current one, so an Entry pays for its second name only once it has been
   renamed (spec: FM-9, FM-15, FM-16).
 - Reconstructing the Catalog proves the state described by the available

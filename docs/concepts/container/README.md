@@ -50,9 +50,10 @@ the Container's [Key Envelope](../key-envelope/) from the
   trashing the old one (spec: PK-10, PK-12, CP-14).
   - The **entry table** is the list, inside a Container's encrypted meta
     section, recording each Entry's path, times, place in the content stream,
-    and hash. It names those paths and timestamps `original_*`: they are
-    captured once and never revised, so successive Containers holding one file
-    may each record a different name for it, and the [Journal](../journal/) and
+    and hash. It names those paths and timestamps `captured_*`: they are the
+    values captured when that Container was written and are never revised, so
+    successive Containers holding one file may each record a different name
+    for it, and the [Journal](../journal/) and
     its checkpoints are what say which is the Library's now (spec: FM-9,
     FM-15).
 - **Opaque**: a Container's name is drawn independently of its content, so it

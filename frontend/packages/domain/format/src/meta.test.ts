@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { errorCode } from './errors.testing.js';
 import { MAX_FORMAT_INTEGER } from './internal/bytes.js';
 import { decodeCborExact } from './internal/cbor.js';
+import { META, fromWire } from './internal/fieldNumbers.js';
+import { toWireLenient } from './internal/fieldNumbers.testing.js';
 import { decodeMeta, encodeMeta, plaintextLength, type Meta } from './meta.js';
 import { paddedLength } from './padme.js';
 import { ContainerId } from './model/containerId.js';
@@ -21,6 +23,15 @@ function padded(map: Uint8Array): Uint8Array {
   return plaintext;
 }
 
+/**
+ * A hand-built map keyed by field names as the bytes a writer would produce:
+ * each name the meta section declares under its field number, any other map key
+ * as the case wrote it.
+ */
+function wireEncode(value: unknown): Uint8Array {
+  return encodeCborValue(toWireLenient(value, META));
+}
+
 /** The sample's plaintext, and where its CBOR map ends inside it. */
 function samplePlaintext(): [Uint8Array, number] {
   const map = encodeMeta(sample());
@@ -36,7 +47,7 @@ const DECOMPOSED = 'cafe\u0301.txt';
 function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
-    originalPath: path,
+    capturedPath: path,
     offset,
     size,
     mtimeSeconds: 42n,
@@ -54,7 +65,10 @@ function sample(): Meta {
 
 /** The keys each entry map of an encoded meta section carries, sorted. */
 function entryKeys(meta: Meta): string[][] {
-  const map = decodeCborExact(encodeMeta(meta), 'malformed_meta') as Map<string, unknown>;
+  const map = fromWire(decodeCborExact(encodeMeta(meta), 'malformed_meta'), META) as Map<
+    string,
+    unknown
+  >;
   return (map.get('entries') as Map<string, unknown>[]).map((entry) => [...entry.keys()].sort());
 }
 
@@ -69,10 +83,10 @@ function sampleMap(): Map<string, unknown> {
       sample().entries.map(
         (source) =>
           new Map<string, unknown>([
-            ['original_path', source.path],
+            ['captured_path', source.path],
             ['offset', source.offset],
             ['size', source.size],
-            ['original_mtime', source.mtimeSeconds],
+            ['captured_mtime', source.mtimeSeconds],
             ['hash', source.hash],
           ]),
       ),
@@ -82,8 +96,8 @@ function sampleMap(): Map<string, unknown> {
 
 describe('the meta section', () => {
   // FM-9: the meta section is one CBOR map with `schema`, `kind`, `pad_len`, and
-  // `entries`; each entry records `original_path`, `offset`, `size`,
-  // `original_mtime`, and `hash`, plus an optional `original_btime`.
+  // `entries`; each entry records `captured_path`, `offset`, `size`,
+  // `captured_mtime`, and `hash`, plus an optional `captured_btime`.
   it('round-trips the fields the rule names', () => {
     const decoded = decodeMeta(padded(encodeMeta(sample())));
     expect(decoded).toEqual(sample());
@@ -97,7 +111,7 @@ describe('the meta section', () => {
     }
     const unknownKind = sampleMap();
     unknownKind.set('kind', 'bundle');
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(unknownKind))))).toBe('malformed_meta');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(unknownKind))))).toBe('malformed_meta');
   });
 
   // FM-9: the plaintext is the CBOR map followed by zero padding to the map's
@@ -145,13 +159,14 @@ describe('the meta section', () => {
   // FM-9: the maps are forward-open — a reader ignores fields it does not know,
   // so a newer writer can add fields without breaking this reader.
   it('ignores unknown fields', () => {
-    const map = sampleMap();
+    const map: Map<unknown, unknown> = sampleMap();
     map.set('schema', 2);
-    map.set('future_field', 'whatever');
-    for (const wireEntry of map.get('entries') as Map<string, unknown>[]) {
-      wireEntry.set('future_entry_field', 1);
+    // Under field numbers the registry does not give these maps.
+    map.set(23, 'whatever');
+    for (const wireEntry of map.get('entries') as Map<unknown, unknown>[]) {
+      wireEntry.set(24, 1);
     }
-    const decoded = decodeMeta(padded(encodeCborValue(map)));
+    const decoded = decodeMeta(padded(wireEncode(map)));
     expect(decoded.entries).toEqual(sample().entries);
     expect(decoded.padLength).toBe(7n);
   });
@@ -161,7 +176,7 @@ describe('the meta section', () => {
   it('rejects a schema below one', () => {
     const map = sampleMap();
     map.set('schema', 0);
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('unsupported_meta_schema');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe('unsupported_meta_schema');
   });
 
   // FM-10: the entry table of every Container lists at least one Entry, so a
@@ -201,7 +216,7 @@ describe('the meta section', () => {
     entries[0].set('offset', MAX_FORMAT_INTEGER);
     entries[0].set('size', 1n);
     map.set('entries', [entries[0]]);
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('stream_too_long');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe('stream_too_long');
   });
 
   // FM-19: every unsigned integer a meta section carries is below 2^63, so a
@@ -211,7 +226,7 @@ describe('the meta section', () => {
   it('rejects a pad_len past the integer range the format admits', () => {
     const map = sampleMap();
     map.set('pad_len', MAX_FORMAT_INTEGER + 1n);
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('malformed_meta');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe('malformed_meta');
   });
 
   // FM-19: the bound holds on the way out too, so nothing this package writes
@@ -243,7 +258,7 @@ describe('the meta section', () => {
   it('rejects a content hash of the wrong length', () => {
     const map = sampleMap();
     (map.get('entries') as Map<string, unknown>[])[0].set('hash', new Uint8Array(31));
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('invalid_byte_length');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe('invalid_byte_length');
   });
 
   // FM-9: a `derived_from` points at a Container ID and an Entry Path.
@@ -262,8 +277,8 @@ describe('the meta section', () => {
   // composed on the way back in.
   it('rejects an Entry Path that is not in NFC', () => {
     const map = sampleMap();
-    (map.get('entries') as Map<string, unknown>[])[0].set('original_path', DECOMPOSED);
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
+    (map.get('entries') as Map<string, unknown>[])[0].set('captured_path', DECOMPOSED);
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe(
       'unnormalized_entry_path',
     );
   });
@@ -276,15 +291,15 @@ describe('the meta section', () => {
       'derived_from',
       new Map<string, unknown>([
         ['container_id', new Uint8Array(16).fill(3)],
-        ['original_path', DECOMPOSED],
+        ['captured_path', DECOMPOSED],
       ]),
     );
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe(
       'unnormalized_entry_path',
     );
   });
 
-  // FM-9: `original_mtime` is a signed count of seconds, and negative values
+  // FM-9: `captured_mtime` is a signed count of seconds, and negative values
   // are legal.
   it('round-trips a negative modification time', () => {
     const meta = sample();
@@ -293,7 +308,7 @@ describe('the meta section', () => {
   });
 
   // FM-9: the entry map spells the values a rename could move with the
-  // `original_` prefix — they are what this immutable object captured, not what
+  // `captured_` prefix — they are what this immutable object captured, not what
   // the Library holds now — and a writer that used the catalog's own keys would
   // be writing a meta section no reader accepts.
   it('writes the entry keys the rule names', () => {
@@ -301,31 +316,31 @@ describe('the meta section', () => {
     // canonical key order, so what a case can hold the writer to is which keys
     // it wrote.
     expect(entryKeys(sample())[0]).toEqual(
-      ['hash', 'size', 'offset', 'original_path', 'original_mtime'].sort(),
+      ['hash', 'size', 'offset', 'captured_path', 'captured_mtime'].sort(),
     );
   });
 
-  // FM-9: `original_btime` is optional, and the two answers are "this is when
+  // FM-9: `captured_btime` is optional, and the two answers are "this is when
   // the file was created" and "no birth time was ever captured" — never a
   // stand-in value. One table carries both.
   it('round-trips an optional birth time', () => {
     const meta = sample();
     meta.entries[0].btimeSeconds = -86_400n;
     const keys = entryKeys(meta);
-    expect(keys[0]).toContain('original_btime');
-    expect(keys[1]).not.toContain('original_btime');
+    expect(keys[0]).toContain('captured_btime');
+    expect(keys[1]).not.toContain('captured_btime');
 
     const decoded = decodeMeta(padded(encodeMeta(meta)));
     expect(decoded.entries[0].btimeSeconds).toBe(-86_400n);
     expect(decoded.entries[1].btimeSeconds).toBeUndefined();
   });
 
-  // FM-9: `original_path` is where an Entry's position is recorded, so an entry
+  // FM-9: `captured_path` is where an Entry's position is recorded, so an entry
   // map without one describes nothing and the object is refused.
-  it('rejects an entry map without an original_path', () => {
+  it('rejects an entry map without a captured_path', () => {
     const map = sampleMap();
-    (map.get('entries') as Map<string, unknown>[])[0].delete('original_path');
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('malformed_meta');
+    (map.get('entries') as Map<string, unknown>[])[0].delete('captured_path');
+    expect(errorCode(() => decodeMeta(padded(wireEncode(map))))).toBe('malformed_meta');
   });
 
   // FM-4: the stream a meta section describes is every Entry back to back, then
@@ -335,6 +350,18 @@ describe('the meta section', () => {
   });
 
   it('rejects a meta section that is not a CBOR map', () => {
-    expect(errorCode(() => decodeMeta(padded(encodeCborValue('not a map'))))).toBe('malformed_meta');
+    expect(errorCode(() => decodeMeta(padded(wireEncode('not a map'))))).toBe('malformed_meta');
+  });
+});
+
+describe('a meta section keyed by field name (spec: FM-9)', () => {
+  // Every field travels under the field number the registry assigns it, and a
+  // text key is no field's spelling, so a meta section carrying its fields only
+  // under their names is missing them — refused by name.
+  it('is refused as missing its fields, by name', () => {
+    const byName = fromWire(decodeCborExact(encodeMeta(sample()), 'malformed_meta'), META);
+    const read = (): unknown => decodeMeta(padded(encodeCborValue(byName)));
+    expect(errorCode(read)).toBe('malformed_meta');
+    expect(read).toThrow(/schema/);
   });
 });

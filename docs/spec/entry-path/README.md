@@ -188,10 +188,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     −2 s), and stamps the file with that second on the handle it wrote to and
     before the rename, as a fetch stamps the file it places; the Entry the next
     sync or freeze makes of the file therefore carries that second as its
-    `original_mtime` (FM-9). A part whose field name is not such a count leaves
+    `captured_mtime` (FM-9). A part whose field name is not such a count leaves
     the file with the time it was written at, and is not refused for it.
   - A browser sends no birth time, so the Entry made of a dropped file carries
-    no `original_btime` (FM-9), whatever birth time the file's filesystem
+    no `captured_btime` (FM-9), whatever birth time the file's filesystem
     reports — that one is when the route wrote it. The device notes each file
     it placed this way, with its length and the second it stamped, and the scan
     of the sync or freeze that carries it in records no birth time for a file

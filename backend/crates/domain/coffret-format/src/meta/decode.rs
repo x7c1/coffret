@@ -4,7 +4,8 @@ use super::Meta;
 use super::SCHEMA;
 use super::{malformed, malformed_detail};
 use crate::bounded_uint::bounded_uint;
-use crate::error::{Error, Result};
+use crate::error::{CborDecodeFailure, Error, MalformedDetail, Result};
+use crate::field_numbers;
 use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
@@ -19,7 +20,7 @@ use crate::padme;
 /// saying something the map does not.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     let mut padding = bytes;
-    let wire: WireMeta = ciborium::from_reader(&mut padding)
+    let value: ciborium::Value = ciborium::from_reader(&mut padding)
         .map_err(|error| malformed_cbor(error, malformed_detail))?;
 
     let map_len = (bytes.len() - padding.len()) as u64;
@@ -33,6 +34,17 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     if padding.iter().any(|byte| *byte != 0) {
         return Err(Error::NonZeroMetaPadding);
     }
+    // The fields travel under their field numbers and are read here by name: a
+    // map key the registry does not give this map — an unknown field number, or
+    // any text — is dropped on the way, so a field carried under anything but
+    // its field number is refused as missing, by name (spec: FM-9).
+    let wire: WireMeta = field_numbers::from_wire(value, &field_numbers::META)
+        .deserialized()
+        .map_err(|error| {
+            malformed_detail(MalformedDetail::Undecodable(CborDecodeFailure::converting(
+                error,
+            )))
+        })?;
     // The Container-level numbers, held to the bound FM-19 puts on every
     // integer the format carries. The struct's fields are plain `u64`s, which
     // is the whole 64-bit range, so this is where the map's own arithmetic

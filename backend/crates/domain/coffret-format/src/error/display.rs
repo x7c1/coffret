@@ -6,7 +6,7 @@ use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::recovery_code::RecoveryCode;
 
-use super::{Error, MalformedDetail};
+use super::{EncodeDetail, Error, MalformedDetail};
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -32,9 +32,12 @@ impl fmt::Display for Error {
             Self::MissingChunks => f.write_str("object carries no chunks"),
             Self::AuthenticationFailed => f.write_str("message failed authentication"),
             Self::MalformedMeta { detail } => malformed(f, "malformed meta section", detail),
-            Self::MetaEncodeFailed { detail } => {
-                write!(f, "could not encode meta section: {detail}")
-            }
+            Self::MetaEncodeFailed { detail } => match detail {
+                EncodeDetail::Written(detail) => {
+                    write!(f, "could not encode meta section: {detail}")
+                }
+                EncodeDetail::Unencodable(_) => f.write_str("could not encode meta section"),
+            },
             Self::UnsupportedMetaSchema { schema } => {
                 write!(f, "unsupported meta section schema {schema}")
             }
@@ -149,9 +152,13 @@ impl fmt::Display for Error {
             Self::MissingMasterKeyEpoch => {
                 f.write_str("control-object payload carries no master_key_epoch")
             }
-            Self::ControlPayloadEncodeFailed { detail } => {
-                write!(f, "could not encode control-object payload: {detail}")
+            Self::ControlPayloadEncodeFailed { .. } => {
+                f.write_str("could not encode control-object payload")
             }
+            Self::UnregisteredField { map, field } => write!(
+                f,
+                "the {map} map has no field number for the field {field:?}"
+            ),
             Self::ControlPayloadTooLong { padded } => write!(
                 f,
                 "a control-object payload padded to {padded} bytes is longer than this platform addresses"

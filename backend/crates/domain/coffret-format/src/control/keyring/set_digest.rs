@@ -3,6 +3,7 @@ use coffret_model::{lowercase_hex, KeyTable};
 use super::encode::mapping_value;
 use crate::control::cbor::write_body;
 use crate::error::Result;
+use crate::field_numbers;
 
 /// The digest binding one Keyring generation's key table (spec: FM-17).
 ///
@@ -34,5 +35,5 @@ pub fn set_digest(key_table: &KeyTable) -> Result<String> {
 /// among several — a reader takes any of them — while these bytes are the
 /// spelling, because a second one would be a second digest for one key table.
 pub(super) fn digest_input(key_table: &KeyTable) -> Result<Vec<u8>> {
-    write_body(&mapping_value(key_table))
+    write_body(mapping_value(key_table), &field_numbers::KEYRING_ELEMENT)
 }

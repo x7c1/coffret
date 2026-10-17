@@ -192,7 +192,9 @@ mod entry_source;
 pub use entry_source::EntrySource;
 
 mod error;
-pub use error::{CborDecodeFailure, Error, MalformedDetail, Result};
+pub use error::{
+    CborDecodeFailure, CborEncodeFailure, EncodeDetail, Error, MalformedDetail, Result,
+};
 
 // Where this crate's tests turn a literal number into a generation, beside the
 // modules that do the same for a ciphertext length claim, an Entry Path, and an
@@ -252,3 +254,9 @@ mod token_cache;
 pub use token_cache::{
     decode_account_token_cache, decode_token_cache, encode_account_token_cache, encode_token_cache,
 };
+
+// The field numbers every stored CBOR map carries its fields under, as the
+// field-number registry assigns them (spec: FM-9, FM-15, FM-16, FM-17). Public
+// for the one reader that is a person: `named_view` turns a dumped payload's
+// field numbers back into the names the specification uses.
+pub mod field_numbers;

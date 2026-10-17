@@ -47,7 +47,7 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
             "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
              ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
              PRAGMA user_version = 7;",
         )
         .unwrap();
@@ -97,7 +97,7 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
         .execute_batch(
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
              PRAGMA user_version = 8;",
         )
         .unwrap();
@@ -140,7 +140,7 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
     connection
         .execute_batch(
             "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
-             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+             DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
              PRAGMA user_version = 9;",
         )
         .unwrap();
@@ -183,7 +183,7 @@ async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
     connection
         .execute_batch(
             "DROP TABLE held_parcels; DROP TABLE attempted_slots; \
-             ALTER TABLE entries DROP COLUMN original_path; PRAGMA user_version = 10;",
+             ALTER TABLE entries DROP COLUMN captured_path; PRAGMA user_version = 10;",
         )
         .unwrap();
     drop(connection);
@@ -262,7 +262,7 @@ async fn layout_11_attempts_are_kept_with_no_slot() {
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN original_path; \
+            "DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
              PRAGMA user_version = 11;",
         )
         .unwrap();
@@ -394,13 +394,13 @@ async fn a_batch_whose_slot_cannot_be_recorded_is_left_unmarked() {
         .is_empty());
 }
 
-/// Layout 12 cataloged no original path. Its catalog is kept rather than
-/// discarded — so the device does not catch up from Storage again — with every
-/// Entry's original path read as its current one, which is what every Entry
-/// had while nothing could rename one; its device state is kept with it
-/// (spec: FM-15, FM-16, EP-10, OC-2).
+/// Layout 12's device state is upgraded whole, and its catalog is discarded
+/// rather than migrated: it was filled from Storage objects in a format this
+/// build no longer reads, so the next catch-up rebuilds it from Storage
+/// (spec: RV-5, EP-10, OC-2). The catalog laid out in its place is the one a
+/// fresh file lays out.
 #[tokio::test]
-async fn a_layout_12_catalog_is_kept_with_each_original_path_its_current_one() {
+async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("index.sqlite");
     let index = SqliteIndex::open(&path).unwrap();
@@ -423,31 +423,22 @@ async fn a_layout_12_catalog_is_kept_with_each_original_path_its_current_one() {
         materializes: true,
     };
     index.record_pending_row(row.clone()).await.unwrap();
-    let before = index.snapshot().await.unwrap();
-    assert!(!before.entries().is_empty(), "the case catalogs Entries");
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("ALTER TABLE entries DROP COLUMN original_path; PRAGMA user_version = 12;")
+        .execute_batch("ALTER TABLE entries DROP COLUMN captured_path; PRAGMA user_version = 12;")
         .unwrap();
     drop(connection);
 
     let reopened = SqliteIndex::open(&path).unwrap();
     assert_eq!(
         stamp_of(&path),
-        13,
+        14,
         "the file is upgraded to the current layout"
     );
-    let after = reopened.snapshot().await.unwrap();
-    for location in after.entries() {
-        assert_eq!(
-            location.entry.original_path, location.entry.path,
-            "an Entry cataloged before layout 13 was never renamed",
-        );
-    }
-    assert_eq!(
-        after, before,
-        "the catalog is the one the file held, checkpoint included, not one to catch up again",
+    assert!(
+        reopened.checkpoint().await.unwrap().is_none(),
+        "the catalog is discarded, to be caught up again from Storage"
     );
     assert_eq!(
         reopened
@@ -461,8 +452,6 @@ async fn a_layout_12_catalog_is_kept_with_each_original_path_its_current_one() {
     assert_eq!(reopened.pending_rows().await.unwrap(), [row]);
     drop(reopened);
 
-    // The table laid out again is the one a fresh file lays out, so the upgraded
-    // file is not a layout of its own.
     let fresh = dir.path().join("fresh.sqlite");
     drop(SqliteIndex::open(&fresh).unwrap());
     assert_eq!(entries_table(&path), entries_table(&fresh));

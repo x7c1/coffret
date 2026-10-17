@@ -18,6 +18,12 @@ Every key named here is produced under the
 [Key Derivation](../key-derivation/) rules. Multi-byte integers are
 big-endian throughout.
 
+Every CBOR map an object stores carries each field as a map key equal to its
+field number: a small integer that the machine-readable field-number registry
+[`field-numbers.json`](field-numbers.json) assigns per map kind. The registry
+is normative; the rules below name fields by name, the way readers, errors and
+logs do, and FM-9 says how the two meet.
+
 The planned [derived-origin transition](derived-origin-transition.md) replaces
 source Container identity with source content identity. It is not part of the
 current schema described below; readers and writers still use FM-9's existing
@@ -130,29 +136,46 @@ fields until a coordinated implementation changes the format.
   message under the Container Key. Container-level fields: `schema` (= 1);
   `kind` — `one-file` or `pack`, carrying the explicit kind PK-15 defines;
   `pad_len` (FM-4); and `entries`, the entry table. Each entry records its
-  `original_path` (an Entry Path, EP-1), `offset` and `size` in the plaintext
-  stream, `original_mtime`, and `hash` — the BLAKE3-256 of the Entry's
+  `captured_path` (an Entry Path, EP-1), `offset` and `size` in the plaintext
+  stream, `captured_mtime`, and `hash` — the BLAKE3-256 of the Entry's
   plaintext, used for end-to-end verification after decryption and for change
-  detection — plus optional `original_btime`, optional `derived_from` (the
+  detection — plus optional `captured_btime`, optional `derived_from` (the
   parent's Container ID and Entry Path, for derived data such as thumbnails),
   and optional `mime`. *(Form: test)*
-  - The `original_` prefix states what those three values are: the Entry Path
-    and the times **as of the moment this Container was written**, not the
-    first name the Entry ever had and not what the Library holds now. A
+  - Every field of the meta section's maps — the map itself, each entry map,
+    and each `derived_from` — is carried as a CBOR map key equal to the field
+    number the field-number registry,
+    [`field-numbers.json`](field-numbers.json), assigns it within that map
+    kind. A text map key is no field's spelling: a reader looks a field up by
+    its field number alone, so a map that carries a required field only under
+    a text key lacks that field and is rejected. Field numbers are per map
+    kind, so one field number names different fields in different maps. A
+    registry row, once published, keeps its map, name and field number for
+    good: a field that stops being written is marked retired rather than
+    removed, and its field number is never read, written or given to another
+    field again. The same holds for every control payload (FM-15, FM-16,
+    FM-17), whose maps the registry covers too.
+  - The `captured_` prefix states what those three values are: the Entry Path
+    and the times **as captured when this Container was written** — not the
+    first name the Entry ever had, and not what the Library holds now. A
     Container is one immutable object — rewriting its meta section would mean
-    re-encrypting and re-uploading it — so nothing ever updates them, and a
-    content update writes a new Container, which means successive Containers
-    for one Entry may each carry a different `original_path`. The current
+    re-encrypting and re-uploading it — so nothing ever updates them. Any
+    write of a new Container records the values current at that write: a
+    content update writes one under the name the Entry then has, and a
+    rewrite of a Pack (a repack, a compaction, the rebuild a delete makes)
+    records the names current when it is rewritten, so successive Containers
+    for one Entry may each carry a different `captured_path`. The current
     state is the Journal's and its checkpoint's (CP-11, CK-1), which is why a
     record and a Snapshot spell the same values without the prefix (FM-15,
-    FM-16) — and why they also carry this `original_path` beside the current
+    FM-16) — and why they also carry this `captured_path` beside the current
     one wherever the two differ, so that a device can name both without
     opening the Container.
   - `derived_from` is itself a CBOR map with two fields: `container_id`,
     the parent Entry's Container ID as a 16-byte byte string, and
-    `original_path`, the parent's Entry Path (EP-1) as a text string. The
+    `captured_path`, the parent's Entry Path (EP-1) as a text string. The
     prefix is the entry map's own, for the same reason: the reference names an
-    Entry inside an object already written, and no rename reaches in there.
+    Entry as it stood when this object was written, and no rename reaches in
+    there.
   - The meta section's plaintext is that CBOR map followed by zero padding up
     to the next Padmé bucket boundary (FM-4), so the meta section length in the
     header (FM-2) is not a proxy for the Entry count or the total Entry Path
@@ -163,14 +186,16 @@ fields until a coordinated implementation changes the format.
     the same two conditions FM-11 puts on a control payload. Without the
     length condition an unpadded map would pass, and its length would leak
     what the padding is there to blur.
-  - The maps are forward-open: a reader ignores fields it does not know,
-    and adding a field only increments `schema`. A reader accepts any
-    `schema` of 1 or above and rejects anything lower.
-  - `original_mtime` is a signed count of whole seconds from the Unix epoch;
+  - The maps are forward-open: a reader ignores fields it does not know —
+    any field number the registry does not give that map, or gives only as
+    retired — and adding a field only adds a registry row and increments
+    `schema`. A reader accepts any `schema` of 1 or above and rejects anything
+    lower.
+  - `captured_mtime` is a signed count of whole seconds from the Unix epoch;
     sub-second precision is not recorded, and negative values (before
     1970) are legal.
-  - `original_btime` is when the file came into being, in the same form and
-    with the same range as `original_mtime`. It is optional because not every
+  - `captured_btime` is when the file came into being, in the same form and
+    with the same range as `captured_mtime`. It is optional because not every
     platform and filesystem keeps a creation time: a writer records it where
     the local file reports one and omits the field entirely where it does not.
     Absent means "no birth time was ever captured" and never "created at the
@@ -321,7 +346,10 @@ fields until a coordinated implementation changes the format.
   first epoch, incremented by 1 at each rotation. The epoch is distinct
   from the header's `generation`, which places the object in the Library's
   control history and never restarts at a rotation — so an object name
-  (FM-12) is never reused across epochs (CP-13, KL-10). *(Form: test)*
+  (FM-12) is never reused across epochs (CP-13, KL-10). The registry gives
+  `master_key_epoch` the same field number in every payload map kind, so a
+  reader finds the epoch before it knows which kind's map it holds.
+  *(Form: test)*
   - Journal records and activation Index Snapshots form one control-head
     chain: the Library's first head is written as generation 0 when the
     Library is created (CP-2), and every successor — whichever kind wins the
@@ -356,8 +384,9 @@ fields until a coordinated implementation changes the format.
   it travels; `additions`, an array of the Containers the batch added; and
   `removals`, an array of 16-byte Container IDs the batch removed (CP-14).
   The header carries the record's own generation and the payload carries
-  `master_key_epoch` (FM-11, FM-13), so neither is repeated here.
-  *(Form: test)*
+  `master_key_epoch` (FM-11, FM-13), so neither is repeated here. Every
+  field, at every level, is carried under the field number the registry gives
+  it in its map kind, on FM-9's terms. *(Form: test)*
   - `prev` is the record's own statement of the head it was built on, so a
     replay can confirm that record *g* follows head *g − 1* from the
     authenticated payload rather than from the name the object was fetched
@@ -374,36 +403,32 @@ fields until a coordinated implementation changes the format.
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
     string), `ciphertext_len`, optional `object_ref` (below), and `entries` —
     the Container's entry table, each element a map of `path`, optional
-    `original_path`, `offset`, `size`, `mtime`, optional `btime`, `hash`,
-    optional `mime`, and optional `derived_from`. `original_path`, `offset`,
+    `captured_path`, `offset`, `size`, `mtime`, optional `btime`, `hash`,
+    optional `mime`, and optional `derived_from`. `captured_path`, `offset`,
     `size`, `hash`, `mime`, and `derived_from` are FM-9's fields verbatim, down
-    to the `original_path` inside a `derived_from`, and carrying the whole
+    to the `captured_path` inside a `derived_from`, and carrying the whole
     table is what lets a device replay a record without opening a Container
     (CP-11).
-  - `path`, `mtime`, and `btime` are spelled without FM-9's `original_`
+  - `path`, `mtime`, and `btime` are named without FM-9's `captured_`
     prefix, though an addition takes them from the same entry table: the
     difference is what the map is for. A record is the catalog, and those
     values are what the Library holds from this commit onward, which a later
-    record may move. `original_path` keeps the prefix because it is not the
+    record may move. `captured_path` keeps the prefix because it is not the
     catalog's to move: it is the Entry Path the owning Container's meta section
     records, the name it was captured under, so one map can carry both names
-    — `path` for where the Entry stands now, `original_path` for what its
+    — `path` for where the Entry stands now, `captured_path` for what its
     Container calls it. Keeping one spelling for both would leave a reader
     with no way to say which of the two it had in hand.
-  - `original_path` is present if and only if it differs from `path`: a map
-    without it names an Entry whose original path is its current one, so an
-    Entry no rename has moved costs nothing more than it did before the field
-    existed. One Library state therefore has one encoding, as with the orders
-    below, and a reader rejects a map whose `original_path` is present and equal
-    to its `path` rather than accepting a second spelling of it.
-  - A commit takes each original path from the entry table of the Container it
+  - `captured_path` is present if and only if it differs from `path`: a map
+    without it names an Entry whose captured path is its current one, so an
+    Entry no rename has moved costs nothing for it. One Library state
+    therefore has one encoding, as with the orders below, and a reader rejects
+    a map whose `captured_path` is present and equal to its `path` rather than
+    accepting a second spelling of it.
+  - A commit takes each captured path from the entry table of the Container it
     adds, as that Container's meta section records it, and not from the paths
     its batch was asked to commit; a checkpoint copies it from the catalog
     (FM-16).
-  - A record of `schema` 1 was written before `original_path` existed, and its
-    entry maps lack it. Nothing could rename an Entry then, so its original path
-    was its current one — which is what the absence of the field means under
-    the rule above, so a reader reads both schemas the same way.
   - `object_ref` is the Storage's own identifier for the Container's object —
     the same value whichever device reads it — carried as a cache so that a
     device can fetch the Container without listing Storage first. It is never
@@ -426,7 +451,7 @@ fields until a coordinated implementation changes the format.
     circulation.
   - The maps are forward-open on FM-9's terms: a reader ignores fields it
     does not know, adding a field only increments `schema`, and a reader
-    accepts any `schema` of 1 or above and rejects anything lower.
+    accepts any `schema` of 2 or above and rejects anything lower.
 - **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 2);
   the checkpoint the Snapshot stands at — `head_generation`,
   `journal_generation`, `next_commit_slot` (the same opaque token FM-15
@@ -436,16 +461,17 @@ fields until a coordinated implementation changes the format.
   each element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
   `object_ref`, as FM-15's additions spell those fields; and `entries`, an
   array of every current Entry, each element the entry map an addition carries
-  — `path`, `mtime`, optional `btime`, and FM-9's optional `original_path`,
+  — `path`, `mtime`, optional `btime`, and FM-9's optional `captured_path`,
   `offset`, `size`, `hash`, optional `mime`, and optional `derived_from` — plus
   `container`, the 0-based index of the owning element of `containers`. A
   Snapshot is a checkpoint of the catalog, so it spells those three the
-  catalog's way, and carries `original_path` where it differs from `path`,
+  catalog's way, and carries `captured_path` where it differs from `path`,
   for the reasons FM-15 gives. The
   fourth member of the Keyring tuple the checkpoint names, `master_key_epoch`
   (CK-3), is the field FM-13 gives every payload, so it is not repeated
   inside. The ordinary kind (`0x03`) and the activation kind (`0x04`) share
-  this schema. *(Form: test)*
+  this schema. Every field, at every level, is carried under the field number
+  the registry gives it in its map kind, on FM-9's terms. *(Form: test)*
   - An Entry names its Container by index rather than by ID because a Library
     holds far more Entries than Containers, and the 16-byte ID would
     otherwise be repeated once per Entry.
@@ -479,25 +505,24 @@ fields until a coordinated implementation changes the format.
     record of which checkpoint object this Index adopted. That last one is
     the Index's own provenance rather than Library content, so it is never
     encoded and a decoded Snapshot reports none.
-  - `original_path` is present if and only if it differs from `path`, and a
-    reader rejects one present and equal, as FM-15 has it for a record. A
-    Snapshot of `schema` 1 lacks the field in every entry map, which a reader
-    takes the same way: each Entry's original path is its `path`.
+  - `captured_path` is present if and only if it differs from `path`, and a
+    reader rejects one present and equal, as FM-15 has it for a record.
   - The maps are forward-open on FM-9's terms, as FM-15's are.
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
   `schema` (= 1); and `mapping`, the generation's complete **key table** from
   every current Container to the key status the committed control state records
-  for it (KL-7). The key table is serialized as the field `mapping`: the field
-  name predates the term and stays, because existing Libraries carry it. Each
-  element of `mapping` is a map of `id` — the 16-byte Container ID as a byte
-  string — and exactly one of `envelope`, that Container's 72-byte Key
-  Envelope (FM-14) as a byte string, or `key_lost` (= `true`), the explicit
-  key-lost marker recording that the committed control state has no reachable
-  envelope for it (KL-7). The header carries the Keyring's generation and the
-  replica position, and the payload carries `master_key_epoch` (FM-11, FM-13),
-  so none of the three is repeated here — which is why every replica of one
-  generation carries an identical payload (KL-6) and two of them differ only in
-  their header and their nonce. *(Form: test)*
+  for it (KL-7). The key table is serialized as the field `mapping`, a name
+  that predates the term. Each element of `mapping` is a map of `id` — the
+  16-byte Container ID as a byte string — and exactly one of `envelope`, that
+  Container's 72-byte Key Envelope (FM-14) as a byte string, or `key_lost`
+  (= `true`), the explicit key-lost marker recording that the committed control
+  state has no reachable envelope for it (KL-7). The header carries the
+  Keyring's generation and the replica position, and the payload carries
+  `master_key_epoch` (FM-11, FM-13), so none of the three is repeated here —
+  which is why every replica of one generation carries an identical payload
+  (KL-6) and two of them differ only in their header and their nonce. Every
+  field, at every level, is carried under the field number the registry gives
+  it in its map kind, on FM-9's terms. *(Form: test)*
   - A reader rejects an element carrying both `envelope` and `key_lost`, and one
     carrying neither. A Container is mapped to exactly one of the two: the marker
     records that no envelope is reachable, so an element carrying one beside an
@@ -521,11 +546,14 @@ fields until a coordinated implementation changes the format.
     half of KL-1's validity check.
     - The bytes hashed are the deterministic CBOR encoding of that array as
       RFC 8949 §4.2.1 defines it: definite-length arrays and maps, shortest-form
-      arguments, and the keys of each element ordered by their encoded bytes —
-      which puts `id` before either `envelope` or `key_lost`. Nothing else about
-      the payload is byte-normative (a reader takes any valid CBOR spelling of
-      the fields, FM-9), so this rule fixes the encoding the digest is taken
-      over rather than leaving it to a serializer's choice.
+      arguments, and the map keys of each element ordered by their encoded
+      bytes. The map keys are the field numbers the registry gives the
+      element's fields, each encoded in one byte, so their encoded order is
+      their numeric order — which puts `id`'s field number before
+      `envelope`'s or `key_lost`'s. Nothing else about the payload is
+      byte-normative (a reader takes any valid CBOR spelling of the fields,
+      FM-9), so this rule fixes the encoding the digest is taken over rather
+      than leaving it to a serializer's choice.
     - Putting the digest inside the payload would make it cover itself. Leaving
       it out is what lets one definition serve the name, the commitment, and
       KL-1 at once.
@@ -586,7 +614,9 @@ fields until a coordinated implementation changes the format.
   `size`, `prev`, `head_generation`, `journal_generation`, `keyring_generation`,
   `base_head_generation`, `master_key_epoch`, `ciphertext_len`, and `container`
   (FM-13, FM-15, FM-16, FM-17). A writer never produces a larger one, and a
-  reader rejects an object carrying one as malformed. *(Form: test)*
+  reader rejects an object carrying one as malformed. A map key is not such a
+  value: a field number the registry does not give its map is ignored whatever
+  its size (FM-9). *(Form: test)*
   - The bound is 2^63 because the value then fits the widest integer many hosts
     have — a signed 64-bit one. An implementation keeping a catalog in a
     database whose integer columns are signed, or reading the format from a

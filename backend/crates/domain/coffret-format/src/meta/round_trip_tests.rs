@@ -35,7 +35,7 @@ fn optional_fields_round_trip() {
     assert_eq!(decoded.entries, meta.entries);
 }
 
-// FM-9: `original_btime` is optional, and the two answers are "this is when the
+// FM-9: `captured_btime` is optional, and the two answers are "this is when the
 // file was created" and "no birth time was ever captured" — never a stand-in
 // value. One table carries both, so a round trip that quietly filled the absent
 // one in would show up here.
@@ -57,16 +57,14 @@ fn a_birth_time_round_trips_where_one_was_captured() {
 }
 
 // FM-9: the maps are forward-open — a reader ignores fields it does not know,
+// carried under field numbers the registry does not give the map,
 // so a newer writer can add fields without breaking this reader.
 #[test]
 fn unknown_fields_are_ignored() {
     let Value::Map(mut map) = as_value(&sample()) else {
         panic!("the meta section is a CBOR map");
     };
-    map.push((
-        Value::Text("future_field".to_owned()),
-        Value::Text("whatever".to_owned()),
-    ));
+    map.push((Value::from(23u64), Value::Text("whatever".to_owned())));
     for (key, value) in map.iter_mut() {
         if key.as_text() != Some("entries") {
             continue;
@@ -78,10 +76,7 @@ fn unknown_fields_are_ignored() {
             let Value::Map(fields) = entry else {
                 panic!("an entry is a CBOR map");
             };
-            fields.push((
-                Value::Text("future_entry_field".to_owned()),
-                Value::Integer(1i64.into()),
-            ));
+            fields.push((Value::from(24u64), Value::Integer(1i64.into())));
         }
     }
     // A newer writer would also have bumped `schema`.
@@ -97,8 +92,8 @@ fn unknown_fields_are_ignored() {
 }
 
 // FM-9: the meta section is one CBOR map with `schema`, `kind`, `pad_len`, and
-// `entries`; each entry records `original_path`, `offset`, `size`,
-// `original_mtime`, and `hash`, plus optional `original_btime`, `derived_from`,
+// `entries`; each entry records `captured_path`, `offset`, `size`,
+// `captured_mtime`, and `hash`, plus optional `captured_btime`, `derived_from`,
 // and `mime`.
 #[test]
 fn field_names_and_kind_spelling_match_the_rule() {
@@ -113,7 +108,7 @@ fn field_names_and_kind_spelling_match_the_rule() {
     assert_eq!(container_kind(&value), Some("pack"));
     assert_eq!(
         entry_keys(&entries(&value)[0]),
-        ["original_path", "offset", "size", "original_mtime", "hash"]
+        ["captured_path", "offset", "size", "captured_mtime", "hash"]
     );
 }
 
@@ -131,17 +126,17 @@ fn a_birth_time_is_written_beside_the_modification_time() {
     assert_eq!(
         entry_keys(&entries[0]),
         [
-            "original_path",
+            "captured_path",
             "offset",
             "size",
-            "original_mtime",
-            "original_btime",
+            "captured_mtime",
+            "captured_btime",
             "hash"
         ],
     );
     assert_eq!(
         entry_keys(&entries[1]),
-        ["original_path", "offset", "size", "original_mtime", "hash"],
+        ["captured_path", "offset", "size", "captured_mtime", "hash"],
         "the entry whose file had no birth time carries no key for one",
     );
 }
@@ -185,4 +180,28 @@ fn entry_keys(entry: &Value) -> Vec<&str> {
         .iter()
         .map(|(key, _)| key.as_text().expect("keys are text"))
         .collect()
+}
+
+// FM-9: on the wire every field travels under its field number, and no key is
+// text: the names above are the reader's translation.
+#[test]
+fn every_key_on_the_wire_is_an_integer() {
+    let Value::Map(map) = super::testing::as_raw_value(&sample()) else {
+        panic!("the meta section is a CBOR map");
+    };
+    let keys: Vec<Value> = map.iter().map(|(key, _)| key.clone()).collect();
+    assert_eq!(
+        keys,
+        [1u64, 2, 3, 4].map(Value::from),
+        "schema, kind, pad_len, entries"
+    );
+    let Value::Array(entries) = &map[3].1 else {
+        panic!("entries is an array");
+    };
+    for entry in entries {
+        let Value::Map(fields) = entry else {
+            panic!("an entry is a map");
+        };
+        assert!(fields.iter().all(|(key, _)| key.is_integer()), "{fields:?}");
+    }
 }

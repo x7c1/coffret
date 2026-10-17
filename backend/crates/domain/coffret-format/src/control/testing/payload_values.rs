@@ -18,6 +18,7 @@ use crate::ciphertext_len_claims::ciphertext_len;
 use crate::control::ControlPayload;
 use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
+use crate::field_numbers::{self, MapFields};
 use crate::generations::generation;
 
 /// A Container ID whose sixteen bytes are all `seed`.
@@ -52,7 +53,7 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
 pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
-        original_path: entry_path(path),
+        captured_path: entry_path(path),
         extent: entry_extent(offset, size),
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         btime: None,
@@ -78,8 +79,62 @@ pub(in crate::control) fn checkpoint(number: u64) -> IndexCheckpoint {
     )
 }
 
-/// The fields of a payload body, for a case that has to change one of them.
-pub(in crate::control) fn body_map(payload: &ControlPayload) -> Vec<(Value, Value)> {
+/// The fields of a payload body, keyed by name, for a case that has to change
+/// one of them.
+///
+/// The body travels under field numbers; this is the reader's translation of
+/// them for the map kind `kind`, so a case speaks of fields the way the rule does
+/// (spec: FM-9).
+pub(in crate::control) fn body_map(
+    payload: &ControlPayload,
+    kind: &MapFields,
+) -> Vec<(Value, Value)> {
+    let value: Value =
+        ciborium::from_reader(payload.body.as_slice()).expect("a payload body is CBOR");
+    match field_numbers::from_wire(value, kind) {
+        Value::Map(entries) => entries,
+        other => panic!("a payload body is a map, found {other:?}"),
+    }
+}
+
+/// A payload carrying the fields a case built by hand, each name `kind`
+/// declares under its field number and any other map key — an unknown field
+/// number, a text key — as the case wrote it.
+pub(in crate::control) fn with_body_map(
+    epoch: MasterKeyEpoch,
+    fields: Vec<(Value, Value)>,
+    kind: &MapFields,
+) -> ControlPayload {
+    with_raw_body(
+        epoch,
+        field_numbers::to_wire_lenient(Value::Map(fields), kind),
+    )
+}
+
+/// A payload carrying exactly the map handed in, keys and all.
+pub(in crate::control) fn with_raw_body(epoch: MasterKeyEpoch, body: Value) -> ControlPayload {
+    let mut bytes = Vec::new();
+    ciborium::into_writer(&body, &mut bytes).expect("a map of values serializes");
+    ControlPayload::new(epoch, bytes)
+}
+
+/// The same payload with every field, at every level, carried under its name
+/// as a text key rather than under its field number — the spelling a map keyed
+/// by field names would have, which is no field's spelling (spec: FM-9).
+pub(in crate::control) fn spelled_by_name(
+    payload: &ControlPayload,
+    kind: &MapFields,
+) -> ControlPayload {
+    let value: Value =
+        ciborium::from_reader(payload.body.as_slice()).expect("a payload body is CBOR");
+    with_raw_body(
+        payload.master_key_epoch,
+        field_numbers::from_wire(value, kind),
+    )
+}
+
+/// The body exactly as it travels, field numbers and all.
+pub(in crate::control) fn raw_body(payload: &ControlPayload) -> Vec<(Value, Value)> {
     let value: Value =
         ciborium::from_reader(payload.body.as_slice()).expect("a payload body is CBOR");
     match value {
@@ -88,21 +143,11 @@ pub(in crate::control) fn body_map(payload: &ControlPayload) -> Vec<(Value, Valu
     }
 }
 
-/// A payload carrying the fields a case built by hand.
-pub(in crate::control) fn with_body_map(
-    epoch: MasterKeyEpoch,
-    fields: Vec<(Value, Value)>,
-) -> ControlPayload {
-    let mut bytes = Vec::new();
-    ciborium::into_writer(&Value::Map(fields), &mut bytes).expect("a map of values serializes");
-    ControlPayload::new(epoch, bytes)
-}
-
 /// The field names a payload body carries, in the order the encoder wrote them.
-pub(in crate::control) fn body_keys(payload: &ControlPayload) -> Vec<String> {
-    body_map(payload)
+pub(in crate::control) fn body_keys(payload: &ControlPayload, kind: &MapFields) -> Vec<String> {
+    body_map(payload, kind)
         .iter()
-        .map(|(key, _)| key.as_text().expect("keys are text").to_owned())
+        .map(|(key, _)| key.as_text().expect("keys are names").to_owned())
         .collect()
 }
 

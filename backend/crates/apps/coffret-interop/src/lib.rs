@@ -13,6 +13,11 @@
 //! - [`verify()`] opens the set the TypeScript side wrote in return and checks
 //!   every fixture against that same manifest schema.
 //!
+//! - [`dump()`] opens one control object fetched from a real Library and prints
+//!   its payload with the field names the field-number registry gives its
+//!   field numbers,
+//!   for a person checking what a device wrote.
+//!
 //! Both directions run in one pass, so a disagreement is caught whichever
 //! implementation writes and whichever reads. When the exchange fails, either
 //! the specification or one implementation is wrong; the fix is a deliberate
@@ -32,3 +37,6 @@ pub use generate::generate;
 
 mod verify;
 pub use verify::verify;
+
+mod dump;
+pub use dump::dump;

@@ -178,3 +178,47 @@ fn a_decoder_refusal_travels_as_the_cause_and_stays_out_of_the_event() {
         ["malformed Journal record payload: a removal is a byte string, found text"],
     );
 }
+
+// A CBOR encoder's refusal travels as the value it reported, the way a
+// decoder's does: the variant's own line says which object could not be
+// written, and the encoder's text is the cause underneath — never the
+// `Custom("…")` spelling ciborium's `Debug` would give it.
+#[test]
+fn an_encoder_refusal_travels_as_the_cause() {
+    let refused = Error::ControlPayloadEncodeFailed {
+        cause: CborEncodeFailure::converting(ciborium::value::Error::Custom(
+            "no CBOR item for this".to_owned(),
+        )),
+    };
+    assert_eq!(
+        chain(&refused),
+        [
+            "could not encode control-object payload",
+            "no CBOR item for this"
+        ],
+    );
+
+    let meta = Error::MetaEncodeFailed {
+        detail: EncodeDetail::Unencodable(CborEncodeFailure::writing(ciborium::ser::Error::Value(
+            "no CBOR item for this".to_owned(),
+        ))),
+    };
+    assert_eq!(
+        chain(&meta),
+        ["could not encode meta section", "no CBOR item for this"],
+    );
+}
+
+// A writer reaching for a field the registry gives its map no number for is
+// named as that, apart from the encoder's refusals.
+#[test]
+fn an_unregistered_field_names_the_map_and_the_field() {
+    let refused = Error::UnregisteredField {
+        map: "journal_record",
+        field: "unheard_of".to_owned(),
+    };
+    assert_eq!(
+        chain(&refused),
+        [r#"the journal_record map has no field number for the field "unheard_of""#],
+    );
+}

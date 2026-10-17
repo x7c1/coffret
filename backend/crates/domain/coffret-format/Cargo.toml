@@ -22,3 +22,8 @@ sha2 = { workspace = true }
 # Wiping the plaintext buffers key material passes through on its way in and out
 # of the forms this crate writes (spec: DK-7).
 zeroize = { workspace = true }
+
+[dev-dependencies]
+# The field-number registry the declarations are held against is JSON
+# (spec: FM-9).
+serde_json = { workspace = true }

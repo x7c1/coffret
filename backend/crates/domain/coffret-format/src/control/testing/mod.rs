@@ -18,8 +18,8 @@ use crate::purpose_key::PurposeKey;
 
 mod payload_values;
 pub(super) use payload_values::{
-    array, body_keys, body_map, checkpoint, container_id, entry, field, keyring, map_keys, summary,
-    with_body_map,
+    array, body_keys, body_map, checkpoint, container_id, entry, field, keyring, map_keys,
+    raw_body, spelled_by_name, summary, with_body_map, with_raw_body,
 };
 
 /// Every kind of control object, for tests that must cover all of them.

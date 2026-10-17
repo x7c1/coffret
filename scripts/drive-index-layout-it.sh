@@ -146,7 +146,7 @@ readonly FILES=3
 readonly FILE_LINES=64
 
 # Where the two layout versions are written down, and the source of both.
-readonly SCHEMA_FILE="$ROOT/backend/crates/gateway/coffret-sqlite-index/src/schema.rs"
+readonly SCHEMA_FILE="$ROOT/backend/crates/gateway/coffret-sqlite-index/src/schema/mod.rs"
 
 # The two kinds of failure a grant that has died is answered with, and they are
 # two because a refresh token Google has expired is not a refresh token that was
@@ -363,9 +363,22 @@ fi
 # here, so that it is read in its place.
 readonly EMPTY_BOUNDARY="DEVICE_SCHEMA_VERSION is $DEVICE_SCHEMA_VERSION and SCHEMA_VERSION is $SCHEMA_VERSION: no stamp lies between them, so there is no older layout for this build to discard."
 
+# The oldest layout this build still opens: the floor of the range `prepare`
+# carries forward by upgrading its device-local group in place. Read out of the
+# source like the two versions above, because a stamp between that floor and
+# DEVICE_SCHEMA_VERSION is upgraded rather than refused.
+oldest_carried_layout() {
+  local value
+  value="$(sed -n 's/^ *\([0-9]\{1,\}\)\.\.=[0-9]\{1,\} => provenance::preserve_device_state(connection),$/\1/p' "$SCHEMA_FILE")"
+  [ -n "$value" ] || fail "$SCHEMA_FILE has no range that prepare upgrades; this script reads the oldest layout it opens from it."
+  printf '%s\n' "$value"
+}
+OLDEST_CARRIED="$(oldest_carried_layout)"
+readonly OLDEST_CARRIED
+
 # What scenario B stamps its copy with: one below the oldest layout this build
 # can carry forward, which is the whole of what makes it refused.
-readonly TOO_OLD=$((DEVICE_SCHEMA_VERSION - 1))
+readonly TOO_OLD=$((OLDEST_CARRIED - 1))
 
 # Whether a Library is on this device is the settings file and not the
 # directory: an interrupted creation leaves a directory that nothing opens.
@@ -857,7 +870,7 @@ else
   echo
   echo "=== scenario B: a refused Index still lists its mappings ==="
   echo
-  echo "--- copying $LIBRARY to $REFUSED and stamping it at $TOO_OLD, below the $DEVICE_SCHEMA_VERSION this build carries forward ---"
+  echo "--- copying $LIBRARY to $REFUSED and stamping it at $TOO_OLD, below the $OLDEST_CARRIED this build carries forward ---"
   rm -rf "$REFUSED_DIR"
   cp -r "$STATE_DIR/libraries/$LIBRARY" "$REFUSED_DIR"
   # From here on the copy goes whatever happens. Handed to the trap above rather

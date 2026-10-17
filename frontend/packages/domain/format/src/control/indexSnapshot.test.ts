@@ -4,6 +4,7 @@ import { errorCode } from '../errors.testing.js';
 import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 import {
+  INDEX_SNAPSHOT_SCHEMA,
   decodeIndexSnapshot,
   encodeIndexSnapshot,
   indexSnapshotKind,
@@ -12,7 +13,7 @@ import {
 import type { ControlPayload } from './payload.js';
 import {
   BORN,
-  ORIGINAL_PATH,
+  CAPTURED_PATH,
   activating,
   arrayField,
   bodyMap,
@@ -24,7 +25,9 @@ import {
   ordinary,
   summary,
   withBodyMap,
+  spelledByName,
 } from './payloadSchemas.testing.js';
+import { INDEX_SNAPSHOT } from '../internal/fieldNumbers.js';
 
 /** An ordinary Snapshot payload with one field changed by hand. */
 function tampered(
@@ -32,9 +35,9 @@ function tampered(
   snapshot: IndexSnapshotPayload = ordinary(),
 ): ControlPayload {
   const payload = encodeIndexSnapshot(snapshot);
-  const map = bodyMap(payload);
+  const map = bodyMap(payload, INDEX_SNAPSHOT);
   change(map);
-  return withBodyMap(payload.masterKeyEpoch, map);
+  return withBodyMap(payload.masterKeyEpoch, map, INDEX_SNAPSHOT);
 }
 
 function readOrdinary(payload: ControlPayload): IndexSnapshotPayload {
@@ -86,7 +89,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
   // CK-7: a Snapshot carries no device state, so nothing records which
   // checkpoint an Index adopted — there is no field for it at all.
   it('carries no field naming what an Index adopted', () => {
-    const map = bodyMap(encodeIndexSnapshot(ordinary()));
+    const map = bodyMap(encodeIndexSnapshot(ordinary()), INDEX_SNAPSHOT);
     for (const key of map.keys()) {
       expect(String(key)).not.toContain('adopted');
     }
@@ -105,7 +108,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
   // An Entry names its Container by index, so the 16-byte ID appears once per
   // Container rather than once per Entry.
   it('names an Entry’s Container by index', () => {
-    const map = bodyMap(encodeIndexSnapshot(ordinary()));
+    const map = bodyMap(encodeIndexSnapshot(ordinary()), INDEX_SNAPSHOT);
     const containers = orderedContainers();
     const expected = canonical(content()).entries.map((location) =>
       containers.findIndex((container) => container.id.toHex() === location.containerId.toHex()),
@@ -124,18 +127,18 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
 
   // A Snapshot's entry map is the catalog's spelling, plus the `container`
   // index that is the Snapshot's own — so `path` and `mtime` without the
-  // `original_` prefix FM-9 gives them, and `btime` for the Entries that have
+  // `captured_` prefix FM-9 gives them, and `btime` for the Entries that have
   // one. `albums/spring/a.jpg` sorts first (spec: EP-3), and it is the one
   // with a birth time.
   it('carries the catalog spelling and an optional birth time', () => {
     const payload = encodeIndexSnapshot(ordinary());
-    const entries = arrayField(bodyMap(payload), 'entries');
+    const entries = arrayField(bodyMap(payload, INDEX_SNAPSHOT), 'entries');
     expect([...mapAt(entries, 0).keys()].sort()).toEqual(
-      ['path', 'original_path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
+      ['path', 'captured_path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
     );
     for (let index = 1; index < entries.length; index += 1) {
       expect([...mapAt(entries, index).keys()]).not.toContain('btime');
-      expect([...mapAt(entries, index).keys()]).not.toContain('original_path');
+      expect([...mapAt(entries, index).keys()]).not.toContain('captured_path');
     }
 
     const decoded = readOrdinary(payload);
@@ -143,47 +146,29 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     expect(decoded.content.entries[1].entry.btimeSeconds).toBeUndefined();
   });
 
-  // An Entry's original path travels beside its current one, each under its
+  // An Entry's captured path travels beside its current one, each under its
   // own key, and each comes back as the one it went in as.
-  it('carries an original path beside the current path', () => {
+  it('carries a captured path beside the current path', () => {
     const payload = encodeIndexSnapshot(ordinary());
-    const entries = arrayField(bodyMap(payload), 'entries');
-    expect(mapAt(entries, 0).get('original_path')).toBe(ORIGINAL_PATH);
+    const entries = arrayField(bodyMap(payload, INDEX_SNAPSHOT), 'entries');
+    expect(mapAt(entries, 0).get('captured_path')).toBe(CAPTURED_PATH);
 
     const decoded = readOrdinary(payload).content.entries;
     expect(decoded[0].entry.path).toBe('albums/spring/a.jpg');
-    expect(decoded[0].entry.originalPath).toBe(ORIGINAL_PATH);
+    expect(decoded[0].entry.capturedPath).toBe(CAPTURED_PATH);
     for (const location of decoded.slice(1)) {
-      expect(location.entry.originalPath).toBe(location.entry.path);
+      expect(location.entry.capturedPath).toBe(location.entry.path);
     }
   });
 
-  // `original_path` is written only where it differs from `path`, so one state
+  // `captured_path` is written only where it differs from `path`, so one state
   // has one encoding; a map carrying it equal to `path` is refused.
-  it('refuses an original path equal to the path', () => {
+  it('refuses a captured path equal to the path', () => {
     const payload = tampered((map) => {
       const entries = arrayField(map, 'entries');
-      mapAt(entries, 0).set('original_path', mapAt(entries, 0).get('path'));
+      mapAt(entries, 0).set('captured_path', mapAt(entries, 0).get('path'));
     });
     expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
-  });
-
-  // A Snapshot of schema 1 was written before `original_path` existed, when
-  // nothing could rename an Entry, so a reader takes each Entry's original path
-  // to be its current one. Everything else in the Snapshot reads as it did.
-  it('reads each original path of a schema 1 Snapshot as its path', () => {
-    const payload = tampered((map) => {
-      for (const entry of arrayField(map, 'entries')) {
-        (entry as Map<unknown, unknown>).delete('original_path');
-      }
-      map.set('schema', 1n);
-    });
-    const expected = canonical(content());
-    expected.entries = expected.entries.map((location) => ({
-      ...location,
-      entry: { ...location.entry, originalPath: location.entry.path },
-    }));
-    expect(readOrdinary(payload).content).toEqual(expected);
   });
 
   // EP-3: the order is over the canonical UTF-8 bytes, which is not the order
@@ -216,10 +201,10 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
   // FM-9: the maps are forward-open at every level.
   it('ignores fields it does not know', () => {
     const payload = tampered((map) => {
-      map.set('future_field', 'whatever');
+      map.set(23, 'whatever');
       for (const name of ['containers', 'entries']) {
         for (const item of arrayField(map, name)) {
-          (item as Map<unknown, unknown>).set('future_element_field', 1n);
+          (item as Map<unknown, unknown>).set(24, 1n);
         }
       }
       map.set('schema', 3n);
@@ -360,9 +345,14 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
     }
   });
 
-  it('refuses a schema below one', () => {
-    const payload = tampered((map) => map.set('schema', 0n));
-    expect(errorCode(() => readOrdinary(payload))).toBe('unsupported_index_snapshot_schema');
+  // FM-16: a reader refuses any schema below the one this build writes.
+  it('refuses a schema below the current one', () => {
+    for (const schema of [0n, INDEX_SNAPSHOT_SCHEMA - 1n]) {
+      const payload = tampered((map) => map.set('schema', schema));
+      expect(errorCode(() => readOrdinary(payload)), `schema ${schema}`).toBe(
+        'unsupported_index_snapshot_schema',
+      );
+    }
   });
 
   it('refuses a missing checkpoint field', () => {
@@ -375,5 +365,17 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
       mapAt(arrayField(map, 'containers'), 0).set('kind', 'archive');
     });
     expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
+  });
+});
+
+describe('an Index Snapshot keyed by field name (spec: FM-16)', () => {
+  // Every field travels under the field number the registry assigns it, and a
+  // text key is no field's spelling, so a map carrying its fields only under
+  // their names is missing them — refused by the name of the first one asked
+  // for.
+  it('is refused as missing its fields, by name', () => {
+    const read = (): unknown => decodeIndexSnapshot(spelledByName(encodeIndexSnapshot(ordinary()), INDEX_SNAPSHOT), 'index-snapshot');
+    expect(errorCode(read)).toBe('malformed_index_snapshot');
+    expect(read).toThrow(/schema/);
   });
 });

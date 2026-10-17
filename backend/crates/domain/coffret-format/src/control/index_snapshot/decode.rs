@@ -7,12 +7,13 @@ use coffret_model::{
 use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
     CONTAINERS, ENTRIES, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
-    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, OLDEST_SCHEMA,
+    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, MalformedDetail, Result};
+use crate::field_numbers;
 
 /// Parses an Index Snapshot out of the payload a control object carried
 /// (spec: FM-16).
@@ -53,11 +54,15 @@ pub fn decode(
         other => return Err(Error::NotAnIndexSnapshotKind { kind: other }),
     };
 
-    let value = read_body(&payload.body, malformed_detail)?;
+    let value = read_body(
+        &payload.body,
+        malformed_detail,
+        &field_numbers::INDEX_SNAPSHOT,
+    )?;
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < OLDEST_SCHEMA {
+    if schema < SCHEMA {
         return Err(Error::UnsupportedIndexSnapshotSchema { schema });
     }
 

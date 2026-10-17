@@ -16,7 +16,7 @@
 //! straight into a replacement through the writer a freeze uses, under a
 //! Container Key of its own (spec: KD-2, FM-14). The replacement keeps the old
 //! Container's kind (spec: PK-15) and each kept Entry's recorded metadata —
-//! Entry Path, `original_mtime`, `original_btime`, hash — in the order the old
+//! Entry Path, `captured_mtime`, `captured_btime`, hash — in the order the old
 //! Container held them. What it hands back is a spooled Container ready to
 //! upload and commit, superseding the old one.
 //!

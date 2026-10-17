@@ -17,7 +17,7 @@ pub(super) const GENERATION: u64 = 7;
 
 /// The folder the first Entry of every table was written into, before
 /// whatever moved it to the path it holds now.
-pub(super) const ORIGINAL_DIR: &str = "imports";
+pub(super) const CAPTURED_DIR: &str = "imports";
 
 /// The birth time the one Entry that has one was created at.
 pub(super) const BORN: Btime = Btime::from_unix_seconds(1_600_000_000);
@@ -93,7 +93,7 @@ pub(super) fn first_record_of(additions: Vec<ContainerAddition>) -> JournalRecor
 /// A Pack's table carries one Entry whose file had a birth time when the
 /// Container was written and one whose file had none, so both spellings of the
 /// optional field travel (spec: FM-15). The first Entry of every table carries
-/// an original path apart from its current one, as a renamed Entry would, so a
+/// a captured path apart from its current one, as a renamed Entry would, so a
 /// codec that wrote one name as the other is caught (spec: FM-15).
 pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     addition_of(seed, kind, table(seed, kind))
@@ -112,7 +112,7 @@ pub(super) fn addition_of(
 /// The entry table [`addition`] gives a Container of that seed and kind.
 pub(super) fn table(seed: u8, kind: ContainerKind) -> Vec<EntryMetadata> {
     let mut cover = entry(&format!("albums/{seed:02x}/cover.jpg"), 0, 120);
-    cover.original_path = entry_path(format!("{ORIGINAL_DIR}/{seed:02x}/cover.jpg"));
+    cover.captured_path = entry_path(format!("{CAPTURED_DIR}/{seed:02x}/cover.jpg"));
     let mut entries = vec![cover];
     if kind == ContainerKind::Pack {
         let mut derived = entry(&format!("albums/{seed:02x}/.thumbs/cover.jpg"), 120, 40);

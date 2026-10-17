@@ -4,10 +4,13 @@
 use ciborium::Value;
 use coffret_model::{ContainerId, ContainerKind, DerivedFrom, MAX_FORMAT_INTEGER};
 
-use super::testing::{as_value, entry, padded, sample, sample_plaintext, to_bytes};
+use super::testing::{
+    as_raw_value, as_value, entry, padded, sample, sample_plaintext, to_bytes, to_raw_bytes,
+};
 use super::{decode, encode, Meta};
 use crate::entry_paths::entry_path;
-use crate::error::{Error, MalformedDetail};
+use crate::error::{EncodeDetail, Error, MalformedDetail};
+use crate::field_numbers;
 
 /// `café.txt` with the accent as `e` and a combining acute — a spelling no
 /// writer holding to EP-1 ever puts in an entry table.
@@ -65,13 +68,13 @@ fn an_unpadded_map_is_rejected() {
     );
 }
 
-// FM-9: `original_path` is where an Entry's position is recorded, so an entry
+// FM-9: `captured_path` is where an Entry's position is recorded, so an entry
 // map without one describes nothing. It is refused exactly as a map without the
 // key this rule used to spell `path` was.
 #[test]
-fn an_entry_map_without_an_original_path_is_rejected() {
+fn an_entry_map_without_a_captured_path_is_rejected() {
     let plaintext = tampered_entry(&sample(), |fields| {
-        fields.retain(|(key, _)| key.as_text() != Some("original_path"));
+        fields.retain(|(key, _)| key.as_text() != Some("captured_path"));
     });
     let result = decode(&plaintext);
     let Err(Error::MalformedMeta {
@@ -85,7 +88,7 @@ fn an_entry_map_without_an_original_path_is_rejected() {
     // What the deserializer said, not ciborium's `Debug` spelling of it: a
     // cause reading `Semantic(None, "…")` would name the layer that caught the
     // map rather than the field it found missing.
-    assert!(cause.to_string().contains("original_path"), "{cause}");
+    assert!(cause.to_string().contains("captured_path"), "{cause}");
     assert!(!cause.to_string().contains("Semantic"), "{cause}");
 }
 
@@ -128,14 +131,14 @@ fn empty_entry_table_is_rejected() {
 #[test]
 fn an_entry_path_that_is_not_in_nfc_is_rejected() {
     let plaintext = tampered_entry(&sample(), |fields| {
-        *field(fields, "original_path") = Value::Text(DECOMPOSED.to_owned());
+        *field(fields, "captured_path") = Value::Text(DECOMPOSED.to_owned());
     });
     let result = decode(&plaintext);
     assert!(
         matches!(
             result,
             Err(Error::UnnormalizedEntryPath {
-                field: "original_path"
+                field: "captured_path"
             })
         ),
         "expected a decomposed Entry Path to be refused, got {result:?}"
@@ -150,14 +153,14 @@ fn a_derived_from_path_that_is_not_in_nfc_is_rejected() {
         let Value::Map(derived) = field(fields, "derived_from") else {
             panic!("derived_from is a CBOR map");
         };
-        *field(derived, "original_path") = Value::Text(DECOMPOSED.to_owned());
+        *field(derived, "captured_path") = Value::Text(DECOMPOSED.to_owned());
     });
     let result = decode(&plaintext);
     assert!(
         matches!(
             result,
             Err(Error::UnnormalizedEntryPath {
-                field: "derived_from.original_path"
+                field: "derived_from.captured_path"
             })
         ),
         "expected a decomposed derived-from path to be refused, got {result:?}"
@@ -171,14 +174,14 @@ fn a_derived_from_path_that_is_not_in_nfc_is_rejected() {
 #[test]
 fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     let plaintext = tampered_entry(&sample(), |fields| {
-        *field(fields, "original_path") = Value::Text("../x".to_owned());
+        *field(fields, "captured_path") = Value::Text("../x".to_owned());
     });
     let result = decode(&plaintext);
     assert!(
         matches!(
             result,
             Err(Error::MalformedEntryPath {
-                field: "original_path"
+                field: "captured_path"
             })
         ),
         "expected a `..` component to be refused, got {result:?}"
@@ -193,14 +196,14 @@ fn a_derived_from_path_with_a_shape_ep_2_excludes_is_rejected() {
         let Value::Map(derived) = field(fields, "derived_from") else {
             panic!("derived_from is a CBOR map");
         };
-        *field(derived, "original_path") = Value::Text("albums/spring.jpg/".to_owned());
+        *field(derived, "captured_path") = Value::Text("albums/spring.jpg/".to_owned());
     });
     let result = decode(&plaintext);
     assert!(
         matches!(
             result,
             Err(Error::MalformedEntryPath {
-                field: "derived_from.original_path"
+                field: "derived_from.captured_path"
             })
         ),
         "expected a trailing separator to be refused, got {result:?}"
@@ -300,7 +303,10 @@ fn a_pad_len_past_the_formats_integer_range_is_not_written() {
     meta.pad_len = MAX_FORMAT_INTEGER + 1;
 
     let result = encode(&meta);
-    let Err(Error::MetaEncodeFailed { detail }) = result else {
+    let Err(Error::MetaEncodeFailed {
+        detail: EncodeDetail::Written(detail),
+    }) = result
+    else {
         panic!("expected a pad_len of 2^63 to be refused, got {result:?}");
     };
     assert!(detail.contains("pad_len"), "{detail}");
@@ -357,4 +363,21 @@ fn field<'a>(map: &'a mut [(Value, Value)], key: &str) -> &'a mut Value {
         .find(|(name, _)| name.as_text() == Some(key))
         .map(|(_, value)| value)
         .unwrap_or_else(|| panic!("the map carries {key}"))
+}
+
+// FM-9: every field travels under the field number the registry assigns it, and
+// a text key is no field's spelling, so a meta section that carries its fields
+// only under their names is missing them — refused by name, as any missing
+// field is.
+#[test]
+fn a_meta_section_keyed_by_name_is_missing_its_fields() {
+    let by_name = field_numbers::from_wire(as_raw_value(&sample()), &field_numbers::META);
+    let result = decode(&to_raw_bytes(&by_name));
+    let Err(Error::MalformedMeta {
+        detail: MalformedDetail::Undecodable(cause),
+    }) = result
+    else {
+        panic!("expected a meta section keyed by name to be refused, got {result:?}");
+    };
+    assert!(cause.to_string().contains("schema"), "{cause}");
 }

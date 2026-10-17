@@ -67,6 +67,8 @@ import {
   type RecoveryCodeFixture,
   type StoredMasterKeyFixture,
 } from './interop.testing.js';
+import { INDEX_SNAPSHOT, JOURNAL_RECORD, KEYRING, type MapFields } from './internal/fieldNumbers.js';
+import type { ControlObjectKind } from './model/kinds.js';
 
 /** The fixture set to read, written by the other implementation. */
 const INPUT = process.env.COFFRET_INTEROP_IN;
@@ -174,7 +176,9 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
       expect(opened.payload.masterKeyEpoch.value, where).toBe(fixture.masterKeyEpoch.value);
       // Bodies are compared as decoded CBOR fields, never as bytes: the two
       // encoders order and spell map entries as they please.
-      expect(decodeBodyFields(opened.payload.body), where).toEqual(sortBodyFields(fixture.body));
+      expect(decodeBodyFields(opened.payload.body, payloadMap(fixture.kind)), where).toEqual(
+        sortBodyFields(fixture.body),
+      );
 
       // And the body is read again through the schema its kind owns, which the
       // field-by-field check above cannot stand in for: the canonical orders,
@@ -346,6 +350,19 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
     storedMasterKeys,
     recoveryCodes,
   });
+}
+
+/** The map kind a control object of `kind` carries as its payload. */
+function payloadMap(kind: ControlObjectKind): MapFields {
+  switch (kind) {
+    case 'journal':
+      return JOURNAL_RECORD;
+    case 'index-snapshot':
+    case 'activation-snapshot':
+      return INDEX_SNAPSHOT;
+    case 'keyring':
+      return KEYRING;
+  }
 }
 
 /**

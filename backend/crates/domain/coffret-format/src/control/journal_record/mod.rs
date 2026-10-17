@@ -35,15 +35,9 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload (spec: FM-15).
-///
-/// Schema 2 added `original_path` to the entry map, present only where it
-/// differs from `path`. A reader still accepts schema 1, whose maps lack it,
-/// by taking it to equal `path`, as it does for any map without it.
+/// The schema this crate writes for a Journal record payload, and the lowest a
+/// reader accepts (spec: FM-15).
 const SCHEMA: u64 = 2;
-
-/// The oldest schema a reader accepts: the first.
-const OLDEST_SCHEMA: u64 = 1;
 
 const PREV: &str = "prev";
 const NEXT_COMMIT_SLOT: &str = "next_commit_slot";

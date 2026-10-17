@@ -9,6 +9,7 @@ use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::Result;
+use crate::field_numbers;
 
 /// Serializes a Journal record to the payload a control object carries
 /// (spec: FM-15).
@@ -58,7 +59,7 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
 
     Ok(ControlPayload::new(
         record.master_key_epoch(),
-        write_body(&map.build())?,
+        write_body(map.build(), &field_numbers::JOURNAL_RECORD)?,
     ))
 }
 
