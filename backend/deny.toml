@@ -44,7 +44,7 @@ all-features = false
 # entry matches nothing, so a waiver cannot sit here unnoticed once it has
 # stopped applying.
 #
-# Both waivers below reach the tree through the desktop app alone, and
+# The first two waivers below reach the tree through the desktop app alone, and
 # through one thing in it: Tauri's Linux backend is built on the gtk-rs
 # bindings for GTK 3, whose last line is 0.18. The fixes are on lines that bind
 # GTK 4 instead, which Tauri does not use, so neither is a `cargo update` away;
@@ -61,6 +61,16 @@ ignore = [
     # advisories, and a build-time macro helper has no input but this
     # workspace's own source.
     { id = "RUSTSEC-2024-0370", reason = "build-time only, through glib-macros 0.18 on Tauri's GTK 3 stack" },
+    # zbus 6 folded `zvariant`, `zvariant_derive` and `zbus_names` into itself,
+    # and the standalone crates are no longer maintained. They reach the tree
+    # through zbus 5 alone, which Tauri's opener and single-instance plugins
+    # use for D-Bus on Linux; their latest releases still require zbus 5, so
+    # there is no upgrade to take. Unmaintained is a statement about future
+    # advisories, not a known flaw, and these leave when the plugins move to
+    # zbus 6.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
 ]
 # A yank is the crate's own author saying not to resolve to that version, not a
 # note to take or leave. Failing here is what makes somebody read why it was
