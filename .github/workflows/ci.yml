@@ -98,9 +98,17 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             backend/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+          # `-backend-`, so that the restore key below cannot match the other
+          # jobs' keys, which share the `-cargo-` prefix.
+          key: ${{ runner.os }}-cargo-backend-${{ hashFiles('backend/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-backend-
+
+      # A restored target may hold builds of this workspace newer than the
+      # checkout; scripts/forget-workspace-builds.sh says why that matters.
+      - name: Rebuild the workspace's own crates
+        working-directory: .
+        run: scripts/forget-workspace-builds.sh backend
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -305,6 +313,12 @@ jobs:
           key: ${{ runner.os }}-cargo-interop-${{ hashFiles('backend/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-interop-
+
+      # A restored target may hold builds of this workspace newer than the
+      # checkout; scripts/forget-workspace-builds.sh says why that matters.
+      - name: Rebuild the workspace's own crates
+        working-directory: .
+        run: scripts/forget-workspace-builds.sh backend
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
