@@ -46,6 +46,9 @@ mod fences;
 mod forward;
 mod host;
 
+mod host_kind;
+pub use host_kind::HostKind;
+
 mod key_file;
 pub use key_file::KeyFile;
 
@@ -115,7 +118,7 @@ pub fn router(listener: &TcpListener, config: Config, gate: Gate) -> Result<Rout
         gate,
         lock: config.lock,
         forwarder,
-        page: Page::new(&config.page),
+        page: Page::new(&config.page, config.kind),
     });
 
     // `/api/` as well as the wildcard, which matches no empty rest: every path

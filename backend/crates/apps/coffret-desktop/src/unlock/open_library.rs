@@ -13,6 +13,7 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 use super::{ask_for_passphrase, refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
+use crate::app_build::AppBuild;
 use crate::launch::Launcher;
 use crate::{explorer, tray};
 
@@ -158,9 +159,10 @@ async fn serve(
     // launcher, and is never handed to the host's routes (spec: LA-17).
     let credentials = Credentials::new(Arc::new(SystemClock))
         .context("the explorer's credentials could not be drawn")?;
+    let kind = AppBuild::of(&app.config().identifier).host_kind();
     let host = coffret_explorer_host::router(
         &listener,
-        Config::for_library(server, &library, Arc::clone(&served)),
+        Config::for_library(server, &library, Arc::clone(&served), kind),
         credentials.gate(),
     )?;
     let launcher = Arc::new(Launcher::new(credentials, launch_dir, address));

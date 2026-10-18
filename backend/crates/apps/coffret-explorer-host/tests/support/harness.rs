@@ -6,7 +6,7 @@ use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use axum::Router;
 use coffret_explorer_host::credentials::{Credentials, SystemClock};
-use coffret_explorer_host::{router, Config, KeySource, PageSource};
+use coffret_explorer_host::{router, Config, HostKind, KeySource, PageSource};
 use tokio::net::TcpListener;
 use tower::ServiceExt;
 
@@ -59,6 +59,7 @@ impl Harness {
                 key: source,
                 lock: lock.clone(),
                 page: PageSource::Embedded,
+                kind: HostKind::Production,
             },
             credentials.gate(),
         )
