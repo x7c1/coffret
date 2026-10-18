@@ -124,6 +124,7 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, then the debug desktop app as the development app |
 | `make desktop-dev` | `make desktop-dev-build`, then runs it over the Libraries under the development state directory |
+| `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 
 `make server` and `make web` are the two halves of `make dev` in the
 foreground, and take the same variables; `WEB_PORT` moves the explorer's port.
@@ -213,6 +214,25 @@ There are two of it, told apart by their identifier:
   `COFFRET_STATE_DIR`, so it serves the Libraries under the development state
   directory, and its own identifier gives it its own single-instance scope, so
   it runs beside the installed app.
+
+Every icon is derived from two SVG sources under `assets/icon/`:
+`coffret.svg`, the app icon, and `coffret-tray.svg`, the same chest as a
+one-colour silhouette. `make icons` (`scripts/gen-icons.sh`, which needs the
+Tauri CLI and python3) writes the installed app's `icons/`, the development
+app's `icons-dev/`, the tray's `icons-tray/` and the explorer's favicon under
+`frontend/packages/apps/web/public/`; the outputs are committed, and running it
+again rewrites the same bytes. The development app's icons carry a "D" badge in
+the bottom-right corner, and its tray icon is badged too, so the two apps are
+told apart in the tray without opening a menu; on macOS its tooltip also reads
+"Coffret (dev)" (Tauri shows no tray tooltip on Linux). The app reads which it
+is from its identifier. The tray icon is a
+one-colour picture rather than the app icon, because a tray draws it small and
+in the menu bar's own colours: on macOS it is black and set as a template
+image, which the menu bar draws black or white for its appearance, and on
+Linux it is white, since GNOME's top bar is dark in both its light and its dark
+style. The `.icns` is the app icon inset to 80 % on a transparent canvas,
+because the Dock draws icons with margins and a full-bleed one would look
+larger than its neighbours.
 
 Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
 

@@ -17,13 +17,15 @@
 # Two apps, told apart by their identifier. The installed one carries
 # tauri.conf.json's, `io.github.x7c1.coffret`, and serves the Libraries under
 # the binaries' default state directory, since nothing sets another. The
-# development one is built with the identifier `io.github.x7c1.coffret.dev`,
-# through the TAURI_CONFIG variable, which tauri-build and `generate_context!`
-# merge over the configuration files at compile time; a plain `cargo build`
-# honours it, so the development build needs neither the Tauri CLI nor a second
-# configuration file. Its own identifier gives it its own single-instance scope
-# and its own app ID, so it runs beside the installed app rather than handing
-# its launch over to it. It serves the Libraries under COFFRET_STATE_DIR, which
+# development one is built with the identifier `io.github.x7c1.coffret.dev`
+# and the badged icons of icons-dev/, through the TAURI_CONFIG variable, which
+# tauri-build and `generate_context!` merge over the configuration files at
+# compile time; a plain `cargo build` honours it, so the development build
+# needs neither the Tauri CLI nor a second configuration file. The identifier
+# is also what the app reads to give its tray the badged icon and, on macOS,
+# its own tooltip (src/tray.rs). Its own identifier gives it its own single-instance
+# scope and its own app ID, so it runs beside the installed app rather than
+# handing its launch over to it. It serves the Libraries under COFFRET_STATE_DIR, which
 # the Makefile exports as the development state directory
 # (docs/guides/environments.md) and which `dev` refuses to run without.
 #
@@ -48,7 +50,14 @@ readonly CRATE_DIR="$ROOT/backend/crates/apps/coffret-desktop"
 readonly TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/backend/target}"
 readonly BUNDLE_DIR="$TARGET_DIR/release/bundle"
 readonly DEV_IDENTIFIER="io.github.x7c1.coffret.dev"
-readonly DEV_TAURI_CONFIG="{\"identifier\":\"$DEV_IDENTIFIER\"}"
+# The development app's icons: icons-dev/, the set with the "D" badge
+# (scripts/gen-icons.sh), in place of tauri.conf.json's icons/. The binary
+# embeds the first PNG, hence icon.png first, as its window icon (Linux), and
+# the .icns as the app icon macOS's Dock shows, since the development binary is
+# not an .app bundle. The paths are relative to the crate directory, as
+# tauri.conf.json's are.
+readonly DEV_ICONS='"icons-dev/icon.png","icons-dev/32x32.png","icons-dev/128x128.png","icons-dev/128x128@2x.png","icons-dev/icon.icns","icons-dev/icon.ico"'
+readonly DEV_TAURI_CONFIG="{\"identifier\":\"$DEV_IDENTIFIER\",\"bundle\":{\"icon\":[$DEV_ICONS]}}"
 readonly DEV_BIN="$TARGET_DIR/debug/coffret-desktop"
 readonly RELEASE_BIN="$TARGET_DIR/release/coffret-desktop"
 readonly SYSTEM_CC="/usr/bin/cc"

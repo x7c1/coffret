@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+#
+# gen-icons.sh — derive every icon of the desktop app and the explorer's
+# favicon from the two sources under assets/icon/:
+#
+#   assets/icon/coffret.svg        the app icon
+#   assets/icon/coffret-tray.svg   the tray icon: the same chest as a one-colour
+#                                  silhouette, since a tray draws it small
+#
+# The sources are the only inputs; everything this script writes is committed.
+# It needs only tauri-cli (`cargo tauri icon` rasterises SVG itself, and
+# `make desktop-build` already requires it), the shell and python3 (to put the
+# .icns entries in a stable order). Where a variant is needed, the source is
+# nested in a derived SVG in a temp directory and that is rasterised instead:
+#
+#   backend/crates/apps/coffret-desktop/icons/       the installed app
+#     icon.png 32x32.png 128x128.png 128x128@2x.png icon.ico   coffret.svg as is
+#     icon.icns                                       coffret.svg inset on a
+#                                                     transparent canvas (see
+#                                                     INSET_PERCENT)
+#   backend/crates/apps/coffret-desktop/icons-dev/   the development app
+#                                                     (scripts/desktop.sh selects
+#                                                     it through TAURI_CONFIG): the
+#                                                     same set, with the "D" badge
+#   backend/crates/apps/coffret-desktop/icons-tray/  the tray (src/tray.rs):
+#     tray{,@2x}.png              installed app, black (the macOS template image)
+#     tray-light{,@2x}.png        installed app, white (Linux)
+#     tray-dev{,@2x}.png          development app, black, with a one-colour badge
+#     tray-dev-light{,@2x}.png    development app, white, with a one-colour badge
+#   frontend/packages/apps/web/public/
+#     favicon.svg                 a copy of coffret.svg
+#     favicon-32.png              its 32 px raster
+#
+# Running it again rewrites the same files with the same bytes.
+#
+# Usage: scripts/gen-icons.sh     (the `make icons` entry point)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+readonly REPO_ROOT
+readonly SOURCE="$REPO_ROOT/assets/icon/coffret.svg"
+readonly TRAY_SOURCE="$REPO_ROOT/assets/icon/coffret-tray.svg"
+readonly DESKTOP_DIR="$REPO_ROOT/backend/crates/apps/coffret-desktop"
+readonly INSTALLED_DIR="$DESKTOP_DIR/icons"
+readonly DEV_DIR="$DESKTOP_DIR/icons-dev"
+readonly TRAY_DIR="$DESKTOP_DIR/icons-tray"
+readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
+
+# --- Geometry -----------------------------------------------------------------
+
+# Both sources' canvas, and the corner radius of the app icon's background (the
+# `rx` of its <rect>). The script checks the source still says so, because the
+# badge is placed from it.
+readonly SIZE=512
+readonly SOURCE_RX=114
+
+# macOS draws a Dock icon as a rounded square at about 80 % of the canvas with
+# transparent margins; a full-bleed icon looks larger than its neighbours. The
+# `.icns` is therefore the source scaled to INSET_PERCENT and centred.
+readonly INSET_PERCENT=80
+
+# The app icon's dev badge: a filled disc centred on the centre of the
+# bottom-right corner arc, ringed in the background colour to separate it from
+# the chest underneath, with a bold "D" drawn as a path (no text element, so no
+# font). Sizes are in source units; at 32 px one unit is 1/16 px, so the disc
+# is about 13 px across and the "D"'s stroke about 2 px.
+readonly BADGE_R=108
+readonly BADGE_RING=16
+readonly BADGE_FILL="#E5532D"
+readonly BADGE_RING_COLOR="#F4F6F8"
+readonly GLYPH_COLOR="#FFFFFF"
+readonly GLYPH_H=136     # the "D"'s height
+readonly GLYPH_STROKE=34 # its stroke width (the bowl's inner radius is GLYPH_H/2 - this)
+readonly GLYPH_STEM=50   # the straight part of the "D" before the bowl starts
+
+# The tray icon: drawn in one colour, at TRAY_PX and twice that for a 2x
+# display. The source's colour, which the white variant swaps for TRAY_WHITE.
+readonly TRAY_PX=32
+readonly TRAY_PX_2X=64
+readonly TRAY_BLACK="#000000"
+readonly TRAY_WHITE="#FFFFFF"
+
+# The tray's dev badge: a disc in the icon's colour touching the canvas's
+# bottom-right corner, with the chest masked away TRAY_BADGE_GAP beyond it so a
+# transparent ring separates the two, and the "D" (the glyph sizes below) cut
+# out of the disc. At 32 px the disc is about 15 px across, the gap 2 px.
+readonly TRAY_BADGE_R=120
+readonly TRAY_BADGE_GAP=32
+readonly TRAY_GLYPH_H=144
+readonly TRAY_GLYPH_STROKE=38
+readonly TRAY_GLYPH_STEM=52
+
+# --- Helpers ------------------------------------------------------------------
+
+log() { printf '[icons] %s\n' "$*"; }
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+[ $# -eq 0 ] || die "usage: scripts/gen-icons.sh (takes no arguments)"
+[ -f "$SOURCE" ] || die "source icon not found: $SOURCE"
+[ -f "$TRAY_SOURCE" ] || die "source tray icon not found: $TRAY_SOURCE"
+grep -q "rx=\"$SOURCE_RX\"" "$SOURCE" ||
+  die "$SOURCE no longer has rx=\"$SOURCE_RX\"; update SOURCE_RX (the badge is placed from it)"
+grep -q "fill=\"$TRAY_BLACK\"" "$TRAY_SOURCE" ||
+  die "$TRAY_SOURCE no longer fills with $TRAY_BLACK; update TRAY_BLACK (the white variant swaps it)"
+cargo tauri --version >/dev/null 2>&1 ||
+  die "cargo tauri not found (one-time: cargo install tauri-cli --version '^2' --locked)"
+command -v python3 >/dev/null 2>&1 || die "python3 not found (it puts the .icns entries in a stable order)"
+
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/coffret-gen-icons.XXXXXX")"
+readonly WORK_DIR
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# A path as the log shows it: relative to the repository.
+shown() { printf '%s' "${1#"$REPO_ROOT"/}"; }
+
+# An SVG without any XML declaration, so it can be nested in a derived SVG as
+# an inner <svg> element.
+source_body() {
+  sed '/^<?xml/d' "$1"
+}
+
+# Rasterise an SVG into a directory with `cargo tauri icon`. Its per-file
+# progress goes to a log that is shown only when it fails.
+rasterise() {
+  local svg="$1" out="$2"
+  shift 2
+  mkdir -p "$out"
+  if ! cargo tauri icon "$svg" -o "$out" "$@" >"$out.log" 2>&1; then
+    cat "$out.log" >&2
+    die "cargo tauri icon failed on $svg"
+  fi
+}
+
+# Rewrite an .icns with its entries sorted by type. tauri-cli writes them in
+# hash-map order, which differs between runs; sorting keeps a rerun from
+# changing the committed file's bytes. The format is a header ("icns", total
+# length) followed by entries of (4-byte type, 4-byte big-endian length
+# including these 8 bytes, data).
+sort_icns() {
+  python3 - "$1" <<'PY'
+import struct, sys
+path = sys.argv[1]
+data = open(path, "rb").read()
+if data[:4] != b"icns":
+    sys.exit(f"{path}: not an icns file")
+entries, i = [], 8
+while i < len(data):
+    length = struct.unpack(">I", data[i + 4 : i + 8])[0]
+    entries.append(data[i : i + length])
+    i += length
+body = b"".join(sorted(entries, key=lambda entry: entry[:4]))
+open(path, "wb").write(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+PY
+}
+
+# The path data of a bold "D" centred on ($1, $2), $3 high with a stroke of $4
+# and $5 of straight edge before the bowl: an outer outline and an inner
+# counter, for an evenodd fill. The bowl is a half circle of radius $3/2.
+glyph_d() {
+  local cx="$1" cy="$2" h="$3" stroke="$4" stem="$5"
+  local r=$((h / 2)) ri=$((h / 2 - stroke))
+  local w=$((stem + r))
+  local x0=$((cx - w / 2)) y0=$((cy - r))
+  local xb=$((x0 + stem)) y1=$((cy + r))
+  local xi=$((x0 + stroke)) yi0=$((cy - ri)) yi1=$((cy + ri))
+  printf 'M%s %s H%s A%s %s 0 0 1 %s %s H%s Z M%s %s H%s A%s %s 0 0 1 %s %s H%s Z' \
+    "$x0" "$y0" "$xb" "$r" "$r" "$xb" "$y1" "$x0" \
+    "$xi" "$yi0" "$xb" "$ri" "$ri" "$xb" "$yi1" "$xi"
+}
+
+# --- Derived SVGs ---------------------------------------------------------------
+
+# $1 scaled to INSET_PERCENT and centred on a transparent canvas of the same size.
+write_inset_svg() {
+  local in="$1" out="$2"
+  local scale offset
+  scale="$(awk "BEGIN { print $INSET_PERCENT / 100 }")"
+  offset="$(awk "BEGIN { print $SIZE * (100 - $INSET_PERCENT) / 200 }")"
+  cat >"$out" <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $SIZE $SIZE" width="$SIZE" height="$SIZE">
+  <g transform="translate($offset $offset) scale($scale)">
+$(source_body "$in")
+  </g>
+</svg>
+EOF
+}
+
+# $1 with the dev badge over its bottom-right corner.
+write_badged_svg() {
+  local in="$1" out="$2"
+  local cx=$((SIZE - SOURCE_RX)) cy=$((SIZE - SOURCE_RX))
+  cat >"$out" <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $SIZE $SIZE" width="$SIZE" height="$SIZE">
+$(source_body "$in")
+  <circle cx="$cx" cy="$cy" r="$BADGE_R" fill="$BADGE_FILL" stroke="$BADGE_RING_COLOR" stroke-width="$BADGE_RING"/>
+  <path fill="$GLYPH_COLOR" fill-rule="evenodd" d="$(glyph_d "$cx" "$cy" "$GLYPH_H" "$GLYPH_STROKE" "$GLYPH_STEM")"/>
+</svg>
+EOF
+}
+
+# The tray source $1 filled with the colour $2.
+write_tray_svg() {
+  local in="$1" color="$2" out="$3"
+  sed "s/fill=\"$TRAY_BLACK\"/fill=\"$color\"/g" "$in" >"$out"
+}
+
+# The tray source $1 filled with the colour $2, with the one-colour dev badge:
+# the chest masked away around the disc, and the "D" cut out of the disc (the
+# disc and the "D" as one evenodd path: inside the "D" is a hole, inside its
+# counter is disc again).
+write_tray_badged_svg() {
+  local in="$1" color="$2" out="$3"
+  local c=$((SIZE - TRAY_BADGE_R)) r="$TRAY_BADGE_R"
+  local gap_r=$((TRAY_BADGE_R + TRAY_BADGE_GAP))
+  cat >"$out" <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $SIZE $SIZE" width="$SIZE" height="$SIZE">
+  <mask id="badge-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="$SIZE" height="$SIZE">
+    <rect width="$SIZE" height="$SIZE" fill="#FFFFFF"/>
+    <circle cx="$c" cy="$c" r="$gap_r" fill="#000000"/>
+  </mask>
+  <g mask="url(#badge-gap)">
+$(source_body "$in" | sed "s/fill=\"$TRAY_BLACK\"/fill=\"$color\"/g")
+  </g>
+  <path fill="$color" fill-rule="evenodd" d="M$((c - r)) $c A$r $r 0 1 0 $((c + r)) $c A$r $r 0 1 0 $((c - r)) $c Z $(glyph_d "$c" "$c" "$TRAY_GLYPH_H" "$TRAY_GLYPH_STROKE" "$TRAY_GLYPH_STEM")"/>
+</svg>
+EOF
+}
+
+# --- Icon sets ------------------------------------------------------------------
+
+# The files a set keeps from `cargo tauri icon`'s output (the rest — Windows
+# Store logos, android/, ios/, 64x64.png — is not used by the bundle).
+SET_FILES=(icon.png 32x32.png 128x128.png 128x128@2x.png icon.ico)
+
+# Write one desktop icon set into $3: the PNGs and the .ico from the SVG $1,
+# the .icns from the inset variant of it. $2 names the set in the work dir.
+write_set() {
+  local svg="$1" name="$2" dest="$3"
+  local full="$WORK_DIR/$name-full" inset_svg="$WORK_DIR/$name-inset.svg"
+  local inset="$WORK_DIR/$name-inset"
+  rasterise "$svg" "$full"
+  write_inset_svg "$svg" "$inset_svg"
+  rasterise "$inset_svg" "$inset"
+  mkdir -p "$dest"
+  local file
+  for file in "${SET_FILES[@]}"; do
+    cp "$full/$file" "$dest/$file"
+    log "wrote $(shown "$dest/$file")"
+  done
+  sort_icns "$inset/icon.icns"
+  cp "$inset/icon.icns" "$dest/icon.icns"
+  log "wrote $(shown "$dest/icon.icns") (inset to $INSET_PERCENT %)"
+}
+
+# Write one tray variant, $2 (tray, tray-dev-light, …), from the SVG $1:
+# $2.png at TRAY_PX and $2@2x.png at TRAY_PX_2X.
+write_tray() {
+  local svg="$1" name="$2"
+  local out="$WORK_DIR/$name"
+  rasterise "$svg" "$out" -p "$TRAY_PX" -p "$TRAY_PX_2X"
+  mkdir -p "$TRAY_DIR"
+  cp "$out/${TRAY_PX}x${TRAY_PX}.png" "$TRAY_DIR/$name.png"
+  cp "$out/${TRAY_PX_2X}x${TRAY_PX_2X}.png" "$TRAY_DIR/$name@2x.png"
+  log "wrote $(shown "$TRAY_DIR/$name.png") and $name@2x.png"
+}
+
+write_set "$SOURCE" installed "$INSTALLED_DIR"
+
+write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
+write_set "$WORK_DIR/dev.svg" dev "$DEV_DIR"
+
+# --- Tray ---------------------------------------------------------------------
+
+# Black files carry no suffix, white ones "-light".
+for suffix in "" -light; do
+  case "$suffix" in
+    "") color="$TRAY_BLACK" ;;
+    -light) color="$TRAY_WHITE" ;;
+  esac
+  write_tray_svg "$TRAY_SOURCE" "$color" "$WORK_DIR/tray$suffix.svg"
+  write_tray "$WORK_DIR/tray$suffix.svg" "tray$suffix"
+  write_tray_badged_svg "$TRAY_SOURCE" "$color" "$WORK_DIR/tray-dev$suffix.svg"
+  write_tray "$WORK_DIR/tray-dev$suffix.svg" "tray-dev$suffix"
+done
+
+# --- Favicon ------------------------------------------------------------------
+
+mkdir -p "$WEB_PUBLIC_DIR"
+cp "$SOURCE" "$WEB_PUBLIC_DIR/favicon.svg"
+log "wrote $(shown "$WEB_PUBLIC_DIR/favicon.svg")"
+rasterise "$SOURCE" "$WORK_DIR/favicon" -p 32
+cp "$WORK_DIR/favicon/32x32.png" "$WEB_PUBLIC_DIR/favicon-32.png"
+log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-32.png")"
