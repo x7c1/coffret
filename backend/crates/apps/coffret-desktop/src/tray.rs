@@ -9,11 +9,22 @@
 //! at once (spec: LA-18). *Quit* ends the process, and the server with it —
 //! which is the lock (spec: DK-1): what the process held is gone with it, every
 //! browser session included.
+//!
+//! The icon is a one-colour picture of its own (`icons-tray/`, written by
+//! `scripts/gen-icons.sh`) rather than the window icon, since a tray draws it
+//! small: on macOS the black one as a template image, which the menu bar draws
+//! black or white for its own appearance; on Linux the white one, since GNOME's
+//! top bar is dark in both its light and its dark style and the appindicator
+//! tray shows the picture as it is. Both are given the 64 px picture, which
+//! either tray scales down to its own size. The development app's icon carries a "D"
+//! badge and its tooltip says so, so that it is told apart from the installed
+//! app running beside it.
 
 use anyhow::Context;
+use tauri::image::Image;
 use tauri::menu::{Menu, MenuEvent, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager};
+use tauri::{include_image, AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::explorer;
@@ -29,6 +40,53 @@ const OPEN_ID: &str = "open";
 const DISCONNECT_ID: &str = "disconnect";
 /// The menu item that ends the app.
 const QUIT_ID: &str = "quit";
+
+/// The development app's identifier, which `scripts/desktop.sh` builds it with
+/// in place of `tauri.conf.json`'s.
+const DEV_IDENTIFIER: &str = "io.github.x7c1.coffret.dev";
+
+/// Which of the two apps this is, and so which icon and tooltip its tray gets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Build {
+    Installed,
+    Development,
+}
+
+impl Build {
+    /// The build the app's identifier names.
+    fn of(identifier: &str) -> Self {
+        if identifier == DEV_IDENTIFIER {
+            Self::Development
+        } else {
+            Self::Installed
+        }
+    }
+
+    fn tooltip(self) -> &'static str {
+        match self {
+            Self::Installed => "Coffret",
+            Self::Development => "Coffret (dev)",
+        }
+    }
+
+    /// The black icon, which macOS draws as a template image.
+    #[cfg(target_os = "macos")]
+    fn icon(self) -> Image<'static> {
+        match self {
+            Self::Installed => include_image!("icons-tray/tray@2x.png"),
+            Self::Development => include_image!("icons-tray/tray-dev@2x.png"),
+        }
+    }
+
+    /// The white icon, for a dark top bar.
+    #[cfg(not(target_os = "macos"))]
+    fn icon(self) -> Image<'static> {
+        match self {
+            Self::Installed => include_image!("icons-tray/tray-light@2x.png"),
+            Self::Development => include_image!("icons-tray/tray-dev-light@2x.png"),
+        }
+    }
+}
 
 /// Puts the icon in the tray.
 pub fn show(app: &AppHandle) -> anyhow::Result<()> {
@@ -48,14 +106,13 @@ pub fn show(app: &AppHandle) -> anyhow::Result<()> {
         .context("the tray's quit item could not be made")?;
     let menu = Menu::with_items(app, &[&unlock, &open, &disconnect, &quit])
         .context("the tray menu could not be made")?;
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip("Coffret")
+    let build = Build::of(&app.config().identifier);
+    TrayIconBuilder::with_id(TRAY_ID)
+        .icon(build.icon())
+        .icon_as_template(cfg!(target_os = "macos"))
+        .tooltip(build.tooltip())
         .menu(&menu)
-        .on_menu_event(chosen);
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
-    builder
+        .on_menu_event(chosen)
         .build(app)
         .context("the tray icon could not be made")?;
     Ok(())
@@ -103,4 +160,21 @@ fn unlock_chosen(app: &AppHandle) {
         return;
     }
     unlock::ask_for_passphrase(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_development_identifier_gets_the_development_tray() {
+        assert_eq!(Build::of(DEV_IDENTIFIER), Build::Development);
+        assert_eq!(Build::of(DEV_IDENTIFIER).tooltip(), "Coffret (dev)");
+    }
+
+    #[test]
+    fn any_other_identifier_gets_the_installed_tray() {
+        assert_eq!(Build::of("io.github.x7c1.coffret"), Build::Installed);
+        assert_eq!(Build::of("io.github.x7c1.coffret").tooltip(), "Coffret");
+    }
 }
