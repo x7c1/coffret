@@ -158,5 +158,6 @@ inset in one sentence so nobody "fixes" it.
 - [ ] On macOS: the Dock and Cmd-Tab show the new icon with margins like the
       neighbouring apps; the menu-bar icon is the one-colour chest and follows
       a light and a dark menu bar; the development app's is badged and its
-      tooltip reads "Coffret (dev)".
+      tooltip reads "Coffret (dev)". Not verified at merge: no Mac that runs
+      coffret was available, so this is left for a later check.
 - [x] The explorer's browser tab shows the favicon.
