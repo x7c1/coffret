@@ -53,12 +53,12 @@ fn a_file_is_served_as_its_extension_says() {
 #[tokio::test]
 async fn a_file_in_the_build_is_served_and_a_path_naming_none_is_the_index() {
     let build = build();
-    let asset = respond_from(&build, "/assets/app-3f2a.js");
+    let asset = respond_from(&build, "/assets/app-3f2a.js", HostKind::Production);
     assert_eq!(asset.status(), StatusCode::OK);
     assert_eq!(body(asset).await, "console.log(1)");
 
     for path in ["/", "/folders/somewhere/deep"] {
-        let page = respond_from(&build, path);
+        let page = respond_from(&build, path, HostKind::Production);
         assert_eq!(page.status(), StatusCode::OK, "{path}");
         assert!(body(page).await.contains("<title>index"), "{path}");
     }
@@ -85,7 +85,7 @@ async fn a_dotfile_or_a_traversal_is_not_served() {
         "/%00",
         "/%zz",
     ] {
-        let answer = respond_from(&build, path);
+        let answer = respond_from(&build, path, HostKind::Production);
         assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{path}");
         assert_eq!(body(answer).await, NOT_HERE, "{path}");
     }
@@ -177,18 +177,25 @@ fn on_disk() -> OnDisk {
 async fn a_build_on_disk_is_read_at_each_request() {
     let build = on_disk();
     assert_eq!(
-        body(respond_from(&build.dist, "/assets/app-3f2a.js")).await,
+        body(respond_from(
+            &build.dist,
+            "/assets/app-3f2a.js",
+            HostKind::Production
+        ))
+        .await,
         "console.log(1)"
     );
-    assert!(body(respond_from(&build.dist, "/"))
+    assert!(body(respond_from(&build.dist, "/", HostKind::Production))
         .await
         .contains("<title>index"));
-    assert!(body(respond_from(&build.dist, "/assets"))
-        .await
-        .contains("<title>index"));
+    assert!(
+        body(respond_from(&build.dist, "/assets", HostKind::Production))
+            .await
+            .contains("<title>index")
+    );
 
     std::fs::write(build.dist.root().join(INDEX), "<title>rebuilt</title>").unwrap();
-    assert!(body(respond_from(&build.dist, "/"))
+    assert!(body(respond_from(&build.dist, "/", HostKind::Production))
         .await
         .contains("rebuilt"));
 }
@@ -208,7 +215,7 @@ async fn a_build_on_disk_serves_nothing_outside_it() {
         "/up/secret.txt",
         "/up/dist/index.html",
     ] {
-        let answer = respond_from(&build.dist, path);
+        let answer = respond_from(&build.dist, path, HostKind::Production);
         assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{path}");
         let said = body(answer).await;
         assert_eq!(said, NOT_HERE, "{path}");
@@ -222,7 +229,80 @@ async fn a_build_on_disk_serves_nothing_outside_it() {
 #[tokio::test]
 async fn a_build_on_disk_with_no_index_says_so() {
     let empty = tempfile::tempdir().unwrap();
-    let answer = respond_from(&DistDir::new(empty.path().to_path_buf()), "/");
+    let answer = respond_from(
+        &DistDir::new(empty.path().to_path_buf()),
+        "/",
+        HostKind::Production,
+    );
     assert_eq!(answer.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert!(body(answer).await.contains("no index.html"));
+}
+
+/// The favicon's plain files, the badged ones a development host answers
+/// their names with, and the content type of each name.
+#[cfg(unix)]
+const FAVICONS: [(&str, &str, &str); 3] = [
+    ("favicon.svg", "favicon-dev.svg", "image/svg+xml"),
+    ("favicon-32.png", "favicon-32-dev.png", "image/png"),
+    (
+        "favicon-32-dark.png",
+        "favicon-32-dark-dev.png",
+        "image/png",
+    ),
+];
+
+/// A build on disk holding the favicon's plain and badged files, each holding
+/// its own name.
+#[cfg(unix)]
+fn with_favicons() -> OnDisk {
+    let build = on_disk();
+    for (plain, badged, _) in FAVICONS {
+        for name in [plain, badged] {
+            std::fs::write(build.dist.root().join(name), name).unwrap();
+        }
+    }
+    build
+}
+
+// A development host answers the favicon's paths with the badged files, as
+// the names asked for say they are and cached as any file outside `assets/`.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_development_host_answers_the_favicon_with_the_badged_one() {
+    let build = with_favicons();
+    for (plain, badged, media) in FAVICONS {
+        let answer = respond_from(&build.dist, &format!("/{plain}"), HostKind::Development);
+        assert_eq!(answer.status(), StatusCode::OK, "{plain}");
+        assert_eq!(answer.headers()[CONTENT_TYPE], media, "{plain}");
+        assert_eq!(answer.headers()[CACHE_CONTROL], NO_CACHE, "{plain}");
+        assert_eq!(body(answer).await, badged, "{plain}");
+
+        // The badged file asked for by its own name is served as it is.
+        let own = respond_from(&build.dist, &format!("/{badged}"), HostKind::Development);
+        assert_eq!(body(own).await, badged, "{badged}");
+    }
+    // Everything else is served as a production host serves it.
+    assert_eq!(
+        body(respond_from(
+            &build.dist,
+            "/assets/app-3f2a.js",
+            HostKind::Development
+        ))
+        .await,
+        "console.log(1)"
+    );
+}
+
+// A production host answers the favicon's paths with the plain files.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_production_host_answers_the_favicon_with_the_plain_one() {
+    let build = with_favicons();
+    for (plain, _, media) in FAVICONS {
+        let answer = respond_from(&build.dist, &format!("/{plain}"), HostKind::Production);
+        assert_eq!(answer.status(), StatusCode::OK, "{plain}");
+        assert_eq!(answer.headers()[CONTENT_TYPE], media, "{plain}");
+        assert_eq!(answer.headers()[CACHE_CONTROL], NO_CACHE, "{plain}");
+        assert_eq!(body(answer).await, plain, "{plain}");
+    }
 }

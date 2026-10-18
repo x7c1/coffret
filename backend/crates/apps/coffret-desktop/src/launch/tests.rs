@@ -11,7 +11,7 @@ use axum::http::{Method, Request, StatusCode};
 use axum::Router;
 use coffret_explorer_host::credentials::{Clock, Credentials, Gate};
 use coffret_explorer_host::launch_file::LaunchFileError;
-use coffret_explorer_host::{Config, KeyFile, LibraryLock, PageSource};
+use coffret_explorer_host::{Config, HostKind, KeyFile, LibraryLock, PageSource};
 use coffret_logging::testing::CapturedLogs;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
@@ -403,6 +403,7 @@ async fn host_with_lock() -> (Router, Case, Arc<LockDouble>, String, TcpListener
             key: Arc::new(KeyFile(key)),
             lock: lock.clone(),
             page: PageSource::Embedded,
+            kind: HostKind::Production,
         },
         case.gate.clone(),
     )

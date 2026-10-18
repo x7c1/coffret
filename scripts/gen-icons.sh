@@ -31,6 +31,11 @@
 #     favicon.svg                 the chest alone, in the app icon's two colours
 #                                 (lighter ones on a dark tab, see FAVICON_*)
 #     favicon-32{,-dark}.png      its 32 px raster in the light and the dark colours
+#     favicon-dev.svg             the same favicon with a "D" badge (see
+#                                 FAVICON_BADGE_*), which a development host
+#                                 serves in place of favicon.svg
+#     favicon-32{,-dark}-dev.png  its 32 px raster in the light and the dark
+#                                 colours, served in place of favicon-32{,-dark}.png
 #
 # Running it again rewrites the same files with the same bytes.
 #
@@ -104,6 +109,19 @@ readonly FAVICON_RIGHT="#5468A8"
 readonly FAVICON_LEFT_DARK="#C5CEEE"
 readonly FAVICON_RIGHT_DARK="#7C8FD0"
 readonly FAVICON_PX=32
+
+# The development favicon's badge: the app icon's (a BADGE_FILL disc with a
+# GLYPH_COLOR "D") placed like the tray's, touching the canvas's bottom-right
+# corner with the chest masked away FAVICON_BADGE_GAP beyond it, so the tab's
+# colour shows through the ring. Larger than the tray's so the "D" still reads
+# at 16 px, where one unit is 1/32 px: the disc is about 9 px across, the "D"'s
+# stroke about 1.4 px and the gap about 1 px. Its colours do not switch on a
+# dark tab.
+readonly FAVICON_BADGE_R=144
+readonly FAVICON_BADGE_GAP=32
+readonly FAVICON_GLYPH_H=176
+readonly FAVICON_GLYPH_STROKE=46
+readonly FAVICON_GLYPH_STEM=60
 
 # --- Helpers ------------------------------------------------------------------
 
@@ -252,10 +270,15 @@ EOF
 # filled $2 (left) and $3 (right). With $4 = dark-switch it also carries a
 # style that turns the halves to the dark colours under a dark colour scheme
 # (for favicon.svg, which the browser draws itself); with $4 = fixed the
-# colours stay as given (for the PNGs, which the rasteriser draws once).
+# colours stay as given (for the PNGs, which the rasteriser draws once). With
+# $5 = badge it carries the development badge (see FAVICON_BADGE_*): the chest
+# masked away around the disc, and the disc with its "D" on top; with $5 =
+# plain it does not.
 write_favicon_svg() {
-  local in="$1" left="$2" right="$3" mode="$4" out="$5"
+  local in="$1" left="$2" right="$3" mode="$4" badge="$5" out="$6"
   local half=$((SIZE / 2)) style=""
+  local c=$((SIZE - FAVICON_BADGE_R)) r="$FAVICON_BADGE_R"
+  local gap_r=$((FAVICON_BADGE_R + FAVICON_BADGE_GAP))
   if [ "$mode" = dark-switch ]; then
     style="  <style>@media (prefers-color-scheme: dark) { .left { fill: $FAVICON_LEFT_DARK } .right { fill: $FAVICON_RIGHT_DARK } }</style>"
   fi
@@ -264,11 +287,19 @@ write_favicon_svg() {
     [ -z "$style" ] || printf '%s\n' "$style"
     printf '  <mask id="chest" maskUnits="userSpaceOnUse" x="0" y="0" width="%s" height="%s">\n' "$SIZE" "$SIZE"
     source_body "$in" | sed "s/fill=\"$TRAY_BLACK\"/fill=\"#FFFFFF\"/g"
+    [ "$badge" = plain ] ||
+      printf '    <circle cx="%s" cy="%s" r="%s" fill="#000000"/>\n' "$c" "$c" "$gap_r"
     printf '  </mask>\n'
     printf '  <g mask="url(#chest)">\n'
     printf '    <rect class="left" width="%s" height="%s" fill="%s"/>\n' "$half" "$SIZE" "$left"
     printf '    <rect class="right" x="%s" width="%s" height="%s" fill="%s"/>\n' "$half" "$half" "$SIZE" "$right"
-    printf '  </g>\n</svg>\n'
+    printf '  </g>\n'
+    if [ "$badge" = badge ]; then
+      printf '  <circle cx="%s" cy="%s" r="%s" fill="%s"/>\n' "$c" "$c" "$r" "$BADGE_FILL"
+      printf '  <path fill="%s" fill-rule="evenodd" d="%s"/>\n' "$GLYPH_COLOR" \
+        "$(glyph_d "$c" "$c" "$FAVICON_GLYPH_H" "$FAVICON_GLYPH_STROKE" "$FAVICON_GLYPH_STEM")"
+    fi
+    printf '</svg>\n'
   } >"$out"
 }
 
@@ -332,16 +363,25 @@ done
 # --- Favicon ------------------------------------------------------------------
 
 mkdir -p "$WEB_PUBLIC_DIR"
-write_favicon_svg "$TRAY_SOURCE" "$FAVICON_LEFT" "$FAVICON_RIGHT" dark-switch "$WEB_PUBLIC_DIR/favicon.svg"
-log "wrote $(shown "$WEB_PUBLIC_DIR/favicon.svg")"
-# Light files carry no suffix, dark ones "-dark".
-for suffix in "" -dark; do
-  case "$suffix" in
-    "") left="$FAVICON_LEFT" right="$FAVICON_RIGHT" ;;
-    -dark) left="$FAVICON_LEFT_DARK" right="$FAVICON_RIGHT_DARK" ;;
+# Plain files carry no suffix, the development ones "-dev" (after the colour
+# scheme's, so favicon-32-dark-dev.png is favicon-32-dark.png's counterpart).
+for badge in plain badge; do
+  case "$badge" in
+    plain) build="" ;;
+    badge) build=-dev ;;
   esac
-  write_favicon_svg "$TRAY_SOURCE" "$left" "$right" fixed "$WORK_DIR/favicon$suffix.svg"
-  rasterise "$WORK_DIR/favicon$suffix.svg" "$WORK_DIR/favicon$suffix" -p "$FAVICON_PX"
-  cp "$WORK_DIR/favicon$suffix/${FAVICON_PX}x${FAVICON_PX}.png" "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix.png"
-  log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix.png")"
+  write_favicon_svg "$TRAY_SOURCE" "$FAVICON_LEFT" "$FAVICON_RIGHT" dark-switch "$badge" "$WEB_PUBLIC_DIR/favicon$build.svg"
+  log "wrote $(shown "$WEB_PUBLIC_DIR/favicon$build.svg")"
+  # Light files carry no suffix, dark ones "-dark".
+  for suffix in "" -dark; do
+    case "$suffix" in
+      "") left="$FAVICON_LEFT" right="$FAVICON_RIGHT" ;;
+      -dark) left="$FAVICON_LEFT_DARK" right="$FAVICON_RIGHT_DARK" ;;
+    esac
+    name="favicon$suffix$build"
+    write_favicon_svg "$TRAY_SOURCE" "$left" "$right" fixed "$badge" "$WORK_DIR/$name.svg"
+    rasterise "$WORK_DIR/$name.svg" "$WORK_DIR/$name" -p "$FAVICON_PX"
+    cp "$WORK_DIR/$name/${FAVICON_PX}x${FAVICON_PX}.png" "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix$build.png"
+    log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix$build.png")"
+  done
 done

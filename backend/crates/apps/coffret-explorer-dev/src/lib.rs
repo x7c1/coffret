@@ -40,7 +40,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use coffret_explorer_host::credentials::{Credentials, SystemClock};
-use coffret_explorer_host::{router, Config, KeyFile, PageSource};
+use coffret_explorer_host::{router, Config, HostKind, KeyFile, PageSource};
 use tokio::net::TcpListener;
 
 /// The name the launch file is written under, in its directory: the same
@@ -56,6 +56,7 @@ pub fn host(listener: &TcpListener, settings: &Settings) -> anyhow::Result<(Rout
         key: Arc::new(KeyFile(settings.key_file.clone())),
         lock: Arc::new(InAnotherProcess),
         page: PageSource::Directory(settings.dist.clone()),
+        kind: HostKind::Development,
     };
     let router = router(listener, config, credentials.gate())?;
     Ok((router, credentials))

@@ -236,7 +236,13 @@ larger than its neighbours. The favicon is the chest alone, without the app
 icon's background square, so that it reads at 16 px in a browser tab; it takes
 the tray source's shape in the app icon's two colours, and lighter ones on a
 dark tab (the SVG switches by itself, and `index.html` picks the light or the
-dark PNG fallback by the colour scheme).
+dark PNG fallback by the colour scheme). `make icons` also writes a badged
+favicon beside it (`favicon-dev.svg`, `favicon-32-dev.png`,
+`favicon-32-dark-dev.png`), with the same "D" badge separated from the chest
+by a transparent ring. A development host — `make dev`'s, or the development
+app's — answers the favicon's paths with the badged files, so its tabs are
+told apart from the installed app's; `index.html` links only the plain ones,
+and the tab's title stays "coffret" whichever host served it.
 
 Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
 

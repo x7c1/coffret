@@ -27,6 +27,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{include_image, AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
+use crate::app_build::AppBuild;
 use crate::explorer;
 use crate::unlock::{self, Desktop};
 
@@ -41,50 +42,30 @@ const DISCONNECT_ID: &str = "disconnect";
 /// The menu item that ends the app.
 const QUIT_ID: &str = "quit";
 
-/// The development app's identifier, which `scripts/desktop.sh` builds it with
-/// in place of `tauri.conf.json`'s.
-const DEV_IDENTIFIER: &str = "io.github.x7c1.coffret.dev";
-
-/// Which of the two apps this is, and so which icon and tooltip its tray gets.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Build {
-    Installed,
-    Development,
+/// The tray's tooltip for `build`.
+fn tooltip(build: AppBuild) -> &'static str {
+    match build {
+        AppBuild::Installed => "Coffret",
+        AppBuild::Development => "Coffret (dev)",
+    }
 }
 
-impl Build {
-    /// The build the app's identifier names.
-    fn of(identifier: &str) -> Self {
-        if identifier == DEV_IDENTIFIER {
-            Self::Development
-        } else {
-            Self::Installed
-        }
+/// The tray's icon for `build`: the black one, which macOS draws as a
+/// template image.
+#[cfg(target_os = "macos")]
+fn icon(build: AppBuild) -> Image<'static> {
+    match build {
+        AppBuild::Installed => include_image!("icons-tray/tray@2x.png"),
+        AppBuild::Development => include_image!("icons-tray/tray-dev@2x.png"),
     }
+}
 
-    fn tooltip(self) -> &'static str {
-        match self {
-            Self::Installed => "Coffret",
-            Self::Development => "Coffret (dev)",
-        }
-    }
-
-    /// The black icon, which macOS draws as a template image.
-    #[cfg(target_os = "macos")]
-    fn icon(self) -> Image<'static> {
-        match self {
-            Self::Installed => include_image!("icons-tray/tray@2x.png"),
-            Self::Development => include_image!("icons-tray/tray-dev@2x.png"),
-        }
-    }
-
-    /// The white icon, for a dark top bar.
-    #[cfg(not(target_os = "macos"))]
-    fn icon(self) -> Image<'static> {
-        match self {
-            Self::Installed => include_image!("icons-tray/tray-light@2x.png"),
-            Self::Development => include_image!("icons-tray/tray-dev-light@2x.png"),
-        }
+/// The tray's icon for `build`: the white one, for a dark top bar.
+#[cfg(not(target_os = "macos"))]
+fn icon(build: AppBuild) -> Image<'static> {
+    match build {
+        AppBuild::Installed => include_image!("icons-tray/tray-light@2x.png"),
+        AppBuild::Development => include_image!("icons-tray/tray-dev-light@2x.png"),
     }
 }
 
@@ -106,11 +87,11 @@ pub fn show(app: &AppHandle) -> anyhow::Result<()> {
         .context("the tray's quit item could not be made")?;
     let menu = Menu::with_items(app, &[&unlock, &open, &disconnect, &quit])
         .context("the tray menu could not be made")?;
-    let build = Build::of(&app.config().identifier);
+    let build = AppBuild::of(&app.config().identifier);
     TrayIconBuilder::with_id(TRAY_ID)
-        .icon(build.icon())
+        .icon(icon(build))
         .icon_as_template(cfg!(target_os = "macos"))
-        .tooltip(build.tooltip())
+        .tooltip(tooltip(build))
         .menu(&menu)
         .on_menu_event(chosen)
         .build(app)
@@ -167,14 +148,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_development_identifier_gets_the_development_tray() {
-        assert_eq!(Build::of(DEV_IDENTIFIER), Build::Development);
-        assert_eq!(Build::of(DEV_IDENTIFIER).tooltip(), "Coffret (dev)");
-    }
-
-    #[test]
-    fn any_other_identifier_gets_the_installed_tray() {
-        assert_eq!(Build::of("io.github.x7c1.coffret"), Build::Installed);
-        assert_eq!(Build::of("io.github.x7c1.coffret").tooltip(), "Coffret");
+    fn the_development_app_gets_the_development_tooltip() {
+        assert_eq!(tooltip(AppBuild::Development), "Coffret (dev)");
+        assert_eq!(tooltip(AppBuild::Installed), "Coffret");
     }
 }

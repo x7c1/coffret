@@ -26,6 +26,7 @@
 //! default state directory for the installed app, or whatever
 //! `COFFRET_STATE_DIR` names for a process started with it set.
 
+mod app_build;
 mod explorer;
 mod launch;
 mod settings;
