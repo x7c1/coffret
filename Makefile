@@ -454,6 +454,35 @@ drive-it-trash:
 drive-it-reset:
 	FORCE=$(FORCE) ./scripts/drive-it-reset.sh reset
 
+## rename-smoke: check that this checkout's build renames correctly against a real Library: LIBRARY under COFFRET_STATE_DIR, the Passphrase asked once
+#
+# Manual: it needs a person to type the Passphrase, and a Library of their own
+# on real Storage — a development Library on Drive, say — which is what CI does
+# not have. CI runs the same script against MinIO, from the CLI's tests.
+#
+# It builds the CLI the way `cli` does, asks for the Passphrase once without
+# echoing it, and hands it to every step on standard input; no client secret is
+# needed, since the Library keeps its client. Under the Library-root mapping, or
+# the first mapping where the root is not mapped, it creates a fresh
+# `rename-smoke-<UTC timestamp>/` folder holding two books of three small SVG
+# pages each, a few hundred bytes apiece, and syncs them up. Then it renames the
+# first book's folder with `coffret rename`, renames two pages of the second
+# book on disk, and syncs again, checking from each step's `--json` answer and
+# from the commit's `committed the batch` event in the run's log that both
+# renames were carried as renames and uploaded no Container. It stops at the
+# first check that does not hold and says which one.
+#
+# The state directory is the development one unless COFFRET_STATE_DIR is given,
+# as for every target here; docs/guides/environments.md says how to name the
+# production one, and what to do first. Each sync covers the whole Library, so
+# whatever else is waiting in its mapped folders is carried in by the first
+# one. The smoke folder is left in the Library and on disk — nothing else is
+# written — and the run says where it is: delete it from the explorer. It needs
+# `jq` on the PATH.
+.PHONY: rename-smoke
+rename-smoke:
+	./scripts/rename-smoke.sh "$(LIBRARY)"
+
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES, PHOTO_SIZE, PAGE_SIZE override defaults)
 .PHONY: fixtures
 fixtures:

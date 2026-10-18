@@ -64,6 +64,12 @@ impl Device {
         child.wait_with_output().expect("the run must finish")
     }
 
+    /// This device's state directory, for a case that runs something other
+    /// than the binary against it.
+    pub fn state(&self) -> &Path {
+        self.state.path()
+    }
+
     /// Where Libraries are on this device.
     pub fn libraries(&self) -> PathBuf {
         self.state.path().join("libraries")

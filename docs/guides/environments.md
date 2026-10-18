@@ -67,6 +67,29 @@ A Library under the development state directory is made the way any Library
 is, through `make cli ARGS="init …"` or `make cli ARGS="join …"`;
 `make cli ARGS="--help"` lists the commands.
 
+`make rename-smoke LIBRARY=<name>` checks that the build in the checkout
+renames correctly against such a Library on its real Storage, a development
+Library on Drive, say, which CI cannot reach. It needs the Library's
+Passphrase, typed once and never echoed, and `jq` on the `PATH`; no client
+secret, since the Library keeps its client. Under the Library-root mapping, or
+the first mapping where the root is not mapped, it creates a
+`rename-smoke-<UTC timestamp>/` folder holding two books of three small SVG
+pages each, and so uploads a few small files. It syncs them, renames one book's
+folder with `coffret rename`, renames two pages of the other on disk and syncs
+again, and checks that both renames uploaded no Container. Each sync covers the
+whole Library, so whatever else is waiting in its mapped
+folders is carried in too. It writes nothing outside the smoke folder, and
+leaves that folder in the Library: delete it from the explorer. Like every
+target, it works under the development state directory unless
+`COFFRET_STATE_DIR` names another; against the production Library it is
+
+```bash
+make rename-smoke COFFRET_STATE_DIR="$HOME/.local/state/coffret" LIBRARY=<name>
+```
+
+after the two things [Production CLI operations](#production-cli-operations)
+asks first, and the smoke folder is then left in the production Library.
+
 ## Production CLI operations
 
 The desktop app opens a Library and serves it; it does not offer the
@@ -95,6 +118,7 @@ follows it to `logs` beside the Libraries. Two things first:
 |---|---|
 | `make dev` | The server for `LIBRARY` under the development state directory, a build of the explorer in watch mode, and the development host serving that build at `http://127.0.0.1:5173/` in front of the server; it prints the launch file to open the explorer by |
 | `make cli ARGS="…"` | The command line, built in release, against the development state directory unless `COFFRET_STATE_DIR` is given |
+| `make rename-smoke LIBRARY=<name>` | Builds the command line, asks for the Passphrase once, and checks a `coffret rename` and two renames on disk against that Library, under a fresh smoke folder it leaves behind |
 | `make down` | Stops the three `make dev` started for `LIBRARY`; `make down dev` is the restart that a Library which has locked itself after idling needs |
 | `make desktop-build` | Builds the explorer, then bundles the desktop app under `backend/target/release/bundle/` (a `.deb` on Linux, `Coffret.app` and a `.dmg` on macOS) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
