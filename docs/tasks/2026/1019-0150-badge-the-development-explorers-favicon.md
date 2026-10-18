@@ -111,8 +111,8 @@ from the installed app's, and that the title stays the same.
 
 ### Before merge (verified outside the check command)
 
-- [ ] With the installed app and `make desktop-dev` both running, the
+- [x] With the installed app and `make desktop-dev` both running, the
       development explorer's tab shows the badged favicon and the installed
       one's the plain favicon, in Chrome's light and dark modes (a person
       looks at the tabs).
-- [ ] The badge's "D" is legible at a tab's size (a person judges).
+- [x] The badge's "D" is legible at a tab's size (a person judges).
