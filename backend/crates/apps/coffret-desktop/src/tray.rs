@@ -17,8 +17,8 @@
 //! top bar is dark in both its light and its dark style and the appindicator
 //! tray shows the picture as it is. Both are given the 64 px picture, which
 //! either tray scales down to its own size. The development app's icon carries a "D"
-//! badge and its tooltip says so, so that it is told apart from the installed
-//! app running beside it.
+//! badge, so that it is told apart from the installed app running beside it,
+//! and on macOS its tooltip says so too (Tauri shows no tray tooltip on Linux).
 
 use anyhow::Context;
 use tauri::image::Image;

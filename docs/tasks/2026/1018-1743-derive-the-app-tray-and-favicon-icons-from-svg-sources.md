@@ -150,11 +150,13 @@ inset in one sentence so nobody "fixes" it.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On Ubuntu (GNOME): the installed app (`make desktop`) shows the new icon
+- [x] On Ubuntu (GNOME): the installed app (`make desktop`) shows the new icon
       in the application grid, dock and Alt-Tab; its tray icon is the white
       chest in the top bar; `make desktop-dev` running beside it shows the
-      badged tray icon and the tooltip "Coffret (dev)".
+      badged tray icon. (No tooltip shows on Linux: Tauri's tray tooltip is
+      unsupported there, so the badge alone tells the two apart.)
 - [ ] On macOS: the Dock and Cmd-Tab show the new icon with margins like the
       neighbouring apps; the menu-bar icon is the one-colour chest and follows
-      a light and a dark menu bar; the development app's is badged.
-- [ ] The explorer's browser tab shows the favicon.
+      a light and a dark menu bar; the development app's is badged and its
+      tooltip reads "Coffret (dev)".
+- [x] The explorer's browser tab shows the favicon.

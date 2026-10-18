@@ -22,8 +22,8 @@
 # tauri-build and `generate_context!` merge over the configuration files at
 # compile time; a plain `cargo build` honours it, so the development build
 # needs neither the Tauri CLI nor a second configuration file. The identifier
-# is also what the app reads to give its tray the badged icon and its own
-# tooltip (src/tray.rs). Its own identifier gives it its own single-instance
+# is also what the app reads to give its tray the badged icon and, on macOS,
+# its own tooltip (src/tray.rs). Its own identifier gives it its own single-instance
 # scope and its own app ID, so it runs beside the installed app rather than
 # handing its launch over to it. It serves the Libraries under COFFRET_STATE_DIR, which
 # the Makefile exports as the development state directory

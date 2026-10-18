@@ -222,9 +222,10 @@ Tauri CLI and python3) writes the installed app's `icons/`, the development
 app's `icons-dev/`, the tray's `icons-tray/` and the explorer's favicon under
 `frontend/packages/apps/web/public/`; the outputs are committed, and running it
 again rewrites the same bytes. The development app's icons carry a "D" badge in
-the bottom-right corner, and its tray icon is badged too and has the tooltip
-"Coffret (dev)", so the two apps are told apart in the tray without opening a
-menu; the app reads which it is from its identifier. The tray icon is a
+the bottom-right corner, and its tray icon is badged too, so the two apps are
+told apart in the tray without opening a menu; on macOS its tooltip also reads
+"Coffret (dev)" (Tauri shows no tray tooltip on Linux). The app reads which it
+is from its identifier. The tray icon is a
 one-colour picture rather than the app icon, because a tray draws it small and
 in the menu bar's own colours: on macOS it is black and set as a template
 image, which the menu bar draws black or white for its appearance, and on
