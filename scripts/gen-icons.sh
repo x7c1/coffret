@@ -111,14 +111,17 @@ readonly FAVICON_RIGHT_DARK="#7C8FD0"
 readonly FAVICON_PX=32
 
 # The development favicon's badge: the app icon's (a BADGE_FILL disc with a
-# GLYPH_COLOR "D") placed like the tray's, touching the canvas's bottom-right
-# corner with the chest masked away FAVICON_BADGE_GAP beyond it, so the tab's
-# colour shows through the ring. Larger than the tray's so the "D" still reads
+# GLYPH_COLOR "D") in the bottom-right corner like the tray's, with the chest
+# masked away FAVICON_BADGE_GAP beyond it, so the tab's colour shows through
+# the ring. It stops FAVICON_BADGE_INSET short of the canvas's edges: a browser
+# scaling a favicon that touches an edge can bleed that edge's colour into the
+# opposite one, which shows as a red line above and left of the icon. Larger than the tray's so the "D" still reads
 # at 16 px, where one unit is 1/32 px: the disc is about 9 px across, the "D"'s
 # stroke about 1.4 px and the gap about 1 px. Its colours do not switch on a
 # dark tab.
 readonly FAVICON_BADGE_R=144
 readonly FAVICON_BADGE_GAP=32
+readonly FAVICON_BADGE_INSET=32
 readonly FAVICON_GLYPH_H=176
 readonly FAVICON_GLYPH_STROKE=46
 readonly FAVICON_GLYPH_STEM=60
@@ -277,7 +280,7 @@ EOF
 write_favicon_svg() {
   local in="$1" left="$2" right="$3" mode="$4" badge="$5" out="$6"
   local half=$((SIZE / 2)) style=""
-  local c=$((SIZE - FAVICON_BADGE_R)) r="$FAVICON_BADGE_R"
+  local c=$((SIZE - FAVICON_BADGE_INSET - FAVICON_BADGE_R)) r="$FAVICON_BADGE_R"
   local gap_r=$((FAVICON_BADGE_R + FAVICON_BADGE_GAP))
   if [ "$mode" = dark-switch ]; then
     style="  <style>@media (prefers-color-scheme: dark) { .left { fill: $FAVICON_LEFT_DARK } .right { fill: $FAVICON_RIGHT_DARK } }</style>"

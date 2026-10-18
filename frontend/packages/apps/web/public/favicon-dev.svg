@@ -5,12 +5,12 @@
   <path d="M48 208 L88 96 H424 L464 208 Z" fill="#FFFFFF"/>
   <path fill="#FFFFFF" fill-rule="evenodd" d="M68 232 H444 A20 20 0 0 1 464 252 V412 A20 20 0 0 1 444 432 H68 A20 20 0 0 1 48 412 V252 A20 20 0 0 1 68 232 Z M240 337.5 A33.6 33.6 0 1 1 272 337.5 L283.2 384 H228.8 Z"/>
 </svg>
-    <circle cx="368" cy="368" r="176" fill="#000000"/>
+    <circle cx="336" cy="336" r="176" fill="#000000"/>
   </mask>
   <g mask="url(#chest)">
     <rect class="left" width="256" height="512" fill="#1C2440"/>
     <rect class="right" x="256" width="256" height="512" fill="#5468A8"/>
   </g>
-  <circle cx="368" cy="368" r="144" fill="#E5532D"/>
-  <path fill="#FFFFFF" fill-rule="evenodd" d="M294 280 H354 A88 88 0 0 1 354 456 H294 Z M340 326 H354 A42 42 0 0 1 354 410 H340 Z"/>
+  <circle cx="336" cy="336" r="144" fill="#E5532D"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M262 248 H322 A88 88 0 0 1 322 424 H262 Z M308 294 H322 A42 42 0 0 1 322 378 H308 Z"/>
 </svg>
