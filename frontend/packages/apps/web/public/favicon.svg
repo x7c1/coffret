@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="114" fill="#F4F6F8"/>
-  <path d="M96 216 L128 136 H256 V216 Z" fill="#1C2440"/>
-  <path d="M112 232 H256 V400 H112 Q96 400 96 384 V248 Q96 232 112 232 Z" fill="#1C2440"/>
-  <path d="M256 136 H384 L416 216 H256 Z" fill="#5468A8"/>
-  <path d="M256 232 H400 Q416 232 416 248 V384 Q416 400 400 400 H256 Z" fill="#5468A8"/>
-  <circle cx="256" cy="296" r="25.6" fill="#F4F6F8"/>
-  <path d="M243.2 304 L235.2 360 H276.8 L268.8 304 Z" fill="#F4F6F8"/>
+  <style>@media (prefers-color-scheme: dark) { .left { fill: #C5CEEE } .right { fill: #7C8FD0 } }</style>
+  <mask id="chest" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <path d="M48 208 L88 96 H424 L464 208 Z" fill="#FFFFFF"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M68 232 H444 A20 20 0 0 1 464 252 V412 A20 20 0 0 1 444 432 H68 A20 20 0 0 1 48 412 V252 A20 20 0 0 1 68 232 Z M240 337.5 A33.6 33.6 0 1 1 272 337.5 L283.2 384 H228.8 Z"/>
+</svg>
+  </mask>
+  <g mask="url(#chest)">
+    <rect class="left" width="256" height="512" fill="#1C2440"/>
+    <rect class="right" x="256" width="256" height="512" fill="#5468A8"/>
+  </g>
 </svg>

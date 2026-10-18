@@ -28,8 +28,9 @@
 #     tray-dev{,@2x}.png          development app, black, with a one-colour badge
 #     tray-dev-light{,@2x}.png    development app, white, with a one-colour badge
 #   frontend/packages/apps/web/public/
-#     favicon.svg                 a copy of coffret.svg
-#     favicon-32.png              its 32 px raster
+#     favicon.svg                 the chest alone, in the app icon's two colours
+#                                 (lighter ones on a dark tab, see FAVICON_*)
+#     favicon-32{,-dark}.png      its 32 px raster in the light and the dark colours
 #
 # Running it again rewrites the same files with the same bytes.
 #
@@ -92,6 +93,18 @@ readonly TRAY_GLYPH_H=144
 readonly TRAY_GLYPH_STROKE=38
 readonly TRAY_GLYPH_STEM=52
 
+# The favicon: the chest alone, without the app icon's background square,
+# since a browser tab draws it at 16 px beside other sites' icons. Its shape is
+# the tray source's (the keyhole a hole, so the tab shows through), split down
+# the middle into the app icon's two colours; on a dark tab the SVG switches
+# to lighter ones, where the dark left half would sink. The PNG fallback cannot
+# switch, so it comes in both and index.html picks one by the colour scheme.
+readonly FAVICON_LEFT="#1C2440"
+readonly FAVICON_RIGHT="#5468A8"
+readonly FAVICON_LEFT_DARK="#C5CEEE"
+readonly FAVICON_RIGHT_DARK="#7C8FD0"
+readonly FAVICON_PX=32
+
 # --- Helpers ------------------------------------------------------------------
 
 log() { printf '[icons] %s\n' "$*"; }
@@ -105,6 +118,10 @@ die() {
 [ -f "$TRAY_SOURCE" ] || die "source tray icon not found: $TRAY_SOURCE"
 grep -q "rx=\"$SOURCE_RX\"" "$SOURCE" ||
   die "$SOURCE no longer has rx=\"$SOURCE_RX\"; update SOURCE_RX (the badge is placed from it)"
+for color in "$FAVICON_LEFT" "$FAVICON_RIGHT"; do
+  grep -q "fill=\"$color\"" "$SOURCE" ||
+    die "$SOURCE no longer uses $color; update FAVICON_LEFT/FAVICON_RIGHT (the favicon takes the app icon's colours)"
+done
 grep -q "fill=\"$TRAY_BLACK\"" "$TRAY_SOURCE" ||
   die "$TRAY_SOURCE no longer fills with $TRAY_BLACK; update TRAY_BLACK (the white variant swaps it)"
 cargo tauri --version >/dev/null 2>&1 ||
@@ -231,6 +248,30 @@ $(source_body "$in" | sed "s/fill=\"$TRAY_BLACK\"/fill=\"$color\"/g")
 EOF
 }
 
+# The favicon: the tray source $1 as a mask over two half-canvas rectangles
+# filled $2 (left) and $3 (right). With $4 = dark-switch it also carries a
+# style that turns the halves to the dark colours under a dark colour scheme
+# (for favicon.svg, which the browser draws itself); with $4 = fixed the
+# colours stay as given (for the PNGs, which the rasteriser draws once).
+write_favicon_svg() {
+  local in="$1" left="$2" right="$3" mode="$4" out="$5"
+  local half=$((SIZE / 2)) style=""
+  if [ "$mode" = dark-switch ]; then
+    style="  <style>@media (prefers-color-scheme: dark) { .left { fill: $FAVICON_LEFT_DARK } .right { fill: $FAVICON_RIGHT_DARK } }</style>"
+  fi
+  {
+    printf '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %s %s" width="%s" height="%s">\n' "$SIZE" "$SIZE" "$SIZE" "$SIZE"
+    [ -z "$style" ] || printf '%s\n' "$style"
+    printf '  <mask id="chest" maskUnits="userSpaceOnUse" x="0" y="0" width="%s" height="%s">\n' "$SIZE" "$SIZE"
+    source_body "$in" | sed "s/fill=\"$TRAY_BLACK\"/fill=\"#FFFFFF\"/g"
+    printf '  </mask>\n'
+    printf '  <g mask="url(#chest)">\n'
+    printf '    <rect class="left" width="%s" height="%s" fill="%s"/>\n' "$half" "$SIZE" "$left"
+    printf '    <rect class="right" x="%s" width="%s" height="%s" fill="%s"/>\n' "$half" "$half" "$SIZE" "$right"
+    printf '  </g>\n</svg>\n'
+  } >"$out"
+}
+
 # --- Icon sets ------------------------------------------------------------------
 
 # The files a set keeps from `cargo tauri icon`'s output (the rest — Windows
@@ -291,8 +332,16 @@ done
 # --- Favicon ------------------------------------------------------------------
 
 mkdir -p "$WEB_PUBLIC_DIR"
-cp "$SOURCE" "$WEB_PUBLIC_DIR/favicon.svg"
+write_favicon_svg "$TRAY_SOURCE" "$FAVICON_LEFT" "$FAVICON_RIGHT" dark-switch "$WEB_PUBLIC_DIR/favicon.svg"
 log "wrote $(shown "$WEB_PUBLIC_DIR/favicon.svg")"
-rasterise "$SOURCE" "$WORK_DIR/favicon" -p 32
-cp "$WORK_DIR/favicon/32x32.png" "$WEB_PUBLIC_DIR/favicon-32.png"
-log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-32.png")"
+# Light files carry no suffix, dark ones "-dark".
+for suffix in "" -dark; do
+  case "$suffix" in
+    "") left="$FAVICON_LEFT" right="$FAVICON_RIGHT" ;;
+    -dark) left="$FAVICON_LEFT_DARK" right="$FAVICON_RIGHT_DARK" ;;
+  esac
+  write_favicon_svg "$TRAY_SOURCE" "$left" "$right" fixed "$WORK_DIR/favicon$suffix.svg"
+  rasterise "$WORK_DIR/favicon$suffix.svg" "$WORK_DIR/favicon$suffix" -p "$FAVICON_PX"
+  cp "$WORK_DIR/favicon$suffix/${FAVICON_PX}x${FAVICON_PX}.png" "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix.png"
+  log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix.png")"
+done
