@@ -280,7 +280,9 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
     // A reload. Nothing in this tab remembers the folder; the server's answer
     // about the freeze it stopped is what brings it back — on the tree, drawn
     // dimmed beside the folder the Library does hold, with its pages in it and
-    // the second attempt on offer.
+    // the second attempt on offer. A run that stops keeps the drop's
+    // reservation (spec: PK-17), so the pages are still the book's, waiting
+    // for their Pack, and a sync would leave them alone.
     await page.reload();
     await expect(inTree(page, STRANDED)).toBeVisible();
     await expect(inTree(page, IMPORTED)).toBeVisible();
@@ -288,7 +290,7 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
       await colourOf(inTree(page, IMPORTED)),
     );
     await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
-    await expect(chip(page, pages[0])).toHaveText('not in Library');
+    await expect(chip(page, pages[0])).toHaveText('to be packed');
     await expect(page.getByRole('button', { name: 'pack again' })).toBeVisible();
     await shot(page, '06-the-folder-came-back');
   } finally {
@@ -304,9 +306,12 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
   }
   await expect(page.getByText(new RegExp(`packed ${setting.importPages} files`))).toBeVisible();
 
-  // And it is the Library's folder now, drawn like the one beside it.
+  // And it is the Library's folder now, drawn like the one beside it; the
+  // commit released the reservation, so a reload finds its pages present
+  // rather than still to be packed.
   await page.reload();
   await expect(inTree(page, STRANDED)).toBeVisible();
   expect(await colourOf(inTree(page, STRANDED))).toBe(await colourOf(inTree(page, IMPORTED)));
+  await expect(chip(page, pages[0])).toHaveText('present');
   await shot(page, '07-packed-at-the-second-attempt');
 });
