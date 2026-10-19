@@ -57,4 +57,4 @@ Reclaiming abandoned rows outside sync, persisting a drop's Pack choice.
 
 ### Before merge
 
-- [ ] Against the agent's development Library, kill the server after `committed the batch` is logged but before the Index refresh (lock the Index), restart, and confirm the listing shows the files `present` and a page opens, before any sync.
+- [x] Against the agent's development Library, kill the server after `committed the batch` is logged but before the Index refresh (lock the Index), restart, and confirm the listing shows the files `present` and a page opens, before any sync.
