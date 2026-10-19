@@ -52,28 +52,18 @@ import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js
 import { JOURNAL_RECORD, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for a Journal record payload, and the one it
- * implements: 3, the first to carry `renames` (spec: FM-15).
- */
-export const JOURNAL_RECORD_SCHEMA = 3n;
-
-/**
- * The lowest schema a reader accepts. A record of schema 2 carries no `renames`
- * and reads as one that renames nothing (spec: FM-15).
+ * The schema this package writes for a Journal record payload, the one it
+ * implements, and the lowest a reader accepts: 4, the first whose addition
+ * entries carry `deposited_at` (spec: FM-15).
  *
- * It is also the reader floor `required_schema` stands for where it is absent:
- * every reader that accepts a record implements this much (spec: FM-9, FM-15).
+ * A record of an earlier schema carries Entries without a deposit time, so it is
+ * refused as a schema this package does not read rather than read with a time
+ * made up. It is also what every record names in `required_schema`: a reader
+ * that ignored `deposited_at` would hold a catalog without deposit times and
+ * could commit records no reader of this schema accepts, so the field is
+ * must-understand and every record says so (spec: FM-9, FM-15).
  */
-const MIN_JOURNAL_RECORD_SCHEMA = 2n;
-
-/**
- * The schema a reader has to implement to apply a record's `renames`
- * faithfully, which a record carrying them names in `required_schema`
- * (spec: FM-15). A reader below it would ignore `renames` as a field it does
- * not know and hold a catalog every other device disagrees with; naming it is
- * what makes such a reader stop instead.
- */
-export const RENAMES_SCHEMA = 3n;
+export const JOURNAL_RECORD_SCHEMA = 4n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
@@ -114,13 +104,14 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
     removals.map((id) => id.bytes()),
   );
   // Left out where the record renames nothing, so a record without renames
-  // costs nothing for them (spec: FM-15). A record carrying them names the
-  // schema a reader needs to apply them; one without leaves that out too, its
-  // absence being the reader floor (spec: FM-9, FM-15).
+  // costs nothing for them (spec: FM-15).
   if (record.renames.length > 0) {
     map.set('renames', [...record.renames].sort(compareRenames).map(encodeRename));
-    map.set('required_schema', RENAMES_SCHEMA);
   }
+  // Every record names the schema its deposit times need, so a reader of an
+  // earlier schema stops at it rather than holding a catalog without them
+  // (spec: FM-9, FM-15).
+  map.set('required_schema', JOURNAL_RECORD_SCHEMA);
 
   return {
     masterKeyEpoch: record.masterKeyEpoch,
@@ -138,11 +129,23 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
  * The entry table keeps the order the Container's own meta section gives it,
  * which is the plaintext stream order FM-9 fixes — the record carries a copy of
  * that table, so re-ordering it here would make the copy disagree with the
- * original.
+ * original. Each Entry carries its deposit time, which no meta section holds
+ * (spec: FM-15).
  */
 function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
+  if (addition.depositTimes.length !== addition.entries.length) {
+    fail(
+      'control_payload_encode_failed',
+      `an addition of ${addition.entries.length} Entries carries ${addition.depositTimes.length} deposit times`,
+    );
+  }
   const map = encodeContainerMap(addition.container);
-  map.set('entries', addition.entries.map(encodeCatalogEntryMap));
+  map.set(
+    'entries',
+    addition.entries.map((entry, index) =>
+      encodeCatalogEntryMap(entry, addition.depositTimes[index] as bigint),
+    ),
+  );
   return map;
 }
 
@@ -197,10 +200,10 @@ export function decodeJournalRecord(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < MIN_JOURNAL_RECORD_SCHEMA) {
+  if (schema < JOURNAL_RECORD_SCHEMA) {
     fail('unsupported_journal_record_schema', `unsupported Journal record payload schema ${schema}`);
   }
-  const required = requiredSchema(map, generation);
+  requireSchemaNamed(map, generation);
 
   const additions = requiredArray(map, 'additions', MALFORMED).map((addition, index) =>
     decodeAddition(asCborMap(addition, MALFORMED, `addition ${index}`)),
@@ -219,19 +222,13 @@ export function decodeJournalRecord(
     compareBytes(left.bytes(), right.bytes()),
   );
 
-  // Absent on a record that renames nothing, which every record of schema 2 is.
+  // Absent on a record that renames nothing (spec: FM-15).
   const renames = map.has('renames')
     ? requiredArray(map, 'renames', MALFORMED).map((rename, index) =>
         decodeRename(asCborMap(rename, MALFORMED, `rename ${index}`), index),
       )
     : [];
   requireStrictlyIncreasing('renames', renames, compareRenames);
-  if (renames.length > 0 && required < RENAMES_SCHEMA) {
-    fail(
-      MALFORMED,
-      `a record carrying renames names ${RENAMES_SCHEMA} or above as its required_schema`,
-    );
-  }
 
   const record: JournalRecord = {
     generation,
@@ -266,16 +263,13 @@ export function decodeJournalRecord(
  * The schema the record says its reader must implement, held against the one
  * this package does (spec: FM-9, FM-15).
  *
- * Absent is the reader floor. Present, it names something above that floor: a
- * value at or below it says what its absence already says, and a second
- * spelling of one state is refused as every other one is.
+ * Above it, the record needs a newer build. Below it, or absent, the record is
+ * malformed: every record of this schema names it, so a lower value is no
+ * state a writer produces.
  */
-function requiredSchema(map: CborMap, generation: Generation): bigint {
+function requireSchemaNamed(map: CborMap, generation: Generation): void {
   const required = optionalUint(map, 'required_schema', MALFORMED);
-  if (required === undefined) {
-    return MIN_JOURNAL_RECORD_SCHEMA;
-  }
-  if (required > JOURNAL_RECORD_SCHEMA) {
+  if (required !== undefined && required > JOURNAL_RECORD_SCHEMA) {
     fail(
       'journal_record_needs_newer_build',
       `the Journal record at generation ${generation} needs a reader of schema ${required}, ` +
@@ -283,13 +277,12 @@ function requiredSchema(map: CborMap, generation: Generation): bigint {
         'is needed to read the Library past it',
     );
   }
-  if (required <= MIN_JOURNAL_RECORD_SCHEMA) {
+  if (required !== JOURNAL_RECORD_SCHEMA) {
     fail(
       MALFORMED,
-      `required_schema is above the reader floor of ${MIN_JOURNAL_RECORD_SCHEMA} where present, found ${required}`,
+      `a record names ${JOURNAL_RECORD_SCHEMA} or above as its required_schema, found ${required ?? 'none'}`,
     );
   }
-  return required;
 }
 
 /**
@@ -334,10 +327,12 @@ function decodeRename(map: CborMap, index: number): EntryRename {
 }
 
 function decodeAddition(map: CborMap): ContainerAddition {
+  const decoded = requiredArray(map, 'entries', MALFORMED).map((entry, index) =>
+    decodeCatalogEntryMap(asCborMap(entry, MALFORMED, `entry ${index}`), MALFORMED),
+  );
   return {
     container: decodeContainerMap(map, MALFORMED),
-    entries: requiredArray(map, 'entries', MALFORMED).map((entry, index) =>
-      decodeCatalogEntryMap(asCborMap(entry, MALFORMED, `entry ${index}`), MALFORMED),
-    ),
+    entries: decoded.map(({ entry }) => entry),
+    depositTimes: decoded.map(({ depositedAtSeconds }) => depositedAtSeconds),
   };
 }

@@ -15,7 +15,9 @@
 //! *beyond* the path is pinned separately: that number is the schema's own, and
 //! it does not move when the sample's paths do.
 
-use coffret_model::{ContainerId, ContainerKind, EntryLocation, EntryNumber, SnapshotContent};
+use coffret_model::{
+    ContainerId, ContainerKind, DepositedAt, EntryLocation, EntryNumber, SnapshotContent,
+};
 
 use super::testing::{located, GENERATION};
 use super::{encode, IndexSnapshotPayload};
@@ -28,22 +30,25 @@ const ENTRIES: usize = 10_000;
 /// rather than one Container per Entry or one Container for everything.
 const ENTRIES_PER_CONTAINER: usize = 50;
 
-/// The ceiling this format is sized on: 90 bytes per Entry before padding.
+/// The ceiling this format is sized on: 96 bytes per Entry before padding.
 ///
 /// It stood at 120 while the maps were keyed by field-name text, when this
 /// sample cost 119 bytes per Entry, 94 of them beyond the path. With the fields
 /// carried under one-byte field numbers (spec: FM-16) the same sample costs 86,
 /// 61 beyond the path, and the budget follows the encoding down so that the
 /// room it leaves is a few bytes rather than the old key strings' worth. Each
-/// Entry's `entry` number then added two bytes, 88 and 63.
-const DESIGN_BUDGET: usize = 90;
+/// Entry's `entry` number then added two bytes, 88 and 63, and its
+/// `deposited_at` six more — a one-byte field number and a four-byte-wide
+/// count of seconds behind its CBOR head — 95 and 69. The budget moved with
+/// it, by what a required time per Entry costs and no more.
+const DESIGN_BUDGET: usize = 96;
 
 /// What one Entry costs beyond its own Entry Path.
 ///
 /// Everything the schema itself spends: the entry map's one-byte field numbers
 /// and their values —
-/// `offset`, `size`, `mtime`, the 32-byte `hash`, the `container` index, and
-/// the `entry` number —
+/// `offset`, `size`, `mtime`, the 32-byte `hash`, `deposited_at`, the
+/// `container` index, and the `entry` number —
 /// plus this Entry's share of the `containers` array and the checkpoint. It is
 /// pinned rather than bounded loosely, because it is the number a change to the
 /// schema moves: a field added per Entry, or a Container named by ID again,
@@ -51,7 +56,7 @@ const DESIGN_BUDGET: usize = 90;
 ///
 /// The sample renames nothing, so no Entry in it carries `captured_path`: the
 /// field is written only where it differs from `path` (spec: FM-16).
-const PINNED_COST_BEYOND_THE_PATH: usize = 63;
+const PINNED_COST_BEYOND_THE_PATH: usize = 69;
 
 // FM-16: a Snapshot of ten thousand Entries stays inside the per-Entry cost the
 // schema was shaped around, for a Library whose paths look like a real one's.
@@ -112,6 +117,7 @@ fn library() -> IndexSnapshotPayload {
                 240_000,
             )
             .entry,
+            deposited_at: DepositedAt::from_unix_seconds(1_760_000_000 + index as i64),
         })
         .collect();
 

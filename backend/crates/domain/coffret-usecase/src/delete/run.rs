@@ -143,6 +143,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
                         old: &partial.summary,
                         envelope: &envelope,
                         table: &partial.table,
+                        deposit_times: &partial.deposit_times,
                         keep: &partial.keep,
                     };
                     match rebuild(&rebuilding, &replacing).await? {

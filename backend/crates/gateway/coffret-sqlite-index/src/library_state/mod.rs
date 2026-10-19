@@ -133,8 +133,8 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
         .execute(
             "INSERT INTO entries (
                  path, container_id, entry_number, \"offset\", size, mtime, btime, hash,
-                 mime, derived_from_container, derived_from_path, captured_path
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 mime, derived_from_container, derived_from_path, captured_path, deposited_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
@@ -148,6 +148,7 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
                 derived.map(|from| from.container_id.as_bytes().as_slice()),
                 derived.map(|from| from.path.as_str()),
                 entry.entry.captured_path.as_str(),
+                entry.deposited_at.as_unix_seconds(),
             ],
         )
         .map_err(|error| match violation(&error) {

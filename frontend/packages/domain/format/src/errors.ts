@@ -86,9 +86,6 @@ export type CoffretErrorCode =
   | 'activation_field_on_ordinary_snapshot'
   | 'activation_snapshot_field_missing'
   | 'not_an_index_snapshot_kind'
-  // A Snapshot of schema 2 carries no entry numbers, so no catalog may start
-  // from it; a reader replays the Journal instead (spec: FM-16).
-  | 'snapshot_predates_entry_numbers'
   // Two Snapshot entries name one Container and entry number (spec: FM-16).
   | 'snapshot_names_one_entry_twice'
   // A rename gives an Entry a path in the derived namespace (spec: FM-15).

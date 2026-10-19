@@ -8,7 +8,6 @@ use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
     CONTAINERS, ENTRIES, ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
     KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
-    SCHEMA_WITHOUT_ENTRY_NUMBERS,
 };
 use crate::control::cbor::{deserialization_failed, entry_number, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -45,9 +44,9 @@ use crate::field_numbers;
 /// The array orders and every `container` index are verified rather than
 /// repaired, for the reason FM-16 gives.
 ///
-/// A Snapshot of schema 2 carries no entry numbers and is refused with
-/// [`Error::SnapshotPredatesEntryNumbers`], which a catch-up meets by replaying
-/// the Journal instead of starting from it (spec: FM-16).
+/// A Snapshot of a schema below this build's is refused with
+/// [`Error::UnsupportedIndexSnapshotSchema`]: its Entries carry no deposit time
+/// (spec: FM-16).
 pub fn decode(
     payload: &ControlPayload,
     kind: ControlObjectKind,
@@ -67,13 +66,8 @@ pub fn decode(
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA_WITHOUT_ENTRY_NUMBERS {
-        return Err(Error::UnsupportedIndexSnapshotSchema { schema });
-    }
     if schema < SCHEMA {
-        // Its Entries are in path order and carry no position, and nothing
-        // here may make one up (spec: FM-16).
-        return Err(Error::SnapshotPredatesEntryNumbers { schema });
+        return Err(Error::UnsupportedIndexSnapshotSchema { schema });
     }
 
     let containers = fields
@@ -212,16 +206,18 @@ fn entry(
         });
     };
     let entry_number = entry_number(&fields, ENTRY, malformed)?;
+    // `container` and `entry` are the Snapshot's own fields and no part of the
+    // entry map, and `WireCatalogEntry` ignores what it does not know, so the
+    // whole map is handed over as it stands.
+    let (entry, deposited_at) = value
+        .deserialized::<WireCatalogEntry>()
+        .map_err(|error| deserialization_failed(error, malformed_detail))?
+        .to_catalog(malformed)?;
     Ok(EntryLocation {
         container_id: containers[position].id,
         entry_number,
-        // `container` and `entry` are the Snapshot's own fields and no part of
-        // the entry map, and `WireCatalogEntry` ignores what it does not know,
-        // so the whole map is handed over as it stands.
-        entry: value
-            .deserialized::<WireCatalogEntry>()
-            .map_err(|error| deserialization_failed(error, malformed_detail))?
-            .to_metadata(malformed)?,
+        entry,
+        deposited_at,
     })
 }
 

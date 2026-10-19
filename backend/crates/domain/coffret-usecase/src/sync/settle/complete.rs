@@ -138,8 +138,8 @@ mod tests {
     use std::path::PathBuf;
 
     use coffret_model::{
-        ContainerAddition, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
-        JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime,
+        ContainerAddition, ContainerKind, ContainerSummary, ContentHash, DepositedAt,
+        EntryMetadata, JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime,
     };
 
     use super::*;
@@ -173,6 +173,7 @@ mod tests {
                 derived_from: None,
                 mime: None,
             }],
+            vec![DepositedAt::from_unix_seconds(1_760_000_000)],
         )
         .expect("one Entry tiles its Container's stream")
     }

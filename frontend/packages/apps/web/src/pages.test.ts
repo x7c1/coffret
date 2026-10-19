@@ -11,6 +11,7 @@ function row(name: string, openable: boolean, state: 'present' | 'remote' = 'pre
     path: `albums/${name}`,
     size: 1,
     mtime: null,
+    deposited_at: null,
     state,
     container: 'one-file',
     reserved: false,

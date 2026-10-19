@@ -475,20 +475,6 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
-    /// An Index Snapshot payload predates entry numbers, so it cannot be
-    /// adopted as a catalog (spec: FM-16).
-    ///
-    /// A Snapshot of schema 2 lists its Entries in Entry Path order and does
-    /// not carry each one's position in its Container's entry table, and
-    /// nothing a reader holds says what that position was: guessing it from
-    /// path order would name Entries a later rename could not find. A reader
-    /// meeting one rebuilds the catalog by replaying the Journal instead,
-    /// which is why this is a refusal of its own rather than a malformed
-    /// payload — the object is sound, only too old to start from.
-    SnapshotPredatesEntryNumbers {
-        /// The schema number found.
-        schema: u64,
-    },
     /// A Keyring replica's payload is not the CBOR shape FM-17 defines.
     MalformedKeyringReplica {
         /// Which field, and what was found there instead — or the CBOR

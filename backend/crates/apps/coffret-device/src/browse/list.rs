@@ -59,6 +59,7 @@ impl OpenLibrary {
                     path: path.clone(),
                     size: location.entry.extent.size(),
                     mtime: location.entry.mtime,
+                    deposited_at: location.deposited_at,
                     state: match present.contains(path) {
                         true => EntryState::Present,
                         false => EntryState::Remote,

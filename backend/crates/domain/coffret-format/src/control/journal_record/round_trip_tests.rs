@@ -9,7 +9,7 @@ use super::testing::{
     addition, addition_of, first_record, first_record_of, record, record_of, renamed_record, table,
     BORN, CAPTURED_DIR, GENERATION,
 };
-use super::{decode, encode, MIN_SCHEMA, RENAMES_SCHEMA};
+use super::{decode, encode};
 use crate::control::testing::{
     array, body_keys, body_map, container_id, field, map_keys, with_body_map,
 };
@@ -54,49 +54,54 @@ fn a_record_without_renames_writes_no_renames_field() {
         !keys.contains(&"renames".to_owned()),
         "renames was written for a record that renames nothing"
     );
-    assert!(
-        !keys.contains(&"required_schema".to_owned()),
-        "required_schema was written for a record every reader applies"
-    );
 }
 
-// FM-9, FM-15: a record carrying renames names the schema a reader needs to
-// apply them, and reads back as it went in.
+// FM-9, FM-15: `deposited_at` is must-understand, so every record names the
+// schema that carries it in `required_schema` — one renaming nothing and one
+// adding nothing included — and reads back as it went in.
 #[test]
-fn a_record_with_renames_names_the_schema_they_need() {
-    let payload = encode(&renamed_record()).expect("encoding succeeds");
-    let fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
-    let required = fields
-        .iter()
-        .find(|(key, _)| key.as_text() == Some("required_schema"))
-        .and_then(|(_, value)| value.as_integer())
-        .map(|value| u64::try_from(value).expect("a schema is a u64"));
-    assert_eq!(required, Some(RENAMES_SCHEMA));
-    const {
-        assert!(
-            RENAMES_SCHEMA > MIN_SCHEMA,
-            "renames are above the reader floor"
-        )
-    };
+fn every_record_names_the_schema_deposit_times_need() {
+    for (record, generation_of) in [
+        (record(), GENERATION),
+        (renamed_record(), GENERATION),
+        (first_record(), 0),
+    ] {
+        let payload = encode(&record).expect("encoding succeeds");
+        let fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+        let required = fields
+            .iter()
+            .find(|(key, _)| key.as_text() == Some("required_schema"))
+            .and_then(|(_, value)| value.as_integer())
+            .map(|value| u64::try_from(value).expect("a schema is a u64"));
+        assert_eq!(required, Some(super::SCHEMA));
+        let decoded = decode(&payload, generation(generation_of)).expect("the record reads");
+        assert_eq!(decoded, record);
+    }
 }
 
-// FM-15: Libraries created since the field-number format hold records of
-// schema 2, which carry no `renames`. A reader still accepts them, as records
-// that rename nothing.
+// FM-15: every Entry an addition carries has its own deposit time, written
+// under `deposited_at` and read back Entry for Entry.
 #[test]
-fn a_schema_2_record_reads_as_one_that_renames_nothing() {
+fn every_addition_entry_carries_its_deposit_time() {
     let payload = encode(&record()).expect("encoding succeeds");
+    let decoded = decode(&payload, generation(GENERATION)).expect("the record reads");
+    for (written, read) in record().additions().iter().zip(decoded.additions()) {
+        assert_eq!(read.deposit_times(), written.deposit_times());
+        assert_eq!(read.deposit_times().len(), read.entries().len());
+    }
     let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
-    *field(&mut fields, "schema") = Value::from(2u64);
-    let payload = with_body_map(
-        payload.master_key_epoch,
-        fields,
-        &field_numbers::JOURNAL_RECORD,
-    );
-
-    let decoded = decode(&payload, generation(GENERATION)).expect("a schema 2 record reads");
-    assert_eq!(decoded, record());
-    assert!(decoded.renames().is_empty());
+    let Value::Map(addition) = &mut array(&mut fields, "additions")[0] else {
+        panic!("an addition is a CBOR map");
+    };
+    let Value::Array(entries) = field(addition, "entries") else {
+        panic!("an entry table is a CBOR array");
+    };
+    for entry in entries.iter() {
+        assert!(
+            map_keys(entry).contains(&"deposited_at"),
+            "an addition entry was written without deposited_at"
+        );
+    }
 }
 
 // FM-15, CP-2, CP-15: at generation 0 there is no predecessor, and a name-keyed
@@ -191,7 +196,7 @@ fn unknown_fields_are_ignored() {
         map.push((Value::from(24u64), Value::from(1u64)));
     }
     // A newer writer would also have bumped `schema`.
-    *field(&mut fields, "schema") = Value::from(3u64);
+    *field(&mut fields, "schema") = Value::from(super::SCHEMA + 1);
 
     let extended = with_body_map(
         payload.master_key_epoch,
@@ -252,7 +257,8 @@ fn an_entry_table_carries_the_catalog_spelling() {
             "btime",
             "hash",
             "derived_from",
-            "mime"
+            "mime",
+            "deposited_at"
         ],
     );
 }

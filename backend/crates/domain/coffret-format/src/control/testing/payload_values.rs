@@ -9,8 +9,8 @@
 
 use ciborium::Value;
 use coffret_model::{
-    ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata, IndexCheckpoint,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    ContainerId, ContainerKind, ContainerSummary, ContentHash, DepositedAt, EntryMetadata,
+    IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 
 use super::epoch;
@@ -61,6 +61,16 @@ pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMeta
         derived_from: None,
         mime: None,
     }
+}
+
+/// When the content of entry `number` of the Container `seed` names was
+/// deposited (spec: FM-15, FM-16).
+///
+/// A different second for every Entry of a fixture, and none of them the
+/// fixture's `mtime`, so a codec that wrote one Entry's time against another's,
+/// or the modification time in its place, is caught.
+pub(in crate::control) fn deposited_at(seed: u8, number: u32) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_760_000_000 + i64::from(seed) * 1_000 + i64::from(number))
 }
 
 /// The Keyring commitment a commit at `generation` selects (spec: KL-3).

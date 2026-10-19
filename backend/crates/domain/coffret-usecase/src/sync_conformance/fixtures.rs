@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
-    ContentHash, EntryExtent, EntryMetadata, EntryNumber, MasterKey, MasterKeyEpoch, Mtime,
+    ContentHash, DepositedAt, EntryExtent, EntryMetadata, EntryNumber, MasterKey, MasterKeyEpoch,
+    Mtime,
 };
 
 use crate::byte_stream::ByteStream;
@@ -271,6 +272,8 @@ pub(super) async fn plant(
                 object_ref: None,
             },
             vec![entry],
+            // Planted as another device's deposit (spec: FM-15).
+            vec![DepositedAt::from_unix_seconds(1_760_000_000)],
         )
         .expect("a fixture holds a table that tiles its Container's stream"),
         envelope,

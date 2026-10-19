@@ -239,6 +239,17 @@ pub enum Error {
         /// Position of the second Entry naming a path the table already holds.
         entry: usize,
     },
+    /// A Container addition does not carry one deposit time per Entry of its
+    /// table (spec: FM-15).
+    ///
+    /// Every Entry an addition puts into the catalog has a deposit time, so a
+    /// table the times do not cover would leave an Entry without one.
+    AdditionDepositTimesDoNotMatchEntries {
+        /// How many Entries the table holds.
+        entries: usize,
+        /// How many deposit times came with it.
+        deposit_times: usize,
+    },
     /// An Index Snapshot holds an Entry in a Container the Snapshot does not
     /// list (spec: FM-16).
     ///
@@ -367,6 +378,10 @@ impl fmt::Display for Error {
                 f,
                 "entry {entry} names an Entry Path the same Container already holds",
             ),
+            Self::AdditionDepositTimesDoNotMatchEntries { entries, deposit_times } => write!(
+                f,
+                "a Container addition of {entries} Entries carries {deposit_times} deposit times",
+            ),
             Self::SnapshotEntryWithoutContainer { entry, container_id } => write!(
                 f,
                 "entry {entry} is held by {container_id}, which this Snapshot does not list",
@@ -478,6 +493,9 @@ impl Redacted for Error {
             Self::AdditionNamesOnePathTwice { entry } => {
                 format!("Model::AdditionNamesOnePathTwice(entry={entry})")
             }
+            Self::AdditionDepositTimesDoNotMatchEntries { entries, deposit_times } => format!(
+                "Model::AdditionDepositTimesDoNotMatchEntries(entries={entries}, deposit_times={deposit_times})"
+            ),
             Self::SnapshotEntryWithoutContainer { entry, container_id } => format!(
                 "Model::SnapshotEntryWithoutContainer(entry={entry}, container_id={container_id})"
             ),

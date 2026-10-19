@@ -4,13 +4,13 @@ use super::*;
 use crate::entry_number::EntryNumber;
 use crate::error::{Error, Result};
 use crate::testing::{
-    container_id, container_summary, entry_path, generation, keyring_commitment, master_key_epoch,
-    table,
+    container_id, container_summary, deposit_times, entry_path, generation, keyring_commitment,
+    master_key_epoch, table,
 };
 
 /// The addition of the Container `seed` names, holding one Entry.
 fn addition(seed: u8) -> ContainerAddition {
-    ContainerAddition::new(container_summary(seed), table(&[(0, 16)]))
+    ContainerAddition::new(container_summary(seed), table(&[(0, 16)]), deposit_times(1))
         .expect("a fixture holds a table that tiles")
 }
 

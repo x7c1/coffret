@@ -107,6 +107,9 @@ and has a window of its own for entering the Passphrase.
 
 - open (a Library on this device, making it available for operations)
 - scan (the mapped local folders for new or changed files)
+- deposit (new content into the Library: adding a file, or replacing a
+  file's content with content of a different hash, each of which sets the
+  deposit time the [Catalog](../catalog/) keeps for that content)
 - sync (the Library to Storage)
 - reference (a Storage account on this device, by its device-local account
   name)
@@ -522,6 +525,20 @@ and has a window of its own for entering the Passphrase.
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).
+- A **deposit** puts new content into the Library, and whether content is new is
+  decided by its hash. Adding a file is one, and so is adding a file again at a
+  path a deletion emptied; replacing a file's content is one when the new
+  content differs from the Entry it replaces. Each sets a new **deposit time**
+  for the content now at that Entry Path, stamped once by the device that
+  prepares the batch, with its own clock. Nothing else is a deposit: a rename, a
+  Pack rebuilt by a deletion, a freeze packing a file whose content the Library
+  already holds, and a replacement with the same content — as healing a key-lost
+  Entry from its unchanged local file is — carry the time forward, and a restore
+  recovers every time as it was. The time says when the Library received the
+  content, not when the file was made or last changed — those are the file's own
+  times, which travel with it (spec: FM-15, PK-10, PK-11, PK-12, PK-13, RV-1).
+  Content salvaged out of a Library and put into one again is deposited anew
+  (spec: RV-4).
 - A run whose commit is refused because another device committed meanwhile
   reports the refusal and leaves the Library as it was: no record of its batch
   is created, and the batch is dropped. Running it again catches up first, so it
@@ -551,7 +568,10 @@ and has a window of its own for entering the Passphrase.
     (spec: EP-10).
   - A device whose build predates renames refuses a record carrying them and
     stops there rather than applying part of it, and says a newer build is
-    needed (spec: FM-9, FM-15).
+    needed (spec: FM-9, FM-15). So does one whose build predates deposit
+    times, at the first record it meets, since every record carries them.
+    A build refuses a Library created before deposit times in turn; such a
+    Library is recreated rather than migrated (spec: FM-15, FM-16).
 - A sync **carries a local rename** into the Library, and only where which file
   became which is not a guess (spec: EP-10). A file this device placed is gone,
   a file appeared under the same mapped root where the Library holds no Entry

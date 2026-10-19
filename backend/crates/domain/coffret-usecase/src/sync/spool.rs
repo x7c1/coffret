@@ -1,10 +1,13 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use coffret_format::{
     encode, generate_container_id, generate_container_key, wrap_container_key, EncodeRequest,
     EntrySource,
 };
-use coffret_model::{CiphertextLenClaim, ContainerKind, EntryNumber};
+use coffret_model::{
+    CiphertextLenClaim, ContainerKind, ContentHash, DepositedAt, EntryLocation, EntryNumber,
+};
 use tracing::debug;
 
 use crate::commit::EntryRef;
@@ -77,6 +80,15 @@ pub(super) async fn spool(
         &entries,
     ))?;
 
+    let replaced = candidate
+        .replaces
+        .as_ref()
+        .map(|location| location.container_id);
+    let carries = carried(
+        candidate.replaces.as_ref(),
+        container.entries().first().map(|entry| entry.hash),
+    );
+
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
     index
         .record_pending_row(PendingRow {
@@ -101,7 +113,7 @@ pub(super) async fn spool(
     debug!(
         container = %container_id,
         bytes = digests.len,
-        replaces = ?candidate.replaces.map(|id| id.to_string()),
+        replaces = ?replaced.map(|id| id.to_string()),
         "encoded a Container and spooled it",
     );
     Ok(SpooledContainer {
@@ -124,11 +136,10 @@ pub(super) async fn spool(
         provider_digest: digests.md5,
         object_ref: None,
         announced_at: now,
-        replaces: candidate.replaces.into_iter().collect(),
+        replaces: replaced.into_iter().collect(),
         // The one Entry of the Container it replaces, which is a one-file
         // Container's only one (spec: FM-9, PK-15).
-        supersedes: candidate
-            .replaces
+        supersedes: replaced
             .map(|replaced| {
                 (
                     EntryNumber::FIRST,
@@ -137,5 +148,75 @@ pub(super) async fn spool(
             })
             .into_iter()
             .collect(),
+        carries,
     })
+}
+
+/// The deposit time a sync's one Entry keeps, by its entry number: the
+/// replaced Entry's, where the bytes the encoder hashed are that Entry's.
+///
+/// Whether the replacement is a deposit is decided by the content, not by the
+/// scan having called the file changed: bytes that turn out to be the replaced
+/// Entry's — as re-encrypting a key-lost Entry's unchanged file gives — put
+/// nothing new into the Library, so the Entry keeps that Entry's time. Any
+/// other bytes, and any file that replaces nothing, are new content, stamped
+/// once as its batch is prepared (spec: FM-15, PK-11, KL-17).
+fn carried(
+    replaces: Option<&EntryLocation>,
+    hash: Option<ContentHash>,
+) -> BTreeMap<EntryNumber, DepositedAt> {
+    replaces
+        .filter(|location| hash == Some(location.entry.hash))
+        .map(|location| (EntryNumber::FIRST, location.deposited_at))
+        .into_iter()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_model::{ContainerId, EntryMetadata, Mtime};
+
+    use super::*;
+    use crate::entry_extents::entry_extent;
+    use crate::entry_paths::entry_path;
+
+    fn hash(byte: u8) -> ContentHash {
+        ContentHash::from_bytes([byte; 32])
+    }
+
+    fn current(content: ContentHash, deposited_at: DepositedAt) -> EntryLocation {
+        EntryLocation {
+            container_id: ContainerId::from_bytes([0x0a; ContainerId::BYTE_LEN]),
+            entry_number: EntryNumber::FIRST,
+            entry: EntryMetadata {
+                path: entry_path("albums/a.jpg"),
+                captured_path: entry_path("albums/a.jpg"),
+                extent: entry_extent(0, 4),
+                mtime: Mtime::from_unix_seconds(1_500_000_000),
+                btime: None,
+                hash: content,
+                derived_from: None,
+                mime: None,
+            },
+            deposited_at,
+        }
+    }
+
+    // FM-15, PK-11, KL-17: a deposit is new content, decided by its hash. A
+    // replacement holding the replaced Entry's bytes keeps its time, one
+    // holding other bytes is stamped by its batch, and so is a new file.
+    #[test]
+    fn only_a_replacement_with_the_same_hash_keeps_the_deposit_time() {
+        let kept = DepositedAt::from_unix_seconds(1_600_000_000);
+        let location = current(hash(1), kept);
+
+        assert_eq!(
+            carried(Some(&location), Some(hash(1)))
+                .into_iter()
+                .collect::<Vec<_>>(),
+            [(EntryNumber::FIRST, kept)],
+        );
+        assert!(carried(Some(&location), Some(hash(2))).is_empty());
+        assert!(carried(None, Some(hash(1))).is_empty());
+    }
 }

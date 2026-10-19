@@ -1,5 +1,5 @@
 use coffret_format::EntryPlan;
-use coffret_model::ContainerId;
+use coffret_model::{ContainerId, DepositedAt};
 
 use crate::local_scan::SourceFile;
 
@@ -23,4 +23,11 @@ pub(super) struct Selected {
     /// The one-file Container this Entry is absorbed out of, if any
     /// (spec: PK-1).
     pub(super) absorbs: Option<ContainerId>,
+    /// The deposit time the Pack's Entry keeps, where it absorbs a one-file
+    /// Entry whose content the file still holds (spec: PK-13, FM-15).
+    ///
+    /// None for a new file, and none for an absorbed one whose content
+    /// changed: that is a deposit of new content, as the `update` it overlaps
+    /// with would be, stamped once as its batch is prepared.
+    pub(super) carries: Option<DepositedAt>,
 }

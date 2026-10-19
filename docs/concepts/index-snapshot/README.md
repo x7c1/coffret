@@ -35,10 +35,14 @@ The Catalog copy beside it lists the current Containers and every current Entry
 with the Container holding it, in Container ID and [Entry Path](../entry-path/)
 order, so one Library state has exactly one encoding whichever device wrote it
 (spec: FM-16). Each Entry carries its captured path beside its current one where
-the two differ, as the [Catalog](../catalog/#domain-rules) keeps it, and its
+the two differ, as the [Catalog](../catalog/#domain-rules) keeps it, its
 entry number in the Container holding it, which the Entry Path order would
-otherwise lose. A Snapshot written before entry numbers is not a starting
-point: a device replays the Journal instead (spec: FM-16).
+otherwise lose, and the deposit time of its content as the records left it.
+Once the records a Snapshot covers are pruned it is the only place those times
+are kept, so a device restored from it holds the same time for every Entry as
+a device that replayed every record. A Snapshot written before deposit times
+carries none and is refused, as is the Library that holds it (spec: FM-16,
+RV-1).
 
 An ordinary Snapshot records an existing committed head. The Journal records
 it covers can then be pruned, because the Snapshot stands in for them.

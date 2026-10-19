@@ -24,6 +24,12 @@ Concept background: [Library](../../concepts/library/),
     the restore names each Entry as the checkpoint names it — or, from the
     complete history, as the record that added it does — with every later
     record's renames applied (RV-5).
+  - A restore recovers each Entry's deposit time the same way: as the
+    checkpoint carries it, or as the record that added the Entry's content
+    stamped it, unchanged by every later record's renames (FM-15, FM-16). A
+    restore is not a deposit and stamps nothing of its own, so a device
+    restored from a Library holds the same deposit time for every Entry as
+    the devices that committed it.
 - **RV-2.** A restore additionally requires at least one committed valid
   Keyring replica matching the tuple the checkpoint records (KL-3, CK-3) and
   the current Containers themselves; a degraded replica set permits the
@@ -49,6 +55,11 @@ Concept background: [Library](../../concepts/library/),
     records the name current at the rebuild as its captured path (PK-10), so
     salvage of that Pack shows that name — still a captured path, which a
     later rename leaves behind in turn.
+  - Salvage has no deposit time to present: the time is carried only by
+    Journal records and Index Snapshots (FM-15, FM-16), and no meta section
+    records one (FM-9). A salvaged file is never shown as deposited at its
+    `captured_mtime` or at any other time, and content salvaged and then put
+    back into a Library is deposited anew, at the time of that deposit.
 - **RV-5.** An exact rebuild of the Index's cached Catalog follows RV-1 and
   opens no Container: the complete unpruned Journal, or a checkpoint and later
   records, carries every current Entry (CK-7, CP-11). Device-local mappings,
@@ -66,8 +77,9 @@ Concept background: [Library](../../concepts/library/),
     the head the cached Catalog already stands at is refused before any of it
     is applied, leaving the cached Catalog and device-local records as they
     were, and a replay steps over it: another replay into the same Index has
-    applied it (CK-9, CK-13). A checkpoint that carries no entry numbers
-    is not a starting point for this rebuild (FM-16). A record that names in
+    applied it (CK-9, CK-13). A checkpoint or a record of a schema before
+    deposit times is refused rather than rebuilt from, since nothing could
+    supply the time its Entries lack (FM-15, FM-16). A record that names in
     `required_schema` a schema above the one the reader implements stops the
     rebuild at that record, with the records before it applied and none of
     it, and a newer build is what reads on (FM-9, FM-15).

@@ -76,6 +76,16 @@ export function entry(path: string, offset: bigint, size: bigint): EntryMetadata
   };
 }
 
+/**
+ * When the content of entry `entryNumber` of the Container `seed` names was
+ * deposited (spec: FM-15, FM-16): a second of its own for every Entry, and none
+ * of them the fixture's `mtime`, so a codec that wrote one Entry's time against
+ * another's, or the modification time in its place, is caught.
+ */
+export function depositedAt(seed: number, entryNumber: number): bigint {
+  return 1_760_000_000n + BigInt(seed) * 1_000n + BigInt(entryNumber);
+}
+
 /** The Keyring commitment a commit at `generation` selects (spec: KL-3). */
 export function keyring(generation: bigint): KeyringCommitment {
   return { generation: Generation.of(generation), replicaCount: 3, setDigest: 'beef' };
@@ -127,7 +137,11 @@ export function addition(seed: number, kind: ContainerKind): ContainerAddition {
       derivedFrom: { containerId: containerId(seed), path: `albums/${label}/cover.jpg` },
     });
   }
-  return { container: summary(seed, kind), entries };
+  return {
+    container: summary(seed, kind),
+    entries,
+    depositTimes: entries.map((_, position) => depositedAt(seed, position)),
+  };
 }
 
 /**
@@ -288,7 +302,12 @@ export function located(
   offset: bigint,
   size: bigint,
 ): EntryLocation {
-  return { containerId: containerId(seed), entryNumber, entry: entry(path, offset, size) };
+  return {
+    containerId: containerId(seed),
+    entryNumber,
+    entry: entry(path, offset, size),
+    depositedAtSeconds: depositedAt(seed, entryNumber),
+  };
 }
 
 /**

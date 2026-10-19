@@ -1,4 +1,4 @@
-use coffret_model::{ContainerKind, EntryPath, Mtime};
+use coffret_model::{ContainerKind, DepositedAt, EntryPath, Mtime};
 
 use super::EntryState;
 
@@ -20,6 +20,12 @@ pub struct FileRow {
     /// The file's own modification time, as the Container preserved it
     /// (spec: FM-9).
     pub mtime: Mtime,
+    /// When the content now at this path was deposited into the Library
+    /// (spec: FM-15, FM-16).
+    ///
+    /// A separate axis from `mtime`: that one is the original file's, and this
+    /// one says when the Library received what the Entry holds.
+    pub deposited_at: DepositedAt,
     /// Whether this device has the file (spec: EP-10).
     pub state: EntryState,
     /// Whether the Entry lives in a Container of its own or inside a Pack

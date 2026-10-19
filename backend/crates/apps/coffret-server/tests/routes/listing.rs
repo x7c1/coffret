@@ -55,6 +55,14 @@ async fn a_folder_lists_its_child_folders_and_its_files() {
             .is_some_and(|mtime| mtime.ends_with('Z')),
         "a modification time is stated in UTC: {cover}",
     );
+    // When the Library received the content, a separate field from the file's
+    // own time, and stated the same way (spec: FM-15).
+    assert!(
+        cover["deposited_at"]
+            .as_str()
+            .is_some_and(|deposited_at| deposited_at.ends_with('Z')),
+        "a deposit time is stated in UTC: {cover}",
+    );
     assert_eq!(
         listing["files"][2]["content_type"],
         "application/octet-stream"

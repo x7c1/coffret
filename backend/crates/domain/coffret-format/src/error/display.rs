@@ -195,10 +195,6 @@ impl fmt::Display for Error {
             Self::UnsupportedIndexSnapshotSchema { schema } => {
                 write!(f, "unsupported Index Snapshot payload schema {schema}")
             }
-            Self::SnapshotPredatesEntryNumbers { schema } => write!(
-                f,
-                "an Index Snapshot of schema {schema} carries no entry numbers, so the catalog is rebuilt from the Journal instead"
-            ),
             Self::MalformedKeyringReplica { detail } => {
                 malformed(f, "malformed Keyring replica payload", detail)
             }

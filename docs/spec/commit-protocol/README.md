@@ -72,6 +72,11 @@ Concept background: [Journal](../../concepts/journal/),
     to the batch's pending changes by `(Container ID, entry number)` (FM-15)
     under EP-7's rules. The first attempt does the same, since the head may
     have moved between preparing the batch and committing it.
+  - A rebase keeps the deposit time the batch was stamped with when it was
+    prepared (FM-15): the batch is the same batch carried onto a newer head,
+    and restamping it on every retry would make the time say when the commit
+    last tried rather than when the content was deposited. Only the current
+    paths a rename moved change.
 - **CP-5.** A writer whose slot was consumed by an activation Index Snapshot
   stops until it is re-enrolled in the new epoch. *(Form: test)*
 - **CP-6.** A successful activation Index Snapshot carries the new epoch's

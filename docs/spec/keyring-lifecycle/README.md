@@ -108,3 +108,8 @@ Concept background: [Keyring](../../concepts/keyring/),
   PK-12), healing the loss. A deletion of only some of its Entries is refused
   for it, because keeping the others would need a read-modify-replace no
   device can perform (PK-10). *(Form: test)*
+  - Healing the loss is no deposit by itself. A deposit is new content,
+    decided by its hash (FM-15): a replacement re-encrypting local plaintext
+    whose `hash` is the key-lost Entry's keeps that Entry's deposit time,
+    whether `update` or `freeze` (PK-13) builds it, and only a replacement
+    whose content differs is stamped with a new one.

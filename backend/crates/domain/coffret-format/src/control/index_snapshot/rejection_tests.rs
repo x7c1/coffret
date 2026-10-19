@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
-use super::{decode, encode, IndexSnapshotPayload, SCHEMA_WITHOUT_ENTRY_NUMBERS};
+use super::{decode, encode, IndexSnapshotPayload, SCHEMA};
 use crate::control::testing::{array, body_map, field, spelled_by_name, summary, with_body_map};
 use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
@@ -209,11 +209,12 @@ fn a_kind_that_is_no_index_snapshot_is_refused_outright() {
     }
 }
 
-// FM-16: a reader refuses any schema below the one before entry numbers as one
-// it cannot read at all.
+// FM-16: a reader refuses any schema below the one it writes as one it cannot
+// read at all: a Snapshot of schema 2 carries no entry numbers, and none
+// before this one carries deposit times.
 #[test]
-fn a_schema_below_the_one_before_entry_numbers_is_rejected() {
-    for schema in [0, SCHEMA_WITHOUT_ENTRY_NUMBERS - 1] {
+fn a_schema_below_the_one_this_build_writes_is_rejected() {
+    for schema in [0, 1, 2, SCHEMA - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read_ordinary(&payload);
         assert!(
@@ -226,27 +227,21 @@ fn a_schema_below_the_one_before_entry_numbers_is_rejected() {
     }
 }
 
-// FM-16: a Snapshot of schema 2 carries no entry numbers, so it is no catalog
-// to start from. It is refused with a refusal of its own — the object is sound,
-// only too old — and never numbered from its path order.
+// FM-16: every Snapshot entry carries `deposited_at`, and one without it is
+// refused by name rather than restored as an Entry with no deposit time.
 #[test]
-fn a_schema_2_snapshot_is_not_used_for_entry_numbers() {
+fn an_entry_without_its_deposit_time_is_rejected() {
     let payload = tampered(|fields| {
-        *field(fields, "schema") = Value::from(SCHEMA_WITHOUT_ENTRY_NUMBERS);
-        for entry in array(fields, "entries") {
-            let Value::Map(entry) = entry else {
-                panic!("an entry is a map");
-            };
-            entry.retain(|(key, _)| key.as_text() != Some("entry"));
-        }
+        let Value::Map(entry) = &mut array(fields, "entries")[1] else {
+            panic!("an entry is a map");
+        };
+        entry.retain(|(key, _)| key.as_text() != Some("deposited_at"));
     });
     let result = read_ordinary(&payload);
     assert!(
-        matches!(
-            result,
-            Err(Error::SnapshotPredatesEntryNumbers { schema: 2 })
-        ),
-        "expected a schema 2 Snapshot to be refused for entry numbers, got {result:?}"
+        matches!(result, Err(Error::MalformedIndexSnapshot { ref detail })
+            if detail.to_string().contains("deposited_at")),
+        "expected an entry without a deposit time to be refused, got {result:?}"
     );
 }
 

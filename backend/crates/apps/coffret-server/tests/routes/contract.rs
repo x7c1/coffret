@@ -9,8 +9,9 @@
 //! and building one by hand would be writing down what the listing is believed
 //! to be rather than what it is.
 //!
-//! One thing is taken out before the file is compared, and only that: a file's
-//! `mtime` is the time the fixture planted it, and differs every run, so it is
+//! Two things are taken out before the file is compared, and only those: a
+//! file's `mtime` is the time the fixture planted it and its `deposited_at` the
+//! time the fixture's batch stamped it, both differ every run, so each is
 //! written as one fixed instant wherever it is not `null`.
 
 use std::path::Path;
@@ -29,12 +30,18 @@ const WRITE: &str = "COFFRET_WRITE_CONTRACT";
 /// The instant every planted file's time is written as.
 const PLANTED_AT: &str = "2026-01-01T00:00:00Z";
 
-/// `answer` with every file's time replaced by [`PLANTED_AT`].
+/// The instant every committed Entry's deposit time is written as.
+const DEPOSITED_AT: &str = "2026-01-02T00:00:00Z";
+
+/// `answer` with every file's time replaced by [`PLANTED_AT`] and every
+/// deposit time by [`DEPOSITED_AT`].
 fn steadied(mut answer: Value) -> Value {
     if let Some(files) = answer.get_mut("files").and_then(Value::as_array_mut) {
         for file in files {
-            if file.get("mtime").is_some_and(|mtime| !mtime.is_null()) {
-                file["mtime"] = Value::from(PLANTED_AT);
+            for (field, instant) in [("mtime", PLANTED_AT), ("deposited_at", DEPOSITED_AT)] {
+                if file.get(field).is_some_and(|time| !time.is_null()) {
+                    file[field] = Value::from(instant);
+                }
             }
         }
     }

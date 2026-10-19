@@ -13,6 +13,7 @@ function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
     path: `albums/${name}`,
     size: 12,
     mtime: null,
+    deposited_at: null,
     state: 'remote',
     container: 'one-file',
     reserved: false,

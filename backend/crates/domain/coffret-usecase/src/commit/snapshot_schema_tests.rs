@@ -1,14 +1,12 @@
-//! What a catch-up starts from when the newest checkpoint predates entry
-//! numbers (spec: FM-16).
+//! What a catch-up starts from, and what it holds afterwards, when the newest
+//! checkpoint is a Snapshot (spec: FM-16).
 //!
-//! A Snapshot of schema 2 lists its Entries in Entry Path order and carries no
-//! entry number for any of them, and the position of an Entry in its
-//! Container's table is not something its path order says. So such a Snapshot
-//! is passed over as a starting point, and a device with nothing better
-//! rebuilds its catalog by replaying every Journal record from `head-0`, which
-//! numbers each Entry by its place in the addition that carried it. A Snapshot
-//! of schema 3 carries the numbers and is adopted as before. These cases hold
-//! the two paths side by side over one Library.
+//! A Snapshot of this build's schema carries each Entry's entry number and
+//! deposit time, so a device catching up from nothing adopts it and holds what
+//! a replay of every record would have left — paths, numbers and deposit times
+//! alike. A Snapshot of an earlier schema carries no deposit time, and neither
+//! do the records it checkpoints, so it is refused rather than adopted with a
+//! time made up. These cases hold both over one Library.
 
 use ciborium::Value;
 use coffret_format::{
@@ -16,15 +14,16 @@ use coffret_format::{
 };
 use coffret_model::{
     CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, ControlObjectKind, ControlObjectName, EntryExtent, EntryMetadata, EntryNumber,
-    EntryPath, EntryRename, Generation, JournalRecord, MasterKeyEpoch, Mtime, SnapshotContent,
+    ContentHash, ControlObjectKind, ControlObjectName, DepositedAt, EntryExtent, EntryMetadata,
+    EntryNumber, EntryPath, EntryRename, Generation, JournalRecord, MasterKeyEpoch, Mtime,
+    SnapshotContent,
 };
 
 use super::catch_up;
 use super::control_fixtures::{
     commitment, control_keys, once, record_at, store_control, PAGE_SIZE,
 };
-use super::ControlKeys;
+use super::{CommitError, ControlKeys, ControlObjectFault};
 use crate::generations::generation;
 use crate::in_memory_index::InMemoryIndex;
 use crate::in_memory_store::InMemoryStore;
@@ -32,10 +31,17 @@ use crate::index::Index;
 
 /// The registry's field numbers this rewrite touches
 /// (`docs/spec/format/field-numbers.json`): `index_snapshot.schema`,
-/// `index_snapshot.entries`, and `snapshot_entry.entry`.
+/// `index_snapshot.entries`, and `snapshot_entry.deposited_at`.
 const SNAPSHOT_SCHEMA_FIELD: u64 = 1;
 const SNAPSHOT_ENTRIES_FIELD: u64 = 9;
-const SNAPSHOT_ENTRY_NUMBER_FIELD: u64 = 10;
+const SNAPSHOT_ENTRY_DEPOSITED_AT_FIELD: u64 = 11;
+
+/// When the Entry at `position` of [`pack`] was deposited: a second of its own
+/// for each, and in the opposite order to the table, so neither position nor
+/// path order could stand in for it.
+fn deposited_at(position: usize) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_760_000_000 - position as i64 * 60)
+}
 
 /// The Pack the Library's second head adds: three Entries whose table order is
 /// not their path order, so a number guessed from where an Entry sorts would be
@@ -70,6 +76,7 @@ fn pack() -> ContainerAddition {
             object_ref: None,
         },
         entries,
+        (0..3).map(deposited_at).collect(),
     )
     .expect("a fixture holds a table that tiles")
 }
@@ -103,6 +110,31 @@ async fn numbers(index: &InMemoryIndex) -> Vec<(String, u32)> {
             )
         })
         .collect()
+}
+
+/// The deposit times the catalog holds, by Entry Path.
+async fn deposit_times(index: &InMemoryIndex) -> Vec<(String, DepositedAt)> {
+    index
+        .entries_under(None)
+        .await
+        .expect("listing the catalog must succeed")
+        .into_iter()
+        .map(|location| {
+            (
+                location.entry.path.as_str().to_owned(),
+                location.deposited_at,
+            )
+        })
+        .collect()
+}
+
+/// What replaying [`adding_the_pack`] stamps its Entries with.
+fn as_deposited() -> Vec<(String, DepositedAt)> {
+    vec![
+        ("albums/a.jpg".to_owned(), deposited_at(1)),
+        ("albums/b.jpg".to_owned(), deposited_at(2)),
+        ("albums/c.jpg".to_owned(), deposited_at(0)),
+    ]
 }
 
 /// What replaying [`adding_the_pack`] numbers its Entries as.
@@ -142,7 +174,7 @@ async fn library(store: &InMemoryStore, keys: &ControlKeys, snapshot: ControlPay
     .await;
 }
 
-/// The checkpoint of the second head as this build writes it, at schema 3.
+/// The checkpoint of the second head as this build writes it.
 fn snapshot_of_the_second_head() -> ControlPayload {
     let record = adding_the_pack();
     let (container, entries) = pack().into_locations();
@@ -152,9 +184,9 @@ fn snapshot_of_the_second_head() -> ControlPayload {
         .expect("a fixture Snapshot encodes")
 }
 
-/// The same checkpoint as a build before entry numbers wrote it: schema 2, and
-/// no `entry` in any Snapshot entry.
-fn schema_2(payload: ControlPayload) -> ControlPayload {
+/// The same checkpoint as a build before deposit times wrote it: schema 3, and
+/// no `deposited_at` in any Snapshot entry.
+fn before_deposit_times(payload: ControlPayload) -> ControlPayload {
     let mut body: Value =
         ciborium::from_reader(payload.body.as_slice()).expect("a payload body is CBOR");
     let Value::Map(fields) = &mut body else {
@@ -162,7 +194,7 @@ fn schema_2(payload: ControlPayload) -> ControlPayload {
     };
     for (key, value) in fields.iter_mut() {
         if *key == Value::from(SNAPSHOT_SCHEMA_FIELD) {
-            *value = Value::from(2u64);
+            *value = Value::from(3u64);
         }
         if *key == Value::from(SNAPSHOT_ENTRIES_FIELD) {
             let Value::Array(entries) = value else {
@@ -172,7 +204,7 @@ fn schema_2(payload: ControlPayload) -> ControlPayload {
                 let Value::Map(entry) = entry else {
                     panic!("an entry is a map");
                 };
-                entry.retain(|(key, _)| *key != Value::from(SNAPSHOT_ENTRY_NUMBER_FIELD));
+                entry.retain(|(key, _)| *key != Value::from(SNAPSHOT_ENTRY_DEPOSITED_AT_FIELD));
             }
         }
     }
@@ -181,11 +213,12 @@ fn schema_2(payload: ControlPayload) -> ControlPayload {
     ControlPayload::new(payload.master_key_epoch, bytes)
 }
 
-// FM-16: a Snapshot of schema 3 carries each Entry's number, so a device
-// catching up from nothing starts from it, and the numbers it holds afterwards
-// are the Snapshot's.
+// FM-16, RV-1: a Snapshot carries each Entry's number and deposit time, so a
+// device catching up from nothing starts from it, and the numbers and times it
+// holds afterwards are the Snapshot's — the ones the record that deposited the
+// Entries stamped.
 #[tokio::test]
-async fn a_schema_3_snapshot_is_adopted_with_its_entry_numbers() {
+async fn a_snapshot_is_adopted_with_its_entry_numbers_and_deposit_times() {
     let store = InMemoryStore::new(PAGE_SIZE);
     let keys = control_keys();
     library(&store, &keys, snapshot_of_the_second_head()).await;
@@ -206,34 +239,47 @@ async fn a_schema_3_snapshot_is_adopted_with_its_entry_numbers() {
     );
     assert_eq!(standing.checkpoint().head_generation(), generation(2));
     assert_eq!(numbers(&index).await, by_table_position());
+    assert_eq!(deposit_times(&index).await, as_deposited());
 }
 
-// FM-16: a Snapshot of schema 2 carries no entry numbers, and nothing may guess
-// them from its path order. So it is passed over, and the catalog is rebuilt by
-// replaying every record from `head-0` — which numbers each Entry by its place
-// in the table its addition carried.
+// FM-16: a Snapshot from before deposit times carries none, and nothing may
+// make one up. So it is refused as a schema this build does not read, and the
+// catch-up stops there with nothing adopted, rather than starting a catalog
+// whose Entries have no deposit time.
 #[tokio::test]
-async fn a_schema_2_snapshot_is_passed_over_for_a_replay_from_the_first_head() {
+async fn a_snapshot_from_before_deposit_times_is_refused() {
     let store = InMemoryStore::new(PAGE_SIZE);
     let keys = control_keys();
-    library(&store, &keys, schema_2(snapshot_of_the_second_head())).await;
+    library(
+        &store,
+        &keys,
+        before_deposit_times(snapshot_of_the_second_head()),
+    )
+    .await;
 
     let index = InMemoryIndex::new();
-    catch_up(&store, &index, &keys, &once())
-        .await
-        .expect("a checkpoint too old to start from does not stop a catch-up");
-
-    let standing = index
-        .snapshot()
-        .await
-        .expect("the catalog stands somewhere");
-    assert_eq!(
-        standing.adopted_from(),
-        None,
-        "nothing was adopted: the catalog was replayed from the first head",
+    let result = catch_up(&store, &index, &keys, &once()).await;
+    assert!(
+        matches!(
+            &result,
+            Err(CommitError::CorruptControlObject {
+                fault: ControlObjectFault::Unopenable(
+                    coffret_format::Error::UnsupportedIndexSnapshotSchema { schema: 3 }
+                ),
+                ..
+            })
+        ),
+        "expected the old Snapshot to be refused, got {:?}",
+        result.as_ref().err(),
     );
-    assert_eq!(standing.checkpoint().head_generation(), generation(2));
-    assert_eq!(numbers(&index).await, by_table_position());
+    assert!(
+        index
+            .checkpoint()
+            .await
+            .expect("reading the checkpoint must succeed")
+            .is_none(),
+        "nothing was adopted",
+    );
 }
 
 /// A record at `head` renaming `renames` of [`pack`]'s Entries, each given as
@@ -283,13 +329,14 @@ async fn names(index: &InMemoryIndex) -> Vec<(String, String)> {
         .collect()
 }
 
-// RV-5, FM-15, FM-16: renames replay. A device replaying the whole Journal and
-// one adopting a schema-3 Snapshot taken between two renaming records, then
-// replaying the record after it, stand at one catalog — current paths, captured
-// paths, and entry numbers alike — because the Snapshot carries the numbers the
-// later renames name their Entries by.
+// RV-1, RV-5, FM-15, FM-16: renames replay. A device replaying the whole
+// Journal and one adopting a Snapshot taken between two renaming records, then
+// replaying the record after it, stand at one catalog — current paths,
+// captured paths, entry numbers and deposit times alike — because the Snapshot
+// carries the numbers the later renames name their Entries by, and a rename
+// carries an Entry's deposit time with it.
 #[tokio::test]
-async fn a_schema_3_snapshot_and_the_renames_after_it_reach_what_a_full_replay_does() {
+async fn a_snapshot_and_the_renames_after_it_reach_what_a_full_replay_does() {
     let records = [
         record_at(Generation::FIRST),
         adding_the_pack(),
@@ -376,6 +423,16 @@ async fn a_schema_3_snapshot_and_the_renames_after_it_reach_what_a_full_replay_d
             ("2024/c.jpg".to_owned(), "albums/c.jpg".to_owned()),
             ("albums/a.jpg".to_owned(), "albums/a.jpg".to_owned()),
             ("albums/c.jpg".to_owned(), "albums/b.jpg".to_owned()),
+        ]
+    );
+    // Each Entry keeps the time the record adding the Pack stamped it with,
+    // under whichever path the renames left it at.
+    assert_eq!(
+        deposit_times(&adopted).await,
+        [
+            ("2024/c.jpg".to_owned(), deposited_at(0)),
+            ("albums/a.jpg".to_owned(), deposited_at(1)),
+            ("albums/c.jpg".to_owned(), deposited_at(2)),
         ]
     );
 }

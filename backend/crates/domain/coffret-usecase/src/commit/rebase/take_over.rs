@@ -10,10 +10,13 @@ use crate::entry_ref::EntryRef;
 /// current path the intervening renames left that other Entry at.
 ///
 /// Only the current path changes. The captured one is what the new Container's
-/// meta section records, and stays (spec: FM-9, FM-15). So does the local file
-/// the Entry was drawn from, and the batch's record of it: it names the new
-/// Entry, so the refresh records the file waiting to follow it there
-/// (spec: EP-10).
+/// meta section records, and stays (spec: FM-9, FM-15). So does every Entry's
+/// deposit time, which the batch stamped once when it was prepared: a rebase
+/// carries the same batch onto a newer head, and moving the time with every
+/// retry would make it say when the commit last tried (spec: CP-4). So does
+/// the local file the Entry was drawn from, and the batch's record of it: it
+/// names the new Entry, so the refresh records the file waiting to follow it
+/// there (spec: EP-10).
 pub(super) fn take_over(
     batch: &mut PreparedBatch,
     renamed: &BTreeMap<EntryRef, &EntryPath>,
@@ -34,7 +37,7 @@ pub(super) fn take_over(
         if followed.is_empty() {
             continue;
         }
-        let (container, mut entries) = prepared.addition.clone().into_parts();
+        let (container, mut entries, deposit_times) = prepared.addition.clone().into_parts();
         for (position, to) in followed {
             if let Some(entry) = entries.get_mut(position) {
                 entry.path = to.clone();
@@ -43,7 +46,7 @@ pub(super) fn take_over(
         // Two of the addition's Entries cannot end at one path: one that was
         // not given that path is a conflict `check_contested` refused, and two
         // that were would be two Entries the head holds at one path.
-        prepared.addition = ContainerAddition::new(container, entries)
+        prepared.addition = ContainerAddition::new(container, entries, deposit_times)
             .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
     }
     Ok(())

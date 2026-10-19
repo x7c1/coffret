@@ -11,7 +11,7 @@ use crate::classify::classify;
 use crate::entry_query::PathQuery;
 use crate::fronts_ahead::read_fronts_ahead;
 use crate::state::ServerState;
-use crate::timestamp::iso8601;
+use crate::timestamp::{deposit_iso8601, iso8601};
 
 /// What one folder holds, one level down.
 #[derive(Serialize)]
@@ -92,6 +92,14 @@ struct FileDto {
     /// file's for an `added` one — which is the only time this device has to
     /// give about a file the Library holds no Entry for.
     mtime: Option<String>,
+    /// When the content now at this path was deposited into the Library, in
+    /// UTC as `mtime` is (spec: FM-15).
+    ///
+    /// A separate axis from `mtime`, which is the original file's: this is when
+    /// the Library received what the Entry holds. Null for an `added` row
+    /// because no Entry holds that file, so nothing has been deposited yet —
+    /// and for the count of seconds no calendar reaches, as `mtime` is.
+    deposited_at: Option<String>,
     /// `present` or `remote` (spec: EP-10), or `added`.
     ///
     /// The first two are the states this device knows about an Entry. What the
@@ -238,6 +246,7 @@ fn file_dto(file: &FileRow, reserved: bool) -> FileDto {
         path: file.path.as_str().to_owned(),
         size: file.size,
         mtime: iso8601(file.mtime),
+        deposited_at: deposit_iso8601(file.deposited_at),
         state: match file.state {
             EntryState::Present => "present",
             EntryState::Remote => "remote",
@@ -266,6 +275,7 @@ fn added_dto(file: &AddedFile, reserved: bool) -> FileDto {
         path: file.path.as_str().to_owned(),
         size: file.size,
         mtime: iso8601(file.mtime),
+        deposited_at: None,
         state: "added",
         container: None,
         reserved,

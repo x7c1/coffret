@@ -10,6 +10,7 @@ function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
     path: `books/${name}`,
     size: 12,
     mtime: null,
+    deposited_at: null,
     state: 'remote',
     container: 'pack-1',
     reserved: false,

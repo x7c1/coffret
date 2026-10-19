@@ -7,6 +7,9 @@ use coffret_model::{
     KeyringCommitment, KeyringElement, MasterKeyEpoch,
 };
 
+use crate::byte_stream::ByteStream;
+use crate::commit_slot::CommitSlot;
+use crate::control_head::ControlHead;
 use crate::error_chains::every_link;
 use crate::fetch_conformance::fixtures::keys::purpose_key;
 use crate::fetch_conformance::fixtures::objects::{handles, overwrite, replica_name};
@@ -86,28 +89,46 @@ pub(crate) async fn lose_key(
         .head_generation()
         .next()
         .expect("a generation has a successor");
+    // The slots the record hands out, reserved the way a writer reserves its
+    // own: nothing to persist where the store keys objects by name, so a slot
+    // is re-derived when it is consumed, and the minted identifier where the
+    // store mints one (spec: CP-2, CP-15, CK-10).
+    let control = ControlHead::at(head);
+    let next_commit_slot = control
+        .reserve_commit_slot(store)
+        .await
+        .expect("reserving the successor's slot must succeed");
+    let snapshot_slot = control
+        .reserve_snapshot_slot(store)
+        .await
+        .expect("reserving the checkpoint's slot must succeed");
     let record = JournalRecord::new(
         head,
         Some(checkpoint.head_generation()),
         MasterKeyEpoch::FIRST,
         commitment,
-        // `None` because both stores this suite runs against key objects by
-        // name, so a slot is re-derived when it is consumed rather than
-        // persisted (spec: CP-15).
-        None,
-        None,
+        next_commit_slot.as_provider_id().map(str::to_owned),
+        snapshot_slot.as_provider_id().map(str::to_owned),
         Vec::new(),
         Vec::new(),
     )
     .expect("a fixture holds a record succeeding the head it read");
     let name = ControlObjectName::head(head).to_string();
     let payload = encode_journal_record(&record).expect("a record always encodes");
-    overwrite(
-        store,
-        &name,
-        control_bytes(&name, ControlObjectKind::Journal, &payload),
-    )
-    .await;
+    let bytes = control_bytes(&name, ControlObjectKind::Journal, &payload);
+    // Into the slot the head it succeeds carries where that is a minted
+    // identifier, as a commit would; by name otherwise (spec: CP-2).
+    match checkpoint.next_commit_slot() {
+        Some(id) => {
+            store
+                .put_if_absent(&CommitSlot::provider_id(&name, id), ByteStream::from(bytes))
+                .await
+                .unwrap_or_else(|error| {
+                    panic!("creating {name:?} must succeed: {}", every_link(&error))
+                });
+        }
+        None => overwrite(store, &name, bytes).await,
+    }
 }
 
 /// The key table the committed Keyring holds, read from its first replica

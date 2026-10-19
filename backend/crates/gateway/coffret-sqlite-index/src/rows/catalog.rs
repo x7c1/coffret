@@ -1,7 +1,7 @@
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ControlObjectName,
-    DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryPath, Generation,
-    IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    DepositedAt, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryPath,
+    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
@@ -75,6 +75,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
             derived_from,
             mime: optional_text(row, "mime", OPERATION)?,
         },
+        deposited_at: DepositedAt::from_unix_seconds(integer(row, "deposited_at", OPERATION)?),
     })
 }
 

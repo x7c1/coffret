@@ -132,6 +132,7 @@ mod tests {
             },
             plan,
             absorbs: None,
+            carries: None,
         }
     }
 

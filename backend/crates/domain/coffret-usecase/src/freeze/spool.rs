@@ -192,6 +192,16 @@ pub(super) async fn spool(
             })
             .collect::<coffret_model::Result<_>>()
             .map_err(coffret_format::Error::from)?,
+        // An absorbed Entry whose content the file still holds keeps its
+        // deposit time; every other member is a deposit (spec: PK-13, FM-15).
+        carries: segment
+            .members
+            .iter()
+            .enumerate()
+            .filter_map(|(position, member)| Some((position, member.carries?)))
+            .map(|(position, deposited_at)| Ok((EntryNumber::at_position(position)?, deposited_at)))
+            .collect::<coffret_model::Result<_>>()
+            .map_err(coffret_format::Error::from)?,
     })
 }
 
@@ -251,7 +261,7 @@ fn change(error: &coffret_format::Error) -> Option<SourceChange> {
 #[cfg(test)]
 mod tests {
     use coffret_format::{unwrap_container_key, ContainerFootprint, ContainerOutline};
-    use coffret_model::{ContainerId, ContentHash, MasterKey, MasterKeyEpoch, Mtime};
+    use coffret_model::{ContainerId, ContentHash, DepositedAt, MasterKey, MasterKeyEpoch, Mtime};
 
     use super::*;
     use crate::entry_paths::entry_path;
@@ -351,22 +361,33 @@ mod tests {
         let local = InMemoryFs::new();
         let absorbed_a = ContainerId::from_bytes([0x0a; ContainerId::BYTE_LEN]);
         let absorbed_c = ContainerId::from_bytes([0x0c; ContainerId::BYTE_LEN]);
+        // The first absorbed file still holds its Entry's content, so the Pack
+        // carries its deposit time; the second changed, so it is a deposit.
+        let kept = DepositedAt::from_unix_seconds(1_600_000_000);
         let members: Vec<Selected> = [
             (
                 "albums/a.jpg",
                 &b"absorbed out of one Container"[..],
                 Some(absorbed_a),
+                Some(kept),
             ),
-            ("albums/b.jpg", &b"a file new to the Library"[..], None),
+            (
+                "albums/b.jpg",
+                &b"a file new to the Library"[..],
+                None,
+                None,
+            ),
             (
                 "albums/c.jpg",
                 &b"absorbed out of another"[..],
                 Some(absorbed_c),
+                None,
             ),
         ]
         .into_iter()
-        .map(|(path, content, absorbs)| Selected {
+        .map(|(path, content, absorbs, carries)| Selected {
             absorbs,
+            carries,
             ..member(&local, path, content)
         })
         .collect();
@@ -412,6 +433,12 @@ mod tests {
         );
         assert_eq!(spooled.entries[0].path, entry_path("albums/a.jpg"));
         assert_eq!(spooled.entries[2].path, entry_path("albums/c.jpg"));
+        // PK-13, FM-15: only the member that carries an Entry's content
+        // unchanged keeps a deposit time; the batch stamps the rest.
+        assert_eq!(
+            spooled.carries.into_iter().collect::<Vec<_>>(),
+            [(first, kept)],
+        );
     }
 
     /// One member of a segment, whose file the case plants in the fake.
@@ -441,6 +468,7 @@ mod tests {
                 ContentHash::from_bytes(*blake3::hash(content).as_bytes()),
             ),
             absorbs: None,
+            carries: None,
         }
     }
 

@@ -1,12 +1,17 @@
 use coffret_usecase::IndexResult;
 use rusqlite::{Connection, TransactionBehavior};
 
-use super::{stamp, unsupported, LOCAL_ENTRIES_DDL, RESERVATIONS_DDL, SCHEMA_VERSION};
+use super::{
+    replace_the_catalog, report_the_discard, stamp, unsupported, LOCAL_ENTRIES_DDL,
+    RESERVATIONS_DDL, SCHEMA_VERSION,
+};
 use crate::error::classify;
 
-/// Brings a layout-16 file to this one, keeping its catalog and every row of
-/// its device-local group the catalog can name the Entry of (spec: EP-10), and
-/// laying out the tables of reservations empty (spec: PK-17).
+/// Brings a layout-16 file to this one, keeping every row of its device-local
+/// group the catalog can name the Entry of (spec: EP-10), laying out the
+/// tables of reservations empty (spec: PK-17), and then discarding the
+/// catalog, whose Entries carry no deposit time, for the next catch-up to
+/// rebuild from Storage (spec: RV-5, FM-15).
 ///
 /// One `BEGIN IMMEDIATE` covers it, from re-reading the stamp to writing the new
 /// one, for the reason a discard is one: a second process opening the file at
@@ -26,11 +31,10 @@ pub(super) fn upgrade(connection: &mut Connection) -> IndexResult<()> {
     transaction
         .execute_batch(RESERVATIONS_DDL)
         .map_err(classify(OPERATION))?;
-    transaction
-        .pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(classify("stamping the Index file's schema version"))?;
+    replace_the_catalog(&transaction)?;
     transaction.commit().map_err(classify(OPERATION))?;
     report_the_drop(dropped);
+    report_the_discard(OPERATION, 16);
     Ok(())
 }
 

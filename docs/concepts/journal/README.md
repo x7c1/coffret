@@ -12,8 +12,9 @@ four vocabularies:
 - the Containers the batch added, with their ciphertext hashes and the
   Entries each one holds — each Entry under its current
   [Entry Path](../entry-path/) and, where it differs, the captured path its
-  Container recorded (see [Catalog](../catalog/#domain-rules)), and in the
-  order of its Container's entry table, so its position is its entry number
+  Container recorded (see [Catalog](../catalog/#domain-rules)), with the
+  deposit time of its content, and in the order of its Container's entry
+  table, so its position is its entry number
 - the Containers it removed
 - the Entries it renamed, each named by its Container ID and
   [entry number](../container/entry/#mental-model) and given a new current
@@ -106,6 +107,16 @@ would fence nobody (spec: FM-12).
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage
   home (spec: CP-8, CP-9, CP-10, CP-11).
+- A record carries each added Entry's **deposit time**: a new time for
+  content the batch deposits, stamped once by the device that prepares the
+  batch with its own clock, and the existing Entry's time for content it only
+  carries — a Pack rebuilt by a deletion, a file a freeze absorbs unchanged. A
+  rename record changes no time. The stamp is not taken again when a commit
+  retries, so a rebased batch keeps the time it was prepared with
+  (spec: FM-15, CP-4, PK-10, PK-13).
+  - Once records are pruned, the Snapshot that replaces them keeps each
+    Entry's time: the order of generations says which batch came first only
+    while the records stand (spec: FM-16, CK-7).
 - A committed removal is final for that Container ID; restoring the same
   contents creates a new Container
   (spec: CP-14).
@@ -151,7 +162,11 @@ also carries the sync's additions and removals (spec: EP-10). A record that
 carries renames also names the schema a reader needs to apply it faithfully,
 and a device whose build implements less refuses the record and stops its
 replay there, rather than skipping it or applying the rest of it without the
-renames (spec: FM-9, FM-15).
+renames (spec: FM-9, FM-15). Every record also names that schema because of
+its deposit times: a build that would ignore them refuses the record and stops,
+rather than keeping a Catalog without them and committing records a newer build
+could not read (spec: FM-9, FM-15). A Library whose records predate deposit
+times is refused, and is recreated rather than migrated.
 
 **Rebase carries a batch over renames.** A batch remembers the head it was
 prepared against, and every commit of it examines the records committed

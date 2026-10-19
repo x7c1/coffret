@@ -17,8 +17,9 @@
 //!
 //! Beside it each Entry carries `entry`, its entry number in that Container's
 //! table (spec: FM-9). The Snapshot's own order is the Entry Path order, so the
-//! position would otherwise be lost, and a Snapshot of schema 2, which predates
-//! the field, is refused as a starting point rather than numbered by guesswork
+//! position would otherwise be lost. And each carries `deposited_at`, when the
+//! content now at its path was deposited into the Library, which a catalog
+//! rebuilt from the Snapshot holds exactly as the records left it
 //! (spec: FM-16).
 //!
 //! What a Snapshot never carries is device state (spec: CK-7) — including
@@ -48,13 +49,14 @@ mod size_tests;
 mod testing;
 
 /// The schema this crate writes for an Index Snapshot payload, and the lowest
-/// a reader adopts: 3, the first to carry each Entry's entry number
+/// a reader accepts: 4, the first whose Entries carry `deposited_at`
 /// (spec: FM-16).
-const SCHEMA: u64 = 3;
-
-/// The schema before entry numbers. A Snapshot of it is a sound object that
-/// no reader may start a catalog from (spec: FM-16).
-const SCHEMA_WITHOUT_ENTRY_NUMBERS: u64 = 2;
+///
+/// A Snapshot of an earlier schema lacks the deposit time of every Entry it
+/// lists, and the records it checkpoints lack it too, so nothing could supply
+/// one: it is refused as a schema this build does not read, and a Library
+/// holding one is recreated rather than migrated.
+const SCHEMA: u64 = 4;
 
 const HEAD_GENERATION: &str = "head_generation";
 const JOURNAL_GENERATION: &str = "journal_generation";

@@ -7,7 +7,7 @@ use crate::commit_conformance::commit_renames_in;
 
 use crate::delete_conformance::delete_under_test::DeleteUnderTest;
 use crate::delete_conformance::fixtures::{
-    current, current_containers, delete, filler, folder, freeze, map, master_key, opened,
+    at, current, current_containers, delete, filler, folder, freeze, map, master_key, opened,
     opened_at_head, paths, spooled, stored, table, write,
 };
 use crate::entry_paths::entry_path;
@@ -121,6 +121,16 @@ pub async fn a_pack_that_keeps_entries_is_rebuilt_with_exactly_them(fixture: &De
             current(index, path).await.map(|at| at.container_id),
             Some(replacement),
             "{path} is current in the replacement",
+        );
+        // A rewrite puts no content into the Library: the kept Entry keeps the
+        // time the freeze deposited it at, not the deletion's (spec: PK-10,
+        // FM-15).
+        assert_eq!(
+            current(index, path)
+                .await
+                .map(|location| location.deposited_at.as_unix_seconds()),
+            Some(at(1).as_unix_seconds()),
+            "{path} keeps its deposit time",
         );
     }
     for path in ["albums/b.jpg", "albums/d.jpg"] {

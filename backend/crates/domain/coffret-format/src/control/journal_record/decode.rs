@@ -1,13 +1,13 @@
 use ciborium::Value;
 use coffret_model::{
-    ContainerAddition, ContainerId, EntryMetadata, Generation, JournalRecord, KeyringCommitment,
+    ContainerAddition, ContainerId, DepositedAt, EntryMetadata, Generation, JournalRecord,
+    KeyringCommitment,
 };
 
 use super::rename;
 use super::{
-    ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, MIN_SCHEMA,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, RENAMES_SCHEMA, REQUIRED_SCHEMA, SCHEMA,
-    SNAPSHOT_SLOT,
+    ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
+    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA, SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -38,8 +38,8 @@ use crate::field_numbers;
 /// record naming a schema above the one this build implements is refused
 /// there with [`Error::JournalRecordNeedsNewerBuild`]: never skipped, and never
 /// applied in part with the fields this build does not know ignored
-/// (spec: FM-9, FM-15). A record that carries `renames` without naming the
-/// schema they need is malformed, since every writer of them names it.
+/// (spec: FM-9, FM-15). A record that does not name this schema there is
+/// malformed, since every writer of it names it.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
     let value = read_body(
         &payload.body,
@@ -49,10 +49,10 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < MIN_SCHEMA {
+    if schema < SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
-    let required = required_schema(&fields, generation)?;
+    required_schema(&fields, generation)?;
 
     let additions = fields
         .array(ADDITIONS)?
@@ -67,8 +67,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         .map(container_id)
         .collect::<Result<Vec<_>>>()?;
 
-    // Absent on a record that renames nothing, which every record of schema 2
-    // is (spec: FM-15).
+    // Absent on a record that renames nothing (spec: FM-15).
     let renames = match fields.get(RENAMES) {
         None => Vec::new(),
         Some(_) => fields
@@ -78,16 +77,6 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
             .map(|(index, value)| rename::from_fields(index, &fields.map(value)?, malformed))
             .collect::<Result<Vec<_>>>()?,
     };
-    if !renames.is_empty() && required < RENAMES_SCHEMA {
-        return Err(malformed(format!(
-            "a record carrying renames names {RENAMES_SCHEMA} or above as its required_schema, \
-             found {}",
-            match required {
-                MIN_SCHEMA => "none".to_owned(),
-                other => other.to_string(),
-            }
-        )));
-    }
 
     JournalRecord::new(
         generation,
@@ -110,22 +99,21 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
 /// The schema the record says its reader must implement, held against the one
 /// this build does (spec: FM-9, FM-15).
 ///
-/// Absent is the reader floor, [`MIN_SCHEMA`]. Present, it names something
-/// above that floor: a value at or below it says what its absence already
-/// says, and a second spelling of one state is refused as every other one is.
-fn required_schema(fields: &Fields<'_>, generation: Generation) -> Result<u64> {
+/// Above it, the record needs a newer build. Below it, or absent, the record is
+/// malformed: every record of this schema names it, so a lower value is no
+/// state a writer produces.
+fn required_schema(fields: &Fields<'_>, generation: Generation) -> Result<()> {
     match fields.optional_uint(REQUIRED_SCHEMA)? {
-        None => Ok(MIN_SCHEMA),
         Some(required) if required > SCHEMA => Err(Error::JournalRecordNeedsNewerBuild {
             generation,
             required,
             implemented: SCHEMA,
         }),
-        Some(required) if required <= MIN_SCHEMA => Err(malformed(format!(
-            "required_schema is above the reader floor of {MIN_SCHEMA} where present, \
-             found {required}"
+        Some(SCHEMA) => Ok(()),
+        found => Err(malformed(format!(
+            "a record names {SCHEMA} or above as its required_schema, found {}",
+            found.map_or_else(|| "none".to_owned(), |required| required.to_string())
         ))),
-        Some(required) => Ok(required),
     }
 }
 
@@ -158,13 +146,14 @@ fn refused_record(error: coffret_model::Error) -> Error {
 /// here (spec: FM-9, FM-10).
 fn addition(index: usize, fields: &Fields<'_>) -> Result<ContainerAddition> {
     let container = wire_container::from_fields(fields, malformed)?;
-    let entries = fields
+    let (entries, deposit_times) = fields
         .array(ENTRIES)?
         .iter()
         .map(entry)
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<(Vec<_>, Vec<_>)>>()?;
 
-    ContainerAddition::new(container, entries).map_err(|error| refused_addition(index, error))
+    ContainerAddition::new(container, entries, deposit_times)
+        .map_err(|error| refused_addition(index, error))
 }
 
 /// One addition's own refusal, placed in the array it came out of.
@@ -191,12 +180,13 @@ fn refused_addition(addition: usize, error: coffret_model::Error) -> Error {
     }
 }
 
-/// One element of an entry table, read in the catalog's spelling (spec: FM-15).
-fn entry(value: &Value) -> Result<EntryMetadata> {
+/// One element of an entry table, read in the catalog's spelling, with the
+/// deposit time it carries (spec: FM-15).
+fn entry(value: &Value) -> Result<(EntryMetadata, DepositedAt)> {
     value
         .deserialized::<WireCatalogEntry>()
         .map_err(|error| deserialization_failed(error, malformed_detail))?
-        .to_metadata(malformed)
+        .to_catalog(malformed)
 }
 
 fn container_id(value: &Value) -> Result<ContainerId> {

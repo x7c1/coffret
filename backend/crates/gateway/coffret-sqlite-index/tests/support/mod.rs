@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, DerivedFrom, EntryExtent, EntryMetadata, EntryPath, Generation,
+    ControlObjectName, DepositedAt, DerivedFrom, EntryExtent, EntryMetadata, EntryPath, Generation,
     IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
@@ -121,6 +121,12 @@ pub fn addition(seed: u8) -> ContainerAddition {
                 }),
                 mime: Some("image/jpeg".to_owned()),
             },
+        ],
+        // A second of its own for each Entry, and none of them its `mtime`, so
+        // a column that took one for another shows it (spec: FM-15, FM-16).
+        vec![
+            DepositedAt::from_unix_seconds(1_760_000_000 + i64::from(seed) * 10),
+            DepositedAt::from_unix_seconds(1_760_000_001 + i64::from(seed) * 10),
         ],
     )
     .expect("a fixture holds a table that tiles its Container's stream")

@@ -268,6 +268,7 @@ describe('heldUnder', () => {
         path: at(name),
         size: 1,
         mtime: null,
+        deposited_at: null,
         state: container === null ? 'added' : 'remote',
         container,
         reserved: false,

@@ -20,14 +20,15 @@
 
 use coffret_format::IndexSnapshotPayload;
 use coffret_model::{
-    ContainerKeyStatus, ContainerKind, ContainerSummary, EntryMetadata, JournalRecord, KeyTable,
+    ContainerKeyStatus, ContainerKind, ContainerSummary, DepositedAt, EntryMetadata, JournalRecord,
+    KeyTable,
 };
 
 use super::{BodyField, BodyValue};
 
 /// The fields FM-15 gives the payload of `record`.
 pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
-    let mut fields = vec![BodyField::uint("schema", 3)];
+    let mut fields = vec![BodyField::uint("schema", 4)];
     if let Some(prev) = record.prev() {
         fields.push(BodyField::uint("prev", prev.get()));
     }
@@ -61,8 +62,9 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
                     addition
                         .entries()
                         .iter()
-                        .map(|entry| BodyValue::Map {
-                            value: entry_fields(entry),
+                        .zip(addition.deposit_times())
+                        .map(|(entry, deposited_at)| BodyValue::Map {
+                            value: entry_fields(entry, *deposited_at),
                         })
                         .collect(),
                 ));
@@ -96,10 +98,10 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
                 })
                 .collect(),
         ));
-        // And the schema a reader needs to apply them, which only a record
-        // carrying them names (spec: FM-9, FM-15).
-        fields.push(BodyField::uint("required_schema", 3));
     }
+    // And the schema a reader needs to apply the record, which every record
+    // names: its deposit times are must-understand (spec: FM-9, FM-15).
+    fields.push(BodyField::uint("required_schema", 4));
     fields
 }
 
@@ -109,7 +111,7 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     let containers = snapshot.content.containers();
 
     let mut fields = vec![
-        BodyField::uint("schema", 3),
+        BodyField::uint("schema", 4),
         BodyField::uint("head_generation", checkpoint.head_generation().get()),
         BodyField::uint("journal_generation", checkpoint.journal_generation().get()),
     ];
@@ -144,7 +146,7 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
             .entries()
             .iter()
             .map(|location| {
-                let mut map = entry_fields(&location.entry);
+                let mut map = entry_fields(&location.entry, location.deposited_at);
                 let position = containers
                     .iter()
                     .position(|container| container.id == location.container_id)
@@ -235,8 +237,9 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
 /// both naming what an object already written records: `captured_path`
 /// beside `path`, the owning Container's own name for the Entry, written only
 /// where it differs from `path`, and the one inside `derived_from`, the
-/// parent's.
-fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
+/// parent's. Beside them rides `deposited_at`, which no meta section carries
+/// at all.
+fn entry_fields(entry: &EntryMetadata, deposited_at: DepositedAt) -> Vec<BodyField> {
     let mut fields = vec![
         BodyField::text("path", entry.path.as_str()),
         BodyField::uint("offset", entry.extent.offset()),
@@ -265,5 +268,9 @@ fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
     if let Some(mime) = &entry.mime {
         fields.push(BodyField::text("mime", mime));
     }
+    fields.push(BodyField::int(
+        "deposited_at",
+        deposited_at.as_unix_seconds(),
+    ));
     fields
 }

@@ -10,8 +10,8 @@ use coffret_format::{
     EntryPlan,
 };
 use coffret_model::{
-    ContainerKind, ContainerSummary, ContentHash, EntryMetadata, KeyEnvelope, MasterKey,
-    MasterKeyEpoch, Mtime,
+    ContainerKind, ContainerSummary, ContentHash, DepositedAt, EntryMetadata, EntryNumber,
+    KeyEnvelope, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use super::{rebuild, Rebuilding, Replacing, Unverified};
@@ -31,6 +31,18 @@ use crate::spool::Spool;
 use crate::spooled_container::SpooledContainer;
 
 const SPOOL_DIR: &str = "/spool";
+
+/// When the row at `position` of a stored Pack's table was deposited, as the
+/// catalog records it: a second of its own for each row, and none of them the
+/// rebuild's own clock.
+fn deposited_at(position: usize) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_600_000_000 + position as i64)
+}
+
+/// One deposit time per row of `table`, as [`deposited_at`] gives them.
+fn deposit_times(table: &[EntryMetadata]) -> Vec<DepositedAt> {
+    (0..table.len()).map(deposited_at).collect()
+}
 
 fn keys() -> LibraryKeys {
     LibraryKeys::derive(
@@ -121,6 +133,7 @@ async fn rebuild_keeping(
             old: summary,
             envelope,
             table,
+            deposit_times: &deposit_times(table),
             keep,
         },
     )
@@ -236,6 +249,13 @@ async fn a_renamed_row_is_carried_forward_under_its_current_path() {
     );
     assert_eq!(carried.hash, table[0].hash);
     assert_eq!(carried.mtime, table[0].mtime);
+    // A rewrite puts no content into the Library, so the carried Entry keeps
+    // the deposit time the catalog holds for it rather than taking the
+    // rebuild's clock (spec: PK-10, FM-15).
+    assert_eq!(
+        rebuilt.carries.into_iter().collect::<Vec<_>>(),
+        [(EntryNumber::FIRST, deposited_at(0))],
+    );
 }
 
 /// FM-3: a Container Storage holds no object for has nothing to rebuild from,
@@ -274,6 +294,7 @@ async fn a_container_with_no_object_is_unreachable() {
             old: &summary,
             envelope: &envelope,
             table: &table,
+            deposit_times: &deposit_times(&table),
             keep: &[true, false],
         },
     )

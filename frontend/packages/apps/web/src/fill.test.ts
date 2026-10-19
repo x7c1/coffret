@@ -67,6 +67,7 @@ function file(path: string, state: ListedFile['state']): ListedFile {
     path,
     size: 1,
     mtime: null,
+    deposited_at: null,
     state,
     container: 'pack',
     reserved: false,

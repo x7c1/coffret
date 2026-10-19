@@ -402,7 +402,7 @@ pub use coffret_format::{
     CborDecodeFailure, Error as FormatError, MalformedDetail, Purpose, RecoveryCode,
 };
 pub use coffret_model::{
-    lowercase_hex, ContainerId, ContainerKind, ContentHash, EntryNumber, EntryPath,
+    lowercase_hex, ContainerId, ContainerKind, ContentHash, DepositedAt, EntryNumber, EntryPath,
     Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_model::{ControlObjectKind, ControlObjectName};
