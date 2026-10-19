@@ -52,7 +52,7 @@ use crate::scratch_file::ScratchFile;
 /// Container's worth of verified placements, which is what lets the object's own
 /// hash be checked before any of them becomes visible (spec: FM-15, CP-11).
 ///
-/// A placement that is not published has to be [`discard`](Self::discard)ed.
+/// A placement that is not published has to be [`remove`](Self::remove)d.
 /// What must not be left behind is a half-written file inside a folder the sync
 /// walks: the scratch prefix already keeps a scan from committing one (see
 /// [`crate::scratch`]), and removing it keeps the folder from accumulating them.
@@ -306,7 +306,7 @@ impl<'a> Placement<'a> {
     ///
     /// A rename that the operating system refuses takes the scratch with it.
     /// This call consumes the placement, so no caller is left holding one to
-    /// [`discard`](Self::discard), and what would otherwise stay behind is a
+    /// [`remove`](Self::remove), and what would otherwise stay behind is a
     /// scratch inside a folder the sync walks. Once the rename has happened the
     /// file is the Entry's, and a bookkeeping failure after it leaves that
     /// file where it belongs rather than removing content this device verified.
@@ -321,7 +321,7 @@ impl<'a> Placement<'a> {
             .expect("a placement is verified before it is published");
         if let Err(cause) = flushed.publish() {
             let refused = refusal(self.target, cause);
-            discard_all(vec![self]);
+            remove_all(vec![self]);
             return Err(refused);
         }
 
@@ -352,7 +352,7 @@ impl<'a> Placement<'a> {
     ///
     /// Synchronous, because the capability's removal is: it is one call against
     /// a folder that has been held open all along.
-    pub(super) fn discard(self) -> FetchResult<()> {
+    pub(super) fn remove(self) -> FetchResult<()> {
         // Whichever handle on the file is still open is closed before the name
         // it holds is removed.
         drop(self.file);
@@ -368,7 +368,7 @@ impl<'a> Placement<'a> {
     }
 }
 
-/// Publishes a whole Container's verified placements, discarding the rest if
+/// Publishes a whole Container's verified placements, removing the rest if
 /// one of them cannot be published.
 ///
 /// The renames happen one after another and are not undone: each is a file that
@@ -386,7 +386,7 @@ pub(super) async fn publish_all(
         match placement.publish(index, now).await {
             Ok(path) => placed.push(path),
             Err(error) => {
-                discard_all(left.collect());
+                remove_all(left.collect());
                 return Err(error);
             }
         }
@@ -400,9 +400,9 @@ pub(super) async fn publish_all(
 /// report is the failure that made the cleanup necessary, and replacing it with
 /// "and the scratch would not go either" would lose the verdict. The path
 /// stays out of the event, as it stays out of a message (spec: EL-1).
-pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
+pub(super) fn remove_all(placements: Vec<Placement<'_>>) {
     for placement in placements {
-        if let Err(error) = placement.discard() {
+        if let Err(error) = placement.remove() {
             warn!(
                 operation = %LocalOperation::Removing,
                 error = %error.redacted(),

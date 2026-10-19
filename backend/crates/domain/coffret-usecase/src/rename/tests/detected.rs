@@ -82,8 +82,10 @@ async fn a_detected_rename_is_rebased_onto_an_unrelated_commit() {
                 fixture.store(),
                 fixture.target(),
                 &keys,
+                fixture.fs(),
                 entry_path("notes.txt"),
                 entry_path("journal.txt"),
+                renamed_at(),
             )
             .with_policy(policy()),
         )
@@ -123,8 +125,10 @@ async fn a_detected_rename_racing_a_rename_of_the_same_entry_is_a_conflict() {
                 fixture.store(),
                 fixture.target(),
                 &keys,
+                fixture.fs(),
                 entry_path("albums/cover.jpg"),
                 entry_path("albums/back.jpg"),
+                renamed_at(),
             )
             .with_policy(policy()),
         )

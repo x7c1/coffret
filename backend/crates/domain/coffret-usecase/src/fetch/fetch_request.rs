@@ -11,6 +11,7 @@ use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
 use crate::relocations::Relocations;
+use crate::spool::Spool;
 
 /// Everything one run of [`fetch_folders`](super::fetch_folders) works from.
 ///
@@ -23,7 +24,8 @@ use crate::relocations::Relocations;
 ///
 /// There is no spool directory. A fetch writes its scratch into the
 /// destination directory itself, because the rename that makes a verified file
-/// visible has to be a rename within one filesystem (spec: EP-11).
+/// visible has to be a rename within one filesystem (spec: EP-11). The
+/// [`spool`](Self::spool) a fetch takes is only ever discarded from.
 pub struct FetchRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,
@@ -46,6 +48,14 @@ pub struct FetchRequest<'a> {
     pub relocations: &'a dyn Relocations,
     /// See [`roots`](Self::roots).
     pub trash: &'a dyn LocalTrash,
+    /// Where this device's Containers waited to be uploaded.
+    ///
+    /// A batch of this device's whose record the catch-up finds committed and
+    /// whose refresh never ran has its bookkeeping completed before anything
+    /// is selected, and its spools are discarded from here (spec: OC-7): until
+    /// then the files it carried in would read as ones this device never put
+    /// there, and every one of them would be declined (spec: EP-10).
+    pub spool: &'a dyn Spool,
     /// The parcels this device holds of earlier reads (spec: PK-21).
     ///
     /// A folder fetch reads whole objects and keeps none of them, but what it
@@ -85,8 +95,9 @@ pub struct FetchRequest<'a> {
 
 impl<'a> FetchRequest<'a> {
     /// A run against `store` and `index` covering everything the mappings cover,
-    /// placing through `destinations` and relocating through `roots`,
-    /// `relocations` and `trash`, under the default policy.
+    /// placing through `destinations`, relocating through `roots`,
+    /// `relocations` and `trash`, and completing a committed batch through
+    /// `spool`, under the default policy.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
@@ -96,6 +107,7 @@ impl<'a> FetchRequest<'a> {
         roots: &'a dyn MappedRoots,
         relocations: &'a dyn Relocations,
         trash: &'a dyn LocalTrash,
+        spool: &'a dyn Spool,
         parcels: KeptParcels<'a>,
         now: DeviceTime,
     ) -> Self {
@@ -107,6 +119,7 @@ impl<'a> FetchRequest<'a> {
             roots,
             relocations,
             trash,
+            spool,
             parcels,
             prefix: None,
             now,

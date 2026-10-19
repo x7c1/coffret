@@ -59,7 +59,11 @@
 //! It runs [`catch_up`](coffret_device::OpenLibrary::catch_up) and nothing else.
 //! No Container is read, no file is placed, and nothing is uploaded: the catalog
 //! advances and the bytes go on arriving the way they already do, when somebody
-//! opens a file and the fill follows them into the folder.
+//! opens a file and the fill follows them into the folder. The one thing it
+//! finishes besides is this device's own bookkeeping: a batch this device
+//! committed whose refresh never ran — a server killed between the two — is
+//! completed by the catch-up after it, so the files that batch carried in read
+//! as this device's from the first window on (spec: OC-7).
 
 mod catch_up_at_startup;
 pub use catch_up_at_startup::catch_up_at_startup;

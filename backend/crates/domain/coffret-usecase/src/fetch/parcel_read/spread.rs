@@ -6,7 +6,7 @@ use crate::device_state::DeviceTime;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::opened_piece::OpenedPiece;
 use crate::fetch::parcel_read::herald::Herald;
-use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::placement::{remove_all, Placement};
 use crate::index::Index;
 
 /// The Entries one stretch of adjacent parcels holds, placed as the stretch's
@@ -123,7 +123,7 @@ impl<'a, 'h> Spread<'a, 'h> {
             let published = match placement.verify().await {
                 Ok(()) => placement.publish(index, now).await,
                 Err(error) => {
-                    discard_all(vec![placement]);
+                    remove_all(vec![placement]);
                     Err(error)
                 }
             };
@@ -164,20 +164,20 @@ impl<'a, 'h> Spread<'a, 'h> {
         now: DeviceTime,
     ) -> FetchResult<Vec<EntryPath>> {
         if let Err(error) = self.publish_complete(index, now).await {
-            discard_all(self.pending);
+            remove_all(self.pending);
             return Err(error);
         }
         debug_assert!(
             self.pending.is_empty(),
             "every Entry of a stretch lies inside it, so its last byte has passed",
         );
-        discard_all(self.pending);
+        remove_all(self.pending);
         Ok(self.placed)
     }
 
     /// Gives up on what the stretch has not published, keeping what it has.
     pub(super) fn abandon(self) -> Vec<EntryPath> {
-        discard_all(self.pending);
+        remove_all(self.pending);
         self.placed
     }
 }

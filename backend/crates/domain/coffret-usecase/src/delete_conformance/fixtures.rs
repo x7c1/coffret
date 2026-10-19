@@ -37,7 +37,7 @@ pub(super) fn policy() -> CommitPolicy {
 }
 
 /// The clock the suite's `run`th operation runs at.
-fn at(run: i64) -> DeviceTime {
+pub(super) fn at(run: i64) -> DeviceTime {
     DeviceTime::from_unix_seconds(1_700_000_000 + run)
 }
 

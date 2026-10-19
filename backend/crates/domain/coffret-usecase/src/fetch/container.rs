@@ -152,7 +152,7 @@ async fn decode_into_place<'a>(
         return Ok(Err(error));
     }
 
-    // Verifying discards what it made on its own refusal, so from here the
+    // Verifying removes what it made on its own refusal, so from here the
     // scratches are its to keep or remove.
     Ok(decoding.disarm().verify().await)
 }

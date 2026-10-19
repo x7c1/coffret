@@ -5,6 +5,7 @@ use tracing::info;
 
 use crate::commit::{catch_up, CommitResult};
 use crate::index::Index;
+use crate::sync::{complete_after_catch_up, PendingWork};
 
 use super::catch_up_outcome::CatchUpOutcome;
 use super::catch_up_request::CatchUpRequest;
@@ -14,9 +15,18 @@ use super::catch_up_request::CatchUpRequest;
 /// The whole of it is [`commit::catch_up`](crate::commit) with the two counts a
 /// caller needs to say what happened taken either side of it: the head the Index
 /// stood at, and how many current Entries it held. Nothing else runs — no scan of
-/// the mapped folders, no spool, no Container read, no file placed — because a
-/// Journal record carries what the Containers it adds hold (spec: CP-11), which
-/// is exactly what makes catching a catalog up cost the control objects alone.
+/// the mapped folders, no spool written, no Container read, no file placed —
+/// because a Journal record carries what the Containers it adds hold
+/// (spec: CP-11), which is exactly what makes catching a catalog up cost the
+/// control objects alone.
+///
+/// Save one thing, which is this device's own bookkeeping rather than anything
+/// of the Library's: a batch of this device's whose record landed and whose
+/// refresh did not is committed, and a catalog the replay has just brought to
+/// the head says so. Its pending rows are completed then and there, as a sync's
+/// settlement would complete them, unless another run owns them (spec: OC-2,
+/// OC-7) — so the files it carried in read as this device's from this catch-up
+/// on, rather than from the next sync's.
 ///
 /// The counts are read from the Index rather than derived from what was
 /// replayed, and that is deliberate: a record's additions and removals are not
@@ -38,6 +48,8 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
         store,
         index,
         keys,
+        spool,
+        now,
         policy,
         memory,
     } = request;
@@ -58,6 +70,7 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
         // kept from an earlier read, is not carried past it (spec: KL-13, KL-15).
         memory.forget_short_key_table();
     }
+    complete_after_catch_up(index, spool, now, PendingWork::Unowned).await;
 
     let outcome = CatchUpOutcome {
         from,

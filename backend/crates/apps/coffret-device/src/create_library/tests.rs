@@ -18,8 +18,8 @@ use crate::library_dir::{isolated, LibraryDir};
 use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::testing::{
-    consent, create_s3, passphrase, request, state_dir, unopenable_catalog, DriveStub, CLIENT_ID,
-    CREATED_FOLDER_ID, PASSPHRASE, REGION,
+    consent, create_s3, local_fs, passphrase, request, state_dir, unopenable_catalog, DriveStub,
+    CLIENT_ID, CREATED_FOLDER_ID, PASSPHRASE, REGION,
 };
 
 /// A callback that fails the case if a Passphrase is ever asked for.
@@ -434,9 +434,18 @@ async fn recovered(store: &dyn ObjectStore, name: &str) -> (Vec<String>, InMemor
     }
 
     let index = InMemoryIndex::new();
-    catch_up_catalog(CatchUpRequest::new(store, &index, &keys))
-        .await
-        .expect("a freshly created Library is one to catch up with");
+    // Nothing is pending on a device that has only just created the Library,
+    // so the spool is named and never reached.
+    let spool = local_fs();
+    catch_up_catalog(CatchUpRequest::new(
+        store,
+        &index,
+        &keys,
+        spool.as_ref(),
+        crate::device_time::now(),
+    ))
+    .await
+    .expect("a freshly created Library is one to catch up with");
     (names, index)
 }
 

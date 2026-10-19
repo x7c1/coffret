@@ -112,6 +112,7 @@ impl OpenLibrary {
             self.index.as_ref(),
             &self.keys,
             self.local_fs.as_ref(),
+            self.local_fs.as_ref(),
             self.kept_parcels(),
             path,
             now(),

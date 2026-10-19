@@ -42,6 +42,16 @@
 //! the backend hands it. It is behind the `conformance` feature so that only
 //! test targets pay for it.
 
+mod caught_up;
+pub use caught_up::{
+    a_catch_up_completes_a_commit_whose_refresh_failed,
+    a_catch_up_leaves_a_row_whose_container_is_not_current,
+    a_catch_up_leaves_rows_another_run_owns,
+    a_delete_preview_completes_a_commit_whose_refresh_failed,
+    a_fetch_completes_a_commit_whose_refresh_failed_before_it_selects,
+    a_rename_completes_a_commit_whose_refresh_failed_before_it_plans,
+};
+
 mod completion;
 pub use completion::{
     a_commit_whose_refresh_failed_is_completed_and_replaced,
@@ -323,6 +333,12 @@ macro_rules! sync_conformance {
             a_commit_whose_refresh_failed_is_completed_and_replaced,
             a_completed_container_marks_its_file_present,
             a_run_with_no_pending_rows_reads_the_head_once,
+            a_catch_up_completes_a_commit_whose_refresh_failed,
+            a_fetch_completes_a_commit_whose_refresh_failed_before_it_selects,
+            a_catch_up_leaves_a_row_whose_container_is_not_current,
+            a_catch_up_leaves_rows_another_run_owns,
+            a_rename_completes_a_commit_whose_refresh_failed_before_it_plans,
+            a_delete_preview_completes_a_commit_whose_refresh_failed,
             a_device_that_maps_nothing_is_told_apart_from_a_folder_with_nothing_new,
             a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can,
             sync_catches_up_before_scanning,

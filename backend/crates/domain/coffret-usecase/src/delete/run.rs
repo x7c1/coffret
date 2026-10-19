@@ -13,6 +13,7 @@ use crate::delete::rebuilt_pack::RebuiltPack;
 use crate::progress::{Phase, Step};
 use crate::read_modify_replace::{rebuild, Rebuilding, Replacing};
 use crate::spooled_container::{commit_spooled, SpooledContainer};
+use crate::sync::{complete_after_catch_up, PendingWork};
 use crate::upload;
 
 /// Deletes the Entries a selection names from the Library, in one Journal batch
@@ -81,6 +82,10 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
 
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // A batch of this device's that the catch-up found committed is completed
+    // under the ownership this run holds, before its plan reads which local
+    // copies are this device's (spec: OC-2, OC-7).
+    complete_after_catch_up(index, spool, now, PendingWork::Held).await;
     // What the plan reads the catalog at, and so what the batch is prepared
     // against (spec: CP-4, EP-7).
     let base = caught.head_generation();

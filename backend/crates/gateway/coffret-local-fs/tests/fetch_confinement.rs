@@ -211,6 +211,7 @@ impl Devices {
                 &self.local,
                 &self.local,
                 &self.local,
+                &self.local,
                 // A folder fetch reads whole objects and keeps no parcel, so
                 // the directory is named and never made (spec: PK-16).
                 KeptParcels::new(&self.local, &self.spool_dir.with_file_name("parcels")),

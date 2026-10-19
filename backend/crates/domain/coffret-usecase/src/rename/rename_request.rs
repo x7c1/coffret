@@ -1,6 +1,7 @@
 use coffret_model::EntryPath;
 
 use crate::commit::CommitPolicy;
+use crate::device_state::DeviceTime;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::local_trash::LocalTrash;
@@ -9,12 +10,14 @@ use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
 use crate::relocate::LocalDisk;
 use crate::relocations::Relocations;
+use crate::spool::Spool;
 
 /// Everything one run of [`rename_entries`](super::rename_entries) works from.
 ///
 /// The two ports, the epoch's keys, and the two Entry Paths: the one renamed
 /// — one Entry, or the folder of every Entry under it — and the one it is
-/// renamed to. No spool and no batch id: a rename writes no Container.
+/// renamed to. No batch id: a rename writes no Container, and the
+/// [`spool`](Self::spool) it takes is only ever discarded from.
 ///
 /// And, where the device hands them over with
 /// [`with_local_disk`](Self::with_local_disk), its mapped folders, the rename a
@@ -29,6 +32,15 @@ pub struct RenameRequest<'a> {
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
     pub keys: &'a LibraryKeys,
+    /// Where this device's Containers waited to be uploaded.
+    ///
+    /// A batch of this device's whose record the catch-up finds committed and
+    /// whose refresh never ran has its bookkeeping completed before the plan,
+    /// and its spools are discarded from here (spec: OC-7): until then the
+    /// files it carried in have no materialization record, and a rename of
+    /// their Entries would leave them where they are rather than relocate them
+    /// (spec: EP-10).
+    pub spool: &'a dyn Spool,
     /// The Entry Path renamed: an Entry, a folder of Entries, or both where
     /// the Library holds an Entry at a path it also holds Entries under.
     pub from: EntryPath,
@@ -39,6 +51,9 @@ pub struct RenameRequest<'a> {
     pub progress: &'a dyn Progress,
     /// The decisions Storage does not make, for the commit this run ends in.
     pub policy: CommitPolicy,
+    /// When the run is, on this device's clock, for what the completion of a
+    /// committed batch records (spec: OC-7).
+    pub now: DeviceTime,
     /// This device's disk, where the run is to relocate its files of the
     /// renamed Entries after the commit, and `None` where it is to leave them
     /// to the next sync or fetch (spec: EP-10).
@@ -46,23 +61,27 @@ pub struct RenameRequest<'a> {
 }
 
 impl<'a> RenameRequest<'a> {
-    /// A run renaming `from` to `to` in the Library in `store`, under the
-    /// default policy.
+    /// A run renaming `from` to `to` in the Library in `store` at `now`,
+    /// completing a committed batch through `spool`, under the default policy.
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
+        spool: &'a dyn Spool,
         from: EntryPath,
         to: EntryPath,
+        now: DeviceTime,
     ) -> Self {
         Self {
             store,
             index,
             keys,
+            spool,
             from,
             to,
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
+            now,
             disk: None,
         }
     }

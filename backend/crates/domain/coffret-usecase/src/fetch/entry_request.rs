@@ -13,6 +13,7 @@ use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
+use crate::spool::Spool;
 
 /// Everything one run of [`fetch_entry`](super::fetch_entry) works from.
 ///
@@ -32,6 +33,11 @@ pub struct FetchEntryRequest<'a> {
     pub keys: &'a LibraryKeys,
     /// The places on this device the Library's files are written into.
     pub destinations: &'a dyn Destinations,
+    /// Where this device's Containers waited to be uploaded, which a run that
+    /// catches the catalog up discards a committed batch's spools from, as a
+    /// folder fetch does (spec: OC-7). A run answering from
+    /// [`memory`](Self::memory) catches nothing up and never reaches it.
+    pub spool: &'a dyn Spool,
     /// Where the parcels the run reads are kept, and how long one is
     /// (spec: PK-19, PK-21).
     pub parcels: KeptParcels<'a>,
@@ -81,11 +87,13 @@ pub struct FetchEntryRequest<'a> {
 impl<'a> FetchEntryRequest<'a> {
     /// A run against `store` and `index` for the Entry at one path, under the
     /// default policy.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
         destinations: &'a dyn Destinations,
+        spool: &'a dyn Spool,
         parcels: KeptParcels<'a>,
         path: EntryPath,
         now: DeviceTime,
@@ -95,6 +103,7 @@ impl<'a> FetchEntryRequest<'a> {
             index,
             keys,
             destinations,
+            spool,
             parcels,
             path,
             now,

@@ -101,6 +101,19 @@ Concept background: [Journal](../../concepts/journal/),
     names a spool this device announced and never finished, so nothing uploaded
     it and no record can name it, and it is disposed of as this device's own
     reclaimable leftovers (OC-2).
+  - Completion follows every catch-up that leaves the Index caught up, not
+    only a sync's: the one a server makes as it starts and whenever it is
+    asked to, a command's on its own, the one a fetch, a freeze, a rename, or
+    a deletion begins with, and the one before a deletion's preview. It needs
+    the provenance and the current set and nothing a sync's settlement has
+    besides, so a batch whose record landed and whose refresh did not is this
+    device's own from the first catch-up after it, and a fill never takes the
+    files it carried in for files this device did not put there (EP-10). Only
+    completion runs there: a row whose Container is not current is left
+    exactly as it is, since reclaiming it needs its batch's commit slots
+    judged (OC-3), which is settlement's. The completion still owns the
+    pending work while it runs (OC-2), so a catch-up that finds another run
+    holding it leaves the rows to that run.
 - **OC-8.** Removing what this device wrote for its own purposes — a spool
   file, a scratch a local writer never published (EP-11), the staging directory
   an interrupted attempt at putting a Library on this device left, or the

@@ -83,7 +83,9 @@ impl OpenLibrary {
             self.store.as_ref(),
             self.index.as_ref(),
             &self.keys,
+            self.local_fs.as_ref(),
             &CommitPolicy::default(),
+            now(),
         )
         .await?;
         Ok(preview_delete(self.index.as_ref(), selection, &key_lost).await?)

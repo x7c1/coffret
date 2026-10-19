@@ -101,15 +101,24 @@ attempted and, for its batch, at which commit slots. Settlement uses that
 evidence to distinguish work it can reclaim, work whose interrupted refresh it
 can complete, and work it must retain.
 
+A row records its uploaded object only once the upload has answered, so a row
+whose spool finished and that names no object is not proof that nothing of its
+Container is on Storage: the run may have ended between the upload and the
+record. Settlement therefore looks the Container up by the name its ID gives it
+before it disposes of such a row (spec: OC-2).
+
 | Settlement evidence | Action |
 | --- | --- |
-| An abandoned batch proven never attempted, or an attempted one whose every recorded commit slot holds another record | Dispose of its spool and uploaded object |
+| An abandoned batch proven never attempted, or an attempted one whose every recorded commit slot holds another record | Dispose of its spool and of its Container on Storage — the object the row names, or the one found under the Container's name — then remove the row |
 | A completed spool whose Container is current, or named by the record at a slot its batch attempted | Complete this device's materialization records |
 | An attempted or unknown commit, without proof of abandonment | Retain the ciphertext and provenance |
 
 Only a run with exclusive ownership of this device's pending work may settle
 it, so another live producer's files cannot be reclaimed (spec: OC-2, OC-3,
-OC-7). Precise spool transitions and cleanup conditions belong to the
+OC-7). Completion needs nothing but a caught-up Index, so it also follows every
+other catch-up that is free to take that ownership — a server's as it starts, a
+fetch's — while reclaiming and retaining stay with settlement (spec: OC-7).
+Precise spool transitions and cleanup conditions belong to the
 [specification register](../../spec/orphan-cleanup/).
 
 ## Examples
@@ -137,13 +146,19 @@ OC-7). Precise spool transitions and cleanup conditions belong to the
 - forget (a materialization record whose Entry left the Library, once its file
   has gone to the desktop's trash or from the disk, or at once where another
   Entry holds the path its file stands at)
-- complete (an interrupted commit's local records from its pending row)
+- complete (an interrupted commit's local records from its pending row, during
+  a sync's settlement or right after any other catch-up that finds its
+  Container current)
 - hold (a parcel this device read, by recording it beside its ciphertext)
 - let go (of a held parcel whose mapped Entries are all present or witnessed
   absent, or whose Container left the current set)
 - discard (a parcel file no row names, as a server opens the Library, before it
   serves anything)
 - dispose (of a proven abandoned spool and uploaded object)
+- remove (a pending row, once its spool is discarded and nothing of its
+  Container can be on Storage — completed, or disposed of with its object
+  trashed or shown absent) — never *delete*, which is the Library's verb for
+  Entries
 - retain (pending work whose commit outcome is unknown)
 
 ## Domain Rules
