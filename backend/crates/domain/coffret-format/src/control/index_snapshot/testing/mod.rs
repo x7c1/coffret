@@ -6,7 +6,7 @@ use coffret_model::{
 };
 
 use super::{IndexSnapshotPayload, SnapshotActivation};
-use crate::control::testing::{checkpoint, container_id, entry, summary};
+use crate::control::testing::{checkpoint, container_id, deposited_at, entry, summary};
 use crate::entry_paths::entry_path;
 use crate::generations::generation;
 
@@ -94,6 +94,7 @@ pub(super) fn located(seed: u8, number: u32, path: &str, offset: u64, size: u64)
         container_id: container_id(seed),
         entry_number: EntryNumber::new(u64::from(number)).expect("every u32 is an entry number"),
         entry: entry(path, offset, size),
+        deposited_at: deposited_at(seed, number),
     }
 }
 

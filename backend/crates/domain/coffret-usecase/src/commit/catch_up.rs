@@ -247,8 +247,11 @@ pub(crate) async fn catch_up(
 /// still usable. A Storage failure is not a verdict about validity and is
 /// reported. Which of the two a refusal is, is [`skippable`]'s to say.
 ///
-/// A Snapshot from before entry numbers is passed over too, though it opens: it
-/// is a sound object, only not one a catalog may start from (spec: FM-16).
+/// A Snapshot of a schema before this build's opens and is not passed over: its
+/// Entries carry no deposit time, and neither do the older records an older
+/// checkpoint would leave to replay, so the catch-up stops there and the
+/// Library is refused rather than read with times made up (spec: FM-15,
+/// FM-16).
 ///
 /// That skipping covers a candidate this device could not open at all. One that
 /// opens and then carries a payload no writer could have written — a Snapshot
@@ -295,21 +298,6 @@ async fn adoptable(
                 let payload =
                     match decode_index_snapshot(&decoded.payload, decoded.kind, generation) {
                         Ok(payload) => payload,
-                        // Sound, but from before entry numbers: its Entries carry no
-                        // position in their Container, and nothing here may make one
-                        // up from path order. So it is no starting point, and the
-                        // walk goes on down — to an older checkpoint that has them,
-                        // or to none, and a replay of every record from `head-0`,
-                        // which numbers each Entry by its place in its addition
-                        // (spec: FM-16).
-                        Err(coffret_format::Error::SnapshotPredatesEntryNumbers { schema }) => {
-                            debug!(
-                                object = %spelling,
-                                schema,
-                                "passing over a checkpoint that predates entry numbers",
-                            );
-                            continue;
-                        }
                         Err(error) => {
                             return Err(CommitError::CorruptControlObject {
                                 object: name.clone(),
@@ -576,7 +564,7 @@ mod tests {
     use coffret_format::ControlPayload;
     use coffret_model::{
         CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-        ContentHash, EntryExtent, EntryMetadata, EntryNumber, EntryPath, EntryRename,
+        ContentHash, DepositedAt, EntryExtent, EntryMetadata, EntryNumber, EntryPath, EntryRename,
         MasterKeyEpoch, Mtime, ReplicaPosition,
     };
 
@@ -699,6 +687,7 @@ mod tests {
                     derived_from: None,
                     mime: None,
                 }],
+                vec![DepositedAt::from_unix_seconds(1_760_000_000)],
             )
             .expect("a one-file table tiles")
         };

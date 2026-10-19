@@ -17,6 +17,7 @@ use crate::container_id::ContainerId;
 use crate::container_kind::ContainerKind;
 use crate::container_summary::ContainerSummary;
 use crate::content_hash::ContentHash;
+use crate::deposited_at::DepositedAt;
 use crate::entry_extent::EntryExtent;
 use crate::entry_location::EntryLocation;
 use crate::entry_metadata::EntryMetadata;
@@ -118,7 +119,19 @@ pub(crate) fn entry_location(
         container_id: container_id(seed),
         entry_number: EntryNumber::new(u64::from(number)).expect("every u32 is an entry number"),
         entry: entry(path, offset, size),
+        deposited_at: deposited_at(),
     }
+}
+
+/// The deposit time a fixture's Entries carry where the case is not about it.
+pub(crate) fn deposited_at() -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_750_000_000)
+}
+
+/// One deposit time per Entry of a table of `count`, for cases about anything
+/// but the time.
+pub(crate) fn deposit_times(count: usize) -> Vec<DepositedAt> {
+    vec![deposited_at(); count]
 }
 
 /// The Keyring replica set a fixture's commit selects.

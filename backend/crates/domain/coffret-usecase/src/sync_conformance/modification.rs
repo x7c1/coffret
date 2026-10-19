@@ -2,10 +2,11 @@ use coffret_model::{ContainerKind, Mtime};
 
 use crate::conformance_library::Library;
 use crate::entry_paths::entry_path;
+use crate::fetch_conformance::fixtures::lose_key;
 use crate::generations::generation;
 use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{
-    keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
+    at, keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
 };
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
@@ -38,6 +39,18 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
         .added
         .first()
         .expect("the first sync uploaded the file");
+    let deposited = index
+        .entry_at(&entry_path("a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .expect("the first sync committed the file")
+        .deposited_at;
+    assert_eq!(
+        deposited.as_unix_seconds(),
+        at(1).as_unix_seconds(),
+        "an addition is a deposit, stamped with the clock of the run that built its record \
+         (spec: FM-15)",
+    );
 
     let changed = b"bytes that are not the original ones".as_slice();
     fixture.fs().write_file(&path, changed);
@@ -74,6 +87,11 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
         .expect("asking the Index for a path must succeed")
         .expect("the path is still current, held by the replacement");
     assert_eq!(location.container_id, replacement);
+    assert_eq!(
+        location.deposited_at.as_unix_seconds(),
+        at(2).as_unix_seconds(),
+        "a replacement is a deposit too, and sets a new time (spec: FM-15, PK-11)",
+    );
 
     let library = Library::read(store).await;
     assert!(
@@ -87,6 +105,78 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     assert_eq!(
         container.entries[0].content, changed,
         "the replacement carries what is on disk now",
+    );
+}
+
+/// A key-lost Entry keeps its deposit time while its file holds the same
+/// content, and is deposited anew once the file is rewritten.
+///
+/// Healing a lost key is no deposit by itself: a deposit is new content, and
+/// whether content is new is its hash's to say. So a touched file whose bytes
+/// are the Entry's leaves the time where the first sync stamped it, and the
+/// replacement a rewrite brings — for which a key-lost Container is always
+/// eligible — is stamped with the clock of the run that commits it
+/// (spec: FM-15, KL-17, PK-11).
+pub async fn a_key_lost_entry_is_deposited_anew_only_for_new_content(fixture: &SyncUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+
+    let original = b"the bytes whose key is lost".as_slice();
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", original);
+    touch(fixture.fs(), &path, OLDER);
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
+        .await
+        .expect("a first sync must succeed");
+    let lost = *first
+        .added
+        .first()
+        .expect("the first sync uploaded the file");
+
+    // What a device meets after another one rebuilt the Keyring from the
+    // material it had, with a marker where the key is gone (spec: RV-8, KL-7).
+    lose_key(store, index, lost).await;
+
+    // The same bytes, touched: nothing new reaches the Library.
+    touch(fixture.fs(), &path, NEWER);
+    let touched = sync_folders(request(store, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a sync over a touched file must succeed");
+    assert!(touched.added.is_empty() && touched.replaced.is_empty());
+    let location = index
+        .entry_at(&entry_path("a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .expect("the key-lost Entry stays current (spec: KL-17)");
+    assert_eq!(location.container_id, lost);
+    assert_eq!(
+        location.deposited_at.as_unix_seconds(),
+        at(1).as_unix_seconds(),
+        "the same content keeps the time it was deposited at (spec: FM-15)",
+    );
+
+    let changed = b"bytes the Library has never held".as_slice();
+    fixture.fs().write_file(&path, changed);
+    touch(fixture.fs(), &path, OLDER);
+    let rewritten = sync_folders(request(store, index, &keys, fixture.fs(), 3))
+        .await
+        .expect("a sync over a rewritten file must succeed");
+    assert_eq!(
+        rewritten.replaced,
+        vec![lost],
+        "a key-lost Container is replaced like any other (spec: KL-17, PK-11)",
+    );
+    let location = index
+        .entry_at(&entry_path("a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .expect("the path is current, held by the replacement");
+    assert_ne!(location.container_id, lost);
+    assert_eq!(
+        location.deposited_at.as_unix_seconds(),
+        at(3).as_unix_seconds(),
+        "new content is a deposit and sets a new time (spec: FM-15, PK-11)",
     );
 }
 

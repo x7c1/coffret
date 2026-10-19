@@ -139,6 +139,7 @@ mod mangling_store;
 
 mod modification;
 pub use modification::{
+    a_key_lost_entry_is_deposited_anew_only_for_new_content,
     a_modified_file_replaces_its_one_file_container,
     a_pack_resident_change_is_surfaced_and_untouched,
 };
@@ -253,6 +254,7 @@ macro_rules! sync_conformance {
             an_unchanged_second_sync_commits_nothing,
             a_touched_file_with_equal_content_commits_nothing,
             a_modified_file_replaces_its_one_file_container,
+            a_key_lost_entry_is_deposited_anew_only_for_new_content,
             a_replacement_for_a_removed_container_is_refused,
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,

@@ -83,6 +83,15 @@ Entry and changes only its Entry Path (see
   (spec: EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict
   (spec: EP-7, CP-7).
+- What an Entry Path's current content carries in time is its **deposit
+  time**: when that content was deposited into the Library, as the
+  [Catalog](../catalog/#domain-rules) keeps it. It belongs to the position's
+  content rather than to an Entry, because Entries come and go under content
+  that stays — a Pack rewrite puts a new Entry at the position and keeps the
+  time — while a replacement with different content deposits new content
+  there and sets a new one; whether it differs is decided by its hash.
+  A rename takes the time to the new position with the Entry (spec: FM-15,
+  PK-10).
 - A name a person chose never reaches a diagnostic event: no Entry Path, local
   path, or filename goes into one, because an event is a record left behind
   that nobody asked for and that outlives the run. A refusal answering the

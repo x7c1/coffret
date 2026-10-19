@@ -612,6 +612,7 @@ function listedFile(value: unknown, where: string): ListedFile {
     'path',
     'size',
     'mtime',
+    'deposited_at',
     'state',
     'container',
     'reserved',
@@ -623,6 +624,7 @@ function listedFile(value: unknown, where: string): ListedFile {
     path: string(fields.path, `${where}.path`),
     size: number(fields.size, `${where}.size`),
     mtime: nullable(fields.mtime, (mtime) => string(mtime, `${where}.mtime`)),
+    deposited_at: nullable(fields.deposited_at, (time) => string(time, `${where}.deposited_at`)),
     state: one(ENTRY_STATES, fields.state, `${where}.state`),
     container: nullable(fields.container, (kind) =>
       one(CONTAINER_KINDS, kind, `${where}.container`),

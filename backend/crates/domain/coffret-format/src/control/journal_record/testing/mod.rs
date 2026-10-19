@@ -5,7 +5,7 @@ use coffret_model::{
     Generation, JournalRecord, MasterKeyEpoch,
 };
 
-use crate::control::testing::{container_id, entry, epoch, keyring, summary};
+use crate::control::testing::{container_id, deposited_at, entry, epoch, keyring, summary};
 use crate::entry_paths::entry_path;
 use crate::generations::generation;
 
@@ -130,7 +130,15 @@ pub(super) fn addition_of(
     kind: ContainerKind,
     entries: Vec<EntryMetadata>,
 ) -> ContainerAddition {
-    ContainerAddition::new(summary(seed, kind), entries)
+    let deposit_times = (0..entries.len())
+        .map(|position| {
+            deposited_at(
+                seed,
+                u32::try_from(position).expect("a fixture's table is short"),
+            )
+        })
+        .collect();
+    ContainerAddition::new(summary(seed, kind), entries, deposit_times)
         .expect("a fixture holds a table that tiles its Container's stream")
 }
 

@@ -62,6 +62,7 @@
         {
           "container": null,
           "content_type": "application/octet-stream",
+          "deposited_at": null,
           "mtime": "2026-01-01T00:00:00Z",
           "name": "blocked",
           "openable": false,
@@ -73,6 +74,7 @@
         {
           "container": "one-file",
           "content_type": "image/jpeg",
+          "deposited_at": "2026-01-02T00:00:00Z",
           "mtime": "2026-01-01T00:00:00Z",
           "name": "café.jpg",
           "openable": true,
@@ -84,6 +86,7 @@
         {
           "container": "one-file",
           "content_type": "image/png",
+          "deposited_at": "2026-01-02T00:00:00Z",
           "mtime": "2026-01-01T00:00:00Z",
           "name": "cover.png",
           "openable": true,
@@ -95,6 +98,7 @@
         {
           "container": null,
           "content_type": "application/octet-stream",
+          "deposited_at": null,
           "mtime": "2026-01-01T00:00:00Z",
           "name": "just-added.txt",
           "openable": false,
@@ -106,6 +110,7 @@
         {
           "container": "one-file",
           "content_type": "application/octet-stream",
+          "deposited_at": "2026-01-02T00:00:00Z",
           "mtime": "2026-01-01T00:00:00Z",
           "name": "notes.txt",
           "openable": false,
@@ -142,6 +147,7 @@
         {
           "container": "pack",
           "content_type": "image/png",
+          "deposited_at": "2026-01-02T00:00:00Z",
           "mtime": "2026-01-01T00:00:00Z",
           "name": "page-001.png",
           "openable": true,

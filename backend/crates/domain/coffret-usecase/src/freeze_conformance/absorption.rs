@@ -6,7 +6,7 @@ use crate::conformance_library::Library;
 use crate::entry_paths::entry_path;
 use crate::freeze_conformance::counting_store::CountingStore;
 use crate::freeze_conformance::fixtures::{
-    container_handle, filler, freeze, freeze_against, keys, map, opened, spooled, sync_source,
+    at, container_handle, filler, freeze, freeze_against, keys, map, opened, spooled, sync_source,
     write, TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
@@ -109,6 +109,13 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
             .find(|entry| entry.metadata.path.as_str() == relative)
             .expect("the Pack the catalog names holds the Entry");
         assert_eq!(&entry.content, content);
+        // Absorbing the file puts no content into the Library, so the Entry
+        // keeps the time the sync deposited it at (spec: PK-13, FM-15).
+        assert_eq!(
+            location.deposited_at.as_unix_seconds(),
+            at(1).as_unix_seconds(),
+            "{relative} keeps its deposit time",
+        );
     }
     assert_eq!(spooled(fixture.fs()), 0);
 }

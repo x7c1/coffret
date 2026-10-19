@@ -17,6 +17,12 @@
  * one. A map carrying it equal to `path` is a second spelling of that same
  * state and is refused.
  *
+ * `deposited_at` is the catalog's alone, with no counterpart in the meta
+ * section: when the content now at `path` was deposited into the Library, a
+ * separate axis from `mtime` and `btime`, which describe the original file. It
+ * is required, so a map without it is refused rather than read as an Entry with
+ * no deposit time (spec: FM-15, FM-16).
+ *
  * A Snapshot's entry map carries `container` beside these fields, and the maps
  * are forward-open anyway (spec: FM-9), so anything not asked for here is
  * stepped over rather than refused.
@@ -34,8 +40,14 @@ import {
 import { fail, type CoffretErrorCode } from '../errors.js';
 import type { EntryMetadata } from '../model/entry.js';
 
-/** Serializes one Entry to the map a record and a Snapshot give it. */
-export function encodeCatalogEntryMap(entry: EntryMetadata): Map<string, unknown> {
+/**
+ * Serializes one Entry, deposited at `depositedAtSeconds`, to the map a record
+ * and a Snapshot give it.
+ */
+export function encodeCatalogEntryMap(
+  entry: EntryMetadata,
+  depositedAtSeconds: bigint,
+): Map<string, unknown> {
   const map = new Map<string, unknown>([['path', entry.path]]);
   // Present only where a rename has set the two apart (spec: FM-15, FM-16), so
   // one state has one encoding.
@@ -48,11 +60,18 @@ export function encodeCatalogEntryMap(entry: EntryMetadata): Map<string, unknown
     map.set('btime', entry.btimeSeconds);
   }
   encodeTrailingFields(map, entry);
+  map.set('deposited_at', depositedAtSeconds);
   return map;
 }
 
-/** Reads one Entry out of a catalog map that may carry more. */
-export function decodeCatalogEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
+/**
+ * Reads one Entry, and when its content was deposited, out of a catalog map
+ * that may carry more.
+ */
+export function decodeCatalogEntryMap(
+  map: CborMap,
+  code: CoffretErrorCode,
+): { entry: EntryMetadata; depositedAtSeconds: bigint } {
   const path = storedPath(map, 'path', code, 'path');
   // Absent where the two paths are one, which every map an earlier schema
   // wrote also is (spec: FM-15, FM-16).
@@ -74,5 +93,5 @@ export function decodeCatalogEntryMap(map: CborMap, code: CoffretErrorCode): Ent
     entry.btimeSeconds = btime;
   }
   decodeTrailingFields(entry, map, code);
-  return entry;
+  return { entry, depositedAtSeconds: requiredInt(map, 'deposited_at', code) };
 }

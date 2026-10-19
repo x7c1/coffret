@@ -6,7 +6,6 @@ import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
 import {
   JOURNAL_RECORD_SCHEMA,
-  RENAMES_SCHEMA,
   decodeJournalRecord,
   encodeJournalRecord,
 } from './journalRecord.js';
@@ -87,22 +86,38 @@ describe('Journal record payload (spec: FM-15)', () => {
   });
 
   // A record that renames nothing leaves `renames` out rather than writing it
-  // empty, and names no required schema, since every reader applies it.
+  // empty.
   it('writes no renames field for a record that renames nothing', () => {
     const payload = encodeJournalRecord(record());
-    const keys = [...bodyMap(payload, JOURNAL_RECORD).keys()];
-    expect(keys).not.toContain('renames');
-    expect(keys).not.toContain('required_schema');
+    expect([...bodyMap(payload, JOURNAL_RECORD).keys()]).not.toContain('renames');
   });
 
-  // FM-9, FM-15: a record carrying renames names the schema a reader needs to
-  // apply them, above the reader floor.
-  it('names the schema renames need on a record carrying them', () => {
-    const payload = encodeJournalRecord(renamedRecord());
-    expect(BigInt(bodyMap(payload, JOURNAL_RECORD).get('required_schema') as number)).toBe(
-      RENAMES_SCHEMA,
-    );
-    expect(RENAMES_SCHEMA).toBeGreaterThan(2n);
+  // FM-9, FM-15: `deposited_at` is must-understand, so every record names the
+  // schema that carries it in `required_schema`, whatever else it carries.
+  it('names the schema deposit times need on every record', () => {
+    for (const source of [record(), renamedRecord(), firstRecord()]) {
+      const payload = encodeJournalRecord(source);
+      expect(BigInt(bodyMap(payload, JOURNAL_RECORD).get('required_schema') as number)).toBe(
+        JOURNAL_RECORD_SCHEMA,
+      );
+    }
+  });
+
+  // FM-15: every Entry an addition carries has its own deposit time, written
+  // under `deposited_at` and read back Entry for Entry.
+  it('carries a deposit time for every addition entry', () => {
+    const source = record();
+    const payload = encodeJournalRecord(source);
+    for (const item of arrayField(bodyMap(payload, JOURNAL_RECORD), 'additions')) {
+      for (const entry of arrayField(item as Map<unknown, unknown>, 'entries')) {
+        expect([...(entry as Map<unknown, unknown>).keys()]).toContain('deposited_at');
+      }
+    }
+    const decoded = read(payload);
+    for (const addition of decoded.additions) {
+      expect(addition.depositTimes).toHaveLength(addition.entries.length);
+    }
+    expect(decoded).toEqual(canonical(source));
   });
 
   // FM-9, FM-15: a record naming a schema above the one this package
@@ -118,25 +133,17 @@ describe('Journal record payload (spec: FM-15)', () => {
     }
   });
 
-  // A record carrying renames without naming the schema they need, or naming
-  // the reader floor (which its absence already says), is malformed.
-  it('refuses renames without a required schema, and a required schema at the floor', () => {
-    const bare = tampered((map) => map.delete('required_schema'), renamedRecord());
+  // A record of this schema names the schema its deposit times need, so naming
+  // none, or one below it, is malformed.
+  it('refuses a required schema below the one deposit times need', () => {
+    const bare = tampered((map) => map.delete('required_schema'));
     expect(errorCode(() => read(bare))).toBe('malformed_journal_record');
-    for (const required of [0n, 2n]) {
+    for (const required of [0n, 2n, JOURNAL_RECORD_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('required_schema', required));
       expect(errorCode(() => read(payload)), `required ${required}`).toBe(
         'malformed_journal_record',
       );
     }
-  });
-
-  // Libraries created since the field-number format hold records of schema 2,
-  // which carry no `renames`: a reader still takes them, as renaming nothing.
-  it('reads a schema 2 record as one that renames nothing', () => {
-    const decoded = read(tampered((map) => map.set('schema', 2n)));
-    expect(decoded).toEqual(canonical(record()));
-    expect(decoded.renames).toEqual([]);
   });
 
   // An addition's entry table is the catalog's own spelling — `path`, `mtime`,
@@ -149,7 +156,7 @@ describe('Journal record payload (spec: FM-15)', () => {
     // `additions` in Container ID order.
     const entries = arrayField(mapAt(arrayField(bodyMap(payload, JOURNAL_RECORD), 'additions'), 1), 'entries');
     expect([...mapAt(entries, 1).keys()].sort()).toEqual(
-      ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'derived_from', 'mime'].sort(),
+      ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'derived_from', 'mime', 'deposited_at'].sort(),
     );
   });
 
@@ -285,7 +292,7 @@ describe('Journal record payload (spec: FM-15)', () => {
       for (const item of arrayField(map, 'additions')) {
         (item as Map<unknown, unknown>).set(24, 1n);
       }
-      map.set('schema', 3n);
+      map.set('schema', JOURNAL_RECORD_SCHEMA + 1n);
     });
     expect(read(payload)).toEqual(canonical(record()));
   });
@@ -315,9 +322,10 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
     expect(errorCode(() => read(payload))).toBe('control_payload_out_of_order');
   });
 
-  // FM-15: a reader refuses any schema below the one this build writes.
+  // FM-15: a reader refuses any schema below the one this build writes: every
+  // earlier schema's additions carry no deposit time.
   it('refuses a schema below the lowest readable one', () => {
-    for (const schema of [0n, JOURNAL_RECORD_SCHEMA - 2n]) {
+    for (const schema of [0n, 2n, JOURNAL_RECORD_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => read(payload)), `schema ${schema}`).toBe(
         'unsupported_journal_record_schema',
@@ -461,6 +469,17 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
       mapAt(entries, 0).set('captured_path', mapAt(entries, 0).get('path'));
     });
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
+  });
+
+  // FM-15: `deposited_at` is required in every addition entry, so a map
+  // without it is refused rather than read as an Entry with no deposit time.
+  it('refuses an addition entry without a deposit time', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
+      mapAt(entries, 0).delete('deposited_at');
+    });
+    expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
+    expect(() => read(payload)).toThrow(/deposited_at/);
   });
 
   // FM-15: each element of an entry table is one entry map — the same values

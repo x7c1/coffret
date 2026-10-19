@@ -1,4 +1,4 @@
-use coffret_model::ContainerId;
+use coffret_model::EntryLocation;
 
 use crate::local_scan::SourceFile;
 
@@ -13,6 +13,9 @@ use crate::local_scan::SourceFile;
 pub(super) struct Candidate {
     /// The file to encode.
     pub(super) source: SourceFile,
-    /// The one-file Container this one replaces, if any.
-    pub(super) replaces: Option<ContainerId>,
+    /// The current Entry this one replaces, if any: the one Entry of the
+    /// one-file Container its replacement removes. It rides along whole
+    /// because whether the replacement deposits new content or carries this
+    /// Entry's deposit time forward is its hash's to say (spec: FM-15, PK-11).
+    pub(super) replaces: Option<EntryLocation>,
 }

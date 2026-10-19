@@ -66,6 +66,9 @@ pub use control_object_kind::ControlObjectKind;
 mod control_object_name;
 pub use control_object_name::ControlObjectName;
 
+mod deposited_at;
+pub use deposited_at::DepositedAt;
+
 mod derived_from;
 pub use derived_from::DerivedFrom;
 

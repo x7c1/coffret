@@ -1,4 +1,4 @@
-use coffret_device::Mtime;
+use coffret_device::{DepositedAt, Mtime};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
@@ -17,7 +17,21 @@ use time::OffsetDateTime;
 /// (spec: FM-9) — and one far enough out is not a date. Saying so is better than
 /// either refusing the row or naming a moment that is not the file's.
 pub fn iso8601(mtime: Mtime) -> Option<String> {
-    OffsetDateTime::from_unix_timestamp(mtime.as_unix_seconds())
+    rfc3339(mtime.as_unix_seconds())
+}
+
+/// One deposit time the same way: in UTC, and `None` where no calendar reaches
+/// it (spec: FM-15).
+///
+/// The same form as a modification time so a page reads both alike, and a
+/// separate function because it is a separate axis — when the Library
+/// received the content, not when the file was last changed.
+pub fn deposit_iso8601(deposited_at: DepositedAt) -> Option<String> {
+    rfc3339(deposited_at.as_unix_seconds())
+}
+
+fn rfc3339(seconds: i64) -> Option<String> {
+    OffsetDateTime::from_unix_timestamp(seconds)
         .ok()?
         .format(&Rfc3339)
         .ok()
@@ -25,8 +39,8 @@ pub fn iso8601(mtime: Mtime) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::iso8601;
-    use coffret_device::Mtime;
+    use super::{deposit_iso8601, iso8601};
+    use coffret_device::{DepositedAt, Mtime};
 
     #[test]
     fn a_time_is_stated_in_utc() {
@@ -49,5 +63,17 @@ mod tests {
     #[test]
     fn a_count_of_seconds_no_calendar_reaches_is_no_date() {
         assert_eq!(iso8601(Mtime::from_unix_seconds(i64::MAX)), None);
+    }
+
+    #[test]
+    fn a_deposit_time_is_stated_in_utc() {
+        assert_eq!(
+            deposit_iso8601(DepositedAt::from_unix_seconds(1_760_000_000)).as_deref(),
+            Some("2025-10-09T08:53:20Z"),
+        );
+        assert_eq!(
+            deposit_iso8601(DepositedAt::from_unix_seconds(i64::MAX)),
+            None
+        );
     }
 }

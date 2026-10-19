@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, EntryMetadata, EntryNumber, EntryPath, IndexCheckpoint, JournalRecord,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    ControlObjectName, DepositedAt, EntryMetadata, EntryNumber, EntryPath, IndexCheckpoint,
+    JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use crate::device_state::{
@@ -27,6 +27,15 @@ use crate::generations::generation;
 /// Before 1970, so an Index that dropped the sign or stored the field as an
 /// unsigned column shows it here rather than in the field's presence alone.
 pub(super) const BORN: i64 = -86_400;
+
+/// When entry `position` of the Container `seed` names was deposited.
+///
+/// A second of its own for every Entry a case builds, so an Index that stored
+/// one Entry's time against another's, or its `mtime` in its place, shows it
+/// (spec: FM-15, FM-16).
+pub(super) fn deposited_at(seed: u8, position: usize) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_760_000_000 + i64::from(seed) * 1_000 + position as i64)
+}
 
 /// A Container ID whose sixteen bytes are all `seed`.
 pub(super) fn container_id(seed: u8) -> ContainerId {
@@ -96,6 +105,9 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
             object_ref: None,
         },
         entries,
+        (0..paths.len())
+            .map(|position| deposited_at(seed, position))
+            .collect(),
     )
     .expect("a fixture holds a table that tiles its Container's stream")
 }
@@ -106,7 +118,7 @@ pub(super) fn written_as(
     addition: ContainerAddition,
     captured: &[(&str, &str)],
 ) -> ContainerAddition {
-    let (container, mut entries) = addition.into_parts();
+    let (container, mut entries, deposit_times) = addition.into_parts();
     for (current, captured_at) in captured {
         let entry = entries
             .iter_mut()
@@ -114,7 +126,7 @@ pub(super) fn written_as(
             .expect("a fixture renames only an Entry its addition holds");
         entry.captured_path = path(captured_at);
     }
-    ContainerAddition::new(container, entries)
+    ContainerAddition::new(container, entries, deposit_times)
         .expect("naming an Entry's captured path leaves its table one that tiles")
 }
 

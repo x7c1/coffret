@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use coffret_model::{
     CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, EntryExtent, EntryMetadata, EntryPath, Generation, JournalRecord,
+    ContentHash, DepositedAt, EntryExtent, EntryMetadata, EntryPath, Generation, JournalRecord,
     KeyringCommitment, LibraryId, MasterKey, MasterKeyEpoch, Mtime,
 };
 use coffret_usecase::device_state::{DeviceTime, LocalObservation, Mapping};
@@ -62,6 +62,12 @@ fn generation_of(number: u64) -> Generation {
         .unwrap_or_else(|error| panic!("a case holds a literal generation: {error}"))
 }
 
+/// When the Entry at `at` of the Container `seed` names was deposited: a
+/// second of its own for each, and none of them its `mtime`.
+fn deposited_at(seed: u8, at: usize) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_760_000_000 + i64::from(seed) * 100 + at as i64)
+}
+
 /// A record adding one Container of `kind` holding an Entry at each path.
 ///
 /// The generation is the seed, so a case planting two Containers replays two
@@ -92,6 +98,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
                 mime: None,
             })
             .collect(),
+        (0..paths.len()).map(|at| deposited_at(seed, at)).collect(),
     )
     .expect("a case's own entry table tiles its Container's stream");
 
@@ -219,6 +226,38 @@ async fn the_listing_is_in_byte_order() {
     assert_eq!(
         names(&listing),
         (vec!["Zurich", "aachen"], vec!["A.jpg", "b.jpg"])
+    );
+}
+
+// FM-15: a row carries the deposit time the catalog holds for its Entry, beside
+// and apart from the file's own modification time.
+#[tokio::test]
+async fn a_row_carries_its_entrys_deposit_time() {
+    let library = library(&[(1, ContainerKind::Pack, &["albums/a.jpg", "albums/b.jpg"])]).await;
+
+    let listing = library
+        .list(Some(&entry_path("albums")))
+        .await
+        .expect("the catalog answers");
+    let rows: Vec<(&str, DepositedAt, Mtime)> = listing
+        .files
+        .iter()
+        .map(|row| (row.name.as_str(), row.deposited_at, row.mtime))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "a.jpg",
+                deposited_at(1, 0),
+                Mtime::from_unix_seconds(1_700_000_000)
+            ),
+            (
+                "b.jpg",
+                deposited_at(1, 1),
+                Mtime::from_unix_seconds(1_700_000_001)
+            ),
+        ],
     );
 }
 

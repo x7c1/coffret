@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use coffret_model::{
     CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, EntryMetadata, EntryNumber, Generation, KeyEnvelope, ObjectRef,
+    ContentHash, DepositedAt, EntryMetadata, EntryNumber, Generation, KeyEnvelope, ObjectRef,
 };
 
 use crate::commit::{
@@ -77,6 +77,18 @@ pub(crate) struct SpooledContainer {
     /// What a rebase follows when another writer renamed one of them since the
     /// run read the catalog (spec: EP-7).
     pub(crate) supersedes: BTreeMap<EntryNumber, EntryRef>,
+    /// The deposit time each of its Entries that carries an existing Entry's
+    /// content keeps, by its entry number here: the kept Entries of a rebuilt
+    /// Pack, the one-file Entries a freeze's Pack absorbs unchanged, and a
+    /// sync's replacement whose bytes hash to the replaced Entry's
+    /// (spec: PK-10, PK-11, PK-13).
+    ///
+    /// Not [`supersedes`](Self::supersedes): a sync's replacement takes the
+    /// place of an Entry whatever its content, but carries that Entry's time
+    /// only where the content is the same, since a deposit is new content and
+    /// the hash is what decides it. An Entry missing here is a deposit,
+    /// stamped once as its batch is prepared (spec: FM-15).
+    pub(crate) carries: BTreeMap<EntryNumber, DepositedAt>,
     /// Whether the Entries it holds are files this device put into it from its
     /// own disk — which is what its commit records as materialized, and what
     /// the pending row naming it says for a later completion (spec: OC-7,
@@ -90,14 +102,19 @@ pub(crate) struct SpooledContainer {
 
 impl SpooledContainer {
     /// What the Journal record says about this Container, paired with the key
-    /// that opens it (spec: CP-11, KL-7).
+    /// that opens it (spec: CP-11, KL-7), with every Entry it deposits stamped
+    /// `deposited_at` and every one it carries keeping its own time
+    /// (spec: FM-15).
     ///
     /// The entry table is the one the encoder laid down, so it tiles the
     /// Container's plaintext stream and holds at least one Entry by
     /// construction (spec: FM-9, FM-10). A spool that somehow held one that did
     /// not would be this device's own doing, so the refusal travels as the
     /// commit's own rather than being unwrapped into a panic.
-    pub(crate) fn addition(&self) -> Result<PreparedAddition, CommitError> {
+    pub(crate) fn addition(
+        &self,
+        deposited_at: DepositedAt,
+    ) -> Result<PreparedAddition, CommitError> {
         let container = ContainerSummary {
             id: self.container_id,
             kind: self.kind,
@@ -108,7 +125,14 @@ impl SpooledContainer {
             // reader can fetch the Container without listing first.
             object_ref: self.object_ref.clone(),
         };
-        let addition = ContainerAddition::new(container, self.entries.clone())
+        let deposit_times = (0..self.entries.len())
+            .map(|position| {
+                let number = EntryNumber::at_position(position)?;
+                Ok(self.carries.get(&number).copied().unwrap_or(deposited_at))
+            })
+            .collect::<coffret_model::Result<Vec<_>>>()
+            .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
+        let addition = ContainerAddition::new(container, self.entries.clone(), deposit_times)
             .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
 
         Ok(PreparedAddition::new(addition, self.envelope).superseding(self.supersedes.clone()))
@@ -164,6 +188,11 @@ impl SpooledContainer {
 /// supersedes travels on the upload itself, in
 /// [`replaces`](SpooledContainer::replaces), so a sync and a freeze pass none.
 ///
+/// `now` stamps every Entry the batch deposits, once, as it is prepared: a
+/// rebase retries this same batch onto a newer head and keeps the stamp, so a
+/// retry does not move the time (spec: CP-4, FM-15). It is this device's own
+/// clock, uncorrected for any other device's.
+///
 /// `base` is the head the run's catch-up reached, which is what it read the
 /// catalog at and so what the batch was prepared against (spec: CP-4, EP-7).
 ///
@@ -198,9 +227,10 @@ pub(crate) async fn commit_spooled(
     if spooled.is_empty() && removals.is_empty() && renames.is_empty() {
         return Ok(None);
     }
+    let deposited_at = DepositedAt::from_unix_seconds(now.as_unix_seconds());
     let additions = spooled
         .iter()
-        .map(SpooledContainer::addition)
+        .map(|one| one.addition(deposited_at))
         .collect::<Result<Vec<_>, CommitError>>()?;
     let batch = PreparedBatch::adding(additions)
         .removing(

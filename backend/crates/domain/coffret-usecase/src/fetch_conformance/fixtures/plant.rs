@@ -3,7 +3,7 @@ use coffret_format::{
 };
 use coffret_model::{
     ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
-    EntryExtent, EntryMetadata, Mtime,
+    DepositedAt, EntryExtent, EntryMetadata, Mtime,
 };
 
 use crate::ciphertext_len_claims::ciphertext_len;
@@ -58,6 +58,7 @@ pub(crate) async fn plant(
         ..entry.clone()
     });
     let entries: Vec<EntryMetadata> = std::iter::once(entry).chain(unheld).collect();
+    let deposit_times = vec![DepositedAt::from_unix_seconds(1_760_000_000); entries.len()];
     let envelope = wrap_container_key(
         &purpose_key(Purpose::ContainerWrap),
         &container_id,
@@ -78,6 +79,8 @@ pub(crate) async fn plant(
                 object_ref: None,
             },
             entries,
+            // Planted as another device's deposit (spec: FM-15).
+            deposit_times,
         )
         .expect("a fixture holds a table that tiles its Container's stream"),
         envelope,

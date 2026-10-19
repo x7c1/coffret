@@ -200,9 +200,11 @@ fields until a coordinated implementation changes the format.
     reader implementing a lower schema than that refuses the object as a
     typed error saying a newer build is needed, and stops wherever it was
     reading — it never skips the object and never applies part of it. A
-    writer sets that field only on an object that carries a must-understand
-    field, and omits it otherwise; absent, it stands for the lowest schema a
-    reader accepts. A future field of this kind reuses the same field rather
+    writer sets that field on an object that carries a must-understand field,
+    or wherever the map's own rule says every object carries it (FM-15), and
+    omits it otherwise; absent, it stands for the lowest schema readers
+    accepted when the field was introduced, which a map's own rule names
+    (FM-15). A future field of this kind reuses the same field rather
     than inventing another. FM-15 is the first map to carry one.
   - `captured_mtime` is a signed count of whole seconds from the Unix epoch;
     sub-second precision is not recorded, and negative values (before
@@ -395,7 +397,7 @@ fields until a coordinated implementation changes the format.
   to unwrap, so envelopes cannot be swapped between Containers.
   *(Form: test)*
 - **FM-15.** A Journal record's payload (kind `0x01`) is a CBOR map with:
-  `schema` (= 3); `prev`, the generation of the control head this record
+  `schema` (= 4); `prev`, the generation of the control head this record
   succeeds, omitted at generation 0 where there is none; `next_commit_slot`
   and `snapshot_slot`, each the Storage's own opaque token for the slot the
   record reserves — the successor's slot (CP-2) and this head's ordinary
@@ -409,8 +411,8 @@ fields until a coordinated implementation changes the format.
   `removals`, an array of 16-byte Container IDs the batch removed (CP-14);
   `renames`, an array of the Entries the batch gave a new current Entry Path,
   absent where it renames nothing; and `required_schema`, the lowest schema a
-  reader has to implement to apply the record faithfully (FM-9), absent where
-  that is the reader floor of 2. Beside the Keyring commitment and
+  reader has to implement to apply the record faithfully (FM-9), which every
+  record of this schema carries (below). Beside the Keyring commitment and
   `required_schema`, which says how the rest is to be read, those are the
   record's four vocabularies.
   The header carries the record's own generation and the payload carries
@@ -430,15 +432,15 @@ fields until a coordinated implementation changes the format.
     is created, it commits nothing but the slot it carries (CP-2).
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
-    `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
-    string), `ciphertext_len`, optional `object_ref` (below), and `entries` —
-    the Container's entry table, each element a map of `path`, optional
+    `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte string),
+    `ciphertext_len`, optional `object_ref` (below), and `entries` — the
+    Container's entry table, each element a map of `path`, optional
     `captured_path`, `offset`, `size`, `mtime`, optional `btime`, `hash`,
-    optional `mime`, and optional `derived_from`. `captured_path`, `offset`,
-    `size`, `hash`, `mime`, and `derived_from` are FM-9's fields verbatim, down
-    to the `captured_path` inside a `derived_from`, and carrying the whole
-    table is what lets a device replay a record without opening a Container
-    (CP-11).
+    optional `mime`, optional `derived_from`, and `deposited_at` (below).
+    `captured_path`, `offset`, `size`, `hash`, `mime`, and `derived_from` are
+    FM-9's fields verbatim, down to the `captured_path` inside a `derived_from`,
+    and carrying the whole table is what lets a device replay a record without
+    opening a Container (CP-11).
   - `path`, `mtime`, and `btime` are named without FM-9's `captured_`
     prefix, though an addition takes them from the same entry table: the
     difference is what the map is for. A record is the catalog, and those
@@ -459,6 +461,37 @@ fields until a coordinated implementation changes the format.
     adds, as that Container's meta section records it, and not from the paths
     its batch was asked to commit; a checkpoint copies it from the catalog
     (FM-16).
+  - `deposited_at` is the Entry's **deposit time**: when the content now at its
+    Entry Path was deposited into the Library, as a signed count of whole
+    seconds from the Unix epoch, the form `mtime` takes. A **deposit** is
+    putting new content into the Library, and whether content is new is decided
+    by its hash (FM-9): adding a file is a deposit, and so is adding a file
+    again at a path a deletion emptied; replacing one's content (`update`,
+    PK-11, PK-12) is a deposit when the replacement's `hash` differs from the
+    replaced Entry's. An operation that puts no new content in is not a deposit
+    and carries the time forward: a rename keeps it on the Entry it renames, and
+    a new Entry that carries an existing Entry's content — a Pack rewrite
+    (PK-10), a one-file Entry a freeze absorbs with the same hash (PK-13), an
+    `update` whose replacement has the same hash as the Entry it replaces, a
+    key-lost Entry's included (KL-17), a repack or compaction — copies that
+    Entry's `deposited_at`. A restore is not a deposit either: it recovers each
+    Entry's time from the checkpoint and records exactly as it recovers the
+    current path (RV-1). Any future way of putting content into the Library is a
+    deposit too, under this same definition.
+  - The device that builds the record carrying a deposit stamps it with its own
+    clock, and nothing corrects for skew between devices: the value says when
+    that device saw the content enter the Library, not when every device
+    agreed it had. A batch is stamped once, as it is prepared, and a rebase
+    carries the stamp onto the newer head unchanged (CP-4).
+  - The deposit time is a separate axis from `mtime` and `btime`, which
+    describe the original file and travel from it: a photograph taken years ago
+    and deposited today carries an old `mtime` and today's `deposited_at`. It
+    is required in every entry map an addition carries, and a reader rejects a
+    map without it rather than reading an Entry with no deposit time. It is the
+    catalog's value and none of the Container's, so FM-9's meta section does
+    not carry it: a Container records what was captured when it was written,
+    and a rewritten one would otherwise mix that with a value the catalog holds
+    now. It sits beside `path`, which is a current value too.
   - `object_ref` is the Storage's own identifier for the Container's object —
     the same value whichever device reads it — carried as a cache so that a
     device can fetch the Container without listing Storage first. It is never
@@ -512,56 +545,55 @@ fields until a coordinated implementation changes the format.
     circulation.
   - The maps are forward-open on FM-9's terms: a reader ignores fields it
     does not know, adding a field only increments `schema`, and a reader
-    accepts any `schema` of 2 or above and rejects anything lower. A record of
-    schema 2 predates `renames` and reads as one that renames nothing;
-    Libraries created since field numbers hold such records.
-  - `renames` is must-understand on FM-9's terms: a reader that ignored it
-    would take the record's removals and additions and keep the renamed
-    Entries at their old paths. So a record carrying `renames` carries
-    `required_schema` of 3, and one without carries no `required_schema`. A
-    reader reads `required_schema` before anything else the record holds and
-    refuses a record naming a schema above the one it implements, as needing a
-    newer build; a replay or a catch-up that meets it stops there, with every
-    record before it applied and none of it. A reader also refuses, as
-    malformed, a record carrying `renames` without a `required_schema` of 3 or
-    above, and a `required_schema` of 2 or below, which its absence already
-    spells.
-- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 3);
-  the checkpoint the Snapshot stands at — `head_generation`,
-  `journal_generation`, `next_commit_slot` (the same opaque token FM-15
-  spells, absent where the name is the slot), `keyring_generation`,
-  `keyring_replica_count`, and `keyring_set_digest`, spelled as FM-15 spells
-  them (CK-1, CK-2, CK-3); `containers`, an array of the current Containers,
-  each element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
-  `object_ref`, as FM-15's additions spell those fields; and `entries`, an
-  array of every current Entry, each element the entry map an addition carries
-  — `path`, `mtime`, optional `btime`, and FM-9's optional `captured_path`,
-  `offset`, `size`, `hash`, optional `mime`, and optional `derived_from` — plus
-  `container`, the 0-based index of the owning element of `containers`, and
-  `entry`, the Entry's entry number in that Container (FM-9). A
-  Snapshot is a checkpoint of the catalog, so it spells those three the
-  catalog's way, and carries `captured_path` where it differs from `path`,
-  for the reasons FM-15 gives. The
-  fourth member of the Keyring tuple the checkpoint names, `master_key_epoch`
-  (CK-3), is the field FM-13 gives every payload, so it is not repeated
-  inside. The ordinary kind (`0x03`) and the activation kind (`0x04`) share
-  this schema. Every field, at every level, is carried under the field number
-  the registry gives it in its map kind, on FM-9's terms. *(Form: test)*
+    accepts any `schema` of 4 or above and rejects anything lower. A record of
+    an earlier schema carries Entries without a deposit time, which no reader
+    may make up, so a Library holding such records is refused rather than read
+    and is recreated rather than migrated.
+  - `renames` and `deposited_at` are must-understand on FM-9's terms. A reader
+    that ignored `renames` would take the record's removals and additions and
+    keep the renamed Entries at their old paths; one that ignored
+    `deposited_at` would hold a catalog without deposit times and could commit
+    records no reader of this schema accepts. So every record carries
+    `required_schema` of 4, whatever it adds or renames — the record at
+    generation 0 included, since a reader that applies it may commit next.
+    Absent, `required_schema` stands for 2, the floor every reader that knows
+    the field shares. A reader reads `required_schema` before anything else the
+    record holds and refuses a record naming a schema above the one it
+    implements, as needing a newer build; a replay or a catch-up that meets it
+    stops there, with every record before it applied and none of it. A reader
+    also refuses, as malformed, a record of schema 4 or above whose
+    `required_schema` is absent or below 4.
+- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 4); the
+  checkpoint the Snapshot stands at — `head_generation`, `journal_generation`,
+  `next_commit_slot` (the same opaque token FM-15 spells, absent where the name
+  is the slot), `keyring_generation`, `keyring_replica_count`, and
+  `keyring_set_digest`, spelled as FM-15 spells them (CK-1, CK-2, CK-3);
+  `containers`, an array of the current Containers, each element `id`, `kind`,
+  `ciphertext_hash`, `ciphertext_len`, and optional `object_ref`, as FM-15's
+  additions spell those fields; and `entries`, an array of every current Entry,
+  each element the entry map an addition carries — `path`, `mtime`, optional
+  `btime`, FM-9's optional `captured_path`, `offset`, `size`, `hash`, optional
+  `mime`, optional `derived_from`, and `deposited_at` — plus `container`, the
+  0-based index of the owning element of `containers`, and `entry`, the Entry's
+  entry number in that Container (FM-9). A Snapshot is a checkpoint of the
+  catalog, so it spells those three the catalog's way, carries `captured_path`
+  where it differs from `path`, and carries each Entry's deposit time as the
+  records left it, for the reasons FM-15 gives. The fourth member of the Keyring
+  tuple the checkpoint names, `master_key_epoch` (CK-3), is the field FM-13
+  gives every payload, so it is not repeated inside. The ordinary kind (`0x03`)
+  and the activation kind (`0x04`) share this schema. Every field, at every
+  level, is carried under the field number the registry gives it in its map
+  kind, on FM-9's terms. *(Form: test)*
   - An Entry names its Container by index rather than by ID because a Library
     holds far more Entries than Containers, and the 16-byte ID would
     otherwise be repeated once per Entry.
   - `entry` is carried because `entries` is in Entry Path order, which loses
     the position an addition carried implicitly (FM-15). No two elements name
     the same `(Container ID, entry number)`, and a reader rejects a Snapshot
-    of schema 3 or above whose element lacks `entry`.
-  - A Snapshot of schema 2 predates `entry`, and nothing a reader holds says
-    what each Entry's number was: path order is not table order. So a reader
-    does not use a schema-2 Snapshot for entry numbers and does not adopt it
-    as a starting point (CK-9). It starts from an older checkpoint that
-    carries the numbers, or rebuilds the catalog by replaying every Journal
-    record from `head-0` — exact for as long as the Journal is unpruned, as it
-    is while no implementation prunes (RV-1). It never guesses a number from
-    path order.
+    whose element lacks `entry`.
+  - `deposited_at` is required in every element, as in an addition's entry
+    map, and a reader rejects an element without it rather than restoring an
+    Entry with no deposit time (FM-15).
   - `containers` is ordered by Container ID and `entries` by the canonical
     UTF-8 bytes of the Entry Path (EP-3), so one Library state has one
     encoding and a reader can answer a prefix range over `entries` by binary
@@ -595,8 +627,11 @@ fields until a coordinated implementation changes the format.
   - `captured_path` is present if and only if it differs from `path`, and a
     reader rejects one present and equal, as FM-15 has it for a record.
   - The maps are forward-open on FM-9's terms, as FM-15's are, and a reader
-    adopts a Snapshot of `schema` 3 or above, refuses one of schema 2 as a
-    starting point as above, and rejects anything lower.
+    adopts a Snapshot of `schema` 4 or above and rejects anything lower. A
+    Snapshot of an earlier schema lacks the deposit time of every Entry it
+    lists, and so do the records it checkpoints, so nothing could supply one:
+    the Library holding it is refused, as one holding such records is
+    (FM-15).
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
   `schema` (= 1); and `mapping`, the generation's complete **key table** from
   every current Container to the key status the committed control state records

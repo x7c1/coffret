@@ -104,8 +104,11 @@ fn entry_value(
             container_id: location.container_id,
         });
     };
-    let mut fields = match Value::serialized(&WireCatalogEntry::from(&location.entry))
-        .map_err(serialization_failed)?
+    let mut fields = match Value::serialized(&WireCatalogEntry::new(
+        &location.entry,
+        location.deposited_at,
+    ))
+    .map_err(serialization_failed)?
     {
         Value::Map(fields) => fields,
         // `WireCatalogEntry` is a struct, so serde has only one shape to write it in.

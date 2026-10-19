@@ -10,7 +10,11 @@ A stored representation and its current name are separate facts.
 
 Replacing or repacking a file creates a new Entry in a new Container, even
 when its content or current Entry Path stays the same. Changing only the
-current name need not change the stored representation.
+current name need not change the stored representation. So a deposit time
+belongs to content, not to an Entry: the [Catalog](../../catalog/#domain-rules)
+keeps when the content now at an Entry Path was deposited, and a new Entry that
+carries existing content — a repacked one — keeps the time the content was
+deposited at, while a replacement with new content is deposited anew.
 
 ## Mental Model
 
@@ -20,6 +24,7 @@ current name need not change the stored representation.
 | What is it called in the current Library? | The Entry Path recorded by the Catalog |
 | What name was captured when it was stored? | The Container entry table's `captured_path`, which the Catalog also keeps beside the current Entry Path |
 | What content was stored? | The plaintext extent and content hash in the entry table |
+| When did that content enter the Library? | Its deposit time, which the Catalog keeps and no entry table records |
 
 An entry number is local to one Container. Every one-file Container has an
 Entry numbered zero; two such Entries are distinct because their Container
@@ -69,6 +74,11 @@ second. For example, renaming `books/old/page.png` to
   when the drop wrote it rather than when the person's file came into being.
   The birth time is left out only as long as the device still holds its note of
   the drop when the run that carries the file in scans it (spec: FM-9, EP-11).
+- **The deposit time is not captured metadata**: when content entered the
+  Library is a fact about the Library, not about the file or the Container, so
+  no entry table records it and no rewrite of a Container moves it. It is
+  neither the modification time nor the birth time, which describe the
+  original file (spec: FM-9, FM-15).
 - **The media type is a hint**: an Entry's recorded media type is a guess made
   at creation and is never what decides whether a client may open the Entry
   (spec: FM-9).

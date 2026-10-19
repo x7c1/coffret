@@ -25,6 +25,15 @@ export interface ContainerAddition {
    * The Container's entry table, in plaintext stream order (spec: FM-9, FM-15).
    */
   entries: EntryMetadata[];
+  /**
+   * When each Entry of `entries` was deposited into the Library, as whole
+   * seconds from the Unix epoch, one per Entry and in the same order
+   * (spec: FM-15).
+   *
+   * The catalog's value rather than the Container's, which is why a record
+   * carries it and the meta section does not.
+   */
+  depositTimes: bigint[];
 }
 
 /**
@@ -74,7 +83,7 @@ export interface JournalRecord {
    * The Entries the batch gave a new current Entry Path, each named by its
    * Container and entry number (spec: FM-15).
    *
-   * Empty on a record that renames nothing, as every record of schema 2 is.
+   * Empty on a record that renames nothing.
    */
   renames: EntryRename[];
 }

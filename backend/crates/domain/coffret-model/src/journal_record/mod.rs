@@ -123,10 +123,10 @@ impl JournalRecord {
     /// The Entries the batch gave a new current Entry Path, ordered by
     /// Container ID and then entry number (spec: FM-15).
     ///
-    /// Empty on a record that renames nothing, which is every record a schema
-    /// before 3 wrote. Whether each one names a current Entry, and whether the
-    /// state they leave keeps one Entry per path, is asked where the record is
-    /// applied, since it depends on the catalog it is applied to.
+    /// Empty on a record that renames nothing. Whether each one names a
+    /// current Entry, and whether the state they leave keeps one Entry per
+    /// path, is asked where the record is applied, since it depends on the
+    /// catalog it is applied to.
     pub fn renames(&self) -> &[EntryRename] {
         &self.renames
     }

@@ -43,8 +43,9 @@ pub(super) enum Verdict {
     AwaitsRelocation,
     /// Held by a one-file Container, which the Pack absorbs however the local
     /// file compares and whether or not the Container's key survives
-    /// (spec: PK-1, PK-13).
-    Absorbs(ContainerId),
+    /// (spec: PK-1, PK-13). The Entry comes along, because whether the Pack
+    /// carries its deposit time is the hash's to say.
+    Absorbs(EntryLocation),
     /// A current Entry this device never materialized, which is outside its
     /// scope whether or not a mapping covers it (spec: EP-10).
     NotMaterialized,
@@ -90,7 +91,7 @@ pub(super) async fn judge(
     let container_id = location.container_id;
 
     if kinds.get(&container_id) == Some(&ContainerKind::OneFile) {
-        return Ok(Verdict::Absorbs(container_id));
+        return Ok(Verdict::Absorbs(location));
     }
 
     // From here the Entry is held by a Pack, which a freeze never reads and
@@ -133,16 +134,22 @@ pub(super) async fn examine(
                 source: source.clone(),
                 plan,
                 absorbs: None,
+                carries: None,
             });
         }
-        Verdict::Absorbs(container_id) => {
+        Verdict::Absorbs(location) => {
             // The replacement is built from the bytes on disk either way
-            // (spec: PK-1, PK-13).
+            // (spec: PK-1, PK-13). Where those are the bytes the Entry already
+            // holds, the Pack puts no content in and the Entry keeps its
+            // deposit time; where they moved, the file deposits new content,
+            // exactly as an `update` of it would (spec: FM-15).
             let plan = plan(source, hashed(source, roots, buffer).await?);
+            let carries = (plan.hash == location.entry.hash).then_some(location.deposited_at);
             survey.selected.push(Selected {
                 source: source.clone(),
                 plan,
-                absorbs: Some(container_id),
+                absorbs: Some(location.container_id),
+                carries,
             });
         }
         Verdict::NotMaterialized | Verdict::Departed | Verdict::AwaitsRelocation => {}

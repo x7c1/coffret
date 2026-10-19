@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
-use coffret_model::{ContainerId, ContainerKind, Mtime};
+use coffret_model::{ContainerId, ContainerKind, DepositedAt, Mtime};
 
 use crate::device_state::LocalEntryState;
 use crate::entry_paths::entry_path;
@@ -28,9 +28,9 @@ use crate::sync_conformance::refusing_index::RefusingIndex;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// What the catalog and this device's record said of one path before a case
-/// renamed its file: the Container holding the Entry there, and the length and
-/// modification time the record observed.
-type Standing = (Option<ContainerId>, Option<(u64, Mtime)>);
+/// renamed its file: the Container holding the Entry there and when its content
+/// was deposited, and the length and modification time the record observed.
+type Standing = (Option<(ContainerId, DepositedAt)>, Option<(u64, Mtime)>);
 
 /// One sync run through `index`, and how many Containers it put.
 async fn sync_through(
@@ -133,7 +133,11 @@ async fn carried_as_renames(
             .await
             .expect("asking the catalog must succeed")
             .unwrap_or_else(|| panic!("an Entry stands at {to}"));
-        assert_eq!(Some(entry.container_id), container, "the same Entry");
+        assert_eq!(
+            Some((entry.container_id, entry.deposited_at)),
+            container,
+            "the same Entry, deposited when it was: a rename deposits nothing (spec: FM-15)",
+        );
         assert!(
             index
                 .local_entry_at(&entry_path(*from))
@@ -172,7 +176,7 @@ async fn standing(fixture: &SyncUnderTest, paths: &[&str]) -> Vec<Standing> {
             .await
             .expect("reading a row must succeed");
         standing.push((
-            entry.map(|entry| entry.container_id),
+            entry.map(|entry| (entry.container_id, entry.deposited_at)),
             row.map(|row| (row.observation.size, row.observation.mtime)),
         ));
     }
@@ -472,7 +476,11 @@ pub async fn a_detected_rename_interrupted_before_its_record_follows_is_finished
         .await
         .expect("asking the catalog must succeed")
         .expect("the rename has landed");
-    assert_eq!(Some(entry.container_id), before[0].0, "the same Entry");
+    assert_eq!(
+        Some((entry.container_id, entry.deposited_at)),
+        before[0].0,
+        "the same Entry, with its deposit time"
+    );
     assert_eq!(
         index
             .local_entry_at(&entry_path("a.jpg"))

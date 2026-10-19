@@ -38,26 +38,20 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload, and the one it
-/// implements: 3, the first to carry `renames` (spec: FM-15).
-const SCHEMA: u64 = 3;
-
-/// The lowest schema a reader accepts. A record of schema 2 carries no
-/// `renames` and reads as one that renames nothing (spec: FM-15).
+/// The schema this crate writes for a Journal record payload, the one it
+/// implements, and the lowest a reader accepts: 4, the first whose addition
+/// entries carry `deposited_at` (spec: FM-15).
 ///
-/// It is also the reader floor `required_schema` stands for where it is
-/// absent: every reader that accepts a record implements this much
-/// (spec: FM-9, FM-15).
-const MIN_SCHEMA: u64 = 2;
-
-/// The schema a reader has to implement to apply a record's `renames`
-/// faithfully, which a record carrying them names in `required_schema`
-/// (spec: FM-15).
+/// A record of an earlier schema carries Entries without a deposit time, which
+/// no catalog this build keeps can hold, so it is refused as a schema this
+/// build does not read rather than read with a time made up. Libraries holding
+/// such records are recreated, not migrated.
 ///
-/// A reader below it would ignore `renames` as a field it does not know, apply
-/// the rest, and hold a catalog every other device disagrees with without
-/// saying so; naming it is what makes such a reader stop instead.
-const RENAMES_SCHEMA: u64 = 3;
+/// It is also what every record this build writes names in `required_schema`:
+/// a reader that ignored `deposited_at` would hold a catalog without deposit
+/// times and could commit records no reader of this schema accepts, so the
+/// field is must-understand and every record says so (spec: FM-9, FM-15).
+const SCHEMA: u64 = 4;
 
 const PREV: &str = "prev";
 const NEXT_COMMIT_SLOT: &str = "next_commit_slot";

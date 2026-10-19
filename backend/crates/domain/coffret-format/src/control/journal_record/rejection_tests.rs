@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
 use super::testing::{first_record, record, renamed_record, GENERATION};
-use super::{decode, encode, MIN_SCHEMA, SCHEMA};
+use super::{decode, encode, SCHEMA};
 use crate::control::testing::{
     array, body_map, field, raw_body, spelled_by_name, with_body_map, with_raw_body,
 };
@@ -266,10 +266,10 @@ fn a_prev_on_the_first_record_is_rejected() {
 }
 
 // FM-15: a reader refuses any schema below the lowest it reads, which is the
-// schema before `renames`.
+// one it writes: every earlier schema's additions carry no deposit time.
 #[test]
 fn a_schema_below_the_lowest_readable_one_is_rejected() {
-    for schema in [0, MIN_SCHEMA - 1] {
+    for schema in [0, 2, 3, SCHEMA - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read(&payload);
         assert!(
@@ -313,31 +313,20 @@ fn a_record_requiring_a_newer_reader_is_refused_as_needing_a_newer_build() {
     }
 }
 
-// FM-15: a record carrying renames without naming the schema they need was
-// written by something that does not follow the rule, and is refused rather
-// than read as safe for every reader.
+// FM-9, FM-15: a record of this schema names the schema its deposit times
+// need, so naming none, or one below it, is malformed.
 #[test]
-fn renames_without_a_required_schema_are_rejected() {
-    let payload = tampered_from(&renamed_record(), |fields| {
-        fields.retain(|(key, _)| key.as_text() != Some("required_schema"))
-    });
-    let result = read(&payload);
+fn a_required_schema_below_the_one_deposit_times_need_is_rejected() {
+    let bare =
+        tampered(|fields| fields.retain(|(key, _)| key.as_text() != Some("required_schema")));
+    let result = read(&bare);
     assert!(
         matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("required_schema")),
-        "expected renames without a required schema to be refused, got {result:?}"
+        "expected a record naming no required schema to be refused, got {result:?}"
     );
-}
-
-// FM-15: absent is the reader floor, so naming the floor (or below it) is a
-// second spelling of one state and is refused.
-#[test]
-fn a_required_schema_at_or_below_the_floor_is_rejected() {
-    for required in [0, MIN_SCHEMA] {
+    for required in [0, 2, SCHEMA - 1] {
         let payload = tampered(|fields| {
-            fields.push((
-                Value::Text("required_schema".to_owned()),
-                Value::from(required),
-            ))
+            *field(fields, "required_schema") = Value::from(required);
         });
         let result = read(&payload);
         assert!(
@@ -584,6 +573,24 @@ fn a_captured_path_equal_to_the_path_is_rejected() {
         panic!("expected a second spelling of one state to be refused, got {result:?}");
     };
     assert!(detail.contains("captured_path"), "{detail}");
+}
+
+// FM-15: `deposited_at` is required in every addition entry, so a map without
+// it is refused by name rather than read as an Entry with no deposit time.
+#[test]
+fn an_addition_entry_without_a_deposit_time_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(entry) = entry_map(fields) else {
+            panic!("an entry is a CBOR map");
+        };
+        entry.retain(|(key, _)| key.as_text() != Some("deposited_at"));
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail })
+            if detail.to_string().contains("deposited_at")),
+        "expected an entry without a deposit time to be refused, got {result:?}"
+    );
 }
 
 // FM-9, FM-15, FM-19: an addition carries the entry table of the Container it

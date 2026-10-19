@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_format::{ChunkSize, ContainerFootprint, EntryPlan};
-use coffret_model::{ContainerId, ContainerSummary, EntryMetadata, EntryNumber, EntryPath};
+use coffret_model::{
+    ContainerId, ContainerSummary, DepositedAt, EntryLocation, EntryMetadata, EntryPath,
+};
 
 use crate::delete::delete_selection::DeleteSelection;
 use crate::delete::pack_refusal::PackRefusal;
@@ -46,6 +48,9 @@ pub(super) struct Partial {
     pub(super) summary: ContainerSummary,
     /// Its rows as the catalog records them, in stream order (spec: FM-9).
     pub(super) table: Vec<EntryMetadata>,
+    /// When each row's content was deposited, row for row: what the
+    /// replacement's kept Entries carry forward (spec: PK-10, FM-15).
+    pub(super) deposit_times: Vec<DepositedAt>,
     /// Which of those rows the replacement keeps: the ones not named.
     pub(super) keep: Vec<bool>,
 }
@@ -133,13 +138,13 @@ pub(super) async fn plan(
     // A Pack's other Entries may lie anywhere in the namespace — path ranges of
     // Packs from different invocations overlap and interleave (spec: PK-8) — so
     // the tables are read off the whole catalog rather than off the selection.
-    let mut tables: BTreeMap<ContainerId, Vec<(EntryNumber, EntryMetadata)>> = BTreeMap::new();
+    let mut tables: BTreeMap<ContainerId, Vec<EntryLocation>> = BTreeMap::new();
     for location in index.entries_under(None).await? {
         if touched.contains(&location.container_id) {
             tables
                 .entry(location.container_id)
                 .or_default()
-                .push((location.entry_number, location.entry));
+                .push(location);
         }
     }
     let summaries: BTreeMap<ContainerId, ContainerSummary> = index
@@ -163,8 +168,11 @@ pub(super) async fn plan(
         // The catalog answers in path order; a Container's own order is its
         // entry numbers (spec: FM-9). Offsets cannot stand in for them: Entries
         // of length zero share one, and a rename has made path order no guide.
-        numbered.sort_by_key(|(number, _)| *number);
-        let table: Vec<EntryMetadata> = numbered.into_iter().map(|(_, entry)| entry).collect();
+        numbered.sort_by_key(|location| location.entry_number);
+        let (table, deposit_times): (Vec<EntryMetadata>, Vec<DepositedAt>) = numbered
+            .into_iter()
+            .map(|location| (location.entry, location.deposited_at))
+            .unzip();
         let keep: Vec<bool> = table.iter().map(|row| !named.contains(&row.path)).collect();
 
         if !keep.iter().any(|keep| *keep) {
@@ -177,6 +185,7 @@ pub(super) async fn plan(
         let partial = Partial {
             summary,
             table,
+            deposit_times,
             keep,
         };
         if key_lost.contains(&container_id) {
@@ -207,7 +216,7 @@ fn unheld(container_id: ContainerId) -> IndexError {
 #[cfg(test)]
 mod tests {
     use coffret_model::{
-        ContainerAddition, ContainerKind, ContentHash, EntryRename, JournalRecord,
+        ContainerAddition, ContainerKind, ContentHash, EntryNumber, EntryRename, JournalRecord,
         KeyringCommitment, MasterKeyEpoch, Mtime,
     };
 
@@ -247,6 +256,12 @@ mod tests {
         .expect("a fixture holds a record a commit could have written")
     }
 
+    /// When the row at `position` of [`addition`]'s table was deposited: a
+    /// second of its own for each row.
+    fn deposited_at(position: usize) -> DepositedAt {
+        DepositedAt::from_unix_seconds(1_760_000_000 + position as i64)
+    }
+
     /// A Pack whose table is `rows` — `(path, offset, size)` — in entry
     /// number order.
     fn addition(rows: &[(&str, u64, u64)]) -> ContainerAddition {
@@ -272,6 +287,7 @@ mod tests {
                 object_ref: None,
             },
             entries,
+            (0..rows.len()).map(deposited_at).collect(),
         )
         .expect("the fixture's table tiles its stream")
     }
@@ -328,6 +344,11 @@ mod tests {
                 ("albums/0.jpg", "albums/b.jpg", 100),
             ],
             "the rows stand in entry number order",
+        );
+        assert_eq!(
+            rebuild.deposit_times,
+            [deposited_at(0), deposited_at(1), deposited_at(2)],
+            "each row's deposit time stands beside it, in the same order",
         );
         assert_eq!(rebuild.keep, [true, false, true]);
         assert_eq!(

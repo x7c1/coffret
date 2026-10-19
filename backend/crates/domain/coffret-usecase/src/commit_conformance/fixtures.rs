@@ -1,7 +1,7 @@
 use coffret_format::{wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
     ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
-    EntryMetadata, EntryPath, KeyEnvelope, MasterKey, MasterKeyEpoch, Mtime,
+    DepositedAt, EntryMetadata, EntryPath, KeyEnvelope, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::ciphertext_len_claims::ciphertext_len;
@@ -100,12 +100,17 @@ pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> Prepare
         // handle to carry here.
         object_ref: None,
     };
+    let deposit_times = vec![DEPOSITED_AT; entries.len()];
     PreparedAddition::new(
-        ContainerAddition::new(container, entries)
+        ContainerAddition::new(container, entries, deposit_times)
             .expect("a fixture holds a table that tiles its Container's stream"),
         envelope(seed),
     )
 }
+
+/// The deposit time a prepared batch stamps its Entries with, as a run's clock
+/// would when it prepared them (spec: FM-15).
+pub(super) const DEPOSITED_AT: DepositedAt = DepositedAt::from_unix_seconds(1_760_000_000);
 
 /// A policy that keeps a case's Library small and its failures quick.
 ///

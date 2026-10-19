@@ -18,9 +18,9 @@
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryRename,
-    IndexCheckpoint, JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment, KeyringElement,
-    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    ContentHash, DepositedAt, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber,
+    EntryRename, IndexCheckpoint, JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment,
+    KeyringElement, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
@@ -201,8 +201,19 @@ fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         });
         entries.push(derived);
     }
-    ContainerAddition::new(summary(seed, kind), entries)
+    let deposit_times = (0..entries.len())
+        .map(|position| deposited_at(seed, position as u32))
+        .collect();
+    ContainerAddition::new(summary(seed, kind), entries, deposit_times)
         .expect("the generator's own entry table tiles its Container's stream")
+}
+
+/// When entry `number` of the Container `seed` names was deposited
+/// (spec: FM-15, FM-16): a second of its own for every Entry, and none of them
+/// an `mtime` the generator writes, so a reader that took one for another is
+/// caught.
+fn deposited_at(seed: u8, number: u32) -> DepositedAt {
+    DepositedAt::from_unix_seconds(1_760_000_000 + i64::from(seed) * 1_000 + i64::from(number))
 }
 
 /// What a payload records about one Container.
@@ -227,6 +238,7 @@ fn located(seed: u8, number: u32, path: &str, offset: u64, size: u64) -> EntryLo
         container_id: container_id(seed),
         entry_number: entry_number(number),
         entry: entry(path, offset, size),
+        deposited_at: deposited_at(seed, number),
     }
 }
 

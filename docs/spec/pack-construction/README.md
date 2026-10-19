@@ -95,6 +95,11 @@ Concept background: [Pack](../../concepts/pack/),
     name current at the rewrite, so the catalog no longer holds a captured
     path apart from the current one (FM-15). The replacement is encrypted
     under a new Container Key (KD-2).
+  - A carried Entry also keeps its deposit time: the replacement's record
+    gives it the `deposited_at` the catalog holds for the Entry it carries,
+    because a rewrite puts no content into the Library (FM-15). A substituted
+    Entry carries new content and is a deposit, stamped once as its batch is
+    prepared (FM-15). A repack or a compaction carries its Entries the same way.
   - A writer that cannot read and verify the old Pack commits nothing for it:
     neither the replacement nor the old Pack's removal. Every Entry of the old
     Pack, the ones it was asked to delete included, stays current, and the
@@ -118,6 +123,12 @@ Concept background: [Pack](../../concepts/pack/),
   read-modify-replace (PK-10) and commits every swap through one Journal
   batch: the replaced Containers in removals, their replacements — new
   Container IDs — in additions (CP-1, CP-14). *(Form: test)*
+  - A deposit is new content, decided by its hash (FM-15): an `update`'s
+    replacement whose `hash` differs from the Entry it replaces is stamped with
+    a new deposit time as its batch is prepared, and one with the same
+    `hash` — as re-encrypting a key-lost Container's surviving local plaintext
+    gives (KL-17) — keeps the replaced Entry's time. The unchanged Entries a
+    read-modify-replace carries keep theirs too (PK-10).
 - **PK-13.** A modified file whose current Entry is held by a one-file
   Container is eligible for both `freeze` (PK-1) and `update` (PK-11).
   Either path uploads the current local content — `freeze` builds the
@@ -125,6 +136,15 @@ Concept background: [Pack](../../concepts/pack/),
   regroups the file into a Pack. The same overlap holds when the one-file
   Container carries a key-lost marker: either path re-encrypts the surviving
   local plaintext (PK-11). *(Form: test)*
+  - The two paths agree on the deposit time of a modified file: its content is
+    new to the Library, so the Pack's Entry is a deposit, stamped as an
+    `update`'s replacement would be (PK-12, FM-15). A one-file Entry a freeze
+    absorbs whose local file still holds the Entry's content — a key-lost one
+    re-encrypted from an unchanged file included (KL-17) — puts no new content
+    into the Library: the Pack's Entry carries that Entry's deposit time
+    forward, as a Pack rewrite carries its kept Entries' (PK-10) and as an
+    `update` with the same content does (PK-12). Whether the content is the
+    Entry's is the hash's to say (FM-9).
 - **PK-14.** Any scan that selects `freeze` or `update` candidates must
   surface every update-eligible file (PK-11) — local content differing from
   its current Entry, or a key-lost Container; neither is ever silently

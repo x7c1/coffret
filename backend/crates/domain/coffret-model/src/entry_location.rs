@@ -1,4 +1,5 @@
 use crate::container_id::ContainerId;
+use crate::deposited_at::DepositedAt;
 use crate::entry_extent::EntryExtent;
 use crate::entry_metadata::EntryMetadata;
 use crate::entry_number::EntryNumber;
@@ -24,6 +25,13 @@ pub struct EntryLocation {
     pub entry_number: EntryNumber,
     /// What that Container's entry table records about it (spec: FM-9).
     pub entry: EntryMetadata,
+    /// When the content this Entry holds was deposited into the Library
+    /// (spec: FM-15, FM-16).
+    ///
+    /// The catalog's own value and none of the Container's: no meta section
+    /// carries it, and a rename or a rewrite that carries this content into
+    /// another Entry carries the time with it.
+    pub deposited_at: DepositedAt,
 }
 
 impl EntryLocation {

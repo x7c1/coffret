@@ -67,7 +67,7 @@ pub(super) async fn examine(
     match kinds.get(&location.container_id) {
         Some(ContainerKind::OneFile) => survey.candidates.push(Candidate {
             source: source.clone(),
-            replaces: Some(location.container_id),
+            replaces: Some(location),
         }),
         // Read-modify-replace over a Pack is the half of `update` this flow
         // does not do, and skipping the file quietly is what it may never do

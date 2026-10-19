@@ -97,6 +97,7 @@ export const ADDITION_ENTRY: MapFields = {
     field('mime', 6),
     field('derived_from', 7, () => DERIVED_FROM),
     field('captured_path', 8),
+    field('deposited_at', 9),
   ],
 };
 
@@ -165,6 +166,7 @@ export const SNAPSHOT_ENTRY: MapFields = {
     field('captured_path', 8),
     field('container', 9),
     field('entry', 10),
+    field('deposited_at', 11),
   ],
 };
 

@@ -28,25 +28,29 @@ use crate::error::classify;
 /// 16 the Entry Path a materialized file waits to follow once a rename has
 /// changed its Entry's current path (spec: FM-15, EP-10), version 17 the
 /// Entry each materialized file is a copy of, by its Container and entry number
-/// (spec: FM-9, EP-10), and version 18 the reservations a drop's choice of a
-/// Pack is kept in until a freeze has decided its files (spec: PK-17).
-pub(crate) const SCHEMA_VERSION: i64 = 18;
+/// (spec: FM-9, EP-10), version 18 the reservations a drop's choice of a
+/// Pack is kept in until a freeze has decided its files (spec: PK-17), and
+/// version 19 each Entry's deposit time (spec: FM-15, FM-16).
+pub(crate) const SCHEMA_VERSION: i64 = 19;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 18 changed the device-local group, so the floor is the current
-/// layout and no older file keeps its device group as it is. A layout-17 file
-/// keeps its catalog and every row of its device group, and gains the tables
-/// of reservations, empty: no build before it recorded a drop's choice of a
-/// Pack, so no file it wrote waits for one (spec: PK-17). A layout-16 file
-/// keeps its catalog and has each materialization record tied to the Entry the
-/// catalog holds where the record stands, or where it waits to follow
-/// (spec: EP-10); a record the catalog holds no Entry for is dropped and the
-/// drop reported, never guessed at. A layout from 13 to 15 has the columns it
-/// lacks added by the same upgrade the older ones take, and loses its catalog
-/// with them: a layout-13 catalog was filled from
-/// objects in a format this build no longer reads, a layout-14 one holds no
+/// Layout 18 changed the device-local group and layout 19 only the catalog, so
+/// the floor is 18: a layout-18 file keeps its device group as it is and loses
+/// its catalog, whose Entries carry no deposit time and were filled from
+/// objects in a format this build no longer reads, so the rebuild from Storage
+/// refills it (spec: RV-5, FM-15). A layout-17 file keeps every row of its
+/// device group, gains the tables of reservations, empty — no build before it
+/// recorded a drop's choice of a Pack, so no file it wrote waits for one
+/// (spec: PK-17) — and loses its catalog for the same reason. A layout-16 file
+/// has each materialization record tied to the Entry the catalog holds where
+/// the record stands, or where it waits to follow (spec: EP-10), and then
+/// loses its catalog the same way; a record the catalog holds no Entry for is
+/// dropped and the drop reported, never guessed at. A layout from 13 to 15 has
+/// the columns it lacks added by the same upgrade the older ones take, and
+/// loses its catalog with them: a layout-13 catalog was filled from objects in
+/// a format this build no longer reads, a layout-14 one holds no
 /// entry numbers, and nothing either holds says what they were, so the rebuild
 /// from Storage replays them out of the Journal (spec: RV-5, FM-16). A
 /// layout-15 catalog would still read, and is discarded all the same: the
@@ -99,6 +103,11 @@ CREATE TABLE entries (
     -- NULL where the platform that wrote the Container reported no birth time,
     -- which is the whole of what absent means (spec: FM-9, FM-15).
     btime                  INTEGER,
+    -- When the content now at `path` was deposited into the Library, in Unix
+    -- seconds: the catalog's own value, which no Container records, carried
+    -- unchanged by a rename and by a rewrite that carries the content
+    -- (spec: FM-15, FM-16).
+    deposited_at           INTEGER NOT NULL,
     hash                   BLOB NOT NULL,
     mime                   TEXT,
     derived_from_container BLOB,
@@ -317,10 +326,11 @@ CREATE TABLE reserved_paths (
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5) — a window this build leaves empty. Layout 16 keeps its catalog
-/// and has its materialization records tied to the Entries it holds; layouts 7
-/// to 15 have their device-local group upgraded in place and lose their catalog
-/// the same way.
+/// (spec: RV-5) — which is what becomes of a layout-18 file. Layout 17 gains
+/// the tables of reservations and layout 16 has its materialization records
+/// tied to the Entries its catalog holds, and both then lose their catalog the
+/// same way; layouts 7 to 15 have their device-local group upgraded in place
+/// and lose their catalog too.
 /// Anything else — older than that, or written by a build that came after this
 /// one — is refused, because guessing at a layout this build does not know is
 /// how a cache turns into wrong answers.
@@ -505,15 +515,20 @@ mod tests {
         );
     }
 
-    /// This build's own window is empty: layout 18 changed the device-local
-    /// group, so no older layout keeps its device group unchanged, and every
-    /// layout from 7 up takes an upgrade rather than the discard
-    /// (spec: OC-2, EP-10, PK-17).
+    /// This build's own window holds layout 18 alone: layout 19 changed only
+    /// the catalog, so a layout-18 file keeps its device group and loses its
+    /// catalog, and every layout from 7 to 17 takes an upgrade instead
+    /// (spec: OC-2, EP-10, PK-17, FM-15).
     #[test]
-    fn this_builds_window_is_empty() {
-        assert_eq!(DEVICE_SCHEMA_VERSION, SCHEMA_VERSION);
+    fn this_builds_window_holds_the_layout_before_deposit_times() {
+        assert_eq!(DEVICE_SCHEMA_VERSION, 18);
+        assert_eq!(SCHEMA_VERSION, 19);
         for found in 0..=SCHEMA_VERSION + 1 {
-            assert!(!carries_a_readable_device_group(found), "layout {found}");
+            assert_eq!(
+                carries_a_readable_device_group(found),
+                found == 18,
+                "layout {found}"
+            );
         }
     }
 }

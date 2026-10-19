@@ -23,4 +23,14 @@ export interface EntryLocation {
   entryNumber: number;
   /** What that Container's entry table records about it (spec: FM-9). */
   entry: EntryMetadata;
+  /**
+   * When the content this Entry holds was deposited into the Library, as whole
+   * seconds from the Unix epoch (spec: FM-15, FM-16).
+   *
+   * The catalog's own value and none of the Container's: no meta section
+   * carries it, and a rename or a rewrite that carries this content into another
+   * Entry carries the time with it. A separate axis from the file's own
+   * `mtimeSeconds` and `btimeSeconds`.
+   */
+  depositedAtSeconds: bigint;
 }

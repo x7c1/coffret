@@ -74,6 +74,7 @@ pub use refusals::{
 mod renames;
 pub use renames::{
     a_containers_entries_are_listed_by_number_at_their_current_paths,
+    a_deposit_time_survives_a_replay_a_rename_and_a_restore,
     a_folders_worth_of_renames_lands_in_one_record,
     a_record_below_the_checkpoint_is_refused_and_changes_nothing,
     a_rename_changes_one_files_current_path,
@@ -128,6 +129,7 @@ macro_rules! index_conformance {
             a_birth_time_survives_a_replay_and_a_query,
             a_captured_path_survives_a_replay_and_a_restore,
             an_entry_number_survives_a_replay_and_a_restore,
+            a_deposit_time_survives_a_replay_a_rename_and_a_restore,
             removing_a_container_removes_the_entries_it_held,
             a_refresh_lands_where_a_replay_of_its_record_does,
             a_refresh_marks_its_files_present_and_clears_its_spools,

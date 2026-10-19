@@ -6,8 +6,8 @@ use coffret_format::{
     ChunkSize, ContainerWriter, EncodePlan, EntryPlan,
 };
 use coffret_model::{
-    CiphertextLenClaim, ContainerId, ContainerKey, ContentHash, EntryMetadata, EntryNumber,
-    Redacted,
+    CiphertextLenClaim, ContainerId, ContainerKey, ContentHash, DepositedAt, EntryMetadata,
+    EntryNumber, Redacted,
 };
 use tokio::io::AsyncReadExt;
 use tracing::{debug, warn};
@@ -50,6 +50,7 @@ pub(crate) async fn rebuild(
 ) -> Result<Result<SpooledContainer, Unverified>, RebuildError> {
     let old = replacing.old;
     debug_assert_eq!(replacing.table.len(), replacing.keep.len());
+    debug_assert_eq!(replacing.table.len(), replacing.deposit_times.len());
     debug_assert!(replacing.keep.iter().any(|keep| *keep));
 
     let Some(object) = old
@@ -130,6 +131,7 @@ pub(crate) async fn rebuild(
                 announced_at: with.now,
                 replaces: vec![old.id],
                 supersedes: carried_forward(old.id, replacing.keep)?,
+                carries: kept_deposit_times(replacing.keep, replacing.deposit_times)?,
                 materializes: false,
             }));
         }
@@ -277,6 +279,25 @@ fn carried_forward(
         .map_err(coffret_format::Error::from)
 }
 
+/// The deposit time each Entry of the replacement keeps, by its entry number
+/// there: the kept rows' own, `keep` and `deposit_times` holding one of each per
+/// row of the old table (spec: PK-10, FM-15).
+///
+/// Every Entry of a rebuilt Pack carries content the Library already held, so
+/// every one keeps its time and none is stamped anew.
+fn kept_deposit_times(
+    keep: &[bool],
+    deposit_times: &[DepositedAt],
+) -> Result<BTreeMap<EntryNumber, DepositedAt>, coffret_format::Error> {
+    keep.iter()
+        .zip(deposit_times)
+        .filter(|(keep, _)| **keep)
+        .enumerate()
+        .map(|(kept, (_, deposited_at))| Ok((EntryNumber::at_position(kept)?, *deposited_at)))
+        .collect::<coffret_model::Result<_>>()
+        .map_err(coffret_format::Error::from)
+}
+
 #[cfg(test)]
 mod carried_forward_tests {
     use super::*;
@@ -303,6 +324,24 @@ mod carried_forward_tests {
                 (number(1), EntryRef::new(old, number(3))),
                 (number(2), EntryRef::new(old, number(4))),
             ],
+        );
+    }
+
+    // PK-10, FM-15: a rebuilt Pack puts no content into the Library, so each
+    // Entry it carries keeps the deposit time of the row it carries, numbered
+    // as the replacement numbers it.
+    #[test]
+    fn each_kept_row_keeps_its_deposit_time() {
+        let at = DepositedAt::from_unix_seconds;
+        let carries = kept_deposit_times(
+            &[false, true, false, true],
+            &[at(10), at(20), at(30), at(40)],
+        )
+        .expect("a short table numbers");
+
+        assert_eq!(
+            carries.into_iter().collect::<Vec<_>>(),
+            [(number(0), at(20)), (number(1), at(40))],
         );
     }
 }

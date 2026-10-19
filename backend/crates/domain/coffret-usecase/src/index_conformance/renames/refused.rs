@@ -13,12 +13,12 @@ use crate::index_error::{IndexError, RenameRule};
 async fn standing(index: &dyn Index) {
     seed_device_state(index).await;
     let mut derived = addition(4, ContainerKind::OneFile, &[".coffret-derived/thumb/a.jpg"]);
-    let (container, mut entries) = derived.into_parts();
+    let (container, mut entries, deposit_times) = derived.into_parts();
     entries[0].derived_from = Some(DerivedFrom {
         container_id: container_id(1),
         path: path("albums/a.jpg"),
     });
-    derived = ContainerAddition::new(container, entries)
+    derived = ContainerAddition::new(container, entries, deposit_times)
         .expect("marking an Entry derived leaves its table one that tiles");
     index
         .apply(record(

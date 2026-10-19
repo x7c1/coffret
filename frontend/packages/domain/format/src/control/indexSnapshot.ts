@@ -18,8 +18,9 @@
  *
  * Beside it each Entry carries `entry`, its entry number in that Container's
  * table (spec: FM-9). The Snapshot's own order is the Entry Path order, so the
- * position would otherwise be lost, and a Snapshot of schema 2, which predates
- * the field, is refused rather than numbered by guesswork (spec: FM-16).
+ * position would otherwise be lost. And each carries `deposited_at`, when the
+ * content now at its path was deposited into the Library, which a catalog
+ * rebuilt from the Snapshot holds exactly as the records left it (spec: FM-16).
  *
  * What a Snapshot never carries is device state (spec: CK-7) — including which
  * checkpoint object an Index adopted, which is that Index's own provenance
@@ -55,16 +56,14 @@ import { INDEX_SNAPSHOT, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
  * The schema this package writes for an Index Snapshot payload, and the lowest
- * a reader adopts: 3, the first to carry each Entry's entry number
+ * a reader accepts: 4, the first whose Entries carry `deposited_at`
  * (spec: FM-16).
+ *
+ * A Snapshot of an earlier schema lacks the deposit time of every Entry it
+ * lists, and the records it checkpoints lack it too, so nothing could supply
+ * one: it is refused as a schema this package does not read.
  */
-export const INDEX_SNAPSHOT_SCHEMA = 3n;
-
-/**
- * The schema before entry numbers. A Snapshot of it is a sound object that no
- * reader may start a catalog from (spec: FM-16).
- */
-const SCHEMA_WITHOUT_ENTRY_NUMBERS = 2n;
+export const INDEX_SNAPSHOT_SCHEMA = 4n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_index_snapshot';
@@ -165,7 +164,7 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
           `entry ${index} is held by ${location.containerId.toHex()}, which this Snapshot does not list`,
         );
       }
-      const entry = encodeCatalogEntryMap(location.entry);
+      const entry = encodeCatalogEntryMap(location.entry, location.depositedAtSeconds);
       entry.set('container', BigInt(position));
       entry.set('entry', BigInt(location.entryNumber));
       return entry;
@@ -201,9 +200,9 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
  * The array orders and every `container` index are verified rather than
  * repaired, for the reason FM-16 gives.
  *
- * A Snapshot of schema 2 carries no entry numbers and is refused with
- * `snapshot_predates_entry_numbers`: a reader meeting one rebuilds the catalog
- * by replaying the Journal from `head-0` instead (spec: FM-16).
+ * A Snapshot of a schema below this package's is refused with
+ * `unsupported_index_snapshot_schema`: its Entries carry no deposit time
+ * (spec: FM-16).
  */
 export function decodeIndexSnapshot(
   payload: ControlPayload,
@@ -221,16 +220,8 @@ export function decodeIndexSnapshot(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < SCHEMA_WITHOUT_ENTRY_NUMBERS) {
-    fail('unsupported_index_snapshot_schema', `unsupported Index Snapshot payload schema ${schema}`);
-  }
   if (schema < INDEX_SNAPSHOT_SCHEMA) {
-    // Its Entries are in path order and carry no position, and nothing here may
-    // make one up (spec: FM-16).
-    fail(
-      'snapshot_predates_entry_numbers',
-      `an Index Snapshot of schema ${schema} carries no entry numbers, so the catalog is rebuilt from the Journal instead`,
-    );
+    fail('unsupported_index_snapshot_schema', `unsupported Index Snapshot payload schema ${schema}`);
   }
 
   const containers: ContainerSummary[] = requiredArray(map, 'containers', MALFORMED).map(
@@ -254,13 +245,15 @@ export function decodeIndexSnapshot(
     if (entryNumber > BigInt(MAX_ENTRY_NUMBER)) {
       fail(MALFORMED, `entry is an entry number below 2^32, found ${entryNumber}`);
     }
+    // `container` and `entry` are the Snapshot's own fields and no part of the
+    // entry map, and the entry-map reader ignores what it does not know, so the
+    // whole map is handed over as it stands.
+    const decoded = decodeCatalogEntryMap(entry, MALFORMED);
     return {
       containerId: containers[Number(container)].id,
       entryNumber: Number(entryNumber),
-      // `container` and `entry` are the Snapshot's own fields and no part of
-      // the entry map, and the entry-map reader ignores what it does not know,
-      // so the whole map is handed over as it stands.
-      entry: decodeCatalogEntryMap(entry, MALFORMED),
+      entry: decoded.entry,
+      depositedAtSeconds: decoded.depositedAtSeconds,
     };
   });
   requireStrictlyIncreasing('entries', entries, (left, right) =>

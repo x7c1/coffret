@@ -39,6 +39,15 @@ export interface ListedFile {
   size: number;
   /** ISO 8601 in UTC, and `null` for a count of seconds no calendar reaches. */
   mtime: string | null;
+  /**
+   * When the content now at this path was deposited into the Library, ISO 8601
+   * in UTC as `mtime` is.
+   *
+   * A separate axis from `mtime`, which is the original file's. `null` for an
+   * `added` row — no Entry holds that file, so nothing has been deposited yet —
+   * and for a count of seconds no calendar reaches.
+   */
+  deposited_at: string | null;
   state: EntryState;
   /** `null` for an `added` row: no current Container holds it. */
   container: ContainerKind | null;

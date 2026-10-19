@@ -1,4 +1,4 @@
-use coffret_model::{Btime, ContentHash, EntryMetadata, Mtime};
+use coffret_model::{Btime, ContentHash, DepositedAt, EntryMetadata, Mtime};
 use serde::{Deserialize, Serialize};
 
 use crate::bounded_uint::bounded_uint;
@@ -28,6 +28,12 @@ use crate::stream_extent::stream_extent;
 /// differs from `path`, so a map without it names an Entry whose two paths are
 /// one. A map carrying it equal to `path` is a second spelling of that same
 /// state and is refused.
+///
+/// `deposited_at` is the catalog's alone, with no counterpart in the meta
+/// section at all: when the content now at `path` was deposited into the
+/// Library, a separate axis from `mtime` and `btime`, which describe the
+/// original file. It is required, so a map without it is refused rather than
+/// read as an Entry with no deposit time (spec: FM-15, FM-16).
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireCatalogEntry {
     path: String,
@@ -44,10 +50,13 @@ pub(crate) struct WireCatalogEntry {
     derived_from: Option<WireDerivedFrom>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mime: Option<String>,
+    deposited_at: i64,
 }
 
-impl From<&EntryMetadata> for WireCatalogEntry {
-    fn from(entry: &EntryMetadata) -> Self {
+impl WireCatalogEntry {
+    /// The map a record or a Snapshot carries for `entry`, deposited at
+    /// `deposited_at`.
+    pub(crate) fn new(entry: &EntryMetadata, deposited_at: DepositedAt) -> Self {
         Self {
             path: entry.path.as_str().to_owned(),
             // Present only where a rename has set the two apart (spec: FM-15,
@@ -61,19 +70,21 @@ impl From<&EntryMetadata> for WireCatalogEntry {
             hash: entry.hash.as_bytes().to_vec(),
             derived_from: entry.derived_from.as_ref().map(WireDerivedFrom::from),
             mime: entry.mime.clone(),
+            deposited_at: deposited_at.as_unix_seconds(),
         }
     }
-}
 
-impl WireCatalogEntry {
-    /// This row as the Entry it records, or the refusal of whichever payload
-    /// carried it.
+    /// This row as the Entry it records and when its content was deposited,
+    /// or the refusal of whichever payload carried it.
     ///
     /// The same map travels in a Journal record and in an Index Snapshot, and a
     /// row neither of them could have written is that object's own malformed
     /// payload rather than one shared verdict — which is what `malformed` says
     /// here, exactly as it does everywhere else those two schemas are read.
-    pub(crate) fn to_metadata(&self, malformed: fn(String) -> Error) -> Result<EntryMetadata> {
+    pub(crate) fn to_catalog(
+        &self,
+        malformed: fn(String) -> Error,
+    ) -> Result<(EntryMetadata, DepositedAt)> {
         let path = stored_path(&self.path, "path")?;
         // Absent where the two paths are one, which every map an earlier
         // schema wrote also is (spec: FM-15, FM-16).
@@ -91,7 +102,7 @@ impl WireCatalogEntry {
             }
             None => path.clone(),
         };
-        Ok(EntryMetadata {
+        let entry = EntryMetadata {
             path,
             captured_path,
             extent: stream_extent(
@@ -107,6 +118,7 @@ impl WireCatalogEntry {
                 .map(WireDerivedFrom::to_domain)
                 .transpose()?,
             mime: self.mime.clone(),
-        })
+        };
+        Ok((entry, DepositedAt::from_unix_seconds(self.deposited_at)))
     }
 }

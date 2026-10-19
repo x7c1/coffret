@@ -2,7 +2,7 @@ use coffret_model::{ContainerKind, EntryLocation, EntryMetadata};
 
 use super::{at, entry_number, holds, names, rename, renaming};
 use crate::index_conformance::fixtures::{
-    addition, checkpoint, container_id, library_state, path, record, written_as,
+    addition, checkpoint, container_id, deposited_at, library_state, path, record, written_as,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
@@ -404,5 +404,85 @@ pub async fn a_containers_entries_are_listed_by_number_at_their_current_paths(
             .expect("listing a Container's Entries must succeed")
             .is_empty(),
         "a Container the catalog does not hold holds no Entry",
+    );
+}
+
+/// Each Entry's deposit time is the one the record that added it carried, and
+/// it stays so through a rename, a checkpoint, and a restore of that
+/// checkpoint into another catalog (spec: FM-15, FM-16, RV-1).
+///
+/// The Pack's three Entries carry three different times, none of them an
+/// `mtime`, so a catalog that stored one Entry's time against another's, took
+/// the modification time for it, or restamped an Entry a rename moved, fails
+/// here.
+pub async fn a_deposit_time_survives_a_replay_a_rename_and_a_restore(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    index
+        .apply(record(
+            0,
+            vec![addition(
+                1,
+                ContainerKind::Pack,
+                &["albums/c.jpg", "albums/a.jpg", "albums/b.jpg"],
+            )],
+            vec![],
+        ))
+        .await
+        .expect("applying the first record must succeed");
+    index
+        .apply(renaming(
+            record(1, vec![], vec![]),
+            vec![rename(1, 0, "books/c.jpg")],
+        ))
+        .await
+        .expect("applying a rename must succeed");
+
+    let deposit_times = |locations: Vec<EntryLocation>| {
+        locations
+            .into_iter()
+            .map(|location| {
+                (
+                    location.entry.path.as_str().to_owned(),
+                    location.deposited_at,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = vec![
+        ("albums/a.jpg".to_owned(), deposited_at(1, 1)),
+        ("albums/b.jpg".to_owned(), deposited_at(1, 2)),
+        ("books/c.jpg".to_owned(), deposited_at(1, 0)),
+    ];
+    assert_eq!(
+        deposit_times(
+            index
+                .entries_under(None)
+                .await
+                .expect("listing the Library must succeed")
+        ),
+        expected,
+        "each Entry keeps the time its addition carried, the renamed one included",
+    );
+
+    let snapshot = index
+        .snapshot()
+        .await
+        .expect("an applied catalog has a state to checkpoint");
+    assert_eq!(deposit_times(snapshot.entries().to_vec()), expected);
+
+    let other = fixture.other();
+    other
+        .restore(snapshot)
+        .await
+        .expect("restoring a Snapshot must succeed");
+    assert_eq!(
+        deposit_times(
+            other
+                .entries_under(None)
+                .await
+                .expect("listing the Library must succeed")
+        ),
+        expected,
+        "a restore takes each Entry's deposit time from the Snapshot",
     );
 }

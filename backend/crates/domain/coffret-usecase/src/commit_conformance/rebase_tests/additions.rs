@@ -3,7 +3,7 @@ use coffret_model::ContainerKind;
 use super::batches::{conflict, entry, is, observed, rename, renaming, updating};
 use super::devices::{Devices, BASE};
 use crate::commit::{PendingChange, PreparedBatch, RebaseRule};
-use crate::commit_conformance::fixtures::{container_id, path, prepared};
+use crate::commit_conformance::fixtures::{container_id, path, prepared, DEPOSITED_AT};
 use crate::commit_conformance::racing_store::RacingStore;
 use crate::generations::generation;
 use crate::index::Index;
@@ -79,9 +79,14 @@ async fn an_update_follows_a_rename_of_its_entry() {
     assert_eq!(added.container().id, container_id(3));
     assert_eq!(added.entries()[0].path, path("albums/b.jpg"));
     assert_eq!(added.entries()[0].captured_path, path("albums/a.jpg"));
+    // The rebase carries the batch as it was prepared onto the newer head, so
+    // the deposit time it was stamped with stays: a retry does not move it
+    // (spec: CP-4, FM-15).
+    assert_eq!(added.deposit_times(), [DEPOSITED_AT]);
 
     let updated = devices.at(&devices.ours, "albums/b.jpg").await;
     assert_eq!(updated.container_id, container_id(3));
+    assert_eq!(updated.deposited_at, DEPOSITED_AT);
     assert_eq!(updated.entry.captured_path, path("albums/a.jpg"));
     assert!(devices.vacant(&devices.ours, "albums/a.jpg").await);
     // The file the update was drawn from stays where it is and waits to

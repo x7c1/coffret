@@ -36,6 +36,7 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 - cache (the Catalog in an Index)
 - commit (a change to the Catalog through the Journal)
 - checkpoint (the Catalog in an Index Snapshot)
+- deposit (content into the Library), carry (a deposit time forward)
 - rename (an Entry, changing its current Entry Path) — from the command line,
   or by a sync carrying a file renamed on disk
 
@@ -58,6 +59,23 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
   Control state carries the captured path only where it differs from the
   current one, so an Entry pays for its second name only once it has been
   renamed (spec: FM-9, FM-15, FM-16).
+- The Catalog keeps, for each current Entry, its **deposit time**: when the
+  content now at its Entry Path was deposited into the Library. A **deposit** is
+  putting new content in — adding a file, adding one again where a deletion left
+  nothing, replacing one's content with different content — and each deposit
+  sets a new time, stamped once by the device that prepares the batch, with its
+  own clock. Whether content is new is decided by its hash. What puts no new
+  content in carries the time forward: a rename keeps it, and a new Entry that
+  carries an existing Entry's content takes that Entry's time. A Pack rewrite, a
+  freeze absorbing an unchanged file, and a replacement with the same content (a
+  key-lost Entry healed from its unchanged file among them) each make such an
+  Entry. A restore is no deposit and recovers every time unchanged (spec: FM-15,
+  FM-16, PK-10, PK-11, PK-12, PK-13, RV-1).
+- The deposit time is a separate axis from an Entry's modification and birth
+  times, which describe the original file: a photograph taken years ago and
+  deposited today has an old modification time and today's deposit time. It is
+  the Catalog's value, so control state carries it and no Container does
+  (spec: FM-9, FM-15).
 - The Catalog refers to an Entry by its Container ID and **entry number**,
   the Entry's position in that Container's immutable entry table, and not by
   its name: the pair names one Entry whatever path it currently stands at,

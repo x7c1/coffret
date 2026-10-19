@@ -155,6 +155,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
         'mtime',
         'btime',
         'hash',
+        'deposited_at',
         'container',
         'entry',
       ].sort(),
@@ -167,6 +168,17 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     const decoded = readOrdinary(payload);
     expect(decoded.content.entries[0].entry.btimeSeconds).toBe(BORN);
     expect(decoded.content.entries[1].entry.btimeSeconds).toBeUndefined();
+  });
+
+  // FM-16: each Entry carries the deposit time of its content, its own and no
+  // other Entry's, and it comes back as it went in.
+  it('carries each Entry\'s deposit time', () => {
+    const source = ordinary();
+    const decoded = readOrdinary(encodeIndexSnapshot(source));
+    const times = (entries: { depositedAtSeconds: bigint }[]) =>
+      entries.map((location) => location.depositedAtSeconds);
+    expect(times(decoded.content.entries)).toEqual(times(canonical(source.content).entries));
+    expect(new Set(times(decoded.content.entries)).size).toBe(decoded.content.entries.length);
   });
 
   // An Entry's captured path travels beside its current one, each under its
@@ -230,7 +242,7 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
           (item as Map<unknown, unknown>).set(24, 1n);
         }
       }
-      map.set('schema', 3n);
+      map.set('schema', INDEX_SNAPSHOT_SCHEMA + 1n);
     });
     expect(readOrdinary(payload).content).toEqual(canonical(content()));
   });
@@ -368,9 +380,11 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
     }
   });
 
-  // FM-16: a reader refuses any schema below the one this build writes.
-  it('refuses a schema below the one before entry numbers', () => {
-    for (const schema of [0n, INDEX_SNAPSHOT_SCHEMA - 2n]) {
+  // FM-16: a reader refuses any schema below the one it writes: a Snapshot of
+  // schema 2 carries no entry numbers, and none before this one carries
+  // deposit times.
+  it('refuses a schema below the one this package writes', () => {
+    for (const schema of [0n, 2n, INDEX_SNAPSHOT_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => readOrdinary(payload)), `schema ${schema}`).toBe(
         'unsupported_index_snapshot_schema',
@@ -378,20 +392,17 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
     }
   });
 
-  // A Snapshot of schema 2 carries no entry numbers, so it is no catalog to
-  // start from: it is refused with a refusal of its own, and never numbered from
-  // its path order. A reader replays the Journal instead.
-  it('does not use a schema 2 Snapshot for entry numbers', () => {
+  // FM-16: every Snapshot entry carries `deposited_at`, and one without it is
+  // refused rather than restored as an Entry with no deposit time.
+  it('refuses an entry without its deposit time', () => {
     const payload = tampered((map) => {
-      map.set('schema', 2n);
-      for (const entry of arrayField(map, 'entries')) {
-        (entry as Map<unknown, unknown>).delete('entry');
-      }
+      mapAt(arrayField(map, 'entries'), 1).delete('deposited_at');
     });
-    expect(errorCode(() => readOrdinary(payload))).toBe('snapshot_predates_entry_numbers');
+    expect(errorCode(() => readOrdinary(payload))).toBe('malformed_index_snapshot');
+    expect(() => readOrdinary(payload)).toThrow(/deposited_at/);
   });
 
-  // From schema 3 every Snapshot entry carries `entry`.
+  // Every Snapshot entry carries `entry`.
   it('refuses an entry without its entry number', () => {
     const payload = tampered((map) => {
       mapAt(arrayField(map, 'entries'), 1).delete('entry');

@@ -200,6 +200,7 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
             "mtime",
             "btime",
             "hash",
+            "deposited_at",
             "container",
             "entry"
         ],
@@ -221,6 +222,32 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
     let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
     assert_eq!(decoded.content.entries()[BORN_AT].entry.btime, Some(BORN));
     assert_eq!(decoded.content.entries()[BORN_AT + 1].entry.btime, None);
+}
+
+// FM-16: each Entry carries the deposit time of its content, its own and no
+// other Entry's, and it comes back as it went in.
+#[test]
+fn an_entry_carries_its_deposit_time() {
+    let snapshot = ordinary();
+    let payload = encode(&snapshot).expect("encoding succeeds");
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    let times = |content: &coffret_model::SnapshotContent| {
+        content
+            .entries()
+            .iter()
+            .map(|location| location.deposited_at)
+            .collect::<Vec<_>>()
+    };
+    let written = times(&snapshot.content);
+    assert_eq!(times(&decoded.content), written);
+    let mut distinct = written.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert_eq!(
+        distinct.len(),
+        written.len(),
+        "the fixture tells every Entry's time apart"
+    );
 }
 
 // FM-9, FM-16: each Entry carries its entry number in its Container, which the
