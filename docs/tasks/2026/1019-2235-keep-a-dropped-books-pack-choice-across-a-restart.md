@@ -61,4 +61,4 @@ User-initiated cancellation of an import, signal handling, the format of the Lib
 
 ### Before merge
 
-- [ ] Against the agent's development Library, drop a 300-page fixture book as a Pack via `POST /api/upload?freeze=true`, SIGKILL the server during the spool and again during the put, restart, and confirm one Pack is committed with no one-file Containers and no leftover spool.
+- [x] Against the agent's development Library, drop a 300-page fixture book as a Pack via `POST /api/upload?freeze=true`, SIGKILL the server during the spool and again during the put, restart, and confirm one Pack is committed with no one-file Containers and no leftover spool.
