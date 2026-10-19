@@ -1,4 +1,5 @@
-use crate::device_state::LocalObservation;
+use crate::device_state::{LocalObservation, ReservationId};
+use crate::freeze::lapsed::Lapsed;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::freeze::selected::Selected;
 use crate::unavailable_root::UnavailableRoot;
@@ -25,4 +26,24 @@ pub(super) struct Survey {
     /// read: they were touched, so the length and modification time this device
     /// last saw are stale even though the content is not (spec: EP-10).
     pub(super) refreshed: Vec<LocalObservation>,
+    /// The reservations this run decided every path of, in the order they
+    /// were made (spec: PK-17).
+    pub(super) closing: Vec<Closing>,
+}
+
+/// What a run makes of one reservation all of whose paths it considered
+/// (spec: PK-17).
+///
+/// A reservation with a path the run did not consider — outside its folder or
+/// its selection, or under a mapped root it could not vouch for (spec: EP-12) —
+/// is not among them: what becomes of that path is a later run's to decide, so
+/// the reservation stays.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Closing {
+    /// The run packs at least one of its paths, and the commit that does is
+    /// what releases it.
+    Packs(ReservationId),
+    /// None of its paths was eligible any more: it is released on its own,
+    /// and these say why.
+    Lapses(ReservationId, Vec<Lapsed>),
 }

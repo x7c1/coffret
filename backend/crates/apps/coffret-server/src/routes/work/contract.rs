@@ -132,6 +132,16 @@ fn every_finding() -> Vec<Finding> {
                 },
             },
         },
+        Found::Surfaced {
+            path: entry_path("scans/vol-1/page-001.jpg"),
+            reason: FindingReason::AwaitsPack,
+        },
+        Found::Surfaced {
+            path: entry_path("scans/vol-1/page-002.jpg"),
+            reason: FindingReason::Unreserved {
+                lapse: coffret_device::Lapse::Gone,
+            },
+        },
         unavailable(RootUnavailable::Missing),
         unavailable(RootUnavailable::AnotherFilesystem),
         Found::RefusedRoot {

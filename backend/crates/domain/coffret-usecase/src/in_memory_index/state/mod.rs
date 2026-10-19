@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
-    Mapping, PendingRow, SpoolState,
+    Mapping, PendingRow, Reservation, ReservationId, SpoolState,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -47,6 +47,12 @@ pub(super) struct State {
     /// The parcels this device holds, keyed and so ordered the way the port
     /// answers for them (spec: PK-21).
     held_parcels: BTreeMap<(ContainerId, u64), HeldParcel>,
+    /// The drops waiting for their Pack, keyed and so ordered by the
+    /// identifier each was drawn (spec: PK-17).
+    reservations: BTreeMap<ReservationId, Reservation>,
+    /// The identifier the next reservation is drawn, which only grows: one is
+    /// never drawn twice, a released one's included.
+    next_reservation: u64,
 }
 
 impl State {
@@ -273,6 +279,36 @@ impl State {
 
     pub(super) fn let_go_parcel(&mut self, container_id: ContainerId, index: u64) {
         self.held_parcels.remove(&(container_id, index));
+    }
+
+    pub(super) fn reserve(&mut self, folder: Option<&EntryPath>) -> ReservationId {
+        self.next_reservation += 1;
+        let id = ReservationId::new(self.next_reservation);
+        self.reservations.insert(
+            id,
+            Reservation {
+                id,
+                folder: folder.cloned(),
+                paths: BTreeSet::new(),
+            },
+        );
+        id
+    }
+
+    /// Adds a path to a reservation, and one that is gone changes nothing:
+    /// inventing it again would record a drop nobody is making.
+    pub(super) fn extend_reservation(&mut self, id: ReservationId, path: &EntryPath) {
+        if let Some(reservation) = self.reservations.get_mut(&id) {
+            reservation.paths.insert(path.clone());
+        }
+    }
+
+    pub(super) fn reservations(&self) -> Vec<Reservation> {
+        self.reservations.values().cloned().collect()
+    }
+
+    pub(super) fn release_reservation(&mut self, id: ReservationId) {
+        self.reservations.remove(&id);
     }
 
     /// The rows of files this device has on disk as copies of the Entries at

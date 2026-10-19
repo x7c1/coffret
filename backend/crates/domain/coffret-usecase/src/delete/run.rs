@@ -184,6 +184,7 @@ pub async fn delete_entries(request: DeleteRequest<'_>) -> DeleteResult<DeleteOu
         &spooled,
         &removed,
         Vec::new(),
+        Vec::new(),
         Some(&short),
         progress,
     )

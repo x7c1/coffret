@@ -171,5 +171,11 @@ pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexRe
     for container_id in uploaded {
         device_state::clear_pending_row(connection, container_id)?;
     }
+    // In the same transaction as the rows they complete, so a drop's Pack is
+    // never committed here while its reservation still says it waits for one
+    // (spec: PK-17).
+    for id in batch.released {
+        device_state::release_reservation(connection, id)?;
+    }
     Ok(())
 }

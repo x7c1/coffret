@@ -13,6 +13,7 @@ function row(name: string, openable: boolean, state: 'present' | 'remote' = 'pre
     mtime: null,
     state,
     container: 'one-file',
+    reserved: false,
     openable,
     content_type: openable ? 'image/jpeg' : 'application/octet-stream',
   };

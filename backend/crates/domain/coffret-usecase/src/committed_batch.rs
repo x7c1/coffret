@@ -1,6 +1,6 @@
 use coffret_model::JournalRecord;
 
-use crate::device_state::LocalObservation;
+use crate::device_state::{LocalObservation, ReservationId};
 
 /// A batch of this device's own that has just committed.
 ///
@@ -25,4 +25,11 @@ pub struct CommittedBatch {
     /// reported as deleted locally (spec: EP-10). So the batch says which ones
     /// those are rather than leaving it to be inferred from the additions.
     pub materialized: Vec<LocalObservation>,
+    /// The reservations the batch packs, which go in the same step that
+    /// completes its rows (spec: PK-17).
+    ///
+    /// Device state for the reason [`materialized`](Self::materialized) is:
+    /// which drop asked for a Pack is this device's own record, and no Storage
+    /// Object carries it (spec: CK-7).
+    pub released: Vec<ReservationId>,
 }

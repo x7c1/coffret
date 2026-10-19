@@ -125,7 +125,7 @@ mod disposal;
 pub use disposal::Disposal;
 
 mod settle;
-pub(crate) use settle::{complete_after_catch_up, PendingWork};
+pub(crate) use settle::{complete_after_catch_up, settle, PendingWork, SettleStorage};
 
 mod settled;
 pub use settled::Settled;

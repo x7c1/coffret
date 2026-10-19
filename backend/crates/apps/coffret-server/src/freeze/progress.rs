@@ -75,7 +75,26 @@ impl Progress {
     /// already waiting is taken into that one — two drops into one folder
     /// waiting their turn are packed by one run, of both drops' files, rather
     /// than one queued behind the other or one lost.
-    pub(super) fn arm(&mut self, mut book: Book) -> bool {
+    pub(super) fn arm(&mut self, book: Book) -> bool {
+        self.arming(book, true)
+    }
+
+    /// Asks for the book a drop just finished writing to be packed, as a run
+    /// of its own wherever a run is already under way (spec: PK-17).
+    ///
+    /// The one difference from [`arm`](Self::arm), and it is about the run
+    /// under way: a drop's book is never taken for it, even where that run
+    /// covers every file the drop wrote. That run read the reservations before
+    /// the drop stopped receiving, so it spares the drop's reservation rather
+    /// than deciding it, and its walk may have gone past pages that landed after
+    /// it — the drop's own run is the one that considers every landed page and
+    /// decides the reservation. A book of the same folder still waiting is
+    /// joined as `arm` joins it: nothing has walked that folder for it yet.
+    pub(super) fn arm_dropped(&mut self, book: Book) -> bool {
+        self.arming(book, false)
+    }
+
+    fn arming(&mut self, mut book: Book, joins_running: bool) -> bool {
         // Whoever is asking for it has taken it up, so it is no longer a book
         // the screen is offering to take up, nor a stopped run it is still
         // holding the offer out for: this arming is that second attempt, and
@@ -90,7 +109,7 @@ impl Progress {
         }
         self.discarded.retain(|kept| kept.folder != folder);
         self.displaced.retain(|kept| kept.run.folder != folder);
-        if self.is_pending(&book) {
+        if joins_running && self.is_pending(&book) {
             return false;
         }
         if let Some(waiting) = self
@@ -744,6 +763,32 @@ mod tests {
             progress.take_next(),
             Some(dropped(&["books/vol-1/b.png"])),
             "new files are a run of their own",
+        );
+    }
+
+    // PK-17: a drop's own book is never taken for the run under way, even one
+    // of its whole folder. That run spares the drop's reservation, which was
+    // live when it read the reservations, and may have walked past pages that
+    // landed after: the drop's own run is what packs them and releases it.
+    #[test]
+    fn a_drop_does_not_join_the_run_under_way_even_where_it_covers_it() {
+        let mut progress = Progress::default();
+        progress.arm(book("books/vol-1"));
+        progress.take_next();
+
+        assert!(
+            !progress.arm(book("books/vol-1")),
+            "the whole folder asked for again is the run under way",
+        );
+        assert!(
+            !progress.arm_dropped(dropped(&["books/vol-1/a.png"])),
+            "a worker is already running",
+        );
+        assert_eq!(progress.waiting(), [folder("books/vol-1")]);
+        assert_eq!(
+            progress.take_next(),
+            Some(dropped(&["books/vol-1/a.png"])),
+            "the drop is a run of its own",
         );
     }
 

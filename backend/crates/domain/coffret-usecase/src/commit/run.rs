@@ -166,6 +166,7 @@ async fn attempt_until_committed(
                     .refresh(CommittedBatch {
                         record: landed.record,
                         materialized: Vec::new(),
+                        released: Vec::new(),
                     })
                     .await?;
             }
@@ -235,6 +236,7 @@ async fn attempt_until_committed(
             .refresh(CommittedBatch {
                 record: landed.record.clone(),
                 materialized: batch.materialized.clone(),
+                released: batch.released.clone(),
             })
             .await?;
 

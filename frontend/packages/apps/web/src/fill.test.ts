@@ -69,6 +69,7 @@ function file(path: string, state: ListedFile['state']): ListedFile {
     mtime: null,
     state,
     container: 'pack',
+    reserved: false,
     openable: true,
     content_type: 'image/jpeg',
   };
@@ -403,6 +404,27 @@ it('marks a file the Library does not hold yet', () => {
   expect(rowFill(file('albums/dropped.jpg', 'added'), 'albums', filling()).state).toBe('added');
 });
 
+// A file a drop asked to have packed waits for the freeze rather than for the
+// next sync, which leaves it alone (spec: PK-17), so the chip says so instead
+// of promising the sync — and a row the Library holds that this device does
+// not have is nothing waiting here, whatever the reservation names.
+it('marks a file waiting to be packed apart from one waiting for a sync', () => {
+  const reserved = { ...file('scans/vol-1/page-001.jpg', 'added'), reserved: true };
+  const shown = rowFill(reserved, 'scans/vol-1', null);
+  expect(shown.state).toBe('reserved');
+  expect(SAYS[shown.state]).toBe('to be packed');
+  expect(shown.message).toContain('dropped to be added as a Pack');
+
+  expect(
+    rowFill({ ...file('scans/vol-1/page-001.jpg', 'present'), reserved: true }, 'scans/vol-1', null)
+      .state,
+  ).toBe('reserved');
+  expect(
+    rowFill({ ...file('scans/vol-1/page-001.jpg', 'remote'), reserved: true }, 'scans/vol-1', null)
+      .state,
+  ).toBe('remote');
+});
+
 // A fill that finished having declined something and one that stopped both end
 // at "28/30", and they are opposite answers: one is over and the other is not.
 // So the finished one says so rather than taking its line off the screen.
@@ -680,6 +702,42 @@ it('keeps a line for a sync that left something alone', () => {
       }),
     ),
   ).toBe('a folder went');
+});
+
+// PK-17: the pages of a book still to be packed are on their way rather than
+// left behind, and their rows say so. The sync's own line keeps what it came to
+// and counts them after it, instead of naming the book's first page.
+it('counts the files a sync left for their Pack after what it came to', () => {
+  const waiting = (path: string) => ({
+    path,
+    message: 'this file was dropped to be added as a Pack, and waits for the freeze that packs it',
+    reason: 'surfaced' as const,
+    surfaced: 'AwaitsPack' as const,
+  });
+  const book = [waiting('scans/vol-1/page-001.jpg'), waiting('scans/vol-1/page-002.jpg')];
+
+  expect(syncLine(syncing({ status: 'done', stopped: null, added: 5, findings: book }))).toBe(
+    'added 5 files to the Library; 2 files are still to be packed',
+  );
+  expect(
+    syncLine(syncing({ status: 'done', stopped: null, added: 0, findings: [book[0]] })),
+  ).toBe('1 file is still to be packed');
+  expect(
+    syncLine(
+      syncing({
+        status: 'done',
+        stopped: null,
+        added: 1,
+        findings: [
+          ...book,
+          { path: 'a.jpg', message: 'one', reason: 'surfaced', surfaced: 'ChangedInPack' },
+        ],
+      }),
+    ),
+  ).toBe('a.jpg — one; 2 files are still to be packed');
+  expect(syncLine(syncing({ status: 'stopped', stopped: STORAGE, findings: book }))).toBe(
+    "could not back up what was added — the Library's Storage did not answer; 2 files are still to be packed",
+  );
 });
 
 it('keeps a line for a sync that stopped, because the retry hangs off it', () => {

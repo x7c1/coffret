@@ -50,6 +50,7 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
         grant: None,
         births: Default::default(),
         fetch_memory: Default::default(),
+        live: Default::default(),
     }
 }
 

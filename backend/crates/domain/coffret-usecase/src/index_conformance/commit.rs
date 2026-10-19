@@ -34,6 +34,7 @@ pub async fn a_refresh_lands_where_a_replay_of_its_record_does(fixture: &IndexUn
                 observation_of("albums/a.jpg", 100, entry(1, 0)),
                 observation_of("albums/b.jpg", 101, entry(1, 1)),
             ],
+            released: Vec::new(),
         })
         .await
         .expect("refreshing after a commit must succeed");
@@ -86,6 +87,7 @@ pub async fn a_refresh_marks_its_files_present_and_clears_its_spools(fixture: &I
                 vec![],
             ),
             materialized: vec![observation_of("albums/a.jpg", 100, entry(1, 0))],
+            released: Vec::new(),
         })
         .await
         .expect("refreshing after a commit must succeed");

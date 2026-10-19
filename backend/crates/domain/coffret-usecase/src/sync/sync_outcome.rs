@@ -1,4 +1,4 @@
-use coffret_model::ContainerId;
+use coffret_model::{ContainerId, EntryPath};
 
 use crate::commit::CommitOutcome;
 use crate::relocate::Relocation;
@@ -72,6 +72,13 @@ pub struct SyncOutcome {
     pub relocations: Vec<Relocation>,
     /// What the run found and did not act on (spec: PK-14).
     pub surfaced: Vec<Surfaced>,
+    /// The files a drop reserved for a Pack, which this run left for the
+    /// freeze that packs them, in Entry Path order (spec: PK-17).
+    ///
+    /// Read the way [`surfaced`](Self::surfaced) is: each is a file in a mapped
+    /// folder that this run did not carry in, and it is not carried in until
+    /// its freeze commits.
+    pub reserved: Vec<EntryPath>,
     /// The mappings whose local roots the device could not vouch for
     /// (spec: EP-12).
     ///

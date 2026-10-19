@@ -26,6 +26,7 @@ mod redaction;
 mod refresh;
 mod remembered;
 mod remote_head;
+mod resumed;
 mod turns;
 mod upload;
 mod work;

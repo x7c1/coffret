@@ -122,11 +122,21 @@ Concept background: [Library](../../concepts/library/),
   It lives exactly as long as the process: a server started afterwards answers
   with no run under way, nothing waiting, and no last outcome, and work a
   stopped server had waiting is done only once something asks for it again.
+  The one recorded exception is a drop's choice of a Pack, which the drop
+  writes on the device as a reservation before its first file lands (PK-17): a
+  server takes every reservation up once its start-up catch-up has finished,
+  and again once the Library is unlocked in place, in the order they were made,
+  so a book a stopped server was packing is packed rather than left for a sync
+  to carry in one file at a time. Which reservations a drop is still receiving
+  into — live, and decided by no other run (PK-17) — is the process's own state
+  like the rest, so a server started afterwards holds none live and takes every
+  reservation up.
   Every answer about that work carries an identifier the process draws as it
   starts, so a browser holding what one process told it can tell that account
   from the next process's. What such work does that lasts is recorded by the
   work itself, under the rules for it — a materialization record (EP-10), a
-  commit (CP-1), a pending row a run leaves for the next settle (OC-2) — so a
+  commit (CP-1), a pending row a run leaves for the next settle (OC-2), a
+  reservation a drop leaves for its `freeze` (PK-17) — so a
   server that stops loses the account of what this device was doing and none
   of the record of what it has. A server started afterwards finishes what such
   a record proves: the catch-up it makes as it starts, where it lands,

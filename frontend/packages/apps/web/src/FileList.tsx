@@ -640,6 +640,9 @@ const CHIP: Record<RowState, string> = {
   // In the folder and not in the Library, which is a state to notice rather
   // than one to worry about: the next run is what ends it.
   added: COLOR.added,
+  // Work still to come rather than work refused or done: the chip a row being
+  // brought over wears, since this one is about to be carried in too.
+  reserved: COLOR.fetching,
   fetching: COLOR.fetching,
   // A refusal, which is what stopped the fill before it reached this row.
   failed: COLOR.refused,

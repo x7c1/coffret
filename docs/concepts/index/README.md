@@ -14,7 +14,7 @@ The Index keeps three kinds of information with different recovery properties:
 | Part | What it records | After loss |
 | --- | --- | --- |
 | Cached Catalog | Current Containers, Entries with their current and captured paths and their entry numbers, and the checkpoint reached | Reconstruct from intact control state |
-| Device-local records | Mappings, materializations, and pending work | Restore the Index from a backup of this device, or re-establish the records on this device |
+| Device-local records | Mappings, materializations, pending work, and reservations | Restore the Index from a backup of this device, or re-establish the records on this device |
 | Held parcels | Which parcels of which Containers this device keeps the ciphertext of | Nothing to recover: the parcels are read from Storage again when next wanted |
 
 A new device restores the Catalog and chooses its own mappings. Rebuilding
@@ -115,9 +115,20 @@ before it disposes of such a row (spec: OC-2).
 
 Only a run with exclusive ownership of this device's pending work may settle
 it, so another live producer's files cannot be reclaimed (spec: OC-2, OC-3,
-OC-7). Completion needs nothing but a caught-up Index, so it also follows every
-other catch-up that is free to take that ownership — a server's as it starts, a
-fetch's — while reclaiming and retaining stay with settlement (spec: OC-7).
+OC-7). A sync settles before it scans, and so does a freeze before it builds
+its own Packs (spec: OC-9). Completion needs nothing but a caught-up Index, so
+it also follows every other catch-up that is free to take that ownership — a
+server's as it starts, a fetch's — while reclaiming and retaining stay with
+settlement (spec: OC-7).
+
+A **reservation** records a drop's choice to add its files as a
+[Pack](../pack/): the folder the drop was made onto and each Entry Path it
+writes, recorded before that file lands. Like a pending row, it outlives the
+process that wrote it, which is its purpose: a sync leaves a reserved file
+alone and says it waits for its Pack, and a server started afterwards takes
+every reservation up in the order they were made. The freeze that packs any of
+its files releases it with its commit; one that finds none of them eligible any
+more releases it and says why (spec: PK-17, LA-12).
 Precise spool transitions and cleanup conditions belong to the
 [specification register](../../spec/orphan-cleanup/).
 
@@ -131,6 +142,13 @@ Precise spool transitions and cleanup conditions belong to the
 
 ## Collocations
 
+- reserve (a drop's files for a Pack, by recording a reservation before the
+  first of them lands)
+- take up (every reservation, as a freeze over its paths, once a server has
+  caught up or the Library is unlocked)
+- release (a reservation, with the commit that packs any of its paths, or once
+  a freeze finds none of them eligible) — never *delete*, which is the
+  Library's verb for Entries
 - rebuild (the cached Catalog in an Index from Storage)
 - refresh (the Index after a commit, including this device's local records)
 - catch up (a stale Index to the available committed head)

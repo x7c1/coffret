@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use coffret_device::EntryPath;
+use coffret_device::{EntryPath, Reservation};
 
 use crate::folder::Folder;
 
@@ -61,6 +61,23 @@ impl Book {
             folder: Folder::named(holding),
             only: Some(written),
         }
+    }
+
+    /// The files a reservation names, as a server started since the drop takes
+    /// them up (spec: PK-17).
+    ///
+    /// The same book the drop armed, so the line naming it is the one the drop
+    /// showed. A reservation naming no file — a drop stopped before its first
+    /// page — is the folder it was made onto, with a selection of nothing: the
+    /// run considers no file, finds none eligible, and releases it.
+    pub fn reserved(reservation: Reservation) -> Self {
+        if reservation.paths.is_empty() {
+            return Self {
+                folder: Folder::named(reservation.folder),
+                only: Some(BTreeSet::new()),
+            };
+        }
+        Self::dropped(reservation.paths)
     }
 
     /// Whether a run of this book already packs everything `other` asks for.

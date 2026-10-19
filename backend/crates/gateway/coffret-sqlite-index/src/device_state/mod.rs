@@ -1,4 +1,4 @@
-//! The five tables that never leave this device.
+//! The tables that never leave this device.
 //!
 //! Nothing here is ever part of an Index Snapshot (spec: CK-7), and the
 //! Library-wide operations reach these tables only to keep each
@@ -15,6 +15,9 @@ pub(crate) use local_entries::{
 
 mod mappings;
 pub(crate) use mappings::{mappings, set_mapping};
+
+mod reservations;
+pub(crate) use reservations::{extend_reservation, release_reservation, reservations, reserve};
 
 mod pending_rows;
 pub(crate) use pending_rows::{

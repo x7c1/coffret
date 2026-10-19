@@ -15,6 +15,12 @@ use crate::index_conformance::index_under_test::IndexUnderTest;
 mod held_parcels;
 pub use held_parcels::a_held_parcel_is_recorded_until_it_is_let_go;
 
+mod reservations;
+pub use reservations::{
+    a_refresh_releases_the_reservations_its_batch_packs,
+    a_reservation_is_kept_in_order_until_it_is_released,
+};
+
 mod local_entries;
 pub use local_entries::{
     a_file_left_behind_by_the_library_is_reported,
@@ -72,6 +78,14 @@ pub(super) async fn seed_device_state(index: &dyn Index) {
         .hold_parcel(held_parcel())
         .await
         .expect("recording a held parcel must succeed");
+    let reservation = index
+        .reserve(Some(&crate::entry_paths::entry_path("albums")))
+        .await
+        .expect("recording a reservation must succeed");
+    index
+        .extend_reservation(reservation, &seeded_file().path)
+        .await
+        .expect("extending a reservation must succeed");
 }
 
 /// The one held parcel the seed records (spec: PK-21).
@@ -116,6 +130,20 @@ pub(super) async fn assert_device_state_intact(index: &dyn Index) {
             .await
             .expect("reading the held parcels must succeed"),
         [held_parcel()]
+    );
+    let reservations = index
+        .reservations()
+        .await
+        .expect("reading the reservations must succeed");
+    assert_eq!(
+        reservations
+            .iter()
+            .map(|reservation| (reservation.folder.clone(), reservation.paths.clone()))
+            .collect::<Vec<_>>(),
+        [(
+            Some(crate::entry_paths::entry_path("albums")),
+            [seeded_file().path].into_iter().collect()
+        )],
     );
 }
 

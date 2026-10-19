@@ -5,8 +5,9 @@
 //! carried by an Index Snapshot. The other is this: how this device maps the
 //! Library onto its own folders (spec: EP-9), which Entries it has actually put
 //! on disk (spec: EP-10), what it has spooled and uploaded but not yet
-//! committed (spec: OC-2), and which parcels of the Containers it read it still
-//! holds (spec: PK-21).
+//! committed (spec: OC-2), which parcels of the Containers it read it still
+//! holds (spec: PK-21), and which dropped files wait to be packed
+//! (spec: PK-17).
 //!
 //! None of it is ever uploaded, and a restore leaves all of it untouched
 //! (spec: CK-7). That separation is the point: a laptop mapping `albums/` and a
@@ -39,6 +40,19 @@ pub use mapping::Mapping;
 
 mod pending_row;
 pub use pending_row::PendingRow;
+
+mod live_reservation;
+pub use live_reservation::LiveReservation;
+
+mod live_reservations;
+pub use live_reservations::LiveReservations;
+pub(crate) use live_reservations::{LiveSince, NONE_LIVE};
+
+mod reservation;
+pub use reservation::Reservation;
+
+mod reservation_id;
+pub use reservation_id::ReservationId;
 
 mod root_identity;
 pub use root_identity::RootIdentity;

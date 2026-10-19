@@ -66,6 +66,7 @@
           "name": "blocked",
           "openable": false,
           "path": "albums/blocked",
+          "reserved": false,
           "size": 26,
           "state": "added"
         },
@@ -76,6 +77,7 @@
           "name": "café.jpg",
           "openable": true,
           "path": "albums/café.jpg",
+          "reserved": false,
           "size": 6,
           "state": "present"
         },
@@ -86,6 +88,7 @@
           "name": "cover.png",
           "openable": true,
           "path": "albums/cover.png",
+          "reserved": false,
           "size": 5,
           "state": "present"
         },
@@ -96,6 +99,7 @@
           "name": "just-added.txt",
           "openable": false,
           "path": "albums/just-added.txt",
+          "reserved": false,
           "size": 14,
           "state": "added"
         },
@@ -106,6 +110,7 @@
           "name": "notes.txt",
           "openable": false,
           "path": "albums/notes.txt",
+          "reserved": false,
           "size": 23,
           "state": "present"
         }
@@ -141,6 +146,7 @@
           "name": "page-001.png",
           "openable": true,
           "path": "books/page-001.png",
+          "reserved": false,
           "size": 8,
           "state": "remote"
         }

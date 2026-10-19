@@ -96,6 +96,12 @@ the Entry count — decides `freeze` eligibility.
   its `freeze` names them, so a one-file Container already in the destination
   folder is not absorbed by it, and how many Packs result is the target size's
   to decide rather than the folder's (spec: PK-17, PK-3).
+- That choice outlives the process that took the drop. It is recorded on the
+  device as a reservation of the drop's files before the first of them lands,
+  so a sync leaves them for their Pack rather than carrying them in one
+  Container each, and a server started after a quit or a crash packs them
+  (spec: PK-17, LA-12). The `freeze` that does so first settles what the
+  interrupted one left (spec: OC-9).
 - A `freeze` the person asks for on a folder packs every eligible file under
   it (spec: PK-17).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the

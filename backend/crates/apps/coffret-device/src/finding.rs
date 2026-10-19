@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use coffret_model::{ContainerId, EntryPath, Generation};
 use coffret_usecase::commit::{CheckpointFailure, KeyringRepair, ShortKeyring};
 use coffret_usecase::fetch::{UnheldParcel, UnheldReason};
+use coffret_usecase::freeze::Lapse;
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
@@ -209,6 +210,12 @@ impl Finding {
     /// discarded instead, and a file renamed on disk whose Entry was renamed to
     /// follow it (spec: EP-10).
     ///
+    /// A file a drop wanted packed that a Pack already holds is what the person
+    /// asked for, whichever run packed it — a freeze of the whole folder that
+    /// ran beside the drop is one — so the reservation released without a Pack
+    /// of its own is said and not escalated. One that is gone or ineligible is
+    /// escalated: the book the person dropped was not packed (spec: PK-17).
+    ///
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
     ///
@@ -222,6 +229,10 @@ impl Finding {
             self,
             Self::Surfaced {
                 reason: FindingReason::Discarded
+                    | FindingReason::AwaitsPack
+                    | FindingReason::Unreserved {
+                        lapse: Lapse::InPack
+                    }
                     | FindingReason::Relocated { .. }
                     | FindingReason::Renamed { .. }
                     | FindingReason::RelocationDiscarded { .. },

@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
 use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
-    PendingRow,
+    PendingRow, Reservation, ReservationId,
 };
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
@@ -447,6 +447,34 @@ impl Index for SqliteIndex {
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
         self.write("letting go of a held parcel", move |connection| {
             device_state::let_go_parcel(connection, container_id, index)
+        })
+        .await
+    }
+
+    async fn reserve(&self, folder: Option<&EntryPath>) -> IndexResult<ReservationId> {
+        let folder = folder.cloned();
+        self.write("recording a reservation", move |connection| {
+            device_state::reserve(connection, folder.as_ref())
+        })
+        .await
+    }
+
+    async fn extend_reservation(&self, id: ReservationId, path: &EntryPath) -> IndexResult<()> {
+        let path = path.clone();
+        self.write("extending a reservation", move |connection| {
+            device_state::extend_reservation(connection, id, &path)
+        })
+        .await
+    }
+
+    async fn reservations(&self) -> IndexResult<Vec<Reservation>> {
+        self.read("reading the reservations", device_state::reservations)
+            .await
+    }
+
+    async fn release_reservation(&self, id: ReservationId) -> IndexResult<()> {
+        self.write("releasing a reservation", move |connection| {
+            device_state::release_reservation(connection, id)
         })
         .await
     }

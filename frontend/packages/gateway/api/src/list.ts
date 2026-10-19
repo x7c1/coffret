@@ -42,6 +42,16 @@ export interface ListedFile {
   state: EntryState;
   /** `null` for an `added` row: no current Container holds it. */
   container: ContainerKind | null;
+  /**
+   * Whether a drop put this file here to be added as a Pack, and it waits for
+   * the freeze that packs it.
+   *
+   * Beside `state` rather than a state of its own: the file is still `added` —
+   * or `present`, where it replaced an Entry of its own — and what this says is
+   * which run carries it in. A sync leaves it alone, so the row is not one the
+   * next sync takes in.
+   */
+  reserved: boolean;
   /** Whether the explorer can display the Entry itself. */
   openable: boolean;
   /** What the bytes are served as. */

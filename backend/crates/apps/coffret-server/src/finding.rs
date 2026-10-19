@@ -1,4 +1,6 @@
-use coffret_device::{EntryPath, FindingReason, RelocationRefused, RootRefused, RootUnavailable};
+use coffret_device::{
+    EntryPath, FindingReason, Lapse, RelocationRefused, RootRefused, RootUnavailable,
+};
 
 use crate::api_error::refused_root_said;
 
@@ -342,6 +344,22 @@ fn said(reason: &FindingReason) -> &'static str {
             "a file this device had put in place is gone and this file holds exactly its content, \
              but renaming its Entry here was refused, so this file is carried in as a new one"
         }
+        FindingReason::AwaitsPack => {
+            "this file was dropped to be added as a Pack, and waits for the freeze that packs it"
+        }
+        FindingReason::Unreserved { lapse } => match lapse {
+            Lapse::Gone => {
+                "this file was dropped to be added as a Pack and is gone, so no Pack was built \
+                 for it"
+            }
+            Lapse::InPack => {
+                "this file was dropped to be added as a Pack, and a Pack already holds it"
+            }
+            Lapse::Ineligible => {
+                "this file was dropped to be added as a Pack, and is no longer a file a freeze \
+                 packs"
+            }
+        },
     }
 }
 
@@ -430,6 +448,11 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         // declined fetch names either.
         FindingReason::Renamed { .. } => ("surfaced", "Renamed"),
         FindingReason::RenameRefused { .. } => ("surfaced", "RenameRefused"),
+        // The two about a file a drop reserved for a Pack: a sync leaving it
+        // for its freeze, and a freeze finding it no longer one to pack
+        // (spec: PK-17). No declined fetch names them either.
+        FindingReason::AwaitsPack => ("surfaced", "AwaitsPack"),
+        FindingReason::Unreserved { .. } => ("surfaced", "Unreserved"),
     }
 }
 
@@ -767,7 +790,11 @@ mod tests {
                         path: entry_path("albums"),
                     },
                 }),
-                FindingReason::RenameRefused { .. } => unavailable(RootUnavailable::Missing),
+                FindingReason::RenameRefused { .. } => surfaced(FindingReason::AwaitsPack),
+                FindingReason::AwaitsPack => {
+                    surfaced(FindingReason::Unreserved { lapse: Lapse::Gone })
+                }
+                FindingReason::Unreserved { .. } => unavailable(RootUnavailable::Missing),
             }),
             Finding::UnavailableRoot { reason, .. } => Some(match reason {
                 RootUnavailable::Missing => unavailable(RootUnavailable::AnotherFilesystem),

@@ -39,8 +39,12 @@
 //! follows whoever is clicking; the sync parts from it outright, collapsing
 //! because one walk of the mappings finds everything. A book whose files the
 //! running freeze is already packing is not queued again: asking for the same
-//! book again is asking for what is already happening. And a second drop into a
-//! folder already waiting joins that book, so one run packs both drops' files.
+//! book again is asking for what is already happening — save for the run a drop
+//! arms once it stops receiving ([`freeze_dropped`]), which is never taken for
+//! the run under way: that run read the reservations while the drop was still
+//! landing, so it decides none of the drop's (spec: PK-17). And a second drop
+//! into a folder already waiting joins that book, so one run packs both drops'
+//! files.
 //!
 //! # What it is not allowed to do
 //!
@@ -50,6 +54,17 @@
 //! [`DEFAULT_PACK_TARGET`](coffret_device::DEFAULT_PACK_TARGET), the one the
 //! command line defaults to, so a book packed from a browser and a book packed
 //! from a terminal come out alike.
+//!
+//! # A drop's choice outlives the process
+//!
+//! What this server holds about the books it is packing is the process's own
+//! and goes with it (spec: LA-12). The one exception is the drop's choice
+//! itself: the upload route writes it on the device as a reservation before the
+//! first page lands, the freeze that packs the pages releases it with its
+//! commit, and a server started afterwards — or the Library unlocked again —
+//! takes every reservation up, in the order the drops were made
+//! ([`resume_reserved`]). So a book whose server was quit half way is packed,
+//! rather than carried in by the next sync one page at a time (spec: PK-17).
 //!
 //! And a run that returns `Ok` has still to be read for what it left alone
 //! (spec: PK-14, EP-12). Those findings reach the browser as
@@ -64,13 +79,16 @@ mod freeze_run;
 pub use freeze_run::FreezeRun;
 
 mod freeze_folder;
-pub use freeze_folder::freeze_folder;
+pub use freeze_folder::{freeze_dropped, freeze_folder};
 
 mod freeze_status;
 pub use freeze_status::FreezeStatus;
 
 mod freezes;
 pub use freezes::Freezes;
+
+mod resume;
+pub use resume::resume_reserved;
 
 // Everything the server knows about freezing folders, in the one value the
 // others read and write it through.

@@ -76,6 +76,7 @@ fn discarded(literal: &str) -> Finding {
 #[test]
 fn a_sync_answers_its_counts_and_its_findings() {
     let outcome = SyncOutcome {
+        reserved: Vec::new(),
         relocations: Vec::new(),
         added: vec![container(1), container(2)],
         replaced: vec![container(3)],
@@ -138,6 +139,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
 #[test]
 fn a_sync_answers_the_renames_it_detected() {
     let outcome = SyncOutcome {
+        reserved: Vec::new(),
         relocations: Vec::new(),
         added: vec![container(1)],
         replaced: Vec::new(),

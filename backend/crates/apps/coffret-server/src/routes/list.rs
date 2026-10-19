@@ -1,8 +1,9 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
 use axum::Json;
-use coffret_device::{AddedFile, ChildFolder, ContainerKind, EntryState, FileRow};
+use coffret_device::{AddedFile, ChildFolder, ContainerKind, EntryPath, EntryState, FileRow};
 use serde::Serialize;
 
 use crate::api_error::ApiError;
@@ -114,6 +115,15 @@ struct FileDto {
     /// decides from it whether an Entry can be replaced one file at a time, and
     /// a row with no Entry has nothing to replace.
     container: Option<&'static str>,
+    /// Whether a drop put this file here to be added as a Pack, and it waits
+    /// for the freeze that packs it (spec: PK-17).
+    ///
+    /// Beside `state` rather than a state of its own: the file is still
+    /// `added` — or `present`, where it replaced an Entry of its own — and what
+    /// this says is which flow will carry it in. A sync leaves it alone, so
+    /// the row is not one the next sync takes in, and a page that said so would
+    /// be promising what the reservation is there to prevent.
+    reserved: bool,
     openable: bool,
     content_type: &'static str,
 }
@@ -147,6 +157,7 @@ pub async fn list(
     let folder = query.folder()?;
     let listing = library.list(folder.as_ref()).await?;
     let added = library.added_locally(folder.as_ref()).await?;
+    let reserved = library.reserved_paths().await?;
     // Somebody looking at a folder this device can fetch into is about to
     // open something in it, so the fronts of its Containers are read now, in
     // the background, and the first page opened costs its parcel alone. Set
@@ -165,7 +176,7 @@ pub async fn list(
         mapped: listing.mapped,
         held: listing.held,
         folders: listing.folders.iter().map(folder_dto).collect(),
-        files: merged(&listing.files, &added.files),
+        files: merged(&listing.files, &added.files, &reserved),
         folders_on_disk: added.folders,
     }))
 }
@@ -180,7 +191,7 @@ pub async fn list(
 /// The two cannot name one path. A file the Library holds an Entry for is not
 /// among the added ones, which is exactly what
 /// [`added_locally`](coffret_device::OpenLibrary::added_locally) leaves out.
-fn merged(files: &[FileRow], added: &[AddedFile]) -> Vec<FileDto> {
+fn merged(files: &[FileRow], added: &[AddedFile], reserved: &BTreeSet<EntryPath>) -> Vec<FileDto> {
     let mut rows = Vec::with_capacity(files.len() + added.len());
     let mut held = files.iter().peekable();
     let mut waiting = added.iter().peekable();
@@ -195,11 +206,11 @@ fn merged(files: &[FileRow], added: &[AddedFile]) -> Vec<FileDto> {
         rows.push(match next {
             Held(file) => {
                 held.next();
-                file_dto(file)
+                file_dto(file, reserved.contains(&file.path))
             }
             Added(one) => {
                 waiting.next();
-                added_dto(one)
+                added_dto(one, reserved.contains(&one.path))
             }
         });
     }
@@ -220,7 +231,7 @@ fn folder_dto(folder: &ChildFolder) -> FolderDto {
     }
 }
 
-fn file_dto(file: &FileRow) -> FileDto {
+fn file_dto(file: &FileRow, reserved: bool) -> FileDto {
     let media = classify(&file.path);
     FileDto {
         name: file.name.clone(),
@@ -235,6 +246,7 @@ fn file_dto(file: &FileRow) -> FileDto {
             ContainerKind::OneFile => "one-file",
             ContainerKind::Pack => "pack",
         }),
+        reserved,
         openable: media.openable,
         content_type: media.content_type,
     }
@@ -247,7 +259,7 @@ fn file_dto(file: &FileRow) -> FileDto {
 /// opens in the reader like any other. What it has instead of a state and a
 /// Container is the one fact that distinguishes it — the Library does not have
 /// this yet.
-fn added_dto(file: &AddedFile) -> FileDto {
+fn added_dto(file: &AddedFile, reserved: bool) -> FileDto {
     let media = classify(&file.path);
     FileDto {
         name: file.name.clone(),
@@ -256,6 +268,7 @@ fn added_dto(file: &AddedFile) -> FileDto {
         mtime: iso8601(file.mtime),
         state: "added",
         container: None,
+        reserved,
         openable: media.openable,
         content_type: media.content_type,
     }

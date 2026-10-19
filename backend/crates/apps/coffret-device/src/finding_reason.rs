@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_model::EntryPath;
+use coffret_usecase::freeze::Lapse;
 use coffret_usecase::rename::RenameRefusal;
 use coffret_usecase::{DescentError, RelocationRefused};
 
@@ -170,6 +171,20 @@ pub enum FindingReason {
         /// What the rename was refused for.
         refusal: RenameRefusal,
     },
+    /// A drop put the file here to be added as a Pack, and the run left it for
+    /// the freeze that packs it (spec: PK-17).
+    ///
+    /// Work left rather than work refused: the file is carried in once that
+    /// freeze commits, as part of the Pack the person asked for, and never one
+    /// Container to itself first.
+    AwaitsPack,
+    /// A drop put the file here to be added as a Pack, and the freeze found it
+    /// no longer one it could pack, so the reservation it was waiting under
+    /// was released without a Pack being built for it (spec: PK-17).
+    Unreserved {
+        /// Why it was not packed.
+        lapse: Lapse,
+    },
 }
 
 impl fmt::Display for FindingReason {
@@ -242,6 +257,20 @@ impl fmt::Display for FindingReason {
                     chained(reason),
                 );
             }
+            Self::AwaitsPack => {
+                "it was dropped to be added as a Pack, and waits for the freeze that packs it"
+            }
+            Self::Unreserved { lapse } => match lapse {
+                Lapse::Gone => {
+                    "it was dropped to be added as a Pack and is gone, so no Pack was built for it"
+                }
+                Lapse::InPack => {
+                    "it was dropped to be added as a Pack, and a Pack already holds it"
+                }
+                Lapse::Ineligible => {
+                    "it was dropped to be added as a Pack, and is no longer a file a freeze packs"
+                }
+            },
             Self::Renamed { from } => {
                 return write!(
                     f,

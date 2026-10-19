@@ -136,6 +136,11 @@ impl HaltingStore {
         self.commits_refused.store(true, Ordering::SeqCst);
     }
 
+    /// Claims commit slots again, after [`refuse_commits`](Self::refuse_commits).
+    pub fn accept_commits(&self) {
+        self.commits_refused.store(false, Ordering::SeqCst);
+    }
+
     /// Refuses every page of the listing from now on, and nothing else.
     ///
     /// What a case gets from it is a look at which heads the Library has —

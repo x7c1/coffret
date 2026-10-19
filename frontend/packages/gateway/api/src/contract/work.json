@@ -572,6 +572,18 @@
           "surfaced": "RenameRefused"
         },
         {
+          "message": "this file was dropped to be added as a Pack, and waits for the freeze that packs it",
+          "path": "scans/vol-1/page-001.jpg",
+          "reason": "surfaced",
+          "surfaced": "AwaitsPack"
+        },
+        {
+          "message": "this file was dropped to be added as a Pack and is gone, so no Pack was built for it",
+          "path": "scans/vol-1/page-002.jpg",
+          "reason": "surfaced",
+          "surfaced": "Unreserved"
+        },
+        {
           "message": "a folder this device maps is not there, so nothing in it was looked at",
           "path": null,
           "reason": "root_missing"
@@ -721,6 +733,18 @@
           "path": "x/f.jpg",
           "reason": "surfaced",
           "surfaced": "RenameRefused"
+        },
+        {
+          "message": "this file was dropped to be added as a Pack, and waits for the freeze that packs it",
+          "path": "scans/vol-1/page-001.jpg",
+          "reason": "surfaced",
+          "surfaced": "AwaitsPack"
+        },
+        {
+          "message": "this file was dropped to be added as a Pack and is gone, so no Pack was built for it",
+          "path": "scans/vol-1/page-002.jpg",
+          "reason": "surfaced",
+          "surfaced": "Unreserved"
         },
         {
           "message": "a folder this device maps is not there, so nothing in it was looked at",

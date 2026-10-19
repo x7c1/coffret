@@ -187,7 +187,49 @@ Concept background: [Pack](../../concepts/pack/),
     PK-1 — is outside that invocation's scope and stays in its own Container.
   - A retry of a stopped drop's `freeze` asks for that drop's selection again.
     Where the server kept none — a server started since the run stopped, say — the
-    retry asks for the folder, with no selection.
+    retry asks for the folder, with no selection; the drop's own reservation, below,
+    is what takes its files up without being asked.
+  - A drop that asks for a Pack records that choice on the device before the
+    first of its files lands: a **reservation** of the folder it was made onto,
+    naming each Entry Path the drop writes before that file lands, so no file of
+    the drop stands in a mapped folder without one. It is device state like a
+    mapping or a pending row (EP-9, OC-2) — never uploaded and in no Index
+    Snapshot (CK-7) — and it is the drop's record, not folder state of `freeze`'s
+    (PK-2). A drop that is refused as a whole, or that lands nothing, arms no
+    `freeze` and keeps no reservation.
+  - A sync's scan selects no reserved path for addition or update, and reports
+    each as waiting for its Pack rather than passing over it (PK-14). A reserved
+    file is still a file the walk found, so nothing is inferred deleted for it
+    (EP-10). Without this a process that stopped between the drop and its commit
+    would leave a book a sync carries in one Container per page.
+  - A `freeze` that considered every path of a reservation — each inside its
+    scope, and none under a mapped root it could not vouch for (EP-12) — decides
+    it. Where the run packs any of those paths, the reservation is released by the
+    commit's refresh, in the same step that completes the batch's rows (OC-2);
+    where none of them is eligible any more — gone from disk, already held by a
+    Pack, or ineligible under PK-1 or EP-10 — it is released once the run has
+    finished, with a finding per path saying why. A reservation some of whose
+    paths are gone packs the rest. A run that stops before either keeps every
+    reservation as it was, for the next run to decide. A reservation that names
+    no path — its drop's first file has not landed — is decided only by the
+    `freeze` a server takes it up as, so a run over another book never releases
+    the reservation of a drop just made.
+  - While the drop that made it is still receiving, a reservation is **live** in
+    that process: held in memory and nowhere else, so a process started afterwards
+    holds none live. No `freeze` decides a live reservation, nor one that was live
+    at any moment since the run read the reservations — what it read may lack the
+    files that landed after. Such a run may still pack the files of it already
+    landed, which are then not eligible to the drop's own run (PK-1).
+  - The drop's own `freeze` is armed once it stops receiving, and is a run of its
+    own: it is never taken for a run already under way, even one whose scope
+    covers every file the drop wrote, because that run read the reservations
+    while the drop was live. It may join a run of the same folder that is still
+    waiting its turn, since nothing has walked the folder for that one yet.
+  - A server takes every reservation up once its start-up catch-up has finished,
+    and again once the Library is unlocked in place, in the order they were
+    made: each as a `freeze` whose selection is exactly its paths, taking its
+    turn as any `freeze` does (LA-12). A reservation live in that process is not
+    taken up: its drop arms its own run.
 - **PK-18.** A Pack's entry table is fixed before any of its content is
   written. The layout puts the meta section ahead of the chunk sequence (FM-2,
   FM-9), so `freeze` declares every selected Entry's path, size, and hash from

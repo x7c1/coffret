@@ -3,7 +3,7 @@ use std::error;
 use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, ShortKeyring};
 use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
-use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
+use coffret_usecase::freeze::{FreezeOutcome, Lapsed, NotFrozen};
 use coffret_usecase::rename::{RenameOutcome, RenamedPath};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
@@ -87,6 +87,10 @@ impl From<&SyncOutcome> for Findings {
                 .map(relocation)
                 .chain(outcome.renamed.iter().map(renamed))
                 .chain(outcome.surfaced.iter().map(surfaced))
+                .chain(outcome.reserved.iter().map(|path| Finding::Surfaced {
+                    path: path.clone(),
+                    reason: FindingReason::AwaitsPack,
+                }))
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
                 .chain(committed(outcome.commit.as_ref()))
@@ -109,9 +113,20 @@ impl From<&FreezeOutcome> for Findings {
             },
         });
 
+        let lapsed = outcome
+            .lapsed
+            .iter()
+            .map(|Lapsed { path, lapse }| Finding::Surfaced {
+                path: path.clone(),
+                reason: FindingReason::Unreserved { lapse: *lapse },
+            });
+        let settled = outcome.settled.iter().cloned().map(Finding::Settled);
+
         Self(
             surfaced
+                .chain(lapsed)
                 .chain(unavailable(&outcome.unavailable))
+                .chain(settled)
                 .chain(committed(outcome.commit.as_ref()))
                 .chain(repaired(outcome.commit.as_ref()))
                 .chain(short(outcome.short.as_ref()))
@@ -418,6 +433,7 @@ mod tests {
     use coffret_usecase::commit::{
         CheckpointFailure, CommitError, KeyringRepair, RewrittenReplicas, UntrashedRemoval,
     };
+    use coffret_usecase::freeze::Lapse;
     use coffret_usecase::sync::{Disposal, Settled, SyncError};
     use coffret_usecase::{
         root_marker, Error as StorageError, RelocationRefused, RootRefused, RootUnavailable,
@@ -432,6 +448,7 @@ mod tests {
     #[test]
     fn a_sync_reports_what_it_left_alone_and_what_it_could_not_read() {
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -474,6 +491,7 @@ mod tests {
     #[test]
     fn a_relocation_is_said_as_what_became_of_the_file() {
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: vec![
                 Relocation::Relocated {
                     from: entry_path("inbox/a.jpg"),
@@ -537,6 +555,7 @@ mod tests {
     #[test]
     fn a_detected_rename_is_said_from_the_old_path_to_the_new() {
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -597,6 +616,7 @@ mod tests {
     #[test]
     fn a_discarded_copy_is_said_as_discarded() {
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -632,6 +652,7 @@ mod tests {
     #[test]
     fn an_unavailable_root_is_a_finding_that_names_the_mapping() {
         let outcome = |prefix| SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -734,6 +755,7 @@ mod tests {
     #[test]
     fn a_run_that_only_settled_a_leftover_batch_needs_no_attention() {
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -846,6 +868,7 @@ mod tests {
     fn what_a_commit_left_unfinished_is_said_and_not_escalated() {
         let container_id = ContainerId::from_bytes([6; ContainerId::BYTE_LEN]);
         let outcome = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -911,6 +934,9 @@ mod tests {
     fn a_freeze_says_what_its_commit_left_unfinished() {
         let container_id = ContainerId::from_bytes([8; ContainerId::BYTE_LEN]);
         let outcome = FreezeOutcome {
+            settled: Vec::new(),
+            released: 0,
+            lapsed: Vec::new(),
             packs: Vec::new(),
             absorbed: vec![container_id],
             packed_already: 0,
@@ -935,6 +961,39 @@ mod tests {
             rendered[1],
         );
         assert!(!findings.needs_attention());
+    }
+
+    // PK-17: a reserved file a Pack already holds is what the drop asked for,
+    // whichever run packed it, so its release is said and not escalated; one
+    // that is gone means the book the person dropped was not packed.
+    #[test]
+    fn a_released_reservation_needs_somebody_only_where_its_file_was_not_packed() {
+        let outcome = |lapse| FreezeOutcome {
+            settled: Vec::new(),
+            released: 1,
+            lapsed: vec![Lapsed {
+                path: entry_path("scans/vol-1/page-001.jpg"),
+                lapse,
+            }],
+            packs: Vec::new(),
+            absorbed: Vec::new(),
+            packed_already: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            commit: None,
+            short: None,
+        };
+
+        let in_pack = Findings::from(&outcome(Lapse::InPack));
+        assert_eq!(in_pack.len(), 1);
+        assert!(!in_pack.needs_attention(), "the file is in a Pack");
+        for lapse in [Lapse::Gone, Lapse::Ineligible] {
+            assert!(
+                Findings::from(&outcome(lapse)).needs_attention(),
+                "{lapse:?}"
+            );
+        }
     }
 
     // KL-7 is a loss at the Container level, and the fetch reports it at both
@@ -1157,6 +1216,9 @@ mod tests {
             ..EntryFetchOutcome::of(EntryFetch::Placed)
         };
         let freeze = FreezeOutcome {
+            settled: Vec::new(),
+            released: 0,
+            lapsed: Vec::new(),
             packs: Vec::new(),
             absorbed: Vec::new(),
             packed_already: 2,
@@ -1248,6 +1310,7 @@ mod tests {
             ..unfinished_commit(ContainerId::from_bytes([3; ContainerId::BYTE_LEN]))
         };
         let sync = SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),
@@ -1260,6 +1323,9 @@ mod tests {
             commit: Some(repaired()),
         };
         let freeze = FreezeOutcome {
+            settled: Vec::new(),
+            released: 0,
+            lapsed: Vec::new(),
             packs: Vec::new(),
             absorbed: Vec::new(),
             packed_already: 0,

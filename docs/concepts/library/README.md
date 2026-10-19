@@ -407,7 +407,8 @@ and has a window of its own for entering the Passphrase.
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync catches up, settles interrupted work, scans mapped folders, spools
   and uploads new ciphertext, then commits; only that commit changes the
-  Catalog (spec: CP-1, OC-2, OC-7).
+  Catalog (spec: CP-1, OC-2, OC-7). A freeze settles interrupted work the same
+  way before it builds its Packs (spec: OC-9).
   - Settlement reclaims a proven abandoned batch, completes a committed batch's
     interrupted local records, or retains an unknown outcome; exclusive local
     ownership prevents it from reclaiming another live run's work (spec: OC-2,

@@ -139,6 +139,8 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   RelocationRefused: 'finding',
   Renamed: 'finding',
   RenameRefused: 'finding',
+  AwaitsPack: 'finding',
+  Unreserved: 'finding',
 };
 
 const FINDING_REASONS: Literals<FindingReason> = {
@@ -612,6 +614,7 @@ function listedFile(value: unknown, where: string): ListedFile {
     'mtime',
     'state',
     'container',
+    'reserved',
     'openable',
     'content_type',
   ]);
@@ -624,6 +627,7 @@ function listedFile(value: unknown, where: string): ListedFile {
     container: nullable(fields.container, (kind) =>
       one(CONTAINER_KINDS, kind, `${where}.container`),
     ),
+    reserved: boolean(fields.reserved, `${where}.reserved`),
     openable: boolean(fields.openable, `${where}.openable`),
     content_type: string(fields.content_type, `${where}.content_type`),
   };

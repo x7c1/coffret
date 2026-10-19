@@ -81,5 +81,6 @@ where
         grant,
         births: Arc::default(),
         fetch_memory: Default::default(),
+        live: Default::default(),
     })
 }

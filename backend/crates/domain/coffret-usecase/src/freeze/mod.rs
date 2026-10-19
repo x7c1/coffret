@@ -17,7 +17,13 @@
 //!    the Library records as lost is one whose stored content cannot be read
 //!    back at all, and what a freeze does about that depends on the Container's
 //!    kind (spec: PK-11, PK-13).
-//! 2. **Scan** (spec: EP-9, EP-10, EP-12). Walk the device's mappings, narrowed
+//! 2. **Settle** what an interrupted run left behind, by the sync's own
+//!    settlement (spec: OC-2, OC-3, OC-7, OC-9): a row whose batch committed is
+//!    completed, one whose batch is proven not to have is disposed of with its
+//!    spool and its Container, and the rest is retained. Before the scan, for
+//!    the reason a sync settles first, and before anything is spooled, so a
+//!    book a dead run was packing leaves nothing of that run behind.
+//! 3. **Scan** (spec: EP-9, EP-10, EP-12). Walk the device's mappings, narrowed
 //!    to the folder the request names, and translate the regular files under
 //!    them into Entry Paths. A path with a current Entry this device never
 //!    materialized is outside its scope and is left alone, mapping or no mapping
@@ -32,7 +38,7 @@
 //!    indistinguishable from the ordinary second run over an already-packed
 //!    folder. A root that holds files on a filesystem the mapping does not
 //!    record is available, and the scan re-stamps the mapping with what it saw.
-//! 3. **Select, and surface what is not selected** (spec: PK-1, PK-13, PK-14).
+//! 4. **Select, and surface what is not selected** (spec: PK-1, PK-13, PK-14).
 //!    Eligible: a local file not yet in the Library, and a local file whose
 //!    current Entry is held by a one-file Container — including one whose
 //!    content has changed and one whose Container's key is lost, because the
@@ -43,7 +49,7 @@
 //!    opened, are both update-eligible and are reported in
 //!    [`FreezeOutcome::surfaced`] rather than passed over — silence there would
 //!    tell the user that stale or unrecoverable content is safely backed up.
-//! 4. **Segment** (spec: PK-3, PK-4, PK-5, PK-6). Sort the selection by Entry
+//! 5. **Segment** (spec: PK-3, PK-4, PK-5, PK-6). Sort the selection by Entry
 //!    Path and append the next Entry while the resulting pre-padding Container
 //!    footprint stays at or below the target, closing the current non-empty Pack
 //!    when it would not. An Entry over the target on its own stays indivisible
@@ -52,7 +58,7 @@
 //!    constant, and the footprint is measured by
 //!    [`ContainerFootprint`](coffret_format::ContainerFootprint) so that the
 //!    policy and the encoder cannot disagree about what was measured.
-//! 5. **Spool each Pack, streaming** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6,
+//! 6. **Spool each Pack, streaming** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6,
 //!    FM-7, FM-8, FM-9, FM-14, OC-2). A Container ID and a Container Key of its
 //!    own, kind `Pack` (spec: PK-15), and the ciphertext written to the spool
 //!    directory through [`ContainerWriter`](coffret_format::ContainerWriter):
@@ -61,11 +67,11 @@
 //!    Pack, or an Entry. The pending row is recorded before a byte goes out —
 //!    the local provenance that makes cleaning up after an interrupted run
 //!    possible at all.
-//! 6. **Upload** (spec: FM-3). Put each spool file under the name its Container
+//! 7. **Upload** (spec: FM-3). Put each spool file under the name its Container
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy), and
 //!    compare the digest the provider reports for what it stored against the one
 //!    taken while writing the spool.
-//! 7. **Commit** (spec: PK-7, CP-1). One Journal batch: additions are the new
+//! 8. **Commit** (spec: PK-7, CP-1). One Journal batch: additions are the new
 //!    Packs with their entry tables (spec: CP-11), removals are exactly the
 //!    one-file Containers those Packs absorbed. A newly imported file has no
 //!    removal and an existing Pack never appears.
@@ -92,10 +98,16 @@
 //! carrying a change into a Pack, or taking an Entry out of one, is
 //! read-modify-replace, which this flow surfaces and never performs — taking
 //! Entries out is [`delete`](crate::delete)'s. **Derived
-//! Entries**: thumbnails and transcodes are packed by their own operation. And
-//! **settling an interrupted run's pending rows**, which is
-//! [`sync`](crate::sync)'s first step and settles a Pack exactly as it settles
-//! a one-file Container (spec: OC-2, OC-3, OC-7).
+//! Entries**: thumbnails and transcodes are packed by their own operation.
+//!
+//! And one thing it reads that is no Library state: the **reservations** a drop
+//! that asked for a Pack recorded on this device (spec: PK-17). One every path
+//! of which the run considered is released by it — with the commit, where it packs
+//! any of them, or on its own with a [`Lapsed`] per path, where it packs none —
+//! so a book a stopped server left is packed by whichever freeze takes it up.
+//! A reservation a drop in this process is still writing into is decided by no
+//! run ([`LiveReservations`](crate::device_state::LiveReservations)): the
+//! drop's own run, once it stops receiving, is what decides it.
 
 mod freeze_error;
 pub use freeze_error::{FreezeError, FreezeResult, SourceChange};
@@ -111,6 +123,12 @@ pub use freeze_request::FreezeRequest;
 
 mod frozen_pack;
 pub use frozen_pack::FrozenPack;
+
+mod lapse;
+pub use lapse::Lapse;
+
+mod lapsed;
+pub use lapsed::Lapsed;
 
 mod not_frozen;
 pub use not_frozen::NotFrozen;

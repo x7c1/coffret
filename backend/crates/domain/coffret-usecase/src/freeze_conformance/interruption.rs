@@ -80,10 +80,11 @@ pub async fn a_row_precedes_the_first_byte_of_a_pack_spool(fixture: &FreezeUnder
 /// all — and nothing on Storage or in the Library will ever refer to it either
 /// way. The row over it says exactly that much.
 ///
-/// A freeze does not settle rows itself — what an interrupted one leaves is the
-/// sync flow's to settle, whatever wrote it — so the next `sync_folders` is what
-/// reclaims both (spec: OC-2, OC-3). It needs no head to do it: nothing that was
-/// never uploaded can be current.
+/// The settlement is the sync flow's, whatever wrote the row, and every flow
+/// that builds runs it first: here the next `sync_folders` is what reclaims both
+/// (spec: OC-2, OC-3), and the next freeze would do the same before building its
+/// own Pack (spec: OC-9). It needs no head to do it: nothing that was never
+/// uploaded can be current.
 pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeUnderTest) {
     let index = fixture.source();
     let keys = keys();
@@ -192,7 +193,10 @@ pub async fn a_spooling_pack_row_is_never_uploaded_or_committed(fixture: &Freeze
 /// interrupted run left behind.
 ///
 /// Answers with the Container the abandoned spool would have been.
-async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> ContainerId {
+pub(super) async fn interrupted_spool(
+    fixture: &FreezeUnderTest,
+    keys: &LibraryKeys,
+) -> ContainerId {
     let index = fixture.source();
     map(index, None, fixture.source_folder()).await;
     files(fixture).await;

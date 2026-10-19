@@ -11,6 +11,7 @@ use crate::index_error::IndexError;
 use crate::local_error::LocalError;
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
+use crate::sync::SyncError;
 use crate::upload::UploadError;
 
 /// Result alias for the freeze.
@@ -366,6 +367,44 @@ impl From<LocalIoError> for FreezeError {
             operation: error.operation,
             path: error.path,
             cause: error.cause,
+        }
+    }
+}
+
+impl From<SyncError> for FreezeError {
+    /// What the settlement a freeze begins with reports, under this flow's
+    /// names (spec: OC-9).
+    ///
+    /// The settlement is the sync's, so it fails in the sync's vocabulary; every
+    /// one of its variants has a namesake here, and each travels across
+    /// unchanged rather than being flattened into one.
+    fn from(error: SyncError) -> Self {
+        match error {
+            SyncError::Storage(error) => Self::Storage(error),
+            SyncError::Index(error) => Self::Index(error),
+            SyncError::Format(error) => Self::Format(error),
+            SyncError::Commit(failure) => Self::Commit(failure),
+            SyncError::Io {
+                operation,
+                path,
+                cause,
+            } => Self::Io {
+                operation,
+                path,
+                cause,
+            },
+            SyncError::UnrepresentableName { path } => Self::UnrepresentableName { path },
+            SyncError::FoldedReservedName { path } => Self::FoldedReservedName { path },
+            SyncError::PathCollision { path } => Self::PathCollision { path },
+            SyncError::TransferCorrupted {
+                container_id,
+                expected,
+                actual,
+            } => Self::TransferCorrupted {
+                container_id,
+                expected,
+                actual,
+            },
         }
     }
 }

@@ -185,7 +185,7 @@ mod fronts_ahead;
 pub use fronts_ahead::FrontsAhead;
 
 mod freeze;
-pub use freeze::{freeze_folder, Book, FreezeRun, FreezeStatus, Freezes};
+pub use freeze::{freeze_folder, resume_reserved, Book, FreezeRun, FreezeStatus, Freezes};
 
 mod latest;
 pub use latest::Latest;

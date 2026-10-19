@@ -1,8 +1,13 @@
 //! Dropping files onto a folder, as a browser sends them.
 
-use axum::body::Body;
-use axum::http::Response;
+use std::time::Duration;
 
+use axum::body::{Body, Bytes};
+use axum::http::Response;
+use tokio::sync::mpsc;
+use tower::ServiceExt;
+
+use super::streamed_drop::StreamedDrop;
 use super::{asking, Served};
 
 impl Served {
@@ -103,6 +108,60 @@ impl Served {
     }
 }
 
+impl Served {
+    /// Starts dropping a book onto `folder` and keeps the request open, so a
+    /// case can act on the server while the drop is still receiving.
+    ///
+    /// Each [`StreamedDrop::send`] puts one part on the wire with the delimiter
+    /// that ends it, so the route takes it whole without waiting for the next;
+    /// [`StreamedDrop::finish`] ends the body and answers with what the route
+    /// said. No `Content-Length`, since a body still being written has none.
+    pub fn upload_book_streamed(&self, folder: &str) -> StreamedDrop {
+        let (parts, received) = mpsc::unbounded_channel::<Result<Bytes, std::io::Error>>();
+        let body = futures_util::stream::unfold(received, |mut received| async move {
+            received.recv().await.map(|part| (part, received))
+        });
+        let request = asking("POST", &format!("/api/upload?path={folder}&freeze=true"))
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={BOUNDARY}"),
+            )
+            .body(Body::from_stream(body))
+            .expect("a multipart request is well formed");
+        parts
+            .send(Ok(Bytes::from(format!("--{BOUNDARY}"))))
+            .expect("the request is still reading");
+        let router = self.router.clone();
+        StreamedDrop::new(
+            folder.to_owned(),
+            parts,
+            tokio::spawn(async move {
+                router
+                    .oneshot(request)
+                    .await
+                    .expect("the router answers every request")
+            }),
+        )
+    }
+
+    /// Waits until the file a drop is writing at `path` stands in the mapped
+    /// folder, which is after the route has added it to the drop's reservation
+    /// (spec: PK-17).
+    ///
+    /// Bounded, so a part the route never lands fails the case rather than
+    /// hanging it. A short sleep rather than a yield: the file is written on
+    /// the blocking pool, which a yield does not wait for.
+    pub async fn until_landed(&self, path: &str) {
+        for _ in 0..2_000 {
+            if self.holds(path) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("{path} never landed");
+    }
+}
+
 /// Parts under the field name a caller that knows nothing of times sends, which
 /// says no modification time.
 fn unnamed<'a>(parts: &[(&'a str, &'a [u8])]) -> Vec<(String, &'a str, &'a [u8])> {
@@ -113,7 +172,7 @@ fn unnamed<'a>(parts: &[(&'a str, &'a [u8])]) -> Vec<(String, &'a str, &'a [u8])
 }
 
 /// What every multipart body a case sends is delimited by.
-const BOUNDARY: &str = "coffret-case-boundary";
+pub(super) const BOUNDARY: &str = "coffret-case-boundary";
 
 /// Whether a drop says how much it is bringing.
 ///

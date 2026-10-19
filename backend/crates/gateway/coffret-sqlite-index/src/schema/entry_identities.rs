@@ -1,11 +1,12 @@
 use coffret_usecase::IndexResult;
 use rusqlite::{Connection, TransactionBehavior};
 
-use super::{stamp, unsupported, LOCAL_ENTRIES_DDL, SCHEMA_VERSION};
+use super::{stamp, unsupported, LOCAL_ENTRIES_DDL, RESERVATIONS_DDL, SCHEMA_VERSION};
 use crate::error::classify;
 
 /// Brings a layout-16 file to this one, keeping its catalog and every row of
-/// its device-local group the catalog can name the Entry of (spec: EP-10).
+/// its device-local group the catalog can name the Entry of (spec: EP-10), and
+/// laying out the tables of reservations empty (spec: PK-17).
 ///
 /// One `BEGIN IMMEDIATE` covers it, from re-reading the stamp to writing the new
 /// one, for the reason a discard is one: a second process opening the file at
@@ -22,6 +23,9 @@ pub(super) fn upgrade(connection: &mut Connection) -> IndexResult<()> {
         found => return Err(unsupported(found)),
     }
     let dropped = tie_records_to_entries(&transaction)?;
+    transaction
+        .execute_batch(RESERVATIONS_DDL)
+        .map_err(classify(OPERATION))?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(classify("stamping the Index file's schema version"))?;
