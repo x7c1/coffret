@@ -4,12 +4,12 @@ use crate::error::Error;
 /// one (spec: OC-2, OC-3).
 ///
 /// Three answers rather than a yes or a no, because two of them are opposite
-/// states that a `false` would read alike. A spool that never left the device
-/// put nothing on Storage, so there was nothing to remove; an object Storage
-/// would not trash is still there, named by no current state, for
-/// orphan cleanup to find (spec: OC-1, OC-4). Only the refused trash leaves
-/// anything behind, and a caller that is told "disposed of" for both tells a
-/// person the Library's Storage holds less than it does.
+/// states that a `false` would read alike. A Container that never reached
+/// Storage left nothing there to remove; an object Storage would not trash is
+/// still there, and its row with it, for a later run to retry (spec: OC-2,
+/// OC-3). Only the refused trash leaves anything behind, and a caller that is
+/// told "disposed of" for both tells a person the Library's Storage holds less
+/// than it does.
 ///
 /// There is deliberately no `PartialEq`, for the reason
 /// [`UntrashedRemoval`](crate::commit::UntrashedRemoval) has none: a caller
@@ -17,16 +17,16 @@ use crate::error::Error;
 /// one.
 #[derive(Debug, Clone)]
 pub enum Disposal {
-    /// The earlier run never uploaded the Container, so nothing of it was on
-    /// Storage to remove.
+    /// Nothing of the Container was on Storage to remove: the earlier run never
+    /// put it, or its put never landed.
     NeverUploaded,
-    /// Its object was trashed on Storage.
+    /// Its object was trashed on Storage, whether the row recorded the object or
+    /// only its name did.
     Trashed,
     /// Storage refused to trash its object, so it is still there.
     ///
-    /// The row that was the provenance for it goes regardless, so what is left
-    /// is an object no current state names, which is orphan cleanup's to find
-    /// and a person's to decide on (spec: OC-1, OC-4).
+    /// The row that was the provenance for it is retained, because it is the
+    /// proof that makes the next run's retry safe (spec: OC-2, OC-3).
     LeftInStorage {
         /// What Storage answered the trash with.
         cause: Error,

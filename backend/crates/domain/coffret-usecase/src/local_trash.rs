@@ -90,4 +90,36 @@ pub trait LocalTrash: Send + Sync {
         expected: Option<&RootMarkerId>,
         relative: &MappedRelativeLocation,
     ) -> Result<bool, DescentError>;
+
+    /// Removes the scratch at `relative` below `root` that a local writer left
+    /// behind, and answers whether it did (spec: OC-8, EP-11).
+    ///
+    /// Removed, never discarded into the desktop's trash: a scratch is coffret's
+    /// own, written for its own purposes, and nothing in it is the person's to
+    /// take back. The caller asks only about a name of the writers' own shape
+    /// that no writer in its process holds
+    /// ([`scratch::is_stale`](crate::scratch::is_stale)); what
+    /// this adds is the one question the caller cannot ask, whether a writer in
+    /// *another* process holds it. A writer holds an advisory lock on its
+    /// scratch from its creation through its rename, so one whose lock is
+    /// held is left where it is and answered `Ok(false)`, as is one that is
+    /// not there: absence is the outcome being sought (spec: OC-8). A writer
+    /// that is gone holds no lock, whatever ended it.
+    ///
+    /// The same descent as [`discard`](Self::discard), for the same reason:
+    /// removing a file is a write into the mapped folder.
+    ///
+    /// # Errors
+    ///
+    /// The vocabulary [`discard`](Self::discard) answers in, with
+    /// [`Removing`](crate::LocalOperation::Removing) where the step was the
+    /// removal itself, what stands at the name not being a regular file among
+    /// them. A symbolic link on the way down or at the name is
+    /// [`DescentError::Blocked`], and is never followed and never removed.
+    async fn remove_scratch(
+        &self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError>;
 }

@@ -266,14 +266,120 @@ pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
     assert_eq!(spooled(fixture.fs()), 0);
 }
 
+/// A Container put and never recorded on its row is trashed by its name.
+///
+/// The run was killed after its put returned and before it wrote the handle
+/// onto the row, so the row says `Spooled` with no object while the object is
+/// on Storage. A missing handle is not proof the Container never left the
+/// device (spec: OC-2): settlement finds the object under the name the put
+/// used, trashes it, and only then drops the row — rather than treating the
+/// Container as never uploaded and leaving an object no record and no row names.
+pub async fn an_upload_killed_before_its_row_named_the_object_is_trashed_by_name(
+    fixture: &SyncUnderTest,
+) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+
+    let abandoned = interrupted_at(fixture, index, Some(store), Recorded::No).await;
+    assert!(
+        Library::read(store).await.holds_container(abandoned),
+        "the interrupted run got as far as the put",
+    );
+    assert_eq!(
+        pending(index).await[0].state,
+        SpoolState::Spooled(None),
+        "and no further than that",
+    );
+
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a sync after an unrecorded upload must succeed");
+
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::Trashed,
+            }] if *settled == abandoned
+        ),
+        "the object the row never named is trashed by name: {:?}",
+        outcome.settled,
+    );
+    assert!(
+        !Library::read(store).await.holds_container(abandoned),
+        "no object is left that no record and no row names",
+    );
+    assert!(pending(index).await.is_empty());
+    assert_eq!(spooled(fixture.fs()), 0);
+}
+
+/// An unrecorded Container Storage will not trash keeps its row for a retry.
+///
+/// The same interruption as
+/// [`an_upload_killed_before_its_row_named_the_object_is_trashed_by_name`], on
+/// a provider that refuses the trash. The row is the only thing left that says
+/// which batch created the object, so it is retained (spec: OC-2, OC-3), and the
+/// next run against a provider that complies trashes the object and drops the row.
+pub async fn an_unrecorded_container_storage_will_not_trash_is_retried(fixture: &SyncUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+
+    let abandoned = interrupted_at(fixture, index, Some(store), Recorded::No).await;
+
+    let refusing = FaultyStore::refusing_to_trash(store);
+    let outcome = sync_folders(request(&refusing, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a trash the provider refuses does not fail the settle");
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::LeftInStorage { .. },
+            }] if *settled == abandoned
+        ),
+        "a refused trash is reported as left in Storage: {:?}",
+        outcome.settled,
+    );
+    assert!(Library::read(store).await.holds_container(abandoned));
+    assert_eq!(
+        pending(index).await.len(),
+        1,
+        "a refused trash keeps the provenance (spec: OC-2)",
+    );
+
+    let retried = sync_folders(request(store, index, &keys, fixture.fs(), 3))
+        .await
+        .expect("retrying the settle must succeed");
+    assert!(
+        matches!(
+            &retried.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::Trashed,
+            }] if *settled == abandoned
+        ),
+        "the next run retries the trash: {:?}",
+        retried.settled,
+    );
+    assert!(!Library::read(store).await.holds_container(abandoned));
+    assert!(pending(index).await.is_empty());
+}
+
 /// A pending row whose spool is already gone is dropped rather than kept.
 ///
 /// A row that says its spool was finished, over a file that has since left the
 /// disk — half of a cleanup some earlier run got through. Nothing about it is
-/// recoverable and nothing about it is on Storage, so the row is bookkeeping for
-/// a Container that no longer exists anywhere. Dropping one that is already half
-/// gone is idempotent, which is what lets an interrupted cleanup simply be run
-/// again (spec: OC-8).
+/// recoverable, and nothing under its Container's name is on Storage — which is
+/// what lets a row with no handle go without a trash (spec: OC-2) — so the row
+/// is bookkeeping for a Container that no longer exists anywhere. Dropping one
+/// that is already half gone is idempotent, which is what lets an interrupted
+/// cleanup simply be run again (spec: OC-8).
 pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTest) {
     let index = fixture.index();
     let keys = keys();
@@ -527,7 +633,8 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
 }
 
 /// Leaves behind what a run killed mid-batch would have: a spool file, a row
-/// naming it, and — where a store is given — the object it had already put up.
+/// naming it, and — where a store is given — the object it had already put up,
+/// recorded on the row.
 ///
 /// The file is written the way a run writes one — prepare, create, write, flush
 /// — rather than planted behind the spool's back, so that what the next run
@@ -536,6 +643,25 @@ pub(super) async fn interrupted(
     fixture: &SyncUnderTest,
     index: &dyn Index,
     store: Option<&dyn ObjectStore>,
+) -> ContainerId {
+    interrupted_at(fixture, index, store, Recorded::Yes).await
+}
+
+/// Whether the run an [`interrupted_at`] leaves behind got to record the
+/// handle its put answered with.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Recorded {
+    Yes,
+    /// Killed between the put returning and the row being updated.
+    No,
+}
+
+/// [`interrupted`], stopped either side of recording the handle.
+async fn interrupted_at(
+    fixture: &SyncUnderTest,
+    index: &dyn Index,
+    store: Option<&dyn ObjectStore>,
+    recorded: Recorded,
 ) -> ContainerId {
     let container_id = generate_container_id().expect("the OS CSPRNG is available");
     let ciphertext = format!("ciphertext of {container_id}").into_bytes();
@@ -569,6 +695,7 @@ pub(super) async fn interrupted(
         ),
         None => None,
     };
+    let object_ref = object_ref.filter(|_| recorded == Recorded::Yes);
     plant_row(
         index,
         container_id,

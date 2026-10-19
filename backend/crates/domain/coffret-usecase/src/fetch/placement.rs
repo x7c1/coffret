@@ -13,7 +13,7 @@ use crate::flushed_file::FlushedFile;
 use crate::index::Index;
 use crate::local_operation::LocalOperation;
 use crate::refused_root::RefusedRoot;
-use crate::scratch;
+use crate::scratch::{self, ScratchName};
 use crate::scratch_file::ScratchFile;
 
 /// One Entry on its way into a mapped folder.
@@ -63,8 +63,9 @@ pub(super) struct Placement<'a> {
     entry: EntryMetadata,
     /// The destination folder, held open from the descent until the rename.
     directory: Box<dyn Destination>,
-    /// What the scratch is called inside it.
-    scratch_name: String,
+    /// What the scratch is called inside it, held until the placement is done
+    /// with it so that a sync in this process leaves it alone (spec: OC-8).
+    scratch_name: ScratchName,
     /// The scratch until it is flushed, and then what may be published.
     /// Exactly one of the two is ever set.
     file: Option<Box<dyn ScratchFile>>,
@@ -193,7 +194,7 @@ impl<'a> Placement<'a> {
 
         let scratch_name = scratch::name(target.location.container_id);
         let file = directory
-            .create(&scratch_name)
+            .create(scratch_name.as_str())
             .map_err(|refused| refusal(target, refused))?;
 
         Ok(Created::Ready(Box::new(Self {
@@ -357,7 +358,7 @@ impl<'a> Placement<'a> {
         drop(self.file);
         drop(self.flushed);
         self.directory
-            .remove(&self.scratch_name)
+            .remove(self.scratch_name.as_str())
             .map_err(|refused| refusal(self.target, refused))
     }
 

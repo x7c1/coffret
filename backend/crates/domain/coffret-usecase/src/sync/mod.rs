@@ -21,7 +21,9 @@
 //!    the scan rather than after the commit. The verdict is read off the
 //!    catalog the step above brought to the head: a Container no record names
 //!    is an abandoned batch, so the object is trashed and the spool and the row
-//!    go with it; a Container that *is* current is a commit that landed and
+//!    go with it — the object found by its name where the row never got to
+//!    record it, since a row with no object is no proof the put never landed;
+//!    a Container that *is* current is a commit that landed and
 //!    whose Index refresh did not, so the interrupted bookkeeping is completed
 //!    instead — the Entries it holds become present (spec: EP-10) and the spool
 //!    and the row are dropped. A spool is never resumed into a batch either
@@ -65,6 +67,9 @@
 //!    [`SyncOutcome::unavailable`] instead, and the device's other mappings scan
 //!    normally. A root that holds files on a filesystem the mapping does not
 //!    record is available, and the scan re-stamps the mapping with what it saw.
+//!    A scratch a local writer that is gone left under a root the scan read is
+//!    removed once the scan is over (spec: OC-8, EP-11): nothing else would
+//!    ever take it out of the folder.
 //! 5. **Decide, and surface what is not decided here** (spec: PK-14). A new
 //!    file becomes a one-file Container. A changed file whose current Entry
 //!    lives in a one-file Container becomes a replacement Container, the old
@@ -130,6 +135,8 @@ pub use run::sync_folders;
 mod scan;
 
 mod spool;
+
+mod stale_scratches;
 
 mod surfaced;
 pub use surfaced::Surfaced;

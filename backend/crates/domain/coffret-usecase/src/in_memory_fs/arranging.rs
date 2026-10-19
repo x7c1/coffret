@@ -52,7 +52,11 @@ impl InMemoryFs {
     ///
     /// - [`Discarding`](LocalOperation::Discarding) for
     ///   [`discard`](crate::LocalTrash::discard), which leaves the
-    ///   file where it was (spec: EP-15).
+    ///   file where it was (spec: EP-15), and
+    ///   [`Removing`](LocalOperation::Removing) for
+    ///   [`remove_scratch`](crate::LocalTrash::remove_scratch), on the counter
+    ///   the spool's removals use, which leaves the scratch for the next run
+    ///   (spec: OC-8).
     /// - [`Relocating`](LocalOperation::Relocating) for
     ///   [`relocate`](crate::Relocations::relocate) and
     ///   [`exchange`](crate::Relocations::exchange), which leave both files

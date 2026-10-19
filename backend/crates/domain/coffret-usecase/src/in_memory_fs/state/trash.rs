@@ -112,6 +112,57 @@ impl State {
         Ok(true)
     }
 
+    /// Removes one scratch below a vouched root (spec: EP-13, OC-8).
+    ///
+    /// The real one's order and answers, short of its lock: the scripted
+    /// refusal first, then the root and its marker, every folder on the way
+    /// down, and the file itself, which has to be a file — anything else at the
+    /// name is the fence a symbolic link is on a real disk. One that is not
+    /// there is `false`.
+    pub(in crate::in_memory_fs) fn remove_scratch(
+        &mut self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError> {
+        let path = root.join(relative.to_path_buf());
+        self.attempt(LocalOperation::Removing, &path)
+            .map_err(DescentError::Io)?;
+        if !self.is_dir(root) {
+            return Err(DescentError::Io(LocalIoError::new(
+                LocalOperation::Stating,
+                root,
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "the mapped root is not a folder here",
+                ),
+            )));
+        }
+        self.vouch(root, expected)?;
+
+        let mut folder = root.to_path_buf();
+        let components: Vec<_> = relative.components().collect();
+        let (_, folders) = components
+            .split_last()
+            .expect("a file below a mapped root names at least itself");
+        for step in folders {
+            folder.push(step);
+            if !self.is_dir(&folder) {
+                if self.holds(&folder) {
+                    return Err(DescentError::Blocked { stopped_at: folder });
+                }
+                return Ok(false);
+            }
+        }
+        if self.files.remove(&path).is_some() {
+            return Ok(true);
+        }
+        if self.holds(&path) {
+            return Err(DescentError::Blocked { stopped_at: path });
+        }
+        Ok(false)
+    }
+
     /// Everything the fake's trash has taken, in the order it took it.
     pub(in crate::in_memory_fs) fn discarded(&self) -> Vec<PathBuf> {
         self.discarded.clone()

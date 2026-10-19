@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_model::{EntryPath, Mtime, Redacted};
-use coffret_usecase::scratch;
+use coffret_usecase::scratch::{self, ScratchName};
 use coffret_usecase::{Destination, ScratchFile, UnknownBirths};
 use tracing::{debug, warn};
 
@@ -58,8 +58,9 @@ pub struct IncomingFile {
     directory: Box<dyn Destination>,
     /// What the bytes are called until they are all there, and `None` once the
     /// rename has happened — which is what tells the drop guard there is nothing
-    /// left to remove.
-    scratch_name: Option<String>,
+    /// left to remove. Held, so that a sync in this process leaves the scratch
+    /// alone however long the upload takes (spec: OC-8).
+    scratch_name: Option<ScratchName>,
     /// The open scratch, until it is flushed.
     file: Option<Box<dyn ScratchFile>>,
     written: u64,
@@ -84,7 +85,7 @@ impl IncomingFile {
     ) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
-            .create(&scratch_name)
+            .create(scratch_name.as_str())
             .map_err(|refused| Error::below_root(refused, &path))?;
 
         Ok(Self {
@@ -210,7 +211,8 @@ impl IncomingFile {
     pub fn scratch_path(&self) -> PathBuf {
         let name = self
             .scratch_name
-            .as_deref()
+            .as_ref()
+            .map(ScratchName::as_str)
             .expect("an incoming file is written to before it is kept");
         self.directory.path_of(name)
     }
@@ -230,7 +232,7 @@ impl Drop for IncomingFile {
         // that is already gone is the outcome this wanted anyway: every removal
         // of what this device wrote for its own purposes is idempotent by rule
         // (spec: OC-8).
-        match self.directory.remove(&scratch_name) {
+        match self.directory.remove(scratch_name.as_str()) {
             // How far it got is the evidence: stopping at nothing and stopping
             // near the end point at different causes (spec: EL-3).
             Ok(()) => debug!(

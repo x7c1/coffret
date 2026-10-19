@@ -4,6 +4,7 @@ use coffret_model::EntryPath;
 
 use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
+use crate::local_scan::stale_scratch::StaleScratch;
 use crate::local_scan::walked_root::WalkedRoot;
 use crate::unavailable_root::UnavailableRoot;
 
@@ -14,6 +15,10 @@ pub(crate) struct Walked {
     pub(crate) found: BTreeMap<EntryPath, SourceFile>,
     /// One verdict per mapping, in the order the mappings were given.
     pub(crate) roots: Vec<WalkedRoot>,
+    /// Every scratch of coffret's own shape the walk met that no writer in
+    /// this process holds (spec: OC-8, EP-11). Nothing in it is among
+    /// [`found`](Self::found): a scratch is never a file to back up.
+    pub(crate) stale: Vec<StaleScratch>,
 }
 
 /// The mappings whose roots the device could not vouch for, in mapping order

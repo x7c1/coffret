@@ -87,7 +87,7 @@ pub(super) async fn settle(
                         slots = occupants.len(),
                         "every commit slot an interrupted batch attempted holds another record",
                     );
-                    dispose(storage.store, index, spool, policy, row).await?
+                    dispose(&storage, index, spool, policy, row).await?
                 }
                 Attempt::Unknown => {
                     warn!(container = %row.container_id, batch = %row.batch,
@@ -99,7 +99,7 @@ pub(super) async fn settle(
                 }
             }
         } else {
-            dispose(storage.store, index, spool, policy, row).await?
+            dispose(&storage, index, spool, policy, row).await?
         });
     }
     Ok(settled)

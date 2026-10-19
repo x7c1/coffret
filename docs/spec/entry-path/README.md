@@ -407,6 +407,15 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - The reserved prefix is `.coffret-fetch-`. A local name is reserved exactly
     when it starts with that string, so a user can tell which names to avoid and
     a scan decides the question from the name alone.
+  - A scratch's name is the prefix, then the Container ID and `-` for a fetch
+    or `incoming-` for an upload, then sixteen lowercase hex digits drawn
+    afresh for each scratch, then `.part`. A writer holds its scratch in two
+    ways: its name, within its own process, until the scratch is renamed or
+    removed, and an advisory lock on the file, for every other process, from
+    its creation through the rename. A scratch no writer holds was left by one
+    that ended before its rename or its removal, and the next sync removes it
+    (OC-8); a reserved name of any other shape is passed over and never
+    removed.
 - **EP-12.** Reporting an Entry as deleted locally (EP-10) requires the mapped
   root it stands under to be *available*: the root directory exists, and the
   filesystem it stands on is the one recorded for that mapping (EP-9). A device

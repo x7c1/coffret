@@ -20,6 +20,13 @@
 //! The folders those discards empty are removed here too, and without that
 //! interval: the folder is removed relative to the handle the descent opened,
 //! so nothing between the walk and the removal is resolved again.
+//!
+//! So is a scratch a local writer that is gone left behind, which is coffret's
+//! own and is removed rather than discarded into the trash (spec: OC-8, EP-11).
+//! It is opened relative to the same handle, without following a link, and
+//! removed only once this process has taken the advisory lock every writer
+//! holds on its scratch from its creation through its rename: a lock somebody
+//! holds is a writer in another process that is still going.
 
 use std::ffi::OsStr;
 use std::io;
@@ -30,7 +37,7 @@ use coffret_usecase::device_state::RootMarkerId;
 use coffret_usecase::{
     DescentError, LocalIoError, LocalOperation, LocalTrash, MappedRelativeLocation,
 };
-use rustix::fs::{AtFlags, FileType, Mode, OFlags};
+use rustix::fs::{AtFlags, FileType, FlockOperation, Mode, OFlags};
 use rustix::io::Errno;
 
 use crate::unix_destinations::{blocking, descent, refusal, vouch};
@@ -73,6 +80,91 @@ impl LocalTrash for UnixFs {
             remove_if_empty(&owned, expected.as_ref(), &relative)
         })
         .await
+    }
+
+    async fn remove_scratch(
+        &self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError> {
+        let owned = root.to_path_buf();
+        let expected = expected.copied();
+        let relative = relative.clone();
+        blocking(LocalOperation::Removing, root, move || {
+            remove_unheld(&owned, expected.as_ref(), &relative)
+        })
+        .await
+    }
+}
+
+/// Walks to the scratch at `relative` and removes it relative to the open
+/// handle, unless a writer still holds its lock.
+///
+/// The lock is taken on a handle of this call's own, opened without following
+/// a link and without blocking, and held across the unlink, so a writer cannot
+/// take the scratch back in between. A name that is gone on the way is the
+/// absence being sought (spec: OC-8).
+fn remove_unheld(
+    root: &Path,
+    expected: Option<&RootMarkerId>,
+    relative: &MappedRelativeLocation,
+) -> Result<bool, DescentError> {
+    let mut directory =
+        descent::open_root(root).map_err(|cause| refusal(root, LocalOperation::Stating, cause))?;
+    vouch::vouch(&directory, root, expected)?;
+
+    let components: Vec<&OsStr> = relative.components().collect();
+    let (name, folders) = components
+        .split_last()
+        .expect("a file below a mapped root names at least itself");
+    let mut at = root.to_path_buf();
+    for step in folders {
+        at.push(step);
+        directory = match rustix::fs::openat(
+            &directory,
+            *step,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        ) {
+            Ok(entered) => entered,
+            Err(Errno::NOENT) => return Ok(false),
+            Err(cause) => return Err(refusal(&at, LocalOperation::Stating, cause).into()),
+        };
+    }
+
+    at.push(name);
+    // `O_NONBLOCK` so that a FIFO someone put at the name is not waited on, and
+    // `O_NOFOLLOW` so that a symbolic link there is refused rather than opened.
+    let scratch = match rustix::fs::openat(
+        &directory,
+        *name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(scratch) => scratch,
+        Err(Errno::NOENT) => return Ok(false),
+        Err(cause) => return Err(refusal(&at, LocalOperation::Removing, cause).into()),
+    };
+    let stat = rustix::fs::fstat(&scratch)
+        .map_err(|cause| refusal(&at, LocalOperation::Stating, cause))?;
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Err(DescentError::Io(LocalIoError::new(
+            LocalOperation::Removing,
+            &at,
+            io::Error::other("what stands at this path is not a regular file"),
+        )));
+    }
+    match rustix::fs::flock(&scratch, FlockOperation::NonBlockingLockExclusive) {
+        Ok(()) => {}
+        // A writer in another process still holds it (spec: OC-8).
+        Err(Errno::WOULDBLOCK) => return Ok(false),
+        Err(cause) => return Err(refusal(&at, LocalOperation::Removing, cause).into()),
+    }
+    match rustix::fs::unlinkat(&directory, *name, AtFlags::empty()) {
+        Ok(()) => Ok(true),
+        Err(Errno::NOENT) => Ok(false),
+        Err(cause) => Err(refusal(&at, LocalOperation::Removing, cause).into()),
     }
 }
 

@@ -28,4 +28,13 @@ impl LocalTrash for InMemoryFs {
     ) -> Result<bool, DescentError> {
         lock(&self.state).remove_emptied_folder(root, expected, relative)
     }
+
+    async fn remove_scratch(
+        &self,
+        root: &Path,
+        expected: Option<&RootMarkerId>,
+        relative: &MappedRelativeLocation,
+    ) -> Result<bool, DescentError> {
+        lock(&self.state).remove_scratch(root, expected, relative)
+    }
 }

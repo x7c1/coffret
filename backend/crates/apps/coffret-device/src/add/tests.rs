@@ -852,7 +852,7 @@ async fn the_folders_standing_in_a_mapped_folder_are_named() {
         .expect("writing a file must succeed");
     std::fs::create_dir_all(volume.join(root_marker::MANAGEMENT_AREA))
         .expect("making a folder must succeed");
-    std::fs::create_dir_all(volume.join(coffret_usecase::scratch::incoming_name()))
+    std::fs::create_dir_all(volume.join(coffret_usecase::scratch::incoming_name().as_str()))
         .expect("making a folder must succeed");
     std::os::unix::fs::symlink(device.secrets(), volume.join("elsewhere"))
         .expect("making a symbolic link must succeed");
