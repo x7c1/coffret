@@ -61,4 +61,4 @@ Explorer UI for deposit time, manual correction of times, `mtime` handling.
 
 ### Before merge
 
-- [ ] Recreate the agent's development Library under the new schema, add a fixture book, rename a page, delete another page of the same Pack (forcing a rewrite), update a third, and confirm the deposit times behave as listed, on both devices.
+- [x] Recreate the agent's development Library under the new schema, add a fixture book, rename a page, delete another page of the same Pack (forcing a rewrite), update a third, and confirm the deposit times behave as listed, on both devices.
