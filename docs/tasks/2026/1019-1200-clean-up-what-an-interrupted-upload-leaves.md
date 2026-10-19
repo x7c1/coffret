@@ -54,5 +54,5 @@ Persisting a drop's Pack choice, completing a committed batch outside sync, sign
 
 ### Before merge
 
-- [ ] Against the agent's development Library, kill the server between the put and the row update (lock the Index with `BEGIN IMMEDIATE` during the put, then SIGKILL), restart, sync, and confirm the object is trashed and no unrecorded object remains.
-- [ ] Kill the server during a throttled multipart upload, restart, sync, and confirm the `.part` is gone.
+- [x] Against the agent's development Library, kill the server between the put and the row update (lock the Index with `BEGIN IMMEDIATE` during the put, then SIGKILL), restart, sync, and confirm the object is trashed and no unrecorded object remains.
+- [x] Kill the server during a throttled multipart upload, restart, sync, and confirm the `.part` is gone.
