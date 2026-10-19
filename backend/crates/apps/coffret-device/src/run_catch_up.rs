@@ -5,6 +5,7 @@ use coffret_usecase::catch_up::{
 use coffret_usecase::commit::CommitPolicy;
 use tracing::info;
 
+use crate::device_time::now;
 use crate::error::{Error, Result};
 use crate::open_library::{open_library, OpenLibrary};
 
@@ -24,9 +25,13 @@ impl OpenLibrary {
     /// Nothing in the mapped folders changes. Every Entry the run learns of is
     /// `remote` until something asks for its bytes (spec: EP-10), which is what
     /// makes this the cheap question — the control objects and nothing else.
-    /// The one thing on this device's disk it may touch is a kept parcel of a
-    /// Container the replay took out of the current set, which is let go
-    /// (spec: PK-21).
+    /// The things on this device's disk it may touch are its own: a kept parcel
+    /// of a Container the replay took out of the current set, which is let go
+    /// (spec: PK-21), and the spools of a batch of this device's whose record
+    /// the replay found committed, whose bookkeeping is completed — the files it
+    /// carried in recorded as this device's, `present` rather than `remote` —
+    /// unless a sync, a freeze or a deletion running beside this owns them
+    /// (spec: OC-2, OC-7).
     pub async fn catch_up(&self) -> Result<CatchUpOutcome> {
         info!(
             operation = "catch_up",
@@ -36,8 +41,14 @@ impl OpenLibrary {
         // The listing the replay walks is the one the fetches after it reach
         // objects through, so it is left where they look for it.
         let outcome = catch_up_catalog(
-            CatchUpRequest::new(self.store.as_ref(), self.index.as_ref(), &self.keys)
-                .remembering(&self.fetch_memory),
+            CatchUpRequest::new(
+                self.store.as_ref(),
+                self.index.as_ref(),
+                &self.keys,
+                self.local_fs.as_ref(),
+                now(),
+            )
+            .remembering(&self.fetch_memory),
         )
         .await?;
         // A Container the replay took out of the current set takes any parcel

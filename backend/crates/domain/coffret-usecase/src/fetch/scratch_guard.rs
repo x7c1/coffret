@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
 use crate::fetch::decoding::Decoding;
-use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::placement::{remove_all, Placement};
 
 /// What one fetch attempt has written to disk before it knows whether it
 /// succeeded, and how that goes when it did not.
@@ -9,24 +9,24 @@ pub(super) trait Scratch {
     /// Removes it, reporting rather than raising a removal that failed: what
     /// the caller is about to report is the failure that made the removal
     /// necessary.
-    fn discard(self);
+    fn remove(self);
 }
 
 impl Scratch for Decoding<'_, '_> {
-    fn discard(self) {
-        Decoding::discard(self);
+    fn remove(self) {
+        Decoding::remove(self);
     }
 }
 
 impl Scratch for Placement<'_> {
-    fn discard(self) {
-        discard_all(vec![self]);
+    fn remove(self) {
+        remove_all(vec![self]);
     }
 }
 
-/// An attempt's scratch, discarded on drop unless the attempt disarms it.
+/// An attempt's scratch, removed on drop unless the attempt disarms it.
 ///
-/// A guard rather than a discard written at each exit, for the reason
+/// A guard rather than a removal written at each exit, for the reason
 /// [`ShortReport`](crate::commit::ShortReport) is one: an attempt leaves
 /// by every `?` and every early return it contains, through either of its two
 /// error channels — Storage's and the Library's — and each of them has to leave
@@ -79,7 +79,7 @@ impl<T: Scratch> DerefMut for ScratchGuard<T> {
 impl<T: Scratch> Drop for ScratchGuard<T> {
     fn drop(&mut self) {
         if let Some(scratch) = self.scratch.take() {
-            scratch.discard();
+            scratch.remove();
         }
     }
 }

@@ -16,18 +16,19 @@ use crate::fetch::{container, select, translate};
 use crate::progress::{Phase, Step};
 use crate::refused_root::RefusedRoot;
 use crate::relocate::{relocate_waiting, LocalDisk, Relocation};
+use crate::sync::{complete_after_catch_up, PendingWork};
 
 /// Materializes the Library's current Entries into this device's mapped folders.
 ///
 /// The whole path, in the order it has to happen in: catch the Index up to the
-/// Library's head (spec: CK-9), relocate this device's files of Entries a
-/// rename gave another path (spec: EP-10), let the mappings say where each
-/// current Entry
-/// would go (spec: EP-9), decide per Entry whether this device may write there
-/// (spec: EP-10, EP-11), open the committed Keyring the caught-up checkpoint
-/// names (spec: KL-1, KL-3), fetch each needed Container once (spec: PK-16),
-/// verify what came back twice over (spec: FM-15, CP-11), and place the files
-/// (spec: EP-11).
+/// Library's head (spec: CK-9), complete the bookkeeping of a batch of this
+/// device's the catch-up found committed (spec: OC-7), relocate this device's
+/// files of Entries a rename gave another path (spec: EP-10), let the mappings
+/// say where each current Entry would go (spec: EP-9), decide per Entry
+/// whether this device may write there (spec: EP-10, EP-11), open the
+/// committed Keyring the caught-up checkpoint names (spec: KL-1, KL-3), fetch
+/// each needed Container once (spec: PK-16), verify what came back twice over
+/// (spec: FM-15, CP-11), and place the files (spec: EP-11).
 ///
 /// The catch-up comes first and its failure fails the run. A fetch is a claim
 /// about what the Library currently holds, and one that served an Index it had
@@ -67,6 +68,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         roots,
         relocations,
         trash,
+        spool,
         parcels,
         prefix,
         now,
@@ -79,6 +81,12 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // join replays the whole Journal before the first Container is asked for.
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // A batch of this device's that the catch-up found committed is this
+    // device's own before anything is selected, so the files it carried in are
+    // not taken for another's standing where their Entries belong. Before the
+    // relocation too, which follows a renamed Entry with a file the completion
+    // records as waiting for it (spec: OC-7, EP-10).
+    complete_after_catch_up(index, spool, now, PendingWork::Unowned).await;
     // A held parcel whose Container the catch-up took out of the current set
     // serves nothing any more (spec: PK-21).
     let_go_departed(index, &parcels).await?;

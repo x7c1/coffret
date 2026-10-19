@@ -90,7 +90,8 @@
 //! other four on its own. Nothing is scanned, uploaded, fetched or placed, so a
 //! device that has just joined learns what the Library holds without a single
 //! Container being read — and every row it learns of is `remote` until somebody
-//! asks for one (spec: EP-10).
+//! asks for one (spec: EP-10), save the files of a batch this device committed
+//! and never finished recording, which the catch-up completes (spec: OC-7).
 //!
 //! # One unlock, or one process
 //!

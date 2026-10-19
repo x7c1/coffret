@@ -248,7 +248,13 @@ pub async fn letting_go_after_a_catch_up_drops_the_parcels_of_a_departed_contain
     // The catch-up on its own moves the catalog and nothing on the disk.
     catch_up_catalog(CatchUpRequest {
         policy: policy(),
-        ..CatchUpRequest::new(fixture.store(), fixture.target(), &keys)
+        ..CatchUpRequest::new(
+            fixture.store(),
+            fixture.target(),
+            &keys,
+            fixture.fs(),
+            at(4),
+        )
     })
     .await
     .unwrap_or_else(|error| panic!("catching the target up must succeed: {error}"));

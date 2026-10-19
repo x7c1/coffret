@@ -75,6 +75,7 @@ pub(crate) fn request<'a>(
         fixture.fs(),
         fixture.fs(),
         fixture.fs(),
+        fixture.fs(),
         fixture.parcels(),
         at(run),
     )
@@ -123,6 +124,7 @@ pub(crate) fn entry_request<'a>(
         store,
         fixture.target(),
         keys,
+        fixture.fs(),
         fixture.fs(),
         fixture.parcels(),
         entry_path(path),

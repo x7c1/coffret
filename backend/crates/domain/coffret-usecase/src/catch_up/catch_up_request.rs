@@ -1,17 +1,21 @@
 use crate::commit::CommitPolicy;
+use crate::device_state::DeviceTime;
 use crate::fetch::FetchMemory;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
+use crate::spool::Spool;
 
 /// Everything one run of [`catch_up_catalog`](super::catch_up_catalog) works
 /// from.
 ///
 /// The two ports, the epoch's keys, and how long a Storage call is worth
-/// retrying. There is no prefix, no clock, and no spool: a catch-up covers the
-/// Library entire because a Journal record does — it is replayed whole or not at
-/// all (spec: CK-9) — it writes nothing this device would have to stamp with a
-/// time, and it uploads nothing.
+/// retrying. There is no prefix: a catch-up covers the Library entire because a
+/// Journal record does — it is replayed whole or not at all (spec: CK-9). The
+/// spool and the clock are for what follows the replay, never for the replay
+/// itself: a batch of this device's whose record the catch-up found committed
+/// has its bookkeeping completed, which discards its spools and stamps the
+/// files it carried in as observed now (spec: OC-7, EP-10). It uploads nothing.
 pub struct CatchUpRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,
@@ -25,6 +29,12 @@ pub struct CatchUpRequest<'a> {
     /// anyway, because that is what a device holds and splitting it here would
     /// let a caller hand over the control half of one epoch.
     pub keys: &'a LibraryKeys,
+    /// Where this device's Containers waited to be uploaded, which a completed
+    /// batch's spools are discarded from (spec: OC-7).
+    pub spool: &'a dyn Spool,
+    /// What the device's clock says, for the observations a completed batch
+    /// records (spec: EP-10).
+    pub now: DeviceTime,
     /// The decisions Storage does not make.
     ///
     /// A catch-up commits nothing, so what it takes from the policy is the
@@ -42,12 +52,21 @@ pub struct CatchUpRequest<'a> {
 }
 
 impl<'a> CatchUpRequest<'a> {
-    /// A run against `store` and `index` under the default policy.
-    pub fn new(store: &'a dyn ObjectStore, index: &'a dyn Index, keys: &'a LibraryKeys) -> Self {
+    /// A run against `store` and `index` under the default policy, completing
+    /// a committed batch's bookkeeping through `spool` at `now`.
+    pub fn new(
+        store: &'a dyn ObjectStore,
+        index: &'a dyn Index,
+        keys: &'a LibraryKeys,
+        spool: &'a dyn Spool,
+        now: DeviceTime,
+    ) -> Self {
         Self {
             store,
             index,
             keys,
+            spool,
+            now,
             policy: CommitPolicy::default(),
             memory: None,
         }

@@ -46,9 +46,15 @@ pub async fn a_preview_counts_what_the_deletion_then_does(fixture: &DeleteUnderT
     // catalog as it stands: a caller previews over a catalog that has seen the
     // head, so the case brings it there the way any flow would.
     let keys = super::fixtures::keys();
-    catch_up_catalog(CatchUpRequest::new(store, index, &keys))
-        .await
-        .expect("catching up must succeed");
+    catch_up_catalog(CatchUpRequest::new(
+        store,
+        index,
+        &keys,
+        fixture.fs(),
+        super::fixtures::at(5),
+    ))
+    .await
+    .expect("catching up must succeed");
 
     let selection = paths(&[
         "albums/b.jpg",
@@ -139,9 +145,16 @@ pub async fn the_committed_keyring_names_the_packs_a_preview_refuses(fixture: &D
     let keys = super::fixtures::keys();
     let policy = super::fixtures::policy();
     assert_eq!(
-        committed_key_lost(store, index, &keys, &policy)
-            .await
-            .expect("an empty Library is read"),
+        committed_key_lost(
+            store,
+            index,
+            &keys,
+            fixture.fs(),
+            &policy,
+            super::fixtures::at(9)
+        )
+        .await
+        .expect("an empty Library is read"),
         BTreeSet::new(),
     );
 
@@ -153,9 +166,16 @@ pub async fn the_committed_keyring_names_the_packs_a_preview_refuses(fixture: &D
     let key_lost = freeze(fixture, 2).await;
     lose_key(store, index, key_lost).await;
 
-    let lost = committed_key_lost(store, index, &keys, &policy)
-        .await
-        .expect("the committed Keyring is read");
+    let lost = committed_key_lost(
+        store,
+        index,
+        &keys,
+        fixture.fs(),
+        &policy,
+        super::fixtures::at(9),
+    )
+    .await
+    .expect("the committed Keyring is read");
     assert_eq!(lost, BTreeSet::from([key_lost]));
     assert!(!lost.contains(&readable));
 

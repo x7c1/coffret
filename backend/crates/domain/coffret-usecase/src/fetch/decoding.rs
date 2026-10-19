@@ -133,7 +133,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
             return Err(FetchError::Format(FormatError::Truncated));
         };
         if let Err(error) = chunks.finish() {
-            scatter.discard();
+            scatter.remove();
             return Err(FetchError::Format(error));
         }
         scatter.verify().await
@@ -143,9 +143,9 @@ impl<'k, 'a> Decoding<'k, 'a> {
     ///
     /// Synchronous, because the capability's removal is: one call each against
     /// folders the descents have held open all along.
-    pub(super) fn discard(self) {
+    pub(super) fn remove(self) {
         if let Some(scatter) = self.scatter {
-            scatter.discard();
+            scatter.remove();
         }
     }
 }

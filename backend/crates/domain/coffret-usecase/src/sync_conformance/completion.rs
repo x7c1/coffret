@@ -206,7 +206,7 @@ pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderT
 /// the interrupted run left behind.
 ///
 /// Answers with the Container whose commit landed, and the local file it holds.
-async fn interrupted_refresh(
+pub(super) async fn interrupted_refresh(
     fixture: &SyncUnderTest,
     keys: &LibraryKeys,
 ) -> (ContainerId, PathBuf) {

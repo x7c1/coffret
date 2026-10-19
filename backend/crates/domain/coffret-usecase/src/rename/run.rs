@@ -7,6 +7,7 @@ use crate::rename::plan::{self, Plan};
 use crate::rename::rename_error::{RenameError, RenameResult};
 use crate::rename::rename_outcome::RenameOutcome;
 use crate::rename::rename_request::RenameRequest;
+use crate::sync::{complete_after_catch_up, PendingWork};
 
 /// Renames an Entry, or a folder of Entries, in one Journal record, and uploads
 /// nothing (spec: FM-15, CP-1).
@@ -29,10 +30,12 @@ pub async fn rename_entries(request: RenameRequest<'_>) -> RenameResult<RenameOu
         store,
         index,
         keys,
+        spool,
         from,
         to,
         progress,
         policy,
+        now,
         disk,
     } = request;
 
@@ -40,6 +43,12 @@ pub async fn rename_entries(request: RenameRequest<'_>) -> RenameResult<RenameOu
 
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+    // A batch of this device's that the catch-up found committed is this
+    // device's own before the plan, so the files it carried in have the
+    // materialization records the relocation after the commit follows them by.
+    // Left for a later completion, they would stay at the paths the batch
+    // brought them in at, and be recorded there (spec: OC-7, EP-10).
+    complete_after_catch_up(index, spool, now, PendingWork::Unowned).await;
     // What the plan reads the catalog at, and so what the batch is prepared
     // against (spec: CP-4, EP-7).
     let base = caught.head_generation();

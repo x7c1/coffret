@@ -16,6 +16,7 @@ use crate::fetch::storage_reads::{Origin, StorageReads};
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::{select, translate};
 use crate::progress::{Phase, Step};
+use crate::sync::{complete_after_catch_up, PendingWork};
 
 mod key_table;
 pub(super) use key_table::key_table;
@@ -97,6 +98,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         index,
         keys,
         destinations,
+        spool,
         parcels,
         path,
         now,
@@ -116,6 +118,10 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
             // joined it is still the longest part of the run.
             progress.step(Step::begun(Phase::CatchingUp));
             let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
+            // A batch of this device's the catch-up found committed is this
+            // device's own before the Entry's path is asked about, as in a
+            // folder fetch (spec: OC-7, EP-10).
+            complete_after_catch_up(index, spool, now, PendingWork::Unowned).await;
             // The catch-up's own walk is the listing this run reaches objects
             // through.
             reads.listing(Origin::Read);

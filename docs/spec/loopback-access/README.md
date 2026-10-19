@@ -128,11 +128,14 @@ Concept background: [Library](../../concepts/library/),
   work itself, under the rules for it — a materialization record (EP-10), a
   commit (CP-1), a pending row a run leaves for the next settle (OC-2) — so a
   server that stops loses the account of what this device was doing and none
-  of the record of what it has. *(Form: test for what a server started
-  afterwards answers; prose for that account reaching no file — the catalog,
-  the Library's directory, Storage — which is an absence claim over the
-  device's files, honored by construction: the account is held in memory, in
-  no serialized structure.)*
+  of the record of what it has. A server started afterwards finishes what such
+  a record proves: the catch-up it makes as it starts, where it lands,
+  completes a batch whose record landed and whose refresh did not (OC-7), so
+  the files that batch carried in are this device's before the server answers
+  anything. *(Form: test for what a server started afterwards answers; prose
+  for that account reaching no file — the catalog, the Library's directory,
+  Storage — which is an absence claim over the device's files, honored by
+  construction: the account is held in memory, in no serialized structure.)*
   - A run's reported status and its refusal go together: a fill, sync, or
     freeze whose status is `stopped` carries the refusal that stopped it —
     whatever refused the run, be it Storage, a Library locked before the run

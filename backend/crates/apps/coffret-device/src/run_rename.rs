@@ -3,6 +3,7 @@ use coffret_usecase::rename::{rename_entries, RenameOutcome, RenameRequest};
 use coffret_usecase::Progress;
 use tracing::info;
 
+use crate::device_time::now;
 use crate::error::Result;
 use crate::open_library::{open_library, OpenLibrary};
 
@@ -16,6 +17,10 @@ impl OpenLibrary {
     /// destination another Entry holds, a path it would leave both a file and a
     /// folder — is refused before anything is written, as
     /// [`RenameError::Refused`](coffret_usecase::rename::RenameError::Refused).
+    ///
+    /// A batch of this device's whose record the catch-up finds committed and
+    /// whose refresh never ran is completed first, so the files it carried in
+    /// are this device's own when the rename relocates (spec: OC-7).
     ///
     /// Once the record is committed, this device's own files of the renamed
     /// Entries follow them in its mapped folders, as the next sync or fetch
@@ -45,8 +50,10 @@ impl OpenLibrary {
                 self.store.as_ref(),
                 self.index.as_ref(),
                 &self.keys,
+                self.local_fs.as_ref(),
                 from,
                 to,
+                now(),
             )
             .watched_by(progress)
             .with_local_disk(

@@ -15,7 +15,7 @@ use crate::commit::CommitError;
 use crate::entry_paths::entry_path;
 use crate::fetch::fetch_folders;
 use crate::fetch_conformance::fixtures::{
-    entry_at, exists, freeze_source, keys, map, policy, read, request as fetch_request,
+    at, entry_at, exists, freeze_source, keys, map, policy, read, request as fetch_request,
     sync_source, write,
 };
 use crate::fetch_conformance::{create_library, FetchUnderTest};
@@ -58,6 +58,12 @@ async fn fixture() -> FetchUnderTest {
     fixture
 }
 
+/// The clock every rename here runs at: after any run a case makes before it,
+/// and none of them reads it back.
+fn renamed_at() -> crate::device_state::DeviceTime {
+    at(100)
+}
+
 /// The request renaming `from` to `to` through the device whose catalog is
 /// `index`, against `store`, relocating that device's files after the commit.
 fn request<'a>(
@@ -68,9 +74,17 @@ fn request<'a>(
     from: &str,
     to: &str,
 ) -> RenameRequest<'a> {
-    RenameRequest::new(store, index, keys, entry_path(from), entry_path(to))
-        .with_policy(policy())
-        .with_local_disk(fixture.fs(), fixture.fs(), fixture.fs())
+    RenameRequest::new(
+        store,
+        index,
+        keys,
+        fixture.fs(),
+        entry_path(from),
+        entry_path(to),
+        renamed_at(),
+    )
+    .with_policy(policy())
+    .with_local_disk(fixture.fs(), fixture.fs(), fixture.fs())
 }
 
 /// The head a catalog stands at.

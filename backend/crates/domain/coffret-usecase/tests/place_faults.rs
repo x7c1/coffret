@@ -267,7 +267,7 @@ async fn fetch(
     // is named and never made (spec: PK-16).
     let parcels = KeptParcels::new(fs, Path::new("/target-state/parcels"));
     fetch_folders(
-        FetchRequest::new(store, index, &keys, fs, fs, fs, fs, parcels, at(2))
+        FetchRequest::new(store, index, &keys, fs, fs, fs, fs, fs, parcels, at(2))
             .with_policy(policy()),
     )
     .await

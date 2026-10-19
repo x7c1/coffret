@@ -31,8 +31,10 @@ fn target_request<'a>(
         store,
         fixture.target(),
         keys,
+        fixture.fs(),
         entry_path("albums/cover.jpg"),
         entry_path(to),
+        renamed_at(),
     )
     .with_policy(policy())
 }

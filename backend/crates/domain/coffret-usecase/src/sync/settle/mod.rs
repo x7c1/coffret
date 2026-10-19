@@ -24,6 +24,10 @@ use complete::{complete, completes, materialized};
 mod dispose;
 use dispose::dispose;
 
+// The same completion, after a catch-up outside a sync (spec: OC-7).
+mod after_catch_up;
+pub(crate) use after_catch_up::{complete_after_catch_up, PendingWork};
+
 /// What settlement reads Storage with: the run's own catch-up and the keys
 /// that authenticate a control object.
 pub(super) struct SettleStorage<'a> {
@@ -59,12 +63,7 @@ pub(super) async fn settle(
     }
     progress.step(Step::begun(Phase::Settling));
 
-    let current: BTreeSet<ContainerId> = index
-        .containers_under(None)
-        .await?
-        .into_iter()
-        .map(|container| container.id)
-        .collect();
+    let current = current(index).await?;
     let mut landed = materialized(index, &pending, &current).await?;
     let attempts = attempts(&storage, index, policy, &pending, &current).await?;
 
@@ -103,4 +102,15 @@ pub(super) async fn settle(
         });
     }
     Ok(settled)
+}
+
+/// The Containers current in the catalog as it stands, which is the Library's
+/// current set only once the catalog is caught up (spec: CK-9, OC-7).
+async fn current(index: &dyn Index) -> SyncResult<BTreeSet<ContainerId>> {
+    Ok(index
+        .containers_under(None)
+        .await?
+        .into_iter()
+        .map(|container| container.id)
+        .collect())
 }

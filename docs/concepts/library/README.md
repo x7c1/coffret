@@ -210,7 +210,11 @@ and has a window of its own for entering the Passphrase.
 - displace (a stopped run from the server's record of the last run of its
   kind, as a later run of that kind does; the stopped run is still reported
   beside it, with its refusal)
-- discard (queued work, or a scratch or spool this device can safely remove)
+- discard (queued work, or a spool this device can safely remove)
+- remove (a stale scratch — one a killed writer left and no live writer holds —
+  under a mapped root a sync walked, during that sync; or a writer's own scratch
+  when its write fails) — never *discard*, which a departed file is, into the
+  desktop's trash
 
 ## Domain Rules
 
@@ -295,7 +299,7 @@ and has a window of its own for entering the Passphrase.
     Entry comes to hold the path the file stands at — a rename brings one
     there, or one is added after the record's own Entry left — the record is
     forgotten rather than read as that Entry's copy: the file is then one this
-    device never placed for it, which a fetch refuses to overwrite and no scan
+    device never placed for it, which a fetch declines to overwrite and no scan
     offers as its update (spec: EP-10, EP-11).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
@@ -430,6 +434,11 @@ and has a window of its own for entering the Passphrase.
   rename never comes is the writer's own leftover, and removing one is
   idempotent: one already gone is a successful removal, absence being the
   outcome sought (spec: EP-11, OC-8).
+  - A writer removes its own scratch when its write fails. One a killed writer
+    left is removed by the next sync that walks its mapped root: a sync removes
+    every scratch no live writer still holds, and leaves alone a name that
+    merely carries the reserved prefix without the shape the writers give their
+    scratches — the person's own file, or a folder (spec: OC-8, EP-11).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash

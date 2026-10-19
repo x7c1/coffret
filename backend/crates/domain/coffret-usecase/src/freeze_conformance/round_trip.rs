@@ -67,6 +67,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
             fixture.fs(),
             fixture.fs(),
             fixture.fs(),
+            fixture.fs(),
             KeptParcels::new(fixture.fs(), Path::new(PARCEL_DIR)),
             at(2),
         )

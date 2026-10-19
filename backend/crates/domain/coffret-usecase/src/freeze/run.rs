@@ -16,6 +16,7 @@ use crate::object_store::ObjectStore;
 use crate::progress::{Phase, Progress, Step};
 use crate::retry::RetryPolicy;
 use crate::spooled_container::{commit_spooled, SpooledContainer};
+use crate::sync::{complete_after_catch_up, PendingWork};
 use crate::upload;
 
 /// Packs the eligible local files under one folder into Packs (spec: PK-17).
@@ -78,7 +79,9 @@ use crate::upload;
 /// same way whatever wrote it: a pending row naming a Pack this device was
 /// writing, wrote, or uploaded, which the next
 /// [`sync_folders`](crate::sync::sync_folders) either disposes of or completes
-/// the bookkeeping of (spec: OC-2, OC-3, OC-7). There is always a row, whatever
+/// the bookkeeping of (spec: OC-2, OC-3, OC-7). Completing it needs no more than
+/// a catch-up that finds the Pack current, so the next catch-up of any flow
+/// does that much, a later freeze's own included. There is always a row, whatever
 /// stopped the run and wherever it stopped, because the row is written before the
 /// spool file it names. A spool is never resumed, here
 /// or there, because the Container Key that opens it lived only in the run that
@@ -109,6 +112,11 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         key_lost,
         short,
     } = read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
+    // A batch of this device's that the catch-up found committed is this
+    // device's own before the scan reads which files are, under the ownership
+    // this run already holds and before it has a row of its own (spec: OC-2,
+    // OC-7).
+    complete_after_catch_up(index, local, now, PendingWork::Held).await;
     // The read's finding, from here to wherever this run ends. Said as the
     // guard goes out of scope — by the last line of the run or by any `?`
     // before it — unless the commit's examination of the same generation has

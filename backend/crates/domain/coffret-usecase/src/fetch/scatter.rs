@@ -2,7 +2,7 @@ use coffret_format::{ContainerOutline, Error as FormatError};
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Created, Placed, Placement};
+use crate::fetch::placement::{remove_all, Created, Placed, Placement};
 use crate::fetch::target::Target;
 use crate::refused_root::RefusedRoot;
 
@@ -58,7 +58,7 @@ impl<'a> Scatter<'a> {
             let entry = match target.recorded_in(outline) {
                 Ok(entry) => entry.clone(),
                 Err(missing) => {
-                    discard_all(placements);
+                    remove_all(placements);
                     return Err(missing);
                 }
             };
@@ -76,7 +76,7 @@ impl<'a> Scatter<'a> {
                     }
                 }
                 Err(error) => {
-                    discard_all(placements);
+                    remove_all(placements);
                     return Err(error);
                 }
             }
@@ -154,7 +154,7 @@ impl<'a> Scatter<'a> {
     pub(super) async fn verify(mut self) -> FetchResult<Placed<'a>> {
         for index in 0..self.placements.len() {
             if let Err(error) = self.placements[index].verify().await {
-                discard_all(self.placements);
+                remove_all(self.placements);
                 return Err(error);
             }
         }
@@ -165,7 +165,7 @@ impl<'a> Scatter<'a> {
     }
 
     /// Removes every scratch, the fetch having come to nothing.
-    pub(super) fn discard(self) {
-        discard_all(self.placements);
+    pub(super) fn remove(self) {
+        remove_all(self.placements);
     }
 }

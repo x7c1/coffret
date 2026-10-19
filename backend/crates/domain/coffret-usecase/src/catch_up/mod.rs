@@ -17,7 +17,10 @@
 //! It does not scan the mapped folders, spool anything, upload anything, fetch a
 //! Container, or write a file. The catalog advances and every Entry that arrives
 //! in it is `remote` (spec: EP-10) — the bytes come later, through the ordinary
-//! open-and-fill path, and only for what somebody actually looks at.
+//! open-and-fill path, and only for what somebody actually looks at. The one
+//! exception is a batch this device committed and never finished recording:
+//! its files are already on disk, and the catch-up records them as this
+//! device's and discards the batch's spools (spec: OC-7).
 //!
 //! It does not read the committed Keyring either. A catch-up opens no Container,
 //! so it needs no Container Key; reading the replica set would be Storage calls

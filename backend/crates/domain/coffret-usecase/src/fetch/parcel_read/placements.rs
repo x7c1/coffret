@@ -5,7 +5,7 @@ use tracing::{debug, warn};
 
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::parcel_read::{Member, ParcelRead};
-use crate::fetch::placement::{discard_all, Created, Placement};
+use crate::fetch::placement::{remove_all, Created, Placement};
 
 impl ParcelRead<'_> {
     /// The placements for the members lying in one stretch of parcels.
@@ -33,11 +33,11 @@ impl ParcelRead<'_> {
             {
                 Ok(Created::Ready(placement)) => placements.push(*placement),
                 Ok(Created::RootRefused(root)) if asked => {
-                    discard_all(placements);
+                    remove_all(placements);
                     return Err(FetchError::RefusedRoot(root));
                 }
                 Err(error) if asked => {
-                    discard_all(placements);
+                    remove_all(placements);
                     return Err(error);
                 }
                 Ok(Created::RootRefused(_)) => debug!(
