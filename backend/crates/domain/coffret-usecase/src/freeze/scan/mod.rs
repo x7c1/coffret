@@ -173,9 +173,12 @@ async fn candidates(
     scope: Scope<'_>,
 ) -> FreezeResult<Candidates> {
     let mappings = index.mappings().await?;
+    // The stale scratches the walk met are a sync's to remove (spec: OC-8): a
+    // freeze reads the folders and writes nothing into them.
     let Walked {
         found,
         roots: walked,
+        stale: _,
     } = walk_mappings(roots, &mappings, births).await?;
 
     // The kind is what decides eligibility, and the port answers kinds a prefix

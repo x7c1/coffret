@@ -60,6 +60,7 @@ pub(super) async fn scan(
     let Walked {
         found,
         roots: walked,
+        stale,
     } = walk_mappings(roots, &mappings, births).await?;
 
     for root in &walked {
@@ -96,6 +97,7 @@ pub(super) async fn scan(
     // Once both halves are known: what is gone, and what appeared (spec: EP-10).
     pair_renames(index, roots, deletions, &mut survey).await?;
     survey.unavailable = unavailable_roots(&walked);
+    survey.stale = stale;
 
     // Counts only: a prefix is an Entry Path component and a local root is a
     // local path, and neither may reach a diagnostic event.
@@ -109,6 +111,7 @@ pub(super) async fn scan(
         departed = survey.departed.len(),
         forgotten = survey.forgotten.len(),
         unavailable = survey.unavailable.len(),
+        stale = survey.stale.len(),
         "scanned the mapped folders",
     );
     Ok(survey)

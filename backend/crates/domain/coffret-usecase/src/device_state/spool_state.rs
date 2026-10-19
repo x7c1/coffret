@@ -32,14 +32,16 @@ pub enum SpoolState {
     /// on Storage and names it in a batch only after the file it reads those
     /// bytes from is whole.
     ///
-    /// It carries where the Container was uploaded to, once it has been.
-    /// `None` means the ciphertext exists only in the spool, so abandoning the
-    /// batch removes a local file and nothing on Storage.
+    /// It carries where the Container was uploaded to, once that was recorded.
+    /// `None` does not mean the ciphertext exists only in the spool: the handle
+    /// is recorded after the put returns, so a run killed between the two
+    /// leaves an object this says nothing about, and abandoning the batch looks
+    /// for it by name before the row goes (spec: OC-2).
     Spooled(Option<ObjectRef>),
 }
 
 impl SpoolState {
-    /// Where the Container was uploaded to, if it has been.
+    /// Where the Container was uploaded to, if that was recorded.
     ///
     /// Always `None` for a [`Spooling`](Self::Spooling) row, which by
     /// construction has never been uploaded.

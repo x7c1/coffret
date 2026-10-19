@@ -41,6 +41,10 @@ pub(crate) use root_state::RootState;
 mod source_file;
 pub(crate) use source_file::SourceFile;
 
+// What a writer that is gone left in a mapped folder (spec: OC-8, EP-11).
+mod stale_scratch;
+pub(crate) use stale_scratch::StaleScratch;
+
 // The files a drop placed with no birth time of their own; the walk records
 // no birth time for a file it holds (spec: FM-9, EP-11).
 mod unknown_births;

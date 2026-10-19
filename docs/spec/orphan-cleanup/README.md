@@ -41,6 +41,17 @@ Concept background: [Journal](../../concepts/journal/),
     retain their ciphertext and provenance until OC-3 proves them; a legacy row
     without this evidence, or one whose batch recorded no slot, is treated as
     uncertain. Failed trash retains its proof for a later retry.
+  - A row records where its Container was put only after the put returns, so a
+    run that ends between the two leaves a Container on Storage that its row
+    does not name. A row without that record is therefore not proof that the
+    Container never left the device; only a row whose spool was never finished
+    is, since only a finished spool is ever put. Before cleanup removes a row
+    whose spool was finished, it trashes the Container under the object name
+    its ID gives it (FM-3), found in the listing of Storage the run's catch-up
+    read, or finds no object under that name there. A Container that is not
+    there counts as removed, as for OC-6; the row is removed only once the
+    trash or the absence is confirmed, and a refused or uncertain trash
+    retains it, as for a row that names its object.
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not
@@ -60,6 +71,9 @@ Concept background: [Journal](../../concepts/journal/),
     authenticated, or holds a record that is gone — pruned, or deleted with its
     epoch — is not proof, and the row is retained. A row whose batch recorded
     no slot is retained.
+  - Either proof disposes of the row's spool and its Container, and the row
+    goes last, once nothing of the Container can be on Storage — whether or not
+    the row records where it was put (OC-2).
 - **OC-4.** A suspected orphan without that provenance is retained and may be
   reported for manual review; recovery never deletes it merely because no
   reachable Journal record or checkpoint mentions it. *(Form: test)*
@@ -94,6 +108,27 @@ Concept background: [Journal](../../concepts/journal/),
   is idempotent. What is already gone is a successful removal, an interrupted
   clean-up is simply run again, and no removal has to check what is there
   first, because absence is the outcome being sought. *(Form: test)*
+  - A scratch is removed not only by the writer that made it: a writer that
+    ends before its rename or its own removal — a killed process — leaves it
+    in the mapped folder, where the scan passes over it (EP-11), so a sync
+    removes every **stale scratch** it meets under a mapped root it walked and
+    whose mapping records an identity (EP-13). A scratch is stale where its
+    name is of the exact shape the local writers give their scratches — the
+    reserved prefix, then a Container ID and `-` or `incoming-` (EP-11), then
+    the unique tail, then the scratch suffix — and no writer still holds it. A
+    writer in the sync's own process holds its scratch's name from the moment
+    the name is drawn until the scratch is renamed or removed, and a name is
+    never drawn twice, so one nothing in the process holds is never held
+    later. A writer in another process holds an advisory lock on its scratch
+    for as long as it writes it, through the rename, and the removal takes
+    that lock first and leaves a scratch whose lock is held; a writer that
+    finds the scratch it has just made already locked refuses the write rather
+    than fill a name that is going away. The operating system releases the
+    lock however the writer ends, so what a killed writer left is stale on
+    both counts. Only a regular file is removed, never
+    through or in place of a symbolic link (EP-8), and a name that merely
+    carries the reserved prefix without that shape — the person's own file,
+    or a folder — is left where it is.
   - This is the posture CP-14 gives the Storage side, stated for the local one
     rather than borrowed from it. OC-6 says trashing an untrashed removal is
     idempotent, which is a claim about the Library's objects on Storage; a

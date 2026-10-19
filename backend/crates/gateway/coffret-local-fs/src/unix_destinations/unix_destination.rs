@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_usecase::{BelowRootError, Destination, LocalOperation, ScratchFile};
-use rustix::fs::{AtFlags, Mode, OFlags};
+use rustix::fs::{AtFlags, FlockOperation, Mode, OFlags};
 use rustix::io::Errno;
 
 use crate::unix_destinations::open_folder::OpenFolder;
@@ -46,6 +46,18 @@ impl Destination for UnixDestination {
             self.folder
                 .refused(scratch_name, LocalOperation::Creating, cause)
         })?;
+        // Locked for as long as the scratch is written, flushed and renamed —
+        // the handle travels on to the rename — so a sync in another process
+        // that meets it leaves it alone, while one left by a writer that is gone
+        // holds no lock whatever ended it (spec: OC-8). The file was made just
+        // now and exclusively, so a lock somebody already holds is a sync
+        // removing it in the instant since, and the scratch is refused rather
+        // than written under a name that is going away.
+        if let Err(cause) = rustix::fs::flock(&opened, FlockOperation::NonBlockingLockExclusive) {
+            return Err(self
+                .folder
+                .refused(scratch_name, LocalOperation::Creating, cause));
+        }
 
         Ok(Box::new(UnixScratchFile::new(
             Arc::clone(&self.folder),

@@ -9,6 +9,7 @@ use crate::local_error::LocalError;
 use crate::local_scan::assess_root::assess_root;
 use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
+use crate::local_scan::stale_scratch::StaleScratch;
 use crate::local_scan::unknown_births::UnknownBirths;
 use crate::local_scan::walked::Walked;
 use crate::local_scan::walked_root::WalkedRoot;
@@ -47,6 +48,10 @@ use crate::MappedRelativeLocation;
 /// found with no birth time, whatever its filesystem reports: what it would
 /// report is when the drop wrote it, which is not when the person's file came
 /// into being (spec: FM-9, EP-11).
+///
+/// A scratch is never found, and one of coffret's own shape that no writer in
+/// this process holds is handed back to be removed: its writer is gone, and
+/// nothing else would ever take it out of the folder (spec: OC-8, EP-11).
 pub(crate) async fn walk_mappings(
     roots: &dyn MappedRoots,
     mappings: &[Mapping],
@@ -63,6 +68,7 @@ pub(crate) async fn walk_mappings(
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut walked = Vec::with_capacity(mappings.len());
+    let mut stale = Vec::new();
     for mapping in mappings {
         let state = assess_root(roots, mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
@@ -74,14 +80,25 @@ pub(crate) async fn walk_mappings(
                 Some(_) => BTreeSet::new(),
                 None => represented_elsewhere.clone(),
             };
-            for source in walk(
+            let (sources, scratches) = walk(
                 roots,
                 &mapping.local_root,
                 mapping.prefix.as_ref(),
                 &elsewhere,
             )
-            .await?
-            {
+            .await?;
+            // Only under a root with an identity to hold it to: a removal is a
+            // write, and a root whose mapping records no identity, and so cannot
+            // vouch for itself, is written into by nothing — no writer could
+            // have left a scratch there either (spec: EP-13).
+            if let Some(expected) = mapping.expected_root_id {
+                stale.extend(scratches.into_iter().map(|relative| StaleScratch {
+                    root: mapping.local_root.clone(),
+                    expected,
+                    relative,
+                }));
+            }
+            for source in sources {
                 let source = if births.holds(&source) {
                     SourceFile {
                         btime: None,
@@ -103,6 +120,7 @@ pub(crate) async fn walk_mappings(
     Ok(Walked {
         found,
         roots: walked,
+        stale,
     })
 }
 
@@ -123,13 +141,17 @@ pub(crate) async fn walk_mappings(
 /// this walk therefore does not enter (spec: EP-9). It is a top-level name and
 /// so an Entry Path component, which is why nothing here says which one was
 /// passed over.
+///
+/// Beside the files, the locations of the stale scratches it passed over
+/// ([`scratch::is_stale`]).
 async fn walk(
     roots: &dyn MappedRoots,
     root: &Path,
     prefix: Option<&EntryPath>,
     elsewhere: &BTreeSet<&str>,
-) -> Result<Vec<SourceFile>, LocalError> {
+) -> Result<(Vec<SourceFile>, Vec<MappedRelativeLocation>), LocalError> {
     let mut found = Vec::new();
+    let mut stale = Vec::new();
     // `None` is the root of this walk, which is no path at all: what stands
     // there is a name and not yet a position under it.
     let mut stack: Vec<(Option<EntryPath>, Option<MappedRelativeLocation>)> = vec![(None, None)];
@@ -176,8 +198,18 @@ async fn walk(
             };
             // A scratch a fetch was killed in the middle of writing. It
             // is coffret's own and not user data, so it is passed over
-            // rather than committed as an Entry (spec: EP-11).
+            // rather than committed as an Entry (spec: EP-11). One of the
+            // writers' own shape that is a regular file nothing in this
+            // process holds was left by a writer that is gone, and is handed
+            // back to be removed; anything else carrying the prefix — a folder,
+            // a link, a name of the person's own — is only passed over
+            // (spec: OC-8).
             if scratch::is_scratch(name.as_str()) {
+                if matches!(entry.kind, FolderEntryKind::File { .. })
+                    && scratch::is_stale(name.as_str())
+                {
+                    stale.push(below_local);
+                }
                 continue;
             }
             // The device's own management area, which holds the marker giving
@@ -230,7 +262,7 @@ async fn walk(
             }
         }
     }
-    Ok(found)
+    Ok((found, stale))
 }
 
 /// Where a file sits in the Library, given the mapping it was found under
@@ -250,6 +282,10 @@ fn entry_path(prefix: Option<&EntryPath>, relative: EntryPath) -> EntryPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    use crate::device_state::RootMarkerId;
+
     use crate::entry_paths::entry_path as parsed;
     use crate::in_memory_fs::InMemoryFs;
     use crate::local_scan::NONE_PLACED;
@@ -295,7 +331,8 @@ mod tests {
         let root = Path::new(ROOT);
         let container_id =
             coffret_format::generate_container_id().expect("the OS CSPRNG is available");
-        let scratch_name = scratch::name(container_id);
+        let held = scratch::name(container_id);
+        let scratch_name = held.as_str().to_owned();
         // A *folder* carrying the prefix, which no fetch makes but a user could.
         // The walk decides on the name before it looks at what the name is, so
         // the whole subtree under it is passed over too — which is the width of
@@ -323,6 +360,64 @@ mod tests {
             vec![parsed("a.jpg"), parsed("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
         );
+    }
+
+    // OC-8, EP-11: a scratch of the writers' own shape that nothing in this
+    // process holds is handed back to be removed, wherever it stands; one a
+    // live writer holds, a folder of that shape, and a name that only carries
+    // the prefix are passed over and nothing more.
+    #[tokio::test]
+    async fn only_a_scratch_no_writer_holds_is_handed_back_as_stale() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        let left = scratch::incoming_name().as_str().to_owned();
+        let live = scratch::incoming_name();
+        let folder = scratch::incoming_name().as_str().to_owned();
+        for relative in [
+            "a.jpg".to_owned(),
+            left.clone(),
+            format!("below/{left}"),
+            live.as_str().to_owned(),
+            format!("{}notes.txt", scratch::PREFIX),
+            format!("{folder}/c.gif"),
+        ] {
+            fs.write_file(&root.join(relative), b"some bytes");
+        }
+
+        let registered = RootMarkerId::from_bytes([0x2a; RootMarkerId::BYTE_LEN]);
+        let mapping = Mapping::new(None, root.to_path_buf()).expecting(registered);
+        let walked = walk_mappings(&fs, std::slice::from_ref(&mapping), &NONE_PLACED)
+            .await
+            .expect("walking a mapped folder must succeed");
+
+        let mut stale: Vec<_> = walked
+            .stale
+            .iter()
+            .map(|scratch| {
+                assert_eq!(scratch.root, root);
+                assert_eq!(scratch.expected, registered);
+                scratch.relative.to_path_buf()
+            })
+            .collect();
+        stale.sort();
+        assert_eq!(
+            stale,
+            vec![PathBuf::from(&left), Path::new("below").join(&left)],
+            "the scratch its writer left behind, at both depths, and nothing else",
+        );
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![parsed("a.jpg")],
+        );
+
+        // A root whose mapping records no identity cannot vouch for itself and
+        // is written into by nothing, so nothing under it is handed back to be
+        // removed (spec: EP-13).
+        let unregistered =
+            walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &NONE_PLACED)
+                .await
+                .expect("walking a mapped folder must succeed");
+        assert!(unregistered.stale.is_empty());
     }
 
     // EP-14: the folder holding the marker that gives this root its identity

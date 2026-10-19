@@ -13,7 +13,7 @@ use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
 use crate::sync::sync_outcome::SyncOutcome;
 use crate::sync::sync_request::SyncRequest;
-use crate::sync::{scan, settle, spool};
+use crate::sync::{scan, settle, spool, stale_scratches};
 use crate::upload;
 
 /// Carries every changed file under this device's mapped folders into the
@@ -193,6 +193,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // Once every discard is made, so a folder several departed files stood in
     // is asked about after the last of them left it.
     emptied.remove(trash).await;
+    stale_scratches::remove(trash, std::mem::take(&mut survey.stale)).await;
     local.prepare_dir(&spool_dir).await?;
 
     // The scan has just said how much there is to do, and the encoding is the

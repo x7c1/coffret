@@ -34,10 +34,13 @@ use crate::upload::upload_error::UploadError;
 /// The pending row is updated with the handle Storage answered with as soon as
 /// each upload lands, before the next one starts and before its digest is
 /// compared. That is what makes an interruption in the middle of a batch
-/// recoverable: the rows left behind say which Containers reached Storage and
-/// which never left the device, which is the difference between an object to
-/// dispose of and a file to delete (spec: OC-2) — and an object that did not
-/// arrive whole is one to dispose of like any other.
+/// recoverable: the rows left behind say which Containers reached Storage, so
+/// each has an object to dispose of (spec: OC-2) — and an object that did not
+/// arrive whole is one to dispose of like any other. A row without a handle
+/// says less than that: a run killed between a put returning and its row being
+/// updated leaves an object the row does not name, so settlement looks for one
+/// under the Container's name before it treats the Container as never
+/// uploaded.
 pub(crate) async fn upload(
     store: &dyn ObjectStore,
     index: &dyn Index,

@@ -3,6 +3,7 @@ use coffret_model::EntryPath;
 use crate::commit::PendingRename;
 use crate::departure::Departed;
 use crate::device_state::LocalObservation;
+use crate::local_scan::StaleScratch;
 use crate::sync::candidate::Candidate;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
@@ -53,4 +54,7 @@ pub(super) struct Survey {
     /// this is what keeps a run that scanned less than the mappings cover from
     /// looking like a run that found nothing to do (spec: EP-12, PK-14).
     pub(super) unavailable: Vec<UnavailableRoot>,
+    /// The scratches a local writer that is gone left under the roots the walk
+    /// read, each to be removed (spec: OC-8, EP-11).
+    pub(super) stale: Vec<StaleScratch>,
 }

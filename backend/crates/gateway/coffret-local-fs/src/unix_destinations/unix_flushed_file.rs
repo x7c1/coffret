@@ -10,17 +10,20 @@ use crate::unix_destinations::open_folder::OpenFolder;
 /// One scratch on this device's disk whose bytes are on the device, waiting
 /// for its final name.
 ///
-/// The handle is kept until the stamp takes it, because setting a file's times
-/// on the handle a run has been writing to is both one syscall fewer than
-/// reopening the name and the only form that keeps the confinement: reopening by
-/// path would be the one place a symbolic link could get between the descent and
-/// the stamp.
+/// The handle is kept for the stamp, because setting a file's times on the
+/// handle a run has been writing to is both one syscall fewer than reopening
+/// the name and the only form that keeps the confinement: reopening by path
+/// would be the one place a symbolic link could get between the descent and
+/// the stamp. And it is kept past the stamp, to the rename, because it holds
+/// the lock that tells a sync in another process the scratch is still being
+/// written (spec: OC-8).
 pub(crate) struct UnixFlushedFile {
     folder: Arc<OpenFolder>,
     scratch_name: String,
     path: PathBuf,
-    /// The open file until the stamp spends it, which is the last thing that
-    /// needs it: the rename below names the file rather than holding it.
+    /// The open file, until the rename names it rather than holding it. Taken
+    /// only for as long as the stamp runs off the runtime's threads, and put
+    /// back after it.
     file: Option<std::fs::File>,
 }
 
@@ -59,13 +62,16 @@ impl FlushedFile for UnixFlushedFile {
             .expect("a flushed file is stamped exactly once");
 
         // Off the runtime's threads, because setting times is a blocking
-        // metadata call on a handle and the runtime's file API offers none.
-        tokio::task::spawn_blocking(move || {
-            file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        // metadata call on a handle and the runtime's file API offers none. The
+        // handle comes back with the answer, for the lock it holds.
+        let (file, stamped) = tokio::task::spawn_blocking(move || {
+            let stamped = file.set_times(std::fs::FileTimes::new().set_modified(modified));
+            (file, stamped)
         })
         .await
-        .map_err(|joined| self.refused(io::Error::other(joined)))?
-        .map_err(|cause| self.refused(cause))
+        .map_err(|joined| self.refused(io::Error::other(joined)))?;
+        self.file = Some(file);
+        stamped.map_err(|cause| self.refused(cause))
     }
 
     fn publish(self: Box<Self>) -> Result<(), BelowRootError> {

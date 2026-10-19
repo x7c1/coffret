@@ -119,6 +119,8 @@ pub use interruption::{
     a_stale_pending_row_is_dropped_with_its_spool,
     an_abandoned_container_storage_will_not_trash_is_left_in_storage,
     an_unfinished_spool_is_disposed_with_its_row,
+    an_unrecorded_container_storage_will_not_trash_is_retried,
+    an_upload_killed_before_its_row_named_the_object_is_trashed_by_name,
     an_uploaded_but_uncommitted_container_converges_to_one_entry,
     an_uploaded_container_is_settled_by_the_next_run,
 };
@@ -182,6 +184,12 @@ pub use staleness::sync_catches_up_before_scanning;
 
 mod stale_removal;
 pub use stale_removal::a_replacement_for_a_removed_container_is_refused;
+
+mod stale_scratches;
+pub use stale_scratches::{
+    a_refused_scratch_removal_is_retried_by_the_next_sync,
+    a_scratch_an_interrupted_write_left_is_removed_by_the_next_sync,
+};
 
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
@@ -307,6 +315,10 @@ macro_rules! sync_conformance {
             a_live_producer_keeps_exclusive_ownership,
             a_lost_response_and_withheld_head_never_authorize_trash,
             an_abandoned_container_storage_will_not_trash_is_left_in_storage,
+            an_upload_killed_before_its_row_named_the_object_is_trashed_by_name,
+            an_unrecorded_container_storage_will_not_trash_is_retried,
+            a_scratch_an_interrupted_write_left_is_removed_by_the_next_sync,
+            a_refused_scratch_removal_is_retried_by_the_next_sync,
             a_stale_pending_row_is_dropped_with_its_spool,
             a_commit_whose_refresh_failed_is_completed_and_replaced,
             a_completed_container_marks_its_file_present,
