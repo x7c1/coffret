@@ -99,7 +99,8 @@ impl State {
         )
     }
 
-    /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2).
+    /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2,
+    /// PK-17).
     pub(in crate::in_memory_index) fn refresh(&mut self, batch: CommittedBatch) -> IndexResult<()> {
         let uploaded: Vec<ContainerId> = batch
             .record
@@ -115,6 +116,9 @@ impl State {
         }
         for container_id in uploaded {
             self.clear_pending_row(container_id);
+        }
+        for id in batch.released {
+            self.release_reservation(id);
         }
         Ok(())
     }

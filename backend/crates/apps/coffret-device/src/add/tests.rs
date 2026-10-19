@@ -99,6 +99,7 @@ async fn device_mapped_at(prefix: Option<&str>) -> Device {
         grant: None,
         births: Default::default(),
         fetch_memory: Default::default(),
+        live: Default::default(),
     };
     Device {
         library,

@@ -2,7 +2,7 @@ use coffret_model::{ContainerId, Generation};
 
 use crate::commit::pending_rename::PendingRename;
 use crate::commit::prepared_addition::PreparedAddition;
-use crate::device_state::LocalObservation;
+use crate::device_state::{LocalObservation, ReservationId};
 
 /// A batch whose Containers are on Storage and whose commit has not happened.
 ///
@@ -31,6 +31,11 @@ pub struct PreparedBatch {
     pub materialized: Vec<LocalObservation>,
     /// The Entries the batch gives a new current Entry Path (spec: FM-15).
     pub renames: Vec<PendingRename>,
+    /// The reservations the batch packs, released by the refresh that
+    /// completes its rows (spec: PK-17).
+    ///
+    /// Device state for the reason [`materialized`](Self::materialized) is.
+    pub released: Vec<ReservationId>,
     /// The head the batch was prepared against: what the catalog its producer
     /// read stood at.
     ///
@@ -86,6 +91,13 @@ impl PreparedBatch {
     /// The same batch, recording what this device put on disk for it.
     pub fn materializing(mut self, materialized: Vec<LocalObservation>) -> Self {
         self.materialized = materialized;
+        self
+    }
+
+    /// The same batch, releasing the reservations it packs once it has
+    /// committed (spec: PK-17).
+    pub fn releasing(mut self, released: Vec<ReservationId>) -> Self {
+        self.released = released;
         self
     }
 }

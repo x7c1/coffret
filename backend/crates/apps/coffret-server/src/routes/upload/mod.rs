@@ -10,11 +10,12 @@ use std::sync::Arc;
 use axum::extract::{Multipart, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use tracing::info;
+use coffret_device::{LiveReservation, OpenLibrary, Redacted};
+use tracing::{info, warn};
 
 use crate::api_error::ApiError;
 use crate::entry_query::folder_named;
-use crate::freeze::{freeze_folder, Book};
+use crate::freeze::{freeze_dropped, Book};
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
@@ -23,7 +24,7 @@ use super::RefusalDto;
 
 use self::declared_length::declared_length;
 use self::outran::outran;
-use self::receive::receive;
+use self::receive::{receive, Reserving};
 use self::refusal::Refusal;
 use self::refused_dto::RefusedDto;
 
@@ -109,6 +110,28 @@ pub use upload_query::UploadQuery;
 /// Which of the two it is comes from the caller and is not worked out here, for
 /// the reason [`UploadQuery`] gives: the person was asked.
 ///
+/// # A choice of a Pack outlives the process
+///
+/// The freeze a drop arms is this process's own work, and a process that stops
+/// — a desktop app quit, or a crash, which this server cannot tell apart — takes
+/// it along (spec: LA-12). The pages it leaves in the folder would then read to
+/// the next sync as loose files, and go up one Container each. So the choice is
+/// written down on this device before the first page lands: a reservation of
+/// the folder, made before the first part is read and extended by each page
+/// before it lands (spec: PK-17). A sync leaves a reserved page alone and says
+/// it waits for its Pack. While the drop is receiving, the reservation is live
+/// in this process, and no freeze decides it — a run of the whole folder going
+/// on beside the drop may pack the pages already landed, but it leaves the
+/// reservation for the drop's own run. That run is armed once receiving ends,
+/// as a run of its own rather than one taken for the run under way
+/// ([`freeze_dropped`]), and the freeze that packs the pages releases the
+/// reservation with its commit. A server started afterwards takes up every
+/// reservation it finds, in the order they were made
+/// ([`resume_reserved`](crate::freeze::resume_reserved)). A drop refused as a
+/// whole, or one every part of which was refused, arms nothing, and its
+/// reservation is released with it: what it left in the folder waits there as
+/// anything copied into a mapped folder does.
+///
 /// # Refused before anything lands
 ///
 /// The drop's own refusals are about its folder and about its parts one by
@@ -188,7 +211,7 @@ pub use upload_query::UploadQuery;
 /// each part goes to a scratch name of its own and is renamed onto its
 /// destination (spec: EP-11) — and what they arm behind them is already ordered
 /// where ordering matters: a second book armed while one is being packed waits
-/// its turn behind it, which is [`freeze_folder`]'s doing — a freeze commits
+/// its turn behind it, which is [`freeze_dropped`]'s doing — a freeze commits
 /// one batch (spec: PK-7), so a book put aside half way is one that was never
 /// brought in at all — and a second sync collapses into the one walk of the
 /// mappings that would have found both drops anyway. A queue in front of this
@@ -222,10 +245,22 @@ pub async fn upload(
     // instead of the room the rest of the request will.
     let declared = declared_length(&headers);
 
+    // Before the first part, so that no page of a drop that asked for a Pack
+    // stands in the folder without its reservation (spec: PK-17). A
+    // reservation that cannot be written refuses the drop before anything
+    // lands, for the reason the `unlocked` above does: a page that lands
+    // unreserved is one a sync carries in on its own. Held live for as long as
+    // the drop is receiving, so that no freeze in this process decides it while
+    // pages are still to come.
+    let reservation = match query.freeze {
+        true => Some(library.reserve(folder.as_ref()).await?),
+        false => None,
+    };
+
     let mut written = Vec::new();
-    // The same paths as Entry Paths, for the freeze's selection: what landed is
-    // what the drop asked to pack, and nothing else in the folder is.
-    let mut landed_at = BTreeSet::new();
+    // The same paths as Entry Paths, for the freeze's selection: what the drop
+    // reserved is what it asked to pack, and nothing else in the folder is.
+    let mut reserved = BTreeSet::new();
     let mut refused = Vec::new();
     let mut bytes = 0u64;
     let mut seen = 0usize;
@@ -255,12 +290,17 @@ pub async fn upload(
             // it declared nothing.
             let coming =
                 declared.map_or(state.allowance.part_bytes, |all| all.saturating_sub(bytes));
+            let reserving = reservation.as_ref().map(|held| Reserving {
+                id: held.id(),
+                paths: &mut reserved,
+            });
             match receive(
                 &library,
                 &state.allowance,
                 coming,
                 folder.as_ref(),
                 &name,
+                reserving,
                 part,
             )
             .await
@@ -268,7 +308,6 @@ pub async fn upload(
                 Ok(landed) => {
                     bytes += landed.bytes;
                     written.push(landed.path.as_str().to_owned());
-                    landed_at.insert(landed.path);
                 }
                 Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
                     name,
@@ -297,6 +336,9 @@ pub async fn upload(
     }
     .await;
     if let Err(stopped) = taken {
+        // Nothing is armed for a drop that was stopped, so nothing is to wait
+        // for a Pack either (spec: PK-17).
+        release(&library, reservation).await;
         return Err(stopped.having_written(written));
     }
 
@@ -304,11 +346,17 @@ pub async fn upload(
     // left the folder exactly as it was, and a run over an unchanged folder is
     // a walk to find nothing. A drop stopped for the whole request is answered
     // where it was stopped and never reaches here.
-    if !written.is_empty() {
-        match query.freeze {
-            true => freeze_folder(Arc::clone(&state), Book::dropped(landed_at)),
-            false => arm_sync(Arc::clone(&state)),
-        }
+    if written.is_empty() {
+        release(&library, reservation).await;
+    } else if query.freeze {
+        // Receiving has ended, so the reservation names every page this drop
+        // landed and stops being live before the run that decides it is armed:
+        // a run of its own, never the one under way, which read the
+        // reservations while this drop was still landing (spec: PK-17).
+        drop(reservation);
+        freeze_dropped(Arc::clone(&state), Book::dropped(reserved));
+    } else {
+        arm_sync(Arc::clone(&state));
     }
 
     // Counts and sizes, and which of the two flows was armed. No name of anything
@@ -323,4 +371,27 @@ pub async fn upload(
         "files were added to a folder",
     );
     Ok(Json(UploadDto { written, refused }))
+}
+
+/// Releases a drop's reservation, where it made one, because nothing is armed
+/// for the drop (spec: PK-17).
+///
+/// A release that fails is said and not raised: the drop has already been
+/// answered for, and what the reservation left behind is a set of paths a
+/// later freeze over them decides and releases like any other — until then a
+/// sync leaves them alone and says they wait for their Pack, which is not
+/// silent.
+async fn release(library: &OpenLibrary, reservation: Option<LiveReservation>) {
+    let Some(held) = reservation else {
+        return;
+    };
+    let id = held.id();
+    if let Err(refused) = library.release_reservation(id).await {
+        warn!(
+            operation = "upload",
+            reservation = %id,
+            reason = %refused.redacted(),
+            "the reservation of a drop that armed nothing could not be released",
+        );
+    }
 }

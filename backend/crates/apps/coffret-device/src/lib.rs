@@ -173,6 +173,10 @@ mod accounts;
 mod add;
 pub use add::{AddedFile, IncomingFile, LocalAdditions};
 
+// A drop's choice to add its files as a Pack, kept until a freeze has decided
+// them (spec: PK-17).
+mod reservations;
+
 mod authorize;
 pub use authorize::{authorize, AuthorizeRequest};
 
@@ -412,12 +416,16 @@ pub use coffret_usecase::delete::{
     DeleteError, DeleteOutcome, DeletePreview, DeleteSelection, PackRefusal, RebuiltPack,
     RefusedPack, Unverified,
 };
-pub use coffret_usecase::device_state::Mapping;
+pub use coffret_usecase::device_state::{
+    LiveReservation, LiveReservations, Mapping, Reservation, ReservationId,
+};
 pub use coffret_usecase::fetch::{
     Cancellation, EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, KeptTally, Publication,
     Surfaced, UnheldParcel, UnheldReason,
 };
-pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, FreezePreview, SourceChange};
+pub use coffret_usecase::freeze::{
+    FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
+};
 pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
 pub use coffret_usecase::{

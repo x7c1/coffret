@@ -2,7 +2,9 @@ use coffret_model::ContainerId;
 
 use crate::commit::{CommitOutcome, ShortKeyring};
 use crate::freeze::frozen_pack::FrozenPack;
+use crate::freeze::lapsed::Lapsed;
 use crate::freeze::not_frozen::NotFrozen;
+use crate::sync::Settled;
 use crate::unavailable_root::UnavailableRoot;
 
 /// What one freeze built, absorbed, and left alone.
@@ -75,6 +77,19 @@ pub struct FreezeOutcome {
     /// a root it could not open is not a file it passed over — a run narrowed to
     /// one folder still says which of the device's roots were not there to walk.
     pub unavailable: Vec<UnavailableRoot>,
+    /// What this run made of the pending rows an interrupted run left behind,
+    /// settled before the scan exactly as a sync settles them (spec: OC-2,
+    /// OC-3, OC-7, OC-9).
+    pub settled: Vec<Settled>,
+    /// How many reservations this run released: the ones its commit packs and
+    /// the ones none of whose paths was eligible any more (spec: PK-17).
+    pub released: usize,
+    /// The reserved files of every reservation this run released without
+    /// packing any of them, and why each was not packed (spec: PK-17).
+    ///
+    /// Read the way [`surfaced`](Self::surfaced) is: a person who dropped a book
+    /// to be packed is owed the news that it was not, and why.
+    pub lapsed: Vec<Lapsed>,
     /// What the commit did, or `None` when the run had nothing to commit.
     pub commit: Option<CommitOutcome>,
     /// The committed Keyring set the run's read had to step over a position of,

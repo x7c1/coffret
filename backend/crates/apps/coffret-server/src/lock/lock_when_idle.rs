@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::time::sleep_until;
 use tracing::info;
 
+use crate::freeze::resume_reserved;
 use crate::state::ServerState;
 
 /// Locks the Library once nobody has wanted it for `interval` (spec: DK-4).
@@ -39,6 +40,11 @@ use crate::state::ServerState;
 /// again after the same interval of quiet. A server started from the command
 /// line is never unlocked in place, and this then waits for as long as the
 /// server runs, holding nothing.
+///
+/// An unlock in place also takes up the drops waiting for their Pack
+/// (spec: PK-17): a lock stops a freeze that had not taken the keys yet
+/// (spec: DK-2), and the reservation it leaves is what says the book is still
+/// owed one.
 pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
     loop {
         // Armed: serving starts now, or the Library has just been unlocked, so
@@ -55,6 +61,7 @@ pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
             "nobody wanted the Library for the idle interval, so it was locked",
         );
         state.until_unlocked().await;
+        resume_reserved(&state).await;
     }
 }
 

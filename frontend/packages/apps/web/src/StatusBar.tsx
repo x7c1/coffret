@@ -637,7 +637,10 @@ function lineOf(flow: TurnTaker, turns: Turns): { text: string; colour: string }
     }
     case 'sync': {
       const run = turns.sync;
-      return shown(syncLine(run, waits), toneOf(run?.status, run?.findings.length ?? 0));
+      // A file a Pack drop reserved is on its way to its Pack, not left behind
+      // (spec: PK-17), so a sync whose only findings are those does not warn.
+      const findings = (run?.findings ?? []).filter((finding) => finding.surfaced !== 'AwaitsPack');
+      return shown(syncLine(run, waits), toneOf(run?.status, findings.length));
     }
     case 'delete': {
       const run = turns.deletion;

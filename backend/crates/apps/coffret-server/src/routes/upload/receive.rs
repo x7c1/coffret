@@ -1,5 +1,7 @@
+use std::collections::BTreeSet;
+
 use axum::extract::multipart::Field;
-use coffret_device::{ContainerKind, EntryPath, OpenLibrary};
+use coffret_device::{ContainerKind, EntryPath, OpenLibrary, ReservationId};
 
 use crate::allowance::Allowance;
 use crate::api_error::ApiError;
@@ -63,12 +65,21 @@ use super::under::under;
 /// `coming` is how much room the caller is to be asked to have. It is what the
 /// request said is left of it, so a book being dropped asks for the rest of the
 /// book and not for one page at a time.
+///
+/// `reserving` is the drop's reservation, where it asked for a Pack: the path
+/// is added to it after every refusal has passed and before the rename puts the
+/// file where a scan can find it, so no file of the drop ever stands in the
+/// mapped folder without the reservation saying it waits for its Pack
+/// (spec: PK-17). The path is noted in [`Reserving::paths`] as it is added,
+/// whether or not the rename then succeeds, because that is what the
+/// reservation names and so what the drop's freeze has to consider.
 pub(super) async fn receive(
     library: &OpenLibrary,
     allowance: &Allowance,
     coming: u64,
     folder: Option<&EntryPath>,
     name: &str,
+    reserving: Option<Reserving<'_>>,
     mut part: Field<'_>,
 ) -> Result<Landed, Refusal> {
     let path = under(folder, &shaped(name)?);
@@ -106,6 +117,18 @@ pub(super) async fn receive(
         incoming.write(&chunk).await?;
     }
     let bytes = incoming.written();
+    if let Some(reserving) = reserving {
+        library.extend_reservation(reserving.id, &path).await?;
+        reserving.paths.insert(path.clone());
+    }
     incoming.keep(modified).await?;
     Ok(Landed { path, bytes })
+}
+
+/// A drop's reservation, as one part of it is taken (spec: PK-17).
+pub(super) struct Reserving<'a> {
+    /// The reservation the drop made before its first part.
+    pub(super) id: ReservationId,
+    /// Every path the drop has added to it so far.
+    pub(super) paths: &'a mut BTreeSet<EntryPath>,
 }

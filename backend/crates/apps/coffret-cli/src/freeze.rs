@@ -140,6 +140,9 @@ mod tests {
     /// A run that packed nothing, on a device holding `mappings` mappings.
     fn empty_run(mappings: usize) -> FreezeOutcome {
         FreezeOutcome {
+            settled: Vec::new(),
+            released: 0,
+            lapsed: Vec::new(),
             packs: Vec::new(),
             absorbed: Vec::new(),
             packed_already: 0,

@@ -95,6 +95,15 @@ impl Freezes {
         start
     }
 
+    /// Asks for the book a drop just finished writing to be packed, as a run
+    /// of its own. See [`Progress::arm_dropped`].
+    pub(super) fn arm_dropped(&self, book: Book) -> bool {
+        let mut start = false;
+        self.progress
+            .send_modify(|progress| start = progress.arm_dropped(book));
+        start
+    }
+
     /// What packing `folder` again asks for: the files the runs and books still
     /// kept for it were asked to pack, or every file under it where nothing is
     /// kept (spec: PK-17).

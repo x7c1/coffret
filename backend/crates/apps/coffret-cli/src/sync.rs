@@ -61,6 +61,7 @@ mod tests {
     /// A run that carried nothing, on a device holding `mappings` mappings.
     fn empty_run(mappings: usize) -> SyncOutcome {
         SyncOutcome {
+            reserved: Vec::new(),
             relocations: Vec::new(),
             added: Vec::new(),
             replaced: Vec::new(),

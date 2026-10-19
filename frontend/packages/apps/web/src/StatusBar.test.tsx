@@ -598,6 +598,38 @@ it("says a fill's degraded Keyring after the files it did not place", () => {
   expect(html).toContain(`color:${COLOR.warn}`);
 });
 
+/** A page of a book a Pack drop reserved, which a sync left for its freeze. */
+const awaitsPack = {
+  path: 'scans/vol-1/page-001.jpg',
+  message: 'this file was dropped to be added as a Pack, and waits for the freeze that packs it',
+  reason: 'surfaced',
+  surfaced: 'AwaitsPack',
+} as const;
+
+// PK-17: a page left for its Pack is on its way rather than left behind, so a
+// sync that found nothing else is drawn in the plain colour, as one that found
+// nothing at all is. Anything else it found still warns.
+it('draws a sync whose only findings are files awaiting their Pack without warning', () => {
+  const quiet = draw({
+    sync: syncing({ status: 'done', added: 0, findings: [awaitsPack], stopped: null }),
+  });
+
+  expect(quiet).toContain('1 file is still to be packed');
+  expect(quiet).not.toContain(`color:${COLOR.warn}`);
+  expect(quiet).not.toContain(`color:${COLOR.refused}`);
+
+  const mixed = draw({
+    sync: syncing({
+      status: 'done',
+      added: 1,
+      findings: [awaitsPack, keyringRepaired],
+      stopped: null,
+    }),
+  });
+
+  expect(mixed).toContain(`color:${COLOR.warn}`);
+});
+
 /** A Keyring repair a sync's commit made, as the server says it. */
 const keyringRepaired = {
   path: null,

@@ -12,6 +12,7 @@ function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
     mtime: null,
     state: 'remote',
     container: 'pack-1',
+    reserved: false,
     openable: true,
     content_type: 'image/jpeg',
     ...over,

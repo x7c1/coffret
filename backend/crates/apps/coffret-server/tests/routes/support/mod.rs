@@ -68,6 +68,8 @@ mod requests;
 
 mod storage;
 
+mod streamed_drop;
+
 mod workers;
 
 /// The address the server in these cases was started at.
@@ -466,6 +468,74 @@ impl Served {
         catch_up_at_startup(&self.state).await;
     }
 
+    /// Stands a server started afresh over the same device in place of this
+    /// one, the way the desktop app does after a Quit or a crash, without
+    /// starting it up.
+    ///
+    /// The same Storage, catalog, disk and keys — what the device keeps lasts —
+    /// and a state of its own: whatever the stopped server held about its work
+    /// is gone with it (spec: LA-12). [`start_up`](Self::start_up) is the new
+    /// server's first act, left to the case so that it can do something to the
+    /// device before it.
+    pub fn restart(&mut self) {
+        let library = opened(
+            &self.reads,
+            &self.catalog,
+            &self.local_fs,
+            self.spools.path(),
+            SERVED_LIBRARY,
+            self.parcel_len,
+            self.provider,
+        );
+        let state = Arc::new(
+            ServerState::new("served".to_owned(), library)
+                .consenting_through(Arc::clone(&self.consent) as _),
+        );
+        self.router = router(
+            Arc::clone(&state),
+            Arc::new(Admission::new(AUTHORITY, SERVER_KEY)),
+        );
+        self.state = state;
+    }
+
+    /// How many pending rows the served device's catalog holds (spec: OC-2).
+    pub async fn pending_rows(&self) -> usize {
+        self.catalog
+            .pending_rows()
+            .await
+            .expect("the catalog answers")
+            .len()
+    }
+
+    /// How many reservations the served device's catalog holds (spec: PK-17).
+    pub async fn reservations(&self) -> usize {
+        self.catalog
+            .reservations()
+            .await
+            .expect("the catalog answers")
+            .len()
+    }
+
+    /// How many spool files the served device has on its disk.
+    pub fn spools_left(&self) -> usize {
+        fn count(dir: &Path) -> usize {
+            std::fs::read_dir(dir).map_or(0, |entries| {
+                entries
+                    .flatten()
+                    .map(|entry| {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            count(&path)
+                        } else {
+                            1
+                        }
+                    })
+                    .sum()
+            })
+        }
+        count(&self.spools.path().join("served"))
+    }
+
     /// Commits a file into the Library from the other device.
     ///
     /// The real sync over the real store, as the fixture's first commit is: what
@@ -600,6 +670,7 @@ fn opened(
         grant: None,
         births: Default::default(),
         fetch_memory: Default::default(),
+        live: Default::default(),
     }
 }
 

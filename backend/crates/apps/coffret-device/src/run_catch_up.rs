@@ -138,6 +138,7 @@ mod tests {
             grant: None,
             births: Default::default(),
             fetch_memory: Default::default(),
+            live: Default::default(),
         }
     }
 

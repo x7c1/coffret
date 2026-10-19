@@ -241,6 +241,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         &spooled,
         &[],
         renames.clone(),
+        Vec::new(),
         None,
         progress,
     )
@@ -298,6 +299,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         mappings: index.mappings().await?.len(),
         relocations,
         surfaced: survey.surfaced,
+        reserved: survey.reserved,
         unavailable: survey.unavailable,
         settled,
         commit,
@@ -341,6 +343,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .filter(|one| matches!(one, Relocation::Refused { .. }))
             .count(),
         surfaced = outcome.surfaced.len(),
+        reserved = outcome.reserved.len(),
         discarded = outcome
             .surfaced
             .iter()

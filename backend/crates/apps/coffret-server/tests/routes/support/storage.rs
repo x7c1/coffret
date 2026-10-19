@@ -49,6 +49,11 @@ impl Served {
         self.storage.refuse_commits();
     }
 
+    /// Lets Storage claim commit slots again.
+    pub fn accept_commits(&self) {
+        self.storage.accept_commits();
+    }
+
     /// How many reads Storage refused while it was away.
     pub fn refused_reads(&self) -> usize {
         self.storage.refused()

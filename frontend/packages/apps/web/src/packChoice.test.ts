@@ -270,6 +270,7 @@ describe('heldUnder', () => {
         mtime: null,
         state: container === null ? 'added' : 'remote',
         container,
+        reserved: false,
         openable: true,
         content_type: 'image/jpeg',
       })),

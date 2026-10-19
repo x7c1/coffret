@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use coffret_model::EntryPath;
 
 use crate::commit::CommitPolicy;
-use crate::device_state::{BatchId, DeviceTime};
+use crate::device_state::{BatchId, DeviceTime, LiveReservations, NONE_LIVE};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::local_scan::{UnknownBirths, NONE_PLACED};
@@ -109,6 +109,11 @@ pub struct FreezeRequest<'a> {
     /// Only a drop onto the explorer records a file here. The default holds
     /// nothing.
     pub births: &'a UnknownBirths,
+    /// The reservations a drop in this process is still writing into, which
+    /// the run decides none of (spec: PK-17).
+    ///
+    /// Only a server taking drops holds one live. The default holds nothing.
+    pub live: &'a LiveReservations,
 }
 
 impl<'a> FreezeRequest<'a> {
@@ -149,6 +154,7 @@ impl<'a> FreezeRequest<'a> {
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
             births: &NONE_PLACED,
+            live: &NONE_LIVE,
         }
     }
 
@@ -181,6 +187,13 @@ impl<'a> FreezeRequest<'a> {
     /// of their own.
     pub fn knowing(mut self, births: &'a UnknownBirths) -> Self {
         self.births = births;
+        self
+    }
+
+    /// The same request, sparing the reservations a drop in this process is
+    /// still writing into (spec: PK-17).
+    pub fn sparing(mut self, live: &'a LiveReservations) -> Self {
+        self.live = live;
         self
     }
 }

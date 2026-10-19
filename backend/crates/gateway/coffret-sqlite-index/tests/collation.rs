@@ -67,12 +67,13 @@ fn every_path_column_is_compared_bytewise() {
             line.starts_with("path ")
                 || line.starts_with("prefix ")
                 || line.starts_with("derived_from_path ")
+                || line.starts_with("folder ")
         })
         .collect::<Vec<_>>();
 
     assert_eq!(
         path_columns.len(),
-        4,
+        6,
         "every Entry Path column is accounted for, found {path_columns:?}"
     );
     for column in path_columns {

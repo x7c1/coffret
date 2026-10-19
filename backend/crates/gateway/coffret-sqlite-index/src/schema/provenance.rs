@@ -4,7 +4,7 @@ use rusqlite::{Connection, TransactionBehavior};
 use super::entry_identities::{report_the_drop, tie_records_to_entries};
 use super::{
     replace_the_catalog, report_the_discard, stamp, unsupported, ATTEMPTED_SLOTS_DDL,
-    HELD_PARCELS_DDL, SCHEMA_VERSION,
+    HELD_PARCELS_DDL, RESERVATIONS_DDL, SCHEMA_VERSION,
 };
 use crate::error::classify;
 
@@ -25,17 +25,17 @@ use crate::error::classify;
 /// attempted slots starts empty, and a row they marked attempted stays one
 /// whose outcome is unknown: nothing says where its create may have landed
 /// (spec: OC-2, OC-3). No layout before 16 applied a rename, so no file any of
-/// them recorded waits to follow one (spec: FM-15). Each materialization record
-/// is then tied to the Entry the catalog holds at its path, which only a
-/// catalog that numbers its Entries — layout 15's — can name, and one it cannot
-/// name is dropped and the drop reported (spec: EP-10, FM-16). The catalog
-/// every one of
-/// these layouts holds is not carried forward: up to layout 14 it holds no
-/// entry numbers, or was filled from Storage objects in a format this build no
-/// longer reads, and a layout-15 one is discarded with them so that every older
-/// file takes one path; the next catch-up rebuilds it from Storage
-/// (spec: RV-5). The transaction leaves either complete layout after
-/// interruption.
+/// them recorded waits to follow one (spec: FM-15), and none before 18 recorded
+/// a reservation, so the tables of reservations start empty (spec: PK-17).
+/// Each materialization record is then tied to the Entry the catalog holds at
+/// its path, which only a catalog that numbers its Entries — layout 15's — can
+/// name, and one it cannot name is dropped and the drop reported (spec: EP-10,
+/// FM-16). The catalog every one of these layouts holds is not carried
+/// forward: up to layout 14 it holds no entry numbers, or was filled from
+/// Storage objects in a format this build no longer reads, and a layout-15 one
+/// is discarded with them so that every older file takes one path; the next
+/// catch-up rebuilds it from Storage (spec: RV-5). The transaction leaves
+/// either complete layout after interruption.
 pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<()> {
     const OPERATION: &str = "preserving device state from an older layout";
     let transaction = connection
@@ -74,6 +74,9 @@ pub(super) fn preserve_device_state(connection: &mut Connection) -> IndexResult<
         .execute_batch("ALTER TABLE local_entries ADD COLUMN relocate_to TEXT COLLATE BINARY;")
         .map_err(classify(OPERATION))?;
     let dropped = tie_records_to_entries(&transaction)?;
+    transaction
+        .execute_batch(RESERVATIONS_DDL)
+        .map_err(classify(OPERATION))?;
     replace_the_catalog(&transaction)?;
     transaction.commit().map_err(classify(OPERATION))?;
     report_the_discard(OPERATION, found);

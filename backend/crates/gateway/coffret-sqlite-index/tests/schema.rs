@@ -12,10 +12,13 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build that line falls at the current layout. Layout 17 changed
-//! the device group: a materialized file's row names the Entry it is a copy of
-//! by its Container and entry number. So no older layout keeps its device group
-//! as it is. A layout-16 file keeps its catalog and has each row tied to the
+//! In *this* build that line falls at the current layout. Layout 18 changed
+//! the device group: it keeps the reservations a drop's choice of a Pack is
+//! recorded in. So no older layout keeps its device group as it is. A
+//! layout-17 file keeps its catalog and every row it holds, and gains the
+//! reservations, empty. Layout 17 had changed it before: a materialized file's
+//! row names the Entry it is a copy of by its Container and entry number. A
+//! layout-16 file keeps its catalog and has each row tied to the
 //! Entry that catalog holds where the row stands, a row it holds none for
 //! dropped and reported; every layout from 7 to 15 has its group upgraded by
 //! the adapter's own provenance step, tied the same way where its catalog
@@ -51,7 +54,7 @@ use support::{
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers that decide everything below.
-const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_VERSION: i64 = 18;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -138,11 +141,16 @@ async fn a_file_stamped(scratch: &Scratch, version: i64) {
 
 /// Stamps a layout version into a file, behind the adapter's back.
 ///
-/// An older layout's file loses the device-local columns layouts 16 and 17
-/// added, and one before 15 the entry numbers of its catalog, so the upgrade
-/// meets the shape a build before it left behind.
+/// An older layout's file loses the device-local tables and columns layouts
+/// 16 to 18 added, and one before 15 the entry numbers of its catalog, so the
+/// upgrade meets the shape a build before it left behind.
 fn restamp(file: &Path, version: i64) {
     let connection = rusqlite::Connection::open(file).expect("the Index file must open");
+    if version < 18 {
+        connection
+            .execute_batch("DROP TABLE reserved_paths; DROP TABLE reservations;")
+            .expect("dropping a table must succeed");
+    }
     if version < 17 {
         connection
             .execute_batch(
@@ -167,18 +175,73 @@ fn restamp(file: &Path, version: i64) {
         .expect("stamping a version must succeed");
 }
 
-/// The layout before this one keeps its catalog and its device-local group, and
-/// each materialization record is tied to the Entry the catalog holds where it
-/// stands (spec: EP-10).
+/// The layout before this one keeps its catalog and every row of its
+/// device-local group, and gains the reservations, holding none: no build
+/// before it recorded a drop's choice of a Pack (spec: PK-17).
 ///
-/// Nothing is dropped, so nothing is reported.
+/// Nothing is dropped, so nothing is reported, and the reservations it gains
+/// are ones the port reads and writes like a fresh file's.
 #[tokio::test]
-async fn the_layout_before_this_one_keeps_its_catalog_and_names_each_records_entry() {
+async fn the_layout_before_this_one_keeps_everything_and_holds_no_reservation() {
     let scratch = Scratch::new();
     a_file_stamped(&scratch, SCHEMA_VERSION - 1).await;
 
     let logs = CapturedLogs::capture();
     let index = SqliteIndex::open(scratch.file()).expect("the layout before this one must open");
+    assert_eq!(
+        index
+            .snapshot()
+            .await
+            .expect("the catalog is kept, and has a state to checkpoint"),
+        snapshot(4),
+    );
+    let materialized = index
+        .local_entry_at(&observation().path)
+        .await
+        .expect("reading a local file's row must succeed")
+        .expect("the file it has on disk is kept");
+    assert_eq!(materialized.observation, observation());
+    assert_eq!(index.mappings().await.unwrap(), vec![mapping()]);
+    assert_eq!(index.pending_rows().await.unwrap(), vec![pending()]);
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed"),
+        Vec::new(),
+    );
+    let reserved = index
+        .reserve(Some(&entry_path("albums")))
+        .await
+        .expect("recording a reservation in the upgraded file must succeed");
+    index
+        .extend_reservation(reserved, &entry_path("albums/2.jpg"))
+        .await
+        .expect("extending it must succeed");
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed")
+            .len(),
+        1,
+    );
+    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
+    assert!(logs.at(Level::WARN).is_empty(), "{}", logs.text());
+}
+
+/// The layout two before this one keeps its catalog and its device-local
+/// group, and each materialization record is tied to the Entry the catalog
+/// holds where it stands (spec: EP-10).
+///
+/// Nothing is dropped, so nothing is reported.
+#[tokio::test]
+async fn the_layout_two_before_this_one_keeps_its_catalog_and_names_each_records_entry() {
+    let scratch = Scratch::new();
+    a_file_stamped(&scratch, SCHEMA_VERSION - 2).await;
+
+    let logs = CapturedLogs::capture();
+    let index = SqliteIndex::open(scratch.file()).expect("layout 16 must open");
     assert_eq!(
         index
             .snapshot()
@@ -235,10 +298,10 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
                 .expect("recording a materialized file must succeed");
         }
     }
-    restamp(&scratch.file(), SCHEMA_VERSION - 1);
+    restamp(&scratch.file(), SCHEMA_VERSION - 2);
 
     let logs = CapturedLogs::capture();
-    let index = SqliteIndex::open(scratch.file()).expect("the layout before this one must open");
+    let index = SqliteIndex::open(scratch.file()).expect("layout 16 must open");
     assert!(
         index
             .local_entry_at(&entry_path("albums/departed.jpg"))
@@ -271,7 +334,7 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
     assert!(!logs.text().contains("departed"), "{}", logs.text());
 }
 
-/// The layout two below this one has its device-local group upgraded and its
+/// The layout three below this one has its device-local group upgraded and its
 /// catalog discarded rather than migrated (spec: RV-5, EP-9, EP-10, OC-2).
 ///
 /// Its device group lacks the columns that say which files wait to follow a
@@ -282,17 +345,17 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
 /// current layout with an empty catalog, which the next catch-up rebuilds from
 /// Storage, and a warning says so.
 #[tokio::test]
-async fn the_layout_two_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
-    loses_its_catalog(SCHEMA_VERSION - 2, Kept::Records).await;
+async fn the_layout_three_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
+    loses_its_catalog(SCHEMA_VERSION - 3, Kept::Records).await;
 }
 
-/// The layout three below this one takes the same upgrade (spec: RV-5, EP-9,
+/// The layout four below this one takes the same upgrade (spec: RV-5, EP-9,
 /// EP-10, OC-2), and its catalog holds no entry numbers, so it cannot say
 /// which Entry any record is a copy of: every record is dropped, and that is
 /// reported beside the discard (spec: FM-16).
 #[tokio::test]
-async fn the_layout_three_before_this_one_loses_its_catalog_and_its_records() {
-    loses_its_catalog(SCHEMA_VERSION - 3, Kept::NoRecords).await;
+async fn the_layout_four_before_this_one_loses_its_catalog_and_its_records() {
+    loses_its_catalog(SCHEMA_VERSION - 4, Kept::NoRecords).await;
 }
 
 /// Whether an upgrade keeps the materialization records.

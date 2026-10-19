@@ -1,8 +1,10 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time::timeout;
 use tracing::error;
 
+use crate::freeze::resume_reserved;
 use crate::state::ServerState;
 
 use super::run;
@@ -96,7 +98,16 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// held-parcel row names — what a letting go that ran beside a fetch can leave
 /// (spec: PK-21). Here and nowhere later, because this is the one moment the
 /// process is certain no fetch is in flight.
-pub async fn catch_up_at_startup(state: &ServerState) {
+///
+/// # The drops waiting for their Pack
+///
+/// And then every drop this device recorded as waiting for its Pack is taken
+/// up, in the order the drops were made (spec: PK-17, LA-12): the one account
+/// of a stopped server's work that outlives it, since the drop wrote it on the
+/// device before its first page landed. After the catch-up, however it ended,
+/// because the freeze each one arms makes its own and reads its eligibility
+/// against that (spec: CK-9).
+pub async fn catch_up_at_startup(state: &Arc<ServerState>) {
     match timeout(DEADLINE, run::catch_up(state, "startup")).await {
         Ok(Ok(_outcome)) => {}
         Ok(Err(refusal)) => refusal.record("startup"),
@@ -110,6 +121,7 @@ pub async fn catch_up_at_startup(state: &ServerState) {
     if let Ok(library) = state.unlocked() {
         library.sweep_parcels().await;
     }
+    resume_reserved(state).await;
 }
 
 /// Records a catch-up abandoned at the deadline, the way a refused one is

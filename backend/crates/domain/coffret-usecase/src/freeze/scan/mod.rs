@@ -3,10 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use coffret_model::{ContainerId, ContainerKind, EntryPath};
 use tracing::debug;
 
-use crate::device_state::DeviceTime;
+use crate::device_state::{DeviceTime, LiveSince, Reservation};
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::freeze_preview::FreezePreview;
-use crate::freeze::survey::Survey;
+use crate::freeze::lapse::Lapse;
+use crate::freeze::lapsed::Lapsed;
+use crate::freeze::not_frozen::NotFrozen;
+use crate::freeze::survey::{Closing, Survey};
 use crate::index::Index;
 use crate::local_scan::{
     unavailable_roots, walk_mappings, RootState, SourceFile, UnknownBirths, Walked, WalkedRoot,
@@ -38,6 +41,16 @@ impl Scope<'_> {
         self.prefix.is_none_or(|prefix| path.is_under(prefix))
             && self.only.is_none_or(|only| only.contains(path))
     }
+}
+
+/// The reservations this device holds, as one run read them, and which of
+/// them it is to spare (spec: PK-17).
+#[derive(Clone, Copy)]
+pub(super) struct Reserved<'a> {
+    /// Every reservation, as the run read them before its scan.
+    pub(super) all: &'a [Reservation],
+    /// The ones a drop in this process held live at any moment since.
+    pub(super) live: &'a LiveSince<'a>,
 }
 
 /// Walks the folder and decides what this invocation can pack.
@@ -82,6 +95,11 @@ impl Scope<'_> {
 /// file that turns out unchanged costs a read and refreshes what this device
 /// last saw of it rather than being read again next time.
 ///
+/// The reservations this device holds are read against the same walk
+/// (spec: PK-17): one whose every path this run considered is released — by the
+/// commit, where any of its paths is selected, or on its own, saying why for
+/// each path, where none is ([`Closing`]).
+///
 /// [`FreezeOutcome::unavailable`]: crate::freeze::FreezeOutcome::unavailable
 pub(super) async fn scan(
     index: &dyn Index,
@@ -89,6 +107,7 @@ pub(super) async fn scan(
     births: &UnknownBirths,
     scope: Scope<'_>,
     key_lost: &BTreeSet<ContainerId>,
+    reserved: Reserved<'_>,
     now: DeviceTime,
 ) -> FreezeResult<Survey> {
     let Candidates {
@@ -115,6 +134,7 @@ pub(super) async fn scan(
         surfaced: Vec::new(),
         refreshed: Vec::new(),
         unavailable: unavailable_roots(&walked),
+        closing: Vec::new(),
     };
     // `found` is keyed by Entry Path, so this walk is already the order
     // segmentation needs (spec: EP-3, PK-3).
@@ -135,11 +155,26 @@ pub(super) async fn scan(
         .await?;
     }
 
+    survey.closing = closing(
+        index,
+        Walk {
+            walked: &walked,
+            found: &found,
+            kinds: &kinds,
+        },
+        scope,
+        key_lost,
+        reserved,
+        &survey,
+    )
+    .await?;
+
     // Counts only: a prefix and a selection are Entry Paths and a local root is
     // a local path, and none of them may reach a diagnostic event.
     debug!(
         mappings,
         files = considered,
+        closing = survey.closing.len(),
         selection = scope.only.map(BTreeSet::len),
         selected = survey.selected.len(),
         packed_already = survey.packed_already,
@@ -148,6 +183,118 @@ pub(super) async fn scan(
         "scanned a folder for freezing",
     );
     Ok(survey)
+}
+
+/// What the walk found, as the reading of the reservations asks it.
+struct Walk<'a> {
+    walked: &'a [WalkedRoot],
+    found: &'a BTreeMap<EntryPath, SourceFile>,
+    kinds: &'a BTreeMap<ContainerId, ContainerKind>,
+}
+
+/// Which reservations this run decides every path of, and what it makes of
+/// each (spec: PK-17).
+///
+/// A live reservation is not decided at all: the drop that holds it is still
+/// landing pages the run never read, and releasing it — with the commit or as
+/// lapsed — would leave those pages landing unreserved. Its own run decides
+/// it, once the drop stops receiving. The run still packs whatever of its
+/// landed paths it selected; those are then simply not eligible to that later
+/// run (spec: PK-1, PK-17).
+///
+/// Any other reservation is decided where every one of its paths is one the
+/// run considered: inside its scope, and not under a mapped root the walk
+/// could not vouch for (spec: EP-12) — a book on an unplugged disk is not a
+/// book whose pages are gone. One that names a path the run did not consider
+/// is left for a run that does, and one that names no path is decided only by
+/// the run a server takes it up as (spec: PK-17).
+///
+/// A decided reservation with any path selected is packed, and the commit
+/// releases it. One with none is released with a [`Lapsed`] per path saying
+/// why — save a path the scan has already surfaced, which has its finding
+/// (spec: PK-14). A path no mapping represents is ineligible rather than gone:
+/// nothing looked for it (spec: EP-9).
+async fn closing(
+    index: &dyn Index,
+    walk: Walk<'_>,
+    scope: Scope<'_>,
+    key_lost: &BTreeSet<ContainerId>,
+    reserved: Reserved<'_>,
+    survey: &Survey,
+) -> FreezeResult<Vec<Closing>> {
+    let selected: BTreeSet<&EntryPath> = survey
+        .selected
+        .iter()
+        .map(|selected| &selected.source.path)
+        .collect();
+    let surfaced: BTreeSet<&EntryPath> = survey
+        .surfaced
+        .iter()
+        .map(|surfaced| match surfaced {
+            NotFrozen::ModifiedInPack { path, .. } | NotFrozen::KeyLostInPack { path, .. } => path,
+        })
+        .collect();
+    let unwalked = |path: &EntryPath| {
+        represented_by(walk.walked, path)
+            .is_some_and(|root| matches!(root.state, RootState::Unavailable(_)))
+    };
+
+    let mut closing = Vec::new();
+    for reservation in reserved.all {
+        if reserved.live.spares(reservation.id) {
+            continue;
+        }
+        // A reservation naming no path is a drop stopped before its first
+        // page — or one whose reservation has just been drawn and is not held
+        // live yet, the moment between the Index answering and the drop
+        // holding what it answered. Any run would pass the test below for it,
+        // there being no path to fail it, so only the run taken up for it
+        // decides it: its folder with a selection of nothing. Another run
+        // releasing it in that moment would leave the drop to land its pages
+        // unreserved.
+        if reservation.paths.is_empty()
+            && !(scope.prefix == reservation.folder.as_ref()
+                && scope.only.is_some_and(BTreeSet::is_empty))
+        {
+            continue;
+        }
+        if !reservation
+            .paths
+            .iter()
+            .all(|path| scope.covers(path) && !unwalked(path))
+        {
+            continue;
+        }
+        if reservation.paths.iter().any(|path| selected.contains(path)) {
+            closing.push(Closing::Packs(reservation.id));
+            continue;
+        }
+        let mut lapsed = Vec::new();
+        for path in &reservation.paths {
+            if surfaced.contains(path) {
+                continue;
+            }
+            let lapse = if represented_by(walk.walked, path).is_none() {
+                Lapse::Ineligible
+            } else {
+                match walk.found.get(path) {
+                    None => Lapse::Gone,
+                    Some(source) => match judge(index, walk.kinds, key_lost, source).await? {
+                        Verdict::InPack | Verdict::InPackTouched(_) | Verdict::KeyLostInPack(_) => {
+                            Lapse::InPack
+                        }
+                        _ => Lapse::Ineligible,
+                    },
+                }
+            };
+            lapsed.push(Lapsed {
+                path: path.clone(),
+                lapse,
+            });
+        }
+        closing.push(Closing::Lapses(reservation.id, lapsed));
+    }
+    Ok(closing)
 }
 
 /// What every scan of the folder starts from: the walk of the mappings and the

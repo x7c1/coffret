@@ -1255,4 +1255,30 @@ impl Index for RefusingIndex<'_> {
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
         self.inner.let_go_parcel(container_id, index).await
     }
+
+    async fn reserve(
+        &self,
+        folder: Option<&EntryPath>,
+    ) -> IndexResult<coffret_usecase::device_state::ReservationId> {
+        self.inner.reserve(folder).await
+    }
+
+    async fn extend_reservation(
+        &self,
+        id: coffret_usecase::device_state::ReservationId,
+        path: &EntryPath,
+    ) -> IndexResult<()> {
+        self.inner.extend_reservation(id, path).await
+    }
+
+    async fn reservations(&self) -> IndexResult<Vec<coffret_usecase::device_state::Reservation>> {
+        self.inner.reservations().await
+    }
+
+    async fn release_reservation(
+        &self,
+        id: coffret_usecase::device_state::ReservationId,
+    ) -> IndexResult<()> {
+        self.inner.release_reservation(id).await
+    }
 }

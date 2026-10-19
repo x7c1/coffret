@@ -16,6 +16,7 @@ use std::sync::Arc;
 use coffret_format::ParcelLen;
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
+use coffret_usecase::device_state::LiveReservations;
 use coffret_usecase::fetch::FetchMemory;
 use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
 
@@ -98,4 +99,13 @@ pub struct OpenLibrary {
     /// and an unlocked one reads the Keyring again (spec: DK-2, DK-4). A
     /// command line that fetches once never fills it.
     pub fetch_memory: FetchMemory,
+    /// The reservations a drop in this process is still writing into, which
+    /// no freeze decides (spec: PK-17).
+    ///
+    /// Shared rather than owned: a server that is locked and unlocked again
+    /// hands the Library it reopened the one it had, so a drop still landing
+    /// on the handle it took before the lock stays live to the freezes the
+    /// new handle runs ([`LiveReservations`] says why it is never written
+    /// down).
+    pub live: Arc<LiveReservations>,
 }

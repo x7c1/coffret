@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::ensure;
-use coffret_device::{EntryFetches, KeptTally, OpenLibrary};
+use coffret_device::{EntryFetches, KeptTally, LiveReservations, OpenLibrary};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
@@ -180,11 +180,21 @@ pub struct ServerState {
     /// How a consent flow is asked for, which is Google's own page everywhere
     /// but in a case.
     pub(crate) consent: Arc<dyn Consent>,
+    /// The reservations a drop in this process is still writing into
+    /// (spec: PK-17).
+    ///
+    /// The one the Library was opened with, kept here because a lock drops the
+    /// open Library and an unlock opens another: every Library this server
+    /// holds is handed this one, so a drop still landing on the handle it took
+    /// before a lock stays live to the freezes and the resumption the next
+    /// unlock runs.
+    live: Arc<LiveReservations>,
 }
 
 impl ServerState {
     /// Serves the Library that was opened, under the name it was opened by.
     pub fn new(name: String, library: OpenLibrary) -> Self {
+        let live = Arc::clone(&library.live);
         Self {
             name,
             library_id: library.library_id.to_hex(),
@@ -207,6 +217,7 @@ impl ServerState {
             refreshes: Refreshes::new(),
             reconnects: Reconnects::new(),
             consent: Arc::new(DriveConsent),
+            live,
         }
     }
 
@@ -315,13 +326,18 @@ impl ServerState {
     ///
     /// Once it has taken the Library the idle lock is armed afresh, so the
     /// interval is counted from this moment (spec: DK-4).
-    pub fn unlock(&self, library: OpenLibrary) -> anyhow::Result<Unlocked> {
+    ///
+    /// What the reopened Library is handed is this server's record of the
+    /// drops still landing, in place of the empty one it was opened with: a
+    /// drop that took its handle before the lock is still live (spec: PK-17).
+    pub fn unlock(&self, mut library: OpenLibrary) -> anyhow::Result<Unlocked> {
         ensure!(
             library.library_id.to_hex() == self.library_id,
             "the Library called {:?} on this device is no longer the one this server was \
              started for; quit the app and open it again",
             self.name,
         );
+        library.live = Arc::clone(&self.live);
         if !self.custody.unlock(library) {
             return Ok(Unlocked::Already);
         }

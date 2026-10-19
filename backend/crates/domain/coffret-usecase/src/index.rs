@@ -7,7 +7,7 @@ use coffret_model::{
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
-    PendingRow,
+    PendingRow, Reservation, ReservationId,
 };
 use crate::index_error::IndexResult;
 
@@ -36,8 +36,9 @@ use crate::index_error::IndexResult;
 ///   [`snapshot`](Self::snapshot) hands it back (spec: CK-7).
 /// - **Device-local** — how this device maps the Library onto its folders
 ///   (spec: EP-9), which Entries it has actually put on disk (spec: EP-10),
-///   what it has spooled before committing (spec: OC-2), and which parcels of
-///   the Containers it read it still holds (spec: PK-21). None of it is ever
+///   what it has spooled before committing (spec: OC-2), which parcels of
+///   the Containers it read it still holds (spec: PK-21), and which dropped
+///   files wait to be packed (spec: PK-17). None of it is ever
 ///   uploaded, and no Library-wide operation touches it — save that each
 ///   materialization record is kept about the Entry it names
 ///   ([`LocalObservation::entry`]): a rename, replayed or reached through an
@@ -170,6 +171,12 @@ pub trait Index: Send + Sync {
     /// the Containers the batch uploaded stop being pending, because a
     /// committed Container is no longer a candidate for orphan cleanup
     /// (spec: OC-2).
+    ///
+    /// The reservations the batch names in
+    /// [`released`](CommittedBatch::released) are released in the same
+    /// operation, so a drop's Pack is never committed while its reservation
+    /// still says it waits for one, nor the reservation gone while the batch
+    /// that packs it has not committed (spec: PK-17).
     ///
     /// It is never called for a batch whose record was not created: before that
     /// the batch has changed nothing (spec: CP-1). Being [`apply`](Self::apply)
@@ -453,4 +460,35 @@ pub trait Index: Send + Sync {
     /// Forgetting one that is not there succeeds, so an interrupted letting go
     /// is simply run again (spec: OC-8, PK-21).
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()>;
+
+    /// Records a drop's choice to add its files to `folder` as a Pack, before
+    /// any of them has landed, and answers with the reservation's identifier
+    /// (spec: PK-17).
+    ///
+    /// The reservation names no path yet; each is added by
+    /// [`extend_reservation`](Self::extend_reservation) before its file lands.
+    /// Identifiers are drawn in the order reservations are made and never
+    /// reused, so [`reservations`](Self::reservations) answers in that order.
+    async fn reserve(&self, folder: Option<&EntryPath>) -> IndexResult<ReservationId>;
+
+    /// Adds `path` to the reservation `id`, before the file the drop is
+    /// writing there lands (spec: PK-17).
+    ///
+    /// An update and not an upsert, for the reason
+    /// [`mark_spooled`](Self::mark_spooled) is one: a reservation that is no
+    /// longer there changes nothing rather than failing, and none is made up
+    /// for it.
+    async fn extend_reservation(&self, id: ReservationId, path: &EntryPath) -> IndexResult<()>;
+
+    /// Every reservation this device holds, in the order they were made
+    /// (spec: PK-17).
+    async fn reservations(&self) -> IndexResult<Vec<Reservation>>;
+
+    /// Releases one reservation, its drop having been refused or its freeze
+    /// having found none of its paths eligible any more (spec: PK-17).
+    ///
+    /// Releasing one that is not there succeeds, so an interrupted clean-up is
+    /// simply run again (spec: OC-8). A reservation a commit packs goes with
+    /// that commit's [`refresh`](Self::refresh) instead.
+    async fn release_reservation(&self, id: ReservationId) -> IndexResult<()>;
 }

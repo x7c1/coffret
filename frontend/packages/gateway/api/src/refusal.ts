@@ -287,7 +287,19 @@ export type SurfacedFinding =
    * refuses, so the file was carried in as a new one and the other is reported
    * deleted locally.
    */
-  | 'RenameRefused';
+  | 'RenameRefused'
+  /**
+   * The file is one a Pack drop reserved (spec: PK-17), and the sync left it
+   * for the freeze that packs it rather than carrying it in on its own. Not a
+   * file left behind: it is on its way, and its row says so.
+   */
+  | 'AwaitsPack'
+  /**
+   * The file was reserved by a Pack drop, and its reservation was released
+   * without packing it: the file is gone, it is already in a Pack, or it is not
+   * one a freeze may pack (spec: PK-17). Nothing is waiting on it any more.
+   */
+  | 'Unreserved';
 
 /**
  * What a placement under a folder this device has no folder for is told as

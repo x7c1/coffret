@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{EntryNumber, Generation, Mtime, ObjectRef};
+use coffret_model::{EntryNumber, EntryPath, Generation, Mtime, ObjectRef};
 use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalEntryState, LocalObservation,
-    Mapping, PendingRow, RootIdentity, RootMarkerId, SpoolState,
+    Mapping, PendingRow, ReservationId, RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::{EntryRef, IndexError, IndexResult};
 use rusqlite::Row;
@@ -139,4 +139,23 @@ fn spool_state(row: &Row<'_>, operation: &'static str) -> IndexResult<SpoolState
         ("spooled", object_ref) => Ok(SpoolState::Spooled(object_ref)),
         (found, _) => Err(unreadable(operation, "spool state", found)),
     }
+}
+
+/// One row of `reservations`: which reservation it is, and the folder its drop
+/// was made onto (spec: PK-17).
+pub(crate) fn reservation(row: &Row<'_>) -> IndexResult<(ReservationId, Option<EntryPath>)> {
+    const OPERATION: &str = "reading a reservation";
+    Ok((
+        ReservationId::new(from_integer(row, "id", OPERATION)?),
+        optional_entry_path(row, "folder", OPERATION)?,
+    ))
+}
+
+/// One row of `reserved_paths`: a path one reservation names (spec: PK-17).
+pub(crate) fn reserved_path(row: &Row<'_>) -> IndexResult<(ReservationId, EntryPath)> {
+    const OPERATION: &str = "reading a reserved path";
+    Ok((
+        ReservationId::new(from_integer(row, "reservation", OPERATION)?),
+        entry_path(row, "path", OPERATION)?,
+    ))
 }

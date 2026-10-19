@@ -30,10 +30,10 @@ pub(crate) use after_catch_up::{complete_after_catch_up, PendingWork};
 
 /// What settlement reads Storage with: the run's own catch-up and the keys
 /// that authenticate a control object.
-pub(super) struct SettleStorage<'a> {
-    pub(super) store: &'a dyn ObjectStore,
-    pub(super) keys: &'a ControlKeys,
-    pub(super) caught: &'a CaughtUp,
+pub(crate) struct SettleStorage<'a> {
+    pub(crate) store: &'a dyn ObjectStore,
+    pub(crate) keys: &'a ControlKeys,
+    pub(crate) caught: &'a CaughtUp,
 }
 
 /// Settles interrupted work while the caller exclusively owns pending rows.
@@ -46,7 +46,10 @@ pub(super) struct SettleStorage<'a> {
 /// proof the batch did not commit, and the row is disposed of like one never
 /// attempted. Anything less retains the ciphertext and its provenance, even
 /// when catch-up found no record (spec: OC-1, OC-3).
-pub(super) async fn settle(
+///
+/// A sync settles first, and so does a freeze, before either builds anything of
+/// its own (spec: OC-9).
+pub(crate) async fn settle(
     storage: SettleStorage<'_>,
     index: &dyn Index,
     spool: &dyn Spool,

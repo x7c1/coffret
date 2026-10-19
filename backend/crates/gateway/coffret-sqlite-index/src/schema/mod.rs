@@ -1,5 +1,9 @@
 mod provenance;
 
+// The upgrade that adds the reservations a drop's choice of a Pack is kept in,
+// which a layout-17 file takes on its way to this one (spec: PK-17).
+mod reservations;
+
 // The upgrade that ties each materialization record to the Entry it records,
 // which every older layout takes on its way to this one (spec: EP-10).
 mod entry_identities;
@@ -22,16 +26,20 @@ use crate::error::classify;
 /// specification now gives the field, `captured_path` (spec: FM-9), version 15
 /// each Entry's entry number in its Container (spec: FM-9, FM-16), and version
 /// 16 the Entry Path a materialized file waits to follow once a rename has
-/// changed its Entry's current path (spec: FM-15, EP-10), and version 17 the
+/// changed its Entry's current path (spec: FM-15, EP-10), version 17 the
 /// Entry each materialized file is a copy of, by its Container and entry number
-/// (spec: FM-9, EP-10).
-pub(crate) const SCHEMA_VERSION: i64 = 17;
+/// (spec: FM-9, EP-10), and version 18 the reservations a drop's choice of a
+/// Pack is kept in until a freeze has decided its files (spec: PK-17).
+pub(crate) const SCHEMA_VERSION: i64 = 18;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 17 changed the device-local group, so the floor is the current
-/// layout and no older file keeps its device group as it is. A layout-16 file
+/// Layout 18 changed the device-local group, so the floor is the current
+/// layout and no older file keeps its device group as it is. A layout-17 file
+/// keeps its catalog and every row of its device group, and gains the tables
+/// of reservations, empty: no build before it recorded a drop's choice of a
+/// Pack, so no file it wrote waits for one (spec: PK-17). A layout-16 file
 /// keeps its catalog and has each materialization record tied to the Entry the
 /// catalog holds where the record stands, or where it waits to follow
 /// (spec: EP-10); a record the catalog holds no Entry for is dropped and the
@@ -54,7 +62,8 @@ pub(crate) const SCHEMA_VERSION: i64 = 17;
 /// is what a build before version 11 never kept, records no commit slot for
 /// any batch, which is what a build before version 12 never kept — so an old
 /// attempt stays one whose outcome is unknown (spec: OC-2) — and has no file
-/// waiting to follow a rename, which no build before version 16 applied. Each
+/// waiting to follow a rename, which no build before version 16 applied, and
+/// no reservation, which no build before version 18 recorded. Each
 /// of their materialization records is tied to its Entry the way a layout-16
 /// one is, from a catalog that numbers its Entries — layout 15's — and dropped
 /// with a report where the catalog cannot say: a layout before 15 numbers none
@@ -62,7 +71,7 @@ pub(crate) const SCHEMA_VERSION: i64 = 17;
 /// the reason above. Other
 /// unreadable device layouts are refused rather than discarded, because
 /// Storage cannot reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 17;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 18;
 
 /// The table of current Entries, part of the Library-wide group below.
 macro_rules! entries_ddl {
@@ -277,6 +286,31 @@ CREATE UNIQUE INDEX attempted_slots_by_batch
     ON attempted_slots (batch, generation, ifnull(provider_id, ''));
 "#;
 
+/// The tables of reservations, which layout 18 added to the device-local group.
+///
+/// Apart from the rest of that group because the upgrade from an older layout
+/// lays them out on their own (spec: PK-17).
+pub(crate) const RESERVATIONS_DDL: &str = r#"
+CREATE TABLE reservations (
+    -- A drop's choice to add its files as a Pack, written before the first of
+    -- them lands (spec: PK-17). `AUTOINCREMENT` so that an identifier is never
+    -- drawn twice, a released one's included: the order of `id` is the order
+    -- the drops were made in, which is the order a server resumes them in.
+    -- `folder` is the folder the drop was made onto, NULL for the Library
+    -- root.
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder TEXT COLLATE BINARY
+) STRICT;
+
+CREATE TABLE reserved_paths (
+    -- One Entry Path a reservation names, added before the file the drop
+    -- writes there lands.
+    reservation INTEGER NOT NULL REFERENCES reservations(id),
+    path        TEXT NOT NULL COLLATE BINARY,
+    PRIMARY KEY (reservation, path)
+) STRICT;
+"#;
+
 /// Brings a connection to the layout this build works in.
 ///
 /// A file with no layout at all gets one; a file already at this version is left
@@ -300,6 +334,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        17 => reservations::upgrade(connection),
         16 => entry_identities::upgrade(connection),
         7..=15 => provenance::preserve_device_state(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
@@ -348,6 +383,9 @@ fn create(connection: &Connection) -> IndexResult<()> {
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(ATTEMPTED_SLOTS_DDL)
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute_batch(RESERVATIONS_DDL)
         .map_err(classify(OPERATION))?;
     connection
         .pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -467,10 +505,10 @@ mod tests {
         );
     }
 
-    /// This build's own window is empty: layout 17 changed the device-local
+    /// This build's own window is empty: layout 18 changed the device-local
     /// group, so no older layout keeps its device group unchanged, and every
     /// layout from 7 up takes an upgrade rather than the discard
-    /// (spec: OC-2, EP-10).
+    /// (spec: OC-2, EP-10, PK-17).
     #[test]
     fn this_builds_window_is_empty() {
         assert_eq!(DEVICE_SCHEMA_VERSION, SCHEMA_VERSION);

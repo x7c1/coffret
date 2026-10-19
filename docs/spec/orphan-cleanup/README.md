@@ -4,8 +4,8 @@ Rule prefix: `OC`. When a Container that no reachable Journal record or
 checkpoint mentions may be deleted, and what happens when orphanhood cannot
 be proven. The provenance a cleanup rests on can also prove the opposite —
 that the batch did commit — and what that obliges instead is here too, along
-with the idempotence of removing the local files and rows a device wrote for
-itself.
+with the settlement a freeze begins with and the idempotence of removing the
+local files and rows a device wrote for itself.
 
 Concept background: [Journal](../../concepts/journal/),
 [Storage](../../concepts/storage/).
@@ -103,8 +103,9 @@ Concept background: [Journal](../../concepts/journal/),
     reclaimable leftovers (OC-2).
   - Completion follows every catch-up that leaves the Index caught up, not
     only a sync's: the one a server makes as it starts and whenever it is
-    asked to, a command's on its own, the one a fetch, a freeze, a rename, or
-    a deletion begins with, and the one before a deletion's preview. It needs
+    asked to, a command's on its own, the one a fetch, a rename, or a deletion
+    begins with, and the one before a deletion's preview — a freeze settles in
+    full instead (OC-9). It needs
     the provenance and the current set and nothing a sync's settlement has
     besides, so a batch whose record landed and whose refresh did not is this
     device's own from the first catch-up after it, and a fill never takes the
@@ -147,3 +148,18 @@ Concept background: [Journal](../../concepts/journal/),
     idempotent, which is a claim about the Library's objects on Storage; a
     device's own leftovers are not the Library's, so their removals need a rule
     of their own and do not widen OC-6.
+- **OC-9.** A `freeze` settles this device's pending work before it builds
+  anything of its own, by the settlement a sync runs: under the ownership it
+  holds for its whole run (OC-2), and against the listing its own catch-up
+  read, each row an interrupted run left — a sync's, a freeze's, or a
+  deletion's — is completed where its batch committed (OC-7), disposed of with
+  its spool and its Container where OC-3 proves the batch did not, and retained
+  otherwise. *(Form: test)*
+  - So a `freeze` taking up a book a stopped run was packing (PK-17) leaves no
+    spool or row of that run behind once it has built its own Pack, and a
+    device that only ever freezes does not keep an interrupted run's spool —
+    up to one Pack's size — and its row until a sync happens to run.
+  - The scan comes after the settlement for the reason a sync's does: a row
+    whose batch committed and whose refresh did not names files this device
+    put into the Library, and a scan with it open would take them for files it
+    never placed (EP-10).

@@ -41,6 +41,11 @@ export type RowState =
   | 'remote'
   /** It is in the folder and the Library does not have it. */
   | 'added'
+  /**
+   * It is in the folder, dropped to be added as a Pack, and waits for the
+   * freeze that packs it rather than for the next sync.
+   */
+  | 'reserved'
   /** It is being brought over right now. */
   | 'fetching'
   /** Storage stopped the fill before it was reached. */
@@ -61,6 +66,7 @@ export const SAYS: Record<RowState, string> = {
   present: 'present',
   remote: 'remote',
   added: 'not in Library',
+  reserved: 'to be packed',
   fetching: 'fetching',
   failed: 'failed',
   declined: 'declined',
@@ -85,6 +91,19 @@ export function rowFill(
   folder: string,
   fill: Fill | DisplacedFill | null,
 ): RowFill {
+  // A file a drop asked to have packed, waiting for the freeze that does it —
+  // whether or not this tab is the one that dropped it, and whether or not a
+  // server started since is the one packing it. A sync leaves it alone, so the
+  // `added` sentence below, which promises the next sync, would be wrong about
+  // it. Not for a `remote` row: the Library has it and this device does not,
+  // so there is nothing here waiting to be packed.
+  if (file.reserved && file.state !== 'remote') {
+    return {
+      state: 'reserved',
+      message:
+        'this file was dropped to be added as a Pack — the freeze waiting for it packs it with the rest of what was dropped, or says why not',
+    };
+  }
   if (file.state === 'present') {
     return { state: 'present', message: null };
   }
@@ -324,6 +343,15 @@ function andTheRest(count: number, line: string | null): string | null {
  * repair its commit made before failing reaches the person who dropped the
  * file (spec: KL-15).
  *
+ * The files a drop asked to have packed are the exception among the findings
+ * (spec: PK-17). A sync that ran while a book was landing, or before a
+ * restarted server took its freeze up again, leaves every page of it alone
+ * and says so of each — and those pages are on their way, not left behind, and
+ * their rows already say `to be packed`. So they are counted after what the
+ * sync came to — or what stopped it — rather than said page by page in its
+ * place: a person who dropped five photos beside a 300-page book is told the
+ * five went in, not shown the book's first page "and 299 more".
+ *
  * A running one the server says is waiting its turn behind a freeze or a
  * deletion says so in the words `waits` carries — the same
  * [`waitsFor`](./turns.ts) answer the deletion's and the freeze's lines are
@@ -338,11 +366,35 @@ export function syncLine(sync: Sync | null, waits: WaitsFor = null): string | nu
       return sync.step === null && waits !== null
         ? `backing up what was added${waitingClause(waits)}`
         : `backing up what was added${phaseOf(sync.step)}…`;
-    case 'stopped':
-      return besides(`could not back up what was added — ${sync.stopped.message}`, sync.findings);
-    case 'done':
-      return sync.findings.length === 0 ? addedLine(sync.added) : oneLine(sync.findings);
+    case 'stopped': {
+      const others = sync.findings.filter((finding) => finding.surfaced !== 'AwaitsPack');
+      const waiting = sync.findings.length - others.length;
+      const line = besides(`could not back up what was added — ${sync.stopped.message}`, others);
+      return waiting === 0 ? line : `${line}; ${toBePacked(waiting)}`;
+    }
+    case 'done': {
+      const others = sync.findings.filter((finding) => finding.surfaced !== 'AwaitsPack');
+      const waiting = sync.findings.length - others.length;
+      if (others.length > 0) {
+        return waiting === 0 ? oneLine(others) : `${oneLine(others)}; ${toBePacked(waiting)}`;
+      }
+      if (waiting === 0) {
+        return addedLine(sync.added);
+      }
+      // Not `everything added is in the Library`: these pages are not, yet.
+      return sync.added === 0
+        ? toBePacked(waiting)
+        : `${addedLine(sync.added)}; ${toBePacked(waiting)}`;
+    }
   }
+}
+
+/**
+ * How many files a sync left for the freeze a drop armed, in the words their
+ * rows wear.
+ */
+function toBePacked(files: number): string {
+  return files === 1 ? '1 file is still to be packed' : `${files} files are still to be packed`;
 }
 
 /**

@@ -9,6 +9,7 @@ use coffret_model::{
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
     AttemptedSlot, BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow,
+    Reservation, ReservationId,
 };
 use crate::index::Index;
 use crate::index_error::IndexResult;
@@ -198,6 +199,24 @@ impl Index for InMemoryIndex {
 
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
         self.locked().let_go_parcel(container_id, index);
+        Ok(())
+    }
+
+    async fn reserve(&self, folder: Option<&EntryPath>) -> IndexResult<ReservationId> {
+        Ok(self.locked().reserve(folder))
+    }
+
+    async fn extend_reservation(&self, id: ReservationId, path: &EntryPath) -> IndexResult<()> {
+        self.locked().extend_reservation(id, path);
+        Ok(())
+    }
+
+    async fn reservations(&self) -> IndexResult<Vec<Reservation>> {
+        Ok(self.locked().reservations())
+    }
+
+    async fn release_reservation(&self, id: ReservationId) -> IndexResult<()> {
+        self.locked().release_reservation(id);
         Ok(())
     }
 }

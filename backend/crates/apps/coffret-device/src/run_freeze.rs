@@ -107,7 +107,8 @@ impl OpenLibrary {
             now,
         )
         .watched_by(progress)
-        .knowing(&self.births);
+        .knowing(&self.births)
+        .sparing(&self.live);
         if let Some(prefix) = prefix {
             request = request.under(prefix);
         }

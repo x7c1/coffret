@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{ContainerId, ContainerKind};
 use tracing::debug;
@@ -49,6 +49,12 @@ use renames::pair_renames;
 /// becomes a rename of the Entry rather than a deletion and an upload, held to
 /// the rules a rename is (spec: EP-10, FM-15).
 ///
+/// A file a drop reserved for a Pack is not this scan's to carry in
+/// (spec: PK-17): it is neither added nor updated, and it is reported in
+/// [`Survey::reserved`] as waiting for its Pack rather than passed over. It is
+/// still a file the walk found, so a file this device placed is not read as
+/// deleted for standing there reserved.
+///
 /// [`LocalError`]: crate::local_error::LocalError
 pub(super) async fn scan(
     index: &dyn Index,
@@ -82,8 +88,19 @@ pub(super) async fn scan(
         .map(|container| (container.id, container.kind))
         .collect();
 
+    let reserved: BTreeSet<_> = index
+        .reservations()
+        .await?
+        .into_iter()
+        .flat_map(|reservation| reservation.paths)
+        .collect();
+
     let mut survey = Survey::default();
     for source in found.values() {
+        if reserved.contains(&source.path) {
+            survey.reserved.push(source.path.clone());
+            continue;
+        }
         // The mapping a file was found under is the one whose root it stands in,
         // and its expected identity is what a move out of that root is held to
         // (spec: EP-13).
@@ -107,6 +124,7 @@ pub(super) async fn scan(
         candidates = survey.candidates.len(),
         renames = survey.renames.len(),
         unchanged = survey.unchanged,
+        reserved = survey.reserved.len(),
         surfaced = survey.surfaced.len(),
         departed = survey.departed.len(),
         forgotten = survey.forgotten.len(),

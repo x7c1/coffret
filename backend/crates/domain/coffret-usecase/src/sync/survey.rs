@@ -35,6 +35,10 @@ pub(super) struct Survey {
     pub(super) unchanged: usize,
     /// What the scan surfaces and does not act on (spec: PK-14).
     pub(super) surfaced: Vec<Surfaced>,
+    /// The files a drop reserved for a Pack, which wait for the freeze that
+    /// packs them rather than being carried in here, in Entry Path order
+    /// (spec: PK-17).
+    pub(super) reserved: Vec<EntryPath>,
     /// The files this device materialized whose Entry has left the Library and
     /// which still hold what this device last made them match, in Entry Path
     /// order: each goes to the trash (spec: EP-15).

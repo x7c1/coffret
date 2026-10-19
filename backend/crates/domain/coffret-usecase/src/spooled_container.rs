@@ -10,7 +10,7 @@ use crate::commit::{
     commit_batch, CommitError, CommitFailure, CommitOutcome, CommitPolicy, CommitRequest,
     ControlKeys, EntryRef, PendingRename, PreparedAddition, PreparedBatch, ShortReport,
 };
-use crate::device_state::{DeviceTime, LocalObservation};
+use crate::device_state::{DeviceTime, LocalObservation, ReservationId};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::progress::Progress;
@@ -167,6 +167,11 @@ impl SpooledContainer {
 /// `base` is the head the run's catch-up reached, which is what it read the
 /// catalog at and so what the batch was prepared against (spec: CP-4, EP-7).
 ///
+/// `released` are the reservations the batch packs, which the refresh that
+/// completes its rows deletes in the same step (spec: PK-17). Only a freeze
+/// passes any, and only where the batch packs at least one of their paths; a
+/// run with nothing to commit releases nothing here.
+///
 /// `short` is the finding a caller's own read of the committed Keyring left,
 /// for the commit to speak for where it examines that same set (spec: KL-15). A
 /// run that read nothing of the Keyring, or that ends here with nothing to
@@ -186,6 +191,7 @@ pub(crate) async fn commit_spooled(
     spooled: &[SpooledContainer],
     removals: &[ContainerId],
     renames: Vec<PendingRename>,
+    released: Vec<ReservationId>,
     short: Option<&ShortReport>,
     progress: &dyn Progress,
 ) -> Result<Option<CommitOutcome>, CommitFailure> {
@@ -211,6 +217,7 @@ pub(crate) async fn commit_spooled(
                 .flat_map(|one| one.materialized(now))
                 .collect(),
         )
+        .releasing(released)
         .prepared_at(base);
 
     let request = CommitRequest::new(store, index, keys, batch)

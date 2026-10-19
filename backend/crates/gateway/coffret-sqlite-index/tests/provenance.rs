@@ -50,7 +50,7 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
              ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 7;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
@@ -100,7 +100,7 @@ async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
             "ALTER TABLE pending_rows DROP COLUMN materializes; \
              ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 8;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 8;",
         )
         .unwrap();
     drop(connection);
@@ -140,7 +140,7 @@ async fn layout_9_materializations_are_kept_without_a_hash() {
         .execute_batch(
             "ALTER TABLE local_entries DROP COLUMN hash; DROP TABLE held_parcels; \
              DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 9;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 9;",
         )
         .unwrap();
     drop(connection);
@@ -177,7 +177,7 @@ async fn layout_10_device_state_is_kept_and_holds_no_parcel() {
     connection
         .execute_batch(
             "DROP TABLE held_parcels; DROP TABLE attempted_slots; \
-             ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 10;",
+             ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 10;",
         )
         .unwrap();
     drop(connection);
@@ -257,7 +257,7 @@ async fn layout_11_attempts_are_kept_with_no_slot() {
     connection
         .execute_batch(
             "DROP TABLE attempted_slots; ALTER TABLE entries DROP COLUMN captured_path; \
-             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 11;",
+             ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 11;",
         )
         .unwrap();
     drop(connection);
@@ -414,14 +414,14 @@ async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
-        .execute_batch("ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; PRAGMA user_version = 12;")
+        .execute_batch("ALTER TABLE entries DROP COLUMN captured_path; ALTER TABLE local_entries DROP COLUMN relocate_to; DROP INDEX local_entries_by_entry; ALTER TABLE local_entries DROP COLUMN entry_container; ALTER TABLE local_entries DROP COLUMN entry_number; DROP TABLE reserved_paths; DROP TABLE reservations; PRAGMA user_version = 12;")
         .unwrap();
     drop(connection);
 
     let reopened = SqliteIndex::open(&path).unwrap();
     assert_eq!(
         stamp_of(&path),
-        17,
+        18,
         "the file is upgraded to the current layout"
     );
     assert!(

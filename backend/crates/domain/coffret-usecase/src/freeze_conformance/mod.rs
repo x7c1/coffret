@@ -81,6 +81,16 @@ pub use recovery::{
     a_modified_one_file_entry_freezes_to_the_local_bytes,
 };
 
+mod reservations;
+pub use reservations::{
+    a_freeze_beside_a_drop_still_landing_leaves_its_reservation,
+    a_freeze_settles_an_interrupted_spool_before_it_builds,
+    a_reservation_is_released_whether_or_not_its_files_remain,
+    a_reservation_live_before_a_restart_is_released_after_it,
+    a_reservation_naming_no_path_is_released_only_by_its_own_run,
+    a_sync_leaves_reserved_files_for_their_pack,
+};
+
 mod roots;
 pub use roots::{
     a_missing_mapped_root_is_reported_unavailable_by_a_freeze,
@@ -160,6 +170,12 @@ macro_rules! freeze_conformance {
             a_row_precedes_the_first_byte_of_a_pack_spool,
             an_unfinished_pack_spool_is_disposed_with_its_row,
             a_spooling_pack_row_is_never_uploaded_or_committed,
+            a_freeze_settles_an_interrupted_spool_before_it_builds,
+            a_sync_leaves_reserved_files_for_their_pack,
+            a_reservation_is_released_whether_or_not_its_files_remain,
+            a_reservation_naming_no_path_is_released_only_by_its_own_run,
+            a_freeze_beside_a_drop_still_landing_leaves_its_reservation,
+            a_reservation_live_before_a_restart_is_released_after_it,
             a_file_that_shrinks_under_the_run_stops_its_pack,
             a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed,
             a_second_device_fetches_a_frozen_folder,

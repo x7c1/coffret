@@ -220,6 +220,7 @@ mod tests {
             .refresh(CommittedBatch {
                 record,
                 materialized: Vec::new(),
+                released: Vec::new(),
             })
             .await
             .expect("applying the record must succeed");

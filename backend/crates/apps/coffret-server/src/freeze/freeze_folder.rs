@@ -14,3 +14,20 @@ pub fn freeze_folder(state: Arc<ServerState>, book: Book) {
         tokio::spawn(worker::work(state));
     }
 }
+
+/// Asks for the book a drop has just finished writing to be packed, as a run
+/// of its own rather than one taken for the run under way (spec: PK-17).
+///
+/// Armed only once the drop has stopped receiving and its reservation is no
+/// longer live, so the run it makes is one that decides the reservation:
+/// every page the drop landed is in it by then. It does not join a run already
+/// under way, even one of the drop's whole folder: that run read the
+/// reservations while the drop was still receiving, so it spares this one, and
+/// its walk may have gone past pages that landed after it. A book of the same
+/// folder still waiting its turn is joined, since nothing has walked the folder
+/// for it yet.
+pub fn freeze_dropped(state: Arc<ServerState>, book: Book) {
+    if state.freezes.arm_dropped(book) {
+        tokio::spawn(worker::work(state));
+    }
+}
