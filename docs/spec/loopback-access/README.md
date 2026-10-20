@@ -58,9 +58,10 @@ Concept background: [Library](../../concepts/library/),
   LA-5's third fence exists against. It never reaches a browser at all
   (LA-3). A browser's own credential is held to the same line: a browser
   token travels only in an `Authorization` header, and a launch ticket only in
-  the ticket file, in the fragment of the address that file refreshes to,
-  which no request carries and which the page removes as it reads it (LA-21),
-  and in the `Authorization` header of its exchange (LA-16). *(Form: test)*
+  the ticket file and the fragment of the address that file refreshes to, or
+  in the fragment of the URL the app loads its own window from — a fragment no
+  request carries, and which the page removes as it reads it (LA-21) — and in
+  the `Authorization` header of its exchange (LA-16). *(Form: test)*
 - **LA-7.** The shown key is compared against the expected one without
   stopping at the first byte that differs. *(Form: prose — a timing property
   of one comparison, which no test over the verdict can observe; honored by
@@ -243,7 +244,8 @@ Concept background: [Library](../../concepts/library/),
   header, and an `OPTIONS` request is refused like any other method a route
   does not take. *(Form: test)*
 - **LA-17.** A launch ticket is issued only by a call within the host's own
-  process — the desktop app's, as it opens the explorer — and by no HTTP
+  process — the desktop app's, as it opens the explorer in the system browser
+  or in a window of its own (LA-21) — and by no HTTP
   request whatever. It is good for one exchange, and it expires 60 seconds
   after it was issued. At most 4 tickets are live at once, and issuing a fifth
   expires the oldest one not yet exchanged. Of concurrent exchanges of one
@@ -295,7 +297,10 @@ Concept background: [Library](../../concepts/library/),
   timing is what no test over the verdict observes, as with LA-7; both are
   honored by construction: the secret lives in a type that overwrites its
   bytes when dropped and renders as redacted, and only its digest is kept.)*
-- **LA-21.** A ticket reaches the browser through a file only the account that
+- **LA-21.** A ticket reaches the explorer's page in one of two ways, and
+  neither puts it anywhere another account on the device can read. Where the
+  app shows the explorer in the system browser, the ticket reaches the
+  browser through a file only the account that
   owns the Library can read. The app writes an HTML page that refreshes to
   `http://127.0.0.1:<port>/#launch=<ticket>` into a directory of mode `0700`,
   as a file of mode `0600` created exclusively under a temporary name and
@@ -303,13 +308,20 @@ Concept background: [Library](../../concepts/library/),
   browser — so the browser's command line, which another account on the
   device can read, carries a path and never a ticket. The file is removed once
   its ticket is exchanged or has expired, and a file that could not be removed
-  leaves a ticket that is still spent (LA-17). The page takes the ticket out of
+  leaves a ticket that is still spent (LA-17). Where the app shows the
+  explorer in a window of its own, it loads that window from
+  `http://127.0.0.1:<port>/#launch=<ticket>` itself: the URL goes from the
+  app's process to the window's renderer and onto no command line, into no
+  file and into no log, and a window whose page has lost its session is
+  loaded again from a fresh ticket only when the app is asked to. Either way,
+  the page takes the ticket out of
   the fragment, removes it from the address with `history.replaceState`
   before it does anything else, and exchanges it (LA-16). A page that holds no
-  token reads no Library data, and says to open the explorer from the app.
+  token reads no Library data, and says to reload the explorer from the app.
   *(Form: test for the modes, the exclusive creation and the page's handling
-  of the fragment; prose for the browser's command line carrying no ticket,
-  which is a property of how the app opens the browser, honored by
+  of the fragment; prose for the browser's command line carrying no ticket
+  and the window's URL staying within the app, which are properties of how
+  the app opens the browser and loads its window, honored by
   construction.)*
 
 ### The Passphrase door

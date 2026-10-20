@@ -28,12 +28,15 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     the keys, which is why there is no lock to ask a running one for. A
     running server that has locked may be unlocked in place, but only with
     the Passphrase taken from a prompt that does not echo (DK-10). Two
-    surfaces are told apart here: the explorer's page in the system browser,
-    which never takes or carries a key or a Passphrase (the server key stays
-    off it, LA-3, LA-6, and what it holds instead is a browser token, LA-15),
-    and the desktop app's own window, a page the
-    app itself ships and renders, which is the one surface that takes the
-    Passphrase. The prompt is that window, not the explorer's page.
+    surfaces are told apart here: the explorer's page, in the system browser
+    or in a window of the desktop app's own, which never takes or carries a
+    key or a Passphrase (the server key stays off it, LA-3, LA-6, and what it
+    holds instead is a browser token, LA-15), and the desktop app's
+    Passphrase window, a page the app itself ships, which is the one surface
+    that takes the Passphrase. That window is either a webview the app
+    renders the page in, or a window of the app's own that loads the page
+    from the app's Passphrase door (LA-22, LA-23). The prompt is that window,
+    not the explorer's page.
     Whatever brings the window forward — a press of *unlock*, the tray, or
     the explorer asking on its own once it sees the Library locked — decides
     only when it is shown; the Passphrase's path from the window to the

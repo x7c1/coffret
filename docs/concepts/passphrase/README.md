@@ -31,8 +31,9 @@ protection, anyone holding the device would hold the Library's root secret.
   - There is no route back through a browser: a running server that has
     locked takes the Passphrase again only from the
     [desktop app](../library/#browsing-surface)'s own window, through a
-    prompt that does not echo — never from the explorer's page in the
-    system browser, which holds no key: neither a cryptographic key nor the
+    prompt that does not echo — never from the explorer's page, in the
+    system browser or in a window of the app's own, which holds no key:
+    neither a cryptographic key nor the
     server key, only a browser token that admits it to the explorer and
     unlocks nothing. The window is a page too,
     but one the app itself ships and renders; whatever brings it forward, the
@@ -40,9 +41,14 @@ protection, anyone holding the device would hold the Library's root secret.
     command line has no such prompt, so it is unlocked by starting it again
     (spec: DK-1, DK-2, DK-10, LA-3).
     - The promise that nothing of the Passphrase is left behind begins where
-      the app's own code receives it. The copies the window's webview and its
-      IPC make on the way there are outside that promise; the app keeps them
-      short-lived rather than erased (spec: DK-7).
+      the app's own code receives it. The Passphrase gets there by one of
+      two paths: through the window's webview and IPC, where the app renders
+      the page itself, or as a loopback request from the window to a
+      listener of the app's own, the Passphrase door, which served the page
+      and admits that window alone (spec: LA-22, LA-23). The copies made on
+      the way there — by the webview and its IPC, or by the window's
+      renderer and network stack — are outside that promise; the app keeps
+      them short-lived rather than erased (spec: DK-7).
 - The Passphrase protects the Master Key as stored on the device. A thief who
   takes a locked device cannot extract the Master Key and use it to open the
   control state and reachable Key Envelopes on [Storage](../storage/)
@@ -57,7 +63,8 @@ protection, anyone holding the device would hold the Library's root secret.
       device" stays what it says: the server answers only a caller that can
       read the owner's own files, and the explorer host in front of it only a
       page holding a browser token that came to it through one of those
-      files — not everything that can reach a loopback port
+      files or from the app's own process — not everything that can reach a
+      loopback port
       (spec: LA-2, LA-3, LA-14, LA-21).
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk

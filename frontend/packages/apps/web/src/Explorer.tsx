@@ -20,10 +20,13 @@ export const LOCKED_POLL_MS = 2_000;
 /** What a page holding no token says, in place of everything else. */
 export const NO_SESSION = 'This tab holds no session with the explorer, so it shows nothing of the Library.';
 
-/** How the explorer is opened, which is the one thing such a page can offer. */
+/**
+ * How the explorer is opened again, which is the one thing such a page can
+ * offer: only the app can give the page a fresh ticket.
+ */
 export const HOW_TO_OPEN =
-  "Open the explorer from the coffret app's tray — or, in development, by opening the launch " +
-  'file the development host printed.';
+  'Reload the explorer from the coffret app to open it again — or, in development, open the ' +
+  'launch file the development host printed.';
 
 /** What a tab whose session ended under it says, where the host gave no reason of its own. */
 const ENDED = 'This tab’s session ended: it ran out, was revoked, or the explorer was started again.';

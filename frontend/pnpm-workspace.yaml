@@ -1,7 +1,13 @@
 packages:
   - 'packages/*/*'
 allowBuilds:
+  # The desktop app's runtime (packages/apps/desktop). The version pinned has
+  # no install script and fetches its binary the first time it is run; one
+  # that fetches it at install again is allowed to. CI never runs Electron,
+  # and sets ELECTRON_SKIP_BINARY_DOWNLOAD for that download.
+  electron: true
   esbuild: true
+
 # An advisory `pnpm audit` (`make audit`, and the `Audit` step of CI's
 # `frontend` job) should let pass is listed under `auditConfig.ignoreGhsas`, by
 # its GHSA id, and only when no release clears it or the release that does is a
