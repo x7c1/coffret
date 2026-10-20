@@ -82,10 +82,11 @@ export function unlockLanded(before: LibraryState | null, now: LibraryState): bo
  * heard as the listing or the tree refused with the locked refusal. Where the
  * page still believes the Library open, that refusal is news the work answer
  * has not brought yet: reading it once turns the page's state to locked, and
- * what follows a lock — the discard, the *unlock* button, the ask
- * {@link UnlockPrompting} makes on its own — follows from there. Where the page
- * already knows it is locked, or has not been told anything yet, the work
- * answer is already on its way or already said so.
+ * what follows a lock — the discard and the *unlock* button — follows from
+ * there. The ask {@link UnlockPrompting} makes on its own does not wait for
+ * it: the refusal is a lock heard already. Where the page already knows it is
+ * locked, or has not been told anything yet, the work answer is already on its
+ * way or already said so.
  */
 export function lockUnheard(believed: LibraryState | null, refusedLocked: boolean): boolean {
   return refusedLocked && believed === 'unlocked';
@@ -170,7 +171,8 @@ export class UnlockPrompting {
 
   /**
    * Hears one answer about the Library's state, while the page is or is not
-   * in front.
+   * in front: the work answer's, or a question refused as locked, which says
+   * `locked` as plainly.
    *
    * A lock is news here on wider terms than {@link lockLanded}'s: a page that
    * came up to a shut Library is owed an ask as much as one that watched it

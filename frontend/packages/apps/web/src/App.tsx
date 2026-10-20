@@ -250,9 +250,9 @@ export function App() {
   }, [custody, retry]);
 
   // A lock heard first as a refusal: the work answer is read once, so the lock
-  // above lands as news and the unlock below is asked for. When is
-  // [`lockUnheard`](./lock). Read against the ref, not `custody`, so that an
-  // unlock landing while the refusals still stand does not ask again.
+  // above lands as news. When is [`lockUnheard`](./lock). Read against the
+  // ref, not `custody`, so that an unlock landing while the refusals still
+  // stand does not ask again.
   const refusedLocked = [library, folders, listing].some(
     ({ state }) => state.status === 'failed' && state.locked === true,
   );
@@ -308,10 +308,10 @@ export function App() {
       unlock();
     }
   }, [custody, prompting, unlock]);
-  // The lock heard as a refusal is a lock heard all the same. Behind the
-  // explorer host it is the only way it is heard: the host refuses the work
-  // answer as locked like everything else under `/api` (spec: LA-14), and the
-  // screen drawn afresh for the lock is never told `locked` by it.
+  // A region refused as locked is the lock heard as well, and behind the
+  // explorer host the only way it is heard: the host refuses the work answer as
+  // locked like everything else under `/api` (spec: LA-14). Where the work
+  // answer says `locked` too, it is the same lock, and asked about once.
   useEffect(() => {
     if (refusedLocked && prompting.heard('locked', inFront())) {
       unlock();
