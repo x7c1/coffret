@@ -9,8 +9,9 @@
 //! *Unlock…* brings it forward ([`ask_for_passphrase()`]) with the Library
 //! fixed to the one served, and its one call is [`unlock_library()`], which
 //! answers the same two ways. A refusal is shown as one line
-//! ([`refusal_line()`]), and its log-safe rendering goes to the log
-//! ([`refusal_evidence()`]).
+//! ([`refusal_line()`](coffret_desktop_core::refusal_line)), and its log-safe
+//! rendering goes to the log
+//! ([`refusal_evidence()`](coffret_desktop_core::refusal_evidence)).
 //!
 //! Neither call hides the window. The answer has to reach the page first: a
 //! window hidden and reloaded while the call waits tears the call down, and
@@ -20,23 +21,21 @@
 //!
 //! Whatever brings the window forward, the Passphrase's path is the same: the
 //! field, the page's script, Tauri's IPC, and then one of those two calls,
-//! which receives it as an [`EnteredPassphrase`] — already the type that wipes
-//! it. DK-7's claim begins there. The copies before it are the webview's and
-//! the IPC's, which coffret cannot overwrite; what the app does about them is
-//! keep them short-lived: the page empties its field after every submission,
-//! and every hiding of the window loads the page afresh — the page itself
-//! after an open or an unlock that landed, and the app ([`hide`]) when the
-//! window is closed — so nothing typed is left behind in a window nobody is
-//! looking at.
+//! which receives it as an
+//! [`EnteredPassphrase`](coffret_desktop_core::EnteredPassphrase) — already
+//! the type that wipes it. DK-7's claim begins there. The copies before it
+//! are the webview's and the IPC's, which coffret cannot overwrite; what the
+//! app does about them is keep them short-lived: the page empties its field
+//! after every submission, and every hiding of the window loads the page
+//! afresh — the page itself after an open or an unlock that landed, and the
+//! app ([`hide`]) when the window is closed — so nothing typed is left behind
+//! in a window nobody is looking at.
 
 mod ask_for_passphrase;
 pub use ask_for_passphrase::ask_for_passphrase;
 
 mod bring_forward;
 pub use bring_forward::bring_forward;
-
-mod entered_passphrase;
-pub use entered_passphrase::EnteredPassphrase;
 
 mod dismiss_window;
 // A glob, for the reason `open_library`'s is.
@@ -52,9 +51,6 @@ pub use open_library::*;
 
 mod open_window;
 pub use open_window::open_window;
-
-mod refusal_line;
-use refusal_line::{refusal_evidence, refusal_line};
 
 mod desktop;
 pub use desktop::Desktop;

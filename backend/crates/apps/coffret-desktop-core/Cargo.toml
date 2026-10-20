@@ -1,0 +1,61 @@
+[package]
+name = "coffret-desktop-core"
+description = "What a desktop shell needs to open a Library and serve the explorer in-process, with a Passphrase door of its own"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Compile the explorer's build output into the host this crate serves, through
+# the host's feature of the same name, for the reason `coffret-desktop`'s
+# feature gives: turned on unconditionally it would unify into every workspace
+# build and fail each one that runs before the page is built.
+embed-web = ["coffret-explorer-host/embed-web"]
+
+# A shell's logic over the same crates `coffret-desktop` is, and nothing below
+# them: `make deps` holds this crate to that boundary too.
+[dependencies]
+# Which Libraries are on this device, opening one again for an unlock in place,
+# and the Passphrase type the typed secret becomes before anything else
+# touches it.
+coffret-device = { workspace = true }
+# The explorer's host, and the fences and the secret type the door shares with
+# it (spec: LA-22).
+coffret-explorer-host = { workspace = true }
+coffret-server = { workspace = true }
+# Where this process's log goes, the same as every other binary's.
+coffret-shell = { workspace = true }
+
+anyhow = { workspace = true }
+# The door's routes.
+axum = { workspace = true }
+# Reading the door's request body frame by frame, so that it is gathered into a
+# buffer that is wiped rather than into one that is not.
+http-body = { workspace = true }
+# The Passphrase the door's request carries, read straight into the type that
+# wipes it rather than into a `String` first (spec: DK-7).
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The one runtime the server, the explorer's host and the door run on, owned by
+# this crate for the whole of the process.
+tokio = { workspace = true }
+tracing = { workspace = true }
+# The marker that puts the Passphrase as the door reads it on the
+# secret-bearing inventory, and the buffer the door's body is gathered into
+# (spec: DK-7).
+zeroize = { workspace = true }
+
+[dev-dependencies]
+# The app's events read back as the log file would hold them, for the cases that
+# hold them to what an event may carry (spec: EL-1).
+coffret-logging = { workspace = true, features = ["testing"] }
+# The loopback bucket the cases' Libraries are created in.
+coffret-device = { workspace = true, features = ["stub-bucket"] }
+# Reaching the explorer's host over its socket, as a browser would.
+reqwest = { workspace = true }
+# A state directory of the cases' own.
+tempfile = { workspace = true }
+# `oneshot`, which drives the door's router as the service it is.
+tower = { workspace = true }

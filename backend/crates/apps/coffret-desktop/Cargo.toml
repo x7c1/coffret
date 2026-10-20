@@ -27,8 +27,13 @@ tauri-build = { workspace = true }
 # does, and the host serves the explorer in front of it exactly as it would in
 # front of that one.
 [dependencies]
-# Which Libraries are on this device, for the Passphrase window's list, and the
-# Passphrase type the typed secret becomes before anything else touches it.
+# What this app shares with the other desktop shell: which build it is, the
+# idle interval read from the environment, the type the typed Passphrase
+# becomes before anything else touches it (spec: DK-7), and what a refusal
+# tells the person and the log.
+coffret-desktop-core = { workspace = true }
+# Which Libraries are on this device, for the Passphrase window's list, and
+# opening one again for an unlock in place.
 coffret-device = { workspace = true }
 coffret-explorer-host = { workspace = true }
 coffret-server = { workspace = true }
@@ -36,9 +41,6 @@ coffret-server = { workspace = true }
 coffret-shell = { workspace = true }
 
 anyhow = { workspace = true }
-# The Passphrase the window's call carries, read straight into the type that
-# wipes it rather than into a `String` first (spec: DK-7).
-serde = { workspace = true }
 # The Library names handed to the Passphrase window, as a script literal.
 serde_json = { workspace = true }
 tauri = { workspace = true }
@@ -49,9 +51,6 @@ tauri-plugin-single-instance = { workspace = true }
 # life rather than borrowed from Tauri's.
 tokio = { workspace = true }
 tracing = { workspace = true }
-# The marker that puts the Passphrase as the window hands it over on the
-# secret-bearing inventory (spec: DK-7).
-zeroize = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true }

@@ -1,8 +1,9 @@
+use coffret_desktop_core::{refusal_evidence, refusal_line, EnteredPassphrase};
 use coffret_device::open_library as reopen;
 use coffret_server::Unlocked;
 use tauri::State;
 
-use super::{refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
+use super::Desktop;
 
 /// Unlocks the Library this app serves, in place, with `passphrase`: what the
 /// Passphrase window does in *unlock* mode (spec: DK-1).

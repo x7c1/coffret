@@ -101,7 +101,14 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     script's string, the serialized message — are outside anything coffret
     can overwrite, and outside the claim. The app shortens their life — the
     window's field is emptied after every submission and whenever the window
-    is hidden — without guaranteeing their erasure.
+    is hidden — without guaranteeing their erasure. For a secret entered in
+    the window the Passphrase door serves (LA-22), the claim begins where the
+    door's handler reads the request's body into a type on the inventory: the
+    body is gathered into a buffer that is overwritten when it is dropped, and
+    read from there straight into that type. The copies the window's renderer
+    and its network stack make before then are outside the claim in the same
+    way, and so is the scratch copy the JSON parser makes of a secret holding
+    a character JSON escapes.
   - Inventory membership is the testable half of this rule: every type on the
     list overwrites its bytes when it is dropped and none of them is copyable,
     which one place asserts over the domain's types rather than each type
