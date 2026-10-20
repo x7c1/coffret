@@ -301,3 +301,36 @@ it('lets the session go when it runs out', async () => {
   expect(screen.getByText(NO_SESSION)).toBeTruthy();
   expect(heldToken()).toBeNull();
 });
+
+// DK-1, LA-14: a Library that locks while somebody is looking brings the
+// app's Passphrase window forward by itself. Behind the host every request
+// under `/api` but the unlock is refused as locked — the work answer too — so
+// the explorer's own screen hears the lock only as those refusals.
+it('asks for the unlock on its own once the host refuses the screen as locked', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const focused = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  library = 'locked';
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    const path = new URL(url, window.location.origin).pathname;
+    made.push(`${init?.method ?? 'GET'} ${path}`);
+    if (path === '/auth/session') {
+      return Promise.resolve(Response.json({ expires_in: 600, library }));
+    }
+    if (path === '/api/unlock') {
+      return Promise.resolve(
+        Response.json({ library: 'locked', message: 'asking in the app' }, { status: 202 }),
+      );
+    }
+    return Promise.resolve(
+      Response.json({ error: 'library_locked', message: 'the Library is locked' }, { status: 423 }),
+    );
+  });
+  render(<Explorer opened={held()} shelved={shelf()} />);
+
+  expect(await screen.findByText(/waits for it to be unlocked/)).toBeTruthy();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(LOCKED_POLL_MS * 3);
+  });
+  expect(made.filter((asked) => asked === 'POST /api/unlock')).toHaveLength(1);
+  focused.mockRestore();
+});

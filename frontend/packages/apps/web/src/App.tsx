@@ -308,6 +308,15 @@ export function App() {
       unlock();
     }
   }, [custody, prompting, unlock]);
+  // The lock heard as a refusal is a lock heard all the same. Behind the
+  // explorer host it is the only way it is heard: the host refuses the work
+  // answer as locked like everything else under `/api` (spec: LA-14), and the
+  // screen drawn afresh for the lock is never told `locked` by it.
+  useEffect(() => {
+    if (refusedLocked && prompting.heard('locked', inFront())) {
+      unlock();
+    }
+  }, [refusedLocked, prompting, unlock]);
   // Whether the Library has anything this device has not caught up with, which
   // is what draws the sync icon as waiting. Looked at as the page comes up,
   // when the tab comes back in front (below), and every few minutes while it
