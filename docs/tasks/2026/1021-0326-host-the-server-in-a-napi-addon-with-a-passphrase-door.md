@@ -105,7 +105,7 @@ A throwaway prototype, kept off main, proved the shape. Do not copy its shortcut
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, the built `.node` is loaded from plain Node on the agent Library:
+- [x] On macOS, the built `.node` is loaded from plain Node on the agent Library:
   - `start` succeeds;
   - opening the door returns a URL whose page renders in Playwright's Chromium;
   - submitting the agent Passphrase opens the Library;
