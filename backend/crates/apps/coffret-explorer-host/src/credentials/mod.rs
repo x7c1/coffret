@@ -52,7 +52,7 @@ pub use not_drawn::NotDrawn;
 mod rate_limit;
 
 mod secret;
-pub use secret::{BrowserToken, LaunchTicket};
+pub use secret::{BrowserToken, Digest, LaunchTicket, Secret};
 
 mod session;
 pub use session::Session;

@@ -12,7 +12,7 @@ use super::{is_base64url, ENCODED_LEN, SECRET_BYTES};
 /// though it were: wiped when dropped, not `Clone`, compared without stopping
 /// at the first byte that differs, and redacted in `Debug` and `Display`, so
 /// that it never becomes an identifier an event could carry (spec: EL-1).
-pub(in crate::credentials) struct Digest(pub(super) [u8; 32]);
+pub struct Digest(pub(super) [u8; 32]);
 
 impl Digest {
     pub(super) fn of(bytes: &[u8]) -> Self {
@@ -25,7 +25,7 @@ impl Digest {
     ///
     /// The decoded bytes are wiped before this returns; only the digest is
     /// kept. A presented string that is not one is not decoded at all.
-    pub(in crate::credentials) fn of_presented(presented: &str) -> Option<Self> {
+    pub fn of_presented(presented: &str) -> Option<Self> {
         let presented = presented.as_bytes();
         if presented.len() != ENCODED_LEN || !presented.iter().all(|&b| is_base64url(b)) {
             return None;
@@ -39,7 +39,7 @@ impl Digest {
 
     /// Whether two digests are the same, compared without stopping at the
     /// first byte that differs (spec: LA-20).
-    pub(in crate::credentials) fn same_as(&self, other: &Self) -> bool {
+    pub fn same_as(&self, other: &Self) -> bool {
         self.0
             .iter()
             .zip(&other.0)

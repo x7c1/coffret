@@ -22,7 +22,9 @@ const MAX_HEAD_BYTES: usize = 64 * 1024;
 const ACCEPT_BACKOFF: Duration = Duration::from_secs(1);
 
 /// Answers `router` on `listener`, the listener it was built around, for as
-/// long as the process runs.
+/// long as the process runs: the explorer's host, and any other loopback
+/// listener in the same app that bounds what it reads the same way: the
+/// desktop app's Passphrase door (spec: LA-22).
 ///
 /// HTTP/1 alone, which is what a browser speaks to an `http:` origin, with what
 /// it reads of each request's head bounded in size and in time
@@ -40,7 +42,7 @@ pub async fn serve(listener: TcpListener, router: Router) {
             Err(cause) => {
                 tracing::warn!(
                     io_error_kind = ?cause.kind(),
-                    "the explorer's host could not accept a connection; it tries again shortly",
+                    "a loopback host could not accept a connection; it tries again shortly",
                 );
                 tokio::time::sleep(ACCEPT_BACKOFF).await;
                 continue;
@@ -60,7 +62,7 @@ pub async fn serve(listener: TcpListener, router: Router) {
                 tracing::debug!(
                     timeout = cause.is_timeout(),
                     parse = cause.is_parse(),
-                    "a connection to the explorer's host ended with an error",
+                    "a connection to a loopback host ended with an error",
                 );
             }
         });

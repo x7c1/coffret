@@ -1,4 +1,8 @@
 //! The two secrets the host hands out, and the digest it keeps of each.
+//!
+//! [`Secret`] and [`Digest`] are public as well, for a credential of the same
+//! kind that another loopback listener in the same app hands out: the desktop
+//! app's Passphrase door admits its window by one (spec: LA-23).
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -28,7 +32,7 @@ mod browser_token;
 pub use browser_token::BrowserToken;
 
 mod digest;
-pub(super) use digest::Digest;
+pub use digest::Digest;
 
 mod launch_ticket;
 pub use launch_ticket::LaunchTicket;
@@ -43,29 +47,39 @@ const SECRET_BYTES: usize = 32;
 const ENCODED_LEN: usize = 43;
 
 /// Thirty-two bytes drawn from the operating system's CSPRNG: the body of a
-/// [`LaunchTicket`] and of a [`BrowserToken`] alike (spec: LA-20).
+/// [`LaunchTicket`] and of a [`BrowserToken`] alike (spec: LA-20), and of the
+/// desktop app's door token (spec: LA-23).
 ///
-/// Not `Clone`, and it overwrites its bytes when it is dropped. It is not on
-/// the secret-bearing inventory, which is what carries the Master Key, is
-/// derived from it or wrapped under it, or unlocks it (spec: DK-7); it is held
-/// the same way because it admits a browser to the Library the host serves.
-struct Secret([u8; SECRET_BYTES]);
+/// Not `Clone`, and it overwrites its bytes when it is dropped; `Debug` and
+/// `Display` are redacted. It is not on the secret-bearing inventory, which is
+/// what carries the Master Key, is derived from it or wrapped under it, or
+/// unlocks it (spec: DK-7); it is held the same way because it admits whoever
+/// presents it: a browser to the Library the host serves, or a window to the
+/// door a Passphrase is submitted through.
+pub struct Secret([u8; SECRET_BYTES]);
 
 impl Secret {
-    fn draw() -> Result<Self, NotDrawn> {
+    /// A secret freshly drawn from the operating system's CSPRNG.
+    pub fn draw() -> Result<Self, NotDrawn> {
         let mut bytes = [0_u8; SECRET_BYTES];
         getrandom::fill(&mut bytes).map_err(NotDrawn)?;
         Ok(Self(bytes))
     }
 
-    fn encoded(&self) -> Zeroizing<String> {
+    /// The secret as it is presented: 43 characters of unpadded base64url, in
+    /// a buffer that is wiped when it is dropped (spec: LA-20).
+    pub fn encoded(&self) -> Zeroizing<String> {
         Zeroizing::new(URL_SAFE_NO_PAD.encode(self.0))
     }
 
-    fn digest(&self) -> Digest {
+    /// The digest the secret is held as by whoever checks it, in place of the
+    /// secret itself (spec: LA-20).
+    pub fn digest(&self) -> Digest {
         Digest::of(&self.0)
     }
 }
+
+redacted!(Secret, "Secret(<redacted>)", "<redacted secret>");
 
 impl Drop for Secret {
     fn drop(&mut self) {

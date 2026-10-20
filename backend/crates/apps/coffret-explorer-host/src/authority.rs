@@ -11,7 +11,10 @@ use crate::Error;
 /// Built from the address a listener actually bound and from nothing else, so
 /// that no request can say where the host is: a request that names anywhere
 /// else is one that reached this socket through somebody else's name.
-pub(crate) struct Authority {
+///
+/// Public for another loopback listener in the same app that is fenced the
+/// same way: the desktop app's Passphrase door (spec: LA-22).
+pub struct Authority {
     host: HeaderValue,
     origin: HeaderValue,
 }
@@ -26,7 +29,7 @@ pub(crate) type Fence = &'static str;
 impl Authority {
     /// The authority of a listener bound to `bound`, which has to be IPv4
     /// loopback (spec: LA-1, LA-13).
-    pub(crate) fn of(bound: SocketAddr) -> Result<Self, Error> {
+    pub fn of(bound: SocketAddr) -> Result<Self, Error> {
         match bound {
             SocketAddr::V4(v4) if *v4.ip() == Ipv4Addr::LOCALHOST => {}
             _ => return Err(Error::NotLoopback(bound)),
@@ -39,7 +42,7 @@ impl Authority {
     }
 
     /// Whether `origin` is the fixed origin, exactly.
-    pub(crate) fn is_origin(&self, origin: &HeaderValue) -> bool {
+    pub fn is_origin(&self, origin: &HeaderValue) -> bool {
         origin.as_bytes() == self.origin.as_bytes()
     }
 
@@ -49,7 +52,7 @@ impl Authority {
     ///
     /// `Forwarded` and `X-Forwarded-*` are not read at all: nothing in front
     /// of the host is trusted to say where a request was meant for.
-    pub(crate) fn is_named_by(&self, headers: &HeaderMap, uri: &Uri) -> bool {
+    pub fn is_named_by(&self, headers: &HeaderMap, uri: &Uri) -> bool {
         let mut hosts = headers.get_all(HOST).iter();
         let (Some(host), None) = (hosts.next(), hosts.next()) else {
             return false;

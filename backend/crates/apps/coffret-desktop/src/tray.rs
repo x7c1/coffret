@@ -27,9 +27,9 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{include_image, AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-use crate::app_build::AppBuild;
 use crate::explorer;
 use crate::unlock::{self, Desktop};
+use coffret_desktop_core::AppBuild;
 
 /// The tray icon's id.
 const TRAY_ID: &str = "coffret";

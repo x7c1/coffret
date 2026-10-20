@@ -12,10 +12,13 @@ attached, the one authority it answers to, the **browser token** it admits a
 browser by, and the one-time **launch ticket** a browser exchanges for that
 token.
 
-LA-1 to LA-12 are the contract of the server itself, and LA-13 onwards the
-contract of the explorer host. The two credentials never cross: the server key
-is what the host shows the server, a browser token is what a browser shows the
-host, and neither of the two accepts the other's.
+LA-1 to LA-12 are the contract of the server itself, LA-13 to LA-21 the
+contract of the explorer host, and LA-22 onwards that of the desktop app's
+**Passphrase door**: a listener of the app's own that serves the page a
+Passphrase is typed into and takes what that page submits. The two credentials
+never cross: the server key is what the host shows the server, a browser token
+is what a browser shows the host, and neither of the two accepts the other's.
+Nor does the door's token stand for either.
 
 Concept background: [Library](../../concepts/library/),
 [Passphrase](../../concepts/passphrase/).
@@ -308,3 +311,67 @@ Concept background: [Library](../../concepts/library/),
   of the fragment; prose for the browser's command line carrying no ticket,
   which is a property of how the app opens the browser, honored by
   construction.)*
+
+### The Passphrase door
+
+- **LA-22.** The desktop app takes a Passphrase through a door of its own: a
+  listener on IPv4 loopback alone, bound before it answers, whose authority
+  and origin are fixed from the address it bound as the explorer host's are
+  (LA-13). It serves the Passphrase page itself, and the page submits to the
+  origin it was served from, so the Passphrase goes from the window to the
+  process that unlocks the Library without passing through the shell's own
+  process, and no cross-origin request is made or answered: the door sends no
+  `Access-Control-Allow-*` header, and an `OPTIONS` request is refused like
+  any other method a route does not take. Every path is answered only where
+  `Host` is the fixed authority exactly, and refused as `403` where it is
+  missing, given more than once, or anything else, and every request brings
+  at most 8 KiB of headers, as one to the explorer host does (LA-19),
+  refused as `431`. A submission (`POST /submit`) passes, in this order:
+  `Origin` given once and equal to the door's own origin, and `Sec-Fetch-Site`
+  given once as `same-origin` — both required, since the one client the door
+  answers is the app's own window, which sends both — refused as `403`; a
+  window's token (LA-23), refused as `401`; a JSON body, refused as `415`
+  where `Content-Type` does not say JSON and `400` where it is not a
+  submission; and at most 4 KiB of body arriving within 5 seconds, refused as
+  `413` — before a byte of it is read where it says it is longer, and where it
+  passes the bound otherwise — and as `408` where it takes longer. A look at
+  what the window is for (`GET /window`) passes the same `Host`,
+  `Sec-Fetch-Site` and token fences, and `Origin` only where one is given,
+  which a same-origin `GET` does not send. A refused open or unlock is
+  answered with one sentence that names no path.
+  *(Form: test)*
+- **LA-23.** The door admits a window by a **door token**: one per opening of
+  the window, 32 bytes from the operating system's CSPRNG written as unpadded
+  base64url, the secret type the explorer host's tickets are (LA-20), held by
+  the door only as its digest and compared without stopping at the first byte
+  that differs. It reaches the window in the fragment of the URL the app loads
+  the window from, `http://127.0.0.1:<port>/#door=<token>`, and the page takes
+  it out of the address with `history.replaceState` before it does anything
+  else, presenting it as `Authorization: Door <token>`. A token is bound to
+  the mode the window was opened in — opening a Library, or unlocking the one
+  served in place — which the door holds beside it rather than taking from
+  anything the window sends. Each window's token is its own: at most 4 are
+  held at once, and opening a fifth window ends the oldest token. Every token
+  ends when the app retires its credentials, as it quits and when the server
+  stops (LA-18). A missing, unknown, malformed or ended token is one answer,
+  `401`, which names none of these and says the window has to be opened
+  again. *(Form: test for the token's encoding, its independence and its
+  ending; prose for the comparison's timing and the digest being all that is
+  held, for the reasons LA-20 gives.)*
+- **LA-24.** A token ends when its window's submission opens or unlocks the
+  Library, and after 5 refused submissions. Every submission refused once its
+  token was admitted counts — a body over its bound or not a submission, a
+  Passphrase that does not open the Library, another Library already open —
+  and none refused before its token is looked at does. The answer to a
+  refusal says whether the token has ended with it; once it has, the window
+  says it has to be opened again from the app. Submissions are taken one at a
+  time across every window: of two at once, the second is taken once the
+  first has its answer, and sees what the first did — the Library the first
+  opened is answered as open, and another is refused. *(Form: test)*
+- **LA-25.** No event the door records carries a door token, its digest, the
+  door's URL or its address (EL-1): a window's token being issued, a
+  submission refused, and a token ending are recorded by their kind, a fixed
+  reason and the counts they left. Nor does anything the app tells its shell
+  carry one: the shell is told what happened — a Library opened or unlocked,
+  an unlock asked for, the server stopped — and asks for a URL or a ticket
+  through a call of its own. *(Form: test)*

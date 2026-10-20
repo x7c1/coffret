@@ -32,7 +32,9 @@
 
 mod answer_headers;
 mod auth;
+
 mod authority;
+pub use authority::Authority;
 
 mod config;
 pub use config::Config;
@@ -80,7 +82,6 @@ use axum::routing::any;
 use axum::Router;
 use tokio::net::TcpListener;
 
-use authority::Authority;
 use credentials::Gate;
 use forward::Forwarder;
 use host::Host;

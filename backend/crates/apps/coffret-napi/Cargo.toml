@@ -1,0 +1,37 @@
+[package]
+name = "coffret-napi"
+description = "The Node-API addon the desktop app's Electron shell runs the server in-process through"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Through to `coffret-desktop-core`'s feature of the same name, for the reason
+# it gives.
+embed-web = ["coffret-desktop-core/embed-web"]
+
+# A dynamic library the Node process loads, and nothing else. No test target
+# and no doctests: a test executable that references the `napi_*` symbols has
+# no process to take them from and does not link. What this binding does is
+# `coffret-desktop-core`'s, and is tested there.
+[lib]
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[build-dependencies]
+napi-build = { workspace = true }
+
+# The binding and nothing else: every decision is `coffret-desktop-core`'s.
+[dependencies]
+coffret-desktop-core = { workspace = true }
+
+# The refusals the core answers with, rendered into the exceptions the shell
+# catches.
+anyhow = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+# An event the shell could not be handed is said in the log.
+tracing = { workspace = true }

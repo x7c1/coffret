@@ -597,6 +597,21 @@ desktop-dev-build: web-dist
 desktop-dev: desktop-dev-build
 	./scripts/desktop.sh dev
 
+## napi-addon: build the explorer, then the Node-API addon (coffret-napi) with the explorer compiled in, as backend/target/release/coffret.node
+#
+# The addon an Electron shell loads to run the server in its own process. Cargo
+# writes a cdylib under the platform's library name (libcoffret_napi.dylib on
+# macOS, libcoffret_napi.so on Linux); Node loads a `.node` file, so it is
+# copied to that name beside it. Nothing here starts it: it opens no Library
+# until a shell loads it and a Passphrase is typed into the door's window.
+.PHONY: napi-addon
+napi-addon: web-dist
+	cargo build --release --locked --manifest-path backend/Cargo.toml -p coffret-napi --features embed-web
+	@for built in backend/target/release/libcoffret_napi.dylib backend/target/release/libcoffret_napi.so; do \
+		if [ -f "$$built" ]; then cp "$$built" backend/target/release/coffret.node; exit 0; fi; \
+	done; \
+	echo "the addon's library was not found under backend/target/release"; exit 1
+
 ## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
 down:
@@ -641,15 +656,16 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # server — plus coffret-shell, which both of them start through,
 # coffret-explorer-host, which serves the explorer in front of that server,
 # coffret-desktop, which starts the server and the host in one installed app,
-# and coffret-explorer-dev, which serves the explorer's build on disk through
-# the host in front of a server already running, and what none of the six may
-# name directly. Every flow a shell drives is a
-# call on coffret-device, so any shell can be replaced without a flow moving
-# with it. A gateway or a use case named here would be a decision the other
-# shells then have to make again, and differently. The remaining crates under
-# `apps/` are tools rather than shells — the fixture generator draws images,
-# the interop harness writes the format directly — and are deliberately not
-# held to this.
+# coffret-desktop-core, which does the same for a shell written for Node,
+# coffret-napi, the Node-API addon over it, and coffret-explorer-dev, which
+# serves the explorer's build on disk through the host in front of a server
+# already running, and what none of the eight may name directly. Every flow a
+# shell drives is a call on coffret-device, so any shell can be replaced
+# without a flow moving with it. A gateway or a use case named here would be a
+# decision the other shells then have to make again, and differently. The
+# remaining crates under `apps/` are tools rather than shells — the fixture
+# generator draws images, the interop harness writes the format directly — and
+# are deliberately not held to this.
 #
 # Direct dependencies only — `--depth 1` — because reaching the domain *through*
 # coffret-device is the arrangement rather than the mistake. coffret-shell is on
@@ -658,7 +674,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # it. Dev-dependencies are outside `--edges normal` and so outside this: a case
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
-APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop coffret-explorer-dev
+APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop coffret-desktop-core coffret-napi coffret-explorer-dev
 APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps

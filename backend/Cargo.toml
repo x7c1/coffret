@@ -18,6 +18,7 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 coffret-cli = { path = "crates/apps/coffret-cli" }
+coffret-desktop-core = { path = "crates/apps/coffret-desktop-core" }
 coffret-device = { path = "crates/apps/coffret-device" }
 coffret-explorer-host = { path = "crates/apps/coffret-explorer-host" }
 coffret-format = { path = "crates/domain/coffret-format" }
@@ -118,6 +119,19 @@ image = { version = "0.25", default-features = false, features = ["jpeg"] }
 # that wrote `include_bytes!` for every asset would be this crate again, worse.
 include_dir = "0.7"
 md-5 = "0.11"
+# The Node-API binding the desktop app's Electron shell loads the server through
+# (`coffret-napi`). napi-rs 3, the current stable major, from the release it was
+# taken at; a major is the line its API breaks along, and Cargo.lock holds the
+# exact release. Default features: `napi4` is the version that has threadsafe
+# functions, which is how the binding calls back into the shell from the
+# runtime's threads. Not `tokio_rt` or `async`: the
+# binding exports no future, so napi-rs runs no runtime of its own beside the
+# one `coffret-desktop-core` owns.
+napi = "3.14"
+napi-derive = "3.6"
+# Its build step, which tells the linker to leave the `napi_*` symbols for the
+# loading process to supply. The 2 line is the one napi-rs 3 builds with.
+napi-build = "2.6"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",

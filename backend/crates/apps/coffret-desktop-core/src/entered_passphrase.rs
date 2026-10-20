@@ -4,22 +4,31 @@ use coffret_device::Passphrase;
 use serde::de::{self, Deserialize, Deserializer, Visitor};
 use zeroize::ZeroizeOnDrop;
 
-/// The Passphrase as the Passphrase window's call hands it to this app: the
-/// one point where coffret's own code receives it, and so where DK-7's claim
-/// over it begins.
+/// The Passphrase as a Passphrase window hands it to the app: the one point
+/// where coffret's own code receives it, and so where DK-7's claim over it
+/// begins.
 ///
-/// It is read from the call's arguments straight into a [`Passphrase`], with
-/// no `String` in between. Tauri deserializes a command's arguments from the
-/// message the page sent, which it holds as a JSON value and lends out; the
-/// bytes are copied from that value into the Passphrase's own buffer and
-/// nowhere else, so the first copy coffret holds is already the one that is
+/// It is read straight into a [`Passphrase`], with no `String` in between,
+/// from either of the two places a window hands it over:
+///
+/// - the Tauri app's command arguments, which Tauri deserializes from the
+///   message the page sent, holding it as a JSON value and lending it out;
+/// - the body of the door's `POST` (spec: LA-22), which the door gathers into a
+///   buffer that is wiped and deserializes from there.
+///
+/// Either way the bytes are copied from what is lent into the Passphrase's own
+/// buffer and nowhere else, so the first copy coffret holds is already the one
+/// that is wiped. One exception is the JSON parser's: a Passphrase holding a
+/// character JSON escapes (a quote, a backslash, a control character) is
+/// unescaped through the parser's own scratch buffer first, which is not
 /// wiped. What came before — the field's value and the script's string in the
-/// webview, the message on its way through Tauri's IPC — is outside anything
-/// coffret can overwrite, and outside the claim (spec: DK-7).
+/// page, the message on its way through Tauri's IPC or the window's network
+/// stack — is outside anything coffret can overwrite, and outside the claim
+/// (spec: DK-7).
 ///
 /// It is on the secret-bearing inventory in `coffret_model::MasterKey`'s
 /// module. It carries no `Drop` of its own: the Passphrase in it wipes itself,
-/// and a `Drop` here would forbid the one thing a command does with it — moving
+/// and a `Drop` here would forbid the one thing a caller does with it — moving
 /// that Passphrase out. It is not `Clone`, and it has no `Debug` or `Display`.
 pub struct EnteredPassphrase(Passphrase);
 
@@ -48,8 +57,9 @@ impl Visitor<'_> for PassphraseVisitor {
         f.write_str("the Passphrase, as a string")
     }
 
-    // What Tauri's arguments offer: a string borrowed from the message, copied
-    // here into the buffer that is wiped and into nothing else.
+    // What Tauri's arguments and the door's body offer: a string borrowed from
+    // the message, copied here into the buffer that is wiped and into nothing
+    // else.
     fn visit_str<E: de::Error>(self, typed: &str) -> Result<Self::Value, E> {
         Ok(EnteredPassphrase(Passphrase::from_bytes(
             typed.as_bytes().to_vec(),
@@ -114,9 +124,9 @@ mod tests {
     }
 
     // The testable half of DK-7 for the one inventory type the domain's
-    // assertions cannot name: they live in a crate below this app. The same
-    // two checks, for the same reasons; the probe is checked against a type that
-    // is `Clone` on purpose, so that it can tell the two apart.
+    // assertions cannot name: they live in a crate below the desktop shells.
+    // The same two checks, for the same reasons; the probe is checked against a
+    // type that is `Clone` on purpose, so that it can tell the two apart.
     #[test]
     fn the_entered_passphrase_is_secret_bearing() {
         zeroizes_on_drop::<EnteredPassphrase>();

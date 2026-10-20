@@ -1,7 +1,8 @@
 use coffret_device::{Error, Redacted};
 
-/// What a refused open or unlock tells the person, as the Passphrase window
-/// shows it: one sentence they can act on.
+/// What a refused open or unlock tells the person, as a Passphrase window
+/// shows it (the Tauri app's own, or the page the door serves): one sentence
+/// they can act on.
 ///
 /// The window is small and the chain an error carries is written for a
 /// terminal and a log — the wrong Passphrase alone comes with the Master Key
@@ -12,8 +13,8 @@ use coffret_device::{Error, Redacted};
 /// happened (another server holds the Library, nothing could listen) without
 /// the causes appended. That line is a lower-case, unstopped clause written to
 /// be joined to its causes, so it is capitalised and stopped like the page's
-/// own sentences ([`as_sentence()`]).
-pub(super) fn refusal_line(refused: &anyhow::Error) -> String {
+/// own sentences.
+pub fn refusal_line(refused: &anyhow::Error) -> String {
     let wrong_passphrase = refused.chain().any(|cause| {
         matches!(
             cause.downcast_ref::<Error>(),
@@ -36,7 +37,7 @@ pub(super) fn refusal_line(refused: &anyhow::Error) -> String {
 /// a device failure through [`Redacted`], which renders its own causes under
 /// it, or an `io::Error` by its kind — and stops at a fixed identity where the
 /// chain has neither, rather than walking it (spec: EL-3, EL-4).
-pub(super) fn refusal_evidence(refused: &anyhow::Error) -> String {
+pub fn refusal_evidence(refused: &anyhow::Error) -> String {
     for cause in refused.chain() {
         if let Some(error) = cause.downcast_ref::<Error>() {
             return error.redacted();

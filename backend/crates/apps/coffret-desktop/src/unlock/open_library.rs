@@ -12,8 +12,9 @@ use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use super::{ask_for_passphrase, refusal_evidence, refusal_line, Desktop, EnteredPassphrase};
-use crate::app_build::AppBuild;
+use coffret_desktop_core::{refusal_evidence, refusal_line, AppBuild, EnteredPassphrase};
+
+use super::{ask_for_passphrase, Desktop};
 use crate::launch::Launcher;
 use crate::{explorer, tray};
 

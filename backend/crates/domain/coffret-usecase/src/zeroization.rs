@@ -7,8 +7,8 @@
 //! types, the byte forms they take, and the bundles the flows work under — so
 //! one file covers the whole list rather than three files each covering a
 //! third of it. The one exception is `EnteredPassphrase`, which a shell holds
-//! above every crate this one can see: `coffret-desktop` asserts the same two
-//! promises over it, in the module that defines it.
+//! above every crate this one can see: `coffret-desktop-core` asserts the same
+//! two promises over it, in the module that defines it.
 //!
 //! Both promises are pinned:
 //!

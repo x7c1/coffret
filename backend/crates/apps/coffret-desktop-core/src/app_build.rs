@@ -3,8 +3,8 @@
 //!
 //! Told apart by the app's identifier, and read by everything that marks the
 //! development app so it is told apart from the installed app running beside
-//! it: the tray's icon and tooltip ([`crate::tray`]), and the explorer's
-//! favicon, which the host serves badged for a development app
+//! it: the desktop app's tray icon and tooltip, and the explorer's favicon,
+//! which the host serves badged for a development app
 //! ([`AppBuild::host_kind`]).
 
 use coffret_explorer_host::HostKind;
