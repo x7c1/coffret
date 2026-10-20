@@ -94,7 +94,7 @@ The previous change put the server, the explorer host and a Passphrase door into
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, `make desktop-electron-dev` over the agent Library (recreated in the current format if it no longer opens cleanly):
+- [x] On macOS, `make desktop-electron-dev` over the agent Library (recreated in the current format if it no longer opens cleanly):
   - the Passphrase window opens the Library;
   - the explorer loads its listing in the app's window;
   - with `COFFRET_IDLE_MINUTES=1`, the idle lock brings the Passphrase window back in unlock mode, and the Passphrase unlocks the explorer in place;
