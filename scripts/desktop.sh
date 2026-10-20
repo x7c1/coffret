@@ -13,6 +13,17 @@
 #                                  /Applications/Coffret.app, replaced
 #   scripts/desktop.sh dev-build   the debug binary, built as the development app
 #   scripts/desktop.sh dev         run the binary `dev-build` built
+#   scripts/desktop.sh electron-dev
+#                                  run the Electron app from the checkout, as
+#                                  the development app, once
+#                                  `make desktop-electron-dev` has built it
+#
+# The Electron app (frontend/packages/apps/desktop) runs beside the Tauri one
+# until it replaces it. It loads the server from the Node-API addon
+# (`make napi-addon`) and takes its identifier from how it is run: from a
+# package it is the installed app, and from a checkout, which is the one way
+# it is run today, it is the development app and refuses to start without
+# COFFRET_STATE_DIR, as `dev` does here.
 #
 # Two apps, told apart by their identifier. The installed one carries
 # tauri.conf.json's, `io.github.x7c1.coffret`, and serves the Libraries under
@@ -61,9 +72,11 @@ readonly DEV_TAURI_CONFIG="{\"identifier\":\"$DEV_IDENTIFIER\",\"bundle\":{\"ico
 readonly DEV_BIN="$TARGET_DIR/debug/coffret-desktop"
 readonly RELEASE_BIN="$TARGET_DIR/release/coffret-desktop"
 readonly SYSTEM_CC="/usr/bin/cc"
+readonly ELECTRON_APP_DIR="$ROOT/frontend/packages/apps/desktop"
+readonly NAPI_ADDON="$ROOT/backend/target/release/coffret.node"
 
 usage() {
-  echo "usage: scripts/desktop.sh build|install|dev-build|dev" >&2
+  echo "usage: scripts/desktop.sh build|install|dev-build|dev|electron-dev" >&2
   exit 2
 }
 
@@ -189,11 +202,29 @@ dev() {
   exec "$DEV_BIN"
 }
 
+# The Electron app from the checkout, in the foreground until it quits. The
+# Electron package fetches its binary the first time it is run, so the first
+# run needs the network.
+electron_dev() {
+  [ -n "${COFFRET_STATE_DIR:-}" ] ||
+    fail "COFFRET_STATE_DIR is not set; run this through make desktop-electron-dev, which sets it to the development state directory"
+  [ -f "$NAPI_ADDON" ] || fail "$NAPI_ADDON is not built; run make napi-addon"
+  [ -f "$ELECTRON_APP_DIR/dist/main.js" ] ||
+    fail "the Electron app is not built; run make desktop-electron-dev"
+  [ -x "$ELECTRON_APP_DIR/node_modules/.bin/electron" ] ||
+    fail "the frontend's dependencies are not installed; run \`pnpm install\` in frontend/ first"
+  echo "Starting $DEV_IDENTIFIER (Electron) over the Libraries under $COFFRET_STATE_DIR"
+  # Run from the repository root, as `dev` is, so that a relative
+  # COFFRET_STATE_DIR or COFFRET_LOG_DIR means a directory under it.
+  exec "$ELECTRON_APP_DIR/node_modules/.bin/electron" "$ELECTRON_APP_DIR"
+}
+
 [ $# -eq 1 ] || usage
 case "$1" in
   build) build_app ;;
   install) install_app ;;
   dev-build) dev_build ;;
   dev) dev ;;
+  electron-dev) electron_dev ;;
   *) usage ;;
 esac

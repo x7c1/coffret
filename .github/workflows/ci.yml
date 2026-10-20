@@ -6,6 +6,15 @@ on:
   push:
     branches: [main]
 
+# No job here runs Electron (a dependency of frontend/packages/apps/desktop),
+# so no job's `pnpm install` should fetch its binary. Set for the whole
+# workflow so that every job that installs the frontend, including one added
+# later, has it. The Electron version the lockfile pins fetches its binary on
+# first run rather than at install, so today this guards against a version
+# that fetches it at install again.
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
 jobs:
   backend:
     runs-on: ubuntu-latest

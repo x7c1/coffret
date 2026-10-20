@@ -124,6 +124,8 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, then the debug desktop app as the development app |
 | `make desktop-dev` | `make desktop-dev-build`, then runs it over the Libraries under the development state directory |
+| `make napi-addon` | Builds the explorer, then the Node-API addon the Electron app runs the server in, as `backend/target/release/coffret.node` |
+| `make desktop-electron-dev` | `make napi-addon`, then builds the Electron app (`frontend/packages/apps/desktop`) and runs it over the Libraries under the development state directory, as the development app (see [the Electron app](#the-electron-app)) |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 
 `make server` and `make web` are the two halves of `make dev` in the
@@ -183,7 +185,8 @@ anyone else, and removes what its last run left there as it starts.
 
 The address typed by hand, a bookmark, and a tab whose session ended — after
 12 hours, or because the app ended it — show a page saying the tab holds no
-session: open the explorer again from the tray. *Disconnect all browser tabs*
+session, and to reload the explorer from the app; with this app, that is
+opening it again from the tray. *Disconnect all browser tabs*
 ends every tab's session at once; quitting does too, and so does the server
 stopping. At most eight tabs hold a session at once, and closing a tab does not
 end its session; opening a ninth ends the session of the tab used least
@@ -258,6 +261,39 @@ libraries do not resolve from an empty environment. The app is a member of
 the backend workspace, so `make check` builds it and needs those files too;
 the backend job in `.github/workflows/ci.yml` lists the Debian and Ubuntu
 package names.
+
+### The Electron app
+
+The desktop app is moving to Electron (`frontend/packages/apps/desktop`). For
+now it runs from a checkout alone, through `make desktop-electron-dev`, as the
+development app: it carries the identifier `io.github.x7c1.coffret.dev`,
+serves the Libraries under the development state directory, and refuses to
+start where `COFFRET_STATE_DIR` is not set. It shares that identifier and
+those Libraries with `make desktop-dev`, so run one or the other.
+
+It runs the server in its own process through the Node-API addon
+(`make napi-addon`), and shows the explorer in a window of its own rather than
+in the system browser. The Passphrase is typed into a second, small window,
+served by the app's Passphrase door: the page there submits to the door
+directly, and no page of the app reaches the app's own process. Once the
+Library is open that window goes and the explorer's comes. When the explorer
+asks for the Library to be unlocked — a press of *unlock*, or the idle lock
+seen — the Passphrase window comes back to take the Passphrase, and goes again
+once the Library is unlocked; the explorer comes back in place. A page that
+has lost its session gets a fresh one from *Reload the explorer* in the app's
+menu (Cmd/Ctrl+R). Addresses the explorer opens a window for, such as Google's
+consent page, open in the system browser.
+
+Closing the Passphrase window before a Library is open quits the app, and so
+does closing the explorer's window; quitting ends the server, which locks the
+Library. A second launch brings the open window forward. There is no tray yet.
+A Passphrase window that says it can no longer take the Passphrase, after too
+many refused tries, is not reloaded while it shows, so pressing *unlock* only
+brings it forward: close it and press *unlock* again for a fresh one, or,
+before a Library is open, start the app again.
+
+The Electron package fetches its binary the first time it is run, so the first
+`make desktop-electron-dev` needs the network.
 
 ## The rule for agents
 

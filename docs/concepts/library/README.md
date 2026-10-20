@@ -90,8 +90,9 @@ browser, and "the explorer's page" means that browser page, never a step of
 the reader's sequence. An Entry is **openable** when the reader supports
 displaying it, as determined from its name; every file can be stored whether
 or not the reader supports it (spec: FM-9). The **desktop app** is coffret's desktop
-application: it opens the Library, serves this surface in the system browser,
-and has a window of its own for entering the Passphrase.
+application: it opens the Library, serves this surface in the system browser
+or in a window of its own, and has a separate window of its own for entering
+the Passphrase.
 
 ## Examples
 
@@ -370,9 +371,10 @@ and has a window of its own for entering the Passphrase.
     that forwards the page's requests to the server with the server key
     attached, and the page shows the host a **browser token** of its own
     instead. The page gets that token by exchanging a one-time **launch
-    ticket**, which the app hands it through a file only the owner's account
-    can read, whenever the app opens the explorer; the person does nothing
-    more than open it (spec: LA-15, LA-17, LA-21).
+    ticket**, which the app hands it whenever the app opens the explorer —
+    through a file only the owner's account can read where the explorer is in
+    the system browser, or in the URL the app loads its own window from — and
+    the person does nothing more than open it (spec: LA-15, LA-17, LA-21).
     - A browser token lets a page do everything the explorer can do, for one
       Library, until the token expires, is revoked, or the host restarts
       (spec: LA-18). It is no narrower than that: there are no read-only
@@ -380,7 +382,7 @@ and has a window of its own for entering the Passphrase.
       locked Library stays locked to a page holding one until the
       Passphrase is entered in the app's own window.
     - A tab holding no token — a bookmark, a typed address, a session that
-      ended — reads nothing of the Library, and says to open the explorer
+      ended — reads nothing of the Library, and says to reload the explorer
       from the app (spec: LA-21).
   - One server at a time serves a Library on a device, and a second start is
     refused rather than taking the first one's place: a second server would

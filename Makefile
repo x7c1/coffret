@@ -612,6 +612,20 @@ napi-addon: web-dist
 	done; \
 	echo "the addon's library was not found under backend/target/release"; exit 1
 
+## desktop-electron-dev: build the explorer, the Node-API addon (napi-addon) and the Electron app, then run it over the Libraries under COFFRET_STATE_DIR as the development app (identifier io.github.x7c1.coffret.dev)
+#
+# The Electron app (frontend/packages/apps/desktop) shows the explorer in a
+# window of its own rather than in the system browser, and runs the server in
+# its own process through the addon. It has the identifier and the Libraries
+# of the Tauri app `desktop-dev` runs, so run one or the other: one server
+# serves a Library at a time. Like `desktop-dev`, it refuses to run without
+# COFFRET_STATE_DIR, which this Makefile exports as the development state
+# directory.
+.PHONY: desktop-electron-dev
+desktop-electron-dev: napi-addon
+	cd frontend && pnpm --filter @coffret/desktop build
+	./scripts/desktop.sh electron-dev
+
 ## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
 down:

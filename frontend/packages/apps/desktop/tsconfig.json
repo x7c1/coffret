@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // The main process, run by Electron's Node as ES modules: Node resolves
+    // the emitted imports itself, so they name their files as Node does.
+    // Nothing depends on this package, so it is not part of the project
+    // references the libraries are wired into.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

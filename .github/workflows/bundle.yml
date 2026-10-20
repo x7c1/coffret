@@ -34,6 +34,11 @@ on:
         type: string
         required: true
 
+# This workflow bundles the Tauri app and never runs Electron, so its
+# `pnpm install` fetches no Electron binary (see ci.yml).
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
 jobs:
   bundle:
     name: bundle (${{ matrix.name }})
