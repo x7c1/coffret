@@ -72,10 +72,10 @@ The Electron app (`frontend/packages/apps/desktop`) runs only from a checkout to
 
 ### Before merge (verified outside the check command)
 
-- [ ] This PR's `bundle` workflow run is green on both OSes, and its assertions show:
+- [x] This PR's `bundle` workflow run is green on both OSes, and its assertions show:
   - on macOS, fuses off, an ad-hoc `runtime` signature and allow-jit;
   - on Linux, the `.deb` name, package name, version and desktop entry.
-- [ ] On macOS, `make desktop-build` produces `Coffret_<version>_aarch64.dmg`. Run from its mounted image or extracted `.app` with `COFFRET_STATE_DIR` and `COFFRET_LOG_DIR` pointed at the agent's state directory and `--user-data-dir` at a temporary directory (never the production state directory), the app:
+- [x] On macOS, `make desktop-build` produces `Coffret_<version>_aarch64.dmg`. Run from its mounted image or extracted `.app` with `COFFRET_STATE_DIR` and `COFFRET_LOG_DIR` pointed at the agent's state directory and `--user-data-dir` at a temporary directory (never the production state directory), the app:
   - starts, loads the addon and opens its Passphrase window, with the door listening;
   - refuses `ELECTRON_RUN_AS_NODE=1` and `--inspect` (the fuses hold).
 
