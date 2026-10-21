@@ -12,6 +12,9 @@ pub enum DesktopEvent {
     /// The explorer asked for the Library to be unlocked: open the door in
     /// its unlock mode.
     UnlockRequested,
+    /// A Passphrase window's token ended after its last refused submission:
+    /// load that window afresh the next time it is brought forward.
+    PassphraseWindowSpent,
     /// The server stopped, and every session, ticket and door token was
     /// discarded: the shell ends.
     ServerStopped,
@@ -23,6 +26,7 @@ impl From<Event> for DesktopEvent {
             Event::LibraryOpened => Self::LibraryOpened,
             Event::LibraryUnlocked => Self::LibraryUnlocked,
             Event::UnlockRequested => Self::UnlockRequested,
+            Event::PassphraseWindowSpent => Self::PassphraseWindowSpent,
             Event::ServerStopped => Self::ServerStopped,
         }
     }

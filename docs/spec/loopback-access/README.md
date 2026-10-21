@@ -285,9 +285,10 @@ Concept background: [Library](../../concepts/library/),
   server restarts and when the Library it serves changes; a Library that locks
   keeps its sessions, which are then refused data (LA-14). A session is
   revoked singly by a request carrying its own token (LA-16) — which the
-  explorer offers no control to make — and all of them at once by the app,
-  which spends every ticket not yet exchanged as well, so that no ticket makes
-  a session after every session was revoked. *(Form: test)*
+  explorer offers no control to make — and all of them at once when the app
+  quits or retires its credentials, which spends every ticket not yet
+  exchanged as well, so that no ticket makes a session after every session was
+  revoked. *(Form: test)*
 - **LA-19.** What the host reads of a request is bounded before it is read. A
   request to `/auth` brings at most 1 KiB of body, any request at most 8 KiB
   of headers, and reading a request to `/auth` stops 5 seconds after it began.
@@ -385,17 +386,20 @@ Concept background: [Library](../../concepts/library/),
   Passphrase that does not open the Library, another Library already open —
   and none refused before its token is looked at does. The answer to a
   refusal says whether the token has ended with it; once it has, the window
-  says it has to be opened again from the app. Submissions are taken one at a
-  time across every window: of two at once, the second is taken once the
-  first has its answer, and sees what the first did — the Library the first
-  opened is answered as open, and another is refused. *(Form: test)*
+  says it has to be opened again from the app, and the app is told that a
+  window's token ended unused, so that it loads that window afresh, from a
+  token of its own, the next time it brings it forward. Submissions are taken
+  one at a time across every window: of two at once, the second is taken once
+  the first has its answer, and sees what the first did — the Library the
+  first opened is answered as open, and another is refused. *(Form: test)*
 - **LA-25.** No event the door records carries a door token, its digest, the
   door's URL or its address (EL-1): a window's token being issued, a
   submission refused, and a token ending are recorded by their kind, a fixed
   reason and the counts they left. Nor does anything the app tells its shell
   carry one: the shell is told what happened — a Library opened or unlocked,
-  an unlock asked for, the server stopped — and asks for a URL or a ticket
-  through a call of its own. *(Form: test)*
+  an unlock asked for, a window's token ended unused, the server stopped — by
+  its kind alone, and asks for a URL or a ticket through a call of its own.
+  *(Form: test)*
 
 ### The import
 

@@ -23,3 +23,14 @@ describe.each(['darwin', 'linux'] as const)('the menu on %s', (platform) => {
     }
   });
 });
+
+describe('Quit', () => {
+  it('is the app menu’s on macOS, which carries Cmd+Q', () => {
+    expect(menuTemplate('darwin', vi.fn()).map((each) => each.role)).toContain('appMenu');
+  });
+
+  it.each(['linux', 'win32'] as const)('is a File menu’s on %s, on Ctrl+Q', (platform) => {
+    const quit = items(menuTemplate(platform, vi.fn())).find((each) => each.role === 'quit');
+    expect(quit?.accelerator).toBe('Ctrl+Q');
+  });
+});

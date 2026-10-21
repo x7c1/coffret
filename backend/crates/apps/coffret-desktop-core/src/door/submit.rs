@@ -9,6 +9,7 @@ use super::fences::presented_token;
 use super::windows::AfterRefusal;
 use super::{Door, Refusal, Submission};
 use crate::attempt::{attempt, AttemptRefused};
+use crate::Event;
 
 /// `POST /submit`: what a window sends when its form is submitted — the
 /// Passphrase, and in the open mode the Library to open (spec: LA-22).
@@ -25,7 +26,8 @@ use crate::attempt::{attempt, AttemptRefused};
 /// at again once the turn is taken: a submission that waited behind its own
 /// window's last try finds the token gone. Success ends the token. A refusal
 /// is answered with one sentence that carries no path, and the log is told its
-/// log-safe rendering (spec: EL-1, LA-24).
+/// log-safe rendering (spec: EL-1, LA-24). A refusal that ends the token tells
+/// the shell so, for it to load that window afresh.
 pub(super) async fn submit(State(door): State<Arc<Door>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     if let Err(fence) = door.admits_submission(&parts.headers) {
@@ -39,10 +41,7 @@ pub(super) async fn submit(State(door): State<Arc<Door>>, request: Request) -> R
     }
     let submission = match Submission::read(&parts.headers, body).await {
         Ok(submission) => submission,
-        Err((refusal, reason)) => {
-            let ended = door.shared.windows.refused(token) != AfterRefusal::Stands;
-            return refusal.answer(reason, ended);
-        }
+        Err((refusal, reason)) => return refusal.answer(reason, door.refused(token)),
     };
 
     let _turn = door.shared.opening.lock().await;
@@ -81,8 +80,25 @@ pub(super) async fn submit(State(door): State<Arc<Door>>, request: Request) -> R
                 error = %refused.evidence(),
                 "a Library could not be opened or unlocked from a Passphrase window",
             );
-            let ended = door.shared.windows.refused(token) != AfterRefusal::Stands;
-            Refusal::Attempt(refused).answer("attempt", ended)
+            Refusal::Attempt(refused).answer("attempt", door.refused(token))
+        }
+    }
+}
+
+impl Door {
+    /// Counts a refused submission against the token `presented`, saying
+    /// whether the token has ended. Where this refusal was its last try, the
+    /// shell is told that a window is spent (spec: LA-24); a token that was
+    /// already gone was told of as it went, or was never the shell's to load
+    /// again.
+    fn refused(&self, presented: &str) -> bool {
+        match self.shared.windows.refused(presented) {
+            AfterRefusal::Stands => false,
+            AfterRefusal::Ended => {
+                self.shared.events.send(Event::PassphraseWindowSpent);
+                true
+            }
+            AfterRefusal::Gone => true,
         }
     }
 }

@@ -26,7 +26,24 @@ export const EXPLORER_PARTITION = 'persist:coffret-explorer';
 /** Every partition a window of the app is in. */
 export const PARTITIONS = [PASSPHRASE_PARTITION, EXPLORER_PARTITION] as const;
 
-const TITLE = 'Coffret';
+/** What every window shows of the app: its title, and its icon where it has one of its own. */
+export interface Appearance {
+  /** The window's title, kept whatever the page's own says. */
+  title: string;
+  /** The icon file's path (Linux), or `undefined` for the platform's default. */
+  icon?: string;
+}
+
+/** The installed app's windows: titled Coffret, with no icon of their own. */
+export const INSTALLED: Appearance = { title: 'Coffret' };
+
+/** `appearance`, as window options: the icon left out where there is none. */
+function shown(appearance: Appearance): BrowserWindowConstructorOptions {
+  return {
+    title: appearance.title,
+    ...(appearance.icon === undefined ? {} : { icon: appearance.icon }),
+  };
+}
 
 /** What every page runs under: a renderer that reaches nothing but the web. */
 function confined(partition: string, preload?: string): WebPreferences {
@@ -47,9 +64,9 @@ function confined(partition: string, preload?: string): WebPreferences {
 }
 
 /** The small window the Passphrase is typed into, served by the door. */
-export function passphraseWindowOptions(): BrowserWindowConstructorOptions {
+export function passphraseWindowOptions(appearance: Appearance = INSTALLED): BrowserWindowConstructorOptions {
   return {
-    title: TITLE,
+    ...shown(appearance),
     width: 380,
     height: 260,
     resizable: false,
@@ -65,9 +82,12 @@ export function passphraseWindowOptions(): BrowserWindowConstructorOptions {
  * The window the explorer runs in, served by the explorer host, with the
  * preload at `preload` that hands a drop over by path.
  */
-export function explorerWindowOptions(preload: string): BrowserWindowConstructorOptions {
+export function explorerWindowOptions(
+  preload: string,
+  appearance: Appearance = INSTALLED,
+): BrowserWindowConstructorOptions {
   return {
-    title: TITLE,
+    ...shown(appearance),
     width: 1280,
     height: 820,
     minWidth: 640,

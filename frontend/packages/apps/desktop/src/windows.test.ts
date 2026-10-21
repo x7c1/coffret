@@ -59,3 +59,20 @@ describe('the Passphrase window', () => {
     expect(windows.passphrase).toMatchObject({ width: 380, height: 260, resizable: false });
   });
 });
+
+describe('appearance', () => {
+  it('titles every window Coffret, with no icon of its own, by default', () => {
+    for (const options of Object.values(windows)) {
+      expect(options.title).toBe('Coffret');
+      expect(options).not.toHaveProperty('icon');
+    }
+  });
+
+  it('carries the title and icon it is given', () => {
+    const appearance = { title: 'Coffret (dev)', icon: '/app/assets/icon-dev.png' };
+    for (const options of [passphraseWindowOptions(appearance), explorerWindowOptions(PRELOAD, appearance)]) {
+      expect(options.title).toBe('Coffret (dev)');
+      expect(options.icon).toBe('/app/assets/icon-dev.png');
+    }
+  });
+});

@@ -284,13 +284,45 @@ has lost its session gets a fresh one from *Reload the explorer* in the app's
 menu (Cmd/Ctrl+R). Addresses the explorer opens a window for, such as Google's
 consent page, open in the system browser.
 
-Closing the Passphrase window before a Library is open quits the app, and so
-does closing the explorer's window; quitting ends the server, which locks the
-Library. A second launch brings the open window forward. There is no tray yet.
-A Passphrase window that says it can no longer take the Passphrase, after too
-many refused tries, is not reloaded while it shows, so pressing *unlock* only
-brings it forward: close it and press *unlock* again for a fresh one, or,
-before a Library is open, start the app again.
+Closing the Passphrase window before a Library is open quits the app, since
+nothing is served yet. Once one is open the app stays resident: closing the
+explorer's window only hides it, and the server keeps serving the Library. The
+explorer comes back from a second launch, a click on the Dock icon (macOS),
+the tray's *Open the explorer*, or a click on the tray icon where the platform
+delivers one (not on macOS, where a click opens the menu); a window that was
+destroyed is opened anew from a fresh launch ticket, and where the Library has
+locked, the Passphrase window comes in front of it in unlock mode.
+
+The tray icon's menu has *Open the explorer*; *Unlock…*, which brings the
+Passphrase window in unlock mode and is offered only while the Library is
+locked; and *Quit Coffret*. The app ends by *Quit Coffret*, by the app menu's
+*Quit* (Cmd+Q on macOS, Ctrl+Q in the *File* menu elsewhere), or by the
+session ending. Quitting ends the server, which locks the Library, and every
+browser session with it.
+
+On Linux a tray icon is shown only where something on the session bus hosts
+one — owns `org.kde.StatusNotifierWatcher`, which GNOME does only with an
+extension such as AppIndicator and KStatusNotifierItem Support. The app asks
+the bus as it starts (`gdbus`, given about a second), and logs which way it
+went. Where nothing hosts one, or `gdbus` is missing or does not answer, there
+is no tray, and closing the explorer's window quits the app as before. macOS
+and Windows always have a tray.
+
+A Passphrase window that says it can no longer take the Passphrase, after five
+refused tries, is spent: the app is told so, and loads it afresh the next time
+it is brought forward, so pressing *unlock* again, or the tray's *Unlock…*,
+gives a window that takes the Passphrase. Before a Library is open, a second
+launch, the Dock or the tray's *Open the explorer* brings it back fresh in the
+same way, as does closing it, which quits the app, and starting the app again.
+
+The development app is told apart from the installed one: its windows are
+titled "Coffret (dev)", its tray icon carries the "D" badge and its tooltip
+reads "Coffret (dev)", its Dock icon (macOS) and window icon (Linux) are the
+badged `icons-dev/` icon, and on Linux its windows carry the identifier as
+their app ID (`WM_CLASS` on X11), so GNOME groups and names them apart from the
+installed app's. The installed app's look is unchanged. The icons are copies,
+under `frontend/packages/apps/desktop/assets/`, that `make icons` writes along
+with the Tauri app's.
 
 The Electron package fetches its binary the first time it is run, so the first
 `make desktop-electron-dev` needs the network.

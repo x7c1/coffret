@@ -566,7 +566,7 @@ web-dist:
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT) $(WEB_PORT)
 
-## icons: regenerate the desktop app's icons (icons/, the development app's badged icons-dev/, the tray's icons-tray/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI and python3; the outputs are committed)
+## icons: regenerate the desktop app's icons (icons/, the development app's badged icons-dev/, the tray's icons-tray/, and their copies in the Electron app's assets/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI and python3; the outputs are committed)
 .PHONY: icons
 icons:
 	./scripts/gen-icons.sh
