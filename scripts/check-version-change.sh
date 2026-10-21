@@ -15,24 +15,22 @@ set -euo pipefail
 #   version=<semver>      — only when changed=true; the new version.
 #
 # Implementation notes:
-#   - The version is read through `cargo metadata` rather than by grepping
-#     TOML, so the `[workspace.package]` section boundary is honoured by
-#     cargo itself.
+#   - The version is read by scripts/workspace-version.sh, through
+#     `cargo metadata`, from a crate that takes it from the workspace.
 #   - The previous version is obtained by temporarily checking out
-#     backend/Cargo.toml from HEAD~1 and running cargo metadata against
-#     that snapshot, then restoring the working-tree copy. cargo metadata
-#     only reads Cargo.toml + Cargo.lock; no network access is required.
+#     backend/Cargo.toml from HEAD~1 and reading the version against that
+#     snapshot, then restoring the working-tree copy. cargo metadata only
+#     reads Cargo.toml + Cargo.lock; no network access is required.
+#   - It runs against the repository it is run in (`git rev-parse
+#     --show-toplevel`), which is what lets scripts/check-version-change-test.sh
+#     run it against throwaway repositories.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CARGO_TOML="${REPO_ROOT}/backend/Cargo.toml"
 
 read_workspace_version() {
-  # coffret-desktop pulls its version from [workspace.package].version, so
-  # reading any workspace member would do — picking the one whose version
-  # names the desktop bundles keeps the intent obvious.
-  (cd "${REPO_ROOT}/backend" &&
-    cargo metadata --no-deps --format-version 1 |
-    jq -r '.packages[] | select(.name == "coffret-desktop") | .version')
+  "${SCRIPT_DIR}/workspace-version.sh" "${REPO_ROOT}/backend"
 }
 
 current_version=$(read_workspace_version)

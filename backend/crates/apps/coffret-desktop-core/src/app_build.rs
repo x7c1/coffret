@@ -1,5 +1,5 @@
 //! Which of the two apps this is: the installed app, or the development app
-//! `scripts/desktop.sh` builds beside it (`make desktop-dev`).
+//! run from a checkout beside it (`make desktop-dev`).
 //!
 //! Told apart by the app's identifier, and read by everything that marks the
 //! development app so it is told apart from the installed app running beside
@@ -9,8 +9,8 @@
 
 use coffret_explorer_host::HostKind;
 
-/// The development app's identifier, which `scripts/desktop.sh` builds it with
-/// in place of `tauri.conf.json`'s.
+/// The development app's identifier, which the app carries when it is run from
+/// a checkout rather than from a bundle.
 const DEV_IDENTIFIER: &str = "io.github.x7c1.coffret.dev";
 
 /// Which of the two apps this is.

@@ -13,9 +13,9 @@ publish.workspace = true
 # because features unify across a workspace build: asking for the host's
 # `embed-web` unconditionally here would turn it on for every `cargo build` of
 # the workspace — `make check` and CI's included — and fail every one of them
-# that runs before `make web-dist` has written the page. `make desktop-build`
-# and `make desktop-dev-build` build the page and then turn this on; a plain
-# build answers a page saying the explorer is not in this binary.
+# that runs before `make web-dist` has written the page. A build that wants the
+# page builds it first and then turns this on; a plain build answers a page
+# saying the explorer is not in this binary.
 embed-web = ["coffret-explorer-host/embed-web"]
 
 [build-dependencies]

@@ -120,12 +120,12 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make cli ARGS="…"` | The command line, built in release, against the development state directory unless `COFFRET_STATE_DIR` is given |
 | `make rename-smoke LIBRARY=<name>` | Builds the command line, asks for the Passphrase once, and checks a `coffret rename` and two renames on disk against that Library, under a fresh smoke folder it leaves behind |
 | `make down` | Stops the three `make dev` started for `LIBRARY`; `make down dev` is the restart that a Library which has locked itself after idling needs |
-| `make desktop-build` | Builds the explorer, then bundles the desktop app under `backend/target/release/bundle/` (a `.deb` on Linux, `Coffret.app` and a `.dmg` on macOS) |
+| `make desktop-build` | Builds the explorer, the Node-API addon and the Electron app, then bundles it for this host under `frontend/packages/apps/desktop/release/` (`Coffret_<version>_aarch64.dmg` on macOS, `coffret-desktop_<version>_amd64.deb` on Linux) and checks the bundle (see [building it](#building-it)) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
-| `make desktop-dev-build` | Builds the explorer, then the debug desktop app as the development app |
-| `make desktop-dev` | `make desktop-dev-build`, then runs it over the Libraries under the development state directory |
-| `make napi-addon` | Builds the explorer, then the Node-API addon the Electron app runs the server in, as `backend/target/release/coffret.node` |
-| `make desktop-electron-dev` | `make napi-addon`, then builds the Electron app (`frontend/packages/apps/desktop`) and runs it over the Libraries under the development state directory, as the development app (see [the Electron app](#the-electron-app)) |
+| `make desktop-dev-build` | Builds the explorer, the Node-API addon and the Electron app, without bundling or starting it |
+| `make desktop-dev` | `make desktop-dev-build`, then runs the app from the checkout over the Libraries under the development state directory, as the development app |
+| `make desktop-electron-dev` | Another name for `make desktop-dev` |
+| `make napi-addon` | Builds the explorer, then the Node-API addon the desktop app runs the server in, as `backend/target/release/coffret.node` |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 
 `make server` and `make web` are the two halves of `make dev` in the
@@ -162,118 +162,10 @@ and the server's own locked refusal is what the explorer shows.
 
 ## The desktop app
 
-The desktop app asks for a Library and its Passphrase in a small window of its
-own, starts the server in its own process, and opens the explorer in the default
-browser. Once a Library is open the window goes away and a tray icon is left,
-which unlocks the Library, opens the explorer again, disconnects every browser
-tab, or quits; quitting ends the server, which locks the Library. A second
-launch opens the explorer again rather than starting a second copy, with the
-app's window in front of it where the Library has locked.
-
-The app opens the explorer the way the development host's launch file does: it
-issues a one-time ticket, writes it into an owner-only **launch file** — a page
-that refreshes to `http://127.0.0.1:<port>/#launch=<ticket>` — and asks the
-system to open that file, so the browser's command line carries a path and
-never the ticket. Every opening (after the Passphrase, from the tray's *Open
-the explorer*, from a second launch) is a fresh ticket in a fresh file, which
-the app removes once the page has exchanged it or after the minute it is good
-for. The files live in a `0700` directory named for the app's identifier:
-`$XDG_RUNTIME_DIR/<identifier>` on Linux, and `explorer-launch/<identifier>`
-under the state directory where `$XDG_RUNTIME_DIR` is unset and on macOS. The
-app refuses to start where that directory is another account's or open to
-anyone else, and removes what its last run left there as it starts.
-
-The address typed by hand, a bookmark, and a tab whose session ended — after
-12 hours, or because the app ended it — show a page saying the tab holds no
-session, and to reload the explorer from the app; with this app, that is
-opening it again from the tray. *Disconnect all browser tabs*
-ends every tab's session at once; quitting does too, and so does the server
-stopping. At most eight tabs hold a session at once, and closing a tab does not
-end its session; opening a ninth ends the session of the tab used least
-recently, which then shows the page saying it holds no session. Locking does
-not end a session: a tab of a locked Library keeps its session, shows the
-locked state, and comes back once the Library is unlocked. The browser is
-expected to be a Chromium-based one, installed from a `.deb` on Linux or as the
-macOS app; a browser installed as a Snap may not read the launch file, and is
-not supported.
-
-The Library also locks itself after the idle interval
-(`COFFRET_IDLE_MINUTES`, 30 minutes unless set), as the server's does. It is
-unlocked in place: press *unlock* in the explorer's status bar, or choose
-*Unlock…* from the tray, and the app's own window comes forward to take the
-Passphrase; the explorer's listing and reader come back once it is entered. The
-Passphrase is typed only in that window, never in the explorer's page. The
-server `make dev` starts has no such window, so its *unlock* says to start it
-again.
-
-There are two of it, told apart by their identifier:
-
-- **The installed app** (`make desktop`) is `io.github.x7c1.coffret`. It is
-  started from the desktop, so nothing sets `COFFRET_STATE_DIR` for it, and it
-  serves the Libraries under the default state directory: the production
-  Library, whichever checkout it was built in.
-- **The development app** (`make desktop-dev`) is built with the identifier
-  `io.github.x7c1.coffret.dev`. It inherits the `Makefile`'s
-  `COFFRET_STATE_DIR`, so it serves the Libraries under the development state
-  directory, and its own identifier gives it its own single-instance scope, so
-  it runs beside the installed app.
-
-Every icon is derived from two SVG sources under `assets/icon/`:
-`coffret.svg`, the app icon, and `coffret-tray.svg`, the same chest as a
-one-colour silhouette. `make icons` (`scripts/gen-icons.sh`, which needs the
-Tauri CLI and python3) writes the installed app's `icons/`, the development
-app's `icons-dev/`, the tray's `icons-tray/` and the explorer's favicon under
-`frontend/packages/apps/web/public/`; the outputs are committed, and running it
-again rewrites the same bytes. The development app's icons carry a "D" badge in
-the bottom-right corner, and its tray icon is badged too, so the two apps are
-told apart in the tray without opening a menu; on macOS its tooltip also reads
-"Coffret (dev)" (Tauri shows no tray tooltip on Linux). The app reads which it
-is from its identifier. The tray icon is a
-one-colour picture rather than the app icon, because a tray draws it small and
-in the menu bar's own colours: on macOS it is black and set as a template
-image, which the menu bar draws black or white for its appearance, and on
-Linux it is white, since GNOME's top bar is dark in both its light and its dark
-style. The `.icns` is the app icon inset to 80 % on a transparent canvas,
-because the Dock draws icons with margins and a full-bleed one would look
-larger than its neighbours. The favicon is the chest alone, without the app
-icon's background square, so that it reads at 16 px in a browser tab; it takes
-the tray source's shape in the app icon's two colours, and lighter ones on a
-dark tab (the SVG switches by itself, and `index.html` picks the light or the
-dark PNG fallback by the colour scheme). `make icons` also writes a badged
-favicon beside it (`favicon-dev.svg`, `favicon-32-dev.png`,
-`favicon-32-dark-dev.png`), with the same "D" badge separated from the chest
-by a transparent ring. A development host — `make dev`'s, or the development
-app's — answers the favicon's paths with the badged files, so its tabs are
-told apart from the installed app's; `index.html` links only the plain ones,
-and the tab's title stays "coffret" whichever host served it.
-
-Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
-
-Building the app needs the Tauri CLI once for `make desktop-build`
-(`cargo install tauri-cli --version '^2' --locked`), and on Linux the
-development files of WebKitGTK 4.1, GTK 3, ayatana-appindicator and librsvg.
-On Linux both `make desktop-build` and `make desktop-dev-build` link the app
-with the system's C compiler, `/usr/bin/cc` (`build-essential`), whatever
-`PATH` puts first: a compiler from a Nix profile, say, would make the binary
-ask for a dynamic loader that cannot find the distribution's GTK. Both then
-refuse a binary whose program interpreter is not the system's or whose
-libraries do not resolve from an empty environment. The app is a member of
-the backend workspace, so `make check` builds it and needs those files too;
-the backend job in `.github/workflows/ci.yml` lists the Debian and Ubuntu
-package names.
-
-### The Electron app
-
-The desktop app is moving to Electron (`frontend/packages/apps/desktop`). For
-now it runs from a checkout alone, through `make desktop-electron-dev`, as the
-development app: it carries the identifier `io.github.x7c1.coffret.dev`,
-serves the Libraries under the development state directory, and refuses to
-start where `COFFRET_STATE_DIR` is not set. It shares that identifier and
-those Libraries with `make desktop-dev`, so run one or the other.
-
-It runs the server in its own process through the Node-API addon
-(`make napi-addon`), and shows the explorer in a window of its own rather than
-in the system browser. The Passphrase is typed into a second, small window,
+The desktop app is an Electron app, `frontend/packages/apps/desktop`. It runs
+the server in its own process through the Node-API addon (`make napi-addon`),
+and shows the explorer in a window of its own rather than in the system
+browser. The Passphrase is typed into a second, small window,
 served by the app's Passphrase door: the page there submits to the door
 directly, and no page of the app reaches the app's own process. Once the
 Library is open that window goes and the explorer's comes. When the explorer
@@ -305,8 +197,8 @@ one — owns `org.kde.StatusNotifierWatcher`, which GNOME does only with an
 extension such as AppIndicator and KStatusNotifierItem Support. The app asks
 the bus as it starts (`gdbus`, given about a second), and logs which way it
 went. Where nothing hosts one, or `gdbus` is missing or does not answer, there
-is no tray, and closing the explorer's window quits the app as before. macOS
-and Windows always have a tray.
+is no tray, and closing the explorer's window quits the app. macOS and
+Windows always have a tray.
 
 A Passphrase window that says it can no longer take the Passphrase, after five
 refused tries, is spent: the app is told so, and loads it afresh the next time
@@ -315,17 +207,123 @@ gives a window that takes the Passphrase. Before a Library is open, a second
 launch, the Dock or the tray's *Open the explorer* brings it back fresh in the
 same way, as does closing it, which quits the app, and starting the app again.
 
+The Library also locks itself after the idle interval
+(`COFFRET_IDLE_MINUTES`, 30 minutes unless set), as the server's does, and is
+unlocked in place as above. The Passphrase is typed only in the Passphrase
+window, never in the explorer's page. The server `make dev` starts has no such
+window, so its *unlock* says to start it again.
+
+There are two of it, told apart by their identifier, which the app takes from
+how it is run:
+
+- **The installed app** is `io.github.x7c1.coffret`: the app from a bundle,
+  installed by `make desktop` or from a GitHub Release. It is started from the
+  desktop, so nothing sets `COFFRET_STATE_DIR` for it, and it serves the
+  Libraries under the default state directory: the production Library,
+  whichever checkout it was built in.
+- **The development app** (`make desktop-dev`) is the same app run from the
+  checkout, which makes it `io.github.x7c1.coffret.dev`. It inherits the
+  `Makefile`'s `COFFRET_STATE_DIR`, so it serves the Libraries under the
+  development state directory, and refuses to start where that is not set.
+  Its own identifier gives it its own single-instance scope and its own
+  browser data, so it runs beside the installed app.
+
 The development app is told apart from the installed one: its windows are
 titled "Coffret (dev)", its tray icon carries the "D" badge and its tooltip
-reads "Coffret (dev)", its Dock icon (macOS) and window icon (Linux) are the
-badged `icons-dev/` icon, and on Linux its windows carry the identifier as
-their app ID (`WM_CLASS` on X11), so GNOME groups and names them apart from the
-installed app's. The installed app's look is unchanged. The icons are copies,
-under `frontend/packages/apps/desktop/assets/`, that `make icons` writes along
-with the Tauri app's.
+reads "Coffret (dev)", and its Dock icon (macOS) and window icon (Linux) are
+the badged `icons-dev/` icon. On Linux each app's windows carry its own
+identifier as their app ID (`WM_CLASS` on X11), so GNOME groups and names the
+two apart, and matches the installed app's windows with the desktop entry its
+`.deb` installs, whose `StartupWMClass` is `io.github.x7c1.coffret`.
 
-The Electron package fetches its binary the first time it is run, so the first
-`make desktop-electron-dev` needs the network.
+Every icon is derived from two SVG sources under `assets/icon/`:
+`coffret.svg`, the app icon, and `coffret-tray.svg`, the same chest as a
+one-colour silhouette. `make icons` (`scripts/gen-icons.sh`, which needs the
+Tauri CLI, `cargo install tauri-cli --version '^2' --locked`, and python3)
+writes the installed app's `icons/`, the development app's `icons-dev/` and
+the tray's `icons-tray/` under `backend/crates/apps/coffret-desktop/`, copies
+of what the app uses into `frontend/packages/apps/desktop/assets/` (the tray
+icons and the development app's badged icon) and `packaging/` (the `.icns` and
+the PNG the bundles carry), and the explorer's favicon under
+`frontend/packages/apps/web/public/`; the outputs are committed, and running it
+again rewrites the same bytes. The development app's icons carry a "D" badge in
+the bottom-right corner, and its tray icon is badged too, so the two apps are
+told apart in the tray without opening a menu. The tray icon is a
+one-colour picture rather than the app icon, because a tray draws it small and
+in the menu bar's own colours: on macOS it is black and set as a template
+image, which the menu bar draws black or white for its appearance, and on
+Linux it is white, since GNOME's top bar is dark in both its light and its dark
+style. The `.icns` is the app icon inset to 80 % on a transparent canvas,
+because the Dock draws icons with margins and a full-bleed one would look
+larger than its neighbours. The favicon is the chest alone, without the app
+icon's background square, so that it reads at 16 px in a browser tab; it takes
+the tray source's shape in the app icon's two colours, and lighter ones on a
+dark tab (the SVG switches by itself, and `index.html` picks the light or the
+dark PNG fallback by the colour scheme). `make icons` also writes a badged
+favicon beside it (`favicon-dev.svg`, `favicon-32-dev.png`,
+`favicon-32-dark-dev.png`), with the same "D" badge separated from the chest
+by a transparent ring. A development host — `make dev`'s, or the development
+app's — answers the favicon's paths with the badged files, so its tabs are
+told apart from the installed app's; `index.html` links only the plain ones,
+and the tab's title stays "coffret" whichever host served it.
+
+Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
+
+### Building it
+
+`make desktop-build` (`scripts/desktop.sh build`) builds the explorer, the
+Node-API addon with the explorer compiled in (`make napi-addon`), the app's
+code, and then the bundle for the host, with electron-builder and the
+package's `electron-builder.config.js`, into
+`frontend/packages/apps/desktop/release/`: `Coffret_<version>_aarch64.dmg`
+(and `mac-arm64/Coffret.app`) on macOS, `coffret-desktop_<version>_amd64.deb`
+on Linux. The version is the workspace version of `backend/Cargo.toml`. The
+build then checks the bundle — its fuses, its signature on macOS, its package
+fields on Linux — as the Bundle workflow does ([the release
+guide](release.md#desktop-bundles) lists what is checked).
+
+It needs the frontend's dependencies (`pnpm install` in `frontend/`) and the
+Rust toolchain. The Electron package fetches its binary the first time the
+app is run, and electron-builder fetches the Electron release it packages
+(and, on Linux, the tool that writes the `.deb`) the first time it bundles,
+so the first `make desktop-dev` and the first `make desktop-build` need the
+network.
+
+On Linux the addon is built with the system's C compiler, `/usr/bin/cc`
+(`build-essential`), whatever `PATH` puts first: Electron is loaded by the
+distribution's dynamic loader, and an addon linked by a compiler from a Nix
+profile, say, would ask for libraries that loader cannot find. Each build then
+refuses an addon whose libraries do not resolve from an empty environment
+through the program interpreter Electron's binary asks for.
+
+The Tauri app (`backend/crates/apps/coffret-desktop`) is no longer built by
+any of these targets, nor bundled, but it is still a member of the backend
+workspace, so `make check` builds it and needs the development files of
+WebKitGTK 4.1, GTK 3, ayatana-appindicator and librsvg on Linux; the backend
+job in `.github/workflows/ci.yml` lists the Debian and Ubuntu package names.
+
+### Trying a bundle without installing it
+
+A bundle is the installed app, so started as it is it serves the production
+Library, and hands its launch to an installed copy that is already running. To
+try one beside the installed app, run its binary from the mounted `.dmg` (or
+the extracted `.deb`) with a state directory and a browser-data directory of
+its own:
+
+```bash
+COFFRET_STATE_DIR="$PWD/.tmp/try" COFFRET_LOG_DIR="$PWD/.tmp/try/logs" \
+  /Volumes/Coffret*/Coffret.app/Contents/MacOS/Coffret --user-data-dir="$(mktemp -d)"
+```
+
+The app takes `--user-data-dir` in place of its own browser-data directory, so
+its single-instance lock is apart from the installed app's too.
+
+On Linux the binary of an extracted `.deb` is
+`<dir>/opt/Coffret/coffret-desktop`. On Ubuntu 24.04 it cannot start
+Chromium's sandbox from there: the AppArmor profile that lets the app create
+user namespaces names `/opt/Coffret/coffret-desktop` alone, and the extracted
+`chrome-sandbox` is not setuid root ([the install
+guide](install/ubuntu.md#the-sandbox)). Try it on Ubuntu 22.04, or install it.
 
 ## The rule for agents
 

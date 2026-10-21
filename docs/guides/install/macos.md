@@ -13,8 +13,9 @@ where it keeps its state are in the [install guide](README.md).
 
 Open `Coffret.app`. The first time, macOS refuses and reports that the app "is
 damaged and can't be opened". Nothing is wrong with the download: the app is
-neither signed by an identified developer nor notarized by Apple, and
-Gatekeeper, the macOS check for downloaded apps, describes that as damage.
+signed only ad hoc — signed, with the hardened runtime, but by no identified
+developer — and not notarized by Apple, and Gatekeeper, the macOS check for
+downloaded apps, describes that as damage.
 
 Clear the quarantine attribute macOS put on the download; that is what
 triggers the check. You only need this once per downloaded copy:
@@ -35,8 +36,23 @@ password. On macOS 14 and earlier, right-click `Coffret.app` in `Applications`
 and choose **Open** instead. The `xattr` command above works in this case
 too.
 
+To see the signature for yourself:
+
+```bash
+codesign -dv /Applications/Coffret.app
+```
+
+prints `Signature=adhoc`, and `flags=…(adhoc,runtime)` for the hardened
+runtime.
+
 ## Updating
 
 Quit Coffret from its tray icon, drag the new `Coffret.app` from the new
 `.dmg` over the old one, then clear the quarantine attribute again. The
 [install guide](README.md#updating) says what happens to your state.
+
+## Removing
+
+Quit Coffret from its tray icon, then delete `/Applications/Coffret.app`. The
+[install guide](README.md#removing-the-app) says what is left behind and how
+to remove it too.

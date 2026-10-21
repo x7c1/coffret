@@ -1,10 +1,12 @@
 // The Node-API addon the app runs the server in: coffret-napi, built by
 // `make napi-addon` as backend/target/release/coffret.node with the explorer
-// compiled in. This module says what it exports, and loads it.
+// compiled in, and shipped beside a packaged app's code (`resources.ts`). This
+// module says what it exports, and loads it.
 
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+
+import type { Resources } from './resources.js';
 
 /** What a Passphrase window is opened to do. */
 export type DoorMode = 'Open' | 'Unlock';
@@ -97,17 +99,11 @@ export interface Addon {
   retire(): void;
 }
 
-/**
- * Where `make napi-addon` leaves the addon, from this file's place in the
- * checkout once built (`frontend/packages/apps/desktop/dist/`).
- */
-const ADDON_IN_CHECKOUT = '../../../../../backend/target/release/coffret.node';
-
-/** The addon, loaded from the checkout this app was built in. */
-export function loadAddon(): Addon {
-  const path = fileURLToPath(new URL(ADDON_IN_CHECKOUT, import.meta.url));
+/** The addon, loaded from where `resources` says it is. */
+export function loadAddon(resources: Resources): Addon {
+  const path = resources.addon;
   if (!existsSync(path)) {
-    throw new Error(`The Node-API addon is not built at ${path}; run make napi-addon.`);
+    throw new Error(`The Node-API addon is not at ${path}; ${resources.missingAddon}`);
   }
   return createRequire(import.meta.url)(path) as Addon;
 }
