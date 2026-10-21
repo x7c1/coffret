@@ -93,7 +93,7 @@ Today the Electron app (`frontend/packages/apps/desktop`) quits when its explore
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, driving the development app with Playwright's `_electron` over the agent Library:
+- [x] On macOS, driving the development app with Playwright's `_electron` over the agent Library:
   - closing the explorer window leaves the app running, with the tray present;
   - a second-instance launch and a Dock `activate` bring the explorer back;
   - the tray menu's *Open the explorer* and *Quit Coffret* work (invoked through the menu object);
