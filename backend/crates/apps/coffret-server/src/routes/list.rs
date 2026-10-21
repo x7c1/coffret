@@ -31,9 +31,10 @@ pub struct ListingDto {
     /// is each row's `state`.
     ///
     /// What the browser makes of it is the browser's: the explorer keeps the
-    /// sentence back at a Library root that holds no files of its own, where
-    /// every row is a folder with a `mapped` of its own to answer with. The
-    /// route says the same thing about that root as about any other folder.
+    /// sentence back at a Library root that holds folders and no files of its
+    /// own, where every row is a folder with a `mapped` of its own to answer
+    /// with. The route says the same thing about that root as about any other
+    /// folder.
     mapped: bool,
     /// Whether the Library has this folder at all.
     ///
@@ -68,6 +69,17 @@ pub struct ListingDto {
     /// field only says that one is there. Coffret's scratch, the management
     /// area (spec: EP-14) and symbolic links are never named.
     folders_on_disk: Vec<String>,
+    /// The names of the top-level folders this device maps that the Library
+    /// holds no Entry under yet, in EP-3 order; empty for every listing but the
+    /// Library root's.
+    ///
+    /// Not among `folders`, which are the Library's: a folder exists only where
+    /// a current Entry stands under it (spec: EP-2), and a mapping made before
+    /// anything was put in it names none. Named all the same, because it is
+    /// somewhere this device can put files, and the explorer offers it as a
+    /// place to drop into. Only this device's mappings are read, so another
+    /// device's never appear here.
+    empty_mapped_prefixes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -186,6 +198,11 @@ pub async fn list(
         folders: listing.folders.iter().map(folder_dto).collect(),
         files: merged(&listing.files, &added.files, &reserved),
         folders_on_disk: added.folders,
+        empty_mapped_prefixes: listing
+            .empty_mapped_prefixes
+            .iter()
+            .map(|prefix| prefix.name().to_owned())
+            .collect(),
     }))
 }
 

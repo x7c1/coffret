@@ -276,6 +276,7 @@ describe('heldUnder', () => {
         content_type: 'image/jpeg',
       })),
       folders_on_disk: [],
+      empty_mapped_prefixes: [],
     };
   }
 

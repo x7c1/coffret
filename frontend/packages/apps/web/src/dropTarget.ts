@@ -93,10 +93,11 @@ export function dropLine(outcome: DropOutcome, held: boolean): string {
  * A mapping stands for one top-level folder and everything under it, or for
  * the Library root (spec: EP-9), so the root's listing answers for every folder
  * the tree draws: the root by its own `mapped`, and any other folder by the
- * top-level folder it is under. A top-level folder the root's listing does not
- * name — the folder of a book whose freeze has not committed — is reached
- * where the root is, and otherwise not known from here: the drop asks its own
- * listing before anything is sent.
+ * top-level folder it is under. A top-level folder not among the root's
+ * folders is reached where the root's `empty_mapped_prefixes` names it. Any
+ * other — the folder of a book whose freeze has not committed, a path prepared
+ * on the page — is reached where the root is, and otherwise not known from
+ * here: the drop asks its own listing before anything is sent.
  *
  * Read while a drag is over a row of the tree, which has no listing of its own
  * to ask and cannot wait for one.
@@ -112,6 +113,9 @@ export function mappedAt(folder: string, root: Listing | null): boolean | null {
   const listed = root.folders.find((one) => one.name === top);
   if (listed !== undefined) {
     return listed.mapped;
+  }
+  if (root.empty_mapped_prefixes.includes(top)) {
+    return true;
   }
   return root.mapped ? true : null;
 }

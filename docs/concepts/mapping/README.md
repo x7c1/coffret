@@ -44,7 +44,9 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   mappings leave, as the root mapping does)
 - reach (a folder of the Library, as the mapping that represents it does) —
   a listing of a folder reports, in a field named `mapped`, whether a mapping
-  reaches that folder and each child folder in it
+  reaches that folder and each child folder in it, and the root's listing
+  names, apart from its folders and in a field named `empty_mapped_prefixes`,
+  each top-level component this device maps that no Entry stands under yet
 - translate (an Entry Path into a local path under the mapped root)
 - stamp (the filesystem a mapped root stood on, during a scan)
 - adopt (the identity a mapped root's marker already carries, when the mapping

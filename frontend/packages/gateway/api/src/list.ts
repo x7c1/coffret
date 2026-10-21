@@ -84,9 +84,9 @@ export interface Listing {
    * everything about whether anything here *can* be. A listing that says `false`
    * is one whose files no fetch could place, which is why the screen says so
    * over the rows rather than letting a reader find out by being declined —
-   * everywhere but a Library root holding no files of its own, where every row
-   * is a folder answering for itself and the banner would have no inert row to
-   * explain.
+   * everywhere but a Library root holding folders and no files of its own,
+   * where every row is a folder answering for itself and the banner would have
+   * no inert row to explain.
    *
    * `true` is not the converse: a mapping this device holds may reach a folder
    * that is not the one it was recorded against, and a listing of it says
@@ -126,6 +126,18 @@ export interface Listing {
    * the Library does not hold is a separate question from whether one is there.
    */
   folders_on_disk: string[];
+  /**
+   * The names of the top-level folders this device maps that the Library holds
+   * no Entry under yet, in the same order; empty for every listing but the
+   * Library root's.
+   *
+   * Not among `folders`, which are the Library's: a folder exists only where an
+   * Entry stands under it, so a mapping made before anything was put in it
+   * names none. Named all the same, because it is somewhere this device can put
+   * files, and a page offers it as a place to drop into. Only this device's
+   * mappings are read, so another device's never appear.
+   */
+  empty_mapped_prefixes: string[];
 }
 
 /** Asks what one folder holds; the empty string is the Library root. */

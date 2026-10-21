@@ -144,7 +144,7 @@ export function strandedFolders(
  * units and puts every astral character before `U+E000`–`U+FFFF` rather than
  * after them. `localeCompare` would be a third order again.
  */
-function inLibraryOrder(left: string, right: string): number {
+export function inLibraryOrder(left: string, right: string): number {
   const one = [...left];
   const other = [...right];
   for (let at = 0; at < Math.min(one.length, other.length); at += 1) {

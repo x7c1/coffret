@@ -222,3 +222,29 @@ async fn a_librarys_folder_spelled_decomposed_on_disk_is_not_named_twice() {
     assert_eq!(folders(&albums), ["2026", "caf\u{e9}s"]);
     assert_eq!(albums["folders_on_disk"], json!([]));
 }
+
+// A top-level folder this device maps with nothing under it yet is no folder of
+// the Library (spec: EP-2), and the root's listing names it apart from the
+// folders, so the explorer can offer it as a place to drop the first files into.
+// A mapped top-level folder that does hold Entries is an ordinary folder and is
+// not named there.
+#[tokio::test]
+async fn the_root_names_a_mapped_top_level_folder_nothing_is_under() {
+    let empty = Served::mapping_only("comics").await;
+    let (status, root) = body_of(empty.get("/api/list").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(folders(&root), ["albums", "books"]);
+    assert_eq!(root["empty_mapped_prefixes"], json!(["comics"]));
+
+    // Every other listing leaves it empty: a mapping is made at the top level.
+    let (_, inside) = body_of(empty.get("/api/list?path=comics").await).await;
+    assert_eq!(inside["held"], false);
+    assert_eq!(inside["mapped"], true);
+    assert_eq!(inside["empty_mapped_prefixes"], json!([]));
+
+    let holding = Served::mapping_only("albums").await;
+    let (_, root) = body_of(holding.get("/api/list").await).await;
+    assert_eq!(folders(&root), ["albums", "books"]);
+    assert_eq!(root["folders"][0]["mapped"], true);
+    assert_eq!(root["empty_mapped_prefixes"], json!([]));
+}

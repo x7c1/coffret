@@ -89,6 +89,8 @@ export type { Library } from './library';
 export { getListing } from './list';
 export type { ContainerKind, EntryState, Listing, ListedFile, ListedFolder } from './list';
 export { mapFolder } from './map';
+export { componentDefect, reservedName } from './names';
+export type { ComponentDefect, ReservedName } from './names';
 export type { Mapped, MappedMarker } from './map';
 export { startReconnect } from './reconnect';
 export type { Reconnecting } from './reconnect';

@@ -643,6 +643,7 @@ function listing(value: unknown, where: string): Listing {
     'folders',
     'files',
     'folders_on_disk',
+    'empty_mapped_prefixes',
   ]);
   return {
     path: string(fields.path, `${where}.path`),
@@ -651,6 +652,7 @@ function listing(value: unknown, where: string): Listing {
     folders: list(fields.folders, `${where}.folders`, listedFolder),
     files: list(fields.files, `${where}.files`, listedFile),
     folders_on_disk: list(fields.folders_on_disk, `${where}.folders_on_disk`, string),
+    empty_mapped_prefixes: list(fields.empty_mapped_prefixes, `${where}.empty_mapped_prefixes`, string),
   };
 }
 

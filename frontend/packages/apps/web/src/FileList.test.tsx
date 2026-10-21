@@ -1,11 +1,12 @@
 import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
+import { AWAITING } from './awaiting';
 import { TAKEN } from './dropTarget';
-import { END_SELECT, FileList, SELECT } from './FileList';
+import { EMPTY_MAPPED_ROOT, END_SELECT, FileList, SELECT } from './FileList';
 
 function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
   return {
@@ -35,6 +36,7 @@ function listing(over: Partial<Listing> = {}): Listing {
     folders: [],
     files: [],
     folders_on_disk: [],
+    empty_mapped_prefixes: [],
     ...over,
   };
 }
@@ -48,6 +50,8 @@ function listOf(shown: Listing, stranded = false, strandedKnown = true) {
   return (
     <FileList
       listing={shown}
+      awaiting={[]}
+      awaitingHere={false}
       fill={null}
       freeze={null}
       stranded={stranded}
@@ -63,6 +67,7 @@ function listOf(shown: Listing, stranded = false, strandedKnown = true) {
       onMap={() => undefined}
       onPack={() => undefined}
       onDelete={() => undefined}
+      onNewFolder={() => undefined}
     />
   );
 }
@@ -109,6 +114,11 @@ it('names the top-level folder to map, whichever sentence it says', () => {
 // person looking for files they never had.
 it('tells a folder that is not there from one that is empty', () => {
   expect(draw(listing({ path: '', held: true }))).toContain('this Library is empty');
+  // Mapped, an empty root is where a Library just made is started, and says how.
+  expect(draw(listing({ path: '', held: true }))).toContain(EMPTY_MAPPED_ROOT);
+  expect(draw(listing({ path: '', held: true, mapped: false }))).not.toContain(
+    EMPTY_MAPPED_ROOT,
+  );
   expect(draw(listing({ path: 'album', held: false }))).toContain(
     'the Library holds nothing at this path',
   );
@@ -171,6 +181,8 @@ function mount(shown: Listing, strandedKnown = true, stranded = false) {
   const { container } = render(
     <FileList
       listing={shown}
+      awaiting={[]}
+      awaitingHere={false}
       fill={null}
       freeze={null}
       stranded={stranded}
@@ -186,6 +198,7 @@ function mount(shown: Listing, strandedKnown = true, stranded = false) {
       onMap={onMap}
       onPack={onPack}
       onDelete={onDelete}
+      onNewFolder={() => undefined}
     />,
   );
   // The element the drag handlers are on, which is the list as a whole.
@@ -746,4 +759,121 @@ it('gives the selection line the headings’ height and font size', () => {
   expect(row().contains(screen.getByText('1 selected'))).toBe(true);
   expect({ height: row().style.height, fontSize: row().style.fontSize }).toEqual(headings);
   expect((row().querySelector('th') as HTMLElement).style.fontSize).toBe('');
+});
+
+/** The list drawn into the DOM with the folders it does not hold yet, and "New folder…" recorded. */
+function mountAwaiting(shown: Listing, awaiting: ListedFolder[] = [], awaitingHere = false) {
+  const onNewFolder = vi.fn();
+  const onDelete = vi.fn();
+  const onOpenFolder = vi.fn();
+  const onMap = vi.fn();
+  render(
+    <FileList
+      {...listOf(shown).props}
+      awaiting={awaiting}
+      awaitingHere={awaitingHere}
+      onNewFolder={onNewFolder}
+      onDelete={onDelete}
+      onOpenFolder={onOpenFolder}
+      onMap={onMap}
+    />,
+  );
+  return { onNewFolder, onDelete, onOpenFolder, onMap };
+}
+
+/** The labels of the items a row's "⋮" offers, opening it to read them. */
+function menuOf(name: string): string[] {
+  const mark = screen.queryByLabelText(`actions for ${name}`);
+  if (mark === null) {
+    return [];
+  }
+  fireEvent.click(mark);
+  const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+  fireEvent.click(mark);
+  return items;
+}
+
+describe('the root of a Library with nothing mapped', () => {
+  // A Library just made has nothing in it and nothing mapped, and mapping the
+  // root is how it is started from the explorer: the banner and its button are
+  // there although no row is.
+  it('offers to map the root of a Library that holds nothing', () => {
+    const { onMap } = mountAwaiting(listing({ path: '', mapped: false }));
+    expect(screen.getByText(/this Library holds nothing yet/)).toBeTruthy();
+    fireEvent.click(screen.getByText('map the Library root…'));
+    expect(onMap).toHaveBeenCalledWith(null);
+  });
+
+  // A root of folders alone is the ordinary shape of a device that mapped one
+  // top-level folder, and keeps the banner back as it always has.
+  it('keeps the banner back at a root holding only folders', () => {
+    expect(
+      draw(listing({ path: '', mapped: false, folders: [{ name: 'albums', path: 'albums', mapped: true }] })),
+    ).not.toContain('map the Library root…');
+    cleanup();
+    // A mapped top-level folder with nothing under it is such a folder too.
+    mountAwaiting(listing({ path: '', mapped: false, empty_mapped_prefixes: ['comics'] }), [
+      { name: 'comics', path: 'comics', mapped: true },
+    ]);
+    expect(screen.queryByText('map the Library root…')).toBeNull();
+  });
+
+  // And a root holding files of its own says what it always said.
+  it('offers the root over a root holding files, as before', () => {
+    const shown = draw(listing({ path: '', mapped: false, files: [file('loose.png')] }));
+    expect(shown).toContain('map the Library root…');
+    expect(shown).toContain('files sitting directly in it');
+  });
+});
+
+describe('"New folder…" on a row of the list', () => {
+  it('is offered on a folder a mapping reaches, and hands over that folder', () => {
+    const { onNewFolder } = mountAwaiting(
+      listing({ folders: [folder('2026', true), folder('2027', false)], mapped: false }),
+    );
+    expect(menuOf('2026')).toEqual(['New folder…', 'Delete…']);
+    fireEvent.click(screen.getByLabelText('actions for 2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+    expect(onNewFolder).toHaveBeenCalledWith('albums/2026');
+
+    // Where no mapping reaches, a drop would be refused, so there is nothing to
+    // prepare a path for.
+    expect(menuOf('2027')).toEqual(['Delete…']);
+  });
+});
+
+describe('a folder the Library does not hold yet', () => {
+  // Drawn among the Library's own folders, in the Library's order, with its
+  // mark, opened like any folder, and with nothing to delete.
+  it('is a row marked as not in the Library yet', () => {
+    const { onOpenFolder, onNewFolder } = mountAwaiting(
+      listing({ folders: [folder('a', true), folder('c', true)] }),
+      [{ name: 'b', path: 'albums/b', mapped: true }],
+    );
+    const names = screen
+      .getAllByRole('row')
+      .map((row) => row.getAttribute('title'))
+      .filter((title) => title !== null);
+    expect(names).toEqual(['a', 'b', 'c']);
+    const row = screen.getByTitle('b');
+    expect(row.textContent).toContain(AWAITING);
+    expect(screen.getByTitle('a').textContent).not.toContain(AWAITING);
+    expect(menuOf('b')).toEqual(['New folder…']);
+
+    fireEvent.doubleClick(row);
+    expect(onOpenFolder).toHaveBeenCalledWith('albums/b');
+    fireEvent.click(screen.getByLabelText('actions for b'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+    expect(onNewFolder).toHaveBeenCalledWith('albums/b');
+  });
+
+  // Opened, it is an empty listing the Library holds nothing at — and it is
+  // not "nothing at this path": it is where the next drop goes.
+  it('opens to an empty listing that says what to do with it', () => {
+    mountAwaiting(listing({ path: 'comics/Series', held: false }), [], true);
+    const list = screen.getByText(AWAITING);
+    expect(list).toBeTruthy();
+    expect(document.body.textContent).not.toContain('the Library holds nothing at this path');
+    expect(document.body.textContent).not.toContain('this folder is not on this device');
+  });
 });

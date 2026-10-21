@@ -21,7 +21,7 @@ function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
 }
 
 function listing(files: ListedFile[], path = 'books'): Listing {
-  return { path, mapped: true, held: true, folders: [], files, folders_on_disk: [] };
+  return { path, mapped: true, held: true, folders: [], files, folders_on_disk: [], empty_mapped_prefixes: [] };
 }
 
 const book = listing([

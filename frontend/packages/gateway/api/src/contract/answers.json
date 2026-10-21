@@ -58,6 +58,7 @@
   },
   "listings": {
     "albums": {
+      "empty_mapped_prefixes": [],
       "files": [
         {
           "container": null,
@@ -135,6 +136,7 @@
       "path": "albums"
     },
     "nowhere": {
+      "empty_mapped_prefixes": [],
       "files": [],
       "folders": [],
       "folders_on_disk": [],
@@ -143,6 +145,7 @@
       "path": "nowhere"
     },
     "packed": {
+      "empty_mapped_prefixes": [],
       "files": [
         {
           "container": "pack",
@@ -164,6 +167,7 @@
       "path": "books"
     },
     "root": {
+      "empty_mapped_prefixes": [],
       "files": [],
       "folders": [
         {
@@ -183,6 +187,7 @@
       "path": ""
     },
     "unmapped_root": {
+      "empty_mapped_prefixes": [],
       "files": [],
       "folders": [
         {

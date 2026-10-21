@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 
 import type { DeleteTarget } from '@coffret/api';
 
+import { AWAITING, NEW_FOLDER, parentOf } from './awaiting';
 import { DropBanner, dropOutline } from './Banner';
 import { DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
@@ -32,26 +33,47 @@ import { ancestry, nest, type FolderNode } from './tree';
  * to be: a folder dropped onto a row lands under its own name inside that
  * row's folder, and the confirmation says where.
  *
+ * So are the folders the Library does not hold yet (see
+ * [`awaiting`](./awaiting)) — a path prepared with "New folder…", and a
+ * top-level folder this device maps with nothing under it — marked as such,
+ * so that a place to drop the first files into is somewhere a person can see
+ * and walk into.
+ *
  * A book — a folder with no folders under it, which is where pages are — can
  * be deleted from its row's "⋮", as it can from its row in the file list: the
  * same target handed over, so the same question asked. Not a stranded folder,
- * which the Library has nothing of to take out.
+ * nor one the Library does not hold yet, which the Library has nothing of to
+ * take out.
+ *
+ * Every row a mapping of this device reaches offers "New folder…" from its
+ * "⋮", the root's "Library" among them — in a Library with nothing in it, that
+ * is the one row there is, and the way to prepare a path right under the root.
  */
 export function FolderTree({
   folders,
   stranded,
+  awaiting,
   current,
   onOpen,
   onDelete,
+  onNewFolder,
   drops,
 }: {
   folders: readonly string[];
   /** The folders of books whose freeze has not committed, which the Library does not hold yet. */
   stranded: readonly string[];
+  /**
+   * The folders drawn that the Library does not hold yet and that are places
+   * to drop into: prepared here, or mapped on this device with nothing under
+   * them. Each is among `folders` too.
+   */
+  awaiting: readonly string[];
   current: string;
   onOpen: (folder: string) => void;
   /** "Delete…" was chosen from a book's menu: the same as the file list's folder menu. */
   onDelete: (target: DeleteTarget) => void;
+  /** "New folder…" was chosen from a row's menu, for a folder inside that row's. */
+  onNewFolder: (parent: string) => void;
   /** What a drop onto a row reaches out to. */
   drops: TreeDrops;
 }) {
@@ -72,6 +94,27 @@ export function FolderTree({
     });
   }, [current]);
 
+  // And a folder just prepared is brought into view too, wherever it was
+  // prepared from: "New folder…" on a row of the list leaves the tree's branch
+  // above it as it was, and a row that appeared nowhere would be a folder
+  // somebody has to go looking for. Only the ones not drawn before, so that a
+  // branch somebody closed stays closed.
+  const seen = useRef<ReadonlySet<string>>(new Set(awaiting));
+  useEffect(() => {
+    const fresh = awaiting.filter((path) => !seen.current.has(path));
+    seen.current = new Set(awaiting);
+    if (fresh.length === 0) {
+      return;
+    }
+    setExpanded((open) => {
+      const above = fresh.flatMap((path) => ancestry(parentOf(path)));
+      if (above.every((folder) => open.has(folder))) {
+        return open;
+      }
+      return new Set([...open, ...above]);
+    });
+  }, [awaiting]);
+
   const toggle = (path: string) =>
     setExpanded((open) => {
       const next = new Set(open);
@@ -85,6 +128,7 @@ export function FolderTree({
   // while the folders are still being asked for, so that nothing moves across
   // the screen when they arrive.
   const waiting = new Set(stranded);
+  const unheld = new Set(awaiting);
   return (
     <nav aria-label="folders" style={{ padding: '8px 0' }}>
       {/* No mark: the root is the place the tree hangs from, and what it is
@@ -95,6 +139,7 @@ export function FolderTree({
         depth={0}
         selected={current === ''}
         onOpen={() => onOpen('')}
+        menu={newFolderOf('', drops, onNewFolder)}
         drops={drops}
       />
       {nest(folders).map((node) => (
@@ -105,9 +150,11 @@ export function FolderTree({
           current={current}
           expanded={expanded}
           stranded={waiting}
+          awaiting={unheld}
           onToggle={toggle}
           onOpen={onOpen}
           onDelete={onDelete}
+          onNewFolder={onNewFolder}
           drops={drops}
         />
       ))}
@@ -126,11 +173,6 @@ export interface TreeDrops {
   /** Whether a book is being packed right now, wherever it is. */
   freezing: boolean;
   /**
-   * A drag carrying files came over a row: the moment to learn which folders
-   * are mapped, if that is not known yet.
-   */
-  onArrive: () => void;
-  /**
    * A drop on a row: its files, each with its path relative to that row's
    * folder, and what the desktop app did not take of it.
    */
@@ -146,15 +188,32 @@ export interface TreeDrops {
   onUnmapped: (folder: string) => void;
 }
 
+/**
+ * "New folder…" for the row of `folder`, where a mapping of this device is
+ * known to reach it — and nothing where it is not, or not known yet: a path
+ * prepared there would be one no drop could land under.
+ */
+function newFolderOf(
+  folder: string,
+  drops: TreeDrops,
+  onNewFolder: (parent: string) => void,
+): MenuItem[] {
+  return drops.mapped(folder) === true
+    ? [{ label: NEW_FOLDER, onPress: () => onNewFolder(folder) }]
+    : [];
+}
+
 function Branch({
   node,
   depth,
   current,
   expanded,
   stranded,
+  awaiting,
   onToggle,
   onOpen,
   onDelete,
+  onNewFolder,
   drops,
 }: {
   node: FolderNode;
@@ -162,14 +221,17 @@ function Branch({
   current: string;
   expanded: ReadonlySet<string>;
   stranded: ReadonlySet<string>;
+  awaiting: ReadonlySet<string>;
   onToggle: (path: string) => void;
   onOpen: (folder: string) => void;
   onDelete: (target: DeleteTarget) => void;
+  onNewFolder: (parent: string) => void;
   drops: TreeDrops;
 }) {
   const open = expanded.has(node.path);
   const book = node.children.length === 0;
   const waiting = stranded.has(node.path);
+  const unheld = awaiting.has(node.path);
   return (
     <>
       <Row
@@ -178,14 +240,16 @@ function Branch({
         depth={depth}
         selected={current === node.path}
         waiting={waiting}
+        unheld={unheld}
         onOpen={() => onOpen(node.path)}
         onToggle={book ? undefined : () => onToggle(node.path)}
         opened={open}
-        menu={
-          book && !waiting
+        menu={[
+          ...newFolderOf(node.path, drops, onNewFolder),
+          ...(book && !waiting && !unheld
             ? [{ label: DELETE, onPress: () => onDelete({ folder: node.path, paths: [] }) }]
-            : []
-        }
+            : []),
+        ]}
         drops={drops}
       />
       {open &&
@@ -197,9 +261,11 @@ function Branch({
             current={current}
             expanded={expanded}
             stranded={stranded}
+            awaiting={awaiting}
             onToggle={onToggle}
             onOpen={onOpen}
             onDelete={onDelete}
+            onNewFolder={onNewFolder}
             drops={drops}
           />
         ))}
@@ -213,6 +279,7 @@ function Row({
   depth,
   selected,
   waiting,
+  unheld,
   onOpen,
   onToggle,
   opened,
@@ -226,6 +293,8 @@ function Row({
   selected: boolean;
   /** Whether this folder is a stranded one, which the Library does not hold. */
   waiting?: boolean;
+  /** Whether this folder is one the Library does not hold yet, to drop into. */
+  unheld?: boolean;
   onOpen: () => void;
   /** Opens and closes the branch, on a folder that has one. */
   onToggle?: () => void;
@@ -253,12 +322,6 @@ function Row({
   const drag = useDragOver();
   const mapped = drag.dragged ? drops.mapped(path) : null;
   const outcome = dropOutcome({ mapped: mapped !== false, freezing: drops.freezing });
-  const arrive = (event: DragEvent) => {
-    drag.onDragEnter(event);
-    if (event.dataTransfer.types.includes('Files')) {
-      drops.onArrive();
-    }
-  };
   const drop = (event: DragEvent) => {
     event.preventDefault();
     drag.ended();
@@ -277,7 +340,7 @@ function Row({
 
   return (
     <div
-      onDragEnter={arrive}
+      onDragEnter={drag.onDragEnter}
       onDragOver={drag.onDragOver}
       onDragLeave={drag.onDragLeave}
       onDrop={drop}
@@ -315,10 +378,10 @@ function Row({
             textAlign: 'left',
             border: 'none',
             background: selected ? COLOR.selected : 'none',
-            // Dimmed while the Library does not hold it: the pages are on the
-            // disk and out of the Library, and nothing else on the row would
-            // say so.
-            color: waiting === true ? COLOR.added : COLOR.text,
+            // Dimmed while the Library does not hold it: a stranded folder's
+            // pages are on the disk and out of the Library, and nothing else
+            // on its row would say so; a folder not held yet has its mark too.
+            color: waiting === true || unheld === true ? COLOR.added : COLOR.text,
             font: 'inherit',
             padding: '3px 8px 3px 2px',
             borderRadius: 3,
@@ -330,6 +393,11 @@ function Row({
         >
           {label}
         </button>
+        {unheld === true && (
+          <span title={AWAITING} style={MARK}>
+            not in Library
+          </span>
+        )}
         <RowMenu name={label} items={menu} />
       </div>
       {/* Under the row rather than over the rows below it, and inside the
@@ -340,6 +408,15 @@ function Row({
     </div>
   );
 }
+
+/** The mark after the name of a folder the Library does not hold yet; the sentence is its title. */
+const MARK = {
+  flex: '0 0 auto',
+  marginRight: 4,
+  color: COLOR.added,
+  fontSize: 11,
+  whiteSpace: 'nowrap',
+} as const;
 
 /** How far in a row at `depth` starts. */
 function indent(depth: number): number {
