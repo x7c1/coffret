@@ -15,7 +15,8 @@
 //! required; a token the door holds ([`Windows`]); and a bounded body
 //! ([`Submission`]). The token is the explorer host's own secret type, held as
 //! its digest and compared in constant time (spec: LA-23); it ends when its
-//! window's submission lands, and after five refused ones (spec: LA-24).
+//! window's submission lands, and after five refused ones, which the shell is
+//! told of so that it loads that window afresh (spec: LA-24).
 //!
 //! No event recorded here carries a token, the door's URL or its address
 //! (spec: EL-1, LA-25).

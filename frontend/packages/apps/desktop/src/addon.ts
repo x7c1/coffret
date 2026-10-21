@@ -14,7 +14,18 @@ export type DoorMode = 'Open' | 'Unlock';
  * a token, a ticket or a URL, which the app asks for through a call of its
  * own.
  */
-export type DesktopEvent = 'LibraryOpened' | 'LibraryUnlocked' | 'UnlockRequested' | 'ServerStopped';
+export type DesktopEvent =
+  | 'LibraryOpened'
+  | 'LibraryUnlocked'
+  | 'UnlockRequested'
+  /**
+   * The door ended a Passphrase window's token after its last refused try:
+   * that window can take no Passphrase any more, and is loaded afresh the
+   * next time it is brought forward. Which window is not said, since that
+   * would take its token; the app keeps one.
+   */
+  | 'PassphraseWindowSpent'
+  | 'ServerStopped';
 
 /** The Library served, as the addon tells of it. */
 export interface ServedLibrary {

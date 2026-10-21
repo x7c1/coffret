@@ -27,6 +27,11 @@
 #     tray-light{,@2x}.png        installed app, white (Linux)
 #     tray-dev{,@2x}.png          development app, black, with a one-colour badge
 #     tray-dev-light{,@2x}.png    development app, white, with a one-colour badge
+#   frontend/packages/apps/desktop/assets/           the Electron app: copies of
+#     tray*.png                                       every tray file above, and
+#     icon-dev.png                                    icons-dev/icon.png, its window
+#                                                     and Dock icon as the
+#                                                     development app
 #   frontend/packages/apps/web/public/
 #     favicon.svg                 the chest alone, in the app icon's two colours
 #                                 (lighter ones on a dark tab, see FAVICON_*)
@@ -53,6 +58,7 @@ readonly INSTALLED_DIR="$DESKTOP_DIR/icons"
 readonly DEV_DIR="$DESKTOP_DIR/icons-dev"
 readonly TRAY_DIR="$DESKTOP_DIR/icons-tray"
 readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
+readonly ELECTRON_ASSETS_DIR="$REPO_ROOT/frontend/packages/apps/desktop/assets"
 
 # --- Geometry -----------------------------------------------------------------
 
@@ -362,6 +368,15 @@ for suffix in "" -light; do
   write_tray_badged_svg "$TRAY_SOURCE" "$color" "$WORK_DIR/tray-dev$suffix.svg"
   write_tray "$WORK_DIR/tray-dev$suffix.svg" "tray-dev$suffix"
 done
+
+# --- Electron app -------------------------------------------------------------
+
+# Copies rather than files of its own, so that the two apps draw the same
+# pictures for as long as both are built.
+mkdir -p "$ELECTRON_ASSETS_DIR"
+cp "$TRAY_DIR"/tray*.png "$ELECTRON_ASSETS_DIR/"
+cp "$DEV_DIR/icon.png" "$ELECTRON_ASSETS_DIR/icon-dev.png"
+log "copied the tray icons and icon-dev.png into $(shown "$ELECTRON_ASSETS_DIR")"
 
 # --- Favicon ------------------------------------------------------------------
 

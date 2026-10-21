@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DoorMode, ServedLibrary } from './addon.js';
-import { Desktop, type Closing } from './desktop.js';
+import { Desktop, explorerCloses, type Closing, type Residency } from './desktop.js';
 
 /** The windows and the addon, as the dispatcher sees them, recording what it asks. */
-function setup() {
+function setup(residency: Residency = { platform: 'linux', tray: true }) {
   let served: ServedLibrary | null = null;
   let visible = false;
   let tokens = 0;
@@ -25,17 +25,27 @@ function setup() {
     }),
     isVisible: vi.fn(() => visible),
   };
-  let explorerOpen = false;
+  // The explorer's window: none, or one shown or hidden.
+  let explorer: 'none' | 'shown' | 'hidden' = 'none';
   const shell = {
     openExplorer: vi.fn(() => {
-      explorerOpen = true;
+      explorer = 'shown';
     }),
-    focusExplorer: vi.fn(() => explorerOpen),
+    focusExplorer: vi.fn(() => {
+      if (explorer === 'none') {
+        return false;
+      }
+      explorer = 'shown';
+      return true;
+    }),
+    hideExplorer: vi.fn(() => {
+      explorer = 'hidden';
+    }),
     reportServerStopped: vi.fn(),
     quit: vi.fn(),
     warn: vi.fn(),
   };
-  const desktop = new Desktop(core, passphrase, shell);
+  const desktop = new Desktop(core, passphrase, shell, residency);
   return {
     desktop,
     core,
@@ -44,6 +54,11 @@ function setup() {
     loaded,
     serve(library: ServedLibrary | null) {
       served = library;
+    },
+    explorer: () => explorer,
+    /** The explorer's window destroyed, as a crash or the platform may leave it. */
+    destroyExplorer() {
+      explorer = 'none';
     },
   };
 }
@@ -216,17 +231,178 @@ describe('closing the Passphrase window', () => {
   });
 });
 
-describe('a second launch', () => {
-  it('brings the Passphrase window forward while it is showing', () => {
+describe('bringing the explorer back', () => {
+  it('before a Library is served brings the Passphrase window forward as it is', () => {
     fixture.desktop.bringForward();
     expect(fixture.passphrase.bringForward).toHaveBeenCalledTimes(2);
+    expect(fixture.passphrase.load).toHaveBeenCalledOnce();
     expect(fixture.shell.focusExplorer).not.toHaveBeenCalled();
+    expect(fixture.shell.openExplorer).not.toHaveBeenCalled();
   });
 
-  it('brings the explorer forward once the Passphrase window is hidden', () => {
+  describe('once a Library is served and unlocked', () => {
+    beforeEach(() => {
+      fixture.desktop.handle('LibraryOpened');
+      fixture.serve(UNLOCKED);
+      fixture.shell.openExplorer.mockClear();
+      fixture.passphrase.bringForward.mockClear();
+    });
+
+    it('with the window present and showing brings it forward, and opens no other', () => {
+      fixture.desktop.bringForward();
+      expect(fixture.shell.focusExplorer).toHaveBeenCalledOnce();
+      expect(fixture.shell.openExplorer).not.toHaveBeenCalled();
+      expect(fixture.explorer()).toBe('shown');
+      expect(fixture.passphrase.bringForward).not.toHaveBeenCalled();
+    });
+
+    it('with the window hidden shows it again, and opens no other', () => {
+      fixture.desktop.explorerClosing(closing());
+      expect(fixture.explorer()).toBe('hidden');
+      fixture.desktop.bringForward();
+      expect(fixture.explorer()).toBe('shown');
+      expect(fixture.shell.openExplorer).not.toHaveBeenCalled();
+    });
+
+    it('with the window destroyed opens a new one, from a fresh ticket', () => {
+      fixture.destroyExplorer();
+      fixture.desktop.bringForward();
+      expect(fixture.shell.openExplorer).toHaveBeenCalledOnce();
+      expect(fixture.explorer()).toBe('shown');
+    });
+  });
+
+  describe('once the Library served has locked', () => {
+    beforeEach(() => {
+      fixture.desktop.handle('LibraryOpened');
+      fixture.serve(LOCKED);
+      fixture.passphrase.bringForward.mockClear();
+    });
+
+    it('brings the explorer and, in front of it, the Passphrase window in unlock mode', () => {
+      fixture.desktop.explorerClosing(closing());
+      fixture.desktop.bringForward();
+      expect(fixture.explorer()).toBe('shown');
+      expect(fixture.core.openDoor).toHaveBeenLastCalledWith('Unlock');
+      expect(fixture.passphrase.bringForward).toHaveBeenCalledOnce();
+      expect(fixture.shell.focusExplorer.mock.invocationCallOrder[0]).toBeLessThan(
+        fixture.passphrase.bringForward.mock.invocationCallOrder[0] ?? 0,
+      );
+    });
+
+    it('with the window destroyed opens a new one before asking for the Passphrase', () => {
+      fixture.destroyExplorer();
+      fixture.desktop.bringForward();
+      expect(fixture.shell.openExplorer).toHaveBeenCalledTimes(2);
+      expect(fixture.core.openDoor).toHaveBeenLastCalledWith('Unlock');
+      expect(fixture.passphrase.isVisible()).toBe(true);
+    });
+
+    it('leaves an unlock already showing as it is', () => {
+      fixture.desktop.handle('UnlockRequested');
+      fixture.desktop.bringForward();
+      expect(fixture.passphrase.load).toHaveBeenCalledTimes(2);
+      expect(fixture.passphrase.bringForward).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
+describe('closing the explorer window', () => {
+  const PLATFORMS = ['darwin', 'linux', 'win32'] as const;
+  const cases = PLATFORMS.flatMap((platform) =>
+    [true, false].flatMap((tray) => [true, false].map((quitting) => ({ platform, tray, quitting }))),
+  );
+
+  it.each(cases)('on $platform with a tray $tray, quitting $quitting', ({ platform, tray, quitting }) => {
+    const expected = quitting ? 'close' : tray || platform === 'darwin' ? 'hide' : 'quit';
+    expect(explorerCloses(platform, tray, quitting)).toBe(expected);
+
+    const resident = setup({ platform, tray });
+    resident.desktop.open();
+    resident.desktop.handle('LibraryOpened');
+    if (quitting) {
+      resident.desktop.quit();
+    }
+    const event = closing();
+    resident.desktop.explorerClosing(event);
+    expect(event.prevented()).toBe(expected === 'hide');
+    expect(resident.shell.hideExplorer).toHaveBeenCalledTimes(expected === 'hide' ? 1 : 0);
+    expect(resident.shell.quit).toHaveBeenCalledTimes(expected === 'quit' ? 1 : 0);
+  });
+
+  it('hides it on Linux with a tray, leaving the app running', () => {
     fixture.desktop.handle('LibraryOpened');
+    fixture.desktop.explorerClosing(closing());
+    expect(fixture.explorer()).toBe('hidden');
+    expect(fixture.shell.quit).not.toHaveBeenCalled();
+  });
+});
+
+describe('the Library being locked, as the tray sees it', () => {
+  it('is not before a Library is served', () => {
+    fixture.serve(LOCKED);
+    expect(fixture.desktop.locked()).toBe(false);
+  });
+
+  it('follows the Library once one is served', () => {
+    fixture.desktop.handle('LibraryOpened');
+    fixture.serve(UNLOCKED);
+    expect(fixture.desktop.locked()).toBe(false);
+    fixture.serve(LOCKED);
+    expect(fixture.desktop.locked()).toBe(true);
+    fixture.serve(null);
+    expect(fixture.desktop.locked()).toBe(false);
+  });
+
+  it('is what the tray’s Unlock… asks the Passphrase for', () => {
+    fixture.desktop.handle('LibraryOpened');
+    fixture.serve(LOCKED);
+    fixture.desktop.askForPassphrase();
+    expect(fixture.core.openDoor).toHaveBeenLastCalledWith('Unlock');
+    expect(fixture.passphrase.isVisible()).toBe(true);
+  });
+});
+
+describe('a spent Passphrase window', () => {
+  it('is loaded afresh in unlock mode when it is asked for again', () => {
+    fixture.desktop.handle('LibraryOpened');
+    fixture.serve(LOCKED);
+    fixture.desktop.handle('UnlockRequested');
+    fixture.desktop.handle('PassphraseWindowSpent');
+    fixture.desktop.handle('UnlockRequested');
+    expect(fixture.loaded).toEqual([
+      'http://127.0.0.1:9/#door=Open-1',
+      'http://127.0.0.1:9/#door=Unlock-2',
+      'http://127.0.0.1:9/#door=Unlock-3',
+    ]);
+    expect(fixture.passphrase.isVisible()).toBe(true);
+  });
+
+  it('is loaded once, after which the fresh window is live and kept as it is', () => {
+    fixture.desktop.handle('LibraryOpened');
+    fixture.serve(LOCKED);
+    fixture.desktop.handle('UnlockRequested');
+    fixture.desktop.handle('PassphraseWindowSpent');
+    fixture.desktop.handle('UnlockRequested');
+    fixture.desktop.handle('UnlockRequested');
+    expect(fixture.passphrase.load).toHaveBeenCalledTimes(3);
+  });
+
+  it('before a Library is served is loaded afresh in open mode when brought forward', () => {
+    fixture.desktop.handle('PassphraseWindowSpent');
     fixture.desktop.bringForward();
-    expect(fixture.shell.focusExplorer).toHaveBeenCalledOnce();
-    expect(fixture.passphrase.bringForward).toHaveBeenCalledOnce();
+    expect(fixture.loaded).toEqual(['http://127.0.0.1:9/#door=Open-1', 'http://127.0.0.1:9/#door=Open-2']);
+    fixture.desktop.bringForward();
+    expect(fixture.passphrase.load).toHaveBeenCalledTimes(2);
+  });
+
+  it('says where it could not be opened again, and still brings it forward', () => {
+    fixture.desktop.handle('PassphraseWindowSpent');
+    fixture.core.openDoor.mockImplementationOnce(() => {
+      throw new Error('the desktop has not started');
+    });
+    fixture.desktop.bringForward();
+    expect(fixture.shell.warn).toHaveBeenCalledWith(expect.stringContaining('the desktop has not started'));
+    expect(fixture.passphrase.bringForward).toHaveBeenCalledTimes(2);
   });
 });

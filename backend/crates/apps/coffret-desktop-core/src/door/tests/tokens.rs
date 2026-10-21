@@ -144,3 +144,57 @@ fn retiring_ends_every_windows_token() {
         );
     });
 }
+
+// LA-24, LA-25: the fifth refusal tells the shell that a window is spent, and
+// the four before it do not; what it is told, and what the log records of it,
+// carries no token.
+#[test]
+fn the_fifth_refusal_tells_the_shell_the_window_is_spent() {
+    let case = Case::new();
+    let token = case.token(DoorMode::Open);
+    let told = case.events();
+    let logs = CapturedLogs::capture_target("coffret");
+    case.run(async {
+        create("door-spent").await;
+        for _ in 1..MAX_REFUSED {
+            case.send(case.submission(&token, opening("door-spent", "wrong")))
+                .await;
+        }
+        assert!(told.lock().unwrap().is_empty(), "four refusals leave it");
+        let answered = case
+            .send(case.submission(&token, opening("door-spent", "wrong")))
+            .await;
+        assert_eq!(answered.json()["ended"], true, "the fifth ends it");
+        // A submission after the end is refused, and is not told again.
+        case.send(case.submission(&token, opening("door-spent", "wrong")))
+            .await;
+    });
+    assert_eq!(*told.lock().unwrap(), [Event::PassphraseWindowSpent]);
+    let text = logs.text();
+    assert!(
+        text.contains("\"event\":\"passphrase_window_spent\""),
+        "{text}"
+    );
+    logs.assert_free_of(&[&token, "#door="]);
+}
+
+// LA-24: a window whose submission lands is not spent: its token ends, and the
+// shell is told the Library opened and nothing else.
+#[test]
+fn a_landed_submission_tells_of_no_spent_window() {
+    let case = Case::new();
+    let token = case.token(DoorMode::Open);
+    let told = case.events();
+    case.run(async {
+        create("door-landed").await;
+        for _ in 1..MAX_REFUSED {
+            case.send(case.submission(&token, opening("door-landed", "wrong")))
+                .await;
+        }
+        let answered = case
+            .send(case.submission(&token, opening("door-landed", PASSPHRASE)))
+            .await;
+        assert_eq!(answered.status, StatusCode::OK, "{}", answered.text);
+    });
+    assert_eq!(*told.lock().unwrap(), [Event::LibraryOpened]);
+}

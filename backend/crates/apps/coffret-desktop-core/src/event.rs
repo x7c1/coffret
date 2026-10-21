@@ -16,6 +16,13 @@ pub enum Event {
     /// door in its unlock mode, since the Passphrase is never taken in the
     /// explorer's page (spec: DK-10).
     UnlockRequested,
+    /// A Passphrase window's token ended unused, after its last refused
+    /// submission: that window can take no Passphrase any more, and says it
+    /// has to be opened again. The shell loads it afresh, from a token of its
+    /// own, the next time it brings it forward (spec: LA-24). Which window it
+    /// was is not said, since that would take the token: a shell that keeps
+    /// one Passphrase window knows it is that one.
+    PassphraseWindowSpent,
     /// The server stopped. Every browser session, launch ticket and door token
     /// was discarded before this was sent, and nothing is served any more: the
     /// shell ends, as the core never ends the process itself.
@@ -29,6 +36,7 @@ impl Event {
             Self::LibraryOpened => "library_opened",
             Self::LibraryUnlocked => "library_unlocked",
             Self::UnlockRequested => "unlock_requested",
+            Self::PassphraseWindowSpent => "passphrase_window_spent",
             Self::ServerStopped => "server_stopped",
         }
     }
