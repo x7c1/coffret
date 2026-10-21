@@ -135,7 +135,14 @@ jobs:
       # is checked), and a failed check fails the step. The bundle is always
       # the installed app, identifier io.github.x7c1.coffret: the development
       # one is never packaged.
+      # electron-builder skips code signing on a pull request's build unless
+      # told otherwise, which would ship the macOS app without its ad hoc
+      # signature and hardened runtime. The signature is ad hoc (identity `-`):
+      # no certificate, key or secret is involved, so signing a pull request's
+      # build exposes nothing.
       - name: Build and check the bundle
+        env:
+          CSC_FOR_PULL_REQUEST: 'true'
         run: scripts/desktop.sh build
 
       # The one bundle of this host's type, which `build` also insisted on.

@@ -76,8 +76,7 @@ The Electron app (`frontend/packages/apps/desktop`) runs only from a checkout to
   - on macOS, fuses off, an ad-hoc `runtime` signature and allow-jit;
   - on Linux, the `.deb` name, package name, version and desktop entry.
 - [ ] On macOS, `make desktop-build` produces `Coffret_<version>_aarch64.dmg`. Run from its mounted image or extracted `.app` with `COFFRET_STATE_DIR` and `COFFRET_LOG_DIR` pointed at the agent's state directory and `--user-data-dir` at a temporary directory (never the production state directory), the app:
-  - starts;
-  - opens the agent Library through the Passphrase window and shows the explorer;
+  - starts, loads the addon and opens its Passphrase window, with the door listening;
   - refuses `ELECTRON_RUN_AS_NODE=1` and `--inspect` (the fuses hold).
 
-  The merging session records this in the PR, and does not replace `/Applications/Coffret.app`.
+  The merging session records this in the PR, and does not replace `/Applications/Coffret.app`. Typing the Passphrase into the packaged app's window to open the Library is left to a person: this machine refuses an agent's keystrokes and screen capture. The same flow, the Passphrase window through to the explorer, is verified on the unpackaged app, which differs from the packaged one only in where it finds the addon and assets (`src/resources.ts`, unit-tested).
