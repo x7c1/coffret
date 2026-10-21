@@ -15,10 +15,16 @@ export interface Identity {
   /**
    * The tray icon: the black picture on macOS, which the menu bar draws as a
    * template image in its own colours, and the white one elsewhere, since
-   * GNOME's top bar is dark in both its light and its dark style. The `@2x`
-   * file beside each is picked up with it.
+   * GNOME's top bar is dark in both its light and its dark style.
    */
   trayIcon: string;
+  /**
+   * The scale the tray icon's picture is drawn at. On macOS it is 2: the
+   * 32-pixel picture is a 16-point icon at twice the resolution, the size the
+   * menu bar draws its icons at, where read at 1 it would stand 32 points tall.
+   * Elsewhere 1, and the panel fits the picture to its own size.
+   */
+  trayScale: number;
   /** Whether the tray icon is a macOS template image. */
   trayTemplate: boolean;
   /** The windows' icon (Linux), where it is not the platform's default. */
@@ -48,6 +54,7 @@ export function identityFor(identifier: string, platform: NodeJS.Platform): Iden
     title: name,
     tooltip: name,
     trayIcon: mac ? `tray${suffix}.png` : `tray${suffix}-light.png`,
+    trayScale: mac ? 2 : 1,
     trayTemplate: mac,
     windowIcon: development && platform === 'linux' ? DEV_ICON : null,
     dockIcon: development && mac ? DEV_ICON : null,
