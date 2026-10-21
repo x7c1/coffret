@@ -65,7 +65,7 @@ A Library that was just `init`ed cannot be started from the explorer. The first 
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, with the Electron app (`make desktop-dev`) driven by Playwright's `_electron`, over a throwaway Library made on the agent's MinIO with nothing mapped:
+- [x] On macOS, with the Electron app (`make desktop-dev`) driven by Playwright's `_electron`, over a throwaway Library made on the agent's MinIO with nothing mapped:
   - the empty root shows the map banner, and mapping the root through it lets the explorer list the root;
   - "New folder…" from the tree's "Library" row prepares `comics`, and "New folder…" on it prepares `comics/Series`;
   - a real-path drop of a folder of 3 volumes onto `comics/Series` is confirmed and lands, and the explorer then lists `comics/Series/…` as ordinary folders;
