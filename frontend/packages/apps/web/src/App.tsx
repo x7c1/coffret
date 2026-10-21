@@ -31,6 +31,7 @@ import {
   type DeleteQuestion,
 } from './deleteEntries';
 import { destinationsOf, namedBy, type Destination } from './destination';
+import { nothingAddedLine, withNotTaken, type Drop, type NotTaken } from './drop';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { mappedAt } from './dropTarget';
@@ -635,6 +636,7 @@ export function App() {
     files: readonly Added[];
     held: HeldFiles;
     destinations: Destination[];
+    notTaken: readonly NotTaken[];
     answer: (choice: Choice, numbering: Numbering) => void;
   } | null>(null);
   const askAboutDrop = useCallback(
@@ -643,6 +645,7 @@ export function App() {
       files: readonly Added[],
       held: HeldFiles,
       destinations: Destination[],
+      notTaken: readonly NotTaken[],
     ) =>
       new Promise<Answer>((resolve) => {
         setAsking({
@@ -650,6 +653,7 @@ export function App() {
           files,
           held,
           destinations,
+          notTaken,
           answer: (choice, numbering) => {
             setAsking(null);
             resolve(choice === 'cancel' ? 'cancel' : { choice, numbering });
@@ -824,9 +828,16 @@ export function App() {
   // list's own listing where that is the folder on the screen, and that
   // folder's listing asked for where it is a row of the tree — which also says
   // whether a mapping reaches it, where the drag could not know.
+  //
+  // What the desktop app met in the drop and did not take is said wherever the
+  // drop is answered (spec: LA-26): in the confirmation, and where the drop is
+  // answered without one — refused for its budgets, let go over a folder no
+  // mapping reaches, or where it lands could not be read — after the reason
+  // nothing was added.
   const landing = listing.state.status === 'ready' ? listing.state.value : null;
   const add = useCallback(
-    (target: string, files: Added[]) => {
+    (target: string, { files, notTaken }: Drop) => {
+      const notAdded = (line: string) => setNotice(withNotTaken(line, notTaken));
       if (files.length === 0) {
         setAdding(null);
         // An empty folder, or something that was never a file — a selection of
@@ -855,7 +866,7 @@ export function App() {
       const confirm = async (where: Listing) => {
         if (!where.mapped) {
           // As the list says it of a drop onto a folder no mapping reaches.
-          setNotice(
+          notAdded(
             unmappedLine(
               'add',
               where.held || stranded.includes(target),
@@ -882,16 +893,16 @@ export function App() {
             // sent.
             setAdding(null);
             const destinations = destinationsOf(target, summary, namedBy(known, where));
-            return askAboutDrop(summary, asked, held, destinations);
+            return askAboutDrop(summary, asked, held, destinations, notTaken);
           },
           send,
-          refuse: (overdrawn) => setNotice(overBudgetLine(overdrawn, libraryName)),
+          refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, libraryName)),
         });
       };
       const where =
         landing !== null && landing.path === target ? Promise.resolve(landing) : getListing(target);
       const unread = (refused: unknown) =>
-        setNotice(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
+        notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
       void where.then(confirm, unread).finally(() => setAdding(null));
     },
     [landing, known, stranded, askAboutDrop, work, reloadListing, libraryName],
@@ -906,12 +917,14 @@ export function App() {
   const collecting = useCallback(() => setAdding(collectingLine()), []);
 
   // And the end that walk can come to instead of files: a browser that refused
-  // to read a dropped folder's children. Nothing was sent, so nothing else on
-  // the screen is going to change — and the line the drop put up would stand
+  // to read a dropped folder's children, or a desktop app that took nothing of
+  // what was dropped — each said as what it is (see
+  // [`nothingAddedLine`](./drop)). Nothing was sent, so nothing else on the
+  // screen is going to change — and the line the drop put up would stand
   // saying the drop was being read for as long as the tab was open.
   const unreadable = useCallback((cause: unknown) => {
     setAdding(null);
-    setNotice(`nothing was added — that drop could not be read: ${said(cause)}`);
+    setNotice(nothingAddedLine(cause));
   }, []);
 
   // A row of the tree takes a drop for its own folder, through the same
@@ -1146,7 +1159,7 @@ export function App() {
                 onUnsupported={(file) =>
                   setNotice(`${file.name} — preview of this format is not supported yet`)
                 }
-                onAdd={(files) => add(view.folder, files)}
+                onAdd={(drop) => add(view.folder, drop)}
                 onCollecting={collecting}
                 onUnreadable={unreadable}
                 // The sentence the server would have answered with, said here
@@ -1202,6 +1215,7 @@ export function App() {
           files={asking.files}
           held={asking.held}
           destinations={asking.destinations}
+          notTaken={asking.notTaken}
           onChoose={choose}
         />
       )}

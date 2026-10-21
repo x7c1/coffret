@@ -150,8 +150,8 @@ the Passphrase.
   Entry to where the file now stands, and uploads nothing for it)
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
 - add (a file to a mapped folder where no Entry of the Library stands — a
-  browser's drop, or the person copying it in — for a later run to carry into
-  the Library)
+  browser's drop, an import, or the person copying it in — for a later run to
+  carry into the Library)
 - discard (a departed file into the desktop's trash, during a sync, or right
   after the commit of the deletion this device made) — never *trash*, which is
   Storage's verb: a [Storage Object](../storage-object/) is trashed; and never
@@ -169,12 +169,18 @@ the Passphrase.
 - take (the turn at this device's pending work, as a server's sync, freeze or
   deletion does before it asks for the Library; a run armed while another holds
   it waits for the holder)
+- take (a drop, as the desktop app does: the regular files among what was let
+  go of are held under a **drop handle** for one import, within the lifetime
+  and the cap the spec sets, and what it did not take is reported beside them
+  with why; and a held drop, as the import naming its handle does, once —
+  whatever that request then comes to (spec: LA-26))
 - spool (a Container's ciphertext to a local file before uploading it)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
 - stamp (a file this device places with a modification time it was given — a
   fetched file with its Entry's own, a dropped one with the one the browser
-  sent)
+  sent, an imported one with the one its own filesystem reported when the drop
+  was walked)
 - vouch (for a mapped root, as the device — whether the root is there to be
   read from)
 - vouch (for itself, as the root — whether the folder standing there is the one
@@ -200,9 +206,15 @@ the Passphrase.
   in place, with the Passphrase entered in the desktop app's own window)
 - lock (a Library served on this device, after the idle interval or when its
   server stops)
-- drop (files a browser drops into a mapped folder, for a later run — a sync, or
-  where the drop held a folder the person chose to add as a Pack, a freeze of
-  exactly the files dropped — to carry them into the Library)
+- drop (files a browser drops into a mapped folder, or the desktop app takes
+  by their paths and imports there, for a later run — a sync, or where the drop
+  held a folder the person chose to add as a Pack, a freeze of exactly the
+  files dropped — to carry them into the Library)
+- import (the files a drop onto the desktop app's window let go of, walked on
+  this device by their paths, held under a one-time **drop handle**, and placed
+  into a mapped folder for a later run to carry in, as a browser's drop is;
+  a link is neither followed nor taken, and what was not taken is reported,
+  not left out (spec: LA-26, LA-27, LA-28, LA-29))
 - fill (the folder around an Entry somebody just opened, by reading in the
   background the parcels holding the rest of what that folder holds and this
   device has not got — parcel after parcel, never Entry by Entry, and none it
@@ -256,9 +268,11 @@ the Passphrase.
     Library stands, and where this device holds no record of having placed
     anything — is not materialized, and a scan can report it only as new
     (spec: EP-10). It becomes materialized when a run carries it in, which is
-    the only way into the Library. A file a browser drops is added too. The
-    device keeps a note of the drop so that the run carrying the file in
-    records no birth time; that note is not a record of materialization
+    the only way into the Library. A file a browser drops is added too, and so
+    is one the desktop app imports. The device keeps a note of the drop with
+    the birth time the run carrying the file in is to record — none for a
+    browser's drop, the person's file's own for an import where its
+    filesystem reported one; that note is not a record of materialization
     (spec: EP-11).
   - A file is **departed** when its Entry left the Library — this device or
     another removed it — while the file this device materialized for it stayed
@@ -436,7 +450,7 @@ the Passphrase.
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a
   scan passes over every local name carrying it. A fetch is one such writer,
-  and so is an upload the browser drops into a mapped folder. A scratch whose
+  and so is a browser's drop or an import into a mapped folder. A scratch whose
   rename never comes is the writer's own leftover, and removing one is
   idempotent: one already gone is a successful removal, absence being the
   outcome sought (spec: EP-11, OC-8).

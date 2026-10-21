@@ -126,6 +126,43 @@ describe('a drop of files alone', () => {
   });
 });
 
+// What the desktop app met in the drop and did not take is said in the
+// confirmation, whether the drop goes straight in or is asked about as a Pack
+// (spec: LA-26); a browser's drop has nothing to say there.
+describe('what the desktop app did not take', () => {
+  const LINK = [{ path: 'link-to-photos', reason: 'not_a_file_or_folder' }];
+  const LINE =
+    '1 thing in the drop was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
+  const LOOSE: Added[] = [addedFile('cover.png', { size: 10, lastModified: 0 } as File)];
+  const loose = summarize(LOOSE, []);
+
+  it('is said where files alone are added', () => {
+    render(
+      <DropConfirm
+        summary={loose}
+        files={LOOSE}
+        destinations={destinationsOf('', loose, () => true)}
+        notTaken={LINK}
+        onChoose={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('dialog').textContent).toContain(LINE);
+  });
+
+  it('is said where the drop is asked what it goes in as', () => {
+    render(
+      <DropConfirm summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
+    );
+    expect(screen.getByRole('dialog').textContent).toContain(LINE);
+    expect(screen.getByLabelText('As a Pack (recommended)')).toBeTruthy();
+  });
+
+  it('is not said where nothing was left out', () => {
+    render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+    expect(screen.getByRole('dialog').textContent).not.toContain('not taken');
+  });
+});
+
 // A folder the Library already has where the drop lands is said to exist, and
 // the same answers stand.
 it('says a dropped folder already exists here, and still offers the answers', () => {

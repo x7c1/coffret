@@ -8,7 +8,6 @@ import {
 } from 'react';
 
 import type {
-  Added,
   DeleteTarget,
   DisplacedFill,
   Fill,
@@ -20,7 +19,7 @@ import type {
 import { Banner, DropBanner, dropOutline } from './Banner';
 import { deleteOffered, DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
-import { droppedFiles } from './drop';
+import { droppedFiles, type Drop } from './drop';
 import { dropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
@@ -138,8 +137,11 @@ export function FileList({
   onOpenFolder: (path: string) => void;
   onOpenFile: (path: string) => void;
   onUnsupported: (file: ListedFile) => void;
-  /** Files dropped on this folder, each with its path relative to it. */
-  onAdd: (files: Added[]) => void;
+  /**
+   * A drop on this folder: its files, each with its path relative to it, and
+   * what the desktop app did not take of it.
+   */
+  onAdd: (drop: Drop) => void;
   /**
    * A drop was taken and its files are being read out of it.
    *
@@ -154,7 +156,8 @@ export function FileList({
    */
   onCollecting: () => void;
   /**
-   * The walk could not be finished, and this is what stopped it.
+   * The drop came to no files: the walk could not be finished, or the desktop
+   * app took nothing of it ([`NothingTaken`](./drop)), and this is why.
    *
    * A browser reads a dropped folder's children in batches and may refuse one,
    * which ends the walk with no files and no answer. Said rather than swallowed:

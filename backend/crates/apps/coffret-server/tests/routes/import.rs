@@ -11,6 +11,7 @@ use coffret_logging::testing::CapturedLogs;
 use coffret_server::Allowance;
 use serde_json::json;
 use tempfile::TempDir;
+use tracing::Level;
 
 use crate::support::{freeze, json as body_of, rows_of, written, Served};
 
@@ -351,6 +352,7 @@ async fn an_import_of_more_files_than_one_gesture_carries_is_refused() {
     let two = source.file("two.jpg", b"two", 1_444_000_000);
     let three = source.file("three.jpg", b"three", 1_444_000_000);
     let dropped = served.hold_drop(&[&one, &two, &three]).await;
+    let logs = CapturedLogs::capture();
 
     let (status, refusal) = body_of(served.import_all("albums", &dropped, false).await).await;
 
@@ -361,6 +363,9 @@ async fn an_import_of_more_files_than_one_gesture_carries_is_refused() {
         Vec::<String>::new(),
         "the count is asked before any file is read",
     );
+    // Recorded as the request it refused: an import, not an upload.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "import");
 }
 
 // LA-27: a file is addressed by its index in the held set alone, and an index

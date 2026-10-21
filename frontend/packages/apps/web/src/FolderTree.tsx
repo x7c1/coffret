@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 
-import type { Added, DeleteTarget } from '@coffret/api';
+import type { DeleteTarget } from '@coffret/api';
 
 import { DropBanner, dropOutline } from './Banner';
 import { DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
-import { droppedFiles } from './drop';
+import { droppedFiles, type Drop } from './drop';
 import { dropOutcome } from './dropTarget';
 import { RowMenu, type MenuItem } from './RowMenu';
 import { COLOR } from './theme';
@@ -130,11 +130,17 @@ export interface TreeDrops {
    * are mapped, if that is not known yet.
    */
   onArrive: () => void;
-  /** Files dropped on a row, each with its path relative to that row's folder. */
-  onAdd: (folder: string, files: Added[]) => void;
+  /**
+   * A drop on a row: its files, each with its path relative to that row's
+   * folder, and what the desktop app did not take of it.
+   */
+  onAdd: (folder: string, drop: Drop) => void;
   /** A drop was taken and its files are being read out of it, as the list's is. */
   onCollecting: () => void;
-  /** The walk could not be finished, and this is what stopped it. */
+  /**
+   * The drop came to no files: the walk could not be finished, or the desktop
+   * app took nothing of it ([`NothingTaken`](./drop)), and this is why.
+   */
   onUnreadable: (cause: unknown) => void;
   /** A drop onto a folder no mapping of this device reaches. */
   onUnmapped: (folder: string) => void;
@@ -264,7 +270,7 @@ function Row({
     // The walk is asynchronous and the event is not, as on the list.
     drops.onCollecting();
     void droppedFiles(event.dataTransfer).then(
-      (files) => drops.onAdd(path, files),
+      (drop) => drops.onAdd(path, drop),
       drops.onUnreadable,
     );
   };

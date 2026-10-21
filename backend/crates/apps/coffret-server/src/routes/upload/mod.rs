@@ -62,6 +62,9 @@ pub use upload_dto::UploadDto;
 mod upload_query;
 pub use upload_query::UploadQuery;
 
+/// What every event of a browser's drop names its operation as.
+const OPERATION: &str = "upload";
+
 /// `POST /api/upload?path=<folder>[&freeze=true]`, multipart
 ///
 /// Adds files to one folder of the Library.
@@ -286,6 +289,7 @@ pub async fn upload(
             seen += 1;
             if seen > state.allowance.parts {
                 return Err(outran(
+                    OPERATION,
                     "one drop is one gesture, and this carries more files than one gesture \
                      takes — the same files in two drops are taken",
                 ));
@@ -321,7 +325,7 @@ pub async fn upload(
                 }
                 Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
                     name,
-                    refusal: RefusalDto::of(&Reported::recorded(&refusal, "upload")),
+                    refusal: RefusalDto::of(&Reported::recorded(&refusal, OPERATION)),
                 }),
                 // Nothing is armed for what landed before it: this request was
                 // refused, and arming its work would be answering a refusal with
@@ -348,14 +352,14 @@ pub async fn upload(
     if let Err(stopped) = taken {
         // Nothing is armed for a drop that was stopped, so nothing is to wait
         // for a Pack either (spec: PK-17).
-        release(&library, reservation, "upload").await;
+        release(&library, reservation, OPERATION).await;
         return Err(stopped.having_written(written));
     }
     finish_drop(
         &state,
         &library,
         FinishedDrop {
-            operation: "upload",
+            operation: OPERATION,
             reservation,
             reserved,
             written: written.len(),

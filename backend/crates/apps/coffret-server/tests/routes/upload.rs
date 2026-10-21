@@ -760,6 +760,7 @@ async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
         ..Allowance::generous()
     })
     .await;
+    let logs = CapturedLogs::capture();
 
     let (status, refusal) = body_of(
         served
@@ -787,6 +788,9 @@ async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
         refusal["written"],
         json!(["albums/one.jpg", "albums/two.jpg"]),
     );
+    // Recorded as the request it refused: an upload, not an import.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "upload");
 }
 
 // The room question beside the budgets (spec: LA-11): a drop far larger than the

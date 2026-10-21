@@ -20,6 +20,8 @@
 
 import { addedFile, type Added } from '@coffret/api';
 
+import { said } from './useAsked';
+
 /** One thing a drop carried, as much of it as the walk needs. */
 export interface DroppedEntry {
   readonly isFile: boolean;
@@ -125,7 +127,7 @@ async function childrenOf(entry: DroppedFolder): Promise<DroppedEntry[]> {
  * filesystem item — the item is left out, and a drop of nothing but those is an
  * empty answer rather than a request.
  */
-export function droppedFiles(transfer: DataTransfer): Promise<Added[]> {
+export async function droppedFiles(transfer: DataTransfer): Promise<Drop> {
   const bridge = desktopBridge();
   if (bridge !== null) {
     // Read before anything is awaited, as the entries below are: what the
@@ -139,7 +141,20 @@ export function droppedFiles(transfer: DataTransfer): Promise<Added[]> {
       entries.push(entry);
     }
   }
-  return filesUnder(entries);
+  // A browser's walk leaves nothing out that it could say: what it cannot read
+  // refuses the whole walk, and what is not a filesystem item has no name.
+  return { files: await filesUnder(entries), notTaken: [] };
+}
+
+/**
+ * What one drop carried: the files it is added as, and what the desktop app
+ * met in it and did not take — none in a browser, whose walk takes everything
+ * it can read or refuses the drop.
+ */
+export interface Drop {
+  files: Added[];
+  /** What was not taken, in the order the walk met it; never an empty path. */
+  notTaken: NotTaken[];
 }
 
 /** One file the desktop app took, as its answer names it. */
@@ -188,13 +203,30 @@ export function desktopBridge(): DesktopBridge | null {
 }
 
 /**
+ * A drop the desktop app took nothing of, although it met something with a
+ * path in it: the reason nothing was added is what it did not take, which
+ * {@link nothingAddedLine} says as such rather than as a drop that could not
+ * be read.
+ */
+export class NothingTaken extends Error {
+  readonly notTaken: readonly NotTaken[];
+
+  constructor(notTaken: readonly NotTaken[]) {
+    super(notTakenLine(notTaken));
+    this.name = 'NothingTaken';
+    this.notTaken = notTaken;
+  }
+}
+
+/**
  * What a drop handed to the desktop app comes to: one record per file it took,
- * each naming the drop's handle and the file's index in what it took.
+ * each naming the drop's handle and the file's index in what it took, and what
+ * it met and did not take.
  *
- * What it met and did not take is not lost without a word. Where it took
- * nothing at all, that is the answer, and it is thrown as the reason nothing
- * was added; where it took some, what it did not take is said to the console,
- * by count and reason, beside the files it took.
+ * What it did not take is not lost without a word (spec: LA-26). Where it took
+ * nothing at all, that is the answer, and it is thrown as {@link NothingTaken};
+ * where it took some, it goes beside the files it took, for the confirmation
+ * and the notice to say.
  *
  * Except a drop of things that have no path at all — an image dragged out of
  * another page, a selection of text — which the app answers with an empty path
@@ -203,31 +235,69 @@ export function desktopBridge(): DesktopBridge | null {
  * no files rather than that a path named nothing. Where something with a path
  * was not taken beside them, that alone is said.
  */
-export async function heldBy(bridge: DesktopBridge, files: readonly File[]): Promise<Added[]> {
+export async function heldBy(bridge: DesktopBridge, files: readonly File[]): Promise<Drop> {
   if (files.length === 0) {
-    return [];
+    return { files: [], notTaken: [] };
   }
   const held = await bridge.takeDrop(files);
+  const notTaken = held.notTaken.filter((one) => one.reason !== 'empty');
   const handle = held.handle;
   if (handle === null || held.files.length === 0) {
-    const said = held.notTaken.filter((one) => one.reason !== 'empty');
-    if (said.length > 0) {
-      throw new Error(notTakenLine(said));
+    if (notTaken.length > 0) {
+      throw new NothingTaken(notTaken);
     }
-    return [];
+    return { files: [], notTaken: [] };
   }
-  if (held.notTaken.length > 0) {
-    console.warn(
-      `the desktop app did not take ${held.notTaken.length} of what was dropped`,
-      [...new Set(held.notTaken.map((one) => one.reason))],
-    );
+  return {
+    files: held.files.map((file, index) => ({
+      path: file.path,
+      size: file.size,
+      mtime: file.mtime,
+      source: { kind: 'held', handle, index },
+    })),
+    notTaken,
+  };
+}
+
+/**
+ * What the confirmation and the notice say of a drop the desktop app took only
+ * part of, or `null` where it left nothing out: how many things it did not
+ * take, and {@link notTakenLine} of them.
+ */
+export function notTakenNotice(notTaken: readonly NotTaken[]): string | null {
+  if (notTaken.length === 0) {
+    return null;
   }
-  return held.files.map((file, index) => ({
-    path: file.path,
-    size: file.size,
-    mtime: file.mtime,
-    source: { kind: 'held', handle, index },
-  }));
+  const things = notTaken.length === 1 ? '1 thing in the drop was' : `${notTaken.length} things in the drop were`;
+  return `${things} not taken: ${notTakenLine(notTaken)}`;
+}
+
+/**
+ * A notice about a drop that was answered without the confirmation, with what
+ * the desktop app did not take of it said after it, where it left anything out.
+ * After a one-clause line it is the next clause of the same sentence. After
+ * lines written as full sentences — a refusal for the drop's budgets, which ends
+ * on what to do instead — it is a sentence of its own, so that it does not read
+ * as part of that advice.
+ */
+export function withNotTaken(line: string, notTaken: readonly NotTaken[]): string {
+  const left = notTakenNotice(notTaken);
+  if (left === null) {
+    return line;
+  }
+  return line.endsWith('.') ? `${line} ${left}.` : `${line}; ${left}`;
+}
+
+/**
+ * What the screen says of a drop that ended before it had any files: one the
+ * desktop app took nothing of says what it did not take, and a browser's walk
+ * that was refused says the drop could not be read, and why.
+ */
+export function nothingAddedLine(cause: unknown): string {
+  if (cause instanceof NothingTaken) {
+    return `nothing was added — ${notTakenLine(cause.notTaken)}`;
+  }
+  return `nothing was added — that drop could not be read: ${said(cause)}`;
 }
 
 /**
