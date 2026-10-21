@@ -54,7 +54,7 @@ The desktop app now takes a drop as paths. The app walks dropped folders on the 
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, the Electron app over the agent Library, driven with Playwright's `_electron` and a real-path CDP drag:
+- [x] On macOS, the Electron app over the agent Library, driven with Playwright's `_electron` and a real-path CDP drag:
   - a drop of a JPEG with a symbolic link beside it shows the not-taken line in the confirmation or notice and lands the JPEG;
   - a drop of only a symbolic link shows "nothing was added — …".
   The merging session records this in the PR.
