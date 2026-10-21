@@ -274,7 +274,8 @@ jobs:
   # needing curl beyond those: it fetches the shellcheck and shfmt that
   # scripts/shell-lint.sh pins rather than using the runner's, and that script's
   # header says why. The release scripts' unit test, which needs only bash,
-  # runs beside it.
+  # runs beside it, and so does the test of how the release workflow reads the
+  # workspace version, which needs cargo metadata and jq, both on the runner.
   spec:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -298,6 +299,11 @@ jobs:
       # The release PR's summary handling (docs/guides/release.md), offline.
       - name: Release summary tests
         run: bash .github/scripts/release-summary.test.sh
+
+      # The workspace version the release workflow reads, and whether it went
+      # up, without the Tauri crate (docs/guides/release.md).
+      - name: Version change test
+        run: make check-version-change-test
 
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to

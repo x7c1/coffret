@@ -151,31 +151,64 @@ workflow:
 
 ## Desktop bundles
 
-Every Release carries unsigned bundles of the desktop app
-(`backend/crates/apps/coffret-desktop`), built by
-`.github/workflows/bundle.yml`:
+Every Release carries bundles of the desktop app, the Electron app in
+`frontend/packages/apps/desktop`, built by `.github/workflows/bundle.yml`:
 
 | File | Platform |
 |---|---|
 | `Coffret_<version>_aarch64.dmg` | macOS, Apple silicon |
 | `coffret-desktop_<version>_amd64.deb` | Ubuntu and other Debian-based distributions, x86_64 |
 
-The version in each file name is the workspace version Tauri reads from the
-shell crate, so it matches the tag by construction. The `.deb` takes its name
-from `tauri.linux.conf.json`'s `productName`. The bundles are built the way
-`make desktop-build` builds them — the explorer first, then
-`cargo tauri build --features embed-web` — and, like that target, without
-`TAURI_CONFIG`: they are the installed app (`io.github.x7c1.coffret`), not
-the development one. They are neither signed nor notarized; what that means
-for someone installing them is in [the install guide](install/README.md).
+The bundles are made the way `make desktop-build` makes them
+(`scripts/desktop.sh build`): the explorer, the Node-API addon with the
+explorer compiled in (`make napi-addon`), the app's code, and then
+electron-builder with the package's `electron-builder.config.js`, which names
+the files and says what goes into them. The version in each file name, the
+`.app`'s version and the `.deb`'s `Version` are the workspace version of
+`backend/Cargo.toml`, which the script reads through `cargo metadata`
+(`scripts/workspace-version.sh`) and hands to electron-builder, so they match
+the tag by construction; the version in the package's `package.json` is a
+placeholder nothing reads. The `.deb` is the package `coffret-desktop`, the
+name the desktop bundles have always had, so that `apt` upgrades an installed
+one in place. Each bundle is the installed app (`io.github.x7c1.coffret`),
+never the development one, which is only ever run from a checkout.
+
+The Electron binary in each has its fuses set as it is packaged: running it as
+plain Node (`ELECTRON_RUN_AS_NODE`), `NODE_OPTIONS`, and the `--inspect` flags
+are off, and the app is loaded from its asar archive alone. The macOS app is
+signed ad hoc with the hardened runtime, with the entitlements `allow-jit`
+(which V8 needs under it) and `disable-library-validation` (an ad hoc signature
+carries no Team ID, so library validation would refuse Electron's own
+framework); it has no Developer ID signature and is not notarized. What that
+means for someone installing either bundle is in [the install
+guide](install/README.md).
+
+Before a bundle is uploaded, the job checks it against that configuration
+(`scripts/check-desktop-bundle.sh`, which `make desktop-build` runs too), and
+fails if any of it does not hold:
+
+- the fuses, as `@electron/fuses read --app` reads them from the binary in the
+  bundle: `RunAsNode`, `EnableNodeOptionsEnvironmentVariable` and
+  `EnableNodeCliInspectArguments` disabled, `OnlyLoadAppFromAsar` enabled;
+- on macOS, from the `.app` in the attached `.dmg`: `codesign -dv` shows an
+  ad hoc signature (`Signature=adhoc`) whose flags include `runtime`, the
+  signature verifies, and the entitlements include `allow-jit`;
+- on Linux: `dpkg-deb -I` shows the package `coffret-desktop` at the workspace
+  version for `amd64`, and `dpkg-deb -c` lists the desktop entry
+  (`/usr/share/applications/coffret-desktop.desktop`, whose `StartupWMClass` is
+  `io.github.x7c1.coffret`), `chrome-sandbox` and the AppArmor profile;
+- in both, the addon (`coffret.node`) and the icons ship beside the asar
+  archive, and the file name carries the workspace version.
 
 - **Order.** The `bundles` job of the `Release` workflow runs only after the
   `release` job has created the tag and the Release, and uploads to that
   Release. A bundle failure therefore never blocks the tag or the Release; it
   shows up as a failed `bundles` job.
 - **Pull requests.** A pull request that changes how the bundle is made —
-  the desktop app's crate, `scripts/desktop.sh`, `bundle.yml`, or the
-  lockfile a tauri bump lands in (the `paths` filter in `bundle.yml`) — runs
+  the desktop app's package, the addon's crates (`coffret-napi`,
+  `coffret-desktop-core`), the lockfiles, the `Makefile`, the scripts that
+  build and check the bundle, or `bundle.yml` (the `paths` filter in
+  `bundle.yml`) — runs
   the same builds and uploads each platform's bundle as a workflow artifact
   (`coffret-macos-aarch64`, `coffret-linux-x86_64`), so a broken bundle is
   caught before a release depends on it, and reviewers can download and try
@@ -232,13 +265,17 @@ for someone installing them is in [the install guide](install/README.md).
   manual runs.
 
 The scripts they call are under `.github/scripts/`, plus
-`scripts/check-version-change.sh`. The summary helpers have an offline test,
+`scripts/check-version-change.sh`, `scripts/desktop.sh` and
+`scripts/check-desktop-bundle.sh`. The summary helpers have an offline test,
 `.github/scripts/release-summary.test.sh`, which CI runs beside
-`make shell-lint`.
+`make shell-lint`. `scripts/check-version-change.sh` has one too,
+`make check-version-change-test`, which runs it against throwaway workspaces
+holding no Tauri crate: it reads the version through `coffret-desktop-core`.
 
 No workflow here uses a third-party action to make the tag, the Release or
-the bundles: they are made with the `gh` CLI and `cargo tauri`, for the reason
-the `cargo-deny` job in `.github/workflows/ci.yml` gives.
+the bundles: they are made with the `gh` CLI and electron-builder, a pinned
+development dependency of the desktop package, for the reason the
+`cargo-deny` job in `.github/workflows/ci.yml` gives.
 
 ## Release automation setup
 

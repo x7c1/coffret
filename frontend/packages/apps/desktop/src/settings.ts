@@ -36,7 +36,7 @@ export function identifierFor(packaged: boolean, env: Record<string, string | un
   }
   if (!env[STATE_DIR]) {
     throw new Error(
-      `${STATE_DIR} is not set; run the development app through make desktop-electron-dev, ` +
+      `${STATE_DIR} is not set; run the development app through make desktop-dev, ` +
         'which sets it to the development state directory.',
     );
   }

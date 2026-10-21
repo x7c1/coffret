@@ -39,6 +39,7 @@ import {
   guardNavigation,
 } from './navigation.js';
 import { denyEveryPermission } from './permissions.js';
+import { resourcesFor } from './resources.js';
 import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { trayMenuTemplate } from './tray.js';
 import { trayHostLine, trayHostOn } from './tray-host.js';
@@ -52,8 +53,11 @@ const BUILT = dirname(fileURLToPath(import.meta.url));
 /** The explorer window's preload, built beside this file. */
 const EXPLORER_PRELOAD = join(BUILT, 'preload.cjs');
 
-/** The package's icons. */
-const ASSETS = join(BUILT, '..', 'assets');
+/** The addon and the icons, from the package or from the checkout. */
+const RESOURCES = resourcesFor(app.isPackaged, process.resourcesPath, BUILT);
+
+/** The app's icons. */
+const ASSETS = RESOURCES.assets;
 
 /**
  * How often the tray's menu is brought in step with whether the Library is
@@ -107,7 +111,7 @@ function start(identifier: string, identity: Identity, tray: boolean): void {
   let addon: Addon | null = null;
   try {
     const minutes = idleMinutes(process.env[IDLE_MINUTES]);
-    addon = loadAddon();
+    addon = loadAddon(RESOURCES);
     addon.start(identifier, minutes.toString());
     const assembled = assemble(addon, identity, tray);
     desktop = assembled.desktop;
@@ -375,12 +379,17 @@ function main(): void {
   }
   // The app's own data — the explorer's partition, and the lock that keeps one
   // copy of it running — under its identifier, so that the development app's
-  // is apart from the installed app's and the two run side by side.
-  app.setPath('userData', join(app.getPath('appData'), identifier));
+  // is apart from the installed app's and the two run side by side. A
+  // `--user-data-dir` given on the command line wins, so that a bundle can be
+  // tried out beside the installed copy of it, which has the same identifier.
+  if (!app.commandLine.hasSwitch('user-data-dir')) {
+    app.setPath('userData', join(app.getPath('appData'), identifier));
+  }
   const identity = identityFor(identifier, process.platform);
   if (identity.linuxAppId !== null) {
     // The Wayland app ID and the X11 window class, so that the desktop groups
-    // and names the development app's windows apart from the installed app's.
+    // and names the development app's windows apart from the installed app's,
+    // and finds the installed app's desktop entry by its StartupWMClass.
     app.setDesktopName(identity.linuxAppId);
   }
 

@@ -8,19 +8,18 @@
 #                                  silhouette, since a tray draws it small
 #
 # The sources are the only inputs; everything this script writes is committed.
-# It needs only tauri-cli (`cargo tauri icon` rasterises SVG itself, and
-# `make desktop-build` already requires it), the shell and python3 (to put the
-# .icns entries in a stable order). Where a variant is needed, the source is
-# nested in a derived SVG in a temp directory and that is rasterised instead:
+# It needs only tauri-cli (`cargo tauri icon` rasterises SVG itself; install
+# it once with `cargo install tauri-cli --version '^2' --locked`), the shell
+# and python3 (to put the .icns entries in a stable order). Where a variant is
+# needed, the source is nested in a derived SVG in a temp directory and that is
+# rasterised instead:
 #
 #   backend/crates/apps/coffret-desktop/icons/       the installed app
 #     icon.png 32x32.png 128x128.png 128x128@2x.png icon.ico   coffret.svg as is
 #     icon.icns                                       coffret.svg inset on a
 #                                                     transparent canvas (see
 #                                                     INSET_PERCENT)
-#   backend/crates/apps/coffret-desktop/icons-dev/   the development app
-#                                                     (scripts/desktop.sh selects
-#                                                     it through TAURI_CONFIG): the
+#   backend/crates/apps/coffret-desktop/icons-dev/   the development app: the
 #                                                     same set, with the "D" badge
 #   backend/crates/apps/coffret-desktop/icons-tray/  the tray (src/tray.rs):
 #     tray{,@2x}.png              installed app, black (the macOS template image)
@@ -32,6 +31,10 @@
 #     icon-dev.png                                    icons-dev/icon.png, its window
 #                                                     and Dock icon as the
 #                                                     development app
+#   frontend/packages/apps/desktop/packaging/        the Electron app's bundles:
+#     icon.icns icon.png                              copies of icons/'s, the
+#                                                     app icon of the .app and
+#                                                     of the .deb
 #   frontend/packages/apps/web/public/
 #     favicon.svg                 the chest alone, in the app icon's two colours
 #                                 (lighter ones on a dark tab, see FAVICON_*)
@@ -59,6 +62,7 @@ readonly DEV_DIR="$DESKTOP_DIR/icons-dev"
 readonly TRAY_DIR="$DESKTOP_DIR/icons-tray"
 readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
 readonly ELECTRON_ASSETS_DIR="$REPO_ROOT/frontend/packages/apps/desktop/assets"
+readonly ELECTRON_PACKAGING_DIR="$REPO_ROOT/frontend/packages/apps/desktop/packaging"
 
 # --- Geometry -----------------------------------------------------------------
 
@@ -377,6 +381,9 @@ mkdir -p "$ELECTRON_ASSETS_DIR"
 cp "$TRAY_DIR"/tray*.png "$ELECTRON_ASSETS_DIR/"
 cp "$DEV_DIR/icon.png" "$ELECTRON_ASSETS_DIR/icon-dev.png"
 log "copied the tray icons and icon-dev.png into $(shown "$ELECTRON_ASSETS_DIR")"
+mkdir -p "$ELECTRON_PACKAGING_DIR"
+cp "$INSTALLED_DIR/icon.icns" "$INSTALLED_DIR/icon.png" "$ELECTRON_PACKAGING_DIR/"
+log "copied icon.icns and icon.png into $(shown "$ELECTRON_PACKAGING_DIR")"
 
 # --- Favicon ------------------------------------------------------------------
 

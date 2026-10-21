@@ -24,7 +24,7 @@ describe('the installed app', () => {
     });
   });
 
-  it('on Linux shows the light tray icon, and keeps the default window icon and app ID', () => {
+  it('on Linux shows the light tray icon, keeps the default window icon, and carries its identifier as the app ID', () => {
     expect(identityFor(IDENTIFIER, 'linux')).toEqual({
       title: 'Coffret',
       tooltip: 'Coffret',
@@ -32,7 +32,7 @@ describe('the installed app', () => {
       trayTemplate: false,
       windowIcon: null,
       dockIcon: null,
-      linuxAppId: null,
+      linuxAppId: IDENTIFIER,
     });
   });
 });

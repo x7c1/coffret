@@ -566,20 +566,21 @@ web-dist:
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT) $(WEB_PORT)
 
-## icons: regenerate the desktop app's icons (icons/, the development app's badged icons-dev/, the tray's icons-tray/, and their copies in the Electron app's assets/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI and python3; the outputs are committed)
+## icons: regenerate the desktop app's icons (icons/, the development app's badged icons-dev/, the tray's icons-tray/, and their copies in the Electron app's assets/ and packaging/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI and python3; the outputs are committed)
 .PHONY: icons
 icons:
 	./scripts/gen-icons.sh
 
-## desktop-build: build the explorer, then bundle the desktop app under backend/target/release/bundle/ without installing it (one-time: `cargo install tauri-cli --version '^2' --locked`)
+## desktop-build: bundle the desktop app for this host under frontend/packages/apps/desktop/release/ without installing it — the explorer, the Node-API addon (napi-addon), the Electron app, then electron-builder: Coffret_<version>_aarch64.dmg on macOS, coffret-desktop_<version>_amd64.deb on Linux
 #
-# The installed app: macOS gets Coffret.app and a .dmg, Linux the
-# coffret-desktop .deb. It carries tauri.conf.json's identifier and serves the
-# Libraries under the binaries' default state directory, whatever this
-# Makefile exports — the installed app is started from the desktop, not from
-# here. scripts/desktop.sh says how the two apps are told apart.
+# The installed app. It carries the identifier io.github.x7c1.coffret and
+# serves the Libraries under the binaries' default state directory, whatever
+# this Makefile exports — the installed app is started from the desktop, not
+# from here. scripts/desktop.sh says how the two apps are told apart, and
+# frontend/packages/apps/desktop/electron-builder.config.js what the bundle
+# carries.
 .PHONY: desktop-build
-desktop-build: web-dist
+desktop-build:
 	./scripts/desktop.sh build
 
 ## desktop: build the desktop app (desktop-build), then install it — Linux: `sudo apt install --reinstall` the newest .deb; macOS: replace /Applications/Coffret.app
@@ -587,12 +588,16 @@ desktop-build: web-dist
 desktop: desktop-build
 	./scripts/desktop.sh install
 
-## desktop-dev-build: build the explorer, then the debug coffret-desktop `desktop-dev` runs, as the development app (identifier io.github.x7c1.coffret.dev), without starting it
+## desktop-dev-build: build the explorer, the Node-API addon (napi-addon) and the Electron app that desktop-dev runs, without starting it
 .PHONY: desktop-dev-build
-desktop-dev-build: web-dist
+desktop-dev-build:
 	./scripts/desktop.sh dev-build
 
-## desktop-dev: desktop-dev-build, then run it over the Libraries under COFFRET_STATE_DIR (the development state directory), beside an installed app
+## desktop-dev: desktop-dev-build, then run the Electron app from the checkout over the Libraries under COFFRET_STATE_DIR (the development state directory), as the development app (identifier io.github.x7c1.coffret.dev), beside an installed app
+#
+# The app (frontend/packages/apps/desktop) runs the server in its own process
+# through the addon, and refuses to run without COFFRET_STATE_DIR, which this
+# Makefile exports as the development state directory.
 .PHONY: desktop-dev
 desktop-dev: desktop-dev-build
 	./scripts/desktop.sh dev
@@ -612,19 +617,9 @@ napi-addon: web-dist
 	done; \
 	echo "the addon's library was not found under backend/target/release"; exit 1
 
-## desktop-electron-dev: build the explorer, the Node-API addon (napi-addon) and the Electron app, then run it over the Libraries under COFFRET_STATE_DIR as the development app (identifier io.github.x7c1.coffret.dev)
-#
-# The Electron app (frontend/packages/apps/desktop) shows the explorer in a
-# window of its own rather than in the system browser, and runs the server in
-# its own process through the addon. It has the identifier and the Libraries
-# of the Tauri app `desktop-dev` runs, so run one or the other: one server
-# serves a Library at a time. Like `desktop-dev`, it refuses to run without
-# COFFRET_STATE_DIR, which this Makefile exports as the development state
-# directory.
+## desktop-electron-dev: the same as desktop-dev, under the name it had while the Electron app ran beside the Tauri one
 .PHONY: desktop-electron-dev
-desktop-electron-dev: napi-addon
-	cd frontend && pnpm --filter @coffret/desktop build
-	./scripts/desktop.sh electron-dev
+desktop-electron-dev: desktop-dev
 
 ## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
@@ -808,6 +803,16 @@ field-numbers-guard:
 field-numbers-guard-test:
 	./scripts/field-numbers-guard-test.sh
 
+## check-version-change-test: show check-version-change.sh reporting the workspace version, and whether it went up, without the Tauri crate
+#
+# The release workflow reads the workspace version through
+# scripts/check-version-change.sh; this runs it against throwaway repositories
+# whose workspaces hold coffret-desktop-core but no coffret-desktop, and one
+# that holds neither, which it must refuse. Needs git, cargo and jq.
+.PHONY: check-version-change-test
+check-version-change-test:
+	./scripts/check-version-change-test.sh
+
 ## shell-lint: shellcheck and shfmt over every shell script in the repository
 #
 # The scripts under scripts/ include the real-Drive targets, which run only when
@@ -850,7 +855,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -915,6 +920,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

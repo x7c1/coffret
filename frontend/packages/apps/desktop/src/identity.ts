@@ -1,7 +1,8 @@
 // How the app looks, from its identifier: the installed app as it always has,
 // and the development app told apart from it wherever the two would otherwise
 // look the same — its windows' titles, its tray icon and tooltip, its window
-// and Dock icons, and on Linux the app ID the desktop groups its windows by.
+// and Dock icons, and on Linux the app ID the desktop groups its windows by,
+// which is each app's own identifier.
 
 import { DEV_IDENTIFIER } from './settings.js';
 
@@ -26,8 +27,10 @@ export interface Identity {
   dockIcon: string | null;
   /**
    * The app ID its windows carry on Linux — the Wayland app ID and the X11
-   * window class — where it is not the default, so that the desktop groups
-   * and names them apart from the installed app's.
+   * window class: the identifier, so that the desktop groups and names the
+   * development app's windows apart from the installed app's, and matches the
+   * installed app's with the desktop entry its .deb installs, whose
+   * `StartupWMClass` is the installed identifier (`electron-builder.config.js`).
    */
   linuxAppId: string | null;
 }
@@ -48,6 +51,6 @@ export function identityFor(identifier: string, platform: NodeJS.Platform): Iden
     trayTemplate: mac,
     windowIcon: development && platform === 'linux' ? DEV_ICON : null,
     dockIcon: development && mac ? DEV_ICON : null,
-    linuxAppId: development && platform === 'linux' ? identifier : null,
+    linuxAppId: platform === 'linux' ? identifier : null,
   };
 }

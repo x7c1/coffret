@@ -1,10 +1,11 @@
 name: Bundle
 
-# Builds the unsigned desktop bundles of the Tauri app
-# (backend/crates/apps/coffret-desktop). Called by the Release workflow with a
-# release tag, it attaches them to that Release; on pull requests and manual
-# runs it uploads them as workflow artifacts. See docs/guides/release.md
-# ("Desktop bundles").
+# Builds the desktop bundles of the Electron app
+# (frontend/packages/apps/desktop) — an ad hoc signed .dmg for macOS and a .deb
+# for Linux — and checks each against its packaging config. Called by the
+# Release workflow with a release tag, it attaches them to that Release; on
+# pull requests and manual runs it uploads them as workflow artifacts. See
+# docs/guides/release.md ("Desktop bundles").
 
 on:
   workflow_call:
@@ -19,13 +20,22 @@ on:
         default: ''
   pull_request:
     branches: [main, 'feat/**']
-    # Only what decides how the bundle is made. A change to the explorer or
-    # the server is built and tested by CI, and the Release workflow bundles
-    # everything on the way to a release; a tauri bump lands in the lockfile.
+    # Only what decides how the bundle is made: the app's package and its
+    # packaging config, the addon it runs the server in and the crates that
+    # make that addon, the lockfiles, and the scripts that build and check it.
+    # A change to the explorer or the server is built and tested by CI, and the
+    # Release workflow bundles everything on the way to a release.
     paths:
-      - backend/crates/apps/coffret-desktop/**
+      - frontend/packages/apps/desktop/**
+      - frontend/pnpm-lock.yaml
+      - frontend/pnpm-workspace.yaml
+      - backend/crates/apps/coffret-napi/**
+      - backend/crates/apps/coffret-desktop-core/**
       - backend/Cargo.lock
+      - Makefile
       - scripts/desktop.sh
+      - scripts/check-desktop-bundle.sh
+      - scripts/workspace-version.sh
       - .github/workflows/bundle.yml
   workflow_dispatch:
     inputs:
@@ -34,29 +44,14 @@ on:
         type: string
         required: true
 
-# This workflow bundles the Tauri app and never runs Electron, so its
-# `pnpm install` fetches no Electron binary (see ci.yml).
-env:
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-
 jobs:
   bundle:
     name: bundle (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
-      # The system libraries the app (Tauri v2: WebKitGTK 4.1, GTK 3, the
-      # app-indicator and SVG libraries) links against on Linux — the list the
-      # backend job in ci.yml installs. Also part of their cache key.
-      APT_PACKAGES: >-
-        libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
-        librsvg2-dev libxdo-dev libssl-dev patchelf
-      # Pinned so that a release of the CLI cannot change the bundles under an
-      # unchanged tree, as with cargo-deny in ci.yml. Its major version is the
-      # one `make desktop-build` asks for.
-      TAURI_CLI_VERSION: 2.12.0
-      # Where `cargo tauri build` writes, per bundle type, without --target.
-      BUNDLE_DIR: backend/target/release/bundle
+      # Where electron-builder writes the bundle (electron-builder.config.js).
+      RELEASE_DIR: frontend/packages/apps/desktop/release
       # The bundles, gathered for the upload.
       OUT_DIR: ${{ github.workspace }}/.tmp/bundles
 
@@ -72,16 +67,17 @@ jobs:
       matrix:
         include:
           # Apple silicon only: Intel Macs are not supported. The runner is
-          # arm64, so the build is native and needs no --target.
+          # arm64, so the build is native.
           - name: macos-aarch64
             runner: macos-14
             # Coffret_<version>_aarch64.dmg
-            bundles: dmg
-          # The deb's name follows tauri.linux.conf.json's productName:
-          # coffret-desktop_<version>_amd64.deb
+            bundle: dmg
+          # coffret-desktop_<version>_amd64.deb. On 22.04, the oldest Ubuntu
+          # the .deb is installed on, so that the addon asks for no newer
+          # glibc than that has.
           - name: linux-x86_64
             runner: ubuntu-22.04
-            bundles: deb
+            bundle: deb
 
     steps:
       # The pull_request run builds the event's merge ref; the other two build
@@ -89,50 +85,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.ref }}
-
-      # As in ci.yml's backend job (see the comment there): a stalled apt
-      # fetch is abandoned after 30 seconds and tried again.
-      - name: Bound apt's waits on the mirror
-        if: runner.os == 'Linux'
-        run: |
-          printf '%s\n' \
-            'Acquire::http::Timeout "30";' \
-            'Acquire::https::Timeout "30";' \
-            'Acquire::Retries "3";' \
-            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
-
-      # The apt archive cache, as in ci.yml's backend job (see the comment there).
-      - name: Prepare the apt archive cache
-        if: runner.os == 'Linux'
-        id: apt-cache-key
-        run: |
-          sudo rm -f /etc/apt/apt.conf.d/docker-clean
-          sudo chown "$(id -u):$(id -g)" /var/cache/apt/archives
-          packages_hash=$(printf '%s' "$APT_PACKAGES" | sha256sum | cut -c1-16)
-          prefix="apt-${{ runner.os }}-${ImageOS}-${packages_hash}-"
-          echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
-          echo "key=${prefix}${ImageVersion}" >> "$GITHUB_OUTPUT"
-
-      - name: Cache apt archives
-        if: runner.os == 'Linux'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives/*.deb
-          key: ${{ steps.apt-cache-key.outputs.key }}
-          restore-keys: |
-            ${{ steps.apt-cache-key.outputs.prefix }}
-
-      # A stalled mirror can hang `apt-get update`; fail fast instead of
-      # waiting out the job. The retries above usually get past a stall, and
-      # this bounds the run when they do not. A working run takes 1 to 8 minutes.
-      - name: Install system packages
-        timeout-minutes: 15
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y -o APT::Keep-Downloaded-Packages=true $APT_PACKAGES
-          sudo apt-get autoclean
-          sudo find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec chmod a+r {} +
 
       # rust-toolchain.toml names the toolchain; `rustup show` installs it, as
       # in ci.yml.
@@ -158,20 +110,6 @@ jobs:
         working-directory: .
         run: scripts/forget-workspace-builds.sh backend
 
-      - name: Cache the Tauri CLI
-        id: cache-tauri-cli
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-tauri
-          key: ${{ runner.os }}-tauri-cli-${{ env.TAURI_CLI_VERSION }}
-
-      # From crates.io rather than through Tauri's GitHub Action: this
-      # repository avoids a third-party action where a command does the job,
-      # for the reason the cargo-deny job in ci.yml gives.
-      - name: Install the Tauri CLI
-        if: steps.cache-tauri-cli.outputs.cache-hit != 'true'
-        run: cargo install tauri-cli --locked --version "$TAURI_CLI_VERSION"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -184,47 +122,31 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
+      # Unlike ci.yml, with Electron's binary: electron-builder packages it.
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      # The app compiles the explorer's build output in through its
-      # `embed-web` feature, so the explorer is built first, as
-      # `make desktop-build` does.
-      - name: Build the explorer
-        run: make web-dist
+      # What `make desktop-build` runs: the explorer, the addon with the
+      # explorer compiled in (`make napi-addon`), the app's code, and the
+      # bundle for this host, at the workspace version of backend/Cargo.toml.
+      # It then checks the bundle against its packaging config
+      # (scripts/check-desktop-bundle.sh; docs/guides/release.md lists what
+      # is checked), and a failed check fails the step. The bundle is always
+      # the installed app, identifier io.github.x7c1.coffret: the development
+      # one is never packaged.
+      - name: Build and check the bundle
+        run: scripts/desktop.sh build
 
-      # The build scripts/desktop.sh's `build` makes. TAURI_CONFIG is never
-      # set here: that override is how the development app
-      # (io.github.x7c1.coffret.dev) is made, and a release is the installed
-      # app, which carries tauri.conf.json's identifier
-      # (io.github.x7c1.coffret). The bundle directory is emptied first, since
-      # backend/target is restored from a cache that may hold the bundles of
-      # an earlier version.
-      #
-      # `--verbose` because the macOS dmg step fails now and then (about one
-      # run in twenty) inside the create-dmg script tauri runs, and without it
-      # the log says only that the script failed. With it, the script's own
-      # output, including what hdiutil answered, is in the log of the run that
-      # failed.
-      - name: Build the bundles
+      # The one bundle of this host's type, which `build` also insisted on.
+      - name: Gather the bundle
         env:
-          BUNDLES: ${{ matrix.bundles }}
-        run: |
-          rm -rf "$BUNDLE_DIR"
-          cd backend/crates/apps/coffret-desktop
-          cargo tauri build --verbose --features embed-web --bundles "$BUNDLES"
-
-      # Each bundle type is written to a directory of its name, as a file
-      # with its name as the extension.
-      - name: Gather the bundles
-        env:
-          BUNDLES: ${{ matrix.bundles }}
+          BUNDLE: ${{ matrix.bundle }}
         run: |
           shopt -s nullglob
-          files=("$BUNDLE_DIR/$BUNDLES"/*."$BUNDLES")
+          files=("$RELEASE_DIR"/*."$BUNDLE")
           if [ "${#files[@]}" -ne 1 ]; then
-            echo "::error::Expected one .${BUNDLES} under ${BUNDLE_DIR}/${BUNDLES}, found ${#files[@]}: ${files[*]}"
+            echo "::error::Expected one .${BUNDLE} under ${RELEASE_DIR}, found ${#files[@]}: ${files[*]}"
             exit 1
           fi
           mkdir -p "$OUT_DIR"
