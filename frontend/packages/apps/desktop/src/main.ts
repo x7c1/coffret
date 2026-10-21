@@ -20,6 +20,7 @@
 // alone and hands the paths to the addon (`drops.ts`). Nothing else is exposed
 // to any page, and the Passphrase window has no preload.
 
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -334,7 +335,9 @@ function assemble(
  */
 function showTray(identity: Identity): Tray | null {
   try {
-    const image = nativeImage.createFromPath(join(ASSETS, identity.trayIcon));
+    const image = nativeImage.createFromBuffer(readFileSync(join(ASSETS, identity.trayIcon)), {
+      scaleFactor: identity.trayScale,
+    });
     if (image.isEmpty()) {
       warn('the tray icon could not be read');
       return null;
