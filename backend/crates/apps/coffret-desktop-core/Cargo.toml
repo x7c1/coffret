@@ -9,12 +9,12 @@ publish.workspace = true
 
 [features]
 # Compile the explorer's build output into the host this crate serves, through
-# the host's feature of the same name, for the reason `coffret-desktop`'s
-# feature gives: turned on unconditionally it would unify into every workspace
-# build and fail each one that runs before the page is built.
+# the host's feature of the same name. It is a feature rather than always on
+# because, turned on unconditionally, it would unify into every workspace build
+# and fail each one that runs before the page is built.
 embed-web = ["coffret-explorer-host/embed-web"]
 
-# A shell's logic over the same crates `coffret-desktop` is, and nothing below
+# A shell's logic over the same crates the other shells are, and nothing below
 # them: `make deps` holds this crate to that boundary too.
 [dependencies]
 # Which Libraries are on this device, opening one again for an unlock in place,

@@ -23,8 +23,11 @@
 //! page path answers a short plain page saying so. A development host serves
 //! it from the build output on disk instead ([`PageSource`]).
 //!
-//! The ticket a browser exchanges reaches it through a file only the owner's
-//! account can read, which [`launch_file`] writes (spec: LA-21).
+//! The ticket a page exchanges reaches it in the fragment of the URL it is
+//! loaded from (spec: LA-21). The desktop app loads that URL into a window of
+//! its own. The development host serves a system browser instead, which is
+//! handed the URL through a file only the owner's account can read, written
+//! by [`launch_file`].
 //!
 //! The explorer is deliberately not served from the server's own port: the
 //! server would then be answering its own page without a key, and every request

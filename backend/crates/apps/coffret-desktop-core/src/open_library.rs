@@ -14,9 +14,9 @@ use crate::shared::Shared;
 use crate::{refusal_evidence, Event};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
-/// front of it, and records both in `shared`: what the Tauri app's
-/// `open_library` does, minus the launch files, since the shell is handed
-/// tickets directly ([`Desktop::issue_ticket`](crate::Desktop::issue_ticket)).
+/// front of it, and records both in `shared`. No launch file is written: the
+/// shell is handed tickets directly
+/// ([`Desktop::issue_ticket`](crate::Desktop::issue_ticket)).
 ///
 /// The caller holds `shared.opening` and has seen nothing open yet. Run on the
 /// core's runtime, because what it binds is served there, and so are the

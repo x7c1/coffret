@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:e2e": "playwright test",
+    "test:electron": "playwright test --config electron/playwright.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
   },

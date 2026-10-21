@@ -1,7 +1,7 @@
 //! What a desktop shell needs to open a Library and serve the explorer from
-//! inside its own process, whatever the shell is written in: the Tauri app
-//! takes the pieces it shares with this from here, and the Node-API binding
-//! (`coffret-napi`) is a thin layer over [`Desktop`].
+//! inside its own process, whatever the shell is written in. The desktop app's
+//! Electron shell reaches it through the Node-API binding (`coffret-napi`),
+//! which is a thin layer over [`Desktop`].
 //!
 //! A process holds one [`Desktop`] ([`start`]), and with it one tokio runtime
 //! that the server, the explorer's host and the Passphrase door all run on.
@@ -16,9 +16,10 @@
 //! process (spec: LA-22, DK-10). It is read from the request's body straight
 //! into [`EnteredPassphrase`], where DK-7's claim over it begins.
 //!
-//! The explorer is served as the Tauri app serves it, minus the launch files:
-//! the shell is handed tickets directly ([`Desktop::issue_ticket`]) and hands
-//! them to the explorer's page in its fragment (spec: LA-17).
+//! The explorer is served through `coffret-explorer-host`, with no launch file
+//! written for it: the shell is handed tickets directly
+//! ([`Desktop::issue_ticket`]) and hands them to the explorer's page, in its own
+//! window, in the fragment of the URL it loads (spec: LA-17, LA-21).
 
 mod app_build;
 pub use app_build::AppBuild;

@@ -2,8 +2,10 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use super::{Digest, NotDrawn, Secret};
 
-/// A one-time launch ticket, as the host hands it to the app that writes it
-/// into the ticket file (spec: LA-17, LA-21).
+/// A one-time launch ticket, as the host hands it to the process it runs in,
+/// which puts it in the fragment of the URL a page is loaded from: the one the
+/// desktop app loads its own window from, or the one a launch file refreshes
+/// to (spec: LA-17, LA-21).
 ///
 /// The host keeps only its digest, so this value is the only copy of the
 /// ticket itself. Not `Clone`; wiped when dropped; `Debug` and `Display` are

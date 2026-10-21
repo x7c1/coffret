@@ -19,9 +19,9 @@ static STARTING: Mutex<()> = Mutex::new(());
 ///
 /// `identifier` is the app's, which says whether this is the installed app or
 /// the development one; `idle_minutes_setting` is what [`IDLE_MINUTES`] was
-/// set to, read as the Tauri app reads it ([`idle_minutes()`]). The log is
-/// started here and nowhere else, and once per process: a start refused after
-/// it is running may be tried again, and the log is not started a second time.
+/// set to, which [`idle_minutes()`] reads. The log is started here and nowhere
+/// else, and once per process: a start refused after it is running may be
+/// tried again, and the log is not started a second time.
 ///
 /// Refused once the process has started, rather than answered with the
 /// desktop already there: a second start is a shell that lost track of the

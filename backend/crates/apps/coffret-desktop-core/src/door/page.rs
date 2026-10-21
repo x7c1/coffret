@@ -3,9 +3,9 @@ use axum::response::IntoResponse;
 
 use super::Refusal;
 
-/// The Passphrase page: a port of the Tauri app's window, which reaches the
-/// door with `fetch` where that one reached the app with Tauri's `invoke`.
-/// Compiled in, so that the page a window loads is the one this build carries.
+/// The Passphrase page, which reaches the door with `fetch` and nothing else
+/// (spec: LA-22). Compiled in, so that the page a window loads is the one this
+/// build carries.
 const INDEX: &str = include_str!("page/index.html");
 const SCRIPT: &str = include_str!("page/unlock.js");
 const STYLE: &str = include_str!("page/unlock.css");

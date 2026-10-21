@@ -17,10 +17,9 @@
 # Windows and wasm shims pulled in by conditional dependencies — and hides the
 # real ones among them. What the narrowing costs is that those shims go
 # unchecked, which is the trade being made; what it must not cost is a crate
-# this workspace itself depends on behind a `cfg`. The one such dependency
-# today is the desktop app's `glib`, for Linux, which is named below; one
-# added for a platform not named below has to add that platform to this list
-# with it.
+# this workspace itself depends on behind a `cfg`. None does today; one added
+# for a platform not named below has to add that platform to this list with
+# it.
 targets = [
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -43,35 +42,7 @@ all-features = false
 # has to be legible to whoever reads it next. cargo-deny warns as soon as an
 # entry matches nothing, so a waiver cannot sit here unnoticed once it has
 # stopped applying.
-#
-# The first two waivers below reach the tree through the desktop app alone, and
-# through one thing in it: Tauri's Linux backend is built on the gtk-rs
-# bindings for GTK 3, whose last line is 0.18. The fixes are on lines that bind
-# GTK 4 instead, which Tauri does not use, so neither is a `cargo update` away;
-# they leave when Tauri moves off GTK 3.
-ignore = [
-    # glib 0.18's `VariantStrIter` passes an out-pointer immutably to a variadic
-    # C call, which an optimizing build may then read as null. Nothing in this
-    # workspace iterates a GVariant's strings — the shell calls glib for its
-    # program name and nothing else — and Tauri's GTK stack does not reach for
-    # that iterator either.
-    { id = "RUSTSEC-2024-0429", reason = "glib 0.18 is Tauri's GTK 3 stack; nothing here iterates a GVariant's strings" },
-    # `proc-macro-error` runs at compile time, inside `glib-macros`, and ships
-    # nothing in the binary. Unmaintained is a statement about future
-    # advisories, and a build-time macro helper has no input but this
-    # workspace's own source.
-    { id = "RUSTSEC-2024-0370", reason = "build-time only, through glib-macros 0.18 on Tauri's GTK 3 stack" },
-    # zbus 6 folded `zvariant`, `zvariant_derive` and `zbus_names` into itself,
-    # and the standalone crates are no longer maintained. They reach the tree
-    # through zbus 5 alone, which Tauri's opener and single-instance plugins
-    # use for D-Bus on Linux; their latest releases still require zbus 5, so
-    # there is no upgrade to take. Unmaintained is a statement about future
-    # advisories, not a known flaw, and these leave when the plugins move to
-    # zbus 6.
-    { id = "RUSTSEC-2026-0370", reason = "zvariant, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
-    { id = "RUSTSEC-2026-0371", reason = "zbus_names, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
-    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, through zbus 5 in Tauri's opener and single-instance plugins; merged into zbus 6" },
-]
+ignore = []
 # A yank is the crate's own author saying not to resolve to that version, not a
 # note to take or leave. Failing here is what makes somebody read why it was
 # pulled.
@@ -140,20 +111,6 @@ exceptions = [
     # against, so dropping either one of them leaves this exception still in
     # use.
     { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
-    # MPL-2.0 is copyleft at the level of the file: whoever distributes a
-    # modified copy of one of these crates' files makes that file's source
-    # available, and nothing more. Nothing here modifies them, coffret's own
-    # source is published under the AGPL regardless, and MPL-2.0 names the GPL
-    # family as compatible (its section 3.3). Scoped to the crates that carry it
-    # rather than allowed generally, because each arrives through the desktop
-    # app's Tauri alone — the HTML and CSS parsing its configuration tooling
-    # does (`dom_query`) and the platform directory lookup (`dirs`) — and a new
-    # one should be looked at rather than waved in.
-    { crate = "cssparser", allow = ["MPL-2.0"] },
-    { crate = "cssparser-macros", allow = ["MPL-2.0"] },
-    { crate = "dtoa-short", allow = ["MPL-2.0"] },
-    { crate = "option-ext", allow = ["MPL-2.0"] },
-    { crate = "selectors", allow = ["MPL-2.0"] },
 ]
 
 # Two dozen packages spell their dual licence with a slash instead of SPDX's

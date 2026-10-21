@@ -35,6 +35,5 @@ fn the_page_is_served_with_its_policy() {
             )
             .await;
         assert!(script.text.contains("history.replaceState"));
-        assert!(!script.text.contains("__TAURI__"));
     });
 }

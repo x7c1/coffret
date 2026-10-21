@@ -8,33 +8,27 @@
 #                                  silhouette, since a tray draws it small
 #
 # The sources are the only inputs; everything this script writes is committed.
-# It needs only tauri-cli (`cargo tauri icon` rasterises SVG itself; install
-# it once with `cargo install tauri-cli --version '^2' --locked`), the shell
-# and python3 (to put the .icns entries in a stable order). Where a variant is
-# needed, the source is nested in a derived SVG in a temp directory and that is
+# It needs tauri-cli, the shell and python3 (to put the .icns entries in a
+# stable order). tauri-cli is not here for an app of its own: its
+# `cargo tauri icon` is the SVG rasteriser, the one tool that turns an SVG into
+# the PNG sizes, the .icns and the favicon rasters below in one step, without a
+# graphics library installed beside it. Install it once with
+# `cargo install tauri-cli --version '^2' --locked`. Where a variant is needed,
+# the source is nested in a derived SVG in a temp directory and that is
 # rasterised instead:
 #
-#   backend/crates/apps/coffret-desktop/icons/       the installed app
-#     icon.png 32x32.png 128x128.png 128x128@2x.png icon.ico   coffret.svg as is
-#     icon.icns                                       coffret.svg inset on a
-#                                                     transparent canvas (see
-#                                                     INSET_PERCENT)
-#   backend/crates/apps/coffret-desktop/icons-dev/   the development app: the
-#                                                     same set, with the "D" badge
-#   backend/crates/apps/coffret-desktop/icons-tray/  the tray (src/tray.rs):
-#     tray{,@2x}.png              installed app, black (the macOS template image)
+#   frontend/packages/apps/desktop/packaging/   the bundles' app icon:
+#     icon.png                    coffret.svg as is (the .deb's)
+#     icon.icns                   coffret.svg inset on a transparent canvas, see
+#                                 INSET_PERCENT (the .app's)
+#   frontend/packages/apps/desktop/assets/      what the running app shows:
+#     icon-dev.png                the development app's window and Dock icon:
+#                                 coffret.svg with the "D" badge
+#     tray{,@2x}.png              the tray, installed app, black (the macOS
+#                                 template image)
 #     tray-light{,@2x}.png        installed app, white (Linux)
 #     tray-dev{,@2x}.png          development app, black, with a one-colour badge
 #     tray-dev-light{,@2x}.png    development app, white, with a one-colour badge
-#   frontend/packages/apps/desktop/assets/           the Electron app: copies of
-#     tray*.png                                       every tray file above, and
-#     icon-dev.png                                    icons-dev/icon.png, its window
-#                                                     and Dock icon as the
-#                                                     development app
-#   frontend/packages/apps/desktop/packaging/        the Electron app's bundles:
-#     icon.icns icon.png                              copies of icons/'s, the
-#                                                     app icon of the .app and
-#                                                     of the .deb
 #   frontend/packages/apps/web/public/
 #     favicon.svg                 the chest alone, in the app icon's two colours
 #                                 (lighter ones on a dark tab, see FAVICON_*)
@@ -56,13 +50,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 readonly REPO_ROOT
 readonly SOURCE="$REPO_ROOT/assets/icon/coffret.svg"
 readonly TRAY_SOURCE="$REPO_ROOT/assets/icon/coffret-tray.svg"
-readonly DESKTOP_DIR="$REPO_ROOT/backend/crates/apps/coffret-desktop"
-readonly INSTALLED_DIR="$DESKTOP_DIR/icons"
-readonly DEV_DIR="$DESKTOP_DIR/icons-dev"
-readonly TRAY_DIR="$DESKTOP_DIR/icons-tray"
+readonly DESKTOP_DIR="$REPO_ROOT/frontend/packages/apps/desktop"
+readonly PACKAGING_DIR="$DESKTOP_DIR/packaging"
+readonly ASSETS_DIR="$DESKTOP_DIR/assets"
 readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
-readonly ELECTRON_ASSETS_DIR="$REPO_ROOT/frontend/packages/apps/desktop/assets"
-readonly ELECTRON_PACKAGING_DIR="$REPO_ROOT/frontend/packages/apps/desktop/packaging"
 
 # --- Geometry -----------------------------------------------------------------
 
@@ -172,8 +163,10 @@ source_body() {
   sed '/^<?xml/d' "$1"
 }
 
-# Rasterise an SVG into a directory with `cargo tauri icon`. Its per-file
-# progress goes to a log that is shown only when it fails.
+# Rasterise an SVG into a directory with `cargo tauri icon`, which writes a
+# fixed set of sizes (or the ones `-p` asks for) of which the callers keep only
+# what they use. Its per-file progress goes to a log that is shown only when it
+# fails.
 rasterise() {
   local svg="$1" out="$2"
   shift 2
@@ -316,31 +309,27 @@ write_favicon_svg() {
   } >"$out"
 }
 
-# --- Icon sets ------------------------------------------------------------------
+# --- App icon -------------------------------------------------------------------
 
-# The files a set keeps from `cargo tauri icon`'s output (the rest — Windows
-# Store logos, android/, ios/, 64x64.png — is not used by the bundle).
-SET_FILES=(icon.png 32x32.png 128x128.png 128x128@2x.png icon.ico)
+# The bundles' app icon, into PACKAGING_DIR: icon.png from coffret.svg as is,
+# icon.icns from the inset variant of it.
+mkdir -p "$PACKAGING_DIR" "$ASSETS_DIR"
+rasterise "$SOURCE" "$WORK_DIR/installed-full"
+cp "$WORK_DIR/installed-full/icon.png" "$PACKAGING_DIR/icon.png"
+log "wrote $(shown "$PACKAGING_DIR/icon.png")"
+write_inset_svg "$SOURCE" "$WORK_DIR/installed-inset.svg"
+rasterise "$WORK_DIR/installed-inset.svg" "$WORK_DIR/installed-inset"
+sort_icns "$WORK_DIR/installed-inset/icon.icns"
+cp "$WORK_DIR/installed-inset/icon.icns" "$PACKAGING_DIR/icon.icns"
+log "wrote $(shown "$PACKAGING_DIR/icon.icns") (inset to $INSET_PERCENT %)"
 
-# Write one desktop icon set into $3: the PNGs and the .ico from the SVG $1,
-# the .icns from the inset variant of it. $2 names the set in the work dir.
-write_set() {
-  local svg="$1" name="$2" dest="$3"
-  local full="$WORK_DIR/$name-full" inset_svg="$WORK_DIR/$name-inset.svg"
-  local inset="$WORK_DIR/$name-inset"
-  rasterise "$svg" "$full"
-  write_inset_svg "$svg" "$inset_svg"
-  rasterise "$inset_svg" "$inset"
-  mkdir -p "$dest"
-  local file
-  for file in "${SET_FILES[@]}"; do
-    cp "$full/$file" "$dest/$file"
-    log "wrote $(shown "$dest/$file")"
-  done
-  sort_icns "$inset/icon.icns"
-  cp "$inset/icon.icns" "$dest/icon.icns"
-  log "wrote $(shown "$dest/icon.icns") (inset to $INSET_PERCENT %)"
-}
+# The development app's window and Dock icon: the app icon with the "D" badge.
+write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
+rasterise "$WORK_DIR/dev.svg" "$WORK_DIR/dev"
+cp "$WORK_DIR/dev/icon.png" "$ASSETS_DIR/icon-dev.png"
+log "wrote $(shown "$ASSETS_DIR/icon-dev.png")"
+
+# --- Tray ---------------------------------------------------------------------
 
 # Write one tray variant, $2 (tray, tray-dev-light, …), from the SVG $1:
 # $2.png at TRAY_PX and $2@2x.png at TRAY_PX_2X.
@@ -348,18 +337,10 @@ write_tray() {
   local svg="$1" name="$2"
   local out="$WORK_DIR/$name"
   rasterise "$svg" "$out" -p "$TRAY_PX" -p "$TRAY_PX_2X"
-  mkdir -p "$TRAY_DIR"
-  cp "$out/${TRAY_PX}x${TRAY_PX}.png" "$TRAY_DIR/$name.png"
-  cp "$out/${TRAY_PX_2X}x${TRAY_PX_2X}.png" "$TRAY_DIR/$name@2x.png"
-  log "wrote $(shown "$TRAY_DIR/$name.png") and $name@2x.png"
+  cp "$out/${TRAY_PX}x${TRAY_PX}.png" "$ASSETS_DIR/$name.png"
+  cp "$out/${TRAY_PX_2X}x${TRAY_PX_2X}.png" "$ASSETS_DIR/$name@2x.png"
+  log "wrote $(shown "$ASSETS_DIR/$name.png") and $name@2x.png"
 }
-
-write_set "$SOURCE" installed "$INSTALLED_DIR"
-
-write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
-write_set "$WORK_DIR/dev.svg" dev "$DEV_DIR"
-
-# --- Tray ---------------------------------------------------------------------
 
 # Black files carry no suffix, white ones "-light".
 for suffix in "" -light; do
@@ -372,18 +353,6 @@ for suffix in "" -light; do
   write_tray_badged_svg "$TRAY_SOURCE" "$color" "$WORK_DIR/tray-dev$suffix.svg"
   write_tray "$WORK_DIR/tray-dev$suffix.svg" "tray-dev$suffix"
 done
-
-# --- Electron app -------------------------------------------------------------
-
-# Copies rather than files of its own, so that the two apps draw the same
-# pictures for as long as both are built.
-mkdir -p "$ELECTRON_ASSETS_DIR"
-cp "$TRAY_DIR"/tray*.png "$ELECTRON_ASSETS_DIR/"
-cp "$DEV_DIR/icon.png" "$ELECTRON_ASSETS_DIR/icon-dev.png"
-log "copied the tray icons and icon-dev.png into $(shown "$ELECTRON_ASSETS_DIR")"
-mkdir -p "$ELECTRON_PACKAGING_DIR"
-cp "$INSTALLED_DIR/icon.icns" "$INSTALLED_DIR/icon.png" "$ELECTRON_PACKAGING_DIR/"
-log "copied icon.icns and icon.png into $(shown "$ELECTRON_PACKAGING_DIR")"
 
 # --- Favicon ------------------------------------------------------------------
 

@@ -63,10 +63,10 @@ Concept background: [Library](../../concepts/library/),
   LA-5's third fence exists against. It never reaches a browser at all
   (LA-3). A browser's own credential is held to the same line: a browser
   token travels only in an `Authorization` header, and a launch ticket only in
-  the ticket file and the fragment of the address that file refreshes to, or
-  in the fragment of the URL the app loads its own window from — a fragment no
-  request carries, and which the page removes as it reads it (LA-21) — and in
-  the `Authorization` header of its exchange (LA-16). *(Form: test)*
+  the fragment of the URL the explorer's page is loaded from — a fragment no
+  request carries, and which the page removes as it reads it — in the launch
+  file that holds that URL where the page is opened in a browser (LA-21), and
+  in the `Authorization` header of its exchange (LA-16). *(Form: test)*
 - **LA-7.** The shown key is compared against the expected one without
   stopping at the first byte that differs. *(Form: prose — a timing property
   of one comparison, which no test over the verdict can observe; honored by
@@ -253,11 +253,11 @@ Concept background: [Library](../../concepts/library/),
   header, and an `OPTIONS` request is refused like any other method a route
   does not take. *(Form: test)*
 - **LA-17.** A launch ticket is issued only by a call within the host's own
-  process — the desktop app's, as it opens the explorer in the system browser
-  or in a window of its own (LA-21) — and by no HTTP
-  request whatever. It is good for one exchange, and it expires 60 seconds
-  after it was issued. At most 4 tickets are live at once, and issuing a fifth
-  expires the oldest one not yet exchanged. Of concurrent exchanges of one
+  process — the desktop app's, as it loads the explorer into a window of its
+  own, or the development host's, as it writes a launch file (LA-21) — and by
+  no HTTP request whatever. It is good for one exchange, and it expires 60
+  seconds after it was issued. At most 4 tickets are live at once, and issuing
+  a fifth expires the oldest one not yet exchanged. Of concurrent exchanges of one
   ticket, exactly one succeeds. A ticket that was exchanged, expired, never
   issued, or issued before the host's generation changed is refused as one
   answer, `401`, that names none of these. Exchanges are limited across the
@@ -281,14 +281,14 @@ Concept background: [Library](../../concepts/library/),
   recorded as an event by its kind, a fixed reason and a count alone (EL-1).
   A session expires 12 hours after its token was issued, and nothing
   refreshes it: a page whose session ended exchanges a new ticket, which only
-  the app can give it. Every ticket and token is discarded when the host or the
-  server restarts and when the Library it serves changes; a Library that locks
-  keeps its sessions, which are then refused data (LA-14). A session is
-  revoked singly by a request carrying its own token (LA-16) — which the
-  explorer offers no control to make — and all of them at once when the app
-  quits or retires its credentials, which spends every ticket not yet
-  exchanged as well, so that no ticket makes a session after every session was
-  revoked. *(Form: test)*
+  the process the host runs in can give it. Every ticket and token is
+  discarded when the host or the server restarts and when the Library it
+  serves changes; a Library that locks keeps its sessions, which are then
+  refused data (LA-14). A session is revoked singly by a request carrying its
+  own token (LA-16) — which the explorer offers no control to make — and all
+  of them at once when the process the host runs in quits or retires its
+  credentials, which spends every ticket not yet exchanged as well, so that no
+  ticket makes a session after every session was revoked. *(Form: test)*
 - **LA-19.** What the host reads of a request is bounded before it is read. A
   request to `/auth` brings at most 1 KiB of body, any request at most 8 KiB
   of headers, and reading a request to `/auth` stops 5 seconds after it began.
@@ -307,32 +307,33 @@ Concept background: [Library](../../concepts/library/),
   timing is what no test over the verdict observes, as with LA-7; both are
   honored by construction: the secret lives in a type that overwrites its
   bytes when dropped and renders as redacted, and only its digest is kept.)*
-- **LA-21.** A ticket reaches the explorer's page in one of two ways, and
-  neither puts it anywhere another account on the device can read. Where the
-  app shows the explorer in the system browser, the ticket reaches the
-  browser through a file only the account that
-  owns the Library can read. The app writes an HTML page that refreshes to
-  `http://127.0.0.1:<port>/#launch=<ticket>` into a directory of mode `0700`,
-  as a file of mode `0600` created exclusively under a temporary name and
-  renamed into place, and opens that file's `file:` URL in the system
-  browser — so the browser's command line, which another account on the
-  device can read, carries a path and never a ticket. The file is removed once
-  its ticket is exchanged or has expired, and a file that could not be removed
-  leaves a ticket that is still spent (LA-17). Where the app shows the
-  explorer in a window of its own, it loads that window from
-  `http://127.0.0.1:<port>/#launch=<ticket>` itself: the URL goes from the
-  app's process to the window's renderer and onto no command line, into no
-  file and into no log, and a window whose page has lost its session is
-  loaded again from a fresh ticket only when the app is asked to. Either way,
-  the page takes the ticket out of
-  the fragment, removes it from the address with `history.replaceState`
+- **LA-21.** A ticket reaches the explorer's page in the fragment of the URL
+  the page is loaded from, `http://127.0.0.1:<port>/#launch=<ticket>`, and is
+  put nowhere another account on the device can read. The desktop app loads
+  its own window from that URL itself: the URL goes from the app's process to
+  the window's renderer and onto no command line, into no file and into no
+  log, and a window whose page has lost its session is loaded again from a
+  fresh ticket only when the app is asked to. The desktop app writes no file
+  for a ticket and hands none to a browser. Only the development host — the
+  host a checkout runs in front of a server already running, to serve the
+  explorer's build to a system browser — writes a file. A browser is started
+  with its URL on its command line, which another account on the device can
+  read, so the ticket reaches it through a launch file only the account that
+  owns the Library can read. The host writes an HTML page that refreshes to
+  the URL above into a directory of mode `0700`, as a file of mode `0600`
+  created exclusively under a temporary name and renamed into place, and a
+  person opens that file's `file:` URL in the browser — so a command line
+  carries a path and never a ticket. The file is removed once its ticket is
+  exchanged or has expired, and a file that could not be removed leaves a
+  ticket that is still spent (LA-17). Either way, the page takes the ticket
+  out of the fragment, removes it from the address with `history.replaceState`
   before it does anything else, and exchanges it (LA-16). A page that holds no
   token reads no Library data, and says to reload the explorer from the app.
   *(Form: test for the modes, the exclusive creation and the page's handling
-  of the fragment; prose for the browser's command line carrying no ticket
-  and the window's URL staying within the app, which are properties of how
-  the app opens the browser and loads its window, honored by
-  construction.)*
+  of the fragment; prose for the window's URL staying within the app and the
+  browser's command line carrying no ticket, which are properties of how the
+  app loads its window and of how the development host's file is opened,
+  honored by construction.)*
 
 ### The Passphrase door
 

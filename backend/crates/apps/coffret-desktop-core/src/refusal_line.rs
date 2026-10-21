@@ -1,8 +1,7 @@
 use coffret_device::{Error, Redacted};
 
-/// What a refused open or unlock tells the person, as a Passphrase window
-/// shows it (the Tauri app's own, or the page the door serves): one sentence
-/// they can act on.
+/// What a refused open or unlock tells the person, as the Passphrase window
+/// shows it (the page the door serves): one sentence they can act on.
 ///
 /// The window is small and the chain an error carries is written for a
 /// terminal and a log — the wrong Passphrase alone comes with the Master Key

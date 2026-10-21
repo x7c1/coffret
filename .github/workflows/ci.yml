@@ -6,15 +6,6 @@ on:
   push:
     branches: [main]
 
-# No job here runs Electron (a dependency of frontend/packages/apps/desktop),
-# so no job's `pnpm install` should fetch its binary. Set for the whole
-# workflow so that every job that installs the frontend, including one added
-# later, has it. The Electron version the lockfile pins fetches its binary on
-# first run rather than at install, so today this guards against a version
-# that fetches it at install again.
-env:
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -24,73 +15,10 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    env:
-      # The apt packages this job installs; also part of their cache key. The
-      # workspace includes the desktop app (Tauri v2), which links WebKitGTK
-      # 4.1, GTK 3, the app-indicator library its tray icon needs, and the SVG
-      # library, so a build of the workspace needs their development files.
-      APT_PACKAGES: >-
-        libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev
-        librsvg2-dev libxdo-dev libssl-dev patchelf
+    # No apt step: every crate in the workspace builds from what the runner
+    # image and the Rust toolchain carry.
     steps:
       - uses: actions/checkout@v4
-
-      # Every apt fetch gives up on a silent connection after 30 seconds and
-      # tries again, up to three times, so a stalled mirror costs this job a
-      # couple of minutes rather than the whole of the step's timeout. Written
-      # under apt.conf.d rather than passed as `-o` options so that it also
-      # reaches apt runs a tool makes (the e2e job's `playwright install-deps`).
-      - name: Bound apt's waits on the mirror
-        run: |
-          printf '%s\n' \
-            'Acquire::http::Timeout "30";' \
-            'Acquire::https::Timeout "30";' \
-            'Acquire::Retries "3";' \
-            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
-
-      # The .deb archives are cached so a run normally installs from the cache
-      # instead of the Ubuntu mirror, which can stall an install for many
-      # minutes. Only the downloads are cached: `apt-get update` and
-      # `apt-get install` still run, so dpkg registers the packages and runs
-      # their scripts as before, and apt re-downloads any cached archive that
-      # does not match the signed index. The key holds the runner image (a new
-      # image can ship different versions) and the package list; on a new image
-      # the previous image's set for the same list is restored.
-      #
-      # The cache action runs as the runner user, so it is given the root-owned
-      # archive directory (`lock` and `partial/` stay apt's), and apt must keep
-      # what it downloads: drop the Docker-style clean hook if the image has one.
-      - name: Prepare the apt archive cache
-        id: apt-cache-key
-        run: |
-          sudo rm -f /etc/apt/apt.conf.d/docker-clean
-          sudo chown "$(id -u):$(id -g)" /var/cache/apt/archives
-          packages_hash=$(printf '%s' "$APT_PACKAGES" | sha256sum | cut -c1-16)
-          prefix="apt-${{ runner.os }}-${ImageOS}-${packages_hash}-"
-          echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
-          echo "key=${prefix}${ImageVersion}" >> "$GITHUB_OUTPUT"
-
-      - name: Cache apt archives
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives/*.deb
-          key: ${{ steps.apt-cache-key.outputs.key }}
-          restore-keys: |
-            ${{ steps.apt-cache-key.outputs.prefix }}
-
-      # A stalled mirror can hang `apt-get update`; fail fast instead of
-      # waiting out the job. The retries above usually get past a stall, and
-      # this bounds the run when they do not. A working run takes 1 to 8 minutes.
-      - name: Install system packages
-        timeout-minutes: 15
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y -o APT::Keep-Downloaded-Packages=true $APT_PACKAGES
-          # Drop archives the current index no longer offers, so a cache saved
-          # from a restored older set does not keep growing, and let the cache
-          # action read what apt (as root) downloaded.
-          sudo apt-get autoclean
-          sudo find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec chmod a+r {} +
 
       # No toolchain is named here on purpose. rust-toolchain.toml decides,
       # so this job runs the same compiler a developer's checkout does, and a
@@ -212,6 +140,14 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    # No job but `e2e` runs Electron (a dependency of
+    # frontend/packages/apps/desktop), so every other job that installs the
+    # frontend says not to fetch its binary; a job added later that installs
+    # it says the same. The Electron version the lockfile pins fetches its
+    # binary on first run rather than at install, so today this guards against
+    # a version that fetches it at install again.
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -301,7 +237,7 @@ jobs:
         run: bash .github/scripts/release-summary.test.sh
 
       # The workspace version the release workflow reads, and whether it went
-      # up, without the Tauri crate (docs/guides/release.md).
+      # up (docs/guides/release.md).
       - name: Version change test
         run: make check-version-change-test
 
@@ -311,6 +247,9 @@ jobs:
   interop:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # See the frontend job: nothing here runs Electron.
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -391,12 +330,17 @@ jobs:
   # command line — a Library created, a second device joined to it — and ends in
   # Chromium.
   #
+  # Then the desktop app's journey, in the Electron app itself, against MinIO
+  # too: the one job that runs Electron, so the one that lets `pnpm install`
+  # and the app fetch its binary (see the frontend job). It runs under
+  # xvfb-run, since the runner has no display.
+  #
   # The screenshots are kept whatever the run did. What a machine cannot judge is
   # whether the screen reads right, and the pictures of a run that failed are the
   # ones most worth looking at.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -414,6 +358,13 @@ jobs:
           key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('backend/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-e2e-
+
+      # A restored target may hold builds of this workspace newer than the
+      # checkout; scripts/forget-workspace-builds.sh says why that matters. Here
+      # it would put a Node-API addon built from another commit into the
+      # desktop app's journey.
+      - name: Rebuild the workspace's own crates
+        run: scripts/forget-workspace-builds.sh backend
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -447,8 +398,12 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
 
-      # See the backend job: a stalled apt fetch is abandoned after 30 seconds
-      # and tried again. Before the step below, which is this job's only apt run.
+      # Every apt fetch gives up on a silent connection after 30 seconds and
+      # tries again, up to three times, so a stalled mirror costs this job a
+      # couple of minutes rather than the whole of the step's timeout. Written
+      # under apt.conf.d rather than passed as `-o` options so that it also
+      # reaches the apt runs `playwright install-deps` makes. Before the step
+      # below, which is this job's only apt run.
       - name: Bound apt's waits on the mirror
         run: |
           printf '%s\n' \
@@ -474,12 +429,19 @@ jobs:
       - name: Journeys against MinIO
         run: make e2e-it
 
+      # The Electron app on a virtual display. Its system packages are among
+      # Chromium's, which the step above installed, xvfb included.
+      - name: The desktop app's journey against MinIO
+        run: xvfb-run --auto-servernum make e2e-electron
+
       - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots
-          path: .tmp/e2e/screenshots/
+          path: |
+            .tmp/e2e/screenshots/
+            .tmp/e2e-electron/screenshots/
           if-no-files-found: warn
 
       # What a failed run is read from afterwards, beyond the pictures: the
@@ -500,4 +462,6 @@ jobs:
             .tmp/e2e/logs/
             .tmp/e2e/transcript.log
             .tmp/e2e/last-command.log
+            .tmp/e2e-electron/playwright/
+            .tmp/e2e-electron/logs/
           if-no-files-found: warn

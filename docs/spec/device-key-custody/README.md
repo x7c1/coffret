@@ -28,15 +28,14 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     the keys, which is why there is no lock to ask a running one for. A
     running server that has locked may be unlocked in place, but only with
     the Passphrase taken from a prompt that does not echo (DK-10). Two
-    surfaces are told apart here: the explorer's page, in the system browser
-    or in a window of the desktop app's own, which never takes or carries a
+    surfaces are told apart here: the explorer's page, in a window of the
+    desktop app's own or in a system browser, which never takes or carries a
     key or a Passphrase (the server key stays off it, LA-3, LA-6, and what it
     holds instead is a browser token, LA-15), and the desktop app's
     Passphrase window, a page the app itself ships, which is the one surface
-    that takes the Passphrase. That window is either a webview the app
-    renders the page in, or a window of the app's own that loads the page
-    from the app's Passphrase door (LA-22, LA-23). The prompt is that window,
-    not the explorer's page.
+    that takes the Passphrase. That window is a window of the app's own that
+    loads the page from the app's Passphrase door (LA-22, LA-23). The prompt
+    is that window, not the explorer's page.
     Whatever brings the window forward — a press of *unlock*, the tray, or
     the explorer asking on its own once it sees the Library locked — decides
     only when it is shown; the Passphrase's path from the window to the
@@ -97,21 +96,17 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     Code form the key is written out as (KD-11), and the grouped key sets a run
     works under. Together these are the **secret-bearing inventory**, and a new
     type that comes to hold secret bytes joins it.
-  - For a secret entered in the desktop app's window (DK-1), the claim begins
-    where the app's own command handler receives it: from that moment it is
-    held in a type on the inventory, with no copy outside it. The copies the
-    webview and its IPC make before then — the field's value, the page
-    script's string, the serialized message — are outside anything coffret
-    can overwrite, and outside the claim. The app shortens their life — the
-    window's field is emptied after every submission and whenever the window
-    is hidden — without guaranteeing their erasure. For a secret entered in
-    the window the Passphrase door serves (LA-22), the claim begins where the
-    door's handler reads the request's body into a type on the inventory: the
-    body is gathered into a buffer that is overwritten when it is dropped, and
-    read from there straight into that type. The copies the window's renderer
-    and its network stack make before then are outside the claim in the same
-    way, and so is the scratch copy the JSON parser makes of a secret holding
-    a character JSON escapes.
+  - For a secret entered in the desktop app's Passphrase window (DK-1), which
+    the Passphrase door serves (LA-22), the claim begins where the door's
+    handler reads the request's body into a type on the inventory: the body
+    is gathered into a buffer that is overwritten when it is dropped, and
+    read from there straight into that type, with no copy outside it. The
+    copies the window makes before then — the field's value, the page
+    script's string, the request as the window's renderer and its network
+    stack hold it — are outside anything coffret can overwrite, and outside
+    the claim, and so is the scratch copy the JSON parser makes of a secret
+    holding a character JSON escapes. The page shortens the field's life — it
+    is emptied after every submission — without guaranteeing its erasure.
   - Inventory membership is the testable half of this rule: every type on the
     list overwrites its bytes when it is dropped and none of them is copyable,
     which one place asserts over the domain's types rather than each type

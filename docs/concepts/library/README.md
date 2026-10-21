@@ -85,14 +85,14 @@ EP-15, KL-15, OC-2, CK-8).
 
 The **explorer** is the browser surface for browsing and operating a Library.
 Its **reader** displays an ordered sequence of Entries; a **page** is one step
-of that sequence. The explorer itself is also loaded as a page in the
-browser, and "the explorer's page" means that browser page, never a step of
-the reader's sequence. An Entry is **openable** when the reader supports
-displaying it, as determined from its name; every file can be stored whether
-or not the reader supports it (spec: FM-9). The **desktop app** is coffret's desktop
-application: it opens the Library, serves this surface in the system browser
-or in a window of its own, and has a separate window of its own for entering
-the Passphrase.
+of that sequence. The explorer itself is also loaded as a page, in the
+desktop app's window or in a browser, and "the explorer's page" means that
+page, never a step of the reader's sequence. An Entry is **openable** when
+the reader supports displaying it, as determined from its name; every file
+can be stored whether or not the reader supports it (spec: FM-9). The
+**desktop app** is coffret's desktop application: it opens the Library,
+serves this surface in a window of its own, and has a separate window of its
+own for entering the Passphrase.
 
 ## Examples
 
@@ -385,10 +385,9 @@ the Passphrase.
     that forwards the page's requests to the server with the server key
     attached, and the page shows the host a **browser token** of its own
     instead. The page gets that token by exchanging a one-time **launch
-    ticket**, which the app hands it whenever the app opens the explorer —
-    through a file only the owner's account can read where the explorer is in
-    the system browser, or in the URL the app loads its own window from — and
-    the person does nothing more than open it (spec: LA-15, LA-17, LA-21).
+    ticket**, which the app hands it in the URL it loads its own window from
+    whenever it opens the explorer, and the person does nothing more than open
+    it (spec: LA-15, LA-17, LA-21).
     - A browser token lets a page do everything the explorer can do, for one
       Library, until the token expires, is revoked, or the host restarts
       (spec: LA-18). It is no narrower than that: there are no read-only

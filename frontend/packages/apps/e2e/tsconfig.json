@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["journeys", "playwright.config.ts"]
+  "include": ["journeys", "electron", "playwright.config.ts"]
 }
