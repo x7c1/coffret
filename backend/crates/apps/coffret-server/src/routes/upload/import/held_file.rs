@@ -38,6 +38,8 @@ impl<'a> HeldFile<'a> {
 }
 
 impl Incoming for HeldFile<'_> {
+    const OPERATION: &'static str = super::OPERATION;
+
     fn times(&self) -> Times {
         Times {
             modified: Some(self.file.mtime()),

@@ -9,11 +9,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   desktopBridge,
   droppedFiles,
+  filesUnder,
   heldBy,
+  nothingAddedLine,
   notTakenLine,
+  notTakenNotice,
+  withNotTaken,
   type DesktopBridge,
+  type DroppedFolder,
   type HeldDrop,
 } from './drop';
+import { overBudgetLine } from './dropped';
 import { chooseAndAdd, NOTHING_HELD } from './packChoice';
 
 const HANDLE = 'd'.repeat(64);
@@ -80,10 +86,10 @@ describe('with the desktop app’s bridge', () => {
     vi.stubGlobal('coffretDesktop', { takeDrop });
     const dropped = new File(['folder'], 'vol-1');
 
-    const added = await droppedFiles(transfer([dropped]));
+    const drop = await droppedFiles(transfer([dropped]));
 
     expect(takeDrop).toHaveBeenCalledWith([dropped]);
-    expect(added).toEqual(
+    expect(drop.files).toEqual(
       BOOK.files.map((file, index) => ({
         path: file.path,
         size: 100,
@@ -91,12 +97,13 @@ describe('with the desktop app’s bridge', () => {
         source: { kind: 'held', handle: HANDLE, index },
       })),
     );
+    expect(drop.notTaken).toEqual([]);
   });
 
   it('goes through the same Pack choice and is sent as an import', async () => {
     vi.stubGlobal('coffretDesktop', { takeDrop: async () => BOOK });
     const made = recording();
-    const added = await droppedFiles(transfer([new File(['folder'], 'vol-1')]));
+    const { files: added } = await droppedFiles(transfer([new File(['folder'], 'vol-1')]));
     const asked = vi.fn(async () => ({
       choice: 'pack' as const,
       numbering: { pages: true, volumes: false },
@@ -146,7 +153,7 @@ describe('with the desktop app’s bridge', () => {
     await expect(heldBy(bridge, [new File([''], 'link-to-photos')])).rejects.toThrow(
       'link-to-photos is a link',
     );
-    await expect(heldBy(bridge, [])).resolves.toEqual([]);
+    await expect(heldBy(bridge, [])).resolves.toEqual({ files: [], notTaken: [] });
   });
 
   it('adds nothing and says nothing of a drop that had no paths at all', async () => {
@@ -159,7 +166,10 @@ describe('with the desktop app’s bridge', () => {
       }),
     };
 
-    await expect(heldBy(bridge, [new File(['an image'], 'image.png')])).resolves.toEqual([]);
+    await expect(heldBy(bridge, [new File(['an image'], 'image.png')])).resolves.toEqual({
+      files: [],
+      notTaken: [],
+    });
   });
 
   it('names what had a path, not the empty ones, where nothing was taken', async () => {
@@ -177,6 +187,112 @@ describe('with the desktop app’s bridge', () => {
     await expect(heldBy(bridge, [new File([''], 'a'), new File([''], 'b')])).rejects.toThrow(
       /^link-to-photos is a link or something else that is neither a file nor a folder$/,
     );
+  });
+});
+
+const LINK = { path: 'link-to-photos', reason: 'not_a_file_or_folder' } as const;
+
+/** What the app answers a drop of three photos with a symbolic link beside them. */
+const PHOTOS_AND_A_LINK: HeldDrop = {
+  handle: HANDLE,
+  files: ['a.jpg', 'b.jpg', 'c.jpg'].map((path) => ({ path, size: 100, mtime: 0 })),
+  notTaken: [
+    // An image dragged in beside them from another page, which has no path to name.
+    { path: '', reason: 'empty' },
+    LINK,
+  ],
+};
+
+const LINK_LINE =
+  '1 thing in the drop was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
+
+describe('a drop the app took only part of', () => {
+  it('carries what was not taken beside what was, leaving out what had no path', async () => {
+    vi.stubGlobal('coffretDesktop', { takeDrop: async () => PHOTOS_AND_A_LINK });
+
+    const drop = await droppedFiles(transfer([new File([''], 'a.jpg')]));
+
+    expect(drop.files.map((added) => added.path)).toEqual(['a.jpg', 'b.jpg', 'c.jpg']);
+    expect(drop.notTaken).toEqual([LINK]);
+    expect(notTakenNotice(drop.notTaken)).toBe(LINK_LINE);
+  });
+
+  it('says it beside the reason where the drop is answered without the confirmation', async () => {
+    vi.stubGlobal('coffretDesktop', { takeDrop: async () => PHOTOS_AND_A_LINK });
+    const { files, notTaken } = await droppedFiles(transfer([new File([''], 'a.jpg')]));
+    // More files than one request may name: refused without a question.
+    const many = Array.from({ length: 10_001 }, () => files[0]);
+    const said: string[] = [];
+
+    const chosen = await chooseAndAdd({
+      files: many,
+      existing: [],
+      held: async () => NOTHING_HELD,
+      ask: () => {
+        throw new Error('a drop that cannot be sent is not asked about');
+      },
+      send: async () => {
+        throw new Error('a drop that cannot be sent is not sent');
+      },
+      refuse: (overdrawn) => said.push(withNotTaken(overBudgetLine(overdrawn, 'main'), notTaken)),
+    });
+
+    expect(chosen).toBe('refused');
+    expect(said).toHaveLength(1);
+    expect(said[0]).toMatch(/^this drop holds 10001 files, more than the \d+ one drop can carry\. /);
+    // A sentence of its own, after the advice the refusal ends on rather than
+    // part of it.
+    expect(said[0].endsWith(`main\`. ${LINK_LINE}.`)).toBe(true);
+  });
+
+  it('says it as the next clause after a one-clause notice', () => {
+    expect(withNotTaken('nothing was added — x', [LINK])).toBe(`nothing was added — x; ${LINK_LINE}`);
+  });
+
+  it('says nothing more of a drop the app took all of, or of a browser’s', () => {
+    expect(notTakenNotice([])).toBeNull();
+    expect(withNotTaken('nothing was added — x', [])).toBe('nothing was added — x');
+  });
+});
+
+describe('a drop that came to no files', () => {
+  it('says what the app did not take, not that the drop could not be read', async () => {
+    const bridge: DesktopBridge = {
+      takeDrop: async () => ({
+        handle: null,
+        files: [],
+        notTaken: [LINK],
+      }),
+    };
+
+    const cause = await heldBy(bridge, [new File([''], 'link-to-photos')]).catch(
+      (refused: unknown) => refused,
+    );
+
+    const line = nothingAddedLine(cause);
+    expect(line).toBe(
+      'nothing was added — link-to-photos is a link or something else that is neither a file nor a folder',
+    );
+    expect(line).not.toContain('could not be read');
+  });
+
+  it('still says a browser’s walk that was refused could not be read', async () => {
+    const refusing: DroppedFolder = {
+      isFile: false,
+      isDirectory: true,
+      name: 'album',
+      createReader: () => ({
+        readEntries: (_onEntries, onRefused) => onRefused?.(new Error('NotReadableError')),
+      }),
+    };
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const cause = await filesUnder([refusing]).catch((refused: unknown) => refused);
+
+    expect(nothingAddedLine(cause)).toBe(
+      'nothing was added — that drop could not be read: the explorer could not finish that',
+    );
+    error.mockRestore();
   });
 });
 
@@ -203,9 +319,10 @@ describe('without the bridge', () => {
     expect(desktopBridge()).toBeNull();
     const photo = new File(['a photograph'], 'photo.jpg', { lastModified: 1_444_000_000_999 });
 
-    const added = await droppedFiles(transfer([photo]));
+    const drop = await droppedFiles(transfer([photo]));
 
-    expect(added).toEqual([
+    expect(drop.notTaken).toEqual([]);
+    expect(drop.files).toEqual([
       {
         path: 'photo.jpg',
         size: photo.size,

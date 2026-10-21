@@ -81,14 +81,14 @@ use super::under::under;
 /// (spec: PK-17). The path is noted in [`Reserving::paths`] as it is added,
 /// whether or not the rename then succeeds, because that is what the
 /// reservation names and so what the drop's freeze has to consider.
-pub(super) async fn receive(
+pub(super) async fn receive<S: Incoming>(
     library: &OpenLibrary,
     allowance: &Allowance,
     coming: u64,
     folder: Option<&EntryPath>,
     name: &str,
     reserving: Option<Reserving<'_>>,
-    mut source: impl Incoming,
+    mut source: S,
 ) -> Result<Landed, Refusal> {
     let path = under(folder, &shaped(name)?);
     let times = source.times();
@@ -103,7 +103,7 @@ pub(super) async fn receive(
     // is asked about is the volume they will land on rather than whatever a name
     // would have resolved to. A refusal here drops the incoming file, and
     // dropping it takes the empty scratch name with it (spec: EP-11).
-    room_for(allowance, &incoming.scratch_path(), coming)?;
+    room_for(S::OPERATION, allowance, &incoming.scratch_path(), coming)?;
 
     let ceiling = source.ceiling(allowance);
     while let Some(chunk) = source.next_chunk().await? {
@@ -117,6 +117,7 @@ pub(super) async fn receive(
             .is_some_and(|ceiling| incoming.written().saturating_add(chunk.len() as u64) > ceiling)
         {
             return Err(Refusal::Request(outran_as(
+                S::OPERATION,
                 "one file in it is over that on its own, so dropping fewer beside it \
                  changes nothing",
                 &format!(
@@ -155,6 +156,10 @@ pub(super) struct Times {
 
 /// Where the bytes of one file come from, as [`receive`] takes them.
 pub(super) trait Incoming: Send {
+    /// The route the file arrives through, as its events name it: `upload`
+    /// or `import`.
+    const OPERATION: &'static str;
+
     /// The times the file is to be kept with, read before any of its bytes.
     fn times(&self) -> Times;
 
@@ -171,6 +176,8 @@ pub(super) trait Incoming: Send {
 /// Its field name says its modification time ([`modified`]), and a browser
 /// says no birth time. One part is held to the per-part budget (spec: LA-9).
 impl Incoming for Field<'_> {
+    const OPERATION: &'static str = super::OPERATION;
+
     fn times(&self) -> Times {
         Times {
             modified: modified(self.name()),

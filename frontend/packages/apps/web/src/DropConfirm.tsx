@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { Added } from '@coffret/api';
 
 import { newLine, pathLine, type Destination, type Level } from './destination';
+import { notTakenNotice, type NotTaken } from './drop';
 import {
   ADD,
   CANCEL,
@@ -65,6 +66,12 @@ const REMEMBERED = {
  * only the files this drop carries — a replaced one among them — never the
  * other files already in that folder (spec: PK-17).
  *
+ * Where the desktop app met something in the drop and did not take it — a
+ * symbolic link, a name coffret keeps for itself — the confirmation says so in
+ * one line, whether the drop is added straight away or asked what it goes in
+ * as: what is listed above is what was taken, and what was let go of is more
+ * than that (spec: LA-26). A browser's drop has nothing to say here.
+ *
  * Where the Library already holds a file at a path the drop is sent under, the
  * confirmation says so by name: how many files replace a one-file Entry, the
  * first few of them spelled out, and how many a Pack holds and so are refused.
@@ -87,6 +94,7 @@ export function DropConfirm({
   files,
   destinations,
   held = NOTHING_HELD,
+  notTaken = [],
   onChoose,
 }: {
   summary: DropSummary;
@@ -96,6 +104,8 @@ export function DropConfirm({
   destinations: readonly Destination[];
   /** What the Library holds where the drop lands, by path relative to it. */
   held?: HeldFiles;
+  /** What the desktop app met in the drop and did not take; none in a browser. */
+  notTaken?: readonly NotTaken[];
   onChoose: (choice: Choice, numbering: Numbering) => void;
 }) {
   const asked = summary.folders.length > 0;
@@ -126,6 +136,7 @@ export function DropConfirm({
   const collisions = useMemo(() => collisionsOf(renumbered.files, held), [renumbered, held]);
   const replaces = replacesLine(collisions);
   const refused = refusedLine(collisions);
+  const left = notTakenNotice(notTaken);
 
   const labels = choiceLabels(summary);
   const question = questionOf(summary);
@@ -188,6 +199,9 @@ export function DropConfirm({
             <span style={{ color: asked ? COLOR.dim : COLOR.text }}>{looseLine(summary)}</span>
             {loose !== null && <Where levels={loose.levels} />}
           </div>
+        )}
+        {left !== null && (
+          <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{left}</p>
         )}
         {replaces !== null && (
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>

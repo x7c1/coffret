@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NO_FOLDER_HERE } from '@coffret/api';
 
+import type { Drop } from './drop';
 import { TAKEN } from './dropTarget';
 import { FileList } from './FileList';
 import { FolderTree, type TreeDrops } from './FolderTree';
@@ -257,9 +258,11 @@ describe('a drop onto a row of the tree', () => {
     fireEvent.drop(dropTargetOf('2026'), carrying('cover.png'));
     expect(drops.onCollecting).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(drops.onAdd).toHaveBeenCalledTimes(1));
-    const [folder, files] = drops.onAdd.mock.calls[0] as [string, { path: string }[]];
+    const [folder, drop] = drops.onAdd.mock.calls[0] as [string, Drop];
     expect(folder).toBe('albums/2026');
-    expect(files.map((added) => added.path)).toEqual(['cover.png']);
+    expect(drop.files.map((added) => added.path)).toEqual(['cover.png']);
+    // A browser's walk leaves nothing out it could say.
+    expect(drop.notTaken).toEqual([]);
 
     fireEvent.drop(dropTargetOf('Library'), carrying('notes.txt'));
     await waitFor(() => expect(drops.onAdd).toHaveBeenCalledTimes(2));

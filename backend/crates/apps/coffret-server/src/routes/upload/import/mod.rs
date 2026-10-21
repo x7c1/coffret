@@ -28,6 +28,9 @@ mod held_file;
 mod import_request;
 pub use import_request::ImportRequest;
 
+/// What every event of an import names its operation as.
+const OPERATION: &str = "import";
+
 /// `POST /api/import` with `{ "path": …, "freeze": …, "handle": …, "files":
 /// [{ "index": …, "name": … }] }`
 ///
@@ -82,6 +85,7 @@ pub async fn import(
         .map_err(ApiError::drop_not_held)?;
     if request.files.len() > state.allowance.parts {
         return Err(outran(
+            OPERATION,
             "one drop is one gesture, and this names more files than one gesture takes — \
              the same files in two drops are taken",
         ));
@@ -115,7 +119,7 @@ pub async fn import(
             let refuse = |refusal: ApiError, refused: &mut Vec<RefusedDto>| {
                 refused.push(RefusedDto {
                     name: (*name).to_owned(),
-                    refusal: RefusalDto::of(&Reported::recorded(&refusal, "import")),
+                    refusal: RefusalDto::of(&Reported::recorded(&refusal, OPERATION)),
                 });
             };
             let reserving = reservation.as_ref().map(|live| Reserving {
@@ -156,14 +160,14 @@ pub async fn import(
     }
     .await;
     if let Err(stopped) = taken {
-        release(&library, reservation, "import").await;
+        release(&library, reservation, OPERATION).await;
         return Err(stopped.having_written(written));
     }
     finish_drop(
         &state,
         &library,
         FinishedDrop {
-            operation: "import",
+            operation: OPERATION,
             reservation,
             reserved,
             written: written.len(),

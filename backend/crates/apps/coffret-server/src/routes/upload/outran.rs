@@ -21,9 +21,13 @@ use crate::api_error::ApiError;
 ///
 /// Where the budget is about the request's own shape there is no one file to
 /// name and the two sentences are the same, which is what [`outran`] is for.
-pub(super) fn outran_as(recorded: &'static str, said: &str) -> ApiError {
+///
+/// `operation` is the route's own — `upload` for a browser's drop, `import`
+/// for one taken by path — so that a refusal is recorded as the request it
+/// refused.
+pub(super) fn outran_as(operation: &'static str, recorded: &'static str, said: &str) -> ApiError {
     warn!(
-        operation = "upload",
+        operation,
         defect = recorded,
         "a drop passed what this server takes in one request and was stopped",
     );
@@ -32,6 +36,6 @@ pub(super) fn outran_as(recorded: &'static str, said: &str) -> ApiError {
 
 /// A budget about the request's own shape, where the drop carries no one file
 /// the sentence could name.
-pub(super) fn outran(defect: &'static str) -> ApiError {
-    outran_as(defect, defect)
+pub(super) fn outran(operation: &'static str, defect: &'static str) -> ApiError {
+    outran_as(operation, defect, defect)
 }

@@ -23,8 +23,14 @@ use super::refusal::Refusal;
 /// only place they belong: how much room a person's disk has is theirs, and
 /// whoever has to do something about a device that is filling up is at the
 /// device rather than at the browser. Neither is anybody's name for anything
-/// (spec: EL-1).
-pub(super) fn room_for(allowance: &Allowance, scratch: &Path, coming: u64) -> Result<(), Refusal> {
+/// (spec: EL-1). The event names the route it refused for, `operation`, as
+/// every other event of a drop does.
+pub(super) fn room_for(
+    operation: &'static str,
+    allowance: &Allowance,
+    scratch: &Path,
+    coming: u64,
+) -> Result<(), Refusal> {
     let available = allowance
         .space_beside(scratch)
         .map_err(|cause| Refusal::Request(ApiError::unreadable(cause)))?;
@@ -33,7 +39,7 @@ pub(super) fn room_for(allowance: &Allowance, scratch: &Path, coming: u64) -> Re
         true => Ok(()),
         false => {
             warn!(
-                operation = "upload",
+                operation,
                 available,
                 coming,
                 "a drop was refused for want of room on the volume the mapped folder is on",

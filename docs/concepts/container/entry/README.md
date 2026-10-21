@@ -69,11 +69,19 @@ second. For example, renaming `books/old/page.png` to
   with the Entry's modification time stamps no birth time onto it
   (spec: FM-9, EP-11).
 - **A dropped file's times are its own or absent**: a file dropped onto the
-  explorer keeps the modification time the browser sends with it, and the Entry
-  made of it records no birth time, because the one its filesystem reports is
-  when the drop wrote it rather than when the person's file came into being.
-  The birth time is left out only as long as the device still holds its note of
-  the drop when the run that carries the file in scans it (spec: FM-9, EP-11).
+  explorer keeps the person's file's own modification time — the one the
+  browser sends with it, or, for a file the desktop app imports by its path,
+  the one its own filesystem reported when the drop was walked — and its birth
+  time follows where the bytes came from (spec: FM-9, EP-11):
+  - a browser's drop records no birth time, because a browser sends none and
+    the one the copy's filesystem reports is when the drop wrote it rather
+    than when the person's file came into being;
+  - an import by path records the person's file's own birth time, where its
+    filesystem reports one, and none where it does not — never the copy's.
+
+  Either is kept only as long as the device still holds its note of the drop
+  when the run that carries the file in scans it; a file scanned after that is
+  read like any other (spec: EP-11).
 - **The deposit time is not captured metadata**: when content entered the
   Library is a fact about the Library, not about the file or the Container, so
   no entry table records it and no rewrite of a Container moves it. It is
