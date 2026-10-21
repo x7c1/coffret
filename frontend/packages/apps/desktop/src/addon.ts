@@ -24,6 +24,33 @@ export interface ServedLibrary {
   unlocked: boolean;
 }
 
+/** One file a drop took, as the explorer's page is told of it. */
+export interface DroppedFileRow {
+  /** Its path relative to the folder it was dropped from. */
+  path: string;
+  /** Its length in bytes. */
+  size: number;
+  /** Its modification time, in milliseconds from the Unix epoch. */
+  mtime: number;
+}
+
+/** One thing a drop met and did not take, and why, in one word. */
+export interface NotTakenRow {
+  path: string;
+  reason: string;
+}
+
+/**
+ * What a drop is answered with: the one-time handle the explorer's import
+ * names, or `null` where nothing was taken, and what each file is. No path on
+ * this device is in it.
+ */
+export interface DropAnswer {
+  handle: string | null;
+  files: DroppedFileRow[];
+  notTaken: NotTakenRow[];
+}
+
 /**
  * The addon's exports. Every one throws, as an `Error` whose message is the
  * sentence to show, where the addon refuses.
@@ -48,6 +75,11 @@ export interface Addon {
   issueTicket(): string;
   /** Where the explorer is served, as `127.0.0.1:<port>`, if a Library is open. */
   explorerAddress(): string | null;
+  /**
+   * Walks what a drop onto the explorer's window let go of, given as the whole
+   * path of each item, and holds what it took for the explorer's import.
+   */
+  takeDrop(paths: string[]): Promise<DropAnswer>;
   /** Hands every event from now on to `callback`. */
   listen(callback: (event: DesktopEvent) => void): void;
   /** Discards every browser session, launch ticket and door token. */

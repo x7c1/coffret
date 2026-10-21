@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Added, Listing } from '@coffret/api';
+import { addedFile, type Added, type Listing } from '@coffret/api';
 
 import { destinationsOf, LIBRARY_ROOT, levelsOf, namedBy, newLine, pathLine } from './destination';
 import { summarize } from './packChoice';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
 function added(path: string): Added {
-  return { path, file: { size: 10 } as File };
+  return addedFile(path, { size: 10, lastModified: 0 } as File);
 }
 
 /** Whether the Library names a folder, over the folders of a small Library. */

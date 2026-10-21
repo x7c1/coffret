@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { Added } from '@coffret/api';
+import { addedFile, type Added } from '@coffret/api';
 
 import { destinationsOf, type Destination } from './destination';
 import { DropConfirm } from './DropConfirm';
@@ -26,11 +26,10 @@ const INTO: Destination[] = destinationsOf('comics', BOOK, (path) => path === 'c
 
 /** The eighty files of `BOOK`: seventy-nine numbered pages and a cover. */
 const FILES: Added[] = [
-  ...Array.from({ length: 79 }, (_, at) => ({
-    path: `BookX/king01-#${String(at + 1).padStart(3, '0')}.JPG`,
-    file: { size: 10 } as File,
-  })),
-  { path: 'BookX/cover.png', file: { size: 10 } as File },
+  ...Array.from({ length: 79 }, (_, at) =>
+    addedFile(`BookX/king01-#${String(at + 1).padStart(3, '0')}.JPG`, { size: 10, lastModified: 0 } as File),
+  ),
+  addedFile('BookX/cover.png', { size: 10, lastModified: 0 } as File),
 ];
 
 it('names the folder with its count and size, and offers a Pack or one by one', () => {
@@ -71,8 +70,8 @@ it('says where the dropped folder lands, and that it is new', () => {
 // by one, and where — and nothing goes until Add.
 describe('a drop of files alone', () => {
   const LOOSE: Added[] = [
-    { path: 'cover.png', file: { size: 1_500_000 } as File },
-    { path: 'notes.txt', file: { size: 500_000 } as File },
+    addedFile('cover.png', { size: 1_500_000, lastModified: 0 } as File),
+    addedFile('notes.txt', { size: 500_000, lastModified: 0 } as File),
   ];
   const summary = summarize(LOOSE, []);
 

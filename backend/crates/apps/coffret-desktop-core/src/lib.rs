@@ -28,6 +28,10 @@ mod attempt;
 mod desktop;
 pub use desktop::Desktop;
 
+/// What a drop the shell hands over is answered with, under the names the
+/// binding reads it by.
+pub use coffret_device::{Dropped, DroppedRow, NotTakenRow};
+
 mod door;
 pub use door::{DoorMode, DoorUrl};
 

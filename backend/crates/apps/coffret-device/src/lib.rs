@@ -173,6 +173,15 @@ mod accounts;
 mod add;
 pub use add::{AddedFile, IncomingFile, LocalAdditions};
 
+// A drop of files and folders by their paths on this device, walked through the
+// scan's own confined listing and held under a one-time handle for the import
+// that carries it in (spec: EP-8, EP-11).
+mod drops;
+pub use drops::{
+    walk_drop, DropReader, DropRefusal, Dropped, DroppedFile, DroppedRow, DroppedSet, Drops,
+    NotTakenRow, DROP_LIFETIME, HELD_DROPS,
+};
+
 // A drop's choice to add its files as a Pack, kept until a freeze has decided
 // them (spec: PK-17).
 mod reservations;
@@ -402,8 +411,8 @@ pub use coffret_format::{
     CborDecodeFailure, Error as FormatError, MalformedDetail, Purpose, RecoveryCode,
 };
 pub use coffret_model::{
-    lowercase_hex, ContainerId, ContainerKind, ContentHash, DepositedAt, EntryNumber, EntryPath,
-    Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
+    lowercase_hex, Btime, ContainerId, ContainerKind, ContentHash, DepositedAt, EntryNumber,
+    EntryPath, Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_model::{ControlObjectKind, ControlObjectName};
 pub use coffret_usecase::catch_up::{CatchUpOutcome, RemoteHead};

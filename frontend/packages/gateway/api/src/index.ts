@@ -102,5 +102,5 @@ export type { Progress } from './request';
 export type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 export { askToUnlock } from './unlock';
 export type { Unlocking } from './unlock';
-export { addFiles, isOverBudget, OverBudget, overdrawnBy } from './upload';
-export type { Added, Adding, Overdrawn, RefusedPart, Upload } from './upload';
+export { addedFile, addFiles, isOverBudget, OverBudget, overdrawnBy } from './upload';
+export type { Added, AddedSource, Adding, Overdrawn, RefusedPart, Upload } from './upload';

@@ -219,9 +219,12 @@ fields until a coordinated implementation changes the format.
     the original file — which is why it is captured at Container creation and
     why no rule stamps it onto a file a fetch places (EP-11). For the same
     reason a file the device wrote from bytes handed to it without a birth
-    time — a file dropped onto the explorer (EP-11) — is recorded with none:
-    the birth time its filesystem reports is when the device wrote it, which
-    is a fact about the copy and not about the file.
+    time — a file dropped onto the explorer in a browser (EP-11) — is recorded
+    with none: the birth time its filesystem reports is when the device wrote
+    it, which is a fact about the copy and not about the file. A file the
+    desktop app imports by path is not one of those: the device
+    read the person's own file, so it records the birth time that file's
+    filesystem reported, where it reported one, rather than the copy's.
   - `mime` is a guess made when the Container was written — a hint, and never
     a verdict. The format guarantees only that the field, where present, is
     what the writer guessed; no reader treats it as authoritative. So an Entry

@@ -1,8 +1,11 @@
-//! The one route that carries anything into the Library.
+//! The two routes that carry anything into the Library: the upload, which
+//! takes the bytes a browser's drop sends, and the import, which takes files
+//! the desktop app's window dropped by path (`import`).
 //!
-//! The route itself is here with the shapes it is asked and answered with;
-//! taking one part of a drop is `receive`, and where a refusal about one file
-//! and a refusal about the whole request are told apart is `refusal`.
+//! The upload itself is here with the shapes it is asked and answered with;
+//! taking one file of a drop, by either route, is `receive`, and where a
+//! refusal about one file and a refusal about the whole request are told apart
+//! is `refusal`.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -10,25 +13,30 @@ use std::sync::Arc;
 use axum::extract::{Multipart, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use coffret_device::{LiveReservation, OpenLibrary, Redacted};
-use tracing::{info, warn};
 
 use crate::api_error::ApiError;
 use crate::entry_query::folder_named;
-use crate::freeze::{freeze_dropped, Book};
 use crate::reported::Reported;
 use crate::state::ServerState;
-use crate::sync::arm_sync;
 
 use super::RefusalDto;
 
 use self::declared_length::declared_length;
+use self::finish_drop::{finish_drop, FinishedDrop};
 use self::outran::outran;
 use self::receive::{receive, Reserving};
 use self::refusal::Refusal;
 use self::refused_dto::RefusedDto;
+use self::release::release;
 
 mod declared_length;
+
+mod finish_drop;
+
+// The same gesture made by path, from the desktop app's window: the files are
+// read off this device rather than sent, and taken through the same `receive`.
+mod import;
+pub use import::import;
 
 mod landed;
 
@@ -41,6 +49,8 @@ mod receive;
 mod refusal;
 
 mod refused_dto;
+
+mod release;
 
 mod room_for;
 
@@ -338,60 +348,22 @@ pub async fn upload(
     if let Err(stopped) = taken {
         // Nothing is armed for a drop that was stopped, so nothing is to wait
         // for a Pack either (spec: PK-17).
-        release(&library, reservation).await;
+        release(&library, reservation, "upload").await;
         return Err(stopped.having_written(written));
     }
-
-    // Only where something landed. A drop every part of which was refused has
-    // left the folder exactly as it was, and a run over an unchanged folder is
-    // a walk to find nothing. A drop stopped for the whole request is answered
-    // where it was stopped and never reaches here.
-    if written.is_empty() {
-        release(&library, reservation).await;
-    } else if query.freeze {
-        // Receiving has ended, so the reservation names every page this drop
-        // landed and stops being live before the run that decides it is armed:
-        // a run of its own, never the one under way, which read the
-        // reservations while this drop was still landing (spec: PK-17).
-        drop(reservation);
-        freeze_dropped(Arc::clone(&state), Book::dropped(reserved));
-    } else {
-        arm_sync(Arc::clone(&state));
-    }
-
-    // Counts and sizes, and which of the two flows was armed. No name of anything
-    // reaches the event: the folder and the parts are Entry Paths, which are the
-    // user's own names for their own files (spec: EL-1).
-    info!(
-        operation = "upload",
-        written = written.len(),
-        refused = refused.len(),
-        bytes,
-        freeze = query.freeze,
-        "files were added to a folder",
-    );
+    finish_drop(
+        &state,
+        &library,
+        FinishedDrop {
+            operation: "upload",
+            reservation,
+            reserved,
+            written: written.len(),
+            refused: refused.len(),
+            bytes,
+            freeze: query.freeze,
+        },
+    )
+    .await;
     Ok(Json(UploadDto { written, refused }))
-}
-
-/// Releases a drop's reservation, where it made one, because nothing is armed
-/// for the drop (spec: PK-17).
-///
-/// A release that fails is said and not raised: the drop has already been
-/// answered for, and what the reservation left behind is a set of paths a
-/// later freeze over them decides and releases like any other — until then a
-/// sync leaves them alone and says they wait for their Pack, which is not
-/// silent.
-async fn release(library: &OpenLibrary, reservation: Option<LiveReservation>) {
-    let Some(held) = reservation else {
-        return;
-    };
-    let id = held.id();
-    if let Err(refused) = library.release_reservation(id).await {
-        warn!(
-            operation = "upload",
-            reservation = %id,
-            reason = %refused.redacted(),
-            "the reservation of a drop that armed nothing could not be released",
-        );
-    }
 }

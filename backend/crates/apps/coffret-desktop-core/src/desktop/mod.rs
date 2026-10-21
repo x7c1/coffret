@@ -4,6 +4,7 @@ mod listen;
 mod open_door;
 mod retire;
 mod served;
+mod take_drop;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
@@ -28,9 +29,9 @@ pub struct Desktop {
     shared: Arc<Shared>,
     /// Where the door is bound.
     door: SocketAddr,
-    /// Held and not otherwise read outside the cases: it is what every task
-    /// runs on, and dropping it, last, ends them with what they serve.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// What every task runs on, and dropping it, last, ends them with what
+    /// they serve. A call that has to wait for work of its own — the walk of a
+    /// drop — waits on it here.
     runtime: Runtime,
 }
 

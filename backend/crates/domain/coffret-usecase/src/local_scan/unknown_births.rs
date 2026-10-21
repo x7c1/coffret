@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::{Btime, EntryPath, Mtime};
 
 use crate::local_scan::source_file::SourceFile;
 
-/// The files this device placed into a mapped folder without knowing when they
-/// came into being.
+/// The files this device placed into a mapped folder whose copy's birth time is
+/// not theirs, each with the birth time a scan records in its place — none for
+/// a browser's drop, and the person's file's own for an import by path.
 ///
 /// A file dropped onto the explorer arrives as its name, its bytes and at most
 /// its modification time: a browser does not say when the person's own file
@@ -21,6 +22,11 @@ use crate::local_scan::source_file::SourceFile;
 /// EP-11). Nothing else about the file changes, and a file put into a mapped
 /// folder any other way is not here and keeps the birth time its filesystem
 /// reports.
+///
+/// A file imported by path is the one placement that does know: the device
+/// read the person's own file, and its filesystem may have said when that file
+/// came into being. That birth time is noted beside the placement, and the scan
+/// records it in place of the copy's (spec: FM-9, EP-11).
 ///
 /// This is not a record of materialization: a file here is still merely
 /// added, and a scan reports it only as new (spec: EP-10).
@@ -48,6 +54,8 @@ struct Placed {
     /// and the file keeps the time it was written at — which nobody here read,
     /// so the length is then the whole of what is compared.
     mtime: Option<Mtime>,
+    /// The person's file's own birth time, where the placement was told one.
+    btime: Option<Btime>,
 }
 
 impl UnknownBirths {
@@ -58,33 +66,34 @@ impl UnknownBirths {
         }
     }
 
-    /// Records that the file now at `path` was placed by this device with no
-    /// birth time of its own, `size` bytes long and stamped with `mtime` where
-    /// it was stamped at all.
+    /// Records that the file now at `path` was placed by this device, `size`
+    /// bytes long and stamped with `mtime` where it was stamped at all, and
+    /// that the birth time to record for it is `btime` — the person's file's
+    /// own, where the placement was told one, and none otherwise.
     ///
     /// A second placement at the same path replaces the first, which is what the
     /// rename that published it did to the file.
-    pub fn record(&self, path: EntryPath, size: u64, mtime: Option<Mtime>) {
-        self.placed().insert(path, Placed { size, mtime });
+    pub fn record(&self, path: EntryPath, size: u64, mtime: Option<Mtime>, btime: Option<Btime>) {
+        self.placed().insert(path, Placed { size, mtime, btime });
     }
 
-    /// Whether the file a scan found is one this device placed with no birth
-    /// time of its own.
+    /// The birth time to record for the file a scan found, where it is one
+    /// this device placed: `Some` of the placement's own answer, which may be
+    /// none, and `None` where the file is not one of them.
     ///
     /// A path that was placed and now holds a file of another length or time is
     /// forgotten, so that a later scan of a file the person put there does not
     /// meet the drop's record again.
-    pub(crate) fn holds(&self, source: &SourceFile) -> bool {
+    pub(crate) fn birth_of(&self, source: &SourceFile) -> Option<Option<Btime>> {
         let mut placed = self.placed();
-        let Some(dropped) = placed.get(&source.path) else {
-            return false;
-        };
+        let dropped = *placed.get(&source.path)?;
         let same =
             dropped.size == source.size && dropped.mtime.is_none_or(|mtime| mtime == source.mtime);
         if !same {
             placed.remove(&source.path);
+            return None;
         }
-        same
+        Some(dropped.btime)
     }
 
     /// The map, whatever a thread that panicked while holding it left in it.
@@ -118,31 +127,56 @@ mod tests {
         }
     }
 
-    // FM-9, EP-11: what the drop placed is recognised by what it placed, and a
-    // file that has since become another is read like any other — and stays
-    // read that way, because the record is gone.
+    // FM-9, EP-11: what the drop placed is recognised by what it placed, and
+    // answered with the birth time it was told of, none included; a file that
+    // has since become another is read like any other — and stays read that
+    // way, because the record is gone.
     #[test]
     fn a_placed_file_is_held_until_it_is_found_changed() {
         let births = UnknownBirths::new();
-        births.record(entry_path("a.jpg"), 4, Some(Mtime::from_unix_seconds(-2)));
-        births.record(entry_path("b.jpg"), 4, None);
+        let born = Btime::from_unix_seconds(1_600_000_000);
+        births.record(
+            entry_path("a.jpg"),
+            4,
+            Some(Mtime::from_unix_seconds(-2)),
+            None,
+        );
+        births.record(entry_path("b.jpg"), 4, None, None);
+        births.record(
+            entry_path("c.jpg"),
+            4,
+            Some(Mtime::from_unix_seconds(-2)),
+            Some(born),
+        );
 
-        assert!(births.holds(&found("a.jpg", 4, -2)));
-        assert!(
-            births.holds(&found("a.jpg", 4, -2)),
+        assert_eq!(births.birth_of(&found("a.jpg", 4, -2)), Some(None));
+        assert_eq!(
+            births.birth_of(&found("a.jpg", 4, -2)),
+            Some(None),
             "asking twice changes nothing"
         );
-        assert!(
-            births.holds(&found("b.jpg", 4, 1_700_000_000)),
+        assert_eq!(
+            births.birth_of(&found("b.jpg", 4, 1_700_000_000)),
+            Some(None),
             "no stamp, so the length is the whole of what is compared",
         );
-        assert!(!births.holds(&found("c.jpg", 4, -2)), "never placed");
+        assert_eq!(
+            births.birth_of(&found("c.jpg", 4, -2)),
+            Some(Some(born)),
+            "an import was told the person's file's own birth time",
+        );
+        assert_eq!(
+            births.birth_of(&found("d.jpg", 4, -2)),
+            None,
+            "never placed"
+        );
 
-        assert!(!births.holds(&found("a.jpg", 4, 1_700_000_000)));
-        assert!(
-            !births.holds(&found("a.jpg", 4, -2)),
+        assert_eq!(births.birth_of(&found("a.jpg", 4, 1_700_000_000)), None);
+        assert_eq!(
+            births.birth_of(&found("a.jpg", 4, -2)),
+            None,
             "a file found changed is forgotten, so its record does not come back",
         );
-        assert!(!births.holds(&found("b.jpg", 5, 1_700_000_000)));
+        assert_eq!(births.birth_of(&found("b.jpg", 5, 1_700_000_000)), None);
     }
 }
