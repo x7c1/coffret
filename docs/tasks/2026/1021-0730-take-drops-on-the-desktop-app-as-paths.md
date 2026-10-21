@@ -88,7 +88,7 @@ In the Electron app the explorer runs in the app's own window, so the drop can b
 
 ### Before merge (verified outside the check command)
 
-- [ ] On macOS, the Electron app (`make desktop-electron-dev` over the agent Library), driven with Playwright's `_electron`, takes a drop dispatched as a real-path drag through CDP's `Input.dispatchDragEvent`:
+- [x] On macOS, the Electron app (`make desktop-electron-dev` over the agent Library), driven with Playwright's `_electron`, takes a drop dispatched as a real-path drag through CDP's `Input.dispatchDragEvent`:
   - a drop of two JPEGs lands both in the mapped folder, with the source mtime;
   - a drop of a folder holding a 20-page book shows the confirmation with the Pack choice, and adding it as a book freezes it into one Pack;
   - no request body carries the files' bytes; this is visible in the request log.
