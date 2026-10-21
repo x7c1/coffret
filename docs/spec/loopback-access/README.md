@@ -4,7 +4,8 @@ Rule prefix: `LA`. Who a server serving a Library answers, and how it knows:
 the interface it listens on, the key it draws as it starts and publishes into
 the Library's own directory, the fences every request passes before a route
 sees it, the budgets one request carrying files in is taken within, the one
-server at a time that serves a Library on a device, and the account of the
+server at a time that serves a Library on a device, the drop the desktop app
+takes by path and holds for one import, and the account of the
 work it runs that it holds for as long as it runs. Then the **explorer host**
 in front of it: the process on the same device that serves the explorer's page
 and forwards that page's `/api` requests to the server with the server key
@@ -13,9 +14,13 @@ browser by, and the one-time **launch ticket** a browser exchanges for that
 token.
 
 LA-1 to LA-12 are the contract of the server itself, LA-13 to LA-21 the
-contract of the explorer host, and LA-22 onwards that of the desktop app's
+contract of the explorer host, LA-22 to LA-25 that of the desktop app's
 **Passphrase door**: a listener of the app's own that serves the page a
-Passphrase is typed into and takes what that page submits. The two credentials
+Passphrase is typed into and takes what that page submits, and LA-26 onwards
+that of the **import**: the files a drop onto the explorer's window in the
+desktop app let go of, walked on the device by their paths, held under a
+one-time **drop handle**, and carried into the Library by a request that names
+the handle and never a path. The two credentials
 never cross: the server key is what the host shows the server, a browser token
 is what a browser shows the host, and neither of the two accepts the other's.
 Nor does the door's token stand for either.
@@ -75,7 +80,8 @@ Concept background: [Library](../../concepts/library/),
   server leaves a lock nobody holds, and the next start takes it (LA-4). The
   refusal names the Library and, where it can, the process already serving it,
   and never the key or the file it is in. *(Form: test)*
-- **LA-9.** One request carrying files into the Library is taken within three
+- **LA-9.** One multipart upload — the request a browser's drop carries
+  files into the Library in — is taken within three
   budgets of this server's own: at most 64 GiB across the whole request,
   framing included; at most 1 GiB of file content in any one **part** — one
   field of the multipart body such a request carries; and at most 4096
@@ -88,12 +94,14 @@ Concept background: [Library](../../concepts/library/),
   entry table or a Library's checkpoint comes to (FM-2, FM-11), and never
   the size of any one Entry. What this server has that the Library has not
   is a socket, on which somebody who is not the explorer can send whatever
-  they like for as long as they like; these budgets bound that. *(Form: test
+  they like for as long as they like; these budgets bound that. An import
+  carries no file's bytes in its request, and is bounded instead as LA-28
+  says. *(Form: test
   for the three budgets, which a case can drive a server within; prose for
   what they are not — that no bound on a file's size exists elsewhere is a
   claim about the rest of the system rather than about any answer this server
   gives, honored by construction and review.)*
-- **LA-10.** A request that passes one of LA-9's budgets stops where it
+- **LA-10.** An upload that passes one of LA-9's budgets stops where it
   stands. It is the request that is refused and not a file: the parts behind
   it are never looked at, no answer lists them, and the server answers in the
   middle of what the caller is still sending rather than reading out a request
@@ -104,9 +112,10 @@ Concept background: [Library](../../concepts/library/),
   sentence names that part, because whoever dropped hundreds of files has
   nothing to act on until they know which one; the record beside it says which
   budget was passed and never the name (EL-1). *(Form: test)*
-- **LA-11.** Before a part is taken, the server asks the volume this device's
-  mapped folder is on whether it has room for what is still coming, and
-  refuses the drop where it has not. It is asked of each part that names a
+- **LA-11.** Before a part of an upload is taken, the server asks the volume
+  this device's mapped folder is on whether it has room for what is still
+  coming, and refuses the drop where it has not; an import asks the same of
+  each file it takes (LA-28). It is asked of each part that names a
   file, once the scratch its bytes are going to stands (EP-11) and before a
   byte is written to it, so the volume asked about is the one those bytes will
   land on, and a drop that would run the disk out is refused while there is
@@ -387,3 +396,59 @@ Concept background: [Library](../../concepts/library/),
   carry one: the shell is told what happened — a Library opened or unlocked,
   an unlock asked for, the server stopped — and asks for a URL or a ticket
   through a call of its own. *(Form: test)*
+
+### The import
+
+- **LA-26.** The desktop app takes a drop onto the explorer's window by the
+  paths of what was let go of, and holds the regular files it took under a
+  **drop handle**: 32 bytes from the operating system's CSPRNG, written as
+  lowercase hex. A drop is held for 10 minutes; at most 4 are held at once,
+  and holding a fifth ends the oldest. A handle is used once: the import that
+  names it takes the drop, whatever that request then comes to, and the drop
+  is held no longer. An import refused before its handle is read — the
+  Library locked (DK-2), or a body this route does not read (LA-27) — takes
+  nothing, and the drop stays held. An import naming a handle that was never
+  drawn, was used, was ended by a later drop or has expired is refused as a
+  whole as `400`, before anything is read, with one sentence that names none
+  of these.
+  What the page is told of a drop is the handle and, per file taken, its path
+  relative to the folder the dropped item stood in, its size and its
+  modification time, beside what was not taken and why — never a path on the
+  device. Only the explorer's own window may hand a drop over, from the
+  explorer's origin, as a list of the items' paths. No event records a
+  handle, a path on the device or a dropped file's name (EL-1): walking,
+  holding and taking a drop, and importing it, are recorded by counts and
+  refusal kinds. *(Form: test)*
+- **LA-27.** An import (`POST /api/import`) is a JSON body naming the folder of
+  the Library, whether the drop goes in as a Pack (PK-17), the handle, and per
+  file its index in the held set and the name it is to have relative to the
+  folder. No path on the device is accepted over HTTP: a body carrying any
+  other field is refused as a whole as `400`, a name is an Entry Path relative
+  to the folder or that file is refused as one (EP-2), and an index outside the
+  held set refuses the request as a whole as `400` before anything lands. The
+  request passes the same fences every route does (LA-2, LA-5), and is answered
+  in the upload's shape: what was written, and each file refused with its
+  refusal. *(Form: test)*
+- **LA-28.** An import is bounded by three things and not by LA-9's budgets,
+  which are about what one socket carries: the room the volume a file lands on
+  has for what is still coming, asked of each file before it is taken as LA-11
+  asks it of an upload's part, what is still coming being the lengths the walk
+  stated less what has been taken; at most as many files per request as LA-9
+  allows an upload parts, refused as LA-10 refuses an upload past it; and the
+  held set, which no request adds to. A file is held to the length the walk
+  stated: one that grew since it was dropped is refused part way through, as a
+  `conflict`, and leaves neither a file under its final name nor its scratch
+  (EP-11). *(Form: test)*
+- **LA-29.** The walk of a drop follows no symbolic link and takes none: a link
+  to a file and a link to a folder are each reported as neither, as is anything
+  else that is not a regular file or a folder, and nothing under a linked
+  folder is walked (EP-8). A dropped folder is walked depth first, its children
+  in the byte order of their names; an empty folder contributes nothing. A name
+  coffret keeps for itself inside a mapped folder — the scratch prefix and the
+  management area, in the one rule a scan and an upload read them by (EP-11,
+  EP-14) — is reported as refused and not walked. An empty path, a path that is
+  not there, a name that is not text (EP-1), and one the operating system will
+  not read are reported, not left out. The import reads each file again from
+  the folder its dropped item stood in, descending without following a link, so
+  a file replaced by a link since it was dropped is refused rather than
+  followed. *(Form: test)*

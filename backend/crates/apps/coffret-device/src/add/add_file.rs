@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::{local_place_for, FetchError};
-use coffret_usecase::{root_marker, scratch};
+use coffret_usecase::reserved_names::{reserved_name, ReservedName};
+use coffret_usecase::root_marker;
 
 use super::IncomingFile;
 use crate::error::{Error, Result};
@@ -159,6 +160,9 @@ impl OpenLibrary {
 /// nothing may (spec: EP-14).
 fn reserved(path: &EntryPath) -> Option<&str> {
     path.as_str().split('/').find(|component| {
-        scratch::is_scratch(component) || root_marker::is_management_area(component)
+        matches!(
+            reserved_name(component),
+            Some(ReservedName::Scratch | ReservedName::ManagementArea)
+        )
     })
 }

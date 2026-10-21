@@ -99,7 +99,7 @@ export function summarize(files: readonly Added[], existing: readonly string[]):
     const cut = added.path.indexOf('/');
     if (cut === -1) {
       loose += 1;
-      looseBytes += added.file.size;
+      looseBytes += added.size;
       continue;
     }
     const name = added.path.slice(0, cut);
@@ -110,7 +110,7 @@ export function summarize(files: readonly Added[], existing: readonly string[]):
       exists: existing.includes(name),
     };
     folder.files += 1;
-    folder.bytes += added.file.size;
+    folder.bytes += added.size;
     folders.set(name, folder);
   }
   return { folders: [...folders.values()], loose, looseBytes, files: files.length };

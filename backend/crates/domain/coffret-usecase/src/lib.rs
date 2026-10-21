@@ -492,6 +492,15 @@ pub mod root_marker;
 
 pub mod scratch;
 
+// The one answer to which names inside a mapped folder are coffret's rather
+// than the person's, which the scan and every drop ask alike (spec: EP-11,
+// EP-14).
+pub mod reserved_names;
+
+// What a drop of files and folders by their paths on this device carries in,
+// walked through the scan's own confined listing (spec: EP-8).
+pub mod drop_walk;
+
 // And the names a desktop keeps its trash under at the top of a volume a mapped
 // root may be: not coffret's, but never Library content either (spec: EP-16).
 pub mod trash_folders;

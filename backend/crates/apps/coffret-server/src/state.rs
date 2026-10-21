@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::ensure;
-use coffret_device::{EntryFetches, KeptTally, LiveReservations, OpenLibrary};
+use coffret_device::{Drops, EntryFetches, KeptTally, LiveReservations, OpenLibrary};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
@@ -177,6 +177,13 @@ pub struct ServerState {
     /// process, and never uploaded. Nothing in it is a credential — the grant
     /// itself goes into the account's cache and nowhere else (spec: SA-6).
     pub reconnects: Reconnects,
+    /// The drops the desktop app's window made by path, each held under its
+    /// one-time handle until the import that names it takes it (spec: LA-26).
+    ///
+    /// State of this process and nothing else: a drop is held for minutes,
+    /// in memory, and nothing in it is ever uploaded. A server the command line
+    /// started holds none, since nothing there walks a drop.
+    pub drops: Drops,
     /// How a consent flow is asked for, which is Google's own page everywhere
     /// but in a case.
     pub(crate) consent: Arc<dyn Consent>,
@@ -216,6 +223,7 @@ impl ServerState {
             catalog: Catalog::new(),
             refreshes: Refreshes::new(),
             reconnects: Reconnects::new(),
+            drops: Drops::new(),
             consent: Arc::new(DriveConsent),
             live,
         }

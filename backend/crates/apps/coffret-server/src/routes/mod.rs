@@ -1,4 +1,4 @@
-//! The sixteen things a browser may ask of a Library.
+//! The seventeen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -27,6 +27,12 @@
 //! folder made for it (spec: PK-17). It is where a Library gains anything
 //! through the explorer, and it gains it through the flows the command line uses
 //! rather than through one of its own.
+//!
+//! Beside it is the same gesture made by path: the import, which the desktop
+//! app's window makes for a drop the app walked on the device and holds under a
+//! one-time handle (spec: LA-26). It names the handle and an index per file and
+//! never a path, and the server reads each file off the disk itself through the
+//! upload's own writer, so no file's bytes cross this boundary at all.
 //!
 //! The next four are about the work that runs in the background — the fill
 //! that brings over the rest of the folder somebody opened a file in, the sync
@@ -68,7 +74,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the sixteen go on answering once the Library is locked — which
+//! Three of the seventeen go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -85,7 +91,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the sixteen are two answers that are not routes at all: one for a path
+//! Beside the seventeen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -141,7 +147,7 @@ mod unlock;
 pub use unlock::unlock;
 
 mod upload;
-pub use upload::upload;
+pub use upload::{import, upload};
 
 mod work;
 pub use work::work;

@@ -37,7 +37,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // A look at which heads the Library has, by name, and nothing more:
         // a `GET` because it moves nothing, the catalog included.
         .route("/api/remote-head", get(routes::remote_head))
-        // The nine that are not a `GET`, because they are the ones that ask the
+        // The ten that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Four
         // of them arm background work and answer at once — the fill, the sync,
         // the freeze and the deletion; the refresh does its work while the
@@ -45,8 +45,9 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // found; the reconnect starts a consent flow and answers with the page
         // to open; the unlock asks the app's own window for the Passphrase and
         // carries none; the map records which folder on this device holds part
-        // of the Library; and the upload is the one route that carries anything
-        // into the Library.
+        // of the Library; and the upload and the import are the two routes that
+        // carry anything into the Library — the first the bytes a browser
+        // sends, the second files the desktop app's window dropped by path.
         .route("/api/fill", post(routes::fill))
         .route("/api/sync", post(routes::sync))
         // The freeze is also read: a `GET` of it counts what the `POST` would
@@ -81,6 +82,12 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
             // read all of it. The other two the route keeps itself.
             post(routes::upload).layer(DefaultBodyLimit::max(allowance.request_bytes)),
         )
+        // The same gesture made by path from the desktop app's window: a JSON
+        // body naming files a drop holds on this device, which the route reads
+        // off the disk itself. Mounted with axum's own body limit, which is far
+        // past the largest body the explorer sends — a handle and an index and
+        // a name per file — since no file's bytes travel in it (spec: LA-27).
+        .route("/api/import", post(routes::import))
         // What is asked of none of the routes above is still answered in the one
         // shape a refusal takes, rather than by axum's empty-bodied `404` and
         // `405` — answers no code here writes, which a page can only read as

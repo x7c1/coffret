@@ -8,15 +8,20 @@
 // by the explorer host the addon runs in front of the server, and is admitted
 // by a one-time launch ticket in the fragment of the URL it is loaded from.
 //
-// There is no IPC. No window has a preload and nothing here is exposed to a
-// page: this process learns what happened from the addon's events alone.
+// This process learns what happened from the addon's events. The one thing a
+// page may ask of it is to take a drop onto the explorer's window by path: the
+// explorer's preload asks over one channel, which is answered for that window
+// alone and hands the paths to the addon (`drops.ts`). Nothing else is exposed
+// to any page, and the Passphrase window has no preload.
 
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { app, BrowserWindow, dialog, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 
 import { loadAddon, type Addon } from './addon.js';
 import { Desktop, message, type PassphraseWindow, type Shell } from './desktop.js';
+import { TAKE_DROP, takeDropHandler } from './drops.js';
 import { loadAfresh } from './load.js';
 import { menuTemplate } from './menu.js';
 import {
@@ -31,6 +36,9 @@ import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { explorerWindowOptions, PARTITIONS, passphraseWindowOptions } from './windows.js';
 
 const STARTUP_FAILED = 'Coffret could not start';
+
+/** The explorer window's preload, built beside this file. */
+const EXPLORER_PRELOAD = join(dirname(fileURLToPath(import.meta.url)), 'preload.cjs');
 
 function warn(said: string): void {
   console.warn(`coffret: ${said}`);
@@ -116,6 +124,19 @@ function assemble(addon: Addon): Desktop {
   };
 
   let explorerWindow: BrowserWindow | null = null;
+  // The origin the explorer is served from, fixed for the run once its window
+  // is opened.
+  let explorerServed: string | null = null;
+
+  ipcMain.handle(
+    TAKE_DROP,
+    takeDropHandler(
+      () => explorerWindow?.webContents ?? null,
+      () => explorerServed,
+      (paths) => addon.takeDrop(paths),
+      warn,
+    ),
+  );
 
   /** Loads the explorer into its window from a fresh launch ticket. */
   const launchExplorer = (window: BrowserWindow, address: string) => {
@@ -140,7 +161,8 @@ function assemble(addon: Addon): Desktop {
         return;
       }
       const origin = explorerOrigin(address);
-      const window = new BrowserWindow(explorerWindowOptions());
+      explorerServed = origin;
+      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD));
       guardNavigation(window.webContents, 'explorer', () => origin, warn);
       window.webContents.setWindowOpenHandler(explorerWindowOpener((url) => shell.openExternal(url), warn));
       // Until the app stays resident with a tray of its own, the explorer's

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{EntryPath, Mtime, Redacted};
+use coffret_model::{Btime, EntryPath, Mtime, Redacted};
 use coffret_usecase::scratch::{self, ScratchName};
 use coffret_usecase::{Destination, ScratchFile, UnknownBirths};
 use tracing::{debug, warn};
@@ -46,10 +46,11 @@ use crate::error::{Error, Result};
 /// did not materialize from an Entry has no local row to make (spec: EP-10):
 /// what makes it part of the Library is the next sync, which finds it the same
 /// way it finds a file copied in by hand — with one difference, which is its
-/// birth time. Whoever handed the bytes over did not say when the file came
-/// into being, so the one its filesystem reports is when this wrote it, and
-/// the file is noted in the open Library's [`UnknownBirths`] so that the sync
-/// records none for it rather than that one (spec: FM-9, EP-11).
+/// birth time. The one its filesystem reports is when this wrote it, so the
+/// file is noted in the open Library's [`UnknownBirths`] with the birth time
+/// the sync records for it rather than that one: none where whoever handed the
+/// bytes over did not say when the file came into being, and the person's
+/// file's own where an import by path read it (spec: FM-9, EP-11).
 pub struct IncomingFile {
     /// Where in the Library the file will stand, which is what a refusal about
     /// it is spelled in.
@@ -64,8 +65,8 @@ pub struct IncomingFile {
     /// The open scratch, until it is flushed.
     file: Option<Box<dyn ScratchFile>>,
     written: u64,
-    /// Where the open Library notes what was placed with no birth time of its
-    /// own, which is told of this file once it is kept.
+    /// Where the open Library notes what was placed and the birth time to
+    /// record for it, which is told of this file once it is kept.
     births: Arc<UnknownBirths>,
 }
 
@@ -131,7 +132,9 @@ impl IncomingFile {
     /// was written at. A stamp the operating system refuses fails the file like
     /// any other write here, and the scratch goes with it.
     ///
-    /// And it is noted as a file with no birth time of its own (spec: FM-9).
+    /// And it is noted as a file with no birth time of its own (spec: FM-9);
+    /// [`keep_born`](Self::keep_born) is the same for a file whose birth time
+    /// was handed over beside its bytes.
     ///
     /// An existing file at the path is replaced, which is what a rename does and
     /// what this means to do: the caller has already decided that writing here is
@@ -139,7 +142,16 @@ impl IncomingFile {
     /// Library like any other — a local file differing from its current Entry is
     /// what makes it eligible, and the Container holding that Entry is what gets
     /// replaced (spec: PK-11, PK-12).
-    pub async fn keep(mut self, modified: Option<Mtime>) -> Result<()> {
+    pub async fn keep(self, modified: Option<Mtime>) -> Result<()> {
+        self.keep_born(modified, None).await
+    }
+
+    /// [`keep`](Self::keep), for a file whose own birth time is known: one
+    /// imported by its path on this device, whose filesystem said when the
+    /// person's file came into being. That is the birth time the next scan
+    /// records for it, in place of the one the copy's filesystem reports
+    /// (spec: FM-9, EP-11). `None` is [`keep`](Self::keep) itself.
+    pub async fn keep_born(mut self, modified: Option<Mtime>, born: Option<Btime>) -> Result<()> {
         let file = self
             .file
             .take()
@@ -167,6 +179,7 @@ impl IncomingFile {
             self.path.clone(),
             self.written,
             stamped.map(|(mtime, _)| mtime),
+            born,
         );
         let scratch_name = self
             .scratch_name

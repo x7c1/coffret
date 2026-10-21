@@ -19,6 +19,7 @@ use super::*;
 use crate::testing::{self, create, PASSPHRASE};
 use crate::{Desktop, Event};
 
+mod drops;
 mod events;
 mod fences;
 mod page;

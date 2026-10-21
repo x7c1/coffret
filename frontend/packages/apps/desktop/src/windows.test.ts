@@ -8,9 +8,11 @@ import {
   passphraseWindowOptions,
 } from './windows.js';
 
+const PRELOAD = '/app/dist/preload.cjs';
+
 const windows = {
   passphrase: passphraseWindowOptions(),
-  explorer: explorerWindowOptions(),
+  explorer: explorerWindowOptions(PRELOAD),
 };
 
 describe.each(Object.entries(windows))('the %s window', (_name, options) => {
@@ -24,11 +26,17 @@ describe.each(Object.entries(windows))('the %s window', (_name, options) => {
     expect(preferences.nodeIntegrationInSubFrames).toBe(false);
   });
 
-  it('keeps web security and has no preload', () => {
+  it('keeps web security', () => {
     expect(preferences.webSecurity).toBe(true);
     expect(preferences.allowRunningInsecureContent).toBe(false);
     expect(preferences.webviewTag).toBe(false);
-    expect(preferences.preload).toBeUndefined();
+  });
+});
+
+describe('preloads', () => {
+  it('are the explorer window’s alone', () => {
+    expect(windows.explorer.webPreferences?.preload).toBe(PRELOAD);
+    expect(windows.passphrase.webPreferences?.preload).toBeUndefined();
   });
 });
 

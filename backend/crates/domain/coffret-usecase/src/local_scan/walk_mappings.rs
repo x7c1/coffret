@@ -14,7 +14,7 @@ use crate::local_scan::unknown_births::UnknownBirths;
 use crate::local_scan::walked::Walked;
 use crate::local_scan::walked_root::WalkedRoot;
 use crate::mapped_roots::MappedRoots;
-use crate::root_marker;
+use crate::reserved_names::{reserved_name, ReservedName};
 use crate::scratch;
 use crate::trash_folders;
 use crate::MappedRelativeLocation;
@@ -45,9 +45,10 @@ use crate::MappedRelativeLocation;
 /// walked and its identity handed back to be re-stamped.
 ///
 /// A file `births` holds — one a drop placed, still as the drop left it — is
-/// found with no birth time, whatever its filesystem reports: what it would
-/// report is when the drop wrote it, which is not when the person's file came
-/// into being (spec: FM-9, EP-11).
+/// found with the birth time the drop was told of, and with none where it was
+/// told of none, whatever its filesystem reports: what it would report is when
+/// the drop wrote it, which is not when the person's file came into being
+/// (spec: FM-9, EP-11).
 ///
 /// A scratch is never found, and one of coffret's own shape that no writer in
 /// this process holds is handed back to be removed: its writer is gone, and
@@ -99,13 +100,9 @@ pub(crate) async fn walk_mappings(
                 }));
             }
             for source in sources {
-                let source = if births.holds(&source) {
-                    SourceFile {
-                        btime: None,
-                        ..source
-                    }
-                } else {
-                    source
+                let source = match births.birth_of(&source) {
+                    Some(btime) => SourceFile { btime, ..source },
+                    None => source,
                 };
                 if let Some(held) = found.insert(source.path.clone(), source) {
                     return Err(LocalError::PathCollision { path: held.path });
@@ -196,37 +193,39 @@ async fn walk(
                 None => MappedRelativeLocation::from_component(entry.name.clone()),
                 Some(relative) => relative.below_component(entry.name.clone()),
             };
-            // A scratch a fetch was killed in the middle of writing. It
-            // is coffret's own and not user data, so it is passed over
-            // rather than committed as an Entry (spec: EP-11). One of the
-            // writers' own shape that is a regular file nothing in this
-            // process holds was left by a writer that is gone, and is handed
-            // back to be removed; anything else carrying the prefix — a folder,
-            // a link, a name of the person's own — is only passed over
-            // (spec: OC-8).
-            if scratch::is_scratch(name.as_str()) {
-                if matches!(entry.kind, FolderEntryKind::File { .. })
-                    && scratch::is_stale(name.as_str())
-                {
-                    stale.push(below_local);
+            match reserved_name(name.as_str()) {
+                // A scratch a fetch was killed in the middle of writing. It
+                // is coffret's own and not user data, so it is passed over
+                // rather than committed as an Entry (spec: EP-11). One of the
+                // writers' own shape that is a regular file nothing in this
+                // process holds was left by a writer that is gone, and is
+                // handed back to be removed; anything else carrying the prefix
+                // — a folder, a link, a name of the person's own — is only
+                // passed over (spec: OC-8).
+                Some(ReservedName::Scratch) => {
+                    if matches!(entry.kind, FolderEntryKind::File { .. })
+                        && scratch::is_stale(name.as_str())
+                    {
+                        stale.push(below_local);
+                    }
+                    continue;
                 }
-                continue;
-            }
-            // The device's own management area, which holds the marker giving
-            // this root its identity. The name is reserved at any depth, so the
-            // walk neither enters it nor reports anything under it (spec: EP-14).
-            if root_marker::is_management_area(name.as_str()) {
-                continue;
-            }
-            // A spelling that only folds to that name, which on a case-folding
-            // volume the operating system does not tell apart from it. The walk
-            // stops and says so rather than stepping over it: the silent skip
-            // above is the one cost EP-14 states, and stepping over the 127
-            // other spellings too would take a folder somebody named for their
-            // own reasons out of their backup without a word of it anywhere
-            // (spec: EP-14).
-            if root_marker::folds_to_management_area(name.as_str()) {
-                return Err(LocalError::FoldedReservedName { path: local_path });
+                // The device's own management area, which holds the marker
+                // giving this root its identity. The name is reserved at any
+                // depth, so the walk neither enters it nor reports anything
+                // under it (spec: EP-14).
+                Some(ReservedName::ManagementArea) => continue,
+                // A spelling that only folds to that name, which on a
+                // case-folding volume the operating system does not tell apart
+                // from it. The walk stops and says so rather than stepping over
+                // it: the silent skip above is the one cost EP-14 states, and
+                // stepping over the 127 other spellings too would take a folder
+                // somebody named for their own reasons out of their backup
+                // without a word of it anywhere (spec: EP-14).
+                Some(ReservedName::FoldsToManagementArea) => {
+                    return Err(LocalError::FoldedReservedName { path: local_path });
+                }
+                None => {}
             }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
@@ -285,6 +284,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::device_state::RootMarkerId;
+    use crate::root_marker;
 
     use crate::entry_paths::entry_path as parsed;
     use crate::in_memory_fs::InMemoryFs;
@@ -306,7 +306,7 @@ mod tests {
         fs.write_file(&root.join("dropped.jpg"), b"dropped");
         fs.write_file(&root.join("copied.jpg"), b"copied");
         let births = UnknownBirths::new();
-        births.record(parsed("dropped.jpg"), 7, None);
+        births.record(parsed("dropped.jpg"), 7, None, None);
 
         let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &births)
             .await

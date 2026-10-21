@@ -342,14 +342,16 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     content authentication: a file altered to the same length and modification
     time is not detected, and the rule does not claim otherwise.
   - A folder fetch continues past an Entry it declines and reports each one,
-    while a single writer — the upload route the browser drops a file into, or a
-    write already in progress — fails as a whole when its one placement is
+    while a single writer — the upload route the browser drops a file into, the
+    import route the desktop app's window drops a file into by path (LA-27), or
+    a write already in progress — fails as a whole when its one placement is
     declined. A **place** is the local path a fetch resolves an Entry to, so an
     unreachable place and placing an Entry are one word seen twice.
   - A single writer handed several placements at once — the upload route's
-    multipart drop — declines each placement that is one file's business and
-    reports it beside what it placed, and fails the request as a whole where
-    the refusal is a mapping's business rather than a file's (EP-13). Which
+    multipart drop, or the import's list of held files — declines each
+    placement that is one file's business and reports it beside what it
+    placed, and fails the request as a whole where the refusal is a mapping's
+    business rather than a file's (EP-13). Which
     side a placement's refusal falls on is the condition it stands on, not the
     wire kind it is answered with. A mapping's business covers a mapped root
     that could not be asked about at all — the device could not read the
@@ -360,9 +362,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     refusals this register gives such a request are stated where they belong:
     a budget the request passes stops it under LA-10, and a volume with no
     room for what is still coming, or that cannot be asked about at all,
-    refuses it under LA-11. A body that cannot be read as a multipart drop at
-    all is refused as malformed, which no rule here states because it is the
-    shape of the request rather than anything about the Library.
+    refuses it under LA-11 — an import under LA-28. A body that cannot be
+    read as a multipart drop at all is refused as malformed, which no rule
+    here states because it is the shape of the request rather than anything
+    about the Library.
   - Where a drop is addressed at the Library root and the device holds more
     than one mapping (EP-9), its parts may go through more than one mapped root,
     and the first refusal that is a mapping's business ends the request —
@@ -377,13 +380,19 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     before the rename, as a fetch stamps the file it places; the Entry the next
     sync or freeze makes of the file therefore carries that second as its
     `captured_mtime` (FM-9). A part whose field name is not such a count leaves
-    the file with the time it was written at, and is not refused for it.
+    the file with the time it was written at, and is not refused for it. A file
+    imported by path is stamped the same way with the second its own
+    filesystem reported as its modification time when the drop was walked.
   - A browser sends no birth time, so the Entry made of a dropped file carries
     no `captured_btime` (FM-9), whatever birth time the file's filesystem
-    reports — that one is when the route wrote it. The device notes each file
-    it placed this way, with its length and the second it stamped, and the scan
-    of the sync or freeze that carries it in records no birth time for a file
-    still standing there as the drop left it. The note is not a record of
+    reports — that one is when the route wrote it. A file imported by path is
+    the person's own file read on the device, so the Entry made of it carries
+    the birth time that file's filesystem reported when the drop was walked,
+    where it reported one, and none where it did not — never the copy's. The
+    device notes each file it placed either way, with its length, the second it
+    stamped and the birth time to record, and the scan of the sync or freeze
+    that carries it in records that birth time, or none, for a file still
+    standing there as the drop left it. The note is not a record of
     materialization: the file is still merely added, and a scan reports it
     only as new (EP-10). The note is held in memory by the open Library, for the
     sync or freeze the drop arms; a file first scanned after the device has let

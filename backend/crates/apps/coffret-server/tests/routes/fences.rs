@@ -18,7 +18,7 @@ use crate::support::{asking, json as body_of, route, Served, SERVER_KEY};
 /// Written out rather than derived, because what the case over it says is that
 /// there is no route without the fences — and a list the router generated would
 /// hold whatever the router holds.
-const EVERY_ROUTE: [(&str, &str); 17] = [
+const EVERY_ROUTE: [(&str, &str); 18] = [
     ("GET", "/api/library"),
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
@@ -36,6 +36,7 @@ const EVERY_ROUTE: [(&str, &str); 17] = [
     ("POST", "/api/map"),
     ("POST", "/api/upload?path=albums"),
     ("POST", "/api/upload?path=albums&freeze=true"),
+    ("POST", "/api/import"),
 ];
 
 /// The same request the explorer would send, with one header put otherwise.

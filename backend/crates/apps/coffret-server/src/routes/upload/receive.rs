@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
+use std::future::Future;
 
+use axum::body::Bytes;
 use axum::extract::multipart::Field;
-use coffret_device::{ContainerKind, EntryPath, OpenLibrary, ReservationId};
+use coffret_device::{Btime, ContainerKind, EntryPath, Mtime, OpenLibrary, ReservationId};
 
 use crate::allowance::Allowance;
 use crate::api_error::ApiError;
@@ -14,7 +16,13 @@ use super::refusal::Refusal;
 use super::room_for::room_for;
 use super::under::under;
 
-/// Adds the file one part carries to the folder, or says why it was not added.
+/// Adds one file to the folder, or says why it was not added: the file one
+/// part of a browser's drop carries, or one a drop by path read off this
+/// device ([`Incoming`] says which).
+///
+/// One body for both, so that the room this device is asked to have, the name
+/// and fence refusals, the per-file write and the stamp the file is kept with
+/// are one implementation whichever way the bytes arrive.
 ///
 /// The order is the point: the name is shaped, the catalog is asked what stands
 /// at the path, and only then is anything opened. Everything that can refuse this
@@ -56,11 +64,11 @@ use super::under::under;
 /// [`Interrupted`](Refusal::Interrupted) for the route to say as it says every
 /// broken stream.
 ///
-/// The file keeps its own modification time where the part says what it is,
-/// read off the part before any of it is: it is stamped on the file before the
-/// rename, so what appears is the person's file in that respect too, and
-/// recorded as one with no birth time of its own (spec: EP-11, FM-9).
-/// [`modified`] says how a part says it.
+/// The file keeps its own modification time where the caller says what it is
+/// ([`Times::modified`]), read before any of its bytes are: it is stamped on
+/// the file before the rename, so what appears is the person's file in that
+/// respect too, and recorded with the birth time the caller was told of, none
+/// where it was told of none (spec: EP-11, FM-9).
 ///
 /// `coming` is how much room the caller is to be asked to have. It is what the
 /// request said is left of it, so a book being dropped asks for the rest of the
@@ -80,10 +88,10 @@ pub(super) async fn receive(
     folder: Option<&EntryPath>,
     name: &str,
     reserving: Option<Reserving<'_>>,
-    mut part: Field<'_>,
+    mut source: impl Incoming,
 ) -> Result<Landed, Refusal> {
     let path = under(folder, &shaped(name)?);
-    let modified = modified(part.name());
+    let times = source.times();
     if library.container_of(&path).await? == Some(ContainerKind::Pack) {
         return Err(ApiError::pack_resident().into());
     }
@@ -97,14 +105,17 @@ pub(super) async fn receive(
     // dropping it takes the empty scratch name with it (spec: EP-11).
     room_for(allowance, &incoming.scratch_path(), coming)?;
 
-    while let Some(chunk) = part.chunk().await.map_err(Refusal::reading)? {
+    let ceiling = source.ceiling(allowance);
+    while let Some(chunk) = source.next_chunk().await? {
         // Met before the bytes are written rather than after, so the file that is
         // refused is one this device never finished taking.
         //
         // Two sentences and not one: the first is the event's and names nothing,
         // the second is this person's and names their own file (spec: EL-1).
         // `outran_as` says why there are two of them.
-        if incoming.written().saturating_add(chunk.len() as u64) > allowance.part_bytes {
+        if ceiling
+            .is_some_and(|ceiling| incoming.written().saturating_add(chunk.len() as u64) > ceiling)
+        {
             return Err(Refusal::Request(outran_as(
                 "one file in it is over that on its own, so dropping fewer beside it \
                  changes nothing",
@@ -121,7 +132,7 @@ pub(super) async fn receive(
         library.extend_reservation(reserving.id, &path).await?;
         reserving.paths.insert(path.clone());
     }
-    incoming.keep(modified).await?;
+    incoming.keep_born(times.modified, times.born).await?;
     Ok(Landed { path, bytes })
 }
 
@@ -131,4 +142,47 @@ pub(super) struct Reserving<'a> {
     pub(super) id: ReservationId,
     /// Every path the drop has added to it so far.
     pub(super) paths: &'a mut BTreeSet<EntryPath>,
+}
+
+/// The times one file is kept with.
+pub(super) struct Times {
+    /// Its own modification time, where the caller knows it (spec: EP-11).
+    pub(super) modified: Option<Mtime>,
+    /// The person's file's own birth time, where the caller knows it
+    /// (spec: FM-9).
+    pub(super) born: Option<Btime>,
+}
+
+/// Where the bytes of one file come from, as [`receive`] takes them.
+pub(super) trait Incoming: Send {
+    /// The times the file is to be kept with, read before any of its bytes.
+    fn times(&self) -> Times;
+
+    /// The most one file may carry this way, or `None` where no ceiling of
+    /// this route's bounds it.
+    fn ceiling(&self, allowance: &Allowance) -> Option<u64>;
+
+    /// The next stretch of the file, or `None` at its end.
+    fn next_chunk(&mut self) -> impl Future<Output = Result<Option<Bytes>, Refusal>> + Send;
+}
+
+/// One part of a browser's multipart drop.
+///
+/// Its field name says its modification time ([`modified`]), and a browser
+/// says no birth time. One part is held to the per-part budget (spec: LA-9).
+impl Incoming for Field<'_> {
+    fn times(&self) -> Times {
+        Times {
+            modified: modified(self.name()),
+            born: None,
+        }
+    }
+
+    fn ceiling(&self, allowance: &Allowance) -> Option<u64> {
+        Some(allowance.part_bytes)
+    }
+
+    async fn next_chunk(&mut self) -> Result<Option<Bytes>, Refusal> {
+        self.chunk().await.map_err(Refusal::reading)
+    }
 }

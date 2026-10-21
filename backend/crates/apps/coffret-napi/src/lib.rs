@@ -11,7 +11,9 @@
 //!
 //! No export returns a future, so napi-rs runs no runtime of its own: the one
 //! runtime is the core's, started by [`start`]. The core calls back into the
-//! shell through a threadsafe function ([`listen`]).
+//! shell through a threadsafe function ([`listen`]). The one export that waits
+//! for work, [`take_drop`], runs it on a thread of Node's pool and answers with
+//! a promise, so the shell's main thread is never held up by a walk.
 
 mod desktop_event;
 pub use desktop_event::DesktopEvent;
@@ -19,8 +21,20 @@ pub use desktop_event::DesktopEvent;
 mod door_mode;
 pub use door_mode::DoorMode;
 
+mod drop_answer;
+pub use drop_answer::DropAnswer;
+
+mod dropped_file_row;
+pub use dropped_file_row::DroppedFileRow;
+
+mod not_taken_row;
+pub use not_taken_row::NotTakenRow;
+
 mod served_library;
 pub use served_library::ServedLibrary;
+
+mod take_drop;
+use take_drop::TakeDrop;
 
 use std::ffi::OsStr;
 
@@ -104,6 +118,16 @@ pub fn listen(callback: EventCallback) -> Result<()> {
         }
     });
     Ok(())
+}
+
+/// Walks what a drop onto the explorer's window let go of — the whole path of
+/// each item, as the shell read it off the dropped files — and holds what it
+/// took under a one-time handle for the explorer's import. Resolves with the
+/// handle and, per file, its path relative to the folder it was dropped from,
+/// its size and its modification time; never with a path on this device.
+#[napi(catch_unwind)]
+pub fn take_drop(paths: Vec<String>) -> AsyncTask<TakeDrop> {
+    AsyncTask::new(TakeDrop { paths })
 }
 
 /// Discards every browser session, launch ticket and door token: what the

@@ -1,10 +1,13 @@
 // The options every window of the app is created with.
 //
-// No window has a preload, and the main process exposes nothing to any page:
-// the Passphrase page talks to the door it was served from and the explorer to
-// its host, each over its own origin, and neither reaches Node or the main
-// process. Every window is sandboxed and isolated, and keeps its storage in a
-// partition of its own, so that nothing one page stores is seen by the other.
+// The Passphrase page talks to the door it was served from and the explorer to
+// its host, each over its own origin, and neither reaches Node. The explorer's
+// window has the one preload of the app, which exposes a single function to
+// its page — taking a drop by the paths of what was let go of — over the one
+// channel the main process answers, and only for that window (`drops.ts`). The
+// Passphrase window has none. Every window is sandboxed and isolated, the
+// preload included, and keeps its storage in a partition of its own, so that
+// nothing one page stores is seen by the other.
 
 import type { BrowserWindowConstructorOptions, WebPreferences } from 'electron';
 
@@ -26,8 +29,9 @@ export const PARTITIONS = [PASSPHRASE_PARTITION, EXPLORER_PARTITION] as const;
 const TITLE = 'Coffret';
 
 /** What every page runs under: a renderer that reaches nothing but the web. */
-function confined(partition: string): WebPreferences {
+function confined(partition: string, preload?: string): WebPreferences {
   return {
+    ...(preload === undefined ? {} : { preload }),
     contextIsolation: true,
     sandbox: true,
     nodeIntegration: false,
@@ -57,8 +61,11 @@ export function passphraseWindowOptions(): BrowserWindowConstructorOptions {
   };
 }
 
-/** The window the explorer runs in, served by the explorer host. */
-export function explorerWindowOptions(): BrowserWindowConstructorOptions {
+/**
+ * The window the explorer runs in, served by the explorer host, with the
+ * preload at `preload` that hands a drop over by path.
+ */
+export function explorerWindowOptions(preload: string): BrowserWindowConstructorOptions {
   return {
     title: TITLE,
     width: 1280,
@@ -66,6 +73,6 @@ export function explorerWindowOptions(): BrowserWindowConstructorOptions {
     minWidth: 640,
     minHeight: 420,
     show: false,
-    webPreferences: confined(EXPLORER_PARTITION),
+    webPreferences: confined(EXPLORER_PARTITION, preload),
   };
 }

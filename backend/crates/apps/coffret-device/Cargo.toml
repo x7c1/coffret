@@ -106,4 +106,6 @@ url = { workspace = true }
 # The state directory every case runs under, so nothing a case writes lands in
 # the state directory of whoever started the run.
 tempfile = { workspace = true }
-tokio = { workspace = true }
+# `test-util`, for the one case about how long a drop is held: the runtime's
+# own clock is paused and moved, so ten minutes are stated rather than spent.
+tokio = { workspace = true, features = ["test-util"] }

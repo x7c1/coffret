@@ -1,6 +1,6 @@
 import type { Refused } from './refusal';
 import { Refusal, refusedOf } from './refusal';
-import { apiUrl, sentForJson, type Progress } from './request';
+import { apiUrl, askedForJson, sentForJson, type Progress } from './request';
 import uploadBudget from './upload-budget.json';
 
 /**
@@ -91,19 +91,40 @@ function reasonOf(overdrawn: Overdrawn): string {
  * is what decides, and only the server sees the body the browser makes.
  */
 export function overdrawnBy(files: readonly Added[]): Overdrawn | null {
-  const large = files.find((added) => added.file.size > PART_BUDGET);
+  // A drop the desktop app holds by path sends no file's bytes, so the two
+  // budgets on what one request carries are not its: what bounds it is how
+  // many files one request names, which is the parts budget's number.
+  if (files.length > 0 && files.every(isHeld)) {
+    return files.length > PARTS_BUDGET
+      ? { budget: 'parts', count: files.length, limit: PARTS_BUDGET }
+      : null;
+  }
+  const large = files.find((added) => added.size > PART_BUDGET);
   if (large !== undefined) {
-    return { budget: 'part', name: large.path, size: large.file.size, limit: PART_BUDGET };
+    return { budget: 'part', name: large.path, size: large.size, limit: PART_BUDGET };
   }
   if (files.length > PARTS_BUDGET) {
     return { budget: 'parts', count: files.length, limit: PARTS_BUDGET };
   }
-  const carried = files.reduce((sum, added) => sum + added.file.size, 0);
+  const carried = files.reduce((sum, added) => sum + added.size, 0);
   if (carried > REQUEST_BUDGET) {
     return { budget: 'request', carried, limit: REQUEST_BUDGET };
   }
   return null;
 }
+
+/**
+ * Where one added file's bytes come from.
+ *
+ * - `file`: a `File` the browser read out of the drop, whose bytes this page
+ *   sends.
+ * - `held`: a file the desktop app took by its path on this device and holds
+ *   for the import, named by the drop's one-time `handle` and its `index` in
+ *   what that drop took. Its bytes never pass through the page.
+ */
+export type AddedSource =
+  | { kind: 'file'; file: File }
+  | { kind: 'held'; handle: string; index: number };
 
 /** One file on its way into a folder, and where it goes inside it. */
 export interface Added {
@@ -115,7 +136,21 @@ export interface Added {
    * what the server makes on the way.
    */
   path: string;
-  file: File;
+  /** Its length in bytes. */
+  size: number;
+  /** Its modification time, in milliseconds from the Unix epoch. */
+  mtime: number;
+  /** Where its bytes come from. */
+  source: AddedSource;
+}
+
+/** A file the browser read out of a drop, at `path` relative to the folder. */
+export function addedFile(path: string, file: File): Added {
+  return { path, size: file.size, mtime: file.lastModified, source: { kind: 'file', file } };
+}
+
+function isHeld(added: Added): boolean {
+  return added.source.kind === 'held';
 }
 
 /**
@@ -245,13 +280,21 @@ export async function addFiles(
   if (overdrawn !== null) {
     throw new OverBudget(overdrawn);
   }
+  if (files.length > 0 && files.every(isHeld)) {
+    return importHeld(folder, files, adding);
+  }
   const body = new FormData();
   for (const added of files) {
+    if (added.source.kind !== 'file') {
+      // One drop is one of the two, and never both: a page holding a drop by
+      // path has no bytes to send for it.
+      throw new Error('a drop holds its files either as bytes or by path, never both');
+    }
     // The filename is where the file goes, and the field name is the file's
     // own modification time: a browser hands over a file's bytes and name and
     // nothing of its times but this one, and the server stamps the file it
     // writes with it rather than with the moment of the drop.
-    body.append(modifiedOf(added.file), added.file, added.path);
+    body.append(modifiedOf(added.mtime), added.source.file, added.path);
   }
   const params: Record<string, string> = {};
   if (folder !== '') {
@@ -277,8 +320,45 @@ export async function addFiles(
  * sent as `file`, which says no time, and the file keeps the one it is written
  * at.
  */
-function modifiedOf(file: File): string {
-  return Number.isSafeInteger(file.lastModified) ? String(file.lastModified) : 'file';
+function modifiedOf(mtime: number): string {
+  return Number.isSafeInteger(mtime) ? String(mtime) : 'file';
+}
+
+/**
+ * Adds files the desktop app holds by path — `POST /api/import`.
+ *
+ * The body names the folder, whether the drop goes in as a Pack, the drop's
+ * one-time handle, and for each file its index in what the drop took and the
+ * name it is to have: the path relative to the folder, renumbered where the
+ * person asked. No file's bytes and no path on the device are in it; the
+ * server reads each file off the disk itself, keeping its own times. The answer
+ * and every refusal are an upload's, so a screen reads both alike.
+ *
+ * The handle is used by the request that names it, whatever that request comes
+ * to: a drop refused or broken off is dropped again rather than sent again.
+ */
+async function importHeld(
+  folder: string,
+  files: readonly Added[],
+  adding: Adding,
+): Promise<Upload> {
+  let handle: string | null = null;
+  const named: { index: number; name: string }[] = [];
+  for (const added of files) {
+    if (added.source.kind !== 'held') {
+      throw new Error('a drop holds its files either as bytes or by path, never both');
+    }
+    if (handle !== null && handle !== added.source.handle) {
+      throw new Error('one import carries the files of one drop');
+    }
+    handle = added.source.handle;
+    named.push({ index: added.source.index, name: added.path });
+  }
+  const body = new Blob(
+    [JSON.stringify({ path: folder, freeze: adding.freeze === true, handle, files: named })],
+    { type: 'application/json' },
+  );
+  return uploadOf(await askedForJson<unknown>(apiUrl('import'), adding.signal, 'POST', body));
 }
 
 /**

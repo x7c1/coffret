@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Added } from '@coffret/api';
+import { addedFile, type Added } from '@coffret/api';
 
 import { NO_NUMBERING, renumber, unchangedLine, type Numbering } from './renumber';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
 function added(path: string): Added {
-  return { path, file: { size: 10 } as File };
+  return addedFile(path, { size: 10, lastModified: 0 } as File);
 }
 
 const PAGES: Numbering = { pages: true, volumes: false };

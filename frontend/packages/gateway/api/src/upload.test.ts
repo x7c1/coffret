@@ -4,7 +4,7 @@ import { TOKEN } from './page.testing';
 
 import { dropToken, onSessionEnding } from './credential';
 import { isRefusal } from './refusal';
-import { addFiles, isOverBudget, uploadOf, type Added } from './upload';
+import { addedFile, addFiles, isOverBudget, uploadOf, type Added } from './upload';
 import uploadBudget from './upload-budget.json';
 
 afterEach(() => {
@@ -93,8 +93,8 @@ class FakeRequest extends Listeners {
 /** A drop of two real pages, which is what the transport is handed. */
 function pages(): Added[] {
   return [
-    { path: 'page-001.jpg', file: new File(['one'], 'page-001.jpg', { lastModified: 1_444_000_000_999 }) },
-    { path: 'page-002.jpg', file: new File(['two'], 'page-002.jpg', { lastModified: -1_500 }) },
+    addedFile('page-001.jpg', new File(['one'], 'page-001.jpg', { lastModified: 1_444_000_000_999 })),
+    addedFile('page-002.jpg', new File(['two'], 'page-002.jpg', { lastModified: -1_500 })),
   ];
 }
 
@@ -111,7 +111,7 @@ function settled<T>(promise: Promise<T>): Promise<T | unknown> {
  * had to hold 64 GiB to say so would be the case that could not be run.
  */
 function claiming(path: string, size: number): Added {
-  return { path, file: { size, name: path } as File };
+  return addedFile(path, { size, name: path, lastModified: 0 } as File);
 }
 
 /** What `addFiles` threw, or the answer it resolved to where it threw nothing. */
@@ -471,4 +471,69 @@ it('lets go of a drop answered after the session ended', async () => {
   FakeRequest.only().answer(200, JSON.stringify({ added: [], refused: [] }));
   const thrown = await added;
   expect(isRefusal(thrown) && thrown.kind).toBe('withdrawn');
+});
+
+/** A file the desktop app holds by path, as its drop answered with it. */
+function held(path: string, index: number, size = 6): Added {
+  return { path, size, mtime: 1_444_000_000_000, source: { kind: 'held', handle: 'h'.repeat(64), index } };
+}
+
+/** Every request `fetch` was asked to make, answered with `answer`. */
+function fetched(answer: () => Response): { url: string; init: RequestInit }[] {
+  const made: { url: string; init: RequestInit }[] = [];
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+    made.push({ url, init });
+    return Promise.resolve(answer());
+  });
+  return made;
+}
+
+// LA-27: a drop the desktop app holds is sent as an import: the handle, and
+// each file by its index and the name it is to have — no bytes and no path on
+// the device — answered in the upload's own shape.
+it('sends a drop held by path as an import naming the handle and indexes', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+  const made = fetched(() =>
+    Response.json({ written: ['books/vol-1/001.jpg'], refused: [{ name: 'b.jpg', error: 'bad_path', message: 'no' }] }),
+  );
+
+  const answer = await addFiles('books', [held('vol-1/001.jpg', 0), held('b.jpg', 3)], { freeze: true });
+
+  expect(FakeRequest.made).toHaveLength(0);
+  expect(made).toHaveLength(1);
+  expect(made[0].url).toBe('/api/import');
+  expect(made[0].init.method).toBe('POST');
+  const body = JSON.parse(await (made[0].init.body as Blob).text()) as unknown;
+  expect(body).toEqual({
+    path: 'books',
+    freeze: true,
+    handle: 'h'.repeat(64),
+    files: [
+      { index: 0, name: 'vol-1/001.jpg' },
+      { index: 3, name: 'b.jpg' },
+    ],
+  });
+  expect(answer.written).toEqual(['books/vol-1/001.jpg']);
+  expect(answer.refused[0].name).toBe('b.jpg');
+});
+
+// LA-28: what bounds an import is how many files it names; the byte budgets
+// are about a body carrying files, and an import's carries none.
+it('weighs a held drop by its count alone', async () => {
+  const large = held('scan.tif', 0, uploadBudget.part_bytes + 1);
+  fetched(() => Response.json({ written: ['scan.tif'], refused: [] }));
+  await expect(addFiles('', [large])).resolves.toEqual({ written: ['scan.tif'], refused: [] });
+
+  const many = Array.from({ length: uploadBudget.parts + 1 }, (_, index) => held(`${index}.jpg`, index));
+  const thrown = await addFiles('', many).catch((refusal: unknown) => refusal);
+  expect(isOverBudget(thrown) && thrown.overdrawn.budget).toBe('parts');
+});
+
+// One drop is held by path or read as bytes, never both.
+it('refuses a drop mixing files held by path with files read as bytes', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+  const [page] = pages();
+
+  await expect(addFiles('', [page, held('b.jpg', 0)])).rejects.toThrow();
+  expect(FakeRequest.made).toHaveLength(0);
 });

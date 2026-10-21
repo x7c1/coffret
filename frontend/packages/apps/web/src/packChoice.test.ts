@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Added, ContainerKind, Listing } from '@coffret/api';
+import { addedFile, type Added, type ContainerKind, type Listing } from '@coffret/api';
 
 import {
   choiceLabels,
@@ -26,7 +26,7 @@ function added(path: string, size = 10): Added {
   // Only the size is read of a file before anything is sent, so a stand-in
   // holding just that is the file as far as this module is concerned — which
   // is what lets a case speak of a gigabyte without allocating one.
-  return { path, file: { size } as File };
+  return addedFile(path, { size, lastModified: 0 } as File);
 }
 
 /** A book of `pages` pages of `size` bytes each under `folder`, some a level down. */
