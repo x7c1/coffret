@@ -201,6 +201,30 @@ s3-store-it:
 e2e-it:
 	./scripts/e2e-it.sh
 
+## e2e-electron: walk the desktop app's journey end to end, in the Electron app itself, against MinIO in Docker
+#
+# What `e2e-it` does not reach, since it walks the explorer in Chromium behind
+# the development host: the desktop app run unpackaged from the checkout
+# (`desktop-dev-build`, so the Node-API addon and the app's code), driven by
+# Playwright's Electron driver. One journey — a Library opened through the
+# Passphrase window, the explorer listing it, a file dropped onto a folder by
+# its path, the idle lock bringing the Passphrase window back and the unlock
+# landing in place, and a quit that leaves no process running. It waits out a
+# one-minute idle interval, so it takes a few minutes.
+#
+# It needs Docker and the frontend's dependencies; the first run fetches the
+# Electron binary. Everything lives under .tmp/e2e-electron/ — a state
+# directory and a browser-data directory of its own, so it touches neither the
+# development state directory nor an installed app — and is made again on every
+# run. It is out of `check` for the reason `e2e-it` is; CI runs it in the `e2e`
+# job, under xvfb-run. scripts/e2e-electron.sh says why Linux starts it with
+# --no-sandbox, which nothing else does.
+#
+# COFFRET_E2E_ELECTRON_MINIO_PORT moves the port MinIO is published on.
+.PHONY: e2e-electron
+e2e-electron:
+	./scripts/e2e-electron.sh
+
 ## drive-authorize: run the Google authorization flow once and cache the grant
 #
 # Needs a person at a browser, so it is never part of a test run. Set
@@ -566,7 +590,7 @@ web-dist:
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT) $(WEB_PORT)
 
-## icons: regenerate the desktop app's icons (icons/, the development app's badged icons-dev/, the tray's icons-tray/, and their copies in the Electron app's assets/ and packaging/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI and python3; the outputs are committed)
+## icons: regenerate the desktop app's icons (the bundles' under frontend/packages/apps/desktop/packaging/, the tray's and the development app's badged one under its assets/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI, as the SVG rasteriser, and python3; the outputs are committed)
 .PHONY: icons
 icons:
 	./scripts/gen-icons.sh
@@ -617,10 +641,6 @@ napi-addon: web-dist
 	done; \
 	echo "the addon's library was not found under backend/target/release"; exit 1
 
-## desktop-electron-dev: the same as desktop-dev, under the name it had while the Electron app ran beside the Tauri one
-.PHONY: desktop-electron-dev
-desktop-electron-dev: desktop-dev
-
 ## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
 down:
@@ -664,17 +684,16 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # The two shells over coffret-device — the command line and the explorer's
 # server — plus coffret-shell, which both of them start through,
 # coffret-explorer-host, which serves the explorer in front of that server,
-# coffret-desktop, which starts the server and the host in one installed app,
-# coffret-desktop-core, which does the same for a shell written for Node,
-# coffret-napi, the Node-API addon over it, and coffret-explorer-dev, which
-# serves the explorer's build on disk through the host in front of a server
-# already running, and what none of the eight may name directly. Every flow a
-# shell drives is a call on coffret-device, so any shell can be replaced
-# without a flow moving with it. A gateway or a use case named here would be a
-# decision the other shells then have to make again, and differently. The
-# remaining crates under `apps/` are tools rather than shells — the fixture
-# generator draws images, the interop harness writes the format directly — and
-# are deliberately not held to this.
+# coffret-desktop-core, which starts the server and the host in the desktop
+# app's process, coffret-napi, the Node-API addon the app's Electron shell
+# loads it through, and coffret-explorer-dev, which serves the explorer's build
+# on disk through the host in front of a server already running, and what none
+# of the seven may name directly. Every flow a shell drives is a call on
+# coffret-device, so any shell can be replaced without a flow moving with it. A
+# gateway or a use case named here would be a decision the other shells then
+# have to make again, and differently. The remaining crates under `apps/` are
+# tools rather than shells — the fixture generator draws images, the interop
+# harness writes the format directly — and are deliberately not held to this.
 #
 # Direct dependencies only — `--depth 1` — because reaching the domain *through*
 # coffret-device is the arrangement rather than the mistake. coffret-shell is on
@@ -683,7 +702,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # it. Dev-dependencies are outside `--edges normal` and so outside this: a case
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
-APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop coffret-desktop-core coffret-napi coffret-explorer-dev
+APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop-core coffret-napi coffret-explorer-dev
 APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps
@@ -803,12 +822,12 @@ field-numbers-guard:
 field-numbers-guard-test:
 	./scripts/field-numbers-guard-test.sh
 
-## check-version-change-test: show check-version-change.sh reporting the workspace version, and whether it went up, without the Tauri crate
+## check-version-change-test: show check-version-change.sh reporting the workspace version, and whether it went up
 #
 # The release workflow reads the workspace version through
 # scripts/check-version-change.sh; this runs it against throwaway repositories
-# whose workspaces hold coffret-desktop-core but no coffret-desktop, and one
-# that holds neither, which it must refuse. Needs git, cargo and jq.
+# whose workspaces hold coffret-desktop-core, and one that does not, which it
+# must refuse. Needs git, cargo and jq.
 .PHONY: check-version-change-test
 check-version-change-test:
 	./scripts/check-version-change-test.sh
@@ -877,6 +896,9 @@ audit:
 #     pull request as the `s3-store` job.
 #   - `e2e-it`: the explorer's journeys in a real browser against MinIO. It
 #     needs a container runtime and Chromium; CI runs it as the `e2e` job.
+#   - `e2e-electron`: the desktop app's journey in the Electron app against
+#     MinIO. It needs a container runtime and a display; CI runs it in the `e2e`
+#     job too.
 #   - `drive-store-it`, `drive-round-trip-it`, `drive-index-layout-it`: the
 #     same contracts and journeys against a real Google Drive account. They need
 #     a person's OAuth consent and an account to spend, so nothing runs them

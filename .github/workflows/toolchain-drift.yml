@@ -24,9 +24,10 @@ on:
 jobs:
   latest-stable:
     runs-on: ubuntu-latest
-    # A working run takes 5 to 6 minutes; the bound leaves room for a slow
-    # uncached apt install and a slower stable toolchain, so a stalled step
-    # fails the run instead of holding it until GitHub's six-hour limit.
+    # A working run takes a few minutes; the bound leaves room for a slower
+    # stable toolchain, so a stalled step fails the run instead of holding it
+    # until GitHub's six-hour limit. No system packages are installed, as in
+    # ci.yml's backend job: the workspace builds without any.
     timeout-minutes: 45
     defaults:
       run:
@@ -37,28 +38,6 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v4
-
-      # As in ci.yml's backend job (see the comment there): a stalled apt
-      # fetch is abandoned after 30 seconds and tried again.
-      - name: Bound apt's waits on the mirror
-        run: |
-          printf '%s\n' \
-            'Acquire::http::Timeout "30";' \
-            'Acquire::https::Timeout "30";' \
-            'Acquire::Retries "3";' \
-            | sudo tee /etc/apt/apt.conf.d/80-stall-timeout
-
-      # What the workspace's desktop app links against, as CI's backend job
-      # installs it. Uncached here: this runs once a week and blocks nobody.
-      # A stalled mirror can hang `apt-get update`; fail fast instead of
-      # waiting out the job. The retries above usually get past a stall, and
-      # this bounds the run when they do not. A working run takes 1 to 8 minutes.
-      - name: Install system packages
-        timeout-minutes: 15
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
 
       - name: Install the latest stable
         run: |

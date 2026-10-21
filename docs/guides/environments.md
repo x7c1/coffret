@@ -34,10 +34,10 @@ checkout that once served the production Library itself may still have a
 lines, or every target there, `make dev` and `make cli` included, works on the
 production Library.
 
-The scripts that keep state of their own — `e2e-it`, `drive-round-trip-it`,
-`drive-index-layout-it` and the `drive-it-*` targets — set their own
-directories under `.tmp/` and ignore these; `drive-authorize` logs under
-`COFFRET_LOG_DIR` like the rest.
+The scripts that keep state of their own — `e2e-it`, `e2e-electron`,
+`drive-round-trip-it`, `drive-index-layout-it` and the `drive-it-*` targets —
+set their own directories under `.tmp/` and ignore these; `drive-authorize`
+logs under `COFFRET_LOG_DIR` like the rest.
 
 ## The production Library
 
@@ -124,7 +124,6 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, the Node-API addon and the Electron app, without bundling or starting it |
 | `make desktop-dev` | `make desktop-dev-build`, then runs the app from the checkout over the Libraries under the development state directory, as the development app |
-| `make desktop-electron-dev` | Another name for `make desktop-dev` |
 | `make napi-addon` | Builds the explorer, then the Node-API addon the desktop app runs the server in, as `backend/target/release/coffret.node` |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 
@@ -231,20 +230,18 @@ how it is run:
 The development app is told apart from the installed one: its windows are
 titled "Coffret (dev)", its tray icon carries the "D" badge and its tooltip
 reads "Coffret (dev)", and its Dock icon (macOS) and window icon (Linux) are
-the badged `icons-dev/` icon. On Linux each app's windows carry its own
+the badged `assets/icon-dev.png`. On Linux each app's windows carry its own
 identifier as their app ID (`WM_CLASS` on X11), so GNOME groups and names the
 two apart, and matches the installed app's windows with the desktop entry its
 `.deb` installs, whose `StartupWMClass` is `io.github.x7c1.coffret`.
 
 Every icon is derived from two SVG sources under `assets/icon/`:
 `coffret.svg`, the app icon, and `coffret-tray.svg`, the same chest as a
-one-colour silhouette. `make icons` (`scripts/gen-icons.sh`, which needs the
-Tauri CLI, `cargo install tauri-cli --version '^2' --locked`, and python3)
-writes the installed app's `icons/`, the development app's `icons-dev/` and
-the tray's `icons-tray/` under `backend/crates/apps/coffret-desktop/`, copies
-of what the app uses into `frontend/packages/apps/desktop/assets/` (the tray
-icons and the development app's badged icon) and `packaging/` (the `.icns` and
-the PNG the bundles carry), and the explorer's favicon under
+one-colour silhouette. `make icons` (`scripts/gen-icons.sh`) writes the
+`.icns` and the PNG the bundles carry into
+`frontend/packages/apps/desktop/packaging/`, the tray icons and the
+development app's badged icon into `frontend/packages/apps/desktop/assets/`,
+and the explorer's favicon under
 `frontend/packages/apps/web/public/`; the outputs are committed, and running it
 again rewrites the same bytes. The development app's icons carry a "D" badge in
 the bottom-right corner, and its tray icon is badged too, so the two apps are
@@ -267,7 +264,13 @@ app's — answers the favicon's paths with the badged files, so its tabs are
 told apart from the installed app's; `index.html` links only the plain ones,
 and the tab's title stays "coffret" whichever host served it.
 
-Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
+The script rasterises the SVGs with the Tauri CLI's `cargo tauri icon`, which
+writes every PNG size and the `.icns` without a graphics library beside it; it
+is a tool of the script alone, not of the app. Install it once with
+`cargo install tauri-cli --version '^2' --locked`; the script also needs
+python3, which puts the `.icns` entries in a stable order.
+
+Both apps log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
 
 ### Building it
 
@@ -295,12 +298,6 @@ distribution's dynamic loader, and an addon linked by a compiler from a Nix
 profile, say, would ask for libraries that loader cannot find. Each build then
 refuses an addon whose libraries do not resolve from an empty environment
 through the program interpreter Electron's binary asks for.
-
-The Tauri app (`backend/crates/apps/coffret-desktop`) is no longer built by
-any of these targets, nor bundled, but it is still a member of the backend
-workspace, so `make check` builds it and needs the development files of
-WebKitGTK 4.1, GTK 3, ayatana-appindicator and librsvg on Linux; the backend
-job in `.github/workflows/ci.yml` lists the Debian and Ubuntu package names.
 
 ### Trying a bundle without installing it
 

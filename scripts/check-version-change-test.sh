@@ -6,10 +6,9 @@
 # Each case is a throwaway git repository under a temporary directory, holding
 # a backend/ workspace of its own with two commits, so the repository itself is
 # never touched. The workspace's members are coffret-desktop-core, whose
-# version scripts/workspace-version.sh reads, and an unrelated crate; no
-# coffret-desktop is among them, so the script is shown not to rely on it. One
-# case leaves coffret-desktop-core out too, and expects the script to fail
-# rather than report an empty version. It needs git, cargo and jq.
+# version scripts/workspace-version.sh reads, and an unrelated crate. One case
+# leaves coffret-desktop-core out, and expects the script to fail rather than
+# report an empty version. It needs git, cargo and jq.
 
 set -euo pipefail
 

@@ -68,7 +68,7 @@ impl ApiError {
             WayBack::ByStartingAgain => "it is unlocked by starting it again with the Passphrase",
             WayBack::InTheApp => {
                 "it is unlocked by entering the Passphrase in the Coffret app's own window — press \
-                 unlock, or choose Unlock… from the app's tray icon"
+                 unlock, or choose Unlock… from the app's tray icon where it has one"
             }
         };
         Self::plain(

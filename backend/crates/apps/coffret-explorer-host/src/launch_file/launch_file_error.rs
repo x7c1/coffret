@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 
 use crate::credentials::NotDrawn;
 
-/// Why the directory for launch files could not be prepared or swept, or a
+/// Why the directory for launch files could not be prepared, or a
 /// launch file could not be written in it.
 ///
 /// No variant names the file or the directory, and none carries the ticket:
@@ -31,12 +31,8 @@ pub enum LaunchFileError {
     NotLoopback(SocketAddr),
     /// No ticket could be drawn.
     NotDrawn(NotDrawn),
-    /// A launch file, or the temporary file one was being written under, that
-    /// a run before this one left could not be removed by a sweep. The first
-    /// refusal, of however many there were.
-    NotRemoved(io::Error),
-    /// The file system refused a step of preparing the directory, reading it,
-    /// or writing a file into it.
+    /// The file system refused a step of preparing the directory or writing a
+    /// file into it.
     Io {
         /// The step, in a fixed word.
         operation: &'static str,
@@ -74,9 +70,6 @@ impl fmt::Display for LaunchFileError {
                  {address}"
             ),
             Self::NotDrawn(_) => f.write_str("no launch ticket could be drawn"),
-            Self::NotRemoved(_) => {
-                f.write_str("a launch file an earlier run left could not be removed")
-            }
             Self::Io { operation, .. } => {
                 write!(
                     f,
@@ -91,7 +84,7 @@ impl std::error::Error for LaunchFileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::NotDrawn(cause) => Some(cause),
-            Self::NotRemoved(cause) | Self::Io { cause, .. } => Some(cause),
+            Self::Io { cause, .. } => Some(cause),
             _ => None,
         }
     }

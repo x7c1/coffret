@@ -5,8 +5,8 @@
 //! `Host` and `Origin` a request names keeps another site's page out but not
 //! another program on the device, which writes those headers as it likes
 //! (spec: LA-14). So the host admits a browser only by a token of its own,
-//! which the explorer's page gets by exchanging a ticket the app delivered to
-//! it through a file only the owner's account can read (spec: LA-21).
+//! which the explorer's page gets by exchanging a ticket handed to it in the
+//! fragment of the URL it was loaded from (spec: LA-21).
 //!
 //! Every ticket and session is held in one state behind one lock, so that
 //! each transition — an issue, an exchange, a revocation, a retirement — is

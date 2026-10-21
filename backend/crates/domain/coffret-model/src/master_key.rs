@@ -15,7 +15,7 @@
 //!
 //! | type | crate | holds | wiped by |
 //! | --- | --- | --- | --- |
-//! | `EnteredPassphrase` | `coffret-desktop-core` | a `Passphrase`, as the desktop app's window hands it over (spec: DK-1) | its `Passphrase` field |
+//! | `EnteredPassphrase` | `coffret-desktop-core` | a `Passphrase`, as the desktop app's Passphrase window hands it over (spec: DK-1) | its `Passphrase` field |
 //! | [`Passphrase`](crate::Passphrase) | `coffret-model` | the bytes a person typed | its own `Drop` |
 //! | protection key | `coffret-format` | Argon2id output over the Passphrase (spec: KD-5) | the `Zeroizing` buffer `Argon2Params::derive` hands back |
 //! | stored-form plaintext | `coffret-format` | Master Key ‖ epoch, in and out of the sealed form (spec: KD-7) | `Zeroizing`, inside `StoredMasterKey::create`/`unlock` |

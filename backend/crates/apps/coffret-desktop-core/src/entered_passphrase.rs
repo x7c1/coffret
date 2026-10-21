@@ -9,22 +9,19 @@ use zeroize::ZeroizeOnDrop;
 /// begins.
 ///
 /// It is read straight into a [`Passphrase`], with no `String` in between,
-/// from either of the two places a window hands it over:
+/// from the one place the window hands it over: the body of the door's `POST`
+/// (spec: LA-22), which the door gathers into a buffer that is wiped and
+/// deserializes from there.
 ///
-/// - the Tauri app's command arguments, which Tauri deserializes from the
-///   message the page sent, holding it as a JSON value and lending it out;
-/// - the body of the door's `POST` (spec: LA-22), which the door gathers into a
-///   buffer that is wiped and deserializes from there.
-///
-/// Either way the bytes are copied from what is lent into the Passphrase's own
-/// buffer and nowhere else, so the first copy coffret holds is already the one
-/// that is wiped. One exception is the JSON parser's: a Passphrase holding a
-/// character JSON escapes (a quote, a backslash, a control character) is
-/// unescaped through the parser's own scratch buffer first, which is not
-/// wiped. What came before — the field's value and the script's string in the
-/// page, the message on its way through Tauri's IPC or the window's network
-/// stack — is outside anything coffret can overwrite, and outside the claim
-/// (spec: DK-7).
+/// The bytes are copied from the string the deserializer lends into the
+/// Passphrase's own buffer and nowhere else, so the first copy coffret holds is
+/// already the one that is wiped. One exception is the JSON parser's: a
+/// Passphrase holding a character JSON escapes (a quote, a backslash, a
+/// control character) is unescaped through the parser's own scratch buffer
+/// first, which is not wiped. What came before — the field's value and the
+/// script's string in the page, the request on its way through the window's
+/// network stack — is outside anything coffret can overwrite, and outside the
+/// claim (spec: DK-7).
 ///
 /// It is on the secret-bearing inventory in `coffret_model::MasterKey`'s
 /// module. It carries no `Drop` of its own: the Passphrase in it wipes itself,
@@ -57,8 +54,8 @@ impl Visitor<'_> for PassphraseVisitor {
         f.write_str("the Passphrase, as a string")
     }
 
-    // What Tauri's arguments and the door's body offer: a string borrowed from
-    // the message, copied here into the buffer that is wiped and into nothing
+    // What the door's body offers: a string borrowed from the buffer it was
+    // gathered into, copied here into the buffer that is wiped and into nothing
     // else.
     fn visit_str<E: de::Error>(self, typed: &str) -> Result<Self::Value, E> {
         Ok(EnteredPassphrase(Passphrase::from_bytes(
@@ -86,7 +83,7 @@ mod tests {
 
     #[test]
     fn a_string_argument_becomes_the_passphrase_typed() {
-        // Borrowed from a JSON value, the way Tauri lends a command's argument.
+        // Borrowed from a JSON value.
         let message = serde_json::json!({ "passphrase": "correct horse" });
         let entered = EnteredPassphrase::deserialize(&message["passphrase"]).unwrap();
         assert_eq!(entered.into_passphrase().as_bytes(), b"correct horse");

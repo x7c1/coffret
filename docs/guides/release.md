@@ -269,8 +269,8 @@ The scripts they call are under `.github/scripts/`, plus
 `scripts/check-desktop-bundle.sh`. The summary helpers have an offline test,
 `.github/scripts/release-summary.test.sh`, which CI runs beside
 `make shell-lint`. `scripts/check-version-change.sh` has one too,
-`make check-version-change-test`, which runs it against throwaway workspaces
-holding no Tauri crate: it reads the version through `coffret-desktop-core`.
+`make check-version-change-test`, which runs it against throwaway workspaces:
+it reads the version through `coffret-desktop-core`.
 
 No workflow here uses a third-party action to make the tag, the Release or
 the bundles: they are made with the `gh` CLI and electron-builder, a pinned

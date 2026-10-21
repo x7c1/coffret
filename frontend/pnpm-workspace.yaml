@@ -3,9 +3,10 @@ packages:
 allowBuilds:
   # The desktop app's runtime (packages/apps/desktop). The version pinned has
   # no install script and fetches its binary the first time it is run; one
-  # that fetches it at install again is allowed to. CI's jobs (ci.yml) never
-  # run Electron, and set ELECTRON_SKIP_BINARY_DOWNLOAD for that download; the
-  # Bundle workflow (bundle.yml), which packages it, does not.
+  # that fetches it at install again is allowed to. CI's jobs (ci.yml) other
+  # than `e2e` never run Electron, and set ELECTRON_SKIP_BINARY_DOWNLOAD for
+  # that download; the `e2e` job, which runs the desktop app's journey, and the
+  # Bundle workflow (bundle.yml), which packages it, do not.
   electron: true
   # electron-builder's dependency for Windows installers, which nothing here
   # builds: its install script is not run.

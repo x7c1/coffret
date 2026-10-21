@@ -122,7 +122,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      # Unlike ci.yml, with Electron's binary: electron-builder packages it.
+      # Unlike most of ci.yml's jobs, with Electron's binary: electron-builder packages it.
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
         working-directory: frontend
