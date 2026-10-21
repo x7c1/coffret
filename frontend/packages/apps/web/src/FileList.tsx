@@ -13,9 +13,11 @@ import type {
   Fill,
   Freeze,
   ListedFile,
+  ListedFolder,
   Listing,
 } from '@coffret/api';
 
+import { AWAITING, NEW_FOLDER } from './awaiting';
 import { Banner, DropBanner, dropOutline } from './Banner';
 import { deleteOffered, DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
@@ -35,6 +37,7 @@ import {
   toggled,
   type Selection,
 } from './selection';
+import { inLibraryOrder } from './stranded';
 import { COLOR } from './theme';
 import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
 
@@ -84,9 +87,19 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * drop holding a folder whether it goes as a Pack or its files one by one —
  * and that confirmation is the screen's, after this list has handed the files
  * over. A row of the folder tree takes a drop the same way, for its own folder.
+ *
+ * Beside the Library's folders the list draws the ones it does not hold yet
+ * (see [`awaiting`](./awaiting)): a path prepared with "New folder…", and a
+ * top-level folder this device maps with nothing under it. Each is marked as
+ * such, opens like any folder, and takes a drop like any folder, and once
+ * files land in it and a run carries them in it is an ordinary row. "New
+ * folder…" is on the menu of every folder row a mapping of this device
+ * reaches, since a drop anywhere else would be refused.
  */
 export function FileList({
   listing,
+  awaiting,
+  awaitingHere,
   fill,
   freeze,
   stranded,
@@ -102,8 +115,20 @@ export function FileList({
   onMap,
   onPack,
   onDelete,
+  onNewFolder,
 }: {
   listing: Listing;
+  /**
+   * The folders directly in this one that the Library does not hold yet, drawn
+   * as rows among its own (see [`awaitingIn`](./awaiting)).
+   */
+  awaiting: readonly ListedFolder[];
+  /**
+   * Whether this folder is one of those: a path prepared here, or a mapped
+   * top-level folder with nothing under it. Its listing says the Library
+   * holds nothing at it, which is true and is not "nothing at this path".
+   */
+  awaitingHere: boolean;
   /**
    * The fill the rows are to read: what the server is bringing over, wherever
    * it is bringing it, or a stopped one a later run took the record from.
@@ -205,6 +230,11 @@ export function FileList({
    * take out, so it has no menu item and no box to pick it with.
    */
   onDelete: (target: DeleteTarget) => void;
+  /**
+   * "New folder…" was chosen from a folder row's menu: ask for a name, and
+   * prepare a path of that name inside the row's folder.
+   */
+  onNewFolder: (parent: string) => void;
 }) {
   // Whether files are being dragged over the list right now (see
   // [`useDragOver`](./dragOver)).
@@ -253,14 +283,27 @@ export function FileList({
     setCursor(selected === null ? null : fileKey(selected));
   }, [listing.path, selected]);
   const root = listing.path === '';
-  const empty = listing.folders.length === 0 && listing.files.length === 0;
+  // The Library's folders and the ones it does not hold yet, in the one order
+  // every device agrees on, so that a folder stays where it is drawn when its
+  // first Entry commits.
+  const awaitingPaths = new Set(awaiting.map((folder) => folder.path));
+  const folders =
+    awaiting.length === 0
+      ? listing.folders
+      : [...listing.folders, ...awaiting].sort((left, right) =>
+          inLibraryOrder(left.path, right.path),
+        );
+  const empty = folders.length === 0 && listing.files.length === 0;
   // A path the Library names nothing at, as far as what is on hand goes. A
   // folder of the Library is what the separators under it imply, so `held` being
   // false means nothing is under this one — and the folder of a book whose
   // freeze has not committed is the one place that is a state rather than a
   // mistake, since its pages are on the disk and the Library has not heard of
   // it yet.
-  const unheld = !listing.held && !stranded;
+  //
+  // A folder the Library does not hold yet is the other: prepared here, or
+  // mapped on this device with nothing under it, and a place to drop into.
+  const unheld = !listing.held && !stranded && !awaitingHere;
   // And the same thing said out loud, which waits for the one answer that can
   // still overturn it. A stranded folder is read off the folder tree, a separate
   // request from this listing, so until it lands `stranded` is false even for a
@@ -270,11 +313,13 @@ export function FileList({
   // where that request failed — the screen is already showing the tree's own
   // trouble, and a fact this page could not confirm is not one to assert.
   const nowhere = unheld && strandedKnown;
-  // A Library root with no mapping of its own and no files sitting in it is the
-  // ordinary shape of a device that mapped one top-level folder, and there is
-  // nothing on this screen for a banner to explain: no row here is inert,
-  // because the rows are folders and the folders say for themselves. Anywhere
-  // else — and at a root that does hold files — unmapped is worth saying.
+  // A Library root with no mapping of its own, no files sitting in it and
+  // folders below it is the ordinary shape of a device that mapped one
+  // top-level folder, and there is nothing on this screen for a banner to
+  // explain: no row here is inert, because the rows are folders and the
+  // folders say for themselves. Anywhere else — at a root that does hold
+  // files, and at the root of a Library with nothing in it at all, which a
+  // mapping is the one way to start — unmapped is worth saying.
   //
   // Except where there is no such folder. A mistyped path is unmapped as often
   // as not, and being offered to map it would have somebody choose a folder on
@@ -283,7 +328,7 @@ export function FileList({
   // while the tree is still out: neither sentence about a path is worth saying
   // early, and this is the one that would send somebody somewhere.
   const sayUnmapped =
-    !listing.mapped && !unheld && !(root && listing.files.length === 0);
+    !listing.mapped && !unheld && !(root && listing.files.length === 0 && folders.length > 0);
   // What is happening to this folder, said over the rows because it is true of
   // every one of them: the pages are going up together, as Packs, and until the
   // batch commits none of them is an Entry.
@@ -320,7 +365,7 @@ export function FileList({
         : () => onUnsupported(file);
   // Every row in the order it is drawn, which is what the arrow keys walk.
   const rows: ListRow[] = [
-    ...listing.folders.map((folder) => ({
+    ...folders.map((folder) => ({
       key: folderKey(folder.path),
       open: () => onOpenFolder(folder.path),
     })),
@@ -456,7 +501,7 @@ export function FileList({
             root={root}
             path={listing.path}
             files={listing.files.length > 0}
-            folders={listing.folders.length > 0}
+            folders={folders.length > 0}
             onMap={onMap}
           />
         )}
@@ -543,21 +588,29 @@ export function FileList({
               it is still out this falls back to the milder of the two. */}
           {nowhere
             ? NOTHING_AT_THIS_PATH
-            : root
-              ? 'this Library is empty'
-              : 'this folder is empty'}
+            : awaitingHere
+              ? AWAITING
+              : root
+                ? // Mapped, it is where a Library just made is started, and
+                  // nothing else on the screen says how.
+                  listing.mapped
+                  ? EMPTY_MAPPED_ROOT
+                  : 'this Library is empty'
+                : 'this folder is empty'}
         </p>
       ) : (
         <table style={TABLE}>
           <Columns picking={picking} />
           <tbody>
-            {listing.folders.map((folder) => {
+            {folders.map((folder) => {
               const key = folderKey(folder.path);
+              const waiting = awaitingPaths.has(folder.path);
               return (
                 <Row
                   key={key}
                   icon={<FolderIcon />}
                   name={folder.name}
+                  note={waiting ? AWAITING : undefined}
                   selected={cursor === key}
                   onSelect={() => setCursor(key)}
                   onOpen={() => onOpenFolder(folder.path)}
@@ -573,10 +626,20 @@ export function FileList({
                   <MenuCell
                     name={folder.name}
                     items={[
-                      {
-                        label: DELETE,
-                        onPress: () => askToDelete({ folder: folder.path, paths: [] }),
-                      },
+                      // Where a drop into it would be taken, and nowhere else.
+                      ...(folder.mapped
+                        ? [{ label: NEW_FOLDER, onPress: () => onNewFolder(folder.path) }]
+                        : []),
+                      // Not on a folder the Library does not hold: there is
+                      // nothing of it to take out.
+                      ...(waiting
+                        ? []
+                        : [
+                            {
+                              label: DELETE,
+                              onPress: () => askToDelete({ folder: folder.path, paths: [] }),
+                            },
+                          ]),
                     ]}
                   />
                 </Row>
@@ -688,9 +751,19 @@ interface ListRow {
 export const SELECT = 'Select';
 export const END_SELECT = 'Done';
 
+/**
+ * What the Library root says when it holds nothing and a mapping of this
+ * device reaches it: the two ways to put the first files in, since nothing
+ * else on the screen offers them.
+ */
+export const EMPTY_MAPPED_ROOT =
+  'this Library is empty — drop files here to add them, or choose “New folder…” ' +
+  'from the “⋮” of Library in the folder tree to prepare where they go';
+
 function Row({
   icon,
   name,
+  note,
   dim,
   selected,
   onSelect,
@@ -702,6 +775,8 @@ function Row({
   /** The mark beside the name, and `null` for a row that has none. */
   icon: ReactNode;
   name: string;
+  /** What is said after the name, in the name's cell, where there is something. */
+  note?: string;
   dim?: boolean;
   /** Whether the row is drawn selected: the one a click chose, or one picked out. */
   selected: boolean;
@@ -801,7 +876,10 @@ function Row({
         </td>
       )}
       <td style={{ ...CELL, ...MARK }}>{icon}</td>
-      <td style={{ ...CELL, color: dim === true ? COLOR.dim : COLOR.text }}>{name}</td>
+      <td style={{ ...CELL, color: dim === true ? COLOR.dim : COLOR.text }}>
+        {name}
+        {note !== undefined && <span style={NOTE}>{note}</span>}
+      </td>
       {children}
     </tr>
   );
@@ -951,6 +1029,11 @@ function Packing() {
  * `books` that has to be given a folder on this device, and the button says so
  * wherever it is not the folder on the screen.
  *
+ * A root with nothing in it at all — a Library just made, before anything is
+ * mapped — is said as that: mapping the root is how such a Library is started
+ * from here, and the sentence about files sitting in it would be about files
+ * that are not there.
+ *
  * The button opens the picker that chooses that folder (see
  * [`mapping`](./mapping)), and a mapping recorded there reloads this listing,
  * which is what takes the banner away.
@@ -979,7 +1062,13 @@ function Unmapped({
   );
   return (
     <Banner tone={COLOR.warn} background={COLOR.warnGround}>
-      {root ? (
+      {root && !files && !folders ? (
+        <>
+          this Library holds nothing yet, and nothing on this device is mapped to its
+          root — map a folder here to start putting files in it
+          {button(null, MAP_THE_ROOT)}
+        </>
+      ) : root ? (
         <>
           the Library root is not mapped on this device — files sitting directly in it
           cannot be fetched, though a folder below can be mapped on its own
@@ -1067,6 +1156,9 @@ const MARK: CSSProperties = {
   textAlign: 'center',
   textOverflow: 'clip',
 };
+
+/** What a row says after its name: the mark of a folder the Library does not hold yet. */
+const NOTE: CSSProperties = { marginLeft: 10, color: COLOR.added, fontSize: 11 };
 
 /** The column the boxes stand in. */
 const PICK: CSSProperties = { width: 32, textAlign: 'center' };

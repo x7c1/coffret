@@ -98,6 +98,7 @@ describe('namedBy', () => {
     folders: [{ name: 'Vol 1', path: 'comics/Foo/Vol 1', mapped: true }],
     files: [],
     folders_on_disk: [],
+    empty_mapped_prefixes: [],
   };
 
   it('reads the tree where it has answered', () => {

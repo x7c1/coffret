@@ -94,6 +94,25 @@ can be stored whether or not the reader supports it (spec: FM-9). The
 serves this surface in a window of its own, and has a separate window of its
 own for entering the Passphrase.
 
+The explorer lists the folders of the Library, and beside them two kinds of
+folder the Library does not hold, each marked as not in the Library yet and
+each a place a drop can land:
+
+- An **empty mapped prefix**: a top-level component this device maps that no
+  Entry stands under yet. The root's listing names it apart from the
+  Library's folders, and only this device's mappings are read for it.
+- A **prepared path**: a path a person named with "New folder…" inside a
+  folder a mapping of this device reaches, so that a drop can be let go over
+  it — a series too long for one drop goes in a few volumes at a time under
+  one parent. The explorer's page holds it and nothing else does: nothing is
+  sent to the server for it, nothing is made on disk, and a reload forgets
+  it.
+
+Either becomes an ordinary folder of the Library once an Entry under it is
+committed. A Library with nothing in it and nothing mapped is started from the
+explorer by mapping the root from the banner over it; there is no explorer
+control for a sync, since a drop starts one.
+
 ## Examples
 
 - A family photo collection: `albums/2024-summer/IMG_0001.jpg`, …
@@ -323,7 +342,10 @@ own for entering the Passphrase.
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
     by name only, apart from the Library's folders, so a page can tell a name
-    already taken by files on disk from one nothing stands at.
+    already taken by files on disk from one nothing stands at — and a path is
+    never prepared over one. Nor is an empty mapped prefix or a prepared path
+    (see [Browsing surface](#browsing-surface)) a folder of the Library until
+    an Entry under it is committed.
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**: the check establishes whether the root is there to be

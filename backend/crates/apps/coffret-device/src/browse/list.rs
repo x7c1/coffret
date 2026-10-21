@@ -44,7 +44,17 @@ impl OpenLibrary {
             .into_iter()
             .map(|container| (container.id, container.kind))
             .collect();
-        let reach = Reach::of(self.index.mappings().await?);
+        let mappings = self.index.mappings().await?;
+        // The top-level folders this device maps, which the root's listing
+        // names apart from its folders where nothing is under one yet.
+        let prefixes: BTreeSet<EntryPath> = match folder {
+            None => mappings
+                .iter()
+                .filter_map(|mapping| mapping.prefix.clone())
+                .collect(),
+            Some(_) => BTreeSet::new(),
+        };
+        let reach = Reach::of(mappings);
 
         let mut folders = Vec::new();
         let mut named: BTreeSet<EntryPath> = BTreeSet::new();
@@ -87,12 +97,21 @@ impl OpenLibrary {
             }
         }
 
+        // A mapped top-level folder that holds no Entry is not a folder of the
+        // Library (spec: EP-2), and it is still where this device has room for
+        // one: the explorer offers it as a place to drop into.
+        let empty_mapped_prefixes: Vec<EntryPath> = prefixes
+            .into_iter()
+            .filter(|prefix| !named.contains(prefix))
+            .collect();
+
         debug!(
             operation = "list",
             library = %self.library_id,
             entries = entries.len(),
             folders = folders.len(),
             files = files.len(),
+            empty_mapped_prefixes = empty_mapped_prefixes.len(),
             "listed one folder of the Library",
         );
         Ok(FolderListing {
@@ -107,6 +126,7 @@ impl OpenLibrary {
             path: folder.cloned(),
             folders,
             files,
+            empty_mapped_prefixes,
         })
     }
 }

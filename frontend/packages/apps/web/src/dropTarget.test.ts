@@ -46,6 +46,7 @@ function root(mapped: boolean): Listing {
     ],
     files: [],
     folders_on_disk: [],
+    empty_mapped_prefixes: [],
   };
 }
 
@@ -60,6 +61,11 @@ it('reads whether a tree row is mapped off the listing of the root', () => {
   // and otherwise is not known from here.
   expect(mappedAt('stranded/vol-1', root(true))).toBe(true);
   expect(mappedAt('stranded/vol-1', root(false))).toBeNull();
+  // A top-level folder this device maps with nothing under it is reached,
+  // whether the root is or not.
+  const empty = { ...root(false), empty_mapped_prefixes: ['comics'] };
+  expect(mappedAt('comics', empty)).toBe(true);
+  expect(mappedAt('comics/Series', empty)).toBe(true);
   // Nothing is known before the root has been listed.
   expect(mappedAt('albums', null)).toBeNull();
 });

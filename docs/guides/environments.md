@@ -67,6 +67,15 @@ A Library under the development state directory is made the way any Library
 is, through `make cli ARGS="init …"` or `make cli ARGS="join …"`;
 `make cli ARGS="--help"` lists the commands.
 
+A Library just made can then be started from the explorer, with no `map` or
+`sync` at the command line: the empty root offers to map a folder of this
+device to it, "New folder…" on a folder's "⋮" (the tree's "Library" row among
+them) prepares the path a drop is to land under — held by the page alone until
+something is dropped there, and forgotten on a reload — and a drop starts the
+sync that carries the files in. A top-level folder mapped with `map --prefix`
+and nothing in it yet is listed at the root, marked as not in the Library yet,
+to drop into the same way.
+
 `make rename-smoke LIBRARY=<name>` checks that the build in the checkout
 renames correctly against such a Library on its real Storage, a development
 Library on Drive, say, which CI cannot reach. It needs the Library's

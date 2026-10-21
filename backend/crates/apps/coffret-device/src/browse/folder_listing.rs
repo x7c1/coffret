@@ -48,4 +48,15 @@ pub struct FolderListing {
     pub folders: Vec<ChildFolder>,
     /// The files directly inside it.
     pub files: Vec<FileRow>,
+    /// The top-level folders a mapping of this device stands for that the
+    /// Library holds no Entry under yet, in EP-3 order; empty for every
+    /// listing but the root's.
+    ///
+    /// Not among [`folders`](Self::folders): a folder exists only where a
+    /// current Entry stands under it (spec: EP-2), so a mapping made before
+    /// anything was put in it names no folder of the Library. It is named here
+    /// because it is still somewhere this device can put files, and a page
+    /// that offers a place to drop them into has to know it is there. Only
+    /// this device's mappings are read, so another device's never appear.
+    pub empty_mapped_prefixes: Vec<EntryPath>,
 }

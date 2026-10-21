@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NO_FOLDER_HERE } from '@coffret/api';
 
+import { AWAITING } from './awaiting';
 import type { Drop } from './drop';
 import { TAKEN } from './dropTarget';
 import { FileList } from './FileList';
@@ -13,7 +14,6 @@ function dropsOf(mapped: (folder: string) => boolean | null = () => true) {
   return {
     mapped,
     freezing: false,
-    onArrive: vi.fn(),
     onAdd: vi.fn(),
     onCollecting: vi.fn(),
     onUnreadable: vi.fn(),
@@ -34,9 +34,11 @@ function drawAt(current: string) {
     <FolderTree
       folders={['albums', 'albums/2026', 'albums/2026/08', 'books']}
       stranded={[]}
+      awaiting={[]}
       current={current}
       onOpen={() => undefined}
       onDelete={() => undefined}
+      onNewFolder={() => undefined}
       drops={dropsOf()}
     />
   );
@@ -66,21 +68,41 @@ it('scrolls the current folder into view, and moves with it', () => {
 });
 
 /** The tree over `folders`, with what its book menus and its drops hand over recorded. */
-function mount(folders: string[], stranded: string[] = [], drops = dropsOf()) {
+function mount(
+  folders: string[],
+  stranded: string[] = [],
+  drops = dropsOf(),
+  awaiting: string[] = [],
+) {
   Element.prototype.scrollIntoView = () => undefined;
   const onDelete = vi.fn();
   const onOpen = vi.fn();
+  const onNewFolder = vi.fn();
   const { container } = render(
     <FolderTree
       folders={folders}
       stranded={stranded}
+      awaiting={awaiting}
       current="albums"
       onOpen={onOpen}
       onDelete={onDelete}
+      onNewFolder={onNewFolder}
       drops={drops}
     />,
   );
-  return { container, onDelete, onOpen, drops };
+  return { container, onDelete, onOpen, onNewFolder, drops };
+}
+
+/** The labels of the items a row's "⋮" offers, opening it to read them. */
+function menuOf(name: string): string[] {
+  const mark = screen.queryByLabelText(`actions for ${name}`);
+  if (mark === null) {
+    return [];
+  }
+  fireEvent.click(mark);
+  const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+  fireEvent.click(mark);
+  return items;
 }
 
 // The placeholder marks are gone: no mark on the root, and none on a folder
@@ -124,7 +146,10 @@ it('offers to delete a book from its row, as the file list does', () => {
         folders: [{ name: '2026', path: 'albums/2026', mapped: true }],
         files: [],
         folders_on_disk: [],
+        empty_mapped_prefixes: [],
       }}
+      awaiting={[]}
+      awaitingHere={false}
       fill={null}
       freeze={null}
       stranded={false}
@@ -140,29 +165,66 @@ it('offers to delete a book from its row, as the file list does', () => {
       onMap={() => undefined}
       onPack={() => undefined}
       onDelete={fromList}
+      onNewFolder={() => undefined}
     />,
   );
   fireEvent.click(screen.getByLabelText('actions for 2026'));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
   expect(fromList.mock.calls).toEqual(onDelete.mock.calls);
   cleanup();
-  mount(['albums', 'albums/2026', 'books', 'made'], ['made']);
+  // Where no mapping reaches, a row offers nothing but what the Library has.
+  mount(['albums', 'albums/2026', 'books', 'made'], ['made'], dropsOf(() => false));
 
-  expect(screen.getByLabelText('actions for books')).toBeTruthy();
+  expect(menuOf('books')).toEqual(['Delete…']);
   expect(screen.queryByLabelText('actions for albums')).toBeNull();
   expect(screen.queryByLabelText('actions for Library')).toBeNull();
   expect(screen.getByTitle('made')).toBeTruthy();
   expect(screen.queryByLabelText('actions for made')).toBeNull();
 });
 
-// A folder comes to be by a drop, which says where it lands: there is no
-// control for making one on the screen alone.
-it('offers no way to make a folder on the screen alone', () => {
-  const { container } = mount(['albums', 'books']);
-  expect(container.textContent).not.toContain('new folder');
-  expect(screen.queryAllByRole('button').map((button) => button.textContent)).not.toContainEqual(
-    expect.stringContaining('new folder'),
-  );
+// "New folder…" prepares a path a drop is to land under, so it is offered where
+// a mapping of this device reaches the folder — the root's row among them — and
+// nowhere a drop would be refused or might be.
+describe('"New folder…" on a row of the tree', () => {
+  it('is offered on every row a mapping reaches, the root’s included', () => {
+    const { onNewFolder } = mount(['albums', 'albums/2026', 'books']);
+    expect(menuOf('Library')).toEqual(['New folder…']);
+    expect(menuOf('albums')).toEqual(['New folder…']);
+    expect(menuOf('books')).toEqual(['New folder…', 'Delete…']);
+
+    fireEvent.click(screen.getByLabelText('actions for 2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+    expect(onNewFolder).toHaveBeenCalledWith('albums/2026');
+    fireEvent.click(screen.getByLabelText('actions for Library'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+    expect(onNewFolder).toHaveBeenLastCalledWith('');
+  });
+
+  it('is not offered where no mapping reaches the folder, or where that is not known', () => {
+    mount(['albums', 'books'], [], dropsOf((folder) => (folder === '' ? false : folder === 'albums')));
+    expect(menuOf('Library')).toEqual([]);
+    expect(menuOf('albums')).toEqual(['New folder…', 'Delete…']);
+    expect(menuOf('books')).toEqual(['Delete…']);
+    cleanup();
+
+    mount(['albums'], [], dropsOf(() => null));
+    expect(menuOf('Library')).toEqual([]);
+    expect(menuOf('albums')).toEqual(['Delete…']);
+  });
+});
+
+// A folder the Library does not hold yet is drawn with its mark, offers to
+// prepare a path inside it, and has nothing to delete.
+it('marks a folder the Library does not hold yet, and offers no deletion of it', () => {
+  mount(['albums', 'comics', 'comics/Series'], [], dropsOf(), ['comics', 'comics/Series']);
+  fireEvent.click(screen.getByLabelText('expand comics'));
+  const marks = screen.getAllByTitle(AWAITING);
+  expect(marks).toHaveLength(2);
+  expect(marks[0].textContent).toBe('not in Library');
+  expect(menuOf('comics')).toEqual(['New folder…']);
+  expect(menuOf('Series')).toEqual(['New folder…']);
+  // The Library's own folder is drawn as it was.
+  expect(screen.getByTitle('albums').parentElement?.textContent).not.toContain('not in Library');
 });
 
 // The folder of a book whose freeze has not committed is drawn, though the
@@ -207,15 +269,13 @@ const carryingFiles = { dataTransfer: { types: ['Files'] } };
 describe('a drop onto a row of the tree', () => {
   // The same line and the same outline the list gives a drag over it.
   it('says what letting go will do while files are dragged over the row', () => {
-    const { drops } = mount(['albums', 'albums/2026', 'books']);
+    mount(['albums', 'albums/2026', 'books']);
     const row = dropTargetOf('2026');
     expect(row.textContent).not.toContain('drop to');
 
     fireEvent.dragEnter(row, carryingFiles);
     expect(row.textContent).toContain(TAKEN);
     expect((row as HTMLElement).style.outline).toContain('dashed');
-    // The moment a drag arrives is the moment to learn which folders are mapped.
-    expect(drops.onArrive).toHaveBeenCalled();
     // Only the row under the pointer says it.
     expect(dropTargetOf('books').textContent).not.toContain('drop to');
 

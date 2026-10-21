@@ -496,6 +496,34 @@ async fn a_listing_says_whether_this_device_has_a_folder_for_it() {
     );
 }
 
+// EP-2, EP-9: a top-level folder this device maps with no Entry under it is no
+// folder of the Library, and the root's listing names it apart from the
+// folders, so a page can offer it as a place to drop into. One that holds an
+// Entry is an ordinary folder and is not named twice.
+#[tokio::test]
+async fn the_root_names_the_mapped_top_level_folders_nothing_is_under() {
+    let library = library(&[(1, ContainerKind::Pack, &["albums/cover.png"])]).await;
+    map(&library, Some("albums")).await;
+    map(&library, Some("comics")).await;
+
+    let root = library.list(None).await.expect("the catalog answers");
+    assert_eq!(
+        root.folders
+            .iter()
+            .map(|folder| folder.name.as_str())
+            .collect::<Vec<_>>(),
+        ["albums"],
+    );
+    assert_eq!(root.empty_mapped_prefixes, [entry_path("comics")]);
+
+    // Only the root's listing names them: a mapping is made at the top level.
+    let albums = library
+        .list(Some(&entry_path("albums")))
+        .await
+        .expect("the catalog answers");
+    assert!(albums.empty_mapped_prefixes.is_empty());
+}
+
 // EP-9: a mapping at the Library root represents everything the top-level ones
 // do not, so with one present nothing is out of reach.
 #[tokio::test]

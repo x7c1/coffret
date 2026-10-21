@@ -22,6 +22,7 @@ import {
   type ReconnectState,
 } from '@coffret/api';
 
+import { awaitingFolders, awaitingIn, prepare, preparedAfter } from './awaiting';
 import { DeleteConfirm } from './DeleteConfirm';
 import {
   askToDelete,
@@ -42,6 +43,7 @@ import { FolderTree, type TreeDrops } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
+import { NewFolderDialog } from './NewFolderDialog';
 import {
   chooseAndAdd,
   heldUnder,
@@ -82,7 +84,9 @@ import { said, useAsked } from './useAsked';
  * A Library has no folders to make — a folder is the separators in the Entry
  * Paths under it (spec: EP-2) — so a folder comes to be by a drop: onto the
  * list or a row of the tree, confirmed with the full path it lands under
- * before anything is sent.
+ * before anything is sent. "New folder…" prepares the path a drop is to land
+ * under, held by this page alone and drawn as not in the Library yet until
+ * one does (see [`awaiting`](./awaiting)).
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -582,28 +586,103 @@ export function App() {
     }
   }, [naming, known]);
 
-  const drawn = useMemo(
-    () => (known === null ? [] : foldersWith(known, stranded)),
-    [known, stranded],
-  );
-
-  // Which folders a mapping of this device reaches, for a drag over a row of
-  // the tree: the root's listing says it for every one (see
-  // [`mappedAt`](./dropTarget)). The list's own listing where the screen is at
-  // the root; otherwise asked for once a drag first comes over the tree, since
-  // nothing else needs it and a page that is only read should not pay for it.
-  const [rootWanted, setRootWanted] = useState(false);
+  // Which folders a mapping of this device reaches, for the tree's rows — what
+  // a drag over one is told, and whether its menu offers "New folder…" — and
+  // which top-level folders it maps with nothing under them yet: the root's
+  // listing says both (see [`mappedAt`](./dropTarget)). The list's own listing
+  // where the screen is at the root, and asked for on its own everywhere else,
+  // since the tree is on the screen wherever the list is.
+  const atRoot = view.folder === '';
   const rootListing = useAsked<Listing | null>(
-    (signal) => (rootWanted ? getListing('', signal) : Promise.resolve(null)),
-    rootWanted ? 'root-mapping' : 'root-mapping:unasked',
+    (signal) => (atRoot ? Promise.resolve(null) : getListing('', signal)),
+    atRoot ? 'root-mapping:listed' : 'root-mapping',
   );
   const reloadRoot = rootListing.reload;
   const rootKnown: Listing | null =
-    view.folder === '' && listing.state.status === 'ready'
+    atRoot && listing.state.status === 'ready'
       ? listing.state.value
       : rootListing.state.status === 'ready'
         ? rootListing.state.value
         : null;
+
+  // The paths prepared with "New folder…" (see [`awaiting`](./awaiting)), each
+  // let go of the moment the Library names it — the tree's answer, or a
+  // listing's.
+  const [prepared, setPrepared] = useState<readonly string[]>([]);
+  useEffect(() => {
+    if (known !== null) {
+      setPrepared((held) => preparedAfter(held, (path) => known.includes(path)));
+    }
+  }, [known]);
+  // The folder on the screen, as its listing last answered.
+  const listed = listing.state.status === 'ready' ? listing.state.value : null;
+  useEffect(() => {
+    if (listed !== null) {
+      setPrepared((held) =>
+        preparedAfter(
+          held,
+          (path) =>
+            listed.folders.some((folder) => folder.path === path) ||
+            (listed.held && listed.path === path),
+        ),
+      );
+    }
+  }, [listed]);
+  // Every folder drawn as not in the Library yet (see
+  // [`awaitingFolders`](./awaiting)).
+  const awaiting = useMemo(
+    () => awaitingFolders(prepared, rootKnown, known),
+    [prepared, rootKnown, known],
+  );
+
+  const drawn = useMemo(
+    () => (known === null ? [] : foldersWith(known, [...new Set([...stranded, ...awaiting])])),
+    [known, stranded, awaiting],
+  );
+
+  // "New folder…": the name asked for in a dialog over the folder chosen, and
+  // judged before anything is drawn (see [`prepare`](./awaiting)). `null`
+  // while nothing is being asked.
+  const [namingIn, setNamingIn] = useState<string | null>(null);
+  // Counts each time the dialog is opened or closed, so that a name still being
+  // judged when the dialog was let go of — Cancel or Escape while the parent's
+  // listing is out — prepares nothing, as the dialog says it will not.
+  const namings = useRef(0);
+  const openNaming = useCallback((parent: string) => {
+    namings.current += 1;
+    setNamingIn(parent);
+  }, []);
+  const closeNaming = useCallback(() => {
+    namings.current += 1;
+    setNamingIn(null);
+  }, []);
+  const prepareNamed = useCallback(
+    async (typed: string): Promise<string | null> => {
+      if (namingIn === null) {
+        return null;
+      }
+      const asked = namings.current;
+      const answer = await prepare({
+        parent: namingIn,
+        typed,
+        awaiting,
+        list: (path) =>
+          listed !== null && listed.path === path
+            ? Promise.resolve(listed)
+            : getListing(path),
+      });
+      if (namings.current !== asked) {
+        return null;
+      }
+      if ('refused' in answer) {
+        return answer.refused;
+      }
+      setPrepared((held) => (held.includes(answer.path) ? held : [...held, answer.path]));
+      closeNaming();
+      return null;
+    },
+    [namingIn, awaiting, listed, closeNaming],
+  );
 
   // Mapping one: the banner over a folder this device does not have opens the
   // picker for the top-level folder it names, or for the Library root, and a
@@ -834,7 +913,6 @@ export function App() {
   // answered without one — refused for its budgets, let go over a folder no
   // mapping reaches, or where it lands could not be read — after the reason
   // nothing was added.
-  const landing = listing.state.status === 'ready' ? listing.state.value : null;
   const add = useCallback(
     (target: string, { files, notTaken }: Drop) => {
       const notAdded = (line: string) => setNotice(withNotTaken(line, notTaken));
@@ -869,7 +947,7 @@ export function App() {
           notAdded(
             unmappedLine(
               'add',
-              where.held || stranded.includes(target),
+              where.held || stranded.includes(target) || awaiting.includes(target),
               where.folders.filter((folder) => folder.mapped).map((folder) => folder.name),
             ),
           );
@@ -900,12 +978,12 @@ export function App() {
         });
       };
       const where =
-        landing !== null && landing.path === target ? Promise.resolve(landing) : getListing(target);
+        listed !== null && listed.path === target ? Promise.resolve(listed) : getListing(target);
       const unread = (refused: unknown) =>
         notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
       void where.then(confirm, unread).finally(() => setAdding(null));
     },
-    [landing, known, stranded, askAboutDrop, work, reloadListing, libraryName],
+    [listed, known, stranded, awaiting, askAboutDrop, work, reloadListing, libraryName],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -936,7 +1014,6 @@ export function App() {
     () => ({
       mapped: (folder) => mappedAt(folder, rootKnown),
       freezing: freezingNow,
-      onArrive: () => setRootWanted(true),
       onAdd: add,
       onCollecting: collecting,
       onUnreadable: unreadable,
@@ -1007,7 +1084,6 @@ export function App() {
     work.catalog?.state === 'behind' &&
     ranOut(work.catalog.stopped);
 
-  const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
   const openAt = view.open === null ? null : pageAt(pages, view.open);
 
@@ -1068,9 +1144,11 @@ export function App() {
               <FolderTree
                 folders={drawn}
                 stranded={stranded}
+                awaiting={awaiting}
                 current={view.folder}
                 onOpen={(chosen) => go({ folder: chosen, open: null })}
                 onDelete={deleteEntries}
+                onNewFolder={openNaming}
                 drops={treeDrops}
               />
             )}
@@ -1144,6 +1222,8 @@ export function App() {
             {(shown) => (
               <FileList
                 listing={shown}
+                awaiting={awaitingIn(shown, awaiting)}
+                awaitingHere={awaiting.includes(shown.path)}
                 fill={rowsFill}
                 freeze={freeze}
                 stranded={strandedHere}
@@ -1189,6 +1269,7 @@ export function App() {
                 onMap={(prefix) => setMapping({ prefix })}
                 onPack={packFolder}
                 onDelete={deleteEntries}
+                onNewFolder={openNaming}
               />
             )}
           </Region>
@@ -1208,6 +1289,9 @@ export function App() {
       </div>
       {mapping !== null && (
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
+      )}
+      {namingIn !== null && (
+        <NewFolderDialog parent={namingIn} onPrepare={prepareNamed} onClose={closeNaming} />
       )}
       {asking !== null && (
         <DropConfirm
