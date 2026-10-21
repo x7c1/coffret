@@ -73,6 +73,6 @@ The Electron app (`frontend/packages/apps/desktop`, over the `coffret-napi` addo
 
 ### Before merge (verified outside the check command)
 
-- [ ] This PR's CI is green, including `cargo-deny` with the trimmed `deny.toml`, the `e2e` job running the new Electron journey under xvfb, and the Bundle workflow.
-- [ ] `make icons` regenerates the moved icon sets byte-identically, or with only the intended path changes, on macOS.
-- [ ] On macOS, the new Electron journey passes locally against the agent's MinIO.
+- [x] This PR's CI is green, including `cargo-deny` with the trimmed `deny.toml`, the `e2e` job running the new Electron journey under xvfb, and the Bundle workflow.
+- [x] `make icons` regenerates the moved icon sets byte-identically, or with only the intended path changes, on macOS.
+- [x] On macOS, the new Electron journey passes locally against the agent's MinIO.
