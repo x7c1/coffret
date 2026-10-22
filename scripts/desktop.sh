@@ -17,6 +17,11 @@
 #                                  Node-API addon and the app's code
 #   scripts/desktop.sh dev         run the app from the checkout, as the
 #                                  development app
+#   scripts/desktop.sh dev-sandbox-check
+#                                  run only the check `dev` makes on Linux
+#                                  before it starts the app (check_dev_sandbox),
+#                                  on any host; scripts/desktop-dev-sandbox-test.sh
+#                                  calls it
 #
 # The app runs the server in its own process through the Node-API addon
 # (coffret-napi, built by `make napi-addon` as backend/target/release/coffret.node
@@ -48,6 +53,30 @@
 # (check_loadable): Electron is loaded by the distribution's dynamic loader, so
 # the addon must be too. A compiler from a Nix profile, say, would make it ask
 # for libraries the host's loader does not find.
+#
+# On Linux `dev` also refuses to start where Chromium's sandbox could not start
+# (check_dev_sandbox). Ubuntu 24.04 and later set
+# kernel.apparmor_restrict_unprivileged_userns to 1, so only a program an
+# AppArmor profile allows may create the user namespaces the sandbox needs; the
+# installed app's profile names /opt/Coffret/coffret-desktop alone, and
+# Chromium would abort the development app with a message that points at a
+# setuid chrome-sandbox instead. Where the restriction holds, the check wants
+# the checkout's chrome-sandbox setuid root or a profile under /etc/apparmor.d/
+# whose attachment matches the checkout's Electron binary, and otherwise prints
+# the profile and the commands that install it, and stops. It never runs sudo
+# itself. These variables point it elsewhere, and exist only for its test:
+#
+#   COFFRET_USERNS_RESTRICT_FILE   the restriction's file, by default
+#                                  /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+#   COFFRET_APPARMOR_DIR           the profiles' directory, by default
+#                                  /etc/apparmor.d
+#   COFFRET_ELECTRON_BINARY        the Electron binary the development app
+#                                  runs, by default the one the desktop
+#                                  package's electron dependency resolves to
+#   COFFRET_SANDBOX_HELPER_OWNER   the user ID a setuid chrome-sandbox must
+#                                  belong to, by default 0 (root); the test
+#                                  sets its own, since it cannot make a file
+#                                  root's without root
 
 set -euo pipefail
 
@@ -62,7 +91,7 @@ readonly DEV_IDENTIFIER="io.github.x7c1.coffret.dev"
 readonly SYSTEM_CC="/usr/bin/cc"
 
 usage() {
-  echo "usage: scripts/desktop.sh build|install|dev-build|dev" >&2
+  echo "usage: scripts/desktop.sh build|install|dev-build|dev|dev-sandbox-check" >&2
   exit 2
 }
 
@@ -229,6 +258,190 @@ dev_build() {
   fi
 }
 
+# The Electron binary the development app runs: the electron package the
+# desktop package depends on, resolved through pnpm's symlink, and dist/electron
+# under it.
+dev_electron_binary() {
+  if [ -n "${COFFRET_ELECTRON_BINARY:-}" ]; then
+    echo "$COFFRET_ELECTRON_BINARY"
+    return
+  fi
+  local package
+  package="$(readlink -f "$APP_DIR/node_modules/electron")" ||
+    fail "cannot resolve $APP_DIR/node_modules/electron; run \`pnpm install\` in frontend/ first"
+  echo "$package/dist/electron"
+}
+
+# Whether $1, the helper next to the Electron binary, is setuid and belongs to
+# the user ID a setuid helper must belong to (root, unless the test says
+# otherwise). `find -user -perm` rather than `stat`, whose flags differ between
+# GNU and BSD.
+is_setuid_helper() {
+  local helper="$1" owner="${COFFRET_SANDBOX_HELPER_OWNER:-0}"
+  [ -f "$helper" ] || return 1
+  [ -n "$(find "$helper" -maxdepth 0 -user "$owner" -perm -4000 2>/dev/null)" ]
+}
+
+# The AppArmor glob $1 as an extended regular expression matching a whole path:
+# `**` any characters, `*` any characters within one path component, `?` one
+# character within it, `{a,b}` either alternative, `[...]` a character class, `\x`
+# the character x. A variable (`@{...}`) cannot be read without the tunables,
+# so a glob holding one prints nothing and fails.
+apparmor_glob_regex() {
+  local glob="$1" regex="" c i=0 depth=0 n
+  case "$glob" in *'@{'*) return 1 ;; esac
+  n="${#glob}"
+  while [ "$i" -lt "$n" ]; do
+    c="${glob:i:1}"
+    case "$c" in
+      '*')
+        if [ "${glob:i+1:1}" = '*' ]; then
+          regex+='.*'
+          i=$((i + 1))
+        else
+          regex+='[^/]*'
+        fi
+        ;;
+      '?') regex+='[^/]' ;;
+      '{')
+        regex+='('
+        depth=$((depth + 1))
+        ;;
+      '}')
+        [ "$depth" -gt 0 ] || return 1
+        regex+=')'
+        depth=$((depth - 1))
+        ;;
+      ',')
+        if [ "$depth" -gt 0 ]; then regex+='|'; else regex+=','; fi
+        ;;
+      '[')
+        local class="${glob:i}"
+        class="${class%%]*}"
+        [ "${#class}" -lt $((n - i)) ] || return 1
+        regex+="$class]"
+        i=$((i + ${#class}))
+        ;;
+      \\)
+        i=$((i + 1))
+        c="${glob:i:1}"
+        case "$c" in
+          [[:alnum:]/]) regex+="$c" ;;
+          *) regex+="\\$c" ;;
+        esac
+        ;;
+      [.+\(\)\|^\$]) regex+="\\$c" ;;
+      *) regex+="$c" ;;
+    esac
+    i=$((i + 1))
+  done
+  [ "$depth" -eq 0 ] || return 1
+  echo "^$regex\$"
+}
+
+# The attachments of the profiles in the files directly under $1, one per line:
+# the path of `profile <name> <path> ... {`, the name of `profile /path ... {`,
+# and the head of `/path ... {`. Read from the files' text, so it needs no root
+# and says nothing of whether a profile is loaded; a rule never ends with `{`,
+# so the lines that open a block are the ones looked at.
+apparmor_attachments() {
+  local dir="$1" file line rest token
+  local quoted='^"([^"]*)"[[:space:]]*(.*)$' bare='^([^[:space:]]+)[[:space:]]*(.*)$'
+  local files=()
+  for file in "$dir"/*; do
+    [ -f "$file" ] && files+=("$file")
+  done
+  [ "${#files[@]}" -gt 0 ] || return 0
+  grep -hsE '^[[:space:]]*(profile[[:space:]]|"?/).*\{[[:space:]]*$' "${files[@]}" |
+    while IFS= read -r line; do
+      line="${line#"${line%%[![:space:]]*}"}"
+      if [[ "$line" =~ ^profile[[:space:]]+(.*)$ ]]; then
+        rest="${BASH_REMATCH[1]}"
+        # The name, then the attachment if one follows it.
+        if [[ "$rest" =~ $quoted ]] || [[ "$rest" =~ $bare ]]; then
+          token="${BASH_REMATCH[1]}"
+          rest="${BASH_REMATCH[2]}"
+          if [[ "$rest" =~ $quoted ]] || [[ "$rest" =~ $bare ]]; then
+            case "${BASH_REMATCH[1]}" in
+              /*)
+                echo "${BASH_REMATCH[1]}"
+                continue
+                ;;
+            esac
+          fi
+          case "$token" in /*) echo "$token" ;; esac
+        fi
+      elif [[ "$line" =~ $quoted ]] || [[ "$line" =~ $bare ]]; then
+        echo "${BASH_REMATCH[1]}"
+      fi
+    done
+}
+
+# Whether a profile under $1 attaches to the binary $2.
+apparmor_attaches() {
+  local dir="$1" binary="$2" attachment regex
+  while IFS= read -r attachment; do
+    regex="$(apparmor_glob_regex "$attachment")" || continue
+    [[ "$binary" =~ $regex ]] && return 0
+  done < <(apparmor_attachments "$dir")
+  return 1
+}
+
+# Refuses to go on where Chromium's sandbox could not start in the development
+# app: where unprivileged user namespaces are restricted to what an AppArmor
+# profile allows, the checkout's chrome-sandbox is not setuid root, and no
+# profile attaches to the checkout's Electron binary. The refusal prints the
+# profile that lets the binary create user namespaces, for this checkout, and
+# the commands that install and load it, for the developer to run.
+check_dev_sandbox() {
+  local restrict="${COFFRET_USERNS_RESTRICT_FILE:-/proc/sys/kernel/apparmor_restrict_unprivileged_userns}"
+  local profiles="${COFFRET_APPARMOR_DIR:-/etc/apparmor.d}"
+  local electron attachment checkout name file
+  [ -f "$restrict" ] || return 0
+  [ "$(cat "$restrict")" = 1 ] || return 0
+  electron="$(dev_electron_binary)"
+  is_setuid_helper "$(dirname "$electron")/chrome-sandbox" && return 0
+  apparmor_attaches "$profiles" "$electron" && return 0
+
+  # Any version of Electron, so the profile outlives an upgrade.
+  attachment="$electron"
+  local versioned='^(.*/)electron@[^/]*(/.*)$'
+  if [[ "$electron" =~ $versioned ]]; then
+    attachment="${BASH_REMATCH[1]}electron@*${BASH_REMATCH[2]}"
+  fi
+  case "$attachment" in *[[:space:]]*) attachment="\"$attachment\"" ;; esac
+  checkout="${electron%%/frontend/node_modules/*}"
+  [ "$checkout" != "$electron" ] || checkout="$ROOT"
+  # A file of its own only where another checkout's already takes the name.
+  name="coffret-desktop-dev"
+  if [ -e "$profiles/$name" ]; then
+    name="coffret-desktop-dev-$(basename "$checkout" | tr -c 'A-Za-z0-9._\n-' '-')"
+    [ ! -e "$profiles/$name" ] ||
+      name="coffret-desktop-dev-$(cksum <<<"$checkout" | cut -d' ' -f1)"
+  fi
+  file="$profiles/$name"
+  cat >&2 <<MESSAGE
+error: the development app cannot start Chromium's sandbox: this system lets a program create user namespaces only where an AppArmor profile allows it ($restrict is 1), and no profile under $profiles/ allows $electron.
+
+An AppArmor profile like the installed app's, naming this checkout's Electron, lets it. Install and load it with:
+
+sudo tee $file >/dev/null <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile $name $attachment flags=(unconfined) {
+  userns,
+}
+PROFILE
+sudo apparmor_parser -r $file
+
+It confines nothing, and allows the binary to create user namespaces alone. It names any version of Electron, so it outlives an upgrade; another checkout or worktree needs a profile of its own, naming its path.
+
+Then run \`make desktop-dev\` again. Should Chromium still abort, asking for chrome-sandbox to be setuid root, the profile is not loaded: see what apparmor_parser said. docs/guides/environments.md, "The development app's sandbox on Linux", says more.
+MESSAGE
+  exit 1
+}
+
 # The app from the checkout, in the foreground until it quits. The Electron
 # package fetches its binary the first time it is run, so the first run needs
 # the network.
@@ -238,6 +451,7 @@ dev() {
   require_frontend_dependencies
   [ -f "$NAPI_ADDON" ] || fail "$NAPI_ADDON is not built; run make desktop-dev-build"
   [ -f "$APP_DIR/dist/main.js" ] || fail "the app's code is not built; run make desktop-dev-build"
+  [ "$(uname -s)" != Linux ] || check_dev_sandbox
   echo "Starting $DEV_IDENTIFIER over the Libraries under $COFFRET_STATE_DIR"
   # Run from the repository root, so that a relative COFFRET_STATE_DIR or
   # COFFRET_LOG_DIR means a directory under it.
@@ -250,5 +464,6 @@ case "$1" in
   install) install_app ;;
   dev-build) dev_build ;;
   dev) dev ;;
+  dev-sandbox-check) check_dev_sandbox ;;
   *) usage ;;
 esac

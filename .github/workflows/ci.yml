@@ -241,6 +241,11 @@ jobs:
       - name: Version change test
         run: make check-version-change-test
 
+      # The check the development app makes before it starts, over throwaway
+      # stand-ins for /proc and /etc/apparmor.d (docs/guides/environments.md).
+      - name: Development app sandbox check test
+        run: make desktop-dev-sandbox-test
+
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to
   # either one can only be shown not to break the other by running both.

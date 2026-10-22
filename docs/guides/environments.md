@@ -132,7 +132,7 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make desktop-build` | Builds the explorer, the Node-API addon and the Electron app, then bundles it for this host under `frontend/packages/apps/desktop/release/` (`Coffret_<version>_aarch64.dmg` on macOS, `coffret-desktop_<version>_amd64.deb` on Linux) and checks the bundle (see [building it](#building-it)) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, the Node-API addon and the Electron app, without bundling or starting it |
-| `make desktop-dev` | `make desktop-dev-build`, then runs the app from the checkout over the Libraries under the development state directory, as the development app |
+| `make desktop-dev` | `make desktop-dev-build`, then runs the app from the checkout over the Libraries under the development state directory, as the development app; on Ubuntu 24.04 and later it first needs an AppArmor profile (see [its sandbox](#the-development-apps-sandbox-on-linux)) |
 | `make napi-addon` | Builds the explorer, then the Node-API addon the desktop app runs the server in, as `backend/target/release/coffret.node` |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 
@@ -322,6 +322,61 @@ profile, say, would ask for libraries that loader cannot find. Each build then
 refuses an addon whose libraries do not resolve from an empty environment
 through the program interpreter Electron's binary asks for.
 
+### The development app's sandbox on Linux
+
+The development app runs with Chromium's sandbox, as the installed app does,
+and the sandbox needs to create user namespaces. Ubuntu 24.04 and later set
+`kernel.apparmor_restrict_unprivileged_userns` to `1`, which lets an
+unprivileged program create them only where an AppArmor profile allows it. The
+installed app's profile names `/opt/Coffret/coffret-desktop` alone ([the
+install guide](install/ubuntu.md#the-sandbox)); the development app runs the
+checkout's Electron,
+`frontend/node_modules/.pnpm/electron@<version>/node_modules/electron/dist/electron`,
+which it does not name. So `make desktop-dev` refuses to start the app where
+all of these hold:
+
+- `/proc/sys/kernel/apparmor_restrict_unprivileged_userns` reads `1`;
+- the checkout's `chrome-sandbox` is not setuid root;
+- no profile under `/etc/apparmor.d/` attaches to the checkout's Electron.
+
+Where that file is missing or reads `0` (Ubuntu 22.04, other distributions,
+macOS), the check passes and nothing is needed. When it refuses, it prints the
+profile to install, with this checkout's absolute path in it, and the commands
+that install and load it. The path has its symlinks resolved, as AppArmor
+matches the path the binary really runs from, so copy it from the message
+rather than from `$PWD`:
+
+```bash
+sudo tee /etc/apparmor.d/coffret-desktop-dev >/dev/null <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile coffret-desktop-dev <checkout>/frontend/node_modules/.pnpm/electron@*/node_modules/electron/dist/electron flags=(unconfined) {
+  userns,
+}
+PROFILE
+sudo apparmor_parser -r /etc/apparmor.d/coffret-desktop-dev
+```
+
+This is needed once per checkout, and `make` never runs it: it needs `sudo`,
+so the developer runs it. Like the installed app's, the profile confines
+nothing and allows the binary to create user namespaces alone. It names any
+version of Electron (`electron@*`), so it outlives an Electron upgrade. A
+second checkout or worktree has a path of its own, so it needs a profile of
+its own: another `profile` block naming its path in full (the check does not
+expand AppArmor variables such as `@{HOME}`, so it would not count a path
+written with one), or a file of its own, which `make desktop-dev` names after
+the checkout when `coffret-desktop-dev` is already taken.
+
+Chromium's own message, were the app started without the check, asks for
+`chrome-sandbox` to be made setuid root; `pnpm install` undoes that, and the
+profile is the way this guide takes. The check reads the profiles' files, not
+what the kernel has loaded, so a profile written but not loaded (its
+`apparmor_parser -r` line not run, or failed) lets the check pass and Chromium
+then aborts with that message; run the `apparmor_parser -r` line, and see
+what it says. `make desktop-dev-sandbox-test` runs the check over throwaway
+directories (`scripts/desktop-dev-sandbox-test.sh`).
+
 ### Trying a bundle without installing it
 
 A bundle is the installed app, so started as it is it serves the production
@@ -339,11 +394,15 @@ The app takes `--user-data-dir` in place of its own browser-data directory, so
 its single-instance lock is apart from the installed app's too.
 
 On Linux the binary of an extracted `.deb` is
-`<dir>/opt/Coffret/coffret-desktop`. On Ubuntu 24.04 it cannot start
-Chromium's sandbox from there: the AppArmor profile that lets the app create
-user namespaces names `/opt/Coffret/coffret-desktop` alone, and the extracted
-`chrome-sandbox` is not setuid root ([the install
-guide](install/ubuntu.md#the-sandbox)). Try it on Ubuntu 22.04, or install it.
+`<dir>/opt/Coffret/coffret-desktop`. On Ubuntu 24.04 and later it cannot
+start Chromium's sandbox from there, for the reason the development app
+cannot ([its sandbox](#the-development-apps-sandbox-on-linux)): the AppArmor
+profile that lets the app create user namespaces names
+`/opt/Coffret/coffret-desktop` alone, and the extracted `chrome-sandbox` is
+not setuid root ([the install guide](install/ubuntu.md#the-sandbox)). A
+profile of the same kind naming `<dir>/opt/Coffret/coffret-desktop`, in a
+file and under a name of its own (not `coffret-desktop`, the installed app's),
+lets it; otherwise try it on Ubuntu 22.04, or install it.
 
 ## The rule for agents
 

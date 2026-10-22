@@ -621,7 +621,11 @@ desktop-dev-build:
 #
 # The app (frontend/packages/apps/desktop) runs the server in its own process
 # through the addon, and refuses to run without COFFRET_STATE_DIR, which this
-# Makefile exports as the development state directory.
+# Makefile exports as the development state directory. On Ubuntu 24.04 and
+# later it first refuses to start where Chromium's sandbox could not, for want
+# of an AppArmor profile naming the checkout's Electron, and prints the one to
+# install (docs/guides/environments.md, "The development app's sandbox on
+# Linux").
 .PHONY: desktop-dev
 desktop-dev: desktop-dev-build
 	./scripts/desktop.sh dev
@@ -832,6 +836,18 @@ field-numbers-guard-test:
 check-version-change-test:
 	./scripts/check-version-change-test.sh
 
+## desktop-dev-sandbox-test: show the check desktop-dev makes on Linux letting the development app start where Chromium's sandbox can, and refusing, with the AppArmor profile to install, where it cannot
+#
+# scripts/desktop.sh refuses to start the development app where
+# kernel.apparmor_restrict_unprivileged_userns is 1 and neither an AppArmor
+# profile nor a setuid chrome-sandbox lets its Electron create user namespaces;
+# this runs that check alone, never Electron, over throwaway directories
+# standing in for /proc, /etc/apparmor.d and the checkout, so it answers the
+# same on any host.
+.PHONY: desktop-dev-sandbox-test
+desktop-dev-sandbox-test:
+	./scripts/desktop-dev-sandbox-test.sh
+
 ## shell-lint: shellcheck and shfmt over every shell script in the repository
 #
 # The scripts under scripts/ include the real-Drive targets, which run only when
@@ -874,7 +890,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -942,6 +958,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
