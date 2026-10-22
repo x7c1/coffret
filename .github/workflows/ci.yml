@@ -403,12 +403,50 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
 
+      # The runner image's name and version, which with the Playwright version
+      # decide the packages `playwright install-deps` asks apt for and the
+      # versions apt resolves them to. The runner sets them as environment
+      # variables, which the `env` context does not carry, so a step reads them.
+      - name: Runner image
+        id: runner-image
+        run: |
+          echo "os=$ImageOS" >> "$GITHUB_OUTPUT"
+          echo "version=$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      # The .deb files apt downloads for Chromium's system packages, so that a
+      # run installs them from the cache rather than from the mirror. The image
+      # version comes last so that, after an image update, the restore key
+      # brings back the files whose versions did not change and apt fetches
+      # only the rest.
+      - name: Cache apt's downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt-archives
+          key: ${{ runner.os }}-apt-${{ steps.runner-image.outputs.os }}-playwright-${{ steps.playwright.outputs.version }}-${{ steps.runner-image.outputs.version }}
+          restore-keys: |
+            ${{ runner.os }}-apt-${{ steps.runner-image.outputs.os }}-playwright-${{ steps.playwright.outputs.version }}-
+
+      # apt keeps its downloads in the cached directory, and keeps them after
+      # installing, which apt-get does by default and `apt` does not. Written
+      # under apt.conf.d rather than passed as `-o` options so that it reaches
+      # the apt runs `playwright install-deps` makes. apt refuses an archive
+      # directory without its partial/, which the cache may not bring back.
+      - name: Point apt at the cached directory
+        run: |
+          mkdir -p "$HOME/.cache/apt-archives/partial"
+          printf '%s\n' \
+            "Dir::Cache::Archives \"$HOME/.cache/apt-archives\";" \
+            'APT::Keep-Downloaded-Packages "true";' \
+            'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+            | sudo tee /etc/apt/apt.conf.d/80-archive-cache
+
       # Every apt fetch gives up on a silent connection after 30 seconds and
       # tries again, up to three times, so a stalled mirror costs this job a
-      # couple of minutes rather than the whole of the step's timeout. Written
-      # under apt.conf.d rather than passed as `-o` options so that it also
-      # reaches the apt runs `playwright install-deps` makes. Before the step
-      # below, which is this job's only apt run.
+      # couple of minutes rather than the whole of the step's timeout. It does
+      # nothing for a slow mirror that never falls silent; the cache above is
+      # what keeps the mirror out of a warm run. Written under apt.conf.d for
+      # the same reason as the step above. Before the step below, the only one
+      # in this job where apt fetches from the mirror.
       - name: Bound apt's waits on the mirror
         run: |
           printf '%s\n' \
@@ -420,17 +458,31 @@ jobs:
       # The system packages a headless Chromium needs on a runner, installed by
       # apt. A step of its own, not part of the target, so that a stalled mirror
       # fails here under its own bound instead of holding the journeys' step
-      # until the job is cancelled. A working run takes under a minute; the
-      # bound leaves room for a stall the retries get past.
+      # until the job is cancelled. With the cache warm apt downloads no
+      # package and the step takes seconds. The bound is for a cold cache: a
+      # working mirror fills it in under a minute, a stall the retries get past
+      # in a few, and a slow mirror may still run out of it, but only on the run
+      # that fills the cache, not on every run after.
       - name: Install Chromium's system packages
         timeout-minutes: 5
         working-directory: frontend/packages/apps/e2e
         run: pnpm exec playwright install-deps chromium
 
+      # apt wrote the downloads as root, and the cache saves them as the runner
+      # user after the job. Drop the .deb files no longer in the package lists,
+      # which a restore from before an image update leaves behind, so the cache
+      # does not grow with each update; then the lock and any half-downloaded
+      # file, and hand the rest to the runner user.
+      - name: Hand apt's downloads to the cache
+        run: |
+          sudo apt-get autoclean
+          sudo rm -rf "$HOME/.cache/apt-archives/lock" "$HOME/.cache/apt-archives/partial"
+          sudo chown -R "$USER:" "$HOME/.cache/apt-archives"
+
       # Chromium itself is installed by the target, idempotently; its system
-      # packages come from the step above. On a cache hit the browser is already
-      # where Playwright looks and nothing is downloaded; the download happens
-      # once per Playwright version.
+      # packages come from "Install Chromium's system packages" above. On a
+      # cache hit the browser is already where Playwright looks and nothing is
+      # downloaded; the download happens once per Playwright version.
       - name: Journeys against MinIO
         run: make e2e-it
 
