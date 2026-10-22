@@ -66,5 +66,5 @@ Out of scope: the e2e journey's `--no-sandbox` (`scripts/e2e-electron.sh`) stays
 - [x] `shell-lint` passes over the new and changed scripts
 
 ### Before merge (verified outside the check command)
-- [ ] On the Ubuntu 26.04 development machine with `/etc/apparmor.d/coffret-desktop-dev` set aside (`sudo mv` it out and `sudo apparmor_parser -R` the profile), `make desktop-dev` refuses with the message; with the printed commands run, it starts with its sandbox. Needs a person: the commands need `sudo`.
+- [x] On the Ubuntu 26.04 development machine with `/etc/apparmor.d/coffret-desktop-dev` set aside (`sudo mv` it out and `sudo apparmor_parser -R` the profile), `make desktop-dev` refuses with the message; with the printed commands run, it starts with its sandbox. Needs a person: the commands need `sudo`.
 - [ ] On macOS, `make desktop-dev` starts as before
