@@ -29,7 +29,12 @@ export interface Identity {
   trayTemplate: boolean;
   /** The windows' icon (Linux), where it is not the platform's default. */
   windowIcon: string | null;
-  /** The Dock's icon (macOS), where it is not the app's own. */
+  /**
+   * The Dock's icon (macOS), where it is not the app's own: a picture inset on
+   * a transparent canvas, as the .icns is, since the Dock and the app switcher
+   * draw it across the whole tile and a full-bleed one stands larger than its
+   * neighbours.
+   */
   dockIcon: string | null;
   /**
    * The app ID its windows carry on Linux — the Wayland app ID and the X11
@@ -41,8 +46,11 @@ export interface Identity {
   linuxAppId: string | null;
 }
 
-/** The badged icon the development app's windows and Dock tile carry. */
+/** The badged icon the development app's windows carry. */
 const DEV_ICON = 'icon-dev.png';
+
+/** The same badged icon, inset for the development app's Dock tile. */
+const DEV_DOCK_ICON = 'dock-dev.png';
 
 /** How the app with `identifier` looks on `platform`. */
 export function identityFor(identifier: string, platform: NodeJS.Platform): Identity {
@@ -57,7 +65,7 @@ export function identityFor(identifier: string, platform: NodeJS.Platform): Iden
     trayScale: mac ? 2 : 1,
     trayTemplate: mac,
     windowIcon: development && platform === 'linux' ? DEV_ICON : null,
-    dockIcon: development && mac ? DEV_ICON : null,
+    dockIcon: development && mac ? DEV_DOCK_ICON : null,
     linuxAppId: platform === 'linux' ? identifier : null,
   };
 }

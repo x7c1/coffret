@@ -19,11 +19,17 @@
 #
 #   frontend/packages/apps/desktop/packaging/   the bundles' app icon:
 #     icon.png                    coffret.svg as is (the .deb's)
-#     icon.icns                   coffret.svg inset on a transparent canvas, see
-#                                 INSET_PERCENT (the .app's)
+#     icon.icon/                  the Icon Composer icon macOS 26 draws the
+#                                 .app's tile from (see write_icon_composer)
+#     icon.icns                   coffret.svg with continuous corners, inset on
+#                                 a transparent canvas, see INSET_PERCENT and
+#                                 write_continuous_svg (the .app's before
+#                                 macOS 26)
 #   frontend/packages/apps/desktop/assets/      what the running app shows:
-#     icon-dev.png                the development app's window and Dock icon:
+#     icon-dev.png                the development app's window icon (Linux):
 #                                 coffret.svg with the "D" badge
+#     dock-dev.png                its Dock icon (macOS): icon-dev.png's picture
+#                                 with continuous corners, inset as the .icns is
 #     tray{,@2x}.png              the tray, installed app, black (the macOS
 #                                 template image)
 #     tray-light{,@2x}.png        installed app, white (Linux)
@@ -63,10 +69,23 @@ readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
 readonly SIZE=512
 readonly SOURCE_RX=114
 
-# macOS draws a Dock icon as a rounded square at about 80 % of the canvas with
-# transparent margins; a full-bleed icon looks larger than its neighbours. The
-# `.icns` is therefore the source scaled to INSET_PERCENT and centred.
-readonly INSET_PERCENT=80
+# macOS draws a Dock icon as a rounded square of 824 px on a 1024 px canvas,
+# with transparent margins; a full-bleed icon looks larger than its neighbours.
+# The `.icns` and the development app's Dock icon are therefore scaled to
+# INSET_PERCENT and centred.
+readonly INSET_PERCENT=80.5
+
+# macOS rounds its icons with continuous corners, whose curvature eases in from
+# the straight edge, where the source's <rect> has circular arcs that turn at
+# once, and at a larger radius. The macOS icons therefore draw the background
+# as a path with continuous corners, in the proportions UIKit's continuous
+# rounded rectangle is commonly reproduced with: each corner starts
+# CONTINUOUS_REACH radii from it, and is three cubic curves. CONTINUOUS_RX is
+# the radius in source units that matches the tiles macOS 26 draws (its own
+# apps' and the ones it masks): 0.2586 of the tile's side, fitted to within a
+# pixel of a 1024 px rendering.
+readonly CONTINUOUS_REACH=1.52866483
+readonly CONTINUOUS_RX=132
 
 # The app icon's dev badge: a filled disc centred on the centre of the
 # bottom-right corner arc, ringed in the background colour to separate it from
@@ -216,6 +235,43 @@ glyph_d() {
 
 # --- Derived SVGs ---------------------------------------------------------------
 
+# The path data of a SIZE square with continuous corners of radius
+# CONTINUOUS_RX (see CONTINUOUS_REACH), clockwise from the top edge.
+continuous_corners() {
+  awk -v s="$SIZE" -v r="$CONTINUOUS_RX" -v k="$CONTINUOUS_REACH" 'BEGIN {
+    # One corner, as offsets in radii from it along the edge it leaves (a)
+    # and the edge it joins (b): three curves, each with two control points
+    # and an end point, after a short line.
+    n = split("1.08849323 0 0.86840689 0.02238361 0.66993427 0.06549600 " \
+              "0.63149399 0.07491100 " \
+              "0.37282392 0.16905899 0.16906013 0.37282401 0.07491176 0.63149399 " \
+              "0.02238302 0.86840701 0 1.08849299 0 " k, c, " ")
+    # The corners clockwise from the top right: where it sits, and the unit
+    # steps from it towards the edge it leaves (a) and the edge it joins (b).
+    split(s " 0 -1 0 0 1 " s " " s " 0 -1 -1 0 0 " s " 1 0 0 -1 0 0 0 1 1 0", q, " ")
+    printf "M%.2f 0", k * r
+    for (i = 0; i < 4; i++) {
+      cx = q[i*6+1]; cy = q[i*6+2]; ax = q[i*6+3]; ay = q[i*6+4]; bx = q[i*6+5]; by = q[i*6+6]
+      printf " L%.2f %.2f", cx + ax * k * r, cy + ay * k * r
+      for (j = 1; j <= n; j += 2) {
+        if (j == 1 || j == 9 || j == 21) printf " C"
+        if (j == 7) printf " L"
+        printf " %.2f %.2f", cx + (ax * c[j] + bx * c[j+1]) * r, cy + (ay * c[j] + by * c[j+1]) * r
+      }
+    }
+    printf " Z"
+  }'
+}
+
+# $1 with its rounded background drawn with continuous corners: the <rect> of
+# radius SOURCE_RX becomes a path of the same fill, rounded at CONTINUOUS_RX.
+write_continuous_svg() {
+  local in="$1" out="$2"
+  sed -E "s|<rect width=\"$SIZE\" height=\"$SIZE\" rx=\"$SOURCE_RX\" fill=\"([^\"]+)\"/>|<path d=\"$(continuous_corners)\" fill=\"\\1\"/>|" "$in" >"$out"
+  grep -q '<rect' "$out" && die "$in: its background <rect> was not found to redraw"
+  return 0
+}
+
 # $1 scaled to INSET_PERCENT and centred on a transparent canvas of the same size.
 write_inset_svg() {
   local in="$1" out="$2"
@@ -317,17 +373,66 @@ mkdir -p "$PACKAGING_DIR" "$ASSETS_DIR"
 rasterise "$SOURCE" "$WORK_DIR/installed-full"
 cp "$WORK_DIR/installed-full/icon.png" "$PACKAGING_DIR/icon.png"
 log "wrote $(shown "$PACKAGING_DIR/icon.png")"
-write_inset_svg "$SOURCE" "$WORK_DIR/installed-inset.svg"
+write_continuous_svg "$SOURCE" "$WORK_DIR/installed-continuous.svg"
+write_inset_svg "$WORK_DIR/installed-continuous.svg" "$WORK_DIR/installed-inset.svg"
 rasterise "$WORK_DIR/installed-inset.svg" "$WORK_DIR/installed-inset"
 sort_icns "$WORK_DIR/installed-inset/icon.icns"
 cp "$WORK_DIR/installed-inset/icon.icns" "$PACKAGING_DIR/icon.icns"
 log "wrote $(shown "$PACKAGING_DIR/icon.icns") (inset to $INSET_PERCENT %)"
 
-# The development app's window and Dock icon: the app icon with the "D" badge.
+# The development app's window icon: the app icon with the "D" badge. Its Dock
+# icon is the same picture inset, as the installed app's .icns is, since the
+# Dock draws whatever it is handed across the whole tile.
 write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
 rasterise "$WORK_DIR/dev.svg" "$WORK_DIR/dev"
 cp "$WORK_DIR/dev/icon.png" "$ASSETS_DIR/icon-dev.png"
 log "wrote $(shown "$ASSETS_DIR/icon-dev.png")"
+write_continuous_svg "$SOURCE" "$WORK_DIR/continuous.svg"
+write_badged_svg "$WORK_DIR/continuous.svg" "$WORK_DIR/dock-dev-full.svg"
+write_inset_svg "$WORK_DIR/dock-dev-full.svg" "$WORK_DIR/dock-dev.svg"
+rasterise "$WORK_DIR/dock-dev.svg" "$WORK_DIR/dock-dev"
+cp "$WORK_DIR/dock-dev/icon.png" "$ASSETS_DIR/dock-dev.png"
+log "wrote $(shown "$ASSETS_DIR/dock-dev.png") (inset to $INSET_PERCENT %)"
+
+# macOS 26 draws the tile of an app whose icon is only an .icns in a shape and
+# with a glass finish of its own over the picture, which blurs its edges in the
+# Dock. An Icon Composer icon (`icon.icon`, a directory electron-builder
+# compiles with Xcode's actool into the bundle's Assets.car) is drawn as it is
+# described: here the source's background colour as the tile's fill, and the
+# chest, without the background, as one layer over the whole canvas, with the
+# glass, the specular highlight, the shadow and the translucency turned off, so
+# that it is drawn flat as the source is. The system gives it its own shape.
+write_icon_composer() {
+  local out="$1"
+  local fill
+  fill="$(sed -nE "s|.*<rect width=\"$SIZE\" height=\"$SIZE\" rx=\"$SOURCE_RX\" fill=\"#([0-9A-Fa-f]{6})\"/>.*|\1|p" "$SOURCE")"
+  [ -n "$fill" ] || die "$SOURCE: its background <rect> was not found to take the fill from"
+  rm -rf "$out"
+  mkdir -p "$out/Assets"
+  sed -e '/<rect /d' -e "s|width=\"$SIZE\" height=\"$SIZE\"|width=\"$((SIZE * 2))\" height=\"$((SIZE * 2))\"|" \
+    "$SOURCE" >"$out/Assets/chest.svg"
+  python3 - "$fill" "$out/icon.json" <<'PY'
+import json, sys
+fill, path = sys.argv[1], sys.argv[2]
+channels = ",".join(f"{int(fill[i:i + 2], 16) / 255:.5f}" for i in (0, 2, 4))
+icon = {
+    "fill": {"solid": f"srgb:{channels},1.00000"},
+    "groups": [
+        {
+            "layers": [{"glass": False, "image-name": "chest.svg", "name": "chest"}],
+            "shadow": {"kind": "none", "opacity": 0.5},
+            "specular": False,
+            "translucency": {"enabled": False, "value": 0.5},
+        }
+    ],
+    "supported-platforms": {"squares": ["macOS"]},
+}
+open(path, "w").write(json.dumps(icon, indent=2, sort_keys=True) + "\n")
+PY
+}
+
+write_icon_composer "$PACKAGING_DIR/icon.icon"
+log "wrote $(shown "$PACKAGING_DIR/icon.icon")"
 
 # --- Tray ---------------------------------------------------------------------
 

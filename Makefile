@@ -590,7 +590,7 @@ web-dist:
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT) $(WEB_PORT)
 
-## icons: regenerate the desktop app's icons (the bundles' under frontend/packages/apps/desktop/packaging/, the tray's and the development app's badged one under its assets/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI, as the SVG rasteriser, and python3; the outputs are committed)
+## icons: regenerate the desktop app's icons (the bundles' under frontend/packages/apps/desktop/packaging/, the tray's and the development app's badged ones under its assets/) and the explorer's favicon from assets/icon/ (needs the Tauri CLI, as the SVG rasteriser, and python3; the outputs are committed)
 .PHONY: icons
 icons:
 	./scripts/gen-icons.sh
