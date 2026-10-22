@@ -260,9 +260,11 @@ one-colour picture rather than the app icon, because a tray draws it small and
 in the menu bar's own colours: on macOS it is black and set as a template
 image, which the menu bar draws black or white for its appearance, and on
 Linux it is white, since GNOME's top bar is dark in both its light and its dark
-style. The `.icns` is the app icon inset to 80 % on a transparent canvas,
-because the Dock draws icons with margins and a full-bleed one would look
-larger than its neighbours. The favicon is the chest alone, without the app
+style. The `.icns` and the development app's `dock-dev.png` are the app icon
+inset to 80 % on a transparent canvas, because the Dock draws icons with
+margins and a full-bleed one would look larger than its neighbours. Their
+background square has continuous corners, as macOS's own icons do, where the
+source's circular arcs would look pinched beside them. The favicon is the chest alone, without the app
 icon's background square, so that it reads at 16 px in a browser tab; it takes
 the tray source's shape in the app icon's two colours, and lighter ones on a
 dark tab (the SVG switches by itself, and `index.html` picks the light or the

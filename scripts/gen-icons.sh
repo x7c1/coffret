@@ -19,13 +19,14 @@
 #
 #   frontend/packages/apps/desktop/packaging/   the bundles' app icon:
 #     icon.png                    coffret.svg as is (the .deb's)
-#     icon.icns                   coffret.svg inset on a transparent canvas, see
-#                                 INSET_PERCENT (the .app's)
+#     icon.icns                   coffret.svg with continuous corners, inset on
+#                                 a transparent canvas, see INSET_PERCENT and
+#                                 write_continuous_svg (the .app's)
 #   frontend/packages/apps/desktop/assets/      what the running app shows:
 #     icon-dev.png                the development app's window icon (Linux):
 #                                 coffret.svg with the "D" badge
 #     dock-dev.png                its Dock icon (macOS): icon-dev.png's picture
-#                                 inset as the .icns is
+#                                 with continuous corners, inset as the .icns is
 #     tray{,@2x}.png              the tray, installed app, black (the macOS
 #                                 template image)
 #     tray-light{,@2x}.png        installed app, white (Linux)
@@ -70,6 +71,16 @@ readonly SOURCE_RX=114
 # `.icns` and the development app's Dock icon are therefore scaled to
 # INSET_PERCENT and centred.
 readonly INSET_PERCENT=80
+
+# macOS rounds its icons with continuous corners, whose curvature eases in from
+# the straight edge, where the source's <rect> has circular arcs that turn at
+# once and so look pinched beside the other apps' tiles at the same radius. The
+# macOS icons therefore draw the background as a path with continuous corners
+# of the source's radius, in the proportions UIKit's continuous rounded
+# rectangle is commonly reproduced with (CONTINUOUS_*: each corner starts
+# CONTINUOUS_REACH radii from it, and is three cubic curves meeting at the
+# points the other pairs give).
+readonly CONTINUOUS_REACH=1.52866483
 
 # The app icon's dev badge: a filled disc centred on the centre of the
 # bottom-right corner arc, ringed in the background colour to separate it from
@@ -219,6 +230,43 @@ glyph_d() {
 
 # --- Derived SVGs ---------------------------------------------------------------
 
+# The path data of a SIZE square with continuous corners of radius SOURCE_RX
+# (see CONTINUOUS_REACH), clockwise from the top edge.
+continuous_corners() {
+  awk -v s="$SIZE" -v r="$SOURCE_RX" -v k="$CONTINUOUS_REACH" 'BEGIN {
+    # One corner, as offsets in radii from it along the edge it leaves (a)
+    # and the edge it joins (b): three curves, each with two control points
+    # and an end point, after a short line.
+    n = split("1.08849323 0 0.86840689 0.02238361 0.66993427 0.06549600 " \
+              "0.63149399 0.07491100 " \
+              "0.37282392 0.16905899 0.16906013 0.37282401 0.07491176 0.63149399 " \
+              "0.02238302 0.86840701 0 1.08849299 0 " k, c, " ")
+    # The corners clockwise from the top right: where it sits, and the unit
+    # steps from it towards the edge it leaves (a) and the edge it joins (b).
+    split(s " 0 -1 0 0 1 " s " " s " 0 -1 -1 0 0 " s " 1 0 0 -1 0 0 0 1 1 0", q, " ")
+    printf "M%.2f 0", k * r
+    for (i = 0; i < 4; i++) {
+      cx = q[i*6+1]; cy = q[i*6+2]; ax = q[i*6+3]; ay = q[i*6+4]; bx = q[i*6+5]; by = q[i*6+6]
+      printf " L%.2f %.2f", cx + ax * k * r, cy + ay * k * r
+      for (j = 1; j <= n; j += 2) {
+        if (j == 1 || j == 9 || j == 21) printf " C"
+        if (j == 7) printf " L"
+        printf " %.2f %.2f", cx + (ax * c[j] + bx * c[j+1]) * r, cy + (ay * c[j] + by * c[j+1]) * r
+      }
+    }
+    printf " Z"
+  }'
+}
+
+# $1 with its rounded background drawn with continuous corners: the <rect> of
+# radius SOURCE_RX becomes a path of the same fill.
+write_continuous_svg() {
+  local in="$1" out="$2"
+  sed -E "s|<rect width=\"$SIZE\" height=\"$SIZE\" rx=\"$SOURCE_RX\" fill=\"([^\"]+)\"/>|<path d=\"$(continuous_corners)\" fill=\"\\1\"/>|" "$in" >"$out"
+  grep -q '<rect' "$out" && die "$in: its background <rect> was not found to redraw"
+  return 0
+}
+
 # $1 scaled to INSET_PERCENT and centred on a transparent canvas of the same size.
 write_inset_svg() {
   local in="$1" out="$2"
@@ -320,7 +368,8 @@ mkdir -p "$PACKAGING_DIR" "$ASSETS_DIR"
 rasterise "$SOURCE" "$WORK_DIR/installed-full"
 cp "$WORK_DIR/installed-full/icon.png" "$PACKAGING_DIR/icon.png"
 log "wrote $(shown "$PACKAGING_DIR/icon.png")"
-write_inset_svg "$SOURCE" "$WORK_DIR/installed-inset.svg"
+write_continuous_svg "$SOURCE" "$WORK_DIR/installed-continuous.svg"
+write_inset_svg "$WORK_DIR/installed-continuous.svg" "$WORK_DIR/installed-inset.svg"
 rasterise "$WORK_DIR/installed-inset.svg" "$WORK_DIR/installed-inset"
 sort_icns "$WORK_DIR/installed-inset/icon.icns"
 cp "$WORK_DIR/installed-inset/icon.icns" "$PACKAGING_DIR/icon.icns"
@@ -333,7 +382,9 @@ write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
 rasterise "$WORK_DIR/dev.svg" "$WORK_DIR/dev"
 cp "$WORK_DIR/dev/icon.png" "$ASSETS_DIR/icon-dev.png"
 log "wrote $(shown "$ASSETS_DIR/icon-dev.png")"
-write_inset_svg "$WORK_DIR/dev.svg" "$WORK_DIR/dock-dev.svg"
+write_continuous_svg "$SOURCE" "$WORK_DIR/continuous.svg"
+write_badged_svg "$WORK_DIR/continuous.svg" "$WORK_DIR/dock-dev-full.svg"
+write_inset_svg "$WORK_DIR/dock-dev-full.svg" "$WORK_DIR/dock-dev.svg"
 rasterise "$WORK_DIR/dock-dev.svg" "$WORK_DIR/dock-dev"
 cp "$WORK_DIR/dock-dev/icon.png" "$ASSETS_DIR/dock-dev.png"
 log "wrote $(shown "$ASSETS_DIR/dock-dev.png") (inset to $INSET_PERCENT %)"
