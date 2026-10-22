@@ -40,5 +40,5 @@ Out of scope: changing the mirror, and running the journeys without `install-dep
 - [x] `shell-lint` passes
 
 ### Before merge (verified outside the check command)
-- [ ] On this PR's CI, the `e2e` job passes, and its cache step reports a save on the first run
-- [ ] A second run of the `e2e` job on this PR (a re-run, or a later commit) restores the cache, and the log of "Install Chromium's system packages" shows apt fetching no archive from the mirror (no `Get:` line for a `.deb`)
+- [x] On this PR's CI, the `e2e` job passes, and its cache step reports a save on the first run
+- [x] A second run of the `e2e` job on this PR (a re-run, or a later commit) restores the cache, and the log of "Install Chromium's system packages" shows apt fetching no archive from the mirror (no `Get:` line for a `.deb`)
