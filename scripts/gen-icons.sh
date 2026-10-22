@@ -22,8 +22,10 @@
 #     icon.icns                   coffret.svg inset on a transparent canvas, see
 #                                 INSET_PERCENT (the .app's)
 #   frontend/packages/apps/desktop/assets/      what the running app shows:
-#     icon-dev.png                the development app's window and Dock icon:
+#     icon-dev.png                the development app's window icon (Linux):
 #                                 coffret.svg with the "D" badge
+#     dock-dev.png                its Dock icon (macOS): icon-dev.png's picture
+#                                 inset as the .icns is
 #     tray{,@2x}.png              the tray, installed app, black (the macOS
 #                                 template image)
 #     tray-light{,@2x}.png        installed app, white (Linux)
@@ -65,7 +67,8 @@ readonly SOURCE_RX=114
 
 # macOS draws a Dock icon as a rounded square at about 80 % of the canvas with
 # transparent margins; a full-bleed icon looks larger than its neighbours. The
-# `.icns` is therefore the source scaled to INSET_PERCENT and centred.
+# `.icns` and the development app's Dock icon are therefore scaled to
+# INSET_PERCENT and centred.
 readonly INSET_PERCENT=80
 
 # The app icon's dev badge: a filled disc centred on the centre of the
@@ -323,11 +326,17 @@ sort_icns "$WORK_DIR/installed-inset/icon.icns"
 cp "$WORK_DIR/installed-inset/icon.icns" "$PACKAGING_DIR/icon.icns"
 log "wrote $(shown "$PACKAGING_DIR/icon.icns") (inset to $INSET_PERCENT %)"
 
-# The development app's window and Dock icon: the app icon with the "D" badge.
+# The development app's window icon: the app icon with the "D" badge. Its Dock
+# icon is the same picture inset, as the installed app's .icns is, since the
+# Dock draws whatever it is handed across the whole tile.
 write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
 rasterise "$WORK_DIR/dev.svg" "$WORK_DIR/dev"
 cp "$WORK_DIR/dev/icon.png" "$ASSETS_DIR/icon-dev.png"
 log "wrote $(shown "$ASSETS_DIR/icon-dev.png")"
+write_inset_svg "$WORK_DIR/dev.svg" "$WORK_DIR/dock-dev.svg"
+rasterise "$WORK_DIR/dock-dev.svg" "$WORK_DIR/dock-dev"
+cp "$WORK_DIR/dock-dev/icon.png" "$ASSETS_DIR/dock-dev.png"
+log "wrote $(shown "$ASSETS_DIR/dock-dev.png") (inset to $INSET_PERCENT %)"
 
 # --- Tray ---------------------------------------------------------------------
 

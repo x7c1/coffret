@@ -238,8 +238,9 @@ how it is run:
 
 The development app is told apart from the installed one: its windows are
 titled "Coffret (dev)", its tray icon carries the "D" badge and its tooltip
-reads "Coffret (dev)", and its Dock icon (macOS) and window icon (Linux) are
-the badged `assets/icon-dev.png`. On Linux each app's windows carry its own
+reads "Coffret (dev)", and its window icon (Linux) is the badged
+`assets/icon-dev.png`, and its Dock icon (macOS) the same picture inset as the
+installed app's `.icns` is, `assets/dock-dev.png`. On Linux each app's windows carry its own
 identifier as their app ID (`WM_CLASS` on X11), so GNOME groups and names the
 two apart, and matches the installed app's windows with the desktop entry its
 `.deb` installs, whose `StartupWMClass` is `io.github.x7c1.coffret`.

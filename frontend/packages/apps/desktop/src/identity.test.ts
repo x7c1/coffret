@@ -48,7 +48,7 @@ describe('the development app', () => {
       trayScale: 2,
       trayTemplate: true,
       windowIcon: null,
-      dockIcon: 'icon-dev.png',
+      dockIcon: 'dock-dev.png',
       linuxAppId: null,
     });
   });
