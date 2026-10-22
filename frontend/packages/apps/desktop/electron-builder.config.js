@@ -79,7 +79,10 @@ const config = {
   mac: {
     target: [{ target: 'dmg', arch: ['arm64'] }],
     category: 'public.app-category.utilities',
-    icon: 'packaging/icon.icns',
+    // The Icon Composer icon, compiled with Xcode's actool (Xcode 26 or later)
+    // into Assets.car for macOS 26 and later; the .icns electron-builder also
+    // bundles beside it is the icon before macOS 26 (scripts/gen-icons.sh).
+    icon: 'packaging/icon.icon',
     // Signed ad hoc, with no Developer ID, and not notarized: the hardened
     // runtime on, with packaging/entitlements.mac.plist, for the app and every
     // helper. allow-jit is what V8 needs to compile JavaScript under it.

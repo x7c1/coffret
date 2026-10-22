@@ -111,6 +111,19 @@ check_dmg() {
 
   check_fuses "$app"
   check_resources "$app/Contents/Resources"
+  check_mac_icon "$app"
+}
+
+# The icon of the .app $1: the Icon Composer icon compiled into Assets.car,
+# which macOS 26 draws the tile from, and the .icns before it.
+check_mac_icon() {
+  local app="$1" name
+  [ -f "$app/Contents/Resources/Assets.car" ] || fail "Coffret.app holds no Assets.car"
+  name="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIconName' "$app/Contents/Info.plist" 2>/dev/null)" ||
+    fail "Coffret.app's Info.plist names no CFBundleIconName"
+  [ "$name" = Icon ] || fail "Coffret.app's CFBundleIconName is $name, not Icon"
+  [ -f "$app/Contents/Resources/icon.icns" ] || fail "Coffret.app holds no icon.icns"
+  ok "Coffret.app carries its icon in Assets.car, and an .icns"
 }
 
 check_deb() {

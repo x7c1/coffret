@@ -67,9 +67,10 @@ jobs:
       matrix:
         include:
           # Apple silicon only: Intel Macs are not supported. The runner is
-          # arm64, so the build is native.
+          # arm64, so the build is native. macOS 26, for the Xcode whose actool
+          # compiles the Icon Composer icon (26 or later).
           - name: macos-aarch64
-            runner: macos-14
+            runner: macos-26
             # Coffret_<version>_aarch64.dmg
             bundle: dmg
           # coffret-desktop_<version>_amd64.deb. On 22.04, the oldest Ubuntu

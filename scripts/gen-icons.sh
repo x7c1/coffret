@@ -19,9 +19,12 @@
 #
 #   frontend/packages/apps/desktop/packaging/   the bundles' app icon:
 #     icon.png                    coffret.svg as is (the .deb's)
+#     icon.icon/                  the Icon Composer icon macOS 26 draws the
+#                                 .app's tile from (see write_icon_composer)
 #     icon.icns                   coffret.svg with continuous corners, inset on
 #                                 a transparent canvas, see INSET_PERCENT and
-#                                 write_continuous_svg (the .app's)
+#                                 write_continuous_svg (the .app's before
+#                                 macOS 26)
 #   frontend/packages/apps/desktop/assets/      what the running app shows:
 #     icon-dev.png                the development app's window icon (Linux):
 #                                 coffret.svg with the "D" badge
@@ -390,6 +393,46 @@ write_inset_svg "$WORK_DIR/dock-dev-full.svg" "$WORK_DIR/dock-dev.svg"
 rasterise "$WORK_DIR/dock-dev.svg" "$WORK_DIR/dock-dev"
 cp "$WORK_DIR/dock-dev/icon.png" "$ASSETS_DIR/dock-dev.png"
 log "wrote $(shown "$ASSETS_DIR/dock-dev.png") (inset to $INSET_PERCENT %)"
+
+# macOS 26 draws the tile of an app whose icon is only an .icns in a shape and
+# with a glass finish of its own over the picture, which blurs its edges in the
+# Dock. An Icon Composer icon (`icon.icon`, a directory electron-builder
+# compiles with Xcode's actool into the bundle's Assets.car) is drawn as it is
+# described: here the source's background colour as the tile's fill, and the
+# chest, without the background, as one layer over the whole canvas, with the
+# glass, the specular highlight, the shadow and the translucency turned off, so
+# that it is drawn flat as the source is. The system gives it its own shape.
+write_icon_composer() {
+  local out="$1"
+  local fill
+  fill="$(sed -nE "s|.*<rect width=\"$SIZE\" height=\"$SIZE\" rx=\"$SOURCE_RX\" fill=\"#([0-9A-Fa-f]{6})\"/>.*|\1|p" "$SOURCE")"
+  [ -n "$fill" ] || die "$SOURCE: its background <rect> was not found to take the fill from"
+  rm -rf "$out"
+  mkdir -p "$out/Assets"
+  sed -e '/<rect /d' -e "s|width=\"$SIZE\" height=\"$SIZE\"|width=\"$((SIZE * 2))\" height=\"$((SIZE * 2))\"|" \
+    "$SOURCE" >"$out/Assets/chest.svg"
+  python3 - "$fill" "$out/icon.json" <<'PY'
+import json, sys
+fill, path = sys.argv[1], sys.argv[2]
+channels = ",".join(f"{int(fill[i:i + 2], 16) / 255:.5f}" for i in (0, 2, 4))
+icon = {
+    "fill": {"solid": f"srgb:{channels},1.00000"},
+    "groups": [
+        {
+            "layers": [{"glass": False, "image-name": "chest.svg", "name": "chest"}],
+            "shadow": {"kind": "none", "opacity": 0.5},
+            "specular": False,
+            "translucency": {"enabled": False, "value": 0.5},
+        }
+    ],
+    "supported-platforms": {"squares": ["macOS"]},
+}
+open(path, "w").write(json.dumps(icon, indent=2, sort_keys=True) + "\n")
+PY
+}
+
+write_icon_composer "$PACKAGING_DIR/icon.icon"
+log "wrote $(shown "$PACKAGING_DIR/icon.icon")"
 
 # --- Tray ---------------------------------------------------------------------
 

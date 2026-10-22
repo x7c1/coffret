@@ -192,7 +192,9 @@ fails if any of it does not hold:
   `EnableNodeCliInspectArguments` disabled, `OnlyLoadAppFromAsar` enabled;
 - on macOS, from the `.app` in the attached `.dmg`: `codesign -dv` shows an
   ad hoc signature (`Signature=adhoc`) whose flags include `runtime`, the
-  signature verifies, and the entitlements include `allow-jit`;
+  signature verifies, and the entitlements include `allow-jit`; the `.app`
+  carries its Icon Composer icon in `Assets.car` (`CFBundleIconName` is `Icon`)
+  and an `icon.icns`;
 - on Linux: `dpkg-deb -I` shows the package `coffret-desktop` at the workspace
   version for `amd64`, and `dpkg-deb -c` lists the desktop entry
   (`/usr/share/applications/coffret-desktop.desktop`, whose `StartupWMClass` is

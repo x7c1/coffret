@@ -260,7 +260,11 @@ one-colour picture rather than the app icon, because a tray draws it small and
 in the menu bar's own colours: on macOS it is black and set as a template
 image, which the menu bar draws black or white for its appearance, and on
 Linux it is white, since GNOME's top bar is dark in both its light and its dark
-style. The `.icns` and the development app's `dock-dev.png` are the app icon
+style. On macOS 26 the installed app's tile is drawn from `icon.icon`, the
+source's background colour as its fill and the chest as one flat layer, in the
+shape macOS gives every tile; macOS draws an `.icns`-only app's tile with a
+glass finish of its own, which blurs its edges in the Dock. The `.icns`, the
+icon before macOS 26, and the development app's `dock-dev.png` are the app icon
 inset to 80.5 % on a transparent canvas, the share macOS gives its own icons,
 because the Dock draws icons with margins and a full-bleed one would look
 larger than its neighbours. Their background square has continuous corners at
@@ -304,6 +308,12 @@ app is run, and electron-builder fetches the Electron release it packages
 (and, on Linux, the tool that writes the `.deb`) the first time it bundles,
 so the first `make desktop-dev` and the first `make desktop-build` need the
 network.
+
+On macOS the bundle needs Xcode 26 or later, not the Command Line Tools alone:
+electron-builder compiles the app's Icon Composer icon (`packaging/icon.icon`)
+with Xcode's `actool`. Install Xcode, then point the developer directory at it
+with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`;
+`xcrun actool --version` reports 26 or later once it is in place.
 
 On Linux the addon is built with the system's C compiler, `/usr/bin/cc`
 (`build-essential`), whatever `PATH` puts first: Electron is loaded by the
