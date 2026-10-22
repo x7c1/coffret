@@ -66,21 +66,23 @@ readonly WEB_PUBLIC_DIR="$REPO_ROOT/frontend/packages/apps/web/public"
 readonly SIZE=512
 readonly SOURCE_RX=114
 
-# macOS draws a Dock icon as a rounded square at about 80 % of the canvas with
-# transparent margins; a full-bleed icon looks larger than its neighbours. The
-# `.icns` and the development app's Dock icon are therefore scaled to
+# macOS draws a Dock icon as a rounded square of 824 px on a 1024 px canvas,
+# with transparent margins; a full-bleed icon looks larger than its neighbours.
+# The `.icns` and the development app's Dock icon are therefore scaled to
 # INSET_PERCENT and centred.
-readonly INSET_PERCENT=80
+readonly INSET_PERCENT=80.5
 
 # macOS rounds its icons with continuous corners, whose curvature eases in from
 # the straight edge, where the source's <rect> has circular arcs that turn at
-# once and so look pinched beside the other apps' tiles at the same radius. The
-# macOS icons therefore draw the background as a path with continuous corners
-# of the source's radius, in the proportions UIKit's continuous rounded
-# rectangle is commonly reproduced with (CONTINUOUS_*: each corner starts
-# CONTINUOUS_REACH radii from it, and is three cubic curves meeting at the
-# points the other pairs give).
+# once, and at a larger radius. The macOS icons therefore draw the background
+# as a path with continuous corners, in the proportions UIKit's continuous
+# rounded rectangle is commonly reproduced with: each corner starts
+# CONTINUOUS_REACH radii from it, and is three cubic curves. CONTINUOUS_RX is
+# the radius in source units that matches the tiles macOS 26 draws (its own
+# apps' and the ones it masks): 0.2586 of the tile's side, fitted to within a
+# pixel of a 1024 px rendering.
 readonly CONTINUOUS_REACH=1.52866483
+readonly CONTINUOUS_RX=132
 
 # The app icon's dev badge: a filled disc centred on the centre of the
 # bottom-right corner arc, ringed in the background colour to separate it from
@@ -230,10 +232,10 @@ glyph_d() {
 
 # --- Derived SVGs ---------------------------------------------------------------
 
-# The path data of a SIZE square with continuous corners of radius SOURCE_RX
-# (see CONTINUOUS_REACH), clockwise from the top edge.
+# The path data of a SIZE square with continuous corners of radius
+# CONTINUOUS_RX (see CONTINUOUS_REACH), clockwise from the top edge.
 continuous_corners() {
-  awk -v s="$SIZE" -v r="$SOURCE_RX" -v k="$CONTINUOUS_REACH" 'BEGIN {
+  awk -v s="$SIZE" -v r="$CONTINUOUS_RX" -v k="$CONTINUOUS_REACH" 'BEGIN {
     # One corner, as offsets in radii from it along the edge it leaves (a)
     # and the edge it joins (b): three curves, each with two control points
     # and an end point, after a short line.
@@ -259,7 +261,7 @@ continuous_corners() {
 }
 
 # $1 with its rounded background drawn with continuous corners: the <rect> of
-# radius SOURCE_RX becomes a path of the same fill.
+# radius SOURCE_RX becomes a path of the same fill, rounded at CONTINUOUS_RX.
 write_continuous_svg() {
   local in="$1" out="$2"
   sed -E "s|<rect width=\"$SIZE\" height=\"$SIZE\" rx=\"$SOURCE_RX\" fill=\"([^\"]+)\"/>|<path d=\"$(continuous_corners)\" fill=\"\\1\"/>|" "$in" >"$out"
