@@ -67,4 +67,4 @@ Out of scope: the e2e journey's `--no-sandbox` (`scripts/e2e-electron.sh`) stays
 
 ### Before merge (verified outside the check command)
 - [x] On the Ubuntu 26.04 development machine with `/etc/apparmor.d/coffret-desktop-dev` set aside (`sudo mv` it out and `sudo apparmor_parser -R` the profile), `make desktop-dev` refuses with the message; with the printed commands run, it starts with its sandbox. Needs a person: the commands need `sudo`.
-- [ ] On macOS, `make desktop-dev` starts as before
+- [ ] On macOS, `make desktop-dev` starts as before — not run before merge: no macOS machine was at hand. On macOS `/proc/sys/kernel/apparmor_restrict_unprivileged_userns` does not exist, so the check passes at its first test, the path the "restriction file missing" case of `scripts/desktop-dev-sandbox-test.sh` covers; to be confirmed the next time the app is run on macOS
