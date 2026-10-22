@@ -49,6 +49,12 @@ Ubuntu:
   `/opt/Coffret/chrome-sandbox` setuid root instead, which is Chromium's
   other way into its sandbox. Elsewhere it is left an ordinary file.
 
+The profile names the installed binary alone. The app run from a checkout
+(`make desktop-dev`), or from an extracted `.deb`, is another binary, and on
+Ubuntu 24.04 and later needs a profile of its own; [the environments
+guide](../environments.md#the-development-apps-sandbox-on-linux) gives it and
+the commands that install it.
+
 ## Removing
 
 Run `sudo apt remove coffret-desktop`. That removes `/opt/Coffret/`, the
