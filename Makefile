@@ -639,15 +639,14 @@ desktop-dev: desktop-dev-build
 # The addon an Electron shell loads to run the server in its own process. Cargo
 # writes a cdylib under the platform's library name (libcoffret_napi.dylib on
 # macOS, libcoffret_napi.so on Linux); Node loads a `.node` file, so it is
-# copied to that name beside it. Nothing here starts it: it opens no Library
-# until a shell loads it and a Passphrase is typed into the door's window.
+# placed under that name beside it as a new file, so that a development app
+# running the previous build keeps it (scripts/desktop.sh place-addon). Nothing
+# here starts it: it opens no Library until a shell loads it and a Passphrase is
+# typed into the door's window.
 .PHONY: napi-addon
 napi-addon: web-dist
 	cargo build --release --locked --manifest-path backend/Cargo.toml -p coffret-napi --features embed-web
-	@for built in backend/target/release/libcoffret_napi.dylib backend/target/release/libcoffret_napi.so; do \
-		if [ -f "$$built" ]; then cp "$$built" backend/target/release/coffret.node; exit 0; fi; \
-	done; \
-	echo "the addon's library was not found under backend/target/release"; exit 1
+	./scripts/desktop.sh place-addon
 
 ## down: stop the server, the explorer's build and the development host that `dev` started for LIBRARY
 .PHONY: down
@@ -852,6 +851,16 @@ check-version-change-test:
 desktop-dev-sandbox-test:
 	./scripts/desktop-dev-sandbox-test.sh
 
+## desktop-addon-test: show that napi-addon places the addon as a new file each time, so a running development app keeps the one it loaded
+#
+# scripts/desktop.sh place-addon renames a fresh copy of the library over
+# coffret.node rather than copying onto it; this places a stand-in library
+# twice in a throwaway directory and checks that the second placement is a
+# different inode holding the second library, so it needs no built addon.
+.PHONY: desktop-addon-test
+desktop-addon-test:
+	./scripts/desktop-addon-test.sh
+
 ## shell-lint: shellcheck and shfmt over every shell script in the repository
 #
 # The scripts under scripts/ include the real-Drive targets, which run only when
@@ -894,7 +903,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + desktop-addon-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -962,6 +971,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test desktop-addon-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
