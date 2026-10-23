@@ -686,6 +686,8 @@ fn two_control_objects_of_one_name_answer_duplicate_control_object() {
     let error = Error::from(SyncError::Commit(coffret_device::CommitFailure {
         error: Box::new(CommitError::DuplicateControlObject {
             object: coffret_device::ControlObjectName::head(coffret_device::Generation::FIRST),
+            first: coffret_device::ObjectRef::new("1AbcFirstHandle"),
+            second: coffret_device::ObjectRef::new("1XyzSecondHandle"),
         }),
         repairs: Vec::new(),
     }));
@@ -695,6 +697,11 @@ fn two_control_objects_of_one_name_answer_duplicate_control_object() {
         answered["error"]["kind"], "duplicate_control_object",
         "{answered}"
     );
+    // Both objects' handles are in the line, since the name alone does not
+    // tell them apart.
+    let message = answered["error"]["message"].as_str().expect("a message");
+    assert!(message.contains("1AbcFirstHandle"), "{message}");
+    assert!(message.contains("1XyzSecondHandle"), "{message}");
 }
 
 // Flags that leave a provider short, which the shell refuses itself once the

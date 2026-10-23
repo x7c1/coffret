@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { checkSession, launch, revokeSession } from './auth';
+import { checkSession, launch } from './auth';
 import { dropToken, onSessionEnding } from './credential';
 import { isRefusal } from './refusal';
 
@@ -73,12 +73,4 @@ it('asks about a session with the token being asked about', async () => {
   });
   expect(made[0].url).toBe('/auth/session');
   expect(made[0].init.headers).toEqual({ Authorization: `Bearer ${'c'.repeat(43)}` });
-});
-
-it('ends the session of the token it is given', async () => {
-  const made = recording(() => new Response(null, { status: 204 }));
-  await revokeSession('r'.repeat(43));
-  expect(made[0].url).toBe('/auth/session/revoke');
-  expect(made[0].init.method).toBe('POST');
-  expect(made[0].init.headers).toEqual({ Authorization: `Bearer ${'r'.repeat(43)}` });
 });

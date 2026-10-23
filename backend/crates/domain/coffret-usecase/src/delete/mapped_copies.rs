@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use coffret_model::{EntryPath, Redacted};
@@ -11,8 +10,7 @@ use crate::device_state::{LocalEntry, LocalEntryState, Mapping};
 use crate::fetch::reaching;
 use crate::index::Index;
 use crate::index_error::IndexResult;
-use crate::local_error::LocalError;
-use crate::local_scan::{assess_root, RootState};
+use crate::local_scan::{assess_root, RootRefused, RootState};
 use crate::local_trash::LocalTrash;
 use crate::mapped_roots::MappedRoots;
 use crate::sync::Surfaced;
@@ -271,7 +269,7 @@ async fn assessed(
             Verdict::Unavailable
         }
         Err(error) => {
-            let cause = descent(error, &mapping.local_root);
+            let cause = descent(error);
             warn!(
                 reason = %cause.redacted(),
                 "a mapped root could not be asked about after a deletion; this device's copies \
@@ -297,7 +295,7 @@ fn refused_with(path: &EntryPath, cause: DescentError) -> Surfaced {
     }
 }
 
-/// What reading a mapped folder failed with, in the words a refused discard is
+/// What asking a mapped root failed with, in the words a refused discard is
 /// reported in.
 ///
 /// A refusal of the disk is what it is. A name in the root that folds to the
@@ -305,17 +303,9 @@ fn refused_with(path: &EntryPath, cause: DescentError) -> Surfaced {
 /// besides (spec: EP-14), is a name that stands in the way of the root being
 /// read as anything, and is reported as blocking it at that name — the
 /// sync stops on the same name and says so.
-fn descent(error: LocalError, root: &Path) -> DescentError {
+fn descent(error: RootRefused) -> DescentError {
     match error {
-        LocalError::Io(refused) => DescentError::Io(refused),
-        LocalError::FoldedReservedName { path } | LocalError::UnrepresentableName { path } => {
-            DescentError::Blocked { stopped_at: path }
-        }
-        // Two files claiming one Entry Path is what a whole walk can meet, and
-        // the root check does not walk; answered all the same, at the root the
-        // question was about, rather than assumed away.
-        LocalError::PathCollision { .. } => DescentError::Blocked {
-            stopped_at: root.to_path_buf(),
-        },
+        RootRefused::Io(refused) => DescentError::Io(refused),
+        RootRefused::FoldedReservedName { path } => DescentError::Blocked { stopped_at: path },
     }
 }

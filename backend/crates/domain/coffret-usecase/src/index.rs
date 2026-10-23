@@ -323,6 +323,21 @@ pub trait Index: Send + Sync {
     /// not among them.
     async fn present_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>>;
 
+    /// Every current Entry under a prefix that this device does not have on
+    /// disk, ordered by Entry Path bytes.
+    ///
+    /// [`entries_under`](Self::entries_under) less the paths
+    /// [`present_under`](Self::present_under) names, read at once, so that a
+    /// caller asking which Entries are not here reads the subtree a single time
+    /// and both halves of the answer are of one moment of the catalog. An
+    /// Entry whose file waits to follow a rename of it elsewhere
+    /// ([`LocalEntry::relocate_to`]) is not had at its own path, and is among
+    /// them.
+    async fn entries_absent_under(
+        &self,
+        prefix: Option<&EntryPath>,
+    ) -> IndexResult<Vec<EntryLocation>>;
+
     /// Every row whose file waits to follow its Entry to another path
     /// ([`LocalEntry::relocate_to`]), ordered by the path it stands at
     /// (spec: EP-10).

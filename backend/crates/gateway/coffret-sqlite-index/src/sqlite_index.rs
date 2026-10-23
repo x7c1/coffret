@@ -358,6 +358,18 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn entries_absent_under(
+        &self,
+        prefix: Option<&EntryPath>,
+    ) -> IndexResult<Vec<EntryLocation>> {
+        let prefix = prefix.cloned();
+        self.read(
+            "reading a subtree's Entries this device does not have",
+            move |connection| device_state::entries_absent_under(connection, prefix.as_ref()),
+        )
+        .await
+    }
+
     async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
         self.read(
             "reading what waits to be relocated",

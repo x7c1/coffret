@@ -1,4 +1,4 @@
-import { authUrl, requested, requestedJson } from './request';
+import { authUrl, requestedJson } from './request';
 import type { LibraryState } from './work';
 
 /**
@@ -54,22 +54,6 @@ export function launch(ticket: string, signal?: AbortSignal): Promise<Launched> 
 export function checkSession(token: string, signal?: AbortSignal): Promise<SessionStanding> {
   return requestedJson<SessionStanding>(authUrl('session'), {
     signal,
-    authorization: `Bearer ${token}`,
-  });
-}
-
-/**
- * Ends the session of `token` at the host, and no other (spec: LA-16, LA-18).
- *
- * The token is named rather than read from what is held, because a page
- * letting go of its session lets go of the token first, so that nothing still
- * in flight is handed to it, and asks the host to end it after. Letting the
- * token go is the caller's to do, whatever this answers.
- */
-export async function revokeSession(token: string, signal?: AbortSignal): Promise<void> {
-  await requested(authUrl('session/revoke'), {
-    signal,
-    method: 'POST',
     authorization: `Bearer ${token}`,
   });
 }

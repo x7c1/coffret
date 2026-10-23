@@ -5,7 +5,7 @@
 
 use crate::device_state::Mapping;
 use crate::folder_entry::FolderEntry;
-use crate::local_error::LocalError;
+use crate::local_scan::root_refused::RootRefused;
 use crate::local_scan::root_state::RootState;
 use crate::mapped_roots::MappedRoots;
 use crate::root_marker;
@@ -31,13 +31,13 @@ use crate::unavailable_root::RootUnavailable;
 ///
 /// Only absence is a verdict, and it is the capability that says so: a mapped
 /// root that is a regular file, or one the process may not stat at all, still
-/// fails the run with the [`LocalError::Io`] the gateway reports, carrying the
+/// fails the run with the [`RootRefused::Io`] the gateway reports, carrying the
 /// same path and the same operating-system cause. Nothing here reads an error
 /// kind to tell the two apart.
 pub(crate) async fn assess_root(
     roots: &dyn MappedRoots,
     mapping: &Mapping,
-) -> Result<RootState, LocalError> {
+) -> Result<RootState, RootRefused> {
     let root = mapping.local_root.as_path();
     let Some(probe) = roots.probe_root(root).await? else {
         return Ok(RootState::Unavailable(RootUnavailable::Missing));
@@ -89,7 +89,7 @@ pub(crate) async fn assess_root(
             // as holding content. Counting it either way is a guess, so the run
             // reports the name instead (spec: EP-14).
             if let Some(folded) = folded_reserved_name(&entries) {
-                return Err(LocalError::FoldedReservedName {
+                return Err(RootRefused::FoldedReservedName {
                     path: root.join(folded),
                 });
             }
@@ -202,7 +202,7 @@ mod tests {
         assert!(
             matches!(
                 &refused,
-                LocalError::FoldedReservedName { path } if path == &root.join(".COFFRET"),
+                RootRefused::FoldedReservedName { path } if path == &root.join(".COFFRET"),
             ),
             "the verdict names the folder it met: {refused:?}",
         );

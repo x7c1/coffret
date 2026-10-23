@@ -145,6 +145,6 @@ fn desktop() -> Result<&'static Desktop> {
 
 /// A refusal, as the exception the shell catches: the whole chain, which is
 /// the sentence a person is shown where the shell shows one.
-fn failed(error: anyhow::Error) -> Error {
-    Error::from_reason(format!("{error:#}"))
+fn failed(error: core::Error) -> Error {
+    Error::from_reason(error.chain_line())
 }

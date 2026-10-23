@@ -140,6 +140,13 @@ impl Index for InMemoryIndex {
         Ok(self.locked().present_under(prefix))
     }
 
+    async fn entries_absent_under(
+        &self,
+        prefix: Option<&EntryPath>,
+    ) -> IndexResult<Vec<EntryLocation>> {
+        Ok(self.locked().entries_absent_under(prefix))
+    }
+
     async fn awaiting_relocation(&self) -> IndexResult<Vec<LocalEntry>> {
         Ok(self.locked().awaiting_relocation())
     }

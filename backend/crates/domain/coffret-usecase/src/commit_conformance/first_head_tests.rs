@@ -207,7 +207,7 @@ async fn refused_with_two_of(name: &ControlObjectName) {
         .await
         .expect_err("a Library with two control objects under one name is not committed to");
     match *failure.error {
-        CommitError::DuplicateControlObject { ref object } => assert_eq!(object, name),
+        CommitError::DuplicateControlObject { ref object, .. } => assert_eq!(object, name),
         ref other => panic!("expected the Library to be refused for {name}, got {other:?}"),
     }
     assert!(
@@ -219,7 +219,7 @@ async fn refused_with_two_of(name: &ControlObjectName) {
 
     let index = InMemoryIndex::new();
     match catch_up(&store, &index, &keys, &policy().retry).await {
-        Err(CommitError::DuplicateControlObject { ref object }) => assert_eq!(object, name),
+        Err(CommitError::DuplicateControlObject { ref object, .. }) => assert_eq!(object, name),
         Err(other) => panic!("expected the catch-up to refuse {name}, got {other:?}"),
         Ok(_) => panic!("a Library with two objects named {name} is read by no one"),
     }

@@ -7,7 +7,7 @@ use coffret_server::Unlocked;
 use crate::door::DoorMode;
 use crate::open_library::open_library;
 use crate::shared::Shared;
-use crate::{refusal_evidence, refusal_line, Event};
+use crate::{refusal_evidence, refusal_line, Error, Event};
 
 /// What a submission through the door did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +37,7 @@ pub(crate) enum AttemptRefused {
     ServerStopped,
     /// Opening or unlocking the Library refused: the Passphrase does not open
     /// it, another server serves it, nothing could listen.
-    Library(anyhow::Error),
+    Library(Error),
     /// The attempt ended without an answer.
     Panicked,
 }
@@ -126,8 +126,11 @@ pub(crate) async fn attempt(
             let name = state.name.clone();
             let reopened = reopen(&name, move || Ok(passphrase))
                 .await
-                .map_err(|refused| AttemptRefused::Library(refused.into()))?;
-            match state.unlock(reopened).map_err(AttemptRefused::Library)? {
+                .map_err(|refused| AttemptRefused::Library(Error::Device(refused)))?;
+            match state
+                .unlock(reopened)
+                .map_err(|refused| AttemptRefused::Library(Error::Server(refused)))?
+            {
                 Unlocked::Now => {
                     tracing::info!(operation = "unlock", "the Library was unlocked in place");
                     shared.events.send(Event::LibraryUnlocked);

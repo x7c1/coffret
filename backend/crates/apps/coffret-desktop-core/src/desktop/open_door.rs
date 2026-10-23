@@ -1,8 +1,8 @@
-use anyhow::Context;
 use zeroize::Zeroizing;
 
 use super::Desktop;
 use crate::door::{DoorMode, DoorUrl};
+use crate::{Drawn, Error, Result};
 
 impl Desktop {
     /// A fresh token for one Passphrase window opened in `mode`, as the URL
@@ -10,15 +10,18 @@ impl Desktop {
     ///
     /// Refused in the unlock mode while nothing is served, since there is
     /// nothing a window could unlock.
-    pub fn open_door(&self, mode: DoorMode) -> anyhow::Result<DoorUrl> {
+    pub fn open_door(&self, mode: DoorMode) -> Result<DoorUrl> {
         if mode == DoorMode::Unlock && self.shared.served().is_none() {
-            anyhow::bail!("no Library is open in this app to unlock");
+            return Err(Error::NothingToUnlock);
         }
         let token = self
             .shared
             .windows
             .issue(mode)
-            .context("the Passphrase window's token could not be drawn")?;
+            .map_err(|cause| Error::NotDrawn {
+                what: Drawn::DoorToken,
+                cause,
+            })?;
         let mut url = Zeroizing::new(format!("http://{}/#door=", self.door));
         // Room for the token before it is written, so that the buffer never
         // grows and leaves an unwiped copy of it behind.
