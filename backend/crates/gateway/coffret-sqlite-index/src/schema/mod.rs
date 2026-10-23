@@ -326,14 +326,14 @@ CREATE TABLE reserved_paths (
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5) — which is what becomes of a layout-18 file. Layout 17 gains
-/// the tables of reservations and layout 16 has its materialization records
-/// tied to the Entries its catalog holds, and both then lose their catalog the
-/// same way; layouts 7 to 15 have their device-local group upgraded in place
-/// and lose their catalog too.
-/// Anything else — older than that, or written by a build that came after this
-/// one — is refused, because guessing at a layout this build does not know is
-/// how a cache turns into wrong answers.
+/// (spec: RV-5) — which is what becomes of a layout-18 file. Below the floor,
+/// layout 17 gains the tables of reservations and layout 16 has its
+/// materialization records tied to the Entries its catalog holds, and both then
+/// lose their catalog the same way; layouts 7 to 15 have their device-local
+/// group upgraded in place and lose their catalog too. Anything else — older
+/// than layout 7, or written by a build that came after this one — is refused,
+/// because guessing at a layout this build does not know is how a cache turns
+/// into wrong answers.
 pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     // An Entry may only name a Container the catalog holds, and SQLite enforces
     // that only when asked to — per connection, not per file.
@@ -361,9 +361,9 @@ fn carries_a_readable_device_group(found: i64) -> bool {
 /// constants.
 ///
 /// Split out so the rule can be stated against a synthetic pair of versions: in
-/// this build the real window holds two layouts ([`DEVICE_SCHEMA_VERSION`] and
-/// the one after it), and the layouts below it take the upgrade instead, so a
-/// case over the real constants cannot show where its two edges fall.
+/// this build the real window holds one layout, [`DEVICE_SCHEMA_VERSION`]
+/// itself, and the layouts below it take an upgrade instead, so a case over the
+/// real constants cannot show where its two edges fall.
 fn within(window: Range<i64>, found: i64) -> bool {
     window.contains(&found)
 }
@@ -490,11 +490,11 @@ mod tests {
     ///
     /// The rule is that a file stamped at or above the device-local floor and
     /// below the current layout keeps its device group and loses its catalog,
-    /// and that everything outside is refused. In this build the real window
-    /// is empty, and the layouts below it take the upgrade instead, so this is
-    /// the one place the rule itself is stated — with numbers of its
-    /// own, the way the suites beside this crate write their layout versions
-    /// out rather than reading them off the constants.
+    /// and that everything outside is not discarded this way. In this build the
+    /// real window holds layout 18 alone, and the layouts below it take an
+    /// upgrade instead, so this is the one place the rule itself is stated —
+    /// with numbers of its own, the way the suites beside this crate write
+    /// their layout versions out rather than reading them off the constants.
     #[test]
     fn the_window_takes_the_floor_and_stops_below_the_current_layout() {
         let window = 4..6;

@@ -291,7 +291,9 @@ Concept background: [Library](../../concepts/library/),
   ticket makes a session after every session was revoked. *(Form: test)*
 - **LA-19.** What the host reads of a request is bounded before it is read. A
   request to `/auth` brings at most 1 KiB of body, any request at most 8 KiB
-  of headers, and reading a request to `/auth` stops 5 seconds after it began.
+  of headers. Reading any request's head and reading the body of a request to
+  `/auth` are given 5 seconds each, the body's counted from when its reading
+  began rather than from the start of the request.
   A request carrying a large body — an upload — that is refused by LA-14 is
   refused without its body being read, and the connection it came on is
   closed rather than drained. *(Form: test)*

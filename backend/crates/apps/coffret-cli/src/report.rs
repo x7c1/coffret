@@ -367,6 +367,14 @@ mod tests {
             );
         }
         assert!(lines[0].starts_with("settled container "), "{}", lines[0]);
+        assert!(lines[1].contains("never reached Storage"), "{}", lines[1]);
+        assert!(lines[2].contains("its object was trashed"), "{}", lines[2]);
+        assert_ne!(
+            lines[1].replace(&container(2).to_string(), ""),
+            lines[2].replace(&container(3).to_string(), ""),
+            "a Container that never reached Storage and one whose object was trashed \
+             are told apart",
+        );
         assert!(lines[3].contains("still in Storage"), "{}", lines[3]);
         assert!(lines[4].starts_with("untrashed container "), "{}", lines[4]);
         assert!(

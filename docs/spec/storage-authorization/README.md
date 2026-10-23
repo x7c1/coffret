@@ -4,8 +4,9 @@ Rule prefix: `SA`. How a device obtains the credential it reaches a Storage
 provider with: the one-time authorization flow and its PKCE and loopback
 redirect, the single permission it asks for, the width of the grant it
 verifies before anything is cached, what later runs mint from what was
-kept, and where on a device a grant is kept — once per account, opened
-through an envelope each Library that uses the account holds.
+kept, where on a device a grant is kept — once per account, opened
+through an envelope each Library that uses the account holds — and what a
+page polling a served Library is told of a reconnect that renews a grant.
 
 Concept background: [Storage](../../concepts/storage/),
 [Library](../../concepts/library/),
@@ -61,3 +62,14 @@ Concept background: [Storage](../../concepts/storage/),
   from being is a credential for the rest of that account. *(Form: prose — a
   scoping statement about a credential's reach, honored by SA-3 and SA-4
   together rather than by an observation of its own.)*
+- **SA-10.** A grant a served Library's Storage stopped accepting is renewed
+  by a **reconnect**: the explorer asks the server to run the flow again, and
+  the consent page goes back to the request that asked and to no one else.
+  The work answer a page polls reports where the last reconnect stands, and
+  while one waits it carries `flow`, a digest of the consent page's URL — the 32-bit
+  FNV-1a of its UTF-8 bytes, as eight lowercase hex digits — so that a window
+  holding the page its own request was answered with can tell whether that
+  page is still the one waited on. `flow` is present only while the reconnect
+  is waiting and absent once it has ended, and the work answer never carries
+  the consent page or its URL: a second tab asking what the server is doing is
+  told a page is open, not handed one to open. *(Form: test)*

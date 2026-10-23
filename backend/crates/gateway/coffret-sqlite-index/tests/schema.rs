@@ -49,23 +49,26 @@ use support::{
     Scratch,
 };
 
-/// The layout this build writes, and the one its device-local group last
-/// changed at.
+/// The layout this build writes, the one its device-local group last changed
+/// at, and the oldest whose device-local group it upgrades in place.
 ///
 /// Written out rather than read from the adapter, which keeps them to itself.
-/// A case that moved with the constant would stop being a case about these two
-/// numbers, and it is the numbers that decide everything below.
+/// A case that moved with the constants would stop being a case about these
+/// numbers, and it is the numbers that decide everything below: a file at
+/// [`DEVICE_SCHEMA_VERSION`] keeps its device group and loses its catalog, one
+/// from [`OLDEST_UPGRADED_SCHEMA_VERSION`] up to the layout before that takes
+/// the upgrade, and one older than that is refused.
 const SCHEMA_VERSION: i64 = 19;
-const DEVICE_SCHEMA_VERSION: i64 = 7;
+const DEVICE_SCHEMA_VERSION: i64 = 18;
+const OLDEST_UPGRADED_SCHEMA_VERSION: i64 = 7;
 
-/// The layout before this one, which every case about an older file is written
-/// against.
+/// The newest layout this build refuses for being too old, which every case
+/// about a refused older file is written against.
 ///
-/// Under the previous pair its device-local group was one this build read, and
-/// a file stamped with it had its catalog discarded and the rest kept. It is
-/// the same number here and the answer is now a refusal, which is the whole of
-/// what an empty window changes.
-const PREVIOUS_SCHEMA_VERSION: i64 = 6;
+/// It sits right below the oldest layout the upgrade takes, so a refusal here
+/// is the edge of what this build reads rather than a version picked from far
+/// below it.
+const REFUSED_SCHEMA_VERSION: i64 = OLDEST_UPGRADED_SCHEMA_VERSION - 1;
 
 /// Where one part of the Library lives on this device (spec: EP-9).
 fn mapping() -> Mapping {
@@ -188,7 +191,12 @@ fn restamp(file: &Path, version: i64) {
 /// catch-up rebuilds from Storage, and a warning says so (spec: RV-5, FM-15).
 #[tokio::test]
 async fn the_layout_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
-    loses_its_catalog(SCHEMA_VERSION - 1, Kept::Records).await;
+    assert_eq!(
+        DEVICE_SCHEMA_VERSION,
+        SCHEMA_VERSION - 1,
+        "the layout before this one is the device-local floor"
+    );
+    loses_its_catalog(DEVICE_SCHEMA_VERSION, Kept::Records).await;
 }
 
 /// The layout two before this one keeps every row of its device-local group,
@@ -474,14 +482,14 @@ async fn an_existing_file_reopens() {
     );
 }
 
-/// The layout before this one is refused whole, and nothing in it is discarded.
+/// The newest layout older than the upgrades is refused whole, and nothing in
+/// it is discarded.
 ///
-/// This is the case that used to watch a catalog be thrown away while the
-/// device's own state was kept. The change that renamed the table of pending
-/// rows (spec: OC-2) moved the device-local floor up to the current layout, so
-/// there is no longer any version at which half a file can be kept: the window
-/// is empty, the discard path is unreachable, and a file stamped with the
-/// previous layout is refused entire.
+/// No layout below [`OLDEST_UPGRADED_SCHEMA_VERSION`] has a device-local group
+/// this build reads or upgrades, and Storage cannot reconstruct mappings,
+/// materializations or provenance, so there is no version below it at which
+/// half a file can be kept: a file stamped with such a layout is refused
+/// entire.
 ///
 /// What that costs and what it does not is the point of the assertions. Nothing
 /// is converted and nothing is thrown away — every row of both groups is still
@@ -489,18 +497,18 @@ async fn an_existing_file_reopens() {
 /// mappings there to be read out by name and recorded again (see the
 /// `refused_index` suite beside this one).
 #[tokio::test]
-async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
+async fn a_layout_older_than_the_upgrades_is_refused_whole_rather_than_half_discarded() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, REFUSED_SCHEMA_VERSION).await;
 
     let result = SqliteIndex::open(scratch.file());
     assert!(
         matches!(
             result.as_ref().err(),
             Some(IndexError::UnsupportedSchema { found, supported })
-                if *found == PREVIOUS_SCHEMA_VERSION && *supported == SCHEMA_VERSION
+                if *found == REFUSED_SCHEMA_VERSION && *supported == SCHEMA_VERSION
         ),
-        "expected the layout below an empty window to be refused, got {:?}",
+        "expected the layout below the oldest upgraded one to be refused, got {:?}",
         result.err()
     );
 
@@ -520,7 +528,7 @@ async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
     }
     assert_eq!(
         stamp_of(&scratch.file()),
-        PREVIOUS_SCHEMA_VERSION,
+        REFUSED_SCHEMA_VERSION,
         "and the file is still stamped as the layout it was written to"
     );
 }
@@ -530,7 +538,7 @@ async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
 #[tokio::test]
 async fn a_fresh_index_rebuilds_only_the_catalog() {
     let older = Scratch::new();
-    a_file_stamped(&older, PREVIOUS_SCHEMA_VERSION).await;
+    a_file_stamped(&older, REFUSED_SCHEMA_VERSION).await;
     assert!(
         SqliteIndex::open(older.file()).is_err(),
         "the file the owner is recovering from is one this build refuses"
@@ -589,23 +597,21 @@ async fn a_fresh_index_rebuilds_only_the_catalog() {
     );
     assert_eq!(
         stamp_of(&older.file()),
-        PREVIOUS_SCHEMA_VERSION,
+        REFUSED_SCHEMA_VERSION,
         "the refused file was never a step in any of it and is untouched"
     );
 }
 
-/// A layout from further back than the previous one is refused for the same
-/// reason and in the same way.
+/// A layout from further back than the newest refused one is refused for the
+/// same reason and in the same way.
 ///
-/// The floor and the current layout coincide in this build, so "older than the
-/// device state" now names every older layout rather than a range below a
-/// window. The case stays at a version well below both, because what it is here
-/// to say is that the answer does not change with how old the file is: one
-/// refusal, and a file left exactly as it was found.
+/// The case stays at a version well below the oldest upgraded layout, because
+/// what it is here to say is that the answer does not change with how old the
+/// file is: one refusal, and a file left exactly as it was found.
 #[tokio::test]
-async fn a_layout_older_than_the_device_state_is_refused() {
+async fn a_layout_further_back_is_refused_the_same_way() {
     let scratch = Scratch::new();
-    let found = DEVICE_SCHEMA_VERSION - 2;
+    let found = OLDEST_UPGRADED_SCHEMA_VERSION - 2;
     a_file_stamped(&scratch, found).await;
 
     let result = SqliteIndex::open(scratch.file());
@@ -674,15 +680,14 @@ async fn a_layout_from_a_newer_build_is_refused() {
 ///
 /// A server answering a browser while the same person runs a sync in a terminal
 /// is two processes over one file, and both may reach an old one at the same
-/// moment. This used to be about the second one finding the layout the first had
-/// rebuilt; with the window empty there is no rebuild for it to find, and what
-/// has to hold instead is that neither open is a half-step — the file the second
-/// process reaches is the file the first one was refused by, and the owner's
-/// recovery does not race two conversions.
+/// moment. For a layout this build refuses there is no rebuild for the second
+/// to find, and what has to hold is that neither open is a half-step — the file
+/// the second process reaches is the file the first one was refused by, and the
+/// owner's recovery does not race two conversions.
 #[tokio::test]
 async fn a_second_connection_over_an_older_file_refuses_it_too() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, REFUSED_SCHEMA_VERSION).await;
 
     for attempt in ["the first", "the second"] {
         let result = SqliteIndex::open(scratch.file());
@@ -690,7 +695,7 @@ async fn a_second_connection_over_an_older_file_refuses_it_too() {
             matches!(
                 result.as_ref().err(),
                 Some(IndexError::UnsupportedSchema { found, .. })
-                    if *found == PREVIOUS_SCHEMA_VERSION
+                    if *found == REFUSED_SCHEMA_VERSION
             ),
             "expected {attempt} open to be refused, got {:?}",
             result.err()
@@ -699,7 +704,7 @@ async fn a_second_connection_over_an_older_file_refuses_it_too() {
 
     assert_eq!(
         stamp_of(&scratch.file()),
-        PREVIOUS_SCHEMA_VERSION,
+        REFUSED_SCHEMA_VERSION,
         "neither open stamped a layout of its own into the file"
     );
     assert_eq!(
@@ -724,12 +729,12 @@ async fn a_second_connection_over_an_older_file_refuses_it_too() {
 #[tokio::test]
 async fn refusing_an_older_layout_records_nothing_and_names_no_path() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, REFUSED_SCHEMA_VERSION).await;
 
     let logs = CapturedLogs::capture();
     let refusal = SqliteIndex::open(scratch.file())
         .err()
-        .expect("the previous layout must be refused");
+        .expect("a layout older than the upgrades must be refused");
 
     assert!(
         logs.at(Level::WARN).is_empty(),
