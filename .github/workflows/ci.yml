@@ -345,7 +345,7 @@ jobs:
   # ones most worth looking at.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -461,10 +461,13 @@ jobs:
       # until the job is cancelled. With the cache warm apt downloads no
       # package and the step takes seconds. The bound is for a cold cache: a
       # working mirror fills it in under a minute, a stall the retries get past
-      # in a few, and a slow mirror may still run out of it, but only on the run
-      # that fills the cache, not on every run after.
+      # in a few, and a slow mirror has been seen to take ten to download the
+      # 25 MB of fonts and X packages alone, so the bound leaves room for that.
+      # A cold run is not rare: the repository's caches are evicted whenever
+      # the cargo caches of a few branches push the total past the limit, and
+      # this cache goes with them.
       - name: Install Chromium's system packages
-        timeout-minutes: 5
+        timeout-minutes: 15
         working-directory: frontend/packages/apps/e2e
         run: pnpm exec playwright install-deps chromium
 
