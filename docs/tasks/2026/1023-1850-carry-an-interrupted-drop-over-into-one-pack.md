@@ -10,7 +10,7 @@ check_command: 'make check && grep -q "received" backend/crates/gateway/coffret-
 assignee: null
 branch: task/1023-1850-carry-an-interrupted-drop-over-into-one-pack
 created_at: 2026-10-23T09:50:00Z
-updated_at: 2026-10-23T19:05:00Z
+updated_at: 2026-10-23T19:30:00Z
 ---
 
 # fix(server): carry a drop that was cut off by a quit over into one Pack when it is dropped again
@@ -74,4 +74,4 @@ takes it over, so that one Pack results.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this machine, with the agent's development Library (`libraries-dev/agent`, see `docs/guides/environments.md`) and the development server: drop a folder of several files through the explorer, stop the server while the drop is being received, start it again, drop the same folder again, and confirm the explorer lists one Pack-resident folder holding every file and the server log says the cut-off drop was taken over. The merging session records what it ran in the PR.
+- [x] On this machine, with the agent's development Library (`libraries-dev/agent`, see `docs/guides/environments.md`) and the development server: drop a folder of several files through the explorer, stop the server while the drop is being received, start it again, drop the same folder again, and confirm the explorer lists one Pack-resident folder holding every file and the server log says the cut-off drop was taken over. The merging session records what it ran in the PR.
