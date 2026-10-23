@@ -589,6 +589,16 @@ fn every_answer() -> Vec<WorkDto> {
             deletion(3, true, DeleteStatus::Stopped(conflict())),
             0,
         ),
+        // A deletion whose commit landed, removing this device's own copies
+        // of what it took out of the Library: a phase that cannot count.
+        deleting(
+            quiet(),
+            DeleteRun {
+                step: Some(step(Phase::RemovingCopies, None)),
+                ..deletion(4, true, DeleteStatus::Deleting)
+            },
+            0,
+        ),
     ];
 
     let mut every = vec![idle, running, sending, committing];

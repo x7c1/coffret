@@ -5,7 +5,7 @@ use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, Lapsed, NotFrozen};
 use coffret_usecase::rename::{RenameOutcome, RenamedPath};
-use coffret_usecase::sync::{Surfaced, SyncOutcome};
+use coffret_usecase::sync::{RetainedKeyringReplicas, Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
 
 use crate::finding::Finding;
@@ -93,6 +93,7 @@ impl From<&SyncOutcome> for Findings {
                 }))
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
+                .chain(outcome.retained_keyrings.iter().map(retained_keyring))
                 .chain(committed(outcome.commit.as_ref()))
                 .chain(repaired(outcome.commit.as_ref()))
                 .collect(),
@@ -289,6 +290,15 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
     }
 }
 
+/// Keyring replicas no head names, as the run that listed them says them
+/// (spec: OC-4).
+fn retained_keyring(retained: &RetainedKeyringReplicas) -> Finding {
+    Finding::RetainedKeyring {
+        generation: retained.generation,
+        replicas: retained.replicas,
+    }
+}
+
 /// The finding for one file a sync found renamed on disk and carried into the
 /// Library as a rename of its Entry (spec: EP-10).
 ///
@@ -465,6 +475,7 @@ mod tests {
             }],
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
@@ -511,6 +522,7 @@ mod tests {
             unavailable: Vec::new(),
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
@@ -569,6 +581,7 @@ mod tests {
             unavailable: Vec::new(),
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
@@ -629,6 +642,7 @@ mod tests {
             unavailable: Vec::new(),
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
@@ -667,6 +681,7 @@ mod tests {
             }],
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let said = |prefix| {
@@ -769,11 +784,47 @@ mod tests {
                 entries: 1,
             }],
             commit: None,
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
         assert_eq!(findings.len(), 1);
         assert!(!findings.is_empty());
+        assert!(!findings.needs_attention());
+    }
+
+    // OC-4: Keyring replicas no head names are reported for review and kept,
+    // in a generation and a count, and do not turn the exit status: there is
+    // nothing for a person to do about them.
+    #[test]
+    fn retained_keyring_replicas_are_said_and_not_escalated() {
+        let outcome = SyncOutcome {
+            reserved: Vec::new(),
+            relocations: Vec::new(),
+            added: Vec::new(),
+            replaced: Vec::new(),
+            renamed: Vec::new(),
+            unchanged: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: None,
+            retained_keyrings: vec![RetainedKeyringReplicas {
+                generation: coffret_model::Generation::new(3).expect("a small generation is one"),
+                replicas: 2,
+            }],
+        };
+
+        let findings = Findings::from(&outcome);
+        let said: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            said,
+            [
+                "retained Keyring generation 3: 2 replicas that no head names, left by an \
+              interrupted commit most likely — kept, and nothing reads them"
+            ],
+        );
         assert!(!findings.needs_attention());
     }
 
@@ -884,6 +935,7 @@ mod tests {
                 },
             }],
             commit: Some(unfinished_commit(container_id)),
+            retained_keyrings: Vec::new(),
         };
 
         let findings = Findings::from(&outcome);
@@ -1321,6 +1373,7 @@ mod tests {
             unavailable: Vec::new(),
             settled: Vec::new(),
             commit: Some(repaired()),
+            retained_keyrings: Vec::new(),
         };
         let freeze = FreezeOutcome {
             settled: Vec::new(),

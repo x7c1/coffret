@@ -124,6 +124,9 @@ mod candidate;
 mod disposal;
 pub use disposal::Disposal;
 
+mod retained_keyring_replicas;
+pub use retained_keyring_replicas::RetainedKeyringReplicas;
+
 mod settle;
 pub(crate) use settle::{complete_after_catch_up, settle, PendingWork, SettleStorage};
 

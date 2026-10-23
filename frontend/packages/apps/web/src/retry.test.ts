@@ -297,7 +297,7 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
 // with no button, an earlier refusal of a press is not kept standing either.
 // Storage going away is the retry's own case, and keeps it.
 it('offers no second attempt at a run stopped by an epoch or a lock', () => {
-  for (const error of ['epoch', 'locked'] as const) {
+  for (const error of ['epoch', 'library_predates_format', 'locked'] as const) {
     const stopped: Refused = {
       kind: error,
       message: 'what remedies this is at a terminal',

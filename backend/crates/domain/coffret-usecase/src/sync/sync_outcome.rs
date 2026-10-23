@@ -3,6 +3,7 @@ use coffret_model::{ContainerId, EntryPath};
 use crate::commit::CommitOutcome;
 use crate::relocate::Relocation;
 use crate::rename::RenamedPath;
+use crate::sync::retained_keyring_replicas::RetainedKeyringReplicas;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
@@ -98,6 +99,13 @@ pub struct SyncOutcome {
     /// current has its bookkeeping completed — an earlier commit whose record
     /// landed and whose Index refresh did not (spec: OC-7).
     pub settled: Vec<Settled>,
+    /// The Keyring replica objects Storage lists that no head names, by
+    /// generation: suspected orphans, kept and reported, never removed
+    /// (spec: OC-4).
+    ///
+    /// Read off the catch-up's listing, before the run writes a candidate of
+    /// its own.
+    pub retained_keyrings: Vec<RetainedKeyringReplicas>,
     /// What the commit did, or `None` when the run had nothing to commit.
     pub commit: Option<CommitOutcome>,
 }

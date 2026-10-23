@@ -95,6 +95,30 @@ impl ApiError {
         .caused_by(cause)
     }
 
+    /// The Library was written before the Journal record schema this build
+    /// reads, so nothing of it is read or repaired here (spec: FM-15).
+    ///
+    /// Its own kind rather than `unverified`, because that one says what
+    /// Storage holds is not what the Library names — a Library to distrust —
+    /// where this one is a Library to make again. And no retry mends it, for
+    /// the reason [`epoch`](Self::epoch) gives: what stops it is the Library as
+    /// it stands, not the run. `409`, for that reason too: Storage answered,
+    /// this process read the answer correctly, and what the request conflicts
+    /// with is the Library's format.
+    ///
+    /// The sentence says what to do and names no schema number: that is for
+    /// the log, where the cause takes it.
+    pub(super) fn library_predates_format(cause: String) -> Self {
+        Self::plain(
+            StatusCode::CONFLICT,
+            "library_predates_format",
+            "this Library predates this app's format, so nothing of it is read — make it again \
+             and bring its files in again"
+                .to_owned(),
+        )
+        .caused_by(cause)
+    }
+
     /// The Library moved underneath a batch while it was being assembled:
     /// another device committed meanwhile, and either what this one planned no
     /// longer fits what is current (spec: CP-7, CP-18) or it lost the commit

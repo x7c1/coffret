@@ -61,10 +61,11 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
     let to = head_of(index).await?;
     if let Some(memory) = memory {
         // Kept with the head it brought the catalog to, which is what makes it
-        // the listing of this catalog rather than of whatever is newer.
+        // the listing of this catalog rather than of whatever is newer. A
+        // cache: the catalog has advanced whether or not it is kept.
         memory
             .remember_listing(index, Arc::new(caught.listing), to)
-            .await?;
+            .await;
         // And this is where a repair made since is learned of, under a
         // commitment that need not have moved: a finding that the set is short,
         // kept from an earlier read, is not carried past it (spec: KL-13, KL-15).

@@ -8,6 +8,7 @@ use crate::relocate::{relocate_waiting, LocalDisk, Relocation};
 use crate::rename::RenamedPath;
 use crate::spooled_container::commit_spooled;
 use crate::sync::disposal::Disposal;
+use crate::sync::retained_keyring_replicas::retained_keyring_replicas;
 use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
@@ -135,6 +136,9 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // What the scan reads the catalog at, and so what the batch is prepared
     // against (spec: CP-4, EP-7).
     let base = caught.head_generation();
+    // Off the same listing, before this run writes a candidate of its own: what
+    // it counts is somebody else's, or an earlier run's (spec: OC-4).
+    let retained_keyrings = retained_keyring_replicas(&caught, index).await?;
 
     // The settle announces its own phase, and only where there are rows to
     // settle. It reads the slots an interrupted batch attempted through the
@@ -302,6 +306,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         reserved: survey.reserved,
         unavailable: survey.unavailable,
         settled,
+        retained_keyrings,
         commit,
     };
     let completed = outcome
@@ -364,6 +369,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .filter(|one| matches!(one, Settled::Retained { .. }))
             .count(),
         left_in_storage,
+        retained_keyrings = outcome.retained_keyrings.len(),
         "a sync run finished",
     );
     Ok(outcome)

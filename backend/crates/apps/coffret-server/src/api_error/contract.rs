@@ -103,6 +103,13 @@ fn every_refusal() -> Vec<ApiError> {
                 generation: Generation::new(41).expect("a small generation is one"),
             })),
         }),
+        // `library_predates_format`: a Library written before the Journal
+        // record schema this build reads, as the start-up catch-up meets it.
+        ApiError::from(Error::CatchUp {
+            cause: Box::new(CommitError::Format(
+                coffret_device::FormatError::UnsupportedJournalRecordSchema { schema: 2 },
+            )),
+        }),
         // `conflict`: a commit the Library moved underneath, as a sync meets it.
         ApiError::from(Error::Sync {
             cause: Box::new(coffret_device::SyncError::Commit(

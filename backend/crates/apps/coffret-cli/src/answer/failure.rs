@@ -10,6 +10,7 @@ use coffret_device::{
 };
 
 use crate::fetch::UnmappedEntry;
+use crate::interrupted::Interrupted;
 use crate::refusal::Refusal;
 use crate::report;
 
@@ -94,7 +95,8 @@ impl Classified {
 ///
 /// First the kinds a caller acts on whichever layer carried them, found
 /// anywhere in the chain: a one-Entry fetch no mapping reaches, an Index file
-/// at a layout this build does not read, a Drive Library with no grant,
+/// at a layout this build does not read, a Journal record of a schema this
+/// build is too old or too new for, a Drive Library with no grant,
 /// credentials Storage rejected, and an epoch this device holds no key for.
 /// Each is answered by one gesture — `coffret map`, deleting the Index file,
 /// `coffret authorize`, the credentials, re-enrolment — whatever flow met it.
@@ -113,6 +115,11 @@ fn classified<'a>(
         if link.is::<UnmappedEntry>() {
             return Classified::kind("unmapped");
         }
+        // Stopped by the person at the terminal, whatever it was doing: what
+        // it left is the next sync's to settle.
+        if link.is::<Interrupted>() {
+            return Classified::kind("interrupted");
+        }
         if let Some(IndexError::UnsupportedSchema { found, supported }) = link.downcast_ref() {
             return Classified {
                 kind: "unsupported_schema",
@@ -125,6 +132,13 @@ fn classified<'a>(
         // nothing else (spec: FM-9, FM-15).
         if let Some(FormatError::JournalRecordNeedsNewerBuild { .. }) = link.downcast_ref() {
             return Classified::kind("newer_build_needed");
+        }
+        // The other side of the same line: a record of a schema older than
+        // this build reads. The Library is not broken, it predates this
+        // build's format, and what a person does about it is make it again
+        // (spec: FM-15).
+        if let Some(FormatError::UnsupportedJournalRecordSchema { .. }) = link.downcast_ref() {
+            return Classified::kind("library_predates_format");
         }
         // A rename refused before anything was written is the request's own,
         // and each refusal is put right differently.

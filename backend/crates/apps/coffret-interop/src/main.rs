@@ -31,7 +31,8 @@ enum Command {
         #[arg(long = "in")]
         input: PathBuf,
     },
-    /// Print one control object's payload, keyed by field name
+    /// Print one control object's payload, keyed by field name, or a
+    /// Container's meta section
     Dump {
         /// File holding the object's bytes, as fetched from Storage
         #[arg(long)]
@@ -42,6 +43,10 @@ enum Command {
         /// File holding the Library's Recovery Code
         #[arg(long)]
         recovery_code: PathBuf,
+        /// A Keyring replica holding the Container's key, saved under the name
+        /// it is stored under; needed to render a Container
+        #[arg(long)]
+        keyring: Option<PathBuf>,
     },
 }
 
@@ -53,8 +58,12 @@ fn main() -> Result<()> {
             object,
             name,
             recovery_code,
+            keyring,
         } => {
-            println!("{}", coffret_interop::dump(&object, &name, &recovery_code)?);
+            println!(
+                "{}",
+                coffret_interop::dump(&object, &name, &recovery_code, keyring.as_deref())?
+            );
             Ok(())
         }
     }

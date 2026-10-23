@@ -29,9 +29,25 @@ use crate::index_error::{IndexError, IndexResult};
 /// records its mappings and replays the Library through this very catalog, and
 /// only then is the catalog taken away — so what the case meets is a device
 /// whose catalog went bad under it, rather than one that never had one.
+///
+/// Or, made with [`refusing_containers`](Self::refusing_containers), a catalog
+/// that cannot say which Containers are current, and answers everything else
+/// honestly: the one question keeping a listing asks, which a catch-up's replay
+/// never does — so what a case meets is the catalog brought up to the head and
+/// then refusing what is only ever a cache's bookkeeping.
 pub struct RefusingIndex {
     inner: InMemoryIndex,
     refusing: AtomicBool,
+    question: Question,
+}
+
+/// Which question the catalog refuses.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Question {
+    /// [`Index::mappings`].
+    Mappings,
+    /// [`Index::containers_under`].
+    Containers,
 }
 
 impl RefusingIndex {
@@ -40,6 +56,7 @@ impl RefusingIndex {
         Self {
             inner: InMemoryIndex::new(),
             refusing: AtomicBool::new(true),
+            question: Question::Mappings,
         }
     }
 
@@ -48,10 +65,26 @@ impl RefusingIndex {
         Self {
             inner,
             refusing: AtomicBool::new(false),
+            question: Question::Mappings,
         }
     }
 
-    /// Refuses to list the mappings from now on.
+    /// An empty catalog that refuses, from the start, to say which Containers
+    /// are current.
+    pub fn refusing_containers() -> Self {
+        Self {
+            inner: InMemoryIndex::new(),
+            refusing: AtomicBool::new(true),
+            question: Question::Containers,
+        }
+    }
+
+    /// Whether the catalog refuses `question` now.
+    fn refuses(&self, question: Question) -> bool {
+        self.question == question && self.refusing.load(Ordering::SeqCst)
+    }
+
+    /// Refuses its question from now on.
     pub fn refuse(&self) {
         self.refusing.store(true, Ordering::SeqCst);
     }
@@ -105,6 +138,9 @@ impl Index for RefusingIndex {
         &self,
         prefix: Option<&EntryPath>,
     ) -> IndexResult<Vec<ContainerSummary>> {
+        if self.refuses(Question::Containers) {
+            return Err(refused("reading the current Containers"));
+        }
         self.inner.containers_under(prefix).await
     }
 
@@ -113,13 +149,8 @@ impl Index for RefusingIndex {
     }
 
     async fn mappings(&self) -> IndexResult<Vec<Mapping>> {
-        if self.refusing.load(Ordering::SeqCst) {
-            return Err(IndexError::Backend {
-                operation: "reading the mappings",
-                cause: std::sync::Arc::new(std::io::Error::other(
-                    "the catalog's file went away under the process",
-                )),
-            });
+        if self.refuses(Question::Mappings) {
+            return Err(refused("reading the mappings"));
         }
         self.inner.mappings().await
     }
@@ -220,5 +251,16 @@ impl Index for RefusingIndex {
 
     async fn release_reservation(&self, id: crate::device_state::ReservationId) -> IndexResult<()> {
         self.inner.release_reservation(id).await
+    }
+}
+
+/// What a refused question reports: a backend fault, which is the shape of a
+/// catalog that could not be used.
+fn refused(operation: &'static str) -> IndexError {
+    IndexError::Backend {
+        operation,
+        cause: std::sync::Arc::new(std::io::Error::other(
+            "the catalog's file went away under the process",
+        )),
     }
 }

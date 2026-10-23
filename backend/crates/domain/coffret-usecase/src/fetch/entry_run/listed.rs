@@ -63,10 +63,88 @@ pub(in crate::fetch) async fn listed(
         };
         // Landed before it is kept: keeping it asks the catalog which
         // Containers are current, and a waiter needs the listing, not that.
+        // Nor does this run: where the catalog will not answer, the listing in
+        // hand still reaches the objects, and only the next run lists again.
         flight.land(Ok(Arc::clone(&listing)));
         memory
             .remember_listing(index, Arc::clone(&listing), head)
-            .await?;
+            .await;
         return Ok((listing, Origin::Read));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_logging::testing::CapturedLogs;
+    use coffret_model::{MasterKey, MasterKeyEpoch};
+    use tracing::Level;
+
+    use super::listed;
+    use crate::catch_up::{catch_up_catalog, CatchUpRequest};
+    use crate::commit::{write_first_head, CommitPolicy};
+    use crate::device_state::DeviceTime;
+    use crate::fetch::storage_reads::Origin;
+    use crate::fetch::FetchMemory;
+    use crate::freeze::LibraryKeys;
+    use crate::in_memory_fs::InMemoryFs;
+    use crate::in_memory_store::InMemoryStore;
+    use crate::index::Index;
+    use crate::refusing_index::RefusingIndex;
+
+    // The listing in hand reaches the objects whether or not it is kept, so a
+    // catalog that will not say which Containers are current costs the next run
+    // a listing of its own and this one nothing: the run answers with what it
+    // listed, and the refusal is logged.
+    #[tokio::test]
+    async fn a_listing_that_is_not_kept_still_serves_the_run() {
+        let keys = LibraryKeys::derive(
+            &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
+            MasterKeyEpoch::FIRST,
+        );
+        let store = InMemoryStore::new(8);
+        let policy = CommitPolicy::default();
+        write_first_head(&store, keys.control(), &policy)
+            .await
+            .expect("creating a Library in an empty store must succeed")
+            .expect("an empty store holds no head to find instead");
+        let index = RefusingIndex::refusing_containers();
+        let fs = InMemoryFs::new();
+        catch_up_catalog(CatchUpRequest::new(
+            &store,
+            &index,
+            &keys,
+            &fs,
+            DeviceTime::from_unix_seconds(1_700_000_000),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("the catch-up must answer: {error}"));
+        let checkpoint = index
+            .checkpoint()
+            .await
+            .expect("the catalog says where it stands")
+            .expect("the catalog stands at the first head");
+
+        let memory = FetchMemory::default();
+        let logs = CapturedLogs::capture();
+        let (listing, origin) = listed(&store, &index, &policy.retry, &memory, &checkpoint)
+            .await
+            .unwrap_or_else(|error| panic!("the run must have its listing: {error}"));
+
+        assert!(matches!(origin, Origin::Read));
+        assert_eq!(
+            listing.newest_head(),
+            Some(checkpoint.head_generation()),
+            "the listing the run reaches objects through is the one it took",
+        );
+        let warned = logs.only(Level::WARN);
+        assert!(warned.message().contains("listing is not kept"), "{warned}");
+
+        let (_, again) = listed(&store, &index, &policy.retry, &memory, &checkpoint)
+            .await
+            .unwrap_or_else(|error| panic!("the next run must have its listing: {error}"));
+        assert!(
+            matches!(again, Origin::Read),
+            "nothing was kept, so the next run lists Storage again",
+        );
     }
 }

@@ -107,7 +107,8 @@ pub struct ApiError {
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
     /// `unauthorized` (403), `no_such_entry` or `no_such_route` (404),
-    /// `declined`, `refused_placement`, `epoch` or `conflict` (409), `locked`
+    /// `declined`, `refused_placement`, `epoch`, `library_predates_format` or
+    /// `conflict` (409), `locked`
     /// (423), `storage` or `unverified` (502), and `server` (500).
     ///
     /// `declined` and `refused_placement` are the two verdicts on a placement,

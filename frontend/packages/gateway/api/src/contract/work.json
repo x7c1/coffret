@@ -306,6 +306,47 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": {
+      "bytes": 0,
+      "entries": 0,
+      "findings": [],
+      "folder": "albums",
+      "missing": [],
+      "paths": [],
+      "rebuild_read": 0,
+      "rebuild_written": 0,
+      "rebuilt": 0,
+      "refused": [],
+      "removed": 0,
+      "run": 4,
+      "status": "deleting",
+      "step": {
+        "bytes": null,
+        "done": 1,
+        "phase": "removing_copies",
+        "total": null
+      },
+      "stopped": null,
+      "waiting": 0,
+      "waits": false
+    },
+    "fill": null,
+    "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null,
+    "turn": "delete"
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
     "delete": null,
     "fill": null,
     "freeze": null,

@@ -113,17 +113,20 @@ Every answer carries:
 
 A finding's kind is \"surfaced\", \"unavailable_root\", \"refused_root\",
 \"key_lost_container\", \"degraded_keyring\", \"keyring_repaired\",
-\"settled\", \"untrashed_removal\" or \"checkpoint_failed\". Its reason,
-where it has one, is spelled as the explorer's server spells it, e.g.
-\"DeletedLocally\" or \"ForeignFile\", not in snake case.
+\"settled\", \"retained_keyring\" (generation and replicas: Keyring
+replica objects no head names, kept), \"untrashed_removal\" or
+\"checkpoint_failed\". Its reason, where it has one, is spelled as the
+explorer's server spells it, e.g. \"DeletedLocally\" or \"ForeignFile\",
+not in snake case.
 
 error is kind, message (the sentence the text form prints), advice (the
 lines printed after it), and found and supported for \"unsupported_schema\".
 A Journal record this build is too old to apply is
-\"newer_build_needed\". A rename refused before anything was written is
-\"nothing_to_rename\", \"same_path\", \"reserved_namespace\",
-\"into_itself\", \"destination_taken\", \"file_and_folder\" or
-\"rename_rule\".
+\"newer_build_needed\", and one of a schema older than this build reads
+is \"library_predates_format\": the Library is to be made again. A
+rename refused before anything was written is \"nothing_to_rename\",
+\"same_path\", \"reserved_namespace\", \"into_itself\",
+\"destination_taken\", \"file_and_folder\" or \"rename_rule\".
 A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
@@ -131,11 +134,13 @@ other is named after the error's variant in snake case, e.g.
 Passphrase or a Recovery Code refused as it was read is named after the
 refusal, e.g. \"empty_passphrase\", \"passphrases_differ\" or
 \"empty_recovery_code\". What was typed wrongly and refused before the
-command ran is \"usage\", with command and log null. Refused once it
-has started: flags that leave a provider short are \"flags_missing\",
-and a client secret variable that is empty or not Unicode is
-\"empty_client_secret\" or \"client_secret_not_unicode\". \"other\" is
-a failure raised by nothing this command knows the kinds of.
+command ran is \"usage\", with command and log null. A sync, freeze,
+fetch or rename stopped with Ctrl-C is \"interrupted\": the next sync
+settles what it left. Refused once it has started: flags that leave a
+provider short are \"flags_missing\", and a client secret variable that
+is empty or not Unicode is \"empty_client_secret\" or
+\"client_secret_not_unicode\". \"other\" is a failure raised by nothing
+this command knows the kinds of.
 
 answer, per command:
 
