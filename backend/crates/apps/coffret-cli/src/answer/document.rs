@@ -65,7 +65,7 @@ impl<'a> Document<'a> {
     }
 
     /// The object as it is printed.
-    pub(super) fn rendered(&self) -> String {
+    pub(crate) fn rendered(&self) -> String {
         // Nothing here is a map with a key that is not a string, and nothing
         // implements `Serialize` by hand, which are the two ways serializing
         // to a string can fail.

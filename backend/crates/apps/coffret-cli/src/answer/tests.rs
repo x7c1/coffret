@@ -87,6 +87,7 @@ fn a_sync_answers_its_counts_and_its_findings() {
         unavailable: Vec::new(),
         settled: Vec::new(),
         commit: None,
+        retained_keyrings: Vec::new(),
     };
     let findings = Findings::assembled([deleted("albums/a.jpg"), discarded("albums/b.jpg")]);
     let ran = Ran::found(
@@ -131,6 +132,49 @@ fn a_sync_answers_its_counts_and_its_findings() {
     );
 }
 
+// OC-4: Keyring replicas no head names are a finding of their own kind, with
+// the generation and the count, and nobody has to act on them.
+#[test]
+fn a_sync_answers_the_keyring_replicas_it_retained() {
+    let outcome = SyncOutcome {
+        reserved: Vec::new(),
+        relocations: Vec::new(),
+        added: Vec::new(),
+        replaced: Vec::new(),
+        renamed: Vec::new(),
+        unchanged: 0,
+        mappings: 1,
+        surfaced: Vec::new(),
+        unavailable: Vec::new(),
+        settled: Vec::new(),
+        commit: None,
+        retained_keyrings: vec![coffret_device::RetainedKeyringReplicas {
+            generation: coffret_device::Generation::new(2).expect("a small generation is one"),
+            replicas: 3,
+        }],
+    };
+    let findings = Findings::from(&outcome);
+    let ran = Ran::found(
+        crate::report::findings(&findings, Form::Json),
+        Answer::Synced(Synced::from(&outcome)),
+        &findings,
+    );
+
+    let answered = succeeded("sync", &ran);
+    assert_eq!(answered["exit_status"], 0, "{answered}");
+    assert_eq!(
+        answered["findings"],
+        json!([{
+            "kind": "retained_keyring",
+            "needs_attention": false,
+            "said": "retained Keyring generation 2: 3 replicas that no head names, left by \
+                     an interrupted commit most likely — kept, and nothing reads them",
+            "generation": 2,
+            "replicas": 3,
+        }]),
+    );
+}
+
 // A sync that carried a file renamed on disk as a rename of its Entry: the
 // count in the answer, and the rename said once more as a finding from the old
 // path to the new one, which nobody has to act on. A pair whose rename was
@@ -153,6 +197,7 @@ fn a_sync_answers_the_renames_it_detected() {
         unavailable: Vec::new(),
         settled: Vec::new(),
         commit: None,
+        retained_keyrings: Vec::new(),
     };
     // Assembled as the device layer makes them out of the outcome: the rename
     // first, then what the scan surfaced.
@@ -585,6 +630,36 @@ fn a_record_needing_a_newer_build_answers_newer_build_needed() {
         .as_str()
         .expect("a message is a string");
     assert!(message.contains("newer build of coffret"), "{message}");
+}
+
+// A Library whose Journal records predate the schema this build reads is not a
+// broken one, and not a sync that failed: it is named for what a person does
+// about it, and the advice says to make it again (spec: FM-15).
+#[test]
+fn a_record_of_an_older_schema_answers_library_predates_format() {
+    for error in [
+        Error::CatchUp {
+            cause: Box::new(CommitError::Format(
+                FormatError::UnsupportedJournalRecordSchema { schema: 2 },
+            )),
+        },
+        Error::from(SyncError::Commit(coffret_device::CommitFailure::from(
+            CommitError::Format(FormatError::UnsupportedJournalRecordSchema { schema: 2 }),
+        ))),
+    ] {
+        let answered = failed("sync", error);
+        assert_eq!(
+            answered["error"]["kind"], "library_predates_format",
+            "{answered}"
+        );
+        let advice = answered["error"]["advice"]
+            .as_array()
+            .expect("advice is a list");
+        assert_eq!(advice.len(), 1, "{answered}");
+        let advice = advice[0].as_str().expect("advice is a string");
+        assert!(advice.contains("predates this build's format"), "{advice}");
+        assert!(advice.contains("coffret init"), "{advice}");
+    }
 }
 
 // An epoch this device holds no key for, whichever flow met it, by the kind the

@@ -52,6 +52,9 @@ pub use preview::{
     the_committed_keyring_names_the_packs_a_preview_refuses,
 };
 
+mod progress;
+pub use progress::a_deletion_says_it_is_removing_this_devices_copies_after_committing;
+
 mod rebuild;
 pub use rebuild::{
     a_folder_spanning_several_packs_is_deleted_in_one_batch,
@@ -126,6 +129,7 @@ macro_rules! delete_conformance {
             an_unavailable_root_is_reported_and_its_copies_left_alone,
             a_refused_discard_leaves_the_deletion_committed_and_is_reported,
             a_deletion_on_another_device_leaves_this_devices_copies_to_its_sync,
+            a_deletion_says_it_is_removing_this_devices_copies_after_committing,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

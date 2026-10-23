@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, ControlObjectName, Generation, ObjectRef};
+use coffret_model::{ContainerId, ControlObjectName, Generation, KeyringCommitment, ObjectRef};
 use tracing::{debug, warn};
 
 use crate::commit::commit_error::{CommitError, CommitResult};
@@ -19,11 +19,17 @@ use crate::retry::RetryPolicy;
 /// objects by their names, so a caller cannot turn `head-7.cfrt` into something
 /// [`get`](crate::ObjectStore::get) accepts — only the listing can, and it
 /// already did.
+///
+/// The Keyring replica names are kept as well, by name, with the generation
+/// and the set digest each states: a commit interrupted after it put its
+/// candidate's replicas leaves objects no head names, which are suspected
+/// orphans a run may report and never removes (spec: OC-4).
 #[derive(Debug, Default)]
 pub(crate) struct ControlListing {
     handles: BTreeMap<String, ObjectRef>,
     heads: BTreeSet<Generation>,
     snapshots: BTreeSet<Generation>,
+    keyring_replicas: BTreeMap<String, (Generation, String)>,
 }
 
 /// How many pages a listing may take before the walk calls Storage broken.
@@ -105,11 +111,21 @@ impl ControlListing {
             Ok(ControlObjectName::IndexSnapshot { generation }) => {
                 self.snapshots.insert(generation);
             }
-            Ok(ControlObjectName::KeyringReplica { .. }) if listed_before => debug!(
-                object = %name,
-                "Storage lists a Keyring replica twice; only one of them is read",
-            ),
-            Ok(ControlObjectName::KeyringReplica { .. }) | Err(_) => {}
+            Ok(ControlObjectName::KeyringReplica {
+                generation,
+                set_digest,
+                ..
+            }) => {
+                if listed_before {
+                    debug!(
+                        object = %name,
+                        "Storage lists a Keyring replica twice; only one of them is read",
+                    );
+                }
+                self.keyring_replicas
+                    .insert(name.clone(), (generation, set_digest));
+            }
+            Err(_) => {}
         }
         self.handles.insert(name, object_ref);
         Ok(())
@@ -162,6 +178,40 @@ impl ControlListing {
     /// it.
     pub(crate) fn handle(&self, name: &str) -> Option<&ObjectRef> {
         self.handles.get(name)
+    }
+
+    /// How many listed Keyring replica objects no head names, by generation
+    /// (spec: OC-4), where `committed` is the Keyring the head this listing
+    /// was caught up to names.
+    ///
+    /// Read off the names alone, which say only so much. A commit writes its
+    /// candidate at the generation after the committed one, and only a head
+    /// selecting that exact tuple commits it (spec: CP-8, KL-3), so no head
+    /// names a generation past `committed`'s, and none names a set at
+    /// `committed`'s own generation under another digest — which is what a
+    /// candidate a rebase lost its slot with leaves. Below that the names
+    /// cannot say which digest each head named without reading every head, so
+    /// nothing there is counted. In a Library with no head every replica is
+    /// one no head names.
+    ///
+    /// Suspected, never proven: a commit another device is making right now has
+    /// put its replicas and not yet its head, and is counted the same way.
+    pub(crate) fn unnamed_keyring_replicas(
+        &self,
+        committed: Option<&KeyringCommitment>,
+    ) -> BTreeMap<Generation, usize> {
+        let mut unnamed = BTreeMap::new();
+        for (generation, set_digest) in self.keyring_replicas.values() {
+            let named = committed.is_some_and(|committed| {
+                *generation < committed.generation()
+                    || (*generation == committed.generation()
+                        && set_digest == committed.set_digest())
+            });
+            if !named {
+                *unnamed.entry(*generation).or_insert(0) += 1;
+            }
+        }
+        unnamed
     }
 
     /// The handle Storage named one Container by (spec: FM-3).

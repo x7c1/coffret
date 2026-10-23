@@ -436,7 +436,9 @@ pub use coffret_usecase::freeze::{
     FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
 };
 pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
-pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
+pub use coffret_usecase::sync::{
+    Disposal, RetainedKeyringReplicas, Settled, SyncError, SyncOutcome,
+};
 pub use coffret_usecase::{
     DescentError, LocalOperation, Missing, RefusedRoot, Relocation, RelocationRefused, RootRefused,
     RootUnavailable,

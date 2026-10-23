@@ -45,7 +45,8 @@ pub enum RemoteHead {
 /// the one it walks (see [`FetchMemory`]), so the next Entry fetch reaches
 /// objects through it rather than listing again. Where it names a newer head it
 /// is not this catalog's and is not kept: the catch-up that follows walks its
-/// own.
+/// own. Keeping it is a cache and never the answer: where the catalog will not
+/// say what keeping it needs, that is logged and [`RemoteHead::Current`] stands.
 pub async fn remote_head(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -67,9 +68,7 @@ pub async fn remote_head(
     }
     if newest == at {
         if let Some(memory) = memory {
-            memory
-                .remember_listing(index, Arc::new(listing), at)
-                .await?;
+            memory.remember_listing(index, Arc::new(listing), at).await;
         }
     }
     Ok(RemoteHead::Current)

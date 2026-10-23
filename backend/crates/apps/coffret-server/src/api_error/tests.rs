@@ -628,6 +628,32 @@ fn an_activated_epoch_is_its_own_kind_from_every_flow() {
     }
 }
 
+// FM-15: a Library whose Journal records predate the schema this build reads is
+// its own kind from every flow that can meet it, and never `unverified`, which
+// would tell a person the Library is not what it names. The sentence says to make
+// it again and names no schema.
+#[test]
+fn a_library_predating_this_format_is_its_own_kind_from_every_flow() {
+    for (flow, refusal) in from_every_flow(|| {
+        CommitError::Format(
+            coffret_device::FormatError::UnsupportedJournalRecordSchema { schema: 2 },
+        )
+    }) {
+        let said = refusal.message().to_owned();
+        assert_eq!(
+            wire(refusal),
+            (409, "library_predates_format", None, None),
+            "from a {flow}"
+        );
+        assert!(
+            said.contains("predates this app's format"),
+            "from a {flow}: {said}"
+        );
+        assert!(said.contains("make it again"), "from a {flow}: {said}");
+        assert!(!said.contains('2'), "from a {flow}: {said}");
+    }
+}
+
 // The commit's own verdicts are classified once, so a sync, a freeze or a fetch
 // that met one says what the catch-up says rather than filing it as Storage not
 // answering. A slot lost too often is the one here; the rest share its arm. A

@@ -93,6 +93,10 @@ lint:
 #
 #   cd backend && cargo run -p coffret-interop -- dump --object <file> \
 #     --name <object name> --recovery-code <file holding the Recovery Code>
+#
+# A Container prints its meta section — kind, padding and entry table — given
+# `--keyring <file>`, a Keyring replica holding its key, saved under the object
+# name it is stored under.
 .PHONY: interop
 interop:
 	rm -rf $(INTEROP)

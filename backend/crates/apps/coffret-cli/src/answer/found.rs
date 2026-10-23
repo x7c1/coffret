@@ -55,6 +55,8 @@ enum Facts {
     },
     /// A committed Keyring a run put replicas back into.
     KeyringRepaired { generation: u64, rewritten: usize },
+    /// Keyring replicas of one generation that no head names, kept.
+    RetainedKeyring { generation: u64, replicas: usize },
     /// A kept parcel that was not held, and was read again.
     Parcel {
         container_id: String,
@@ -167,6 +169,16 @@ impl From<&Finding> for Found {
                     },
                 )
             }
+            Finding::RetainedKeyring {
+                generation,
+                replicas,
+            } => (
+                "retained_keyring",
+                Facts::RetainedKeyring {
+                    generation: generation.get(),
+                    replicas: *replicas,
+                },
+            ),
             Finding::UntrashedRemoval { container_id, .. } => (
                 "untrashed_removal",
                 Facts::Container {

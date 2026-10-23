@@ -23,7 +23,7 @@
 use std::error;
 use std::fmt;
 
-use coffret_device::{CommitFailure, CommitOutcome, Error, Findings};
+use coffret_device::{CommitError, CommitFailure, CommitOutcome, Error, Findings};
 
 use crate::answer::Form;
 
@@ -174,12 +174,21 @@ pub fn failed(error: &anyhow::Error) -> Failed {
 ///
 /// The errors that advise and have a source are the ones asked here: a stopped
 /// Keyring repair, which only the commit flow's examination raises and so
-/// always arrives on a [`CommitFailure`], and a Library whose app folder may
-/// have been created before the answer was lost. An error with no source says
-/// what to do in its own sentence, which is already the last line of the chain.
+/// always arrives on a [`CommitFailure`]; a Journal record older than this
+/// build reads, which a catch-up meets and which arrives on a
+/// [`CommitFailure`] or as a bare [`CommitError`] (a catch-up's own failure
+/// carries no repairs); and a Library whose app folder may have been created
+/// before the answer was lost. An error with no source says what to do in its
+/// own sentence, which is already the last line of the chain.
+///
+/// A [`CommitFailure`] hands on what is under its error rather than the error
+/// itself, so a chain never holds both and the advice is said once.
 fn advice(link: &(dyn error::Error + 'static)) -> Option<&'static str> {
     if let Some(failure) = link.downcast_ref::<CommitFailure>() {
         return failure.advice();
+    }
+    if let Some(commit) = link.downcast_ref::<CommitError>() {
+        return commit.advice();
     }
     link.downcast_ref::<Error>().and_then(Error::advice)
 }
@@ -290,6 +299,26 @@ mod tests {
         assert_eq!(report.exit_status(), 2);
         assert!(lines[0].contains("retained container"));
         assert!(lines[0].contains("commit outcome is unknown"));
+    }
+
+    // OC-4: Keyring replicas no head names are printed for a person to review,
+    // and leave the exit status alone: nothing reads them and nothing is to be
+    // done about them.
+    #[test]
+    fn retained_keyring_replicas_are_printed_and_exit_zero() {
+        let found = Findings::assembled([Finding::RetainedKeyring {
+            generation: coffret_device::Generation::new(5).expect("a small generation is one"),
+            replicas: 1,
+        }]);
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report.exit_status(), 0);
+        assert_eq!(
+            lines,
+            [
+                "retained Keyring generation 5: 1 replica that no head names, left by an \
+              interrupted commit most likely — kept, and nothing reads it"
+            ],
+        );
     }
 
     #[test]

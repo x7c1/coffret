@@ -183,6 +183,15 @@ describe('the lines a deletion stands under', () => {
     expect(deletingLine(started, 'packing')).toBe('deleting 📁 albums — committing');
   });
 
+  // Once the commit has landed, what the deletion still does is on this
+  // device, and the line says so rather than standing at `committing`.
+  it('says it is removing the copies on this device after the commit', () => {
+    const removing = run({
+      step: { phase: 'removing_copies', done: 0, total: null, bytes: null },
+    });
+    expect(deletingLine(removing)).toBe("deleting 📁 albums — discarding this device's copies into the trash");
+  });
+
   it('names what was deleted, and anything refused', () => {
     expect(
       deletedLine(

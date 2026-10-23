@@ -65,6 +65,14 @@ export type RefusalKind =
    */
   | 'epoch'
   /**
+   * The Library was written before the format this app reads, so nothing of
+   * it is read: it is not corrupt, and it is not this device's standing in it
+   * either. What remedies it is making the Library again and bringing its
+   * files in again, which no retry does, so the sentence is all a screen has
+   * to show.
+   */
+  | 'library_predates_format'
+  /**
    * Another device changed the Library while this one was writing to it, so
    * nothing was committed: a deletion, a freeze or a sync planned over a
    * Library that has since moved. Unlike `server` it is something a person can
@@ -530,6 +538,7 @@ const KINDS: readonly string[] = [
   'declined',
   'refused_placement',
   'epoch',
+  'library_predates_format',
   'conflict',
   'locked',
   'storage',

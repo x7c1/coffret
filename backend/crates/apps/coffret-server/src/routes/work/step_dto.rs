@@ -61,6 +61,7 @@ fn named(phase: Phase) -> &'static str {
         Phase::Packing => "packing",
         Phase::Uploading => "uploading",
         Phase::Committing => "committing",
+        Phase::RemovingCopies => "removing_copies",
         Phase::Fetching => "fetching",
     }
 }

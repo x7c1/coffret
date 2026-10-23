@@ -53,6 +53,9 @@ pub use remote_head::{remote_head, RemoteHead};
 mod run;
 pub use run::catch_up_catalog;
 
+#[cfg(test)]
+mod tests;
+
 // The commit flow's own vocabulary, which is what a catch-up fails in: it is the
 // commit's routine, and re-drawing its distinctions here would give one verdict
 // two spellings. Re-exported where the callers of this flow already reach for

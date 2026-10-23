@@ -72,6 +72,7 @@ mod tests {
             unavailable: Vec::new(),
             settled: Vec::new(),
             commit: None,
+            retained_keyrings: Vec::new(),
         }
     }
 

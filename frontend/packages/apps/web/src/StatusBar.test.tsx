@@ -394,7 +394,7 @@ it('keeps a refused-root explanation visible without offering the same fill agai
 // the line says so and stands on its own, with no button beside it that could
 // only meet the same refusal.
 it('offers no second attempt at a run an epoch or a lock stopped', () => {
-  for (const error of ['epoch', 'locked'] as const) {
+  for (const error of ['epoch', 'library_predates_format', 'locked'] as const) {
     const stopped: Refused = {
       kind: error,
       message: 'what remedies this is at a terminal',

@@ -71,6 +71,11 @@ export type Phase =
    * commit that loses its slot to another device starts its count again.
    */
   | 'committing'
+  /**
+   * Removing this device's own copies of what a deletion has just committed
+   * out of the Library. It cannot count its work, so its `total` is `null`.
+   */
+  | 'removing_copies'
   /** Reading Containers back from Storage and placing the files in them. */
   | 'fetching';
 

@@ -26,7 +26,9 @@
 /// catch-up has to replay is known only as it is read, and the scan is the very
 /// thing that counts the files — which is why a [`Step`] may carry no total.
 /// They are reported all the same, because a phase that cannot count what it
-/// will do is exactly the phase that goes quiet for minutes.
+/// will do is exactly the phase that goes quiet for minutes. So is
+/// [`RemovingCopies`](Self::RemovingCopies), which learns which of the deleted
+/// Entries this device holds a copy of only by looking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     /// Bringing this device's catalog up to the Library's head (spec: CK-9).
@@ -71,12 +73,25 @@ pub enum Phase {
     /// (spec: CK-9, KL-11) — stands at `0`. A commit that loses the head's slot
     /// to another device rebases and stores a fresh candidate, so the count
     /// goes back to `0` with it (spec: CP-4): what it counts is the attempt
-    /// that is under way. What follows the head — refreshing the catalog,
-    /// trashing what the batch superseded, a checkpoint — stands at the total,
-    /// because the batch has committed by then (spec: CP-1, CK-8).
+    /// that is under way. What the commit flow does after the head —
+    /// refreshing the catalog, trashing what the batch superseded, a
+    /// checkpoint — stands at the total, because the batch has committed by
+    /// then (spec: CP-1, CK-8). What the run does after the commit flow
+    /// returns is a phase of its own where it takes long enough to be one:
+    /// a deletion goes on to [`RemovingCopies`](Self::RemovingCopies).
     ///
     /// A run that commits nothing — one with nothing to add — never enters it.
     Committing,
+    /// Removing this device's own copies of the Entries a deletion has just
+    /// committed out of the Library (spec: EP-15).
+    ///
+    /// Each copy is read and hashed to tell an unedited one from an edited one
+    /// before it is discarded, so on a deletion of a large folder this takes
+    /// long enough after the head that a run still saying it was committing
+    /// would read as a commit that had stalled. It cannot say how many copies
+    /// there are — that is learned by looking — so it says only that it has
+    /// begun. Said only by a deletion whose commit landed.
+    RemovingCopies,
     /// Reading Containers back from Storage and placing the files in them.
     Fetching,
 }
