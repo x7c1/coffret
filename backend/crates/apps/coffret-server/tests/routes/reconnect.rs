@@ -45,7 +45,9 @@ async fn once_ended(served: &Served) -> Value {
 // from; the reconnect answers with the consent page; a second press while it
 // waits is the same page and no second flow; and once the person has consented,
 // the server reaches Storage with the renewed grant — no restart — and catches
-// the catalog up, which is what puts the Library back on the screen.
+// the catalog up, which is what puts the Library back on the screen. A poll
+// meanwhile is told the flow by its page's digest and never the page
+// (spec: SA-10).
 #[tokio::test]
 async fn a_grant_that_ran_out_is_renewed_and_the_catalog_caught_up_without_a_restart() {
     let served = Served::joined().await;

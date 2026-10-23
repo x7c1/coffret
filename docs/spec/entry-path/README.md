@@ -659,7 +659,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   under it as a file to back up; a fetch never places a file at a path whose
   first component under the mapped root is one, and reports the Entry with
   that folder as the one on the way that is not a folder of the mapped root
-  (EP-11). *(Form: test)*
+  (EP-11); and a file added through the device — a browser's drop or an
+  import — is never written at such a path: that file is declined as
+  `trash_folder`, in a sentence that names the desktop's trash rather than a
+  name coffret keeps, while the rest of the same drop lands. *(Form: test)*
   - A mapped root may be a volume's own top — a disk mounted at the folder the
     person mapped — and a desktop sending a file to the trash on that volume
     keeps the trash there: `.Trash-<uid>` or `.Trash/<uid>` under the

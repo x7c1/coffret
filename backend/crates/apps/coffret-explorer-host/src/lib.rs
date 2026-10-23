@@ -89,8 +89,13 @@ use credentials::Gate;
 use forward::Forwarder;
 use host::Host;
 
-/// How long reading a request to `/auth` may take, and reading any request's
-/// head (spec: LA-19).
+/// How long reading any request's head may take, and, separately, how long
+/// reading the body of a request to `/auth` may take once the head is read
+/// (spec: LA-19).
+///
+/// Each part gets the whole deadline on its own rather than both sharing one
+/// clock: the head's is hyper's, set per connection before any route is known,
+/// and the body's is the exchange's own, started when it begins to read.
 pub(crate) const READ_DEADLINE: Duration = Duration::from_secs(5);
 
 /// The router for a host whose listener is `listener`, standing in front of

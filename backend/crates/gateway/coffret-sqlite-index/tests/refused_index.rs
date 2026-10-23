@@ -17,13 +17,17 @@ mod support;
 
 use support::{entry_path, rows_in, stamp_of, Scratch};
 
-/// The layout this build writes, and the one its device-local group last
-/// changed at.
+/// The layout this build writes, and the oldest whose device-local group it
+/// upgrades in place.
 ///
 /// Written out rather than read from the adapter, which keeps them to itself
 /// — the sibling suite beside this one does the same.
 const SCHEMA_VERSION: i64 = 19;
-const DEVICE_SCHEMA_VERSION: i64 = 7;
+const OLDEST_UPGRADED_SCHEMA_VERSION: i64 = 7;
+
+/// A layout `SqliteIndex::open` refuses: the newest one older than every
+/// layout the upgrade takes.
+const REFUSED_SCHEMA_VERSION: i64 = OLDEST_UPGRADED_SCHEMA_VERSION - 1;
 
 /// A `mappings` table shaped `columns`, holding two rows, stamped `version`
 /// afterwards.
@@ -68,7 +72,7 @@ const CURRENT_SHAPE: &str =
 #[tokio::test]
 async fn mappings_are_read_from_a_refused_file() {
     let scratch = Scratch::new();
-    a_file_with_mappings(&scratch, CURRENT_SHAPE, DEVICE_SCHEMA_VERSION - 1);
+    a_file_with_mappings(&scratch, CURRENT_SHAPE, REFUSED_SCHEMA_VERSION);
 
     let read = RefusedIndex::open(scratch.file())
         .expect("a refused file must still open for reading its mappings")
@@ -93,7 +97,7 @@ async fn mappings_are_read_from_a_refused_file() {
 #[tokio::test]
 async fn reading_a_refused_file_leaves_it_as_it_was() {
     let scratch = Scratch::new();
-    a_file_with_mappings(&scratch, CURRENT_SHAPE, DEVICE_SCHEMA_VERSION - 1);
+    a_file_with_mappings(&scratch, CURRENT_SHAPE, REFUSED_SCHEMA_VERSION);
 
     RefusedIndex::open(scratch.file())
         .expect("a refused file must still open for reading its mappings")
@@ -102,7 +106,7 @@ async fn reading_a_refused_file_leaves_it_as_it_was() {
 
     assert_eq!(
         stamp_of(&scratch.file()),
-        DEVICE_SCHEMA_VERSION - 1,
+        REFUSED_SCHEMA_VERSION,
         "reading the mappings issues no write, so the stamp is exactly as it was"
     );
     assert_eq!(rows_in(&scratch.file(), "mappings"), 2, "and no row moved");
@@ -112,7 +116,7 @@ async fn reading_a_refused_file_leaves_it_as_it_was() {
         matches!(
             reopened.as_ref().err(),
             Some(IndexError::UnsupportedSchema { found, supported })
-                if *found == DEVICE_SCHEMA_VERSION - 1 && *supported == SCHEMA_VERSION
+                if *found == REFUSED_SCHEMA_VERSION && *supported == SCHEMA_VERSION
         ),
         "the file is still the layout the port refuses, got {:?}",
         reopened.err()
@@ -131,7 +135,7 @@ async fn a_refused_file_needs_only_the_two_columns_every_layout_keeps() {
          guessed_kind TEXT",
     ] {
         let scratch = Scratch::new();
-        a_file_with_mappings(&scratch, columns, DEVICE_SCHEMA_VERSION - 1);
+        a_file_with_mappings(&scratch, columns, REFUSED_SCHEMA_VERSION);
 
         let read = RefusedIndex::open(scratch.file())
             .expect("a refused file must still open for reading its mappings")

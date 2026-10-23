@@ -6,10 +6,11 @@ use crate::fetch::unheld_reason::UnheldReason;
 ///
 /// The file was gone, or its ciphertext no longer authenticated as that parcel
 /// of that Container (spec: FM-5, FM-7, FM-8). Either way the parcel is not
-/// held: it is let go and asked of Storage again (spec: PK-21). It
-/// is said rather than silently read again because that second read is one
-/// the provider observes, and because a kept file that changed under the
-/// device is a disk worth hearing about.
+/// held, so what the device kept of it, its file and its row, is dropped, and
+/// the parcel is read whole from Storage again (spec: PK-21). It is said rather
+/// than silently read again because that second read is one the provider
+/// observes, and because a kept file that changed under the device is a disk
+/// worth hearing about.
 ///
 /// The Container and the parcel's position and nothing else: neither names an
 /// Entry, and the local path stays out of anything that might be logged
