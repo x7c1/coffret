@@ -90,33 +90,41 @@ impl ControlListing {
     /// (spec: KL-14). The handle listed last is the one kept.
     fn record(&mut self, name: String, object_ref: ObjectRef) -> CommitResult<()> {
         let parsed = ControlObjectName::parse(&name);
-        let listed_before = self.handles.contains_key(&name);
-        match parsed {
-            Ok(
-                ref object @ (ControlObjectName::Head { generation }
-                | ControlObjectName::IndexSnapshot { generation }),
-            ) if listed_before => {
+        let listed_before = self.handles.get(&name);
+        match (parsed, listed_before) {
+            (
+                Ok(
+                    object @ (ControlObjectName::Head { generation }
+                    | ControlObjectName::IndexSnapshot { generation }),
+                ),
+                Some(first),
+            ) => {
                 warn!(
                     object = %name,
                     generation = generation.get(),
                     "Storage lists two control objects under one name; refusing the Library",
                 );
                 return Err(CommitError::DuplicateControlObject {
-                    object: object.clone(),
+                    object,
+                    first: first.clone(),
+                    second: object_ref,
                 });
             }
-            Ok(ControlObjectName::Head { generation }) => {
+            (Ok(ControlObjectName::Head { generation }), _) => {
                 self.heads.insert(generation);
             }
-            Ok(ControlObjectName::IndexSnapshot { generation }) => {
+            (Ok(ControlObjectName::IndexSnapshot { generation }), _) => {
                 self.snapshots.insert(generation);
             }
-            Ok(ControlObjectName::KeyringReplica {
-                generation,
-                set_digest,
-                ..
-            }) => {
-                if listed_before {
+            (
+                Ok(ControlObjectName::KeyringReplica {
+                    generation,
+                    set_digest,
+                    ..
+                }),
+                listed_before,
+            ) => {
+                if listed_before.is_some() {
                     debug!(
                         object = %name,
                         "Storage lists a Keyring replica twice; only one of them is read",
@@ -125,7 +133,7 @@ impl ControlListing {
                 self.keyring_replicas
                     .insert(name.clone(), (generation, set_digest));
             }
-            Err(_) => {}
+            (Err(_), _) => {}
         }
         self.handles.insert(name, object_ref);
         Ok(())
@@ -249,8 +257,14 @@ mod tests {
                 .record(name.to_owned(), ObjectRef::new("first"))
                 .expect("the first object under a name is the Library's");
             match listing.record(name.to_owned(), ObjectRef::new("second")) {
-                Err(CommitError::DuplicateControlObject { object }) => {
-                    assert_eq!(object, expected)
+                Err(CommitError::DuplicateControlObject {
+                    object,
+                    first,
+                    second,
+                }) => {
+                    assert_eq!(object, expected);
+                    assert_eq!(first.as_str(), "first");
+                    assert_eq!(second.as_str(), "second");
                 }
                 other => panic!("expected {name} listed twice to be refused, got {other:?}"),
             }

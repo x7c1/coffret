@@ -28,9 +28,13 @@ coffret-server = { workspace = true }
 # Where this process's log goes, the same as every other binary's.
 coffret-shell = { workspace = true }
 
+# The chain the server's own refusals arrive as, which this crate's error
+# carries as it is.
 anyhow = { workspace = true }
 # The door's routes.
 axum = { workspace = true }
+# The cause a drop handle that could not be drawn carries.
+getrandom = { workspace = true }
 # Reading the door's request body frame by frame, so that it is gathered into a
 # buffer that is wiped rather than into one that is not.
 http-body = { workspace = true }

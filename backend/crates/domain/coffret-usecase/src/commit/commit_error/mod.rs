@@ -1,14 +1,29 @@
 use std::error;
 use std::fmt;
 
-use coffret_model::{
-    ContainerId, ControlObjectKind, ControlObjectName, EntryPath, Generation, Redacted,
-};
+use coffret_model::{ContainerId, ControlObjectName, EntryPath, Generation, ObjectRef, Redacted};
 
 use crate::commit::pending_change::PendingChange;
 use crate::commit::rebase_rule::RebaseRule;
 use crate::error::Error;
 use crate::index_error::{IndexError, RenameRule};
+
+// The three values the variants carry, each a module of its own beside the
+// error that carries them.
+mod control_object_fault;
+pub use control_object_fault::ControlObjectFault;
+
+mod unrepaired_replica;
+pub use unrepaired_replica::UnrepairedReplica;
+
+mod unusable_replica;
+pub use unusable_replica::UnusableReplica;
+
+#[cfg(test)]
+mod fixtures;
+
+#[cfg(test)]
+mod tests;
 
 /// Result alias for the commit flow.
 pub type CommitResult<T> = std::result::Result<T, CommitError>;
@@ -241,6 +256,14 @@ pub enum CommitError {
     DuplicateControlObject {
         /// The name both objects are listed under.
         object: ControlObjectName,
+        /// The Storage's handle for the object listed first.
+        ///
+        /// Both handles are said, because the name alone does not tell the
+        /// two apart and whoever puts the Library right has to: a handle is
+        /// the provider's identifier and carries no secret.
+        first: ObjectRef,
+        /// The Storage's handle for the object listed second.
+        second: ObjectRef,
     },
     /// The head chain carries a Master Key epoch activation.
     ///
@@ -279,167 +302,6 @@ pub enum CommitError {
         /// What about it did not hold.
         fault: ControlObjectFault,
     },
-}
-
-/// Why no key table was read from one replica of a Keyring generation.
-///
-/// This is the reader's verdict on a position, not a finding about content: a
-/// replica is *valid* when it decrypts, authenticates, and is consistent
-/// (spec: KL-1), and only the variants from [`Unreadable`](Self::Unreadable)
-/// on establish that the object at a position is not a valid replica.
-/// [`Absent`](Self::Absent) and [`Unfetchable`](Self::Unfetchable) know nothing
-/// about any content — there was none to look at, or Storage did not hand it
-/// over.
-///
-/// A replica is read back the same way wherever a Keyring is read, and what
-/// differs is what the reader does with a failure. A read of a committed set
-/// steps over the replica and tries the next, because one valid replica carries
-/// the whole key table (spec: KL-6); a candidate set stops the commit, because a
-/// set that is not complete is not one a commit may select (spec: CP-8, KL-2);
-/// and a commit examining the committed set before it writes rewrites the
-/// position instead, because that set is one it owes a repair (spec: KL-11,
-/// KL-13). So the reason travels as a value and the reader wraps it in whichever
-/// of [`CommitError::KeyringUnreadable`], [`CommitError::IncompleteKeyring`],
-/// and [`UnrepairedReplica::Unconfirmed`] says which of those it made.
-///
-/// A fetch that failed and an object that arrived and was rejected are kept
-/// apart, because they are different verdicts about the Library rather than two
-/// spellings of one. An object that did arrive and could not be opened is a
-/// replica that is definitively not one a key table may be read from, so the set
-/// it belongs to is a valid replica short: a committed set with one left is the
-/// degraded state KL-5 names, with a repair owed to it (spec: KL-13), and a
-/// candidate is one no commit may select (spec: KL-2). A caller
-/// reading [`CommitError::KeyringUnreadable`] tells a Keyring that has lost
-/// replicas from a provider that was merely having a bad minute by which of the
-/// two it finds.
-#[derive(Debug, Clone)]
-pub enum UnusableReplica {
-    /// The commitment declares the replica and Storage does not hold it.
-    Absent,
-    /// Storage did not hand the object over.
-    ///
-    /// Nothing about the replica's content is known: what failed is the fetch,
-    /// and the object it was for may be exactly what its name promises. What
-    /// Storage reported travels inside, in this flow's own vocabulary.
-    Unfetchable(Box<CommitError>),
-    /// The object arrived and could not be opened.
-    ///
-    /// Decrypting, authenticating, or decoding it failed, so this replica is
-    /// definitively not one a key table may be read from. What the format layer
-    /// reported travels inside, in this flow's own vocabulary.
-    Unreadable(Box<CommitError>),
-    /// It opened as another kind of control object.
-    ///
-    /// Its authenticated header says it is not a Keyring, so this replica is
-    /// definitively not one a key table may be read from.
-    KindNotAdmitted {
-        /// The kind its authenticated header declares.
-        found: ControlObjectKind,
-    },
-    /// The key table it holds is not the one its name promises (spec: CP-10,
-    /// KL-14).
-    ///
-    /// It is not the generation its commitment names, so this replica is
-    /// definitively not one a key table may be read from.
-    DigestMismatch {
-        /// The digest the replica's name carries.
-        expected: String,
-        /// The digest of the key table the object holds.
-        actual: String,
-    },
-}
-
-/// Why one position of a committed Keyring set found short is still not one a
-/// valid replica stands at (spec: KL-13, KL-16).
-///
-/// [`UnusableReplica`] says why a replica could not be *read*; this says why the
-/// repair that answer called for did not finish. The two are kept apart because
-/// a reader steps over a bad replica and a repair is obliged to replace it, so
-/// the vocabulary a repair reports in has a state the reader's has not: a
-/// position left deliberately alone.
-///
-/// That state is [`Unfetchable`](Self::Unfetchable), and it is the reason this
-/// is three variants rather than one. A replica Storage would not hand over is
-/// not known to be lost — the object at that name may be exactly what it
-/// promises — so KL-13's "rewrites the missing replicas" does not reach it and
-/// the repair writes nothing there. The set cannot be called complete on that
-/// evidence either, so the position still holds the gate closed (spec: KL-16).
-/// The other two are ordinary failures of the write KL-14 defines: Storage
-/// refused it, or it was acknowledged and the read-back that confirms it found
-/// something that is still not a valid replica.
-#[derive(Debug, Clone)]
-pub enum UnrepairedReplica {
-    /// Storage would not hand over the object this position holds.
-    ///
-    /// Nothing about its content is known, so it was not rewritten. What
-    /// Storage reported travels inside, in this flow's own vocabulary.
-    ///
-    /// It carries [`UnusableReplica::Unfetchable`]'s name because it is that
-    /// same verdict: the read of the position answered nothing about the
-    /// object, and here that answer is also the verdict on the repair.
-    Unfetchable(Box<CommitError>),
-    /// Storage refused the rewrite.
-    ///
-    /// Quota, permissions, or a provider having a bad minute — the retry policy
-    /// has already spent what it was willing to (spec: KL-16). What Storage
-    /// reported travels inside.
-    Unwritten(Box<CommitError>),
-    /// The rewrite was acknowledged and the replica did not read back valid.
-    ///
-    /// A repair confirms itself by reading the replica back, and what that
-    /// read-back establishes is the replica's validity (spec: KL-14). This is
-    /// that read-back's own verdict.
-    Unconfirmed(UnusableReplica),
-}
-
-/// What about a control object did not hold (spec: FM-11, FM-12).
-///
-/// It is what [`CommitError::CorruptControlObject`] carries alongside the name
-/// the object was read under, so the reason is a value a caller can act on and
-/// not a sentence it would have to read.
-#[derive(Debug, Clone)]
-pub enum ControlObjectFault {
-    /// The format layer would not hand a value back for it.
-    ///
-    /// Two verdicts under one name, and the refusal inside says which: bytes
-    /// this build cannot open at all — a header it does not read, a tag that
-    /// does not verify — and a payload that opened and was then refused for
-    /// what it says. A Snapshot checkpointing a head other than the one its
-    /// name is for is the second kind: the decoder is told the name's own
-    /// generation and holds the rule there (spec: CK-10), so the refusal
-    /// arrives here already saying which head was named and which was
-    /// checkpointed.
-    Unopenable(coffret_format::Error),
-    /// Its header declares a kind the position it was read at does not admit.
-    KindNotAdmitted {
-        /// The kind its authenticated header declares.
-        found: ControlObjectKind,
-    },
-    /// Its authenticated header stands at another generation than its name
-    /// carries.
-    GenerationMismatch {
-        /// The generation the header states.
-        found: Generation,
-    },
-    /// It is the head a commit would succeed, and it carries no commit slot
-    /// where this Storage mints the identifier a successor is created under.
-    ///
-    /// The head is what carries the one slot every writer starting from it
-    /// aims at (spec: CP-2), and on a Storage that mints identifiers that slot
-    /// is the pre-minted identifier in its `next_commit_slot`. Minting a fresh
-    /// one in its place would give each writer a slot of its own, so two of
-    /// them could both succeed the head (spec: CP-3); the commit is refused
-    /// instead.
-    NoCommitSlot,
-    /// It is the head a commit would succeed, and it carries a minted
-    /// identifier as its commit slot where this Storage identifies objects by
-    /// name.
-    ///
-    /// Where names identify objects the head persists nothing in
-    /// `next_commit_slot` and the slot is the successor's name, re-derived when
-    /// it is consumed (spec: CP-2, CP-15). An identifier there was minted by
-    /// some other Storage, and this one cannot create under it.
-    MintedCommitSlot,
 }
 
 impl fmt::Display for CommitError {
@@ -592,10 +454,14 @@ impl fmt::Display for CommitError {
                  nothing of this batch was committed, and a later run finds the head once \
                  the listing shows it",
             ),
-            Self::DuplicateControlObject { object } => write!(
+            Self::DuplicateControlObject {
+                object,
+                first,
+                second,
+            } => write!(
                 f,
-                "Storage holds two control objects named {object}, so the Library is \
-                 inconsistent and neither of them was read"
+                "Storage holds two control objects named {object} ({first} and {second}), so \
+                 the Library is inconsistent and neither of them was read"
             ),
             Self::EpochActivated { generation } => write!(
                 f,
@@ -691,117 +557,6 @@ impl error::Error for CommitError {
     }
 }
 
-impl fmt::Display for UnusableReplica {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Absent => f.write_str("it is not in Storage"),
-            // Which way the replica was no good, and not what Storage or the
-            // format layer answered: `source` hands that value on, and a
-            // caller printing the chain would otherwise read it twice.
-            Self::Unfetchable(_) => f.write_str("Storage would not hand it over"),
-            Self::Unreadable(_) => f.write_str("it could not be opened"),
-            Self::KindNotAdmitted { found } => write!(f, "it carries a {found:?}, not a Keyring"),
-            Self::DigestMismatch { expected, actual } => write!(
-                f,
-                "its key table digests to {actual}, and its name promises {expected}"
-            ),
-        }
-    }
-}
-
-impl error::Error for UnusableReplica {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Unfetchable(error) | Self::Unreadable(error) => Some(error.as_ref()),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for UnrepairedReplica {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            // "was not rewritten" first, because a person reading this beside
-            // the two below has to be told that this one position was left
-            // exactly as it stands rather than written at and refused. What
-            // Storage or the reading answered is the value `source` hands on
-            // and is read under this line, never inside it as well.
-            //
-            // The position is named rather than left to a pronoun, because of
-            // where this line lands: the wrapper that carries it says which
-            // replica the repair stopped at and then spends a clause and a
-            // half on what the run did and what it left standing, so by the
-            // time a chain reaches this the nearest thing an "it" could point
-            // at is the batch or the set. What to do next is not among them:
-            // that is the wrapper's advice, which a shell prints after the
-            // whole chain, under this line rather than above it.
-            Self::Unfetchable(_) => f.write_str(
-                "that replica was not rewritten, because Storage would not hand over what it \
-                 holds",
-            ),
-            Self::Unwritten(_) => f.write_str("that replica could not be written"),
-            Self::Unconfirmed(_) => {
-                f.write_str("that replica was written and did not read back valid")
-            }
-        }
-    }
-}
-
-impl error::Error for UnrepairedReplica {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Unfetchable(error) | Self::Unwritten(error) => Some(error.as_ref()),
-            Self::Unconfirmed(cause) => Some(cause),
-        }
-    }
-}
-
-impl Redacted for UnrepairedReplica {
-    /// Which way the position was left short, with whatever refused it
-    /// underneath.
-    fn redacted(&self) -> String {
-        match self {
-            Self::Unfetchable(error) => format!("Repair::Unfetchable: {}", error.redacted()),
-            Self::Unwritten(error) => format!("Repair::Unwritten: {}", error.redacted()),
-            Self::Unconfirmed(cause) => format!("Repair::Unconfirmed: {}", cause.redacted()),
-        }
-    }
-}
-
-impl fmt::Display for ControlObjectFault {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            // What the format layer refused it for is that layer's own answer,
-            // which `source` hands on.
-            Self::Unopenable(_) => f.write_str("the format layer refused it"),
-            Self::KindNotAdmitted { found } => write!(
-                f,
-                "it carries a {found:?}, which the position it was read at does not admit"
-            ),
-            Self::GenerationMismatch { found } => {
-                write!(f, "its header stands at generation {found}")
-            }
-            Self::NoCommitSlot => f.write_str(
-                "it carries no commit slot, and this Storage mints the identifier its \
-                 successor is created under",
-            ),
-            Self::MintedCommitSlot => f.write_str(
-                "it carries a minted identifier as its commit slot, and this Storage \
-                 identifies objects by name",
-            ),
-        }
-    }
-}
-
-impl error::Error for ControlObjectFault {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Unopenable(error) => Some(error),
-            _ => None,
-        }
-    }
-}
-
 impl Redacted for CommitError {
     /// The generations, the replicas, and the object names, and no Entry Path.
     ///
@@ -886,9 +641,13 @@ impl Redacted for CommitError {
                 format!("Commit::MissingHead(generation={generation})")
             }
             Self::FirstHeadUnlisted => "Commit::FirstHeadUnlisted".to_owned(),
-            Self::DuplicateControlObject { object } => {
-                format!("Commit::DuplicateControlObject(object={object})")
-            }
+            Self::DuplicateControlObject {
+                object,
+                first,
+                second,
+            } => format!(
+                "Commit::DuplicateControlObject(object={object}, first={first}, second={second})"
+            ),
             Self::EpochActivated { generation } => {
                 format!("Commit::EpochActivated(generation={generation})")
             }
@@ -896,42 +655,6 @@ impl Redacted for CommitError {
                 "Commit::CorruptControlObject(object={object}): {}",
                 fault.redacted()
             ),
-        }
-    }
-}
-
-impl Redacted for UnusableReplica {
-    /// Which way a replica was no good, with whatever refused it underneath.
-    fn redacted(&self) -> String {
-        match self {
-            Self::Absent => "Replica::Absent".to_owned(),
-            Self::Unfetchable(error) => {
-                format!("Replica::Unfetchable: {}", error.redacted())
-            }
-            Self::Unreadable(error) => format!("Replica::Unreadable: {}", error.redacted()),
-            Self::KindNotAdmitted { found } => {
-                format!("Replica::KindNotAdmitted(found={found:?})")
-            }
-            Self::DigestMismatch { expected, actual } => {
-                format!("Replica::DigestMismatch(expected={expected}, actual={actual})")
-            }
-        }
-    }
-}
-
-impl Redacted for ControlObjectFault {
-    /// Which way a control object was not the one it promised to be.
-    fn redacted(&self) -> String {
-        match self {
-            Self::Unopenable(error) => format!("Control::Unopenable: {}", error.redacted()),
-            Self::KindNotAdmitted { found } => {
-                format!("Control::KindNotAdmitted(found={found:?})")
-            }
-            Self::GenerationMismatch { found } => {
-                format!("Control::GenerationMismatch(found={found})")
-            }
-            Self::NoCommitSlot => "Control::NoCommitSlot".to_owned(),
-            Self::MintedCommitSlot => "Control::MintedCommitSlot".to_owned(),
         }
     }
 }
@@ -961,378 +684,5 @@ impl From<coffret_model::Error> for CommitError {
     /// Keeping one spelling means a caller matches one variant rather than two.
     fn from(error: coffret_model::Error) -> Self {
         Self::Storage(Error::Model(error))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::error::Error as _;
-
-    use super::*;
-    use crate::commit::EntryRef;
-    use crate::entry_paths::entry_path;
-
-    /// What a provider that failed on its own side leaves behind.
-    fn provider_fault() -> CommitError {
-        CommitError::Storage(Error::ServiceUnavailable {
-            status: 503,
-            detail: "backendError".to_owned(),
-            source: None,
-        })
-    }
-
-    /// What an object that arrived and would not open leaves behind.
-    fn unopenable() -> CommitError {
-        CommitError::Format(coffret_format::Error::AuthenticationFailed)
-    }
-
-    #[test]
-    fn a_fetch_that_failed_says_nothing_about_the_replica() {
-        // The reading a caller has to be able to make: Storage was asked and
-        // did not answer, so the Keyring's own health is unknown and repairing
-        // the set is not what this reports.
-        let cause = UnusableReplica::Unfetchable(Box::new(provider_fault()));
-        let UnusableReplica::Unfetchable(inner) = &cause else {
-            panic!("expected an unfetchable replica, got {cause:?}");
-        };
-        assert!(
-            matches!(
-                inner.as_ref(),
-                CommitError::Storage(Error::ServiceUnavailable { .. })
-            ),
-            "what Storage reported travels inside, got {inner:?}",
-        );
-        assert!(
-            cause.source().is_some(),
-            "the fetch failure is the reason's source",
-        );
-    }
-
-    #[test]
-    fn an_object_that_arrived_and_would_not_open_is_a_bad_replica() {
-        // The opposite reading: the object is on Storage and is not a replica
-        // this Library can read, so the set it belongs to is a valid replica
-        // short — which of the states KL-5 separates that leaves it in is the
-        // reader's to say, and both readers construct this same value.
-        let cause = UnusableReplica::Unreadable(Box::new(unopenable()));
-        let UnusableReplica::Unreadable(inner) = &cause else {
-            panic!("expected an unreadable replica, got {cause:?}");
-        };
-        assert!(
-            matches!(inner.as_ref(), CommitError::Format(_)),
-            "what the format layer reported travels inside, got {inner:?}",
-        );
-        assert!(
-            cause.source().is_some(),
-            "the refusal to open is the reason's source",
-        );
-    }
-
-    // EP-6: the path is what identifies the conflict to a person, and it is
-    // the one thing in this vocabulary a diagnostic event may not carry.
-    #[test]
-    fn two_entries_claiming_one_path_are_recorded_without_it() {
-        let error = CommitError::EntryPathCollision {
-            path: entry_path("albums/spring.jpg"),
-        };
-
-        assert!(error.to_string().contains("albums/spring.jpg"));
-        assert_eq!(error.redacted(), "Commit::EntryPathCollision(path_len=17)");
-    }
-
-    // EP-7: a rebase conflict names the change, the record and the rule to a
-    // person along with the path the two sides meet at, and a diagnostic event
-    // gets everything but the path.
-    #[test]
-    fn a_rebase_conflict_is_recorded_without_its_path() {
-        let entry = EntryRef::new(
-            ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]),
-            coffret_model::EntryNumber::FIRST,
-        );
-        let error = CommitError::RebaseConflict {
-            pending: PendingChange::Rename(entry),
-            record: Generation::new(7).expect("a small generation is one"),
-            rule: RebaseRule::RenamedEntryRenamed,
-            path: entry_path("albums/spring.jpg"),
-        };
-
-        let said = error.to_string();
-        assert!(said.contains("albums/spring.jpg"), "{said}");
-        assert!(said.contains("generation 7"), "{said}");
-        assert!(said.contains("renamed the same Entry"), "{said}");
-        assert_eq!(
-            error.redacted(),
-            format!(
-                "Commit::RebaseConflict(pending=Rename(container={}, entry=0), record=7, \
-                 rule=RenamedEntryRenamed, path_len=17)",
-                entry.container_id
-            ),
-        );
-    }
-
-    // FM-15: a rename of the batch's own that the head does not admit says
-    // which one and which rule, and no path either way.
-    #[test]
-    fn a_refused_rename_names_its_position_and_rule() {
-        let error = CommitError::RenameRefused {
-            element: 2,
-            rule: RenameRule::PathTaken,
-        };
-
-        assert_eq!(
-            error.to_string(),
-            "rename 2 of the batch is refused: another Entry would stand at the same path"
-        );
-        assert_eq!(
-            error.redacted(),
-            "Commit::RenameRefused(element=2, rule=PathTaken)"
-        );
-    }
-
-    // CP-18: the Containers a refused batch would have removed are what a
-    // person and a diagnostic event both need, and neither carries a path. The
-    // sentence ends the chain, so it carries the next step itself.
-    #[test]
-    fn a_removal_no_longer_current_names_every_container() {
-        let first = ContainerId::from_bytes([1; 16]);
-        let second = ContainerId::from_bytes([2; 16]);
-        let error = CommitError::RemovalNotCurrent {
-            container_ids: vec![first, second],
-        };
-
-        let said = error.to_string();
-        assert!(said.contains(&first.to_string()), "{said}");
-        assert!(said.contains(&second.to_string()), "{said}");
-        assert!(
-            said.ends_with("running again plans afresh from the Library as it stands now"),
-            "{said}"
-        );
-        assert_eq!(
-            error.redacted(),
-            format!("Commit::RemovalNotCurrent(containers=[{first}, {second}])"),
-        );
-        assert!(error.source().is_none());
-        assert_eq!(error.advice(), None);
-    }
-
-    // A commit's own bookkeeping is worth reading whole: nothing in it is
-    // anybody's name for anything.
-    #[test]
-    fn a_keyring_that_would_not_read_keeps_its_generation_and_its_replica() {
-        let error = CommitError::KeyringUnreadable {
-            generation: Generation::FIRST,
-            replica: 2,
-            cause: UnusableReplica::Absent,
-        };
-
-        assert_eq!(
-            error.redacted(),
-            "Commit::KeyringUnreadable(generation=0, replica=2): Replica::Absent",
-        );
-    }
-
-    // KL-16: the refusal is one a person acts on, so it has to carry all three
-    // of what is wrong, what it cost them, and what ends it — the first two in
-    // the sentence, and the third as advice a shell prints after the chain,
-    // because the sentence has a source and advice inside it would be read
-    // before the cause. The diagnostic event carries the same verdict as facts
-    // and none of the advice, and the chain reaches what Storage said.
-    //
-    // KL-15: and where the same examination did put positions back before it
-    // stopped, the sentence says so, because that work is a repair performed and
-    // this refusal is the only thing a run that was refused hands back. A run
-    // that put none back says nothing about it rather than reporting a zero.
-    #[test]
-    fn a_keyring_that_could_not_be_repaired_says_what_to_do_about_it() {
-        let error = CommitError::UnrepairedKeyring {
-            generation: Generation::FIRST,
-            needed: vec![1, 2],
-            rewritten: Vec::new(),
-            replica: 1,
-            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
-        };
-
-        let said = error.to_string();
-        assert!(
-            said.contains("short of a valid replica at 2 of its positions"),
-            "{said}"
-        );
-        assert!(
-            said.contains("nothing of this batch was committed"),
-            "{said}"
-        );
-        assert!(
-            said.contains("reads and restores go on"),
-            "a write the gate refuses leaves reading alone, and the person told \
-             their backup will not take a write asks about reading next \
-             (spec: KL-16): {said}",
-        );
-        assert!(
-            !said.contains("running again"),
-            "what to do is advice, printed after the cause rather than before it: {said}",
-        );
-        assert_eq!(
-            error.advice(),
-            Some("running again examines the committed Keyring and repairs it afresh"),
-        );
-        assert!(
-            !said.contains("other replica"),
-            "a run that put nothing back reports no repair rather than a zero: {said}",
-        );
-        assert!(
-            error.source().is_some(),
-            "the reason the repair stopped is the refusal's source",
-        );
-        assert_eq!(
-            error.redacted(),
-            format!(
-                "Commit::UnrepairedKeyring(generation=0, needed=2, rewritten=0, replica=1): \
-                 Repair::Unwritten: {}",
-                provider_fault().redacted(),
-            ),
-        );
-
-        let partial = CommitError::UnrepairedKeyring {
-            generation: Generation::FIRST,
-            needed: vec![2],
-            rewritten: vec![0, 1],
-            replica: 2,
-            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
-        };
-
-        let said = partial.to_string();
-        assert!(
-            said.contains("short of a valid replica at 1 of its positions"),
-            "{said}"
-        );
-        assert!(
-            said.contains("2 other replicas were rewritten and stand"),
-            "the repair it did perform is in the sentence: {said}",
-        );
-        assert_eq!(
-            partial.redacted(),
-            format!(
-                "Commit::UnrepairedKeyring(generation=0, needed=1, rewritten=2, replica=2): \
-                 Repair::Unwritten: {}",
-                provider_fault().redacted(),
-            ),
-        );
-    }
-
-    // KL-13: a replica Storage would not hand over is not one a repair may
-    // write over, and the three ways a position stays short have to be legible
-    // as three rather than as one refusal worded differently.
-    #[test]
-    fn the_three_ways_a_repair_stops_do_not_read_alike() {
-        let unfetchable = UnrepairedReplica::Unfetchable(Box::new(provider_fault()));
-        let unwritten = UnrepairedReplica::Unwritten(Box::new(provider_fault()));
-        let unconfirmed = UnrepairedReplica::Unconfirmed(UnusableReplica::Absent);
-
-        assert!(
-            unfetchable.to_string().contains("was not rewritten"),
-            "a position left alone says so: {unfetchable}",
-        );
-        for (left, right) in [
-            (&unfetchable, &unwritten),
-            (&unwritten, &unconfirmed),
-            (&unfetchable, &unconfirmed),
-        ] {
-            assert_ne!(left.to_string(), right.to_string());
-            assert_ne!(left.redacted(), right.redacted());
-        }
-    }
-
-    /// The links a caller printing `{error:#}` reads, outermost first.
-    fn chain(error: &dyn error::Error) -> Vec<String> {
-        let mut links = vec![error.to_string()];
-        let mut below = error.source();
-        while let Some(link) = below {
-            links.push(link.to_string());
-            below = link.source();
-        }
-        links
-    }
-
-    // A wrapper says which layer, the cause says what that layer answered, and
-    // the chain a caller prints holds each of those once — all the way down
-    // through the repair's own vocabulary to what Storage said. What to do
-    // about it is in no link: it is the advice a shell prints after the last.
-    #[test]
-    fn a_stopped_repair_reaches_a_caller_as_one_sentence_per_layer() {
-        let error = CommitError::UnrepairedKeyring {
-            generation: Generation::FIRST,
-            needed: vec![1, 2],
-            rewritten: Vec::new(),
-            replica: 1,
-            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
-        };
-
-        assert_eq!(
-            chain(&error),
-            vec![
-                "the committed Keyring generation 0 is short of a valid replica at 2 of its \
-                 positions and could not be repaired: the repair stopped at replica 1; nothing \
-                 of this batch was committed, and reads and restores go on from the replicas \
-                 that survive"
-                    .to_owned(),
-                "that replica could not be written".to_owned(),
-                "the commit did not get what it asked of Storage".to_owned(),
-                "Storage failed with status 503: backendError".to_owned(),
-            ],
-        );
-        assert!(
-            chain(&error)
-                .iter()
-                .all(|link| !link.contains("running again")),
-            "the advice is said once, after the chain, and in none of its links",
-        );
-        assert!(error.advice().is_some());
-    }
-
-    // FM-15: a Library whose Journal records predate the schema this build
-    // reads is told to be made again, after the chain that says which schema
-    // was found, and not left reading as a Library that is broken.
-    #[test]
-    fn a_record_of_an_older_schema_advises_making_the_library_again() {
-        let error = CommitError::Format(coffret_format::Error::UnsupportedJournalRecordSchema {
-            schema: 2,
-        });
-        let advice = error.advice().expect("an older schema has advice");
-        assert!(advice.contains("predates this build's format"), "{advice}");
-        assert!(advice.contains("coffret init"), "{advice}");
-        assert!(
-            chain(&error).iter().all(|link| !link.contains("predates")),
-            "the advice is said once, after the chain, and in none of its links",
-        );
-    }
-
-    // Every other refusal either has no source, so its sentence is already the
-    // last line a person reads, or says nothing a person can do: none of them
-    // has advice to print after the chain.
-    #[test]
-    fn only_a_stopped_repair_and_an_older_schema_have_advice_to_print_after_the_chain() {
-        for error in [
-            provider_fault(),
-            unopenable(),
-            CommitError::ConflictLimitReached { attempts: 8 },
-            CommitError::EpochActivated {
-                generation: Generation::FIRST,
-            },
-            CommitError::MissingHead {
-                generation: Generation::FIRST,
-            },
-        ] {
-            assert_eq!(error.advice(), None, "{error:?}");
-        }
-    }
-
-    #[test]
-    fn the_two_verdicts_do_not_read_alike() {
-        let unfetchable = UnusableReplica::Unfetchable(Box::new(provider_fault())).to_string();
-        let unreadable = UnusableReplica::Unreadable(Box::new(unopenable())).to_string();
-        assert_ne!(
-            unfetchable, unreadable,
-            "a person reading either one is told which of the two happened",
-        );
     }
 }

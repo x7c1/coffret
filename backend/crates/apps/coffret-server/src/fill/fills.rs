@@ -5,7 +5,7 @@ use crate::folder::Folder;
 use crate::latest::Latest;
 
 use super::progress::Progress;
-use super::FillRun;
+use super::{EndedFills, FillRun};
 
 /// What the server is bringing over, and what it has brought over last.
 #[derive(Debug)]
@@ -13,6 +13,8 @@ pub struct Fills {
     /// The one place any of this is written, so that every reader sees a whole
     /// answer and a case can wait on one.
     progress: watch::Sender<Progress>,
+    /// The folders a run has ended on, noted where each run ends.
+    ended: EndedFills,
 }
 
 impl Default for Fills {
@@ -26,6 +28,7 @@ impl Fills {
     pub fn new() -> Self {
         Self {
             progress: watch::channel(Progress::default()).0,
+            ended: EndedFills::new(),
         }
     }
 
@@ -144,8 +147,23 @@ impl Fills {
     /// all of this itself, and by the time it is over another worker may own
     /// the flag. Notified only where there was something to put back, which is
     /// why this goes through [`send_if_modified`](watch::Sender::send_if_modified).
+    ///
+    /// The run it stops is noted as ended, as one that stopped through
+    /// [`publish`](Self::publish) is.
     pub(super) fn abandon(&self) {
-        self.progress.send_if_modified(Progress::abandon);
+        self.progress.send_if_modified(|progress| {
+            let modified = progress.abandon();
+            if let Some(run) = &progress.on_record {
+                self.ended.note(run);
+            }
+            modified
+        });
+    }
+
+    /// Whether a run has ended on `folder` in this process, done or stopped
+    /// (see [`EndedFills`]).
+    pub(crate) fn has_ended(&self, folder: &Folder) -> bool {
+        self.ended.has_ended(folder)
     }
 
     /// Whether another folder has been armed under the fill in progress.
@@ -163,12 +181,17 @@ impl Fills {
     /// taken into the run here too, under the same lock the arming put it there
     /// under, so the run keeps it for every later publish of its own (see
     /// [`Progress::hand_over`]).
+    ///
+    /// A run that is done or stopped is noted as ended on its folder here, in
+    /// the same stroke that publishes it; a run whose worker died is noted by
+    /// [`abandon`](Self::abandon) instead.
     pub(super) fn publish(&self, run: &mut FillRun) {
         self.progress.send_modify(|progress| {
             if let Some(found) = progress.hand_over() {
                 run.read_keyring(found);
             }
             run.read_unheld(progress.hand_over_unheld());
+            self.ended.note(run);
             progress.on_record = Some(FillRun {
                 run: progress.run(),
                 ..run.clone()
@@ -180,7 +203,7 @@ impl Fills {
 #[cfg(test)]
 mod tests {
     use super::Fills;
-    use crate::fill::FillStatus;
+    use crate::fill::{FillRun, FillStatus};
     use crate::folder::Folder;
     use crate::reported::Reported;
 
@@ -188,6 +211,56 @@ mod tests {
 
     fn albums() -> Folder {
         Folder::named(Some(entry_path("albums")))
+    }
+
+    fn photos() -> Folder {
+        Folder::named(Some(entry_path("photos")))
+    }
+
+    /// Publishes a run on `folder` that came to `status`.
+    fn published(fills: &Fills, folder: Folder, status: FillStatus) {
+        let mut run = FillRun::starting(folder);
+        run.status = status;
+        fills.publish(&mut run);
+    }
+
+    // A run still on its folder has not ended, and neither has one a fetch
+    // into another folder took the worker from: both leave the folder for the
+    // next page opened in it to arm.
+    #[test]
+    fn a_run_filling_or_superseded_is_not_ended() {
+        let fills = Fills::new();
+        published(&fills, albums(), FillStatus::Filling);
+        assert!(!fills.has_ended(&albums()), "still filling");
+
+        published(&fills, albums(), FillStatus::Superseded);
+        assert!(!fills.has_ended(&albums()), "superseded, not ended");
+    }
+
+    // A run that is done is noted as it publishes its ending, and stays noted
+    // after another run takes the record from it.
+    #[test]
+    fn a_done_run_is_ended_and_stays_so() {
+        let fills = Fills::new();
+        published(&fills, albums(), FillStatus::Done);
+        assert!(fills.has_ended(&albums()));
+
+        published(&fills, photos(), FillStatus::Filling);
+        assert!(fills.has_ended(&albums()));
+        assert!(!fills.has_ended(&photos()));
+    }
+
+    // A run the worker abandoned is reported stopped, which is one way a run
+    // ends, though it never publishes that ending itself.
+    #[test]
+    fn an_abandoned_run_is_ended() {
+        let fills = Fills::new();
+        assert!(fills.arm(albums(), None, Vec::new()));
+        assert_eq!(fills.take_next(), Some(albums()));
+        published(&fills, albums(), FillStatus::Filling);
+
+        fills.abandon();
+        assert!(fills.has_ended(&albums()));
     }
 
     // The half of a worker's leaving that `Progress` cannot state: putting the

@@ -8,7 +8,7 @@ use tokio::time::Instant;
 use crate::allowance::Allowance;
 use crate::api_error::{ApiError, WayBack};
 use crate::delete::Deletes;
-use crate::fill::{EndedFills, Fills};
+use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::fronts_ahead::FrontsAhead;
 use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
@@ -101,12 +101,6 @@ pub struct ServerState {
     /// [`fetches`](Self::fetches) is: it is about work in flight here, it is
     /// gone when the process is, and nothing in it is ever uploaded.
     pub fills: Fills,
-    /// The folders a fill has ended on, which a page answered from disk does
-    /// not arm again.
-    ///
-    /// State of this process as [`fills`](Self::fills) is, and forgotten with
-    /// it.
-    pub(crate) ended_fills: EndedFills,
     /// How many reads of a listed folder's Container fronts are under way.
     ///
     /// State of this process in the sense [`fills`](Self::fills) is, and less:
@@ -213,7 +207,6 @@ impl ServerState {
             idle: Arc::new(Idle::started()),
             fetches: EntryFetches::new(),
             fills: Fills::new(),
-            ended_fills: EndedFills::new(),
             fronts: FrontsAhead::new(),
             syncs: Syncs::new(),
             freezes: Freezes::new(),

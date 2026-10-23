@@ -5,6 +5,7 @@ use crate::index_conformance::fixtures::{
     addition, container_id, entry, observation, observation_of, path, record,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
+use crate::index_conformance::renames::{rename, renaming};
 
 /// A file this device has, at a path the Library no longer holds, is reported.
 ///
@@ -230,4 +231,85 @@ pub async fn a_forgotten_row_is_gone_and_forgetting_twice_succeeds(fixture: &Ind
         "the other row is untouched, got {present:?}"
     );
     assert_eq!(present[0].observation.path.as_str(), "albums/b.jpg");
+}
+
+/// The Entries under a prefix this device does not have are the subtree's
+/// Entries less the ones it has on disk, read at once (spec: EP-10).
+///
+/// A file this device marked absent again, an Entry it never had, and an Entry
+/// whose path holds a file waiting to follow a rename elsewhere are all among
+/// them; a file it has is not, and nor is anything outside the prefix.
+pub async fn the_entries_absent_under_a_prefix_are_the_ones_not_on_disk(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .apply(record(
+            0,
+            vec![addition(
+                1,
+                ContainerKind::Pack,
+                &[
+                    "albums/a.jpg",
+                    "albums/b.jpg",
+                    "albums/c.jpg",
+                    "books/d.png",
+                ],
+            )],
+            vec![],
+        ))
+        .await
+        .expect("replaying a record must succeed");
+    index
+        .mark_present(observation_of("albums/a.jpg", 100, entry(1, 0)))
+        .await
+        .expect("recording a materialized file must succeed");
+    index
+        .mark_present(observation_of("albums/b.jpg", 101, entry(1, 1)))
+        .await
+        .expect("recording a materialized file must succeed");
+    index
+        .mark_absent(
+            &path("albums/b.jpg"),
+            DeviceTime::from_unix_seconds(1_700_000_900),
+        )
+        .await
+        .expect("recording a file gone must succeed");
+
+    let absent = |prefix: Option<&'static str>| {
+        let prefix = prefix.map(path);
+        async move {
+            index
+                .entries_absent_under(prefix.as_ref())
+                .await
+                .expect("reading the Entries not on disk must succeed")
+                .into_iter()
+                .map(|location| location.path().as_str().to_owned())
+                .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(
+        absent(Some("albums")).await,
+        ["albums/b.jpg", "albums/c.jpg"],
+        "the one marked absent and the one never had, in path order",
+    );
+    assert_eq!(
+        absent(None).await,
+        ["albums/b.jpg", "albums/c.jpg", "books/d.png"],
+        "the root covers every subtree",
+    );
+
+    // Swapping the two names leaves the file at albums/a.jpg waiting to follow
+    // its Entry to albums/b.jpg: the Entry now at albums/a.jpg is not had there.
+    index
+        .apply(renaming(
+            record(1, vec![], vec![]),
+            vec![rename(1, 0, "albums/b.jpg"), rename(1, 1, "albums/a.jpg")],
+        ))
+        .await
+        .expect("applying the renames must succeed");
+    assert_eq!(
+        absent(Some("albums")).await,
+        ["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"],
+        "a file waiting to follow its Entry elsewhere is not the Entry at its own path",
+    );
 }

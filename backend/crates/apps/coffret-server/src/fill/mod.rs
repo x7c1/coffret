@@ -58,7 +58,7 @@ mod declined;
 pub use declined::Declined;
 
 mod ended_fills;
-pub(crate) use ended_fills::EndedFills;
+use ended_fills::EndedFills;
 
 mod fill_folder;
 pub use fill_folder::{fill_folder, queue_folder};

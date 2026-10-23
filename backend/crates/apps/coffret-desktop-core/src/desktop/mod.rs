@@ -9,13 +9,12 @@ mod take_drop;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use anyhow::Context;
 use tokio::runtime::Runtime;
 
 use crate::door::Door;
 use crate::page_source::page_source;
 use crate::shared::Shared;
-use crate::AppBuild;
+use crate::{AppBuild, Error, IoStep, Result};
 
 /// What a desktop shell holds for the whole of its process: the runtime the
 /// server, the explorer's host and the door run on, and what they serve.
@@ -41,24 +40,30 @@ impl Desktop {
     /// (spec: DK-4). The door is bound and answering by the time this returns.
     ///
     /// A process holds one ([`crate::start`]); a case may hold several.
-    pub fn new(identifier: &str, idle_minutes: u64) -> anyhow::Result<Self> {
-        let runtime = Runtime::new().context("the async runtime could not be started")?;
+    pub fn new(identifier: &str, idle_minutes: u64) -> Result<Self> {
+        let runtime = Runtime::new().map_err(|cause| Error::Io {
+            step: IoStep::Runtime,
+            cause,
+        })?;
         Self::on(runtime, identifier, idle_minutes)
     }
 
     /// A desktop whose every task runs on the thread that drives its runtime,
     /// for a case that reads back what that thread logged.
     #[cfg(test)]
-    pub(crate) fn on_current_thread(identifier: &str, idle_minutes: u64) -> anyhow::Result<Self> {
+    pub(crate) fn on_current_thread(identifier: &str, idle_minutes: u64) -> Result<Self> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .context("the async runtime could not be started")?;
+            .map_err(|cause| Error::Io {
+                step: IoStep::Runtime,
+                cause,
+            })?;
         Self::on(runtime, identifier, idle_minutes)
     }
 
     /// A desktop running on `runtime`.
-    fn on(runtime: Runtime, identifier: &str, idle_minutes: u64) -> anyhow::Result<Self> {
+    fn on(runtime: Runtime, identifier: &str, idle_minutes: u64) -> Result<Self> {
         let shared = Arc::new(Shared::new(
             AppBuild::of(identifier).host_kind(),
             page_source(),
@@ -68,18 +73,16 @@ impl Desktop {
         // Loopback, and any free port, as the explorer's host is: the shell
         // learns the number from the URL it is handed, and nothing else needs
         // it (spec: LA-13).
+        let failed = |step| move |cause| Error::Io { step, cause };
         let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .context("nothing could listen for the Passphrase window on 127.0.0.1")?;
-        let door = listener
-            .local_addr()
-            .context("the address the Passphrase window is served at could not be read")?;
+            .map_err(failed(IoStep::DoorBind))?;
+        let door = listener.local_addr().map_err(failed(IoStep::DoorAddress))?;
         listener
             .set_nonblocking(true)
-            .context("the Passphrase window's listener could not be made non-blocking")?;
+            .map_err(failed(IoStep::DoorNonBlocking))?;
         let listener = {
             let _on_runtime = runtime.enter();
-            tokio::net::TcpListener::from_std(listener)
-                .context("the Passphrase window's listener could not be handed to the runtime")?
+            tokio::net::TcpListener::from_std(listener).map_err(failed(IoStep::DoorHandOver))?
         };
         let router = Door::new(door, Arc::clone(&shared))?.router();
         runtime.spawn(coffret_explorer_host::serve(listener, router));

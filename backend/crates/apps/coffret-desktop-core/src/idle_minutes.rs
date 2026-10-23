@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use anyhow::Context;
+use crate::{Error, Result};
 
 /// The variable the server's own binary reads its idle interval from
 /// (spec: DK-4), which a desktop shell reads the same way so that a machine
@@ -17,20 +17,18 @@ const DEFAULT_IDLE_MINUTES: u64 = 30;
 /// Refused rather than defaulted where it is set and is not a whole number of
 /// at least one: somebody who set it meant something by it, and a server that
 /// quietly used another interval would be the one they did not ask for.
-pub fn idle_minutes(setting: Option<&OsStr>) -> anyhow::Result<u64> {
+pub fn idle_minutes(setting: Option<&OsStr>) -> Result<u64> {
     let Some(value) = setting.filter(|value| !value.is_empty()) else {
         return Ok(DEFAULT_IDLE_MINUTES);
     };
-    let text = value
-        .to_str()
-        .with_context(|| format!("{IDLE_MINUTES} is not text"))?;
-    let minutes: u64 = text
-        .parse()
-        .with_context(|| format!("{IDLE_MINUTES} is not a whole number of minutes: {text:?}"))?;
-    anyhow::ensure!(
-        minutes >= 1,
-        "{IDLE_MINUTES} must be at least 1, not {minutes}"
-    );
+    let text = value.to_str().ok_or(Error::IdleMinutesNotText)?;
+    let minutes: u64 = text.parse().map_err(|cause| Error::IdleMinutesNotWhole {
+        text: text.to_owned(),
+        cause,
+    })?;
+    if minutes < 1 {
+        return Err(Error::IdleMinutesBelowOne { minutes });
+    }
     Ok(minutes)
 }
 
@@ -38,7 +36,7 @@ pub fn idle_minutes(setting: Option<&OsStr>) -> anyhow::Result<u64> {
 mod tests {
     use super::*;
 
-    fn read(text: &str) -> anyhow::Result<u64> {
+    fn read(text: &str) -> Result<u64> {
         idle_minutes(Some(OsStr::new(text)))
     }
 

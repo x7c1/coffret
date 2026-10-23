@@ -199,6 +199,18 @@ impl State {
             .collect()
     }
 
+    pub(super) fn entries_absent_under(&self, prefix: Option<&EntryPath>) -> Vec<EntryLocation> {
+        let present: BTreeSet<&EntryPath> = self
+            .present()
+            .map(|local| &local.observation.path)
+            .collect();
+        self.entries
+            .values()
+            .filter(|entry| is_under(entry.path(), prefix) && !present.contains(entry.path()))
+            .cloned()
+            .collect()
+    }
+
     pub(super) fn present_without_entry(&self) -> Vec<LocalEntry> {
         self.present()
             .filter(|local| !self.entries.contains_key(&local.observation.path))

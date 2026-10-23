@@ -175,6 +175,13 @@ impl Index for RefusingIndex {
         self.inner.present_under(prefix).await
     }
 
+    async fn entries_absent_under(
+        &self,
+        prefix: Option<&EntryPath>,
+    ) -> IndexResult<Vec<EntryLocation>> {
+        self.inner.entries_absent_under(prefix).await
+    }
+
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>> {
         self.inner.present_without_entry().await
     }

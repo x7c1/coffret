@@ -653,3 +653,37 @@ async fn a_page_answered_from_disk_after_a_fill_ended_on_its_folder_arms_nothing
     let (_, after) = body_of(served.get("/api/work").await).await;
     assert_eq!(fill(&after)["run"], run, "no second run: {after}");
 }
+
+// The run that ended on a folder is noted as it ends, not when somebody next
+// looks at the record: a folder asked for by name taking the record from it
+// does not make the first folder's pages arm it again (spec: EP-11).
+#[tokio::test]
+async fn a_page_answered_from_disk_after_another_folder_took_the_record_arms_nothing() {
+    let served = Served::library().await;
+    served.plant_locally("albums/cover.png", b"something of my own");
+
+    assert_eq!(
+        served.get("/api/file?path=albums/notes.txt").await.status(),
+        200,
+    );
+    served.fill_idle().await;
+    let (_, ended) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&ended)["status"], "done", "{ended}");
+
+    served.queue_fill("books");
+    served.fill_idle().await;
+    let (_, taken) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&taken)["folder"], "books", "{taken}");
+    assert_eq!(fill(&taken)["status"], "done", "{taken}");
+    let run = fill(&taken)["run"].clone();
+
+    assert_eq!(
+        served.get("/api/file?path=albums/notes.txt").await.status(),
+        200,
+    );
+    served.fill_idle().await;
+
+    let (_, after) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&after)["folder"], "books", "{after}");
+    assert_eq!(fill(&after)["run"], run, "no further run: {after}");
+}

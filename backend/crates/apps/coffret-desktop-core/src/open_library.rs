@@ -1,7 +1,6 @@
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
-use anyhow::Context;
 use coffret_device::{LibraryDir, Passphrase};
 use coffret_explorer_host::credentials::{Credentials, SystemClock};
 use coffret_explorer_host::Config;
@@ -11,7 +10,7 @@ use tokio::sync::mpsc;
 
 use crate::opened::Opened;
 use crate::shared::Shared;
-use crate::{refusal_evidence, Event};
+use crate::{refusal_evidence, Drawn, Error, Event, IoStep, Result};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
 /// front of it, and records both in `shared`. No launch file is written: the
@@ -25,7 +24,7 @@ pub(crate) async fn open_library(
     shared: &Arc<Shared>,
     name: String,
     passphrase: Passphrase,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     // The server's way of asking for the Passphrase again once it has locked:
     // the explorer's *unlock* reaches the shell through it (spec: DK-1).
     let (prompt, asked) = UnlockPrompt::channel();
@@ -35,7 +34,13 @@ pub(crate) async fn open_library(
         idle_minutes: shared.idle_minutes,
         unlock_prompt: Some(prompt),
     };
-    let serving: Serving = launch.open(move || Ok(passphrase)).await?;
+    // The server's chain is the one cause kept untyped, so it is wrapped here,
+    // where it is known to be the server's, rather than by a `From` that would
+    // take any `anyhow::Error` for one.
+    let serving: Serving = launch
+        .open(move || Ok(passphrase))
+        .await
+        .map_err(Error::Server)?;
     let server = serving.address();
     let state = Arc::clone(serving.state());
     let library = LibraryDir::resolve(&state.name)?;
@@ -46,14 +51,20 @@ pub(crate) async fn open_library(
     // actually bound (spec: LA-13).
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
-        .context("nothing could listen for the explorer on 127.0.0.1")?;
-    let explorer = listener
-        .local_addr()
-        .context("the address the explorer is served at could not be read")?;
+        .map_err(|cause| Error::Io {
+            step: IoStep::ExplorerBind,
+            cause,
+        })?;
+    let explorer = listener.local_addr().map_err(|cause| Error::Io {
+        step: IoStep::ExplorerAddress,
+        cause,
+    })?;
     // The handle that issues launch tickets stays with the core, and is never
     // handed to the host's routes (spec: LA-17).
-    let credentials = Credentials::new(Arc::new(SystemClock))
-        .context("the explorer's credentials could not be drawn")?;
+    let credentials = Credentials::new(Arc::new(SystemClock)).map_err(|cause| Error::NotDrawn {
+        what: Drawn::Credentials,
+        cause,
+    })?;
     let mut config = Config::for_library(server, &library, Arc::clone(&state), shared.kind);
     config.page = shared.page.clone();
     let host = coffret_explorer_host::router(&listener, config, credentials.gate())?;
@@ -68,9 +79,8 @@ pub(crate) async fn open_library(
 
     let watched = Arc::clone(shared);
     tokio::spawn(async move {
-        let stopped = serving.serve().await;
-        let evidence = match &stopped {
-            Err(error) => refusal_evidence(error),
+        let evidence = match serving.serve().await {
+            Err(error) => refusal_evidence(&Error::Server(error)),
             Ok(()) => "Finished".to_owned(),
         };
         tracing::error!(

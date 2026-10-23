@@ -1,9 +1,7 @@
 use std::ffi::OsStr;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use anyhow::Context;
-
-use crate::{idle_minutes, Desktop};
+use crate::{idle_minutes, Desktop, Error, Result};
 
 /// The one [`Desktop`] this process holds, once it has started.
 static DESKTOP: OnceLock<Desktop> = OnceLock::new();
@@ -28,15 +26,14 @@ static STARTING: Mutex<()> = Mutex::new(());
 /// first, and starting again would be a second runtime and a second door.
 ///
 /// [`IDLE_MINUTES`]: crate::IDLE_MINUTES
-pub fn start(
-    identifier: &str,
-    idle_minutes_setting: Option<&OsStr>,
-) -> anyhow::Result<&'static Desktop> {
+pub fn start(identifier: &str, idle_minutes_setting: Option<&OsStr>) -> Result<&'static Desktop> {
     let _starting = STARTING.lock().unwrap_or_else(PoisonError::into_inner);
-    anyhow::ensure!(DESKTOP.get().is_none(), "the desktop has already started");
+    if DESKTOP.get().is_some() {
+        return Err(Error::AlreadyStarted);
+    }
     let minutes = idle_minutes(idle_minutes_setting)?;
     if LOGGING.get().is_none() {
-        coffret_shell::logging::start().context("the log could not be started")?;
+        coffret_shell::logging::start().map_err(|cause| Error::LogNotStarted { cause })?;
         let _ = LOGGING.set(());
     }
     let desktop = Desktop::new(identifier, minutes)?;

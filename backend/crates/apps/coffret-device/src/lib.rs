@@ -414,7 +414,7 @@ pub use coffret_model::{
     lowercase_hex, Btime, ContainerId, ContainerKind, ContentHash, DepositedAt, EntryNumber,
     EntryPath, Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
 };
-pub use coffret_model::{ControlObjectKind, ControlObjectName};
+pub use coffret_model::{ControlObjectKind, ControlObjectName, ObjectRef};
 pub use coffret_usecase::catch_up::{CatchUpOutcome, RemoteHead};
 pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
