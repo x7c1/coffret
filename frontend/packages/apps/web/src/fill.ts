@@ -529,6 +529,7 @@ const DOING: Record<Step['phase'], string> = {
   packing: PACKING,
   uploading: 'sending',
   committing: 'committing to the Library',
+  removing_copies: "discarding this device's copies into the trash",
   fetching: 'bringing over',
 };
 

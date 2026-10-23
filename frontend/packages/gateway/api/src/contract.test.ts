@@ -88,6 +88,7 @@ const KINDS: Record<RefusalKind, 'server' | 'host' | 'client'> = {
   declined: 'server',
   refused_placement: 'server',
   epoch: 'server',
+  library_predates_format: 'server',
   conflict: 'server',
   locked: 'server',
   storage: 'server',
@@ -171,6 +172,7 @@ const PHASES: Literals<Phase> = {
   packing: true,
   uploading: true,
   committing: true,
+  removing_copies: true,
   fetching: true,
 };
 const CATALOG_STATES: Literals<CatalogState> = {

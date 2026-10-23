@@ -63,6 +63,10 @@ mod drive_client;
 mod fetch;
 mod freeze;
 mod init;
+
+mod interrupted;
+use interrupted::{ctrl_c, raced};
+
 mod join;
 
 mod library_args;
@@ -164,6 +168,24 @@ impl Command {
             Self::Rename(_) => "rename",
         }
     }
+
+    /// Whether Ctrl-C is listened for while the command runs, and answered
+    /// with [`Interrupted`](interrupted::Interrupted).
+    ///
+    /// The runs over a Library's contents, whose leftovers the next sync
+    /// settles — which is what the interrupted line tells a person. Each of
+    /// them asks for its Passphrase before its first await, so [`raced`]
+    /// starts listening only once that prompt is behind it. The rest keep the
+    /// signal's own behaviour: `init`, `join` and `authorize` can ask for a
+    /// secret after a round trip, and a prompt blocking in a terminal read
+    /// once the signal is listened for would swallow Ctrl-C until return is
+    /// pressed; and none of them leaves anything a sync settles.
+    fn interruptible(&self) -> bool {
+        matches!(
+            self,
+            Self::Sync(_) | Self::Freeze(_) | Self::Fetch(_) | Self::Rename(_)
+        )
+    }
 }
 
 /// The kind a refusal of what was typed travels as under `--json`, before any
@@ -243,7 +265,11 @@ async fn main() -> ExitCode {
         Err(error) => return failed(form, command, None, &error.into()),
     };
 
-    match run(cli.command, form).await {
+    let ran = match cli.command.interruptible() {
+        true => raced(run(cli.command, form), ctrl_c()).await,
+        false => run(cli.command, form).await,
+    };
+    match ran {
         Ok(ran) => {
             if form == Form::Json {
                 Document::succeeded(command, Some(&log), &ran).print();

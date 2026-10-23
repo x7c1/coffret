@@ -108,6 +108,11 @@ impl From<Error> for ApiError {
 /// whose exclusion did not hold and which no reader picks a side of
 /// (spec: CP-3, FM-12).
 ///
+/// A Journal record of a schema older than this build reads is
+/// `library_predates_format` rather than `unverified`: the Library is not
+/// corrupt, it was written before this format, and nothing but making it
+/// again reads it ([`ApiError::library_predates_format`]).
+///
 /// An epoch this device holds no Master Key for is `epoch`, and is neither of
 /// those nor any of the rest: it is a state of the Library, permanent until
 /// this device is re-enrolled in the new epoch (spec: CP-5, MR-2), so pressing
@@ -166,6 +171,13 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         // FM-15).
         CommitError::Format(FormatError::JournalRecordNeedsNewerBuild { .. }) => {
             ApiError::server(cause)
+        }
+        // The other side of the same line: a record of a schema older than
+        // this build reads. What Storage holds is a Library written before
+        // this format, not one that is corrupt, and the remedy is to make it
+        // again (spec: FM-15).
+        CommitError::Format(FormatError::UnsupportedJournalRecordSchema { .. }) => {
+            ApiError::library_predates_format(cause)
         }
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::unverified(
             "what Storage answered with is not the control state the Library names",

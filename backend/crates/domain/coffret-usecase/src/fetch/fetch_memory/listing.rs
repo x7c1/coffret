@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use coffret_model::{ContainerId, Generation};
+use coffret_model::{ContainerId, Generation, Redacted};
+use tracing::warn;
 
 use super::{FetchMemory, Flight, Turn};
 use crate::commit::{CommitError, ControlListing};
 use crate::index::Index;
-use crate::index_error::IndexResult;
 
 /// What one read of the listing came to.
 pub(crate) type ListingRead = Result<Arc<ControlListing>, CommitError>;
@@ -43,20 +43,35 @@ impl FetchMemory {
 
     /// Keeps a listing taken while the catalog stood at `at`, and forgets the
     /// front of every Container `index` no longer holds a current Entry in.
+    ///
+    /// Infallible, because what it keeps is a cache: every caller already
+    /// holds the answer the listing served — a head compared, a catalog caught
+    /// up, the handles an Entry fetch reaches objects by — and a catalog that
+    /// would not say which Containers are current takes nothing from that
+    /// answer. So the refusal is logged and nothing is kept, not even the
+    /// listing, whose fronts could then not be pruned with it; the next read
+    /// lists Storage again.
     pub(crate) async fn remember_listing(
         &self,
         index: &dyn Index,
         listing: Arc<ControlListing>,
         at: Option<Generation>,
-    ) -> IndexResult<()> {
-        let current: BTreeSet<ContainerId> = index
-            .containers_under(None)
-            .await?
-            .into_iter()
-            .map(|container| container.id)
-            .collect();
+    ) {
+        let current: BTreeSet<ContainerId> = match index.containers_under(None).await {
+            Ok(containers) => containers
+                .into_iter()
+                .map(|container| container.id)
+                .collect(),
+            Err(error) => {
+                warn!(
+                    reason = %error.redacted(),
+                    "the catalog would not say which Containers are current, so the listing \
+                     is not kept; the next read lists Storage again",
+                );
+                return;
+            }
+        };
         self.keep_listing(listing, at, &current);
-        Ok(())
     }
 
     fn keep_listing(

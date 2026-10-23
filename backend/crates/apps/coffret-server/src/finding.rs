@@ -174,13 +174,15 @@ impl Finding {
             }),
             // Not shown, because none of these leaves anything for the person
             // who dropped a file. Each leaves the committed state correct: a
-            // settled batch is one the run already dealt with, and what a
+            // settled batch is one the run already dealt with, Keyring replicas
+            // no head names are kept for review and read by nothing, and what a
             // refused disposal, an untrashed removal or a failed checkpoint
             // leaves is a later run's to finish, or orphan cleanup's to find
             // (spec: OC-1, OC-4, OC-6, CK-8). Named one by one, so a finding
             // the device grows has to be placed here rather than falling
             // through.
             Finding::Settled(_)
+            | Finding::RetainedKeyring { .. }
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,
         }
@@ -824,6 +826,7 @@ mod tests {
             }),
             Finding::UnheldParcel { .. }
             | Finding::Settled(_)
+            | Finding::RetainedKeyring { .. }
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,
         }

@@ -112,6 +112,9 @@ pub use uncertain_commit::{
     an_uncertain_commit_retains_its_ciphertext_and_provenance,
 };
 
+mod retained_keyring;
+pub use retained_keyring::keyring_replicas_no_head_names_are_reported_and_kept;
+
 mod attempted_slots;
 pub use attempted_slots::{
     a_rebased_attempt_is_disposed_only_once_every_slot_is_proven,
@@ -326,6 +329,7 @@ macro_rules! sync_conformance {
             an_empty_or_vanished_slot_proves_nothing,
             a_live_producer_keeps_exclusive_ownership,
             a_lost_response_and_withheld_head_never_authorize_trash,
+            keyring_replicas_no_head_names_are_reported_and_kept,
             an_abandoned_container_storage_will_not_trash_is_left_in_storage,
             an_upload_killed_before_its_row_named_the_object_is_trashed_by_name,
             an_unrecorded_container_storage_will_not_trash_is_retried,

@@ -160,6 +160,13 @@
   },
   {
     "body": {
+      "error": "library_predates_format",
+      "message": "this Library predates this app's format, so nothing of it is read — make it again and bring its files in again"
+    },
+    "status": 409
+  },
+  {
+    "body": {
       "error": "conflict",
       "message": "another device changed the Library meanwhile, so nothing was changed — running it again plans from the Library as it is now"
     },

@@ -647,8 +647,9 @@ impl CommitError {
     /// instead, and a diagnostic event never carries it: it is for the person
     /// at the terminal, and [`redacted`](Redacted::redacted) is unchanged by it.
     ///
-    /// [`UnrepairedKeyring`](Self::UnrepairedKeyring) is the one refusal here
-    /// that both advises and has a source. The others that say what to do —
+    /// [`UnrepairedKeyring`](Self::UnrepairedKeyring) and a Journal record of a
+    /// schema older than this build reads are the two refusals here that both
+    /// advise and have a source. The others that say what to do —
     /// [`EpochActivated`](Self::EpochActivated) among them — have no source, so
     /// their sentence is the last line of the chain already and keeps its
     /// advice.
@@ -660,6 +661,14 @@ impl CommitError {
             Self::UnrepairedKeyring { .. } => {
                 Some("running again examines the committed Keyring and repairs it afresh")
             }
+            // A Library written before the record schema this build reads is
+            // not broken, and nothing here reads or repairs it: every record
+            // of it is one this build refuses (spec: FM-15). The one gesture
+            // is to make the Library again in the current format.
+            Self::Format(coffret_format::Error::UnsupportedJournalRecordSchema { .. }) => Some(
+                "this Library predates this build's format, and nothing of it is read or \
+                 repaired — make it again with `coffret init` and bring its files in again",
+            ),
             _ => None,
         }
     }
@@ -1280,11 +1289,28 @@ mod tests {
         assert!(error.advice().is_some());
     }
 
+    // FM-15: a Library whose Journal records predate the schema this build
+    // reads is told to be made again, after the chain that says which schema
+    // was found, and not left reading as a Library that is broken.
+    #[test]
+    fn a_record_of_an_older_schema_advises_making_the_library_again() {
+        let error = CommitError::Format(coffret_format::Error::UnsupportedJournalRecordSchema {
+            schema: 2,
+        });
+        let advice = error.advice().expect("an older schema has advice");
+        assert!(advice.contains("predates this build's format"), "{advice}");
+        assert!(advice.contains("coffret init"), "{advice}");
+        assert!(
+            chain(&error).iter().all(|link| !link.contains("predates")),
+            "the advice is said once, after the chain, and in none of its links",
+        );
+    }
+
     // Every other refusal either has no source, so its sentence is already the
     // last line a person reads, or says nothing a person can do: none of them
     // has advice to print after the chain.
     #[test]
-    fn only_a_stopped_repair_has_advice_to_print_after_the_chain() {
+    fn only_a_stopped_repair_and_an_older_schema_have_advice_to_print_after_the_chain() {
         for error in [
             provider_fault(),
             unopenable(),

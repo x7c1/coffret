@@ -406,6 +406,7 @@ fn line(units: Units, step: Step) -> String {
         Phase::Packing => ("packing", Some(units.packed())),
         Phase::Uploading => ("uploading", Some("containers")),
         Phase::Committing => ("committing", Some("objects")),
+        Phase::RemovingCopies => ("discarding this device's copies into the trash", None),
         Phase::Fetching => ("fetching", Some("containers")),
     };
     match (step.total, unit) {

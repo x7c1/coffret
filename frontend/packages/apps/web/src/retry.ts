@@ -105,16 +105,18 @@ export function offeredAgain<R extends DisplacedFill | DisplacedFreeze>(
  * repeating the run cannot change the mapping. Older servers did not send a
  * structured reason, so their stopped runs retain the ordinary retry.
  *
- * Nor can a run the server stopped for a reason about this device's standing
- * rather than about the run. `epoch` is a device that has to be enrolled in the
- * Library again, with the new Recovery Code, at a terminal; `locked` is a
- * server that needs the Passphrase, given in the desktop app's own window or by
- * starting a command-line server again, and while the Library is locked the
- * status bar's *unlock* stands in for every one of these buttons. Either way
- * the same request meets the same refusal, and the sentence already says the
- * one thing that remedies it — so a button beside it would be offering a press
- * that cannot change the answer, and a refusal of that press would repeat the
- * line above it.
+ * Nor can a run the server stopped for a reason about this device's standing,
+ * or about the Library's format, rather than about the run. `epoch` is a device
+ * that has to be enrolled in the Library again, with the new Recovery Code, at
+ * a terminal; `library_predates_format` is a Library written before this app's
+ * format, which is made again rather than read; `locked` is a server that needs
+ * the Passphrase, given in the desktop app's own window or by starting a
+ * command-line server again, and while the Library is locked the status bar's
+ * *unlock* stands in for every one of these buttons. In each case the same
+ * request meets the same refusal, and the sentence already says the one thing
+ * that remedies it — so a button beside it would be offering a press that
+ * cannot change the answer, and a refusal of that press would repeat the line
+ * above it.
  */
 export function retryable(
   run: Fill | Sync | Freeze | DisplacedFill | DisplacedFreeze | null,
@@ -131,9 +133,13 @@ export function retryable(
 
 /**
  * The kinds of refusal no second attempt of the same run can meet differently,
- * because what they are about is this device and not the run.
+ * because what they are about is this device or the Library, and not the run.
  */
-const UNHELPED_BY_ASKING_AGAIN: readonly RefusalKind[] = ['epoch', 'locked'];
+const UNHELPED_BY_ASKING_AGAIN: readonly RefusalKind[] = [
+  'epoch',
+  'library_predates_format',
+  'locked',
+];
 
 /**
  * The refusal, where the offer it answered is still being made, and `null`

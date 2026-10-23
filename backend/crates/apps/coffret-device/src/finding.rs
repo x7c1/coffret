@@ -149,6 +149,19 @@ pub enum Finding {
     /// holds is accounted for after all. A disposal Storage would not finish is
     /// said as that, and not as a disposal: its object is still in Storage.
     Settled(Settled),
+    /// Keyring replica objects of one generation that Storage lists and no
+    /// head names: suspected orphans, which a run reports and never removes
+    /// (spec: OC-4).
+    ///
+    /// What a commit interrupted after it put its candidate's replicas leaves,
+    /// most of the time, beside the retained Container of the same batch. Said
+    /// by its generation and a count, and never by an object name (spec: EL-1).
+    RetainedKeyring {
+        /// The Keyring generation the replica names state.
+        generation: Generation,
+        /// How many replica objects of that generation no head names.
+        replicas: usize,
+    },
     /// A Container this run's commit removed whose object Storage would not
     /// trash (spec: OC-6, CP-14).
     ///
@@ -219,6 +232,13 @@ impl Finding {
     /// A kept parcel that was not held is said and not escalated: the run read
     /// it again, and nothing is left for anybody (spec: PK-21).
     ///
+    /// Retained Keyring replicas are said and not escalated: they hold nothing
+    /// a person could lose, nothing reads them, and there is no gesture for
+    /// them — they are reported for review and kept (spec: OC-4). A commit
+    /// another device is making when the run lists is counted the same way,
+    /// and a run that exited for that would be telling a script to stop over
+    /// somebody else's work in progress.
+    ///
     /// A short Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
     /// before it commits (spec: KL-13, KL-16), so a run that only reports one
@@ -238,6 +258,7 @@ impl Finding {
                     | FindingReason::RelocationDiscarded { .. },
                 ..
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
+                | Self::RetainedKeyring { .. }
                 | Self::UntrashedRemoval { .. }
                 | Self::CheckpointFailed { .. }
                 | Self::ShortKeyring { .. }
@@ -455,6 +476,23 @@ impl fmt::Display for Finding {
             Self::Settled(Settled::Retained { container_id }) => write!(
                 f, "retained container {container_id}: its commit outcome is unknown; its object and local provenance were kept"
             ),
+            Self::RetainedKeyring {
+                generation,
+                replicas,
+            } => {
+                // A suspected orphan, in the words OC-4 allows of it: reported
+                // and kept, and nothing more.
+                let (replicas, them) = match replicas {
+                    1 => ("1 replica".to_owned(), "it"),
+                    many => (format!("{many} replicas"), "them"),
+                };
+                write!(
+                    f,
+                    "retained Keyring generation {}: {replicas} that no head names, left by an \
+                     interrupted commit most likely — kept, and nothing reads {them}",
+                    generation.get(),
+                )
+            }
             Self::Settled(Settled::Completed { container_id, .. }) => write!(
                 f,
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \

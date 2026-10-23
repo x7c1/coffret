@@ -248,6 +248,7 @@ const PHASE: Record<NonNullable<Delete['step']>['phase'], string> = {
   packing: 'rebuilding Packs',
   uploading: 'uploading rebuilt Packs',
   committing: 'committing',
+  removing_copies: "discarding this device's copies into the trash",
   fetching: 'reading',
 };
 

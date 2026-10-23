@@ -15,7 +15,7 @@
 //!
 //! - [`dump()`] opens one control object fetched from a real Library and prints
 //!   its payload with the field names the field-number registry gives its
-//!   field numbers,
+//!   field numbers — or, handed a Keyring replica, a Container's meta section —
 //!   for a person checking what a device wrote.
 //!
 //! Both directions run in one pass, so a disagreement is caught whichever
