@@ -22,7 +22,14 @@ import {
   type ReconnectState,
 } from '@coffret/api';
 
-import { awaitingFolders, awaitingIn, prepare, preparedAfter } from './awaiting';
+import {
+  forgotten,
+  parentOf,
+  prepare,
+  preparedAfter,
+  prospectiveFolders,
+  prospectiveIn,
+} from './prospective';
 import { DeleteConfirm } from './DeleteConfirm';
 import {
   askToDelete,
@@ -31,7 +38,7 @@ import {
   type DeleteNotice,
   type DeleteQuestion,
 } from './deleteEntries';
-import { destinationsOf, namedBy, type Destination } from './destination';
+import { destinationsOf, namedBy, onDiskIn, type Destination } from './destination';
 import { nothingAddedLine, withNotTaken, type Drop, type NotTaken } from './drop';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
@@ -86,7 +93,7 @@ import { said, useAsked } from './useAsked';
  * list or a row of the tree, confirmed with the full path it lands under
  * before anything is sent. "New folder…" prepares the path a drop is to land
  * under, held by this page alone and drawn as not in the Library yet until
- * one does (see [`awaiting`](./awaiting)).
+ * one does (see [`prospective`](./prospective)).
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -120,9 +127,14 @@ export function App() {
     };
   }, []);
 
-  const go = useCallback((next: ViewState, replace = false) => {
+  // `keepNotice` is for the one move the screen makes to answer something it
+  // is saying: a deletion that took the folder on the screen away moves the
+  // list up, and the sentence saying the deletion ended is what explains it.
+  const go = useCallback((next: ViewState, replace = false, keepNotice = false) => {
     setView(next);
-    setNotice(null);
+    if (!keepNotice) {
+      setNotice(null);
+    }
     const current = parseHash(window.location.hash);
     if (current.folder === next.folder && current.open === next.open) {
       return;
@@ -605,7 +617,7 @@ export function App() {
         ? rootListing.state.value
         : null;
 
-  // The paths prepared with "New folder…" (see [`awaiting`](./awaiting)), each
+  // The paths prepared with "New folder…" (see [`prospective`](./prospective)), each
   // let go of the moment the Library names it — the tree's answer, or a
   // listing's.
   const [prepared, setPrepared] = useState<readonly string[]>([]);
@@ -628,20 +640,35 @@ export function App() {
       );
     }
   }, [listed]);
+  // "Forget this folder" on a prepared path's row: that path and the ones
+  // prepared under it are let go of, and nothing is sent (see
+  // [`forgotten`](./prospective)). Where the screen is on one of them — the
+  // tree offers it on the row of the folder the list is showing — the list
+  // moves to the folder it was prepared in, rather than standing on a path
+  // nothing draws any longer and the Library holds nothing at.
+  const forget = useCallback(
+    (path: string) => {
+      setPrepared((held) => forgotten(held, path));
+      if (view.folder === path || view.folder.startsWith(`${path}/`)) {
+        go({ folder: parentOf(path), open: null }, true);
+      }
+    },
+    [view.folder, go],
+  );
   // Every folder drawn as not in the Library yet (see
-  // [`awaitingFolders`](./awaiting)).
-  const awaiting = useMemo(
-    () => awaitingFolders(prepared, rootKnown, known),
+  // [`prospectiveFolders`](./prospective)).
+  const prospective = useMemo(
+    () => prospectiveFolders(prepared, rootKnown, known),
     [prepared, rootKnown, known],
   );
 
   const drawn = useMemo(
-    () => (known === null ? [] : foldersWith(known, [...new Set([...stranded, ...awaiting])])),
-    [known, stranded, awaiting],
+    () => (known === null ? [] : foldersWith(known, [...new Set([...stranded, ...prospective])])),
+    [known, stranded, prospective],
   );
 
   // "New folder…": the name asked for in a dialog over the folder chosen, and
-  // judged before anything is drawn (see [`prepare`](./awaiting)). `null`
+  // judged before anything is drawn (see [`prepare`](./prospective)). `null`
   // while nothing is being asked.
   const [namingIn, setNamingIn] = useState<string | null>(null);
   // Counts each time the dialog is opened or closed, so that a name still being
@@ -665,7 +692,7 @@ export function App() {
       const answer = await prepare({
         parent: namingIn,
         typed,
-        awaiting,
+        prospective,
         list: (path) =>
           listed !== null && listed.path === path
             ? Promise.resolve(listed)
@@ -681,7 +708,7 @@ export function App() {
       closeNaming();
       return null;
     },
-    [namingIn, awaiting, listed, closeNaming],
+    [namingIn, prospective, listed, closeNaming],
   );
 
   // Mapping one: the banner over a folder this device does not have opens the
@@ -865,9 +892,22 @@ export function App() {
   // The run itself is read through a ref, so the effect below is keyed on the
   // run and its status alone: every poll brings a fresh object for the same
   // ending, and an effect keyed on that would reload the folder on each one.
+  //
+  // The root's listing too, where the screen is not at the root: it is read
+  // once there and not again, and it is what names a mapped top-level folder
+  // whose last Entry just left — an empty mapped prefix now, which the tree
+  // would otherwise stop drawing until the root was visited. At the root the
+  // listing asked again above is that one.
+  //
+  // And where the deletion was of the folder on the screen or of one above
+  // it, the list is moved up once the tree has answered again (below), since
+  // that answer is what says which folder above the Library still holds.
   const lastDeletion = useRef(deletion);
   lastDeletion.current = deletion;
+  const shownFolder = useRef(view.folder);
+  shownFolder.current = view.folder;
   const announced = useRef<number | null>(null);
+  const leaving = useRef(false);
   useEffect(() => {
     const ended = lastDeletion.current;
     if (deleted === null || ended === null || ended.status === 'deleting') {
@@ -875,11 +915,36 @@ export function App() {
     }
     reloadListing();
     reloadFolders();
+    const on = shownFolder.current;
+    if (on !== '') {
+      reloadRoot();
+    }
+    if (ended.folder !== null && (on === ended.folder || on.startsWith(`${ended.folder}/`))) {
+      leaving.current = true;
+    }
     if (deletedHere.current && announced.current !== ended.run) {
       announced.current = ended.run;
       showNotice(deletedLine(ended));
     }
-  }, [deleted, reloadListing, reloadFolders]);
+  }, [deleted, reloadListing, reloadFolders, reloadRoot]);
+  // The tree's answer after such a deletion: the screen moves to the nearest
+  // folder at or above it that the Library still holds — the root where none
+  // does — rather than standing on a path it holds nothing at. A deletion
+  // refused for a Pack can leave the folder held, and then nothing moves. The
+  // notice saying the deletion ended stays, since it is what the move answers.
+  useEffect(() => {
+    if (!leaving.current || known === null) {
+      return;
+    }
+    leaving.current = false;
+    let above = shownFolder.current;
+    while (above !== '' && !known.includes(above)) {
+      above = parentOf(above);
+    }
+    if (above !== shownFolder.current) {
+      go({ folder: above, open: null }, true, true);
+    }
+  }, [known, go]);
 
   // What this device calls the Library, which a drop too large for this route
   // names in the command that can carry it in instead.
@@ -947,7 +1012,7 @@ export function App() {
           notAdded(
             unmappedLine(
               'add',
-              where.held || stranded.includes(target) || awaiting.includes(target),
+              where.held || stranded.includes(target) || prospective.includes(target),
               where.folders.filter((folder) => folder.mapped).map((folder) => folder.name),
             ),
           );
@@ -970,7 +1035,12 @@ export function App() {
             // confirmation is up: the reading is over, and nothing is being
             // sent.
             setAdding(null);
-            const destinations = destinationsOf(target, summary, namedBy(known, where));
+            const destinations = destinationsOf(
+              target,
+              summary,
+              namedBy(known, where),
+              onDiskIn(where),
+            );
             return askAboutDrop(summary, asked, held, destinations, notTaken);
           },
           send,
@@ -983,7 +1053,7 @@ export function App() {
         notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
       void where.then(confirm, unread).finally(() => setAdding(null));
     },
-    [listed, known, stranded, awaiting, askAboutDrop, work, reloadListing, libraryName],
+    [listed, known, stranded, prospective, askAboutDrop, work, reloadListing, libraryName],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -1144,11 +1214,13 @@ export function App() {
               <FolderTree
                 folders={drawn}
                 stranded={stranded}
-                awaiting={awaiting}
+                prospective={prospective}
+                prepared={prepared}
                 current={view.folder}
                 onOpen={(chosen) => go({ folder: chosen, open: null })}
                 onDelete={deleteEntries}
                 onNewFolder={openNaming}
+                onForget={forget}
                 drops={treeDrops}
               />
             )}
@@ -1222,8 +1294,9 @@ export function App() {
             {(shown) => (
               <FileList
                 listing={shown}
-                awaiting={awaitingIn(shown, awaiting)}
-                awaitingHere={awaiting.includes(shown.path)}
+                prospective={prospectiveIn(shown, prospective)}
+                prospectiveHere={prospective.includes(shown.path)}
+                prepared={prepared}
                 fill={rowsFill}
                 freeze={freeze}
                 stranded={strandedHere}
@@ -1270,6 +1343,7 @@ export function App() {
                 onPack={packFolder}
                 onDelete={deleteEntries}
                 onNewFolder={openNaming}
+                onForget={forget}
               />
             )}
           </Region>

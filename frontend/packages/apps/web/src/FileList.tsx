@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -17,7 +18,7 @@ import type {
   Listing,
 } from '@coffret/api';
 
-import { AWAITING, NEW_FOLDER } from './awaiting';
+import { FORGET_FOLDER, NEW_FOLDER, PROSPECTIVE } from './prospective';
 import { Banner, DropBanner, dropOutline } from './Banner';
 import { deleteOffered, DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
@@ -89,17 +90,22 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * over. A row of the folder tree takes a drop the same way, for its own folder.
  *
  * Beside the Library's folders the list draws the ones it does not hold yet
- * (see [`awaiting`](./awaiting)): a path prepared with "New folder…", and a
+ * (see [`prospective`](./prospective)): a path prepared with "New folder…", and a
  * top-level folder this device maps with nothing under it. Each is marked as
  * such, opens like any folder, and takes a drop like any folder, and once
  * files land in it and a run carries them in it is an ordinary row. "New
  * folder…" is on the menu of every folder row a mapping of this device
- * reaches, since a drop anywhere else would be refused.
+ * reaches, since a drop anywhere else would be refused. A prepared path's row
+ * offers "Forget this folder" as well, as its row in the tree does.
+ *
+ * The list shows its keyboard focus by its selected row, as it shows a click:
+ * tabbing into it with no row selected selects the first one.
  */
 export function FileList({
   listing,
-  awaiting,
-  awaitingHere,
+  prospective,
+  prospectiveHere,
+  prepared,
   fill,
   freeze,
   stranded,
@@ -116,19 +122,25 @@ export function FileList({
   onPack,
   onDelete,
   onNewFolder,
+  onForget,
 }: {
   listing: Listing;
   /**
    * The folders directly in this one that the Library does not hold yet, drawn
-   * as rows among its own (see [`awaitingIn`](./awaiting)).
+   * as rows among its own (see [`prospectiveIn`](./prospective)).
    */
-  awaiting: readonly ListedFolder[];
+  prospective: readonly ListedFolder[];
   /**
    * Whether this folder is one of those: a path prepared here, or a mapped
    * top-level folder with nothing under it. Its listing says the Library
    * holds nothing at it, which is true and is not "nothing at this path".
    */
-  awaitingHere: boolean;
+  prospectiveHere: boolean;
+  /**
+   * The paths prepared with "New folder…" on this page: those of `prospective`
+   * whose row offers "Forget this folder".
+   */
+  prepared: readonly string[];
   /**
    * The fill the rows are to read: what the server is bringing over, wherever
    * it is bringing it, or a stopped one a later run took the record from.
@@ -235,6 +247,8 @@ export function FileList({
    * prepare a path of that name inside the row's folder.
    */
   onNewFolder: (parent: string) => void;
+  /** "Forget this folder" was chosen from a prepared path's row. */
+  onForget: (path: string) => void;
 }) {
   // Whether files are being dragged over the list right now (see
   // [`useDragOver`](./dragOver)).
@@ -286,11 +300,11 @@ export function FileList({
   // The Library's folders and the ones it does not hold yet, in the one order
   // every device agrees on, so that a folder stays where it is drawn when its
   // first Entry commits.
-  const awaitingPaths = new Set(awaiting.map((folder) => folder.path));
+  const prospectivePaths = new Set(prospective.map((folder) => folder.path));
   const folders =
-    awaiting.length === 0
+    prospective.length === 0
       ? listing.folders
-      : [...listing.folders, ...awaiting].sort((left, right) =>
+      : [...listing.folders, ...prospective].sort((left, right) =>
           inLibraryOrder(left.path, right.path),
         );
   const empty = folders.length === 0 && listing.files.length === 0;
@@ -303,7 +317,7 @@ export function FileList({
   //
   // A folder the Library does not hold yet is the other: prepared here, or
   // mapped on this device with nothing under it, and a place to drop into.
-  const unheld = !listing.held && !stranded && !awaitingHere;
+  const unheld = !listing.held && !stranded && !prospectiveHere;
   // And the same thing said out loud, which waits for the one answer that can
   // still overturn it. A stranded folder is read off the folder tree, a separate
   // request from this listing, so until it lands `stranded` is false even for a
@@ -343,8 +357,13 @@ export function FileList({
   // The folder's own action: packing what it holds one file at a time into
   // Packs. Offered on a mapped folder that is not the Library root (see
   // [`packOffered`](./packFolder)), and not over a path the Library holds
-  // nothing at, where there is no folder to pack.
-  const offersPack = packOffered(listing) && !unheld;
+  // nothing at, where there is no folder to pack — nor over a folder the
+  // Library does not hold yet with nothing standing in it on disk, which is a
+  // place to drop into and nothing to pack. Files standing under such a folder
+  // (a drop just landed there) are something to pack, and keep it.
+  const nothingToPack =
+    !listing.held && listing.files.length === 0 && listing.folders_on_disk.length === 0;
+  const offersPack = packOffered(listing) && !unheld && !nothingToPack;
   // "Select" is offered where there is a file to pick; the mode is left from
   // the same place.
   const offersSelect = pickable.length > 0 || picking;
@@ -399,6 +418,22 @@ export function FileList({
         : Math.min(rows.length - 1, Math.max(0, at + (event.key === 'ArrowDown' ? 1 : -1)));
     setCursor(rows[next].key);
   };
+  // Whether the focus the list is about to take comes from a press on it, which
+  // selects the row pressed, rather than from the keyboard. Cleared when the
+  // list loses the focus, so a press made while it already had it says nothing
+  // about the next time it is tabbed into.
+  const pressed = useRef(false);
+  // Tabbing into the list with no row selected selects the first, so that
+  // the focus is drawn on the screen — by the selected row, as a click's is —
+  // and the keys that move and open the selection have somewhere to start.
+  const onFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const byPress = pressed.current;
+    pressed.current = false;
+    if (event.target !== event.currentTarget || byPress || picking || rows.length === 0) {
+      return;
+    }
+    setCursor((held) => held ?? rows[0].key);
+  };
   return (
     <div
       // What a row's menu measures the room below it against (see `RowMenu`).
@@ -407,12 +442,22 @@ export function FileList({
       // a click on a row focuses the list.
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPointerDown={() => {
+        pressed.current = true;
+      }}
+      onFocus={onFocus}
+      onBlur={(event) => {
+        if (event.target === event.currentTarget) {
+          pressed.current = false;
+        }
+      }}
       style={{
         flex: 1,
         overflow: 'auto',
         minWidth: 0,
         // The list's own focus is drawn by the selected row rather than by a
-        // ring around the whole of it, so the outline is a drag's alone.
+        // ring around the whole of it — the first row, where the keyboard gave
+        // it the focus with none selected — so the outline is a drag's alone.
         outline: dropOutline(dragged, outcome),
         // Inside the outline rather than around it, so that the outline moves
         // nothing on the screen when a drag arrives: one that took up room
@@ -588,8 +633,8 @@ export function FileList({
               it is still out this falls back to the milder of the two. */}
           {nowhere
             ? NOTHING_AT_THIS_PATH
-            : awaitingHere
-              ? AWAITING
+            : prospectiveHere
+              ? PROSPECTIVE
               : root
                 ? // Mapped, it is where a Library just made is started, and
                   // nothing else on the screen says how.
@@ -604,13 +649,13 @@ export function FileList({
           <tbody>
             {folders.map((folder) => {
               const key = folderKey(folder.path);
-              const waiting = awaitingPaths.has(folder.path);
+              const prospectiveRow = prospectivePaths.has(folder.path);
               return (
                 <Row
                   key={key}
                   icon={<FolderIcon />}
                   name={folder.name}
-                  note={waiting ? AWAITING : undefined}
+                  note={prospectiveRow ? PROSPECTIVE : undefined}
                   selected={cursor === key}
                   onSelect={() => setCursor(key)}
                   onOpen={() => onOpenFolder(folder.path)}
@@ -632,7 +677,7 @@ export function FileList({
                         : []),
                       // Not on a folder the Library does not hold: there is
                       // nothing of it to take out.
-                      ...(waiting
+                      ...(prospectiveRow
                         ? []
                         : [
                             {
@@ -640,6 +685,11 @@ export function FileList({
                               onPress: () => askToDelete({ folder: folder.path, paths: [] }),
                             },
                           ]),
+                      // Only on a path this page prepared, which is the page's
+                      // to let go of; an empty mapped prefix is the mapping's.
+                      ...(prospectiveRow && prepared.includes(folder.path)
+                        ? [{ label: FORGET_FOLDER, onPress: () => onForget(folder.path) }]
+                        : []),
                     ]}
                   />
                 </Row>

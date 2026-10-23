@@ -1,6 +1,6 @@
-// The folders the explorer draws that the Library does not hold yet, and offers
-// as places to drop the first files into. Kept free of DOM so it is unit
-// testable.
+// The prospective folders: the folders the explorer draws that the Library does
+// not hold yet, and offers as places to drop the first files into. Kept free of
+// DOM so it is unit testable.
 //
 // A Library has no empty folders: a folder is the separators in the Entry Paths
 // under it (spec: EP-2). So there is no folder to make before something is put
@@ -40,10 +40,13 @@ import { inLibraryOrder } from './stranded';
 import { said } from './useAsked';
 
 /** What a folder the Library does not hold yet is marked with, wherever it is drawn. */
-export const AWAITING = 'not in the Library yet — drop files here to add them';
+export const PROSPECTIVE = 'not in the Library yet — drop files here to add them';
 
 /** The menu item that prepares a path inside a folder. */
 export const NEW_FOLDER = 'New folder…';
+
+/** The menu item that lets go of a prepared path, and of every one prepared under it. */
+export const FORGET_FOLDER = 'Forget this folder';
 
 /**
  * Where a folder called `name` under `parent` stands in the Library.
@@ -113,7 +116,7 @@ export function nameDefect(typed: string): string | null {
  * A folder prepared over a name already taken would be drawn as new and empty
  * over a place that holds somebody's files, or beside the folder that is there.
  */
-export function takenIn(name: string, parent: Listing, awaiting: readonly string[]): boolean {
+export function takenIn(name: string, parent: Listing, prospective: readonly string[]): boolean {
   const path = folderUnder(parent.path, name.trim());
   const named = path.slice(path.lastIndexOf('/') + 1);
   return (
@@ -121,7 +124,7 @@ export function takenIn(name: string, parent: Listing, awaiting: readonly string
     parent.files.some((file) => file.path === path) ||
     parent.folders_on_disk.some((folder) => folder.normalize('NFC') === named) ||
     parent.empty_mapped_prefixes.includes(named) ||
-    awaiting.includes(path)
+    prospective.includes(path)
   );
 }
 
@@ -142,13 +145,13 @@ export type Prepared = { path: string } | { refused: string };
 export async function prepare({
   parent,
   typed,
-  awaiting,
+  prospective,
   list,
 }: {
   parent: string;
   typed: string;
   /** The folders this page already draws as not held yet. */
-  awaiting: readonly string[];
+  prospective: readonly string[];
   /** Asks what a folder holds, which is [`getListing`](@coffret/api). */
   list: (path: string) => Promise<Listing>;
 }): Promise<Prepared> {
@@ -163,7 +166,7 @@ export async function prepare({
   } catch (refused: unknown) {
     return { refused: `whether the folder already holds ${name} could not be asked: ${said(refused)}` };
   }
-  if (takenIn(name, listing, awaiting)) {
+  if (takenIn(name, listing, prospective)) {
     return { refused: `there is already something called ${name} here` };
   }
   return { path: folderUnder(parent, name) };
@@ -185,6 +188,24 @@ export function preparedAfter(
 }
 
 /**
+ * The prepared paths left once `path` is forgotten: every one but `path` and
+ * those prepared under it.
+ *
+ * A path mistyped into "New folder…" would otherwise stand in the tree and the
+ * list until a reload, and a reload forgets every other prepared path with it.
+ * Forgetting is the page's alone, as preparing is: nothing is sent and nothing
+ * on disk changes. The paths under it go too, since a row drawn under a parent
+ * that is no longer drawn would be somewhere nobody can walk to.
+ *
+ * `prepared` comes back as it was where nothing left it, as in
+ * {@link preparedAfter}.
+ */
+export function forgotten(prepared: readonly string[], path: string): readonly string[] {
+  const kept = prepared.filter((one) => one !== path && !one.startsWith(`${path}/`));
+  return kept.length === prepared.length ? prepared : kept;
+}
+
+/**
  * Every folder drawn as not held yet: the prepared paths and the empty mapped
  * prefixes the root's listing names, in the Library's order, each once — less
  * any the tree's answer `known` names, which the Library holds now.
@@ -194,7 +215,7 @@ export function preparedAfter(
  * again; the tree's answer is asked again after every run, so it is the one
  * that says when such a folder stopped being empty.
  */
-export function awaitingFolders(
+export function prospectiveFolders(
   prepared: readonly string[],
   root: Listing | null,
   known: readonly string[] | null,
@@ -214,8 +235,8 @@ export function awaitingFolders(
  * Each is reached where the folder is, and at the root where a mapping of its
  * own stands for it: a prepared path is only offered where a mapping reaches.
  */
-export function awaitingIn(listing: Listing, awaiting: readonly string[]): ListedFolder[] {
-  return awaiting
+export function prospectiveIn(listing: Listing, prospective: readonly string[]): ListedFolder[] {
+  return prospective
     .filter(
       (path) =>
         parentOf(path) === listing.path &&

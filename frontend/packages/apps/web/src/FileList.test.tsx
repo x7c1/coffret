@@ -1,10 +1,10 @@
-import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
-import { AWAITING } from './awaiting';
+import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TAKEN } from './dropTarget';
 import { EMPTY_MAPPED_ROOT, END_SELECT, FileList, SELECT } from './FileList';
 
@@ -50,8 +50,9 @@ function listOf(shown: Listing, stranded = false, strandedKnown = true) {
   return (
     <FileList
       listing={shown}
-      awaiting={[]}
-      awaitingHere={false}
+      prospective={[]}
+      prospectiveHere={false}
+      prepared={[]}
       fill={null}
       freeze={null}
       stranded={stranded}
@@ -68,6 +69,7 @@ function listOf(shown: Listing, stranded = false, strandedKnown = true) {
       onPack={() => undefined}
       onDelete={() => undefined}
       onNewFolder={() => undefined}
+      onForget={() => undefined}
     />
   );
 }
@@ -181,8 +183,9 @@ function mount(shown: Listing, strandedKnown = true, stranded = false) {
   const { container } = render(
     <FileList
       listing={shown}
-      awaiting={[]}
-      awaitingHere={false}
+      prospective={[]}
+      prospectiveHere={false}
+      prepared={[]}
       fill={null}
       freeze={null}
       stranded={stranded}
@@ -199,6 +202,7 @@ function mount(shown: Listing, strandedKnown = true, stranded = false) {
       onPack={onPack}
       onDelete={onDelete}
       onNewFolder={() => undefined}
+      onForget={() => undefined}
     />,
   );
   // The element the drag handlers are on, which is the list as a whole.
@@ -357,6 +361,23 @@ it('does not offer to pack an unmapped folder or the Library root', () => {
 // A path the Library holds nothing at is not a folder, and has nothing to pack.
 it('does not offer to pack a path the Library holds nothing at', () => {
   expect(draw(listing({ path: 'albums/typo', held: false }))).not.toContain('Pack this folder…');
+});
+
+// A folder the Library does not hold yet is a place to drop into, and with
+// nothing standing in it on disk there is nothing to pack; files a drop just
+// left standing there are something to pack.
+it('offers to pack a folder not held yet only where something stands in it on disk', () => {
+  const empty = listing({ path: 'comics/Series', held: false });
+  mountProspective(empty, [], true);
+  expect(screen.queryByText('Pack this folder…')).toBeNull();
+  cleanup();
+
+  mountProspective({ ...empty, files: [file('001.jpg', { state: 'added' })] }, [], true);
+  expect(screen.getByText('Pack this folder…')).toBeTruthy();
+  cleanup();
+
+  mountProspective({ ...empty, folders_on_disk: ['Vol 1'] }, [], true);
+  expect(screen.getByText('Pack this folder…')).toBeTruthy();
 });
 
 /** Opens the row's menu and chooses `Delete…` from it. */
@@ -549,6 +570,40 @@ function pressWith(target: Element, pointerType: string) {
   Object.defineProperty(down, 'pointerType', { value: pointerType });
   fireEvent(target, down);
 }
+
+/** Gives `element` the focus, as tabbing into it does. */
+function focusOn(element: Element) {
+  act(() => (element as HTMLElement).focus());
+}
+
+// Tabbing into the list shows where the focus went by selecting the first row,
+// since the list draws no ring of its own; a press on a row selects that row
+// instead, and a row already selected stays selected.
+it('selects the first row when the keyboard gives the list the focus', () => {
+  const { list } = mount(three);
+  expect(screen.getAllByRole('row').some((row) => row.getAttribute('aria-selected') === 'true')).toBe(
+    false,
+  );
+  focusOn(list);
+  expect(isSelected('2026')).toBe(true);
+
+  // Leaving and coming back keeps the row the selection was moved to.
+  fireEvent.keyDown(list, { key: 'ArrowDown' });
+  act(() => (list as HTMLElement).blur());
+  focusOn(list);
+  expect(isSelected('p1.jpg')).toBe(true);
+});
+
+it('selects the row pressed, not the first, when a click gives the list the focus', () => {
+  const { list } = mount(three);
+  const row = screen.getByTitle('p2.jpg');
+  pressWith(row, 'mouse');
+  focusOn(list);
+  expect(isSelected('2026')).toBe(false);
+  fireEvent.click(row);
+  expect(isSelected('p2.jpg')).toBe(true);
+  expect(isSelected('2026')).toBe(false);
+});
 
 // On a touch screen a tap opens: a double tap is not a gesture a touch screen
 // reliably hands over.
@@ -762,23 +817,31 @@ it('gives the selection line the headings’ height and font size', () => {
 });
 
 /** The list drawn into the DOM with the folders it does not hold yet, and "New folder…" recorded. */
-function mountAwaiting(shown: Listing, awaiting: ListedFolder[] = [], awaitingHere = false) {
+function mountProspective(
+  shown: Listing,
+  prospective: ListedFolder[] = [],
+  prospectiveHere = false,
+  prepared: string[] = [],
+) {
   const onNewFolder = vi.fn();
   const onDelete = vi.fn();
   const onOpenFolder = vi.fn();
   const onMap = vi.fn();
+  const onForget = vi.fn();
   render(
     <FileList
       {...listOf(shown).props}
-      awaiting={awaiting}
-      awaitingHere={awaitingHere}
+      prospective={prospective}
+      prospectiveHere={prospectiveHere}
+      prepared={prepared}
       onNewFolder={onNewFolder}
       onDelete={onDelete}
       onOpenFolder={onOpenFolder}
       onMap={onMap}
+      onForget={onForget}
     />,
   );
-  return { onNewFolder, onDelete, onOpenFolder, onMap };
+  return { onNewFolder, onDelete, onOpenFolder, onMap, onForget };
 }
 
 /** The labels of the items a row's "⋮" offers, opening it to read them. */
@@ -798,7 +861,7 @@ describe('the root of a Library with nothing mapped', () => {
   // root is how it is started from the explorer: the banner and its button are
   // there although no row is.
   it('offers to map the root of a Library that holds nothing', () => {
-    const { onMap } = mountAwaiting(listing({ path: '', mapped: false }));
+    const { onMap } = mountProspective(listing({ path: '', mapped: false }));
     expect(screen.getByText(/this Library holds nothing yet/)).toBeTruthy();
     fireEvent.click(screen.getByText('map the Library root…'));
     expect(onMap).toHaveBeenCalledWith(null);
@@ -812,7 +875,7 @@ describe('the root of a Library with nothing mapped', () => {
     ).not.toContain('map the Library root…');
     cleanup();
     // A mapped top-level folder with nothing under it is such a folder too.
-    mountAwaiting(listing({ path: '', mapped: false, empty_mapped_prefixes: ['comics'] }), [
+    mountProspective(listing({ path: '', mapped: false, empty_mapped_prefixes: ['comics'] }), [
       { name: 'comics', path: 'comics', mapped: true },
     ]);
     expect(screen.queryByText('map the Library root…')).toBeNull();
@@ -828,7 +891,7 @@ describe('the root of a Library with nothing mapped', () => {
 
 describe('"New folder…" on a row of the list', () => {
   it('is offered on a folder a mapping reaches, and hands over that folder', () => {
-    const { onNewFolder } = mountAwaiting(
+    const { onNewFolder } = mountProspective(
       listing({ folders: [folder('2026', true), folder('2027', false)], mapped: false }),
     );
     expect(menuOf('2026')).toEqual(['New folder…', 'Delete…']);
@@ -846,7 +909,7 @@ describe('a folder the Library does not hold yet', () => {
   // Drawn among the Library's own folders, in the Library's order, with its
   // mark, opened like any folder, and with nothing to delete.
   it('is a row marked as not in the Library yet', () => {
-    const { onOpenFolder, onNewFolder } = mountAwaiting(
+    const { onOpenFolder, onNewFolder } = mountProspective(
       listing({ folders: [folder('a', true), folder('c', true)] }),
       [{ name: 'b', path: 'albums/b', mapped: true }],
     );
@@ -856,8 +919,8 @@ describe('a folder the Library does not hold yet', () => {
       .filter((title) => title !== null);
     expect(names).toEqual(['a', 'b', 'c']);
     const row = screen.getByTitle('b');
-    expect(row.textContent).toContain(AWAITING);
-    expect(screen.getByTitle('a').textContent).not.toContain(AWAITING);
+    expect(row.textContent).toContain(PROSPECTIVE);
+    expect(screen.getByTitle('a').textContent).not.toContain(PROSPECTIVE);
     expect(menuOf('b')).toEqual(['New folder…']);
 
     fireEvent.doubleClick(row);
@@ -867,11 +930,32 @@ describe('a folder the Library does not hold yet', () => {
     expect(onNewFolder).toHaveBeenCalledWith('albums/b');
   });
 
+  // A mistyped path is let go of from its own row. An empty mapped prefix is
+  // the mapping's to draw, and a folder the Library holds is the Library's.
+  it('offers to forget a prepared path, and only a prepared path', () => {
+    const { onForget } = mountProspective(
+      listing({ path: '', folders: [{ name: 'albums', path: 'albums', mapped: true }] }),
+      [
+        { name: 'books', path: 'books', mapped: true },
+        { name: 'comics', path: 'comics', mapped: true },
+      ],
+      false,
+      ['books'],
+    );
+    expect(menuOf('books')).toEqual(['New folder…', FORGET_FOLDER]);
+    expect(menuOf('comics')).toEqual(['New folder…']);
+    expect(menuOf('albums')).toEqual(['New folder…', 'Delete…']);
+
+    fireEvent.click(screen.getByLabelText('actions for books'));
+    fireEvent.click(screen.getByRole('menuitem', { name: FORGET_FOLDER }));
+    expect(onForget).toHaveBeenCalledWith('books');
+  });
+
   // Opened, it is an empty listing the Library holds nothing at — and it is
   // not "nothing at this path": it is where the next drop goes.
   it('opens to an empty listing that says what to do with it', () => {
-    mountAwaiting(listing({ path: 'comics/Series', held: false }), [], true);
-    const list = screen.getByText(AWAITING);
+    mountProspective(listing({ path: 'comics/Series', held: false }), [], true);
+    const list = screen.getByText(PROSPECTIVE);
     expect(list).toBeTruthy();
     expect(document.body.textContent).not.toContain('the Library holds nothing at this path');
     expect(document.body.textContent).not.toContain('this folder is not on this device');

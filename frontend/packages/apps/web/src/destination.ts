@@ -9,7 +9,10 @@
 //
 // A Library has no empty folders (spec: EP-2): a folder is there because
 // something is under it. So a drop is also how a folder comes to be, and the
-// levels of the path the Library does not name yet are marked as new.
+// levels of the path the Library does not name yet are marked as new — except
+// one already standing on this device's disk under a mapped folder, which the
+// Library does not hold yet either, and which the drop does not make: what is
+// in it goes in with the drop.
 //
 // Kept free of DOM and of React so it is unit testable, as `packChoice.ts`
 // beside it is.
@@ -17,6 +20,18 @@
 import type { Listing } from '@coffret/api';
 
 import type { DropSummary } from './packChoice';
+import { parentOf } from './prospective';
+
+/**
+ * Where one level of a drop's destination stands.
+ *
+ * - `named`: the Library already names the folder.
+ * - `on_disk`: the Library does not, but the folder stands on this device's
+ *   disk under a mapped folder, so a freeze of it takes the files already
+ *   standing there along with the drop.
+ * - `new`: neither; the drop is what makes it.
+ */
+export type LevelState = 'named' | 'on_disk' | 'new';
 
 /** One folder on the way down to where a drop lands. */
 export interface Level {
@@ -24,8 +39,8 @@ export interface Level {
   name: string;
   /** Its Entry Path. */
   path: string;
-  /** Whether the Library already names this folder. */
-  exists: boolean;
+  /** Whether the Library names it, or the disk holds it, or neither. */
+  state: LevelState;
 }
 
 /** One place a drop lands, and what lands there. */
@@ -41,17 +56,23 @@ export interface Destination {
 
 /**
  * The levels from the top of the Library down to `path`, each with whether the
- * Library names it. The root is the Library itself and is no level: it is
- * there before anything is in it.
+ * Library names it and, where it does not, whether it stands on this device's
+ * disk. The root is the Library itself and is no level: it is there before
+ * anything is in it.
  */
-export function levelsOf(path: string, exists: (path: string) => boolean): Level[] {
+export function levelsOf(
+  path: string,
+  exists: (path: string) => boolean,
+  onDisk: (path: string) => boolean = () => false,
+): Level[] {
   if (path === '') {
     return [];
   }
   const names = path.split('/');
   return names.map((name, at) => {
     const prefix = names.slice(0, at + 1).join('/');
-    return { name, path: prefix, exists: exists(prefix) };
+    const state: LevelState = exists(prefix) ? 'named' : onDisk(prefix) ? 'on_disk' : 'new';
+    return { name, path: prefix, state };
   });
 }
 
@@ -76,23 +97,44 @@ export function namedBy(
 }
 
 /**
+ * Whether a folder stands on this device's disk without the Library holding
+ * it, as the listing `where` of the folder let go over reads it: its
+ * `folders_on_disk` names the folders directly in it, so it answers for those
+ * and for nothing deeper or above.
+ *
+ * Compared in NFC, the form the page holds every path in (spec: EP-1): a name
+ * read off a disk may come in another normalization.
+ */
+export function onDiskIn(where: Listing): (path: string) => boolean {
+  return (path) => {
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    return (
+      parentOf(path) === where.path &&
+      where.folders_on_disk.some((folder) => folder.normalize('NFC') === name)
+    );
+  };
+}
+
+/**
  * Where each part of a drop onto `landing` lands: one place per dropped folder,
  * under its own name, in the order the drop named them — and the landing folder
  * itself where files were dropped loose, or where no folder was dropped at all.
  *
- * `exists` says whether the Library names a folder, the root aside.
+ * `exists` says whether the Library names a folder, the root aside, and
+ * `onDisk` whether one it does not name stands on this device's disk.
  */
 export function destinationsOf(
   landing: string,
   summary: DropSummary,
   exists: (path: string) => boolean,
+  onDisk: (path: string) => boolean = () => false,
 ): Destination[] {
   const into: Destination[] = summary.folders.map((folder) => ({
     folder: folder.name,
-    levels: levelsOf(landing === '' ? folder.name : `${landing}/${folder.name}`, exists),
+    levels: levelsOf(landing === '' ? folder.name : `${landing}/${folder.name}`, exists, onDisk),
   }));
   if (summary.loose > 0 || summary.folders.length === 0) {
-    into.push({ folder: null, levels: levelsOf(landing, exists) });
+    into.push({ folder: null, levels: levelsOf(landing, exists, onDisk) });
   }
   return into;
 }
@@ -117,12 +159,40 @@ export function pathLine(levels: readonly Level[]): string {
  * `null` where every one of them is there already.
  */
 export function newLine(levels: readonly Level[]): string | null {
-  const made = levels.filter((level) => !level.exists).map((level) => level.name);
+  const made = namesIn(levels, 'new');
   if (made.length === 0) {
     return null;
   }
-  const named = made.length === 1 ? made[0] : `${made.slice(0, -1).join(', ')} and ${made.at(-1)}`;
+  const named = listed(made);
   return made.length === 1
     ? `${named} is new — the Library has no such folder yet, and this drop makes it`
     : `${named} are new — the Library has no such folders yet, and this drop makes them`;
+}
+
+/**
+ * What the confirmation says of the levels standing on this device's disk that
+ * the Library does not hold yet, or `null` where there are none: the drop does
+ * not make them, and what is already in them goes into the Library with it.
+ */
+export function onDiskLine(levels: readonly Level[]): string | null {
+  const standing = namesIn(levels, 'on_disk');
+  if (standing.length === 0) {
+    return null;
+  }
+  const named = listed(standing);
+  return standing.length === 1
+    ? `${named} is on this device’s disk and not in the Library yet — this drop adds it ` +
+        'together with what is already in it'
+    : `${named} are on this device’s disk and not in the Library yet — this drop adds them ` +
+        'together with what is already in them';
+}
+
+/** The names of the levels in `state`, top down. */
+function namesIn(levels: readonly Level[], state: LevelState): string[] {
+  return levels.filter((level) => level.state === state).map((level) => level.name);
+}
+
+/** Names said as one list: `a`, `a and b`, `a, b and c`. */
+function listed(names: readonly string[]): string {
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }

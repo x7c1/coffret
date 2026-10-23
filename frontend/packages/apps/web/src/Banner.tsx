@@ -38,15 +38,11 @@ export function Banner({
  * Said while files are dragged over a drop target — the file list, or a row of
  * the folder tree: what letting go of them there will do, as `dropLine` words
  * it. A folder that takes no drop says so in the refused colour the outline
- * around it is drawn in.
+ * around it is drawn in, and one not known yet either way in a neutral one.
  */
 export function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) {
-  const refused = outcome === 'refused';
   return (
-    <Banner
-      tone={refused ? COLOR.refused : COLOR.added}
-      background={refused ? COLOR.refusedGround : COLOR.addedGround}
-    >
+    <Banner tone={TONE[outcome]} background={GROUND[outcome]}>
       {dropLine(outcome, held)}
     </Banner>
   );
@@ -57,5 +53,25 @@ export function dropOutline(dragged: boolean, outcome: DropOutcome): string {
   if (!dragged) {
     return 'none';
   }
-  return `2px dashed ${outcome === 'refused' ? COLOR.refused : COLOR.added}`;
+  return `2px dashed ${TONE[outcome]}`;
 }
+
+/**
+ * The colour of a drop's outcome: refused, taken, or neither while it is not
+ * known yet — so that no row shows one colour the instant a drag starts and
+ * flips to the other when the answer arrives.
+ */
+const TONE: Record<DropOutcome, string> = {
+  taken: COLOR.added,
+  taken_after: COLOR.added,
+  refused: COLOR.refused,
+  unknown: COLOR.dim,
+};
+
+/** What is under the drop line, in the tone of its outcome. */
+const GROUND: Record<DropOutcome, string> = {
+  taken: COLOR.addedGround,
+  taken_after: COLOR.addedGround,
+  refused: COLOR.refusedGround,
+  unknown: COLOR.panel,
+};

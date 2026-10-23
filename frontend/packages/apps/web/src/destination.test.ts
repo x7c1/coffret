@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import { addedFile, type Added, type Listing } from '@coffret/api';
 
-import { destinationsOf, LIBRARY_ROOT, levelsOf, namedBy, newLine, pathLine } from './destination';
+import {
+  destinationsOf,
+  LIBRARY_ROOT,
+  levelsOf,
+  namedBy,
+  newLine,
+  onDiskIn,
+  onDiskLine,
+  pathLine,
+} from './destination';
 import { summarize } from './packChoice';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
@@ -17,9 +26,9 @@ const exists = (path: string) => NAMED.has(path);
 describe('levelsOf', () => {
   it('walks from the top of the Library down, saying which levels are there', () => {
     expect(levelsOf('comics/Foo/Vol 3', exists)).toEqual([
-      { name: 'comics', path: 'comics', exists: true },
-      { name: 'Foo', path: 'comics/Foo', exists: true },
-      { name: 'Vol 3', path: 'comics/Foo/Vol 3', exists: false },
+      { name: 'comics', path: 'comics', state: 'named' },
+      { name: 'Foo', path: 'comics/Foo', state: 'named' },
+      { name: 'Vol 3', path: 'comics/Foo/Vol 3', state: 'new' },
     ]);
     // The root is the Library itself, and no level.
     expect(levelsOf('', exists)).toEqual([]);
@@ -35,7 +44,7 @@ describe('destinationsOf', () => {
     expect(rest).toEqual([]);
     expect(only.folder).toBe('Vol 3');
     expect(pathLine(only.levels)).toBe('comics/Foo/Vol 3/');
-    expect(only.levels.map((level) => level.exists)).toEqual([true, true, false]);
+    expect(only.levels.map((level) => level.state)).toEqual(['named', 'named', 'new']);
     expect(newLine(only.levels)).toBe(
       'Vol 3 is new — the Library has no such folder yet, and this drop makes it',
     );
@@ -113,12 +122,52 @@ describe('namedBy', () => {
     const summary = summarize([added('Vol 1/001.jpg'), added('Vol 3/001.jpg')], ['Vol 1']);
     const [one, three] = destinationsOf('comics/Foo', summary, namedBy(null, foo));
     expect(newLine(one.levels)).toBeNull();
-    expect(three.levels.map((level) => level.exists)).toEqual([true, true, false]);
+    expect(three.levels.map((level) => level.state)).toEqual(['named', 'named', 'new']);
   });
 
   it('says nothing of a folder the listing holds nothing at', () => {
     const named = namedBy(null, { ...foo, held: false, folders: [] });
     expect(named('comics')).toBe(false);
     expect(named('comics/Foo')).toBe(false);
+  });
+});
+
+// A folder standing on this device's disk under a mapped folder is not in the
+// Library and is not made by the drop either: a freeze of it takes what is
+// already standing in it, so the confirmation says so rather than "new".
+describe('onDiskIn', () => {
+  /** The listing of `comics`, held, with `Bar` standing on disk and `Foo` in the Library. */
+  const comics: Listing = {
+    path: 'comics',
+    mapped: true,
+    held: true,
+    folders: [{ name: 'Foo', path: 'comics/Foo', mapped: true }],
+    files: [],
+    folders_on_disk: ['Bar'],
+    empty_mapped_prefixes: [],
+  };
+
+  it('marks a dropped folder standing on disk as on disk, and not as new', () => {
+    const summary = summarize([added('Bar/001.jpg'), added('Baz/001.jpg')], []);
+    const [bar, baz] = destinationsOf('comics', summary, namedBy(null, comics), onDiskIn(comics));
+    expect(bar.levels.map((level) => level.state)).toEqual(['named', 'on_disk']);
+    expect(newLine(bar.levels)).toBeNull();
+    expect(onDiskLine(bar.levels)).toBe(
+      'Bar is on this device’s disk and not in the Library yet — this drop adds it together ' +
+        'with what is already in it',
+    );
+    // A folder neither named nor on disk is still new.
+    expect(baz.levels.map((level) => level.state)).toEqual(['named', 'new']);
+    expect(onDiskLine(baz.levels)).toBeNull();
+    expect(newLine(baz.levels)).toBe(
+      'Baz is new — the Library has no such folder yet, and this drop makes it',
+    );
+  });
+
+  it('answers only for the folders directly in the one let go over, in NFC', () => {
+    const onDisk = onDiskIn({ ...comics, folders_on_disk: ['Cafe\u0301'] });
+    expect(onDisk('comics/Caf\u00e9')).toBe(true);
+    expect(onDisk('comics/Bar/Caf\u00e9')).toBe(false);
+    expect(onDisk('Caf\u00e9')).toBe(false);
   });
 });
