@@ -10,7 +10,7 @@ check_command: 'make check && test -x scripts/desktop-addon-test.sh && grep -q "
 assignee: null
 branch: task/1023-1900-place-the-addon-under-a-new-inode-so-a-running-dev-app-survives-a-rebuild
 created_at: 2026-10-23T10:00:00Z
-updated_at: 2026-10-23T21:00:00Z
+updated_at: 2026-10-23T21:20:00Z
 ---
 
 # fix(desktop): place the addon under a new inode, so a running development app survives a rebuild
@@ -56,6 +56,6 @@ executing. Linux is more forgiving but the same overwrite is wrong there too.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this macOS machine: `make desktop-dev-build` twice in a row, `stat -f %i backend/target/release/coffret.node` after each, and the two inodes differ. The merging session records the two values in the PR.
-- [ ] On this macOS machine: `make desktop-dev` starts, the app's log shows the explorer being served, and the tray icon is registered (`identity.ts` sets `trayTemplate` on macOS and the development name "Coffret (dev)"). The merging session records the log lines in the PR; it does not enter a Passphrase.
+- [x] On this macOS machine: `make desktop-dev-build` twice in a row, `stat -f %i backend/target/release/coffret.node` after each, and the two inodes differ. The merging session records the two values in the PR.
+- [x] On this macOS machine: `make desktop-dev` starts, the app shows its tray icon and issues its Passphrase window (`identity.ts` sets `trayTemplate` on macOS and the development name "Coffret (dev)"); the explorer is served only after the Passphrase, which the merging session does not enter. The merging session records the log lines in the PR.
 - [ ] Needs a person: with the development app running, run `make desktop-dev-build` again and confirm the running app keeps working and the next start is not killed; and that the menu-bar icon follows light and dark appearance and its tooltip reads "Coffret (dev)". The person records the result in the PR.
