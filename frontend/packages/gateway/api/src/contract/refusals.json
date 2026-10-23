@@ -153,6 +153,14 @@
   },
   {
     "body": {
+      "error": "refused_placement",
+      "message": "the mapped folder could not be locked — its filesystem provides no file lock, so nothing was written into it, and a mapped folder has to be on a local disk",
+      "reason": "no_file_lock"
+    },
+    "status": 409
+  },
+  {
+    "body": {
       "error": "epoch",
       "message": "this device has to be enrolled in the Library again: the Library's Master Key was replaced, and this device holds only the one before it — enroll it again with the new Recovery Code"
     },

@@ -64,7 +64,10 @@ impl ServerLock {
     /// try to create beside nothing.
     pub fn take(dir: &LibraryDir) -> Result<Self> {
         let path = dir.server_lock_file();
-        let mut file = owner_only::open_or_create_file(&path, LocalOperation::Locking)?;
+        // Opened as a creation, not as a lock: a directory this cannot write
+        // into, or a disk with no room, refused the file, and the line a person
+        // reads has to send them to that rather than to the filesystem's lock.
+        let mut file = owner_only::open_or_create_file(&path, LocalOperation::Creating)?;
 
         match flock(&file, FlockOperation::NonBlockingLockExclusive) {
             Ok(()) => {}

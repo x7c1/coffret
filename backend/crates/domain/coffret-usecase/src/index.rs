@@ -184,6 +184,25 @@ pub trait Index: Send + Sync {
     /// past the same way, recording nothing of the batch's own.
     async fn refresh(&self, batch: CommittedBatch) -> IndexResult<()>;
 
+    /// Records the device-local half of this device's own batch, whose record the
+    /// Index holds already.
+    ///
+    /// [`refresh`](Self::refresh) refuses a record the Index stands at or past
+    /// with [`IndexError::AlreadyApplied`](crate::IndexError::AlreadyApplied)
+    /// and records nothing of the batch's own. That is what it meets when
+    /// another process over the same Index — a server answering a browser
+    /// while a `sync` runs in a terminal — replays the record between the
+    /// create and the refresh (spec: CK-9). The record is in the catalog then,
+    /// and only the device-local half is missing: this records it. The files the
+    /// batch put on disk become `present` (spec: EP-10), the pending rows of the
+    /// Containers the record adds are cleared (spec: OC-2), and the
+    /// reservations in [`released`](CommittedBatch::released) are released
+    /// (spec: PK-17), all in one operation, as `refresh` records them.
+    ///
+    /// The catalog and its checkpoint are left exactly as they are: the record
+    /// is read for the Containers it adds and is not applied.
+    async fn complete_applied(&self, batch: CommittedBatch) -> IndexResult<()>;
+
     /// The whole Library-wide state, in canonical order, ready to be encoded
     /// and uploaded when the checkpoint policy asks for a Snapshot
     /// (spec: CK-8).

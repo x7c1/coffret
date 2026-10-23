@@ -36,6 +36,9 @@ mod page;
 mod refusal;
 use refusal::Refusal;
 
+mod refusal_reason;
+use refusal_reason::RefusalReason;
+
 mod submission;
 use submission::Submission;
 

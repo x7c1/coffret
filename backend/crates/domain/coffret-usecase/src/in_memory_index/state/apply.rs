@@ -5,6 +5,7 @@ use coffret_model::{ContainerId, EntryLocation, EntryNumber, JournalRecord};
 use super::{insert_container, insert_entry, State};
 use crate::catalog_renames::{self, Named, RenamedEntry};
 use crate::committed_batch::CommittedBatch;
+use crate::device_state::{LocalObservation, ReservationId};
 use crate::index_error::{IndexError, IndexResult};
 
 impl State {
@@ -102,24 +103,49 @@ impl State {
     /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2,
     /// PK-17).
     pub(in crate::in_memory_index) fn refresh(&mut self, batch: CommittedBatch) -> IndexResult<()> {
-        let uploaded: Vec<ContainerId> = batch
-            .record
-            .additions()
-            .iter()
-            .map(|addition| addition.container().id)
-            .collect();
-
-        self.apply(batch.record)?;
-
-        for observation in batch.materialized {
-            self.mark_present(observation);
-        }
-        for container_id in uploaded {
-            self.clear_pending_row(container_id);
-        }
-        for id in batch.released {
-            self.release_reservation(id);
-        }
+        let CommittedBatch {
+            record,
+            materialized,
+            released,
+        } = batch;
+        let uploaded = uploaded(&record);
+        self.apply(record)?;
+        self.complete(&uploaded, materialized, released);
         Ok(())
     }
+
+    /// Records the device-local half of this device's own batch, whose record the
+    /// catalog holds already (spec: EP-10, OC-2, PK-17).
+    pub(in crate::in_memory_index) fn complete_applied(&mut self, batch: CommittedBatch) {
+        self.complete(&uploaded(&batch.record), batch.materialized, batch.released);
+    }
+
+    /// The device-local half of a refresh: the files it put on disk become
+    /// `present` (spec: EP-10), its spools stop being pending (spec: OC-2),
+    /// and the reservations its batch packs are released (spec: PK-17).
+    fn complete(
+        &mut self,
+        uploaded: &[ContainerId],
+        materialized: Vec<LocalObservation>,
+        released: Vec<ReservationId>,
+    ) {
+        for observation in materialized {
+            self.mark_present(observation);
+        }
+        for &container_id in uploaded {
+            self.clear_pending_row(container_id);
+        }
+        for id in released {
+            self.release_reservation(id);
+        }
+    }
+}
+
+/// The Containers a record adds, whose pending rows its commit clears.
+fn uploaded(record: &JournalRecord) -> Vec<ContainerId> {
+    record
+        .additions()
+        .iter()
+        .map(|addition| addition.container().id)
+        .collect()
 }

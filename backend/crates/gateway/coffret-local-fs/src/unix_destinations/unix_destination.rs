@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use coffret_model::Redacted;
 use coffret_usecase::{BelowRootError, Destination, LocalOperation, ScratchFile};
 use rustix::fs::{AtFlags, FlockOperation, Mode, OFlags};
 use rustix::io::Errno;
+use tracing::warn;
 
 use crate::unix_destinations::open_folder::OpenFolder;
 use crate::unix_destinations::unix_scratch_file::UnixScratchFile;
@@ -49,14 +51,34 @@ impl Destination for UnixDestination {
         // Locked for as long as the scratch is written, flushed and renamed —
         // the handle travels on to the rename — so a sync in another process
         // that meets it leaves it alone, while one left by a writer that is gone
-        // holds no lock whatever ended it (spec: OC-8). The file was made just
-        // now and exclusively, so a lock somebody already holds is a sync
-        // removing it in the instant since, and the scratch is refused rather
-        // than written under a name that is going away.
+        // holds no lock whatever ended it (spec: OC-8). A scratch that cannot
+        // be locked is not written: on a filesystem that gives no file lock
+        // (a network share, mostly) a sync could remove it mid-write, so the
+        // mapped folder is refused rather than written without one. The file
+        // was made just now and exclusively, so a lock somebody already holds
+        // is a sync removing it in the instant since, and that is refused the
+        // same way.
+        //
+        // Either way the empty file just made is this writer's own and nothing
+        // would ever claim it, so it goes before the refusal is answered. The
+        // name is unlinked rather than the handle, and that is safe because a
+        // scratch name is drawn unique and never handed out twice: what stands
+        // at it now is this file, or nothing where a sync removed it already.
         if let Err(cause) = rustix::fs::flock(&opened, FlockOperation::NonBlockingLockExclusive) {
-            return Err(self
-                .folder
-                .refused(scratch_name, LocalOperation::Creating, cause));
+            drop(opened);
+            match rustix::fs::unlinkat(self.folder.directory(), scratch_name, AtFlags::empty()) {
+                Ok(()) => {}
+                // A sync that got to it first has removed it already.
+                Err(gone) if gone == Errno::NOENT => {}
+                Err(unlinked) => warn!(
+                    reason = %self
+                        .folder
+                        .refused(scratch_name, LocalOperation::Removing, unlinked)
+                        .redacted(),
+                    "a scratch whose lock failed could not be removed; a later sync removes it",
+                ),
+            }
+            return Err(self.folder.refused_here(LocalOperation::Locking, cause));
         }
 
         Ok(Box::new(UnixScratchFile::new(

@@ -24,6 +24,7 @@
 
 mod commit;
 pub use commit::{
+    a_refresh_another_process_got_to_first_is_completed,
     a_refresh_lands_where_a_replay_of_its_record_does,
     a_refresh_marks_its_files_present_and_clears_its_spools,
 };
@@ -69,6 +70,7 @@ pub use paths::{
 mod refusals;
 pub use refusals::{
     a_record_already_applied_is_refused_and_the_checkpoint_stands,
+    a_refresh_of_a_record_already_applied_records_nothing,
     a_refused_operation_leaves_the_whole_catalog_as_it_was, one_container_added_twice_is_refused,
     two_entries_at_one_path_are_refused,
 };
@@ -134,6 +136,7 @@ macro_rules! index_conformance {
             a_deposit_time_survives_a_replay_a_rename_and_a_restore,
             removing_a_container_removes_the_entries_it_held,
             a_refresh_lands_where_a_replay_of_its_record_does,
+            a_refresh_another_process_got_to_first_is_completed,
             a_refresh_marks_its_files_present_and_clears_its_spools,
             a_restore_leaves_device_state_alone,
             a_replay_leaves_device_state_alone,
@@ -161,6 +164,7 @@ macro_rules! index_conformance {
             two_entries_at_one_path_are_refused,
             one_container_added_twice_is_refused,
             a_record_already_applied_is_refused_and_the_checkpoint_stands,
+            a_refresh_of_a_record_already_applied_records_nothing,
             a_record_below_the_checkpoint_is_refused_and_changes_nothing,
             a_refused_operation_leaves_the_whole_catalog_as_it_was,
             a_rename_changes_one_files_current_path,

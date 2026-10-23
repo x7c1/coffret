@@ -6,6 +6,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
 
+use super::RefusalReason;
 use crate::attempt::AttemptRefused;
 
 /// Every answer the door gives in place of the one a request asked for.
@@ -52,16 +53,20 @@ struct Body<'a> {
 
 impl Refusal {
     /// The answer, put into the log on the way as a refusal of this kind for
-    /// `reason`, a fixed word naming the fence or the limit (spec: EL-1).
+    /// `reason`: a fixed word naming the fence or the limit and, for a body
+    /// that could not be read, which way it failed (spec: EL-1, EL-3, EL-4).
     ///
     /// `ended` says whether the window's token is gone. The connection is
     /// closed after the answer, so that a body a refused request was bringing
     /// is never read.
-    pub(crate) fn answer(self, reason: &'static str, ended: bool) -> Response {
+    pub(crate) fn answer(self, reason: impl Into<RefusalReason>, ended: bool) -> Response {
+        let reason = reason.into();
         tracing::info!(
             kind = "door_refusal",
             refusal = self.word(),
-            reason,
+            reason = reason.word,
+            failure = reason.failure(),
+            io_kind = reason.io_kind.map(tracing::field::debug),
             ended,
             "a request to the door was refused",
         );

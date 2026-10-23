@@ -18,7 +18,7 @@ use crate::query::first;
 use crate::rows;
 
 mod apply;
-pub(crate) use apply::{apply, refresh};
+pub(crate) use apply::{apply, complete_applied, refresh};
 
 mod lookup;
 pub(crate) use lookup::{containers_under, entries_in, entries_under, entry_at};

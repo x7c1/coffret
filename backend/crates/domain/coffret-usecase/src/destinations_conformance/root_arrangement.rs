@@ -49,4 +49,12 @@ pub trait RootArrangement: Send + Sync {
     /// Deliberately not saying which: a scratch name a case expects to be gone
     /// is gone whichever of the three would otherwise be standing there.
     fn holds(&self, path: &Path) -> bool;
+
+    /// Makes the next lock the capability takes fail, as on a filesystem that
+    /// gives no file lock, and answers whether it could.
+    ///
+    /// The fake scripts the refusal; a real filesystem a test can make gives
+    /// every lock asked of it, so a backend on one answers `false` and the
+    /// case that needs the refusal is skipped there.
+    fn refuse_locks(&self) -> bool;
 }

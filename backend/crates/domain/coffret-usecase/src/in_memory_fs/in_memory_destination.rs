@@ -43,6 +43,13 @@ impl Destination for InMemoryDestination {
             .attempt(LocalOperation::Creating, &path)
             .map_err(BelowRootError::Io)?;
         state.create_new(&path)?;
+        // The real thing locks the scratch it has just made, and a filesystem
+        // that gives no lock leaves nothing behind (spec: OC-8): the scratch
+        // goes before the refusal, which names the folder, is answered.
+        if let Err(refused) = state.attempt(LocalOperation::Locking, &self.folder) {
+            state.remove(&path);
+            return Err(BelowRootError::Io(refused));
+        }
         drop(state);
         Ok(Box::new(InMemoryScratchFile::new(
             Arc::clone(&self.state),

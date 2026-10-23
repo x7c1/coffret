@@ -61,6 +61,15 @@ impl OpenFolder {
         self.folder.join(name)
     }
 
+    /// What the operating system refused about this folder as a whole.
+    ///
+    /// The folder is named rather than a file in it where what refused is the
+    /// filesystem the folder is on: a lock it does not give, which no file of
+    /// the folder's would answer differently (spec: OC-8).
+    pub(super) fn refused_here(&self, operation: LocalOperation, cause: Errno) -> BelowRootError {
+        refusal(&self.folder, operation, cause)
+    }
+
     /// What the operating system refused about one name in this folder.
     pub(super) fn refused(
         &self,

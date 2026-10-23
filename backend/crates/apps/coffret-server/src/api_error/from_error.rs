@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use coffret_device::{
-    CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, IndexError, Redacted,
-    RenameError, StorageError, SyncError, UnusableReplica,
+    CommitError, DeleteError, Error, FetchError, FormatError, FreezeError, IndexError,
+    LocalOperation, Redacted, RenameError, StorageError, SyncError, UnusableReplica,
 };
 
 use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE, UNAUTHENTICATED};
@@ -63,6 +63,13 @@ impl From<Error> for ApiError {
             // says nothing about a mapping.
             Error::RootRefused(ref refusal) => {
                 ApiError::refused_root(refusal.prefix.as_ref(), &error)
+            }
+            // A mapped folder on a filesystem that gives no file lock: a drop
+            // is refused there rather than written without one (spec: OC-8).
+            // That is where the folder is, which a person can change, and not
+            // the server failing, so it is a refusal the explorer shows.
+            Error::Local(ref refused) if matches!(refused.operation, LocalOperation::Locking) => {
+                ApiError::no_file_lock(&error)
             }
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a settings file
@@ -560,6 +567,12 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // `Index` before wrapping the rest. Sent to the same classification as
         // that one all the same, so the two cannot come to answer differently.
         FetchError::Index(_) => catalog_unusable(cause.redacted()),
+        // A fetch into a mapped folder whose filesystem gives no file lock is
+        // refused the way a drop into one is.
+        FetchError::Io {
+            operation: LocalOperation::Locking,
+            ..
+        } => ApiError::no_file_lock(&cause),
         // A time this device's clock cannot reach is this device's limit, as
         // the disk's own refusal is, and nothing a browser can do differently
         // about either.

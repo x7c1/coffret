@@ -52,8 +52,9 @@ export type RefusalKind =
    * or of every file under a mapped root: the concept's *refuse*, which is
    * wider than a decline. A mapping's root that is not the folder it was
    * recorded against (`refused_root`), a drop or a freeze under a folder this
-   * device has no folder for (`unmapped`), and a drop that would replace an
-   * Entry inside a Pack (`pack_resident`).
+   * device has no folder for (`unmapped`), a drop that would replace an
+   * Entry inside a Pack (`pack_resident`), and a drop or a fetch into a
+   * mapped folder whose filesystem gives no file lock (`no_file_lock`).
    */
   | 'refused_placement'
   /**
@@ -160,7 +161,7 @@ export type RefusalKind =
  * and a drop meets `unmaterializable` and `reserved` the same way, and also
  * `trash_folder`, which only a drop meets. A `refused_placement` carries
  * `refused_root`, `unmapped` for a drop or a freeze under a folder this device
- * has no folder for, and `pack_resident`,
+ * has no folder for, `no_file_lock`, and `pack_resident`,
  * which is a drop's alone: the Library holds an Entry at that path inside a
  * Pack, and coffret cannot replace one of those yet — so the file is refused
  * rather than written where no sync could carry it in.
@@ -198,6 +199,14 @@ export type PlacementReason =
    * gesture, and it is one at a terminal.
    */
   | 'refused_root'
+  /**
+   * A mapped folder whose filesystem gives no file lock — a network share,
+   * most of the time — so nothing was written into it: a file being written
+   * there could not be kept safe from a sync running beside it. Nothing on a
+   * page remedies it; the message says a mapped folder has to be on a local
+   * disk.
+   */
+  | 'no_file_lock'
   | 'surfaced'
   | 'key_lost'
   | 'pack_resident'
@@ -558,6 +567,7 @@ const REASONS: readonly string[] = [
   'reserved',
   'trash_folder',
   'refused_root',
+  'no_file_lock',
   'surfaced',
   'key_lost',
   'pack_resident',

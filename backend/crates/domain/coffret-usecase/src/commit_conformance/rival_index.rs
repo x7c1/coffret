@@ -37,6 +37,9 @@ pub(super) struct RivalIndex<'a> {
     ahead: Mutex<Vec<JournalRecord>>,
     /// The record whose replay is refused without the catalog moving at all.
     unexplained_at: Option<Generation>,
+    /// Whether the rival replays a committer's own record the moment it asks
+    /// to refresh with it.
+    ahead_of_refresh: bool,
 }
 
 impl<'a> RivalIndex<'a> {
@@ -51,6 +54,7 @@ impl<'a> RivalIndex<'a> {
             inner,
             ahead: Mutex::new(ahead),
             unexplained_at: None,
+            ahead_of_refresh: false,
         }
     }
 
@@ -66,6 +70,24 @@ impl<'a> RivalIndex<'a> {
             inner,
             ahead: Mutex::new(Vec::new()),
             unexplained_at: Some(at),
+            ahead_of_refresh: false,
+        }
+    }
+
+    /// A rival that replays the committer's own record just before the
+    /// committer refreshes with it.
+    ///
+    /// The window is the one between the create of the record and the
+    /// refresh, where a second process over the catalog file — a server
+    /// catching up for a browser — can find the new head first. The refresh
+    /// then meets the port's own refusal over a checkpoint that has genuinely
+    /// moved (spec: CK-9).
+    pub(super) fn replaying_before_refresh(inner: &'a dyn Index) -> Self {
+        Self {
+            inner,
+            ahead: Mutex::new(Vec::new()),
+            unexplained_at: None,
+            ahead_of_refresh: true,
         }
     }
 
@@ -119,7 +141,17 @@ impl Index for RivalIndex<'_> {
     }
 
     async fn refresh(&self, batch: CommittedBatch) -> IndexResult<()> {
+        if self.ahead_of_refresh {
+            self.inner
+                .apply(batch.record.clone())
+                .await
+                .expect("the rival replays a record this catalog has not seen");
+        }
         self.inner.refresh(batch).await
+    }
+
+    async fn complete_applied(&self, batch: CommittedBatch) -> IndexResult<()> {
+        self.inner.complete_applied(batch).await
     }
 
     async fn snapshot(&self) -> IndexResult<SnapshotContent> {

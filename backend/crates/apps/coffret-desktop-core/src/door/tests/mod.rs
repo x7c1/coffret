@@ -83,12 +83,18 @@ impl Case {
 
     /// The submission the door's own page sends with `token`.
     fn submission(&self, token: &str, body: Value) -> Request<Body> {
+        self.raw_submission(token, Body::from(body.to_string()))
+    }
+
+    /// A submission as the door's own page would send it, with whatever
+    /// `body` brings in place of the JSON the page sends.
+    fn raw_submission(&self, token: &str, body: Body) -> Request<Body> {
         self.request(Method::POST, "/submit")
             .header("origin", &self.origin)
             .header("sec-fetch-site", "same-origin")
             .header("authorization", format!("Door {token}"))
             .header("content-type", "application/json")
-            .body(Body::from(body.to_string()))
+            .body(body)
             .unwrap()
     }
 

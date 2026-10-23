@@ -14,8 +14,8 @@ use serde_json::{json, Value};
 use coffret_device::{
     CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryNumber, EntryPath, EntryRef,
     Error, FetchError, FetchOutcome, Finding, FindingReason, Findings, FormatError, IndexError,
-    PendingChange, ProviderSettings, RebaseRule, RenameError, RenameRefusal, RenamedPath,
-    StorageError, SyncError, SyncOutcome,
+    LocalIoError, LocalOperation, PendingChange, ProviderSettings, RebaseRule, RenameError,
+    RenameRefusal, RenamedPath, StorageError, SyncError, SyncOutcome,
 };
 
 use super::*;
@@ -471,6 +471,32 @@ fn a_listing_of_a_refused_file_answers_the_refusal_beside_the_mappings() {
                 "supported": 5,
             },
         }),
+    );
+}
+
+// A mapped folder on a filesystem that gives no file lock: the line names the
+// folder, says the filesystem gives no lock, and says where the folder has to
+// be, which is the one thing a person can change about it.
+#[test]
+fn a_lock_the_filesystem_cannot_give_says_the_folder_must_be_on_a_local_disk() {
+    let refusal = || {
+        Error::Local(LocalIoError::new(
+            LocalOperation::Locking,
+            "/mnt/share/albums",
+            std::io::Error::from(std::io::ErrorKind::Unsupported),
+        ))
+    };
+    let said = crate::report::failed(&anyhow::Error::from(refusal())).said;
+
+    let answered = failed("add", refusal());
+    assert_eq!(answered["error"]["kind"], "local", "{answered}");
+    assert_eq!(answered["error"]["message"], said[0], "{answered}");
+    assert!(
+        said[0].starts_with(
+            "/mnt/share/albums could not be locked — its filesystem provides no file lock, and \
+             it has to be on a local disk"
+        ),
+        "{said:?}"
     );
 }
 

@@ -1,7 +1,10 @@
 use coffret_model::ContainerKind;
 
+use crate::committed_batch::CommittedBatch;
 use crate::index_conformance::device_state::{assert_device_state_intact, seed_device_state};
-use crate::index_conformance::fixtures::{addition, container_id, record, snapshot, snapshot_name};
+use crate::index_conformance::fixtures::{
+    addition, container_id, entry, observation_of, record, snapshot, snapshot_name,
+};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 use crate::index_error::IndexError;
 
@@ -189,6 +192,70 @@ pub async fn a_record_already_applied_is_refused_and_the_checkpoint_stands(
             .expect("an applied catalog has a state to checkpoint"),
         stood_at,
         "the refused replay leaves the catalog standing at the record it holds",
+    );
+    assert_device_state_intact(index).await;
+}
+
+/// A refresh of a record the catalog holds already is refused as already
+/// applied, and records nothing of the batch's own either (spec: CK-9, EP-10,
+/// OC-2, PK-17).
+///
+/// It is what the committer meets when another process over the same file
+/// replayed its record first. The refusal is the signal the commit acts on —
+/// it then completes the batch's device-local half through
+/// [`complete_applied`](crate::Index::complete_applied) — so a refresh that
+/// half-ran here, clearing a spool or releasing a reservation while refusing
+/// the record, would leave that step done twice or out of the one operation
+/// it belongs to. The batch names the seeded spool, a file and the seeded
+/// reservation, and every one of them stays as it was.
+pub async fn a_refresh_of_a_record_already_applied_records_nothing(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    seed_device_state(index).await;
+    let committed = record(
+        0,
+        vec![addition(7, ContainerKind::Pack, &["books/b.jpg"])],
+        vec![],
+    );
+    index
+        .apply(committed.clone())
+        .await
+        .expect("replaying a record must succeed");
+    let stood_at = index
+        .snapshot()
+        .await
+        .expect("an applied catalog has a state to checkpoint");
+    let released = index
+        .reservations()
+        .await
+        .expect("reading the reservations must succeed")
+        .into_iter()
+        .map(|reservation| reservation.id)
+        .collect();
+
+    let result = index
+        .refresh(CommittedBatch {
+            record: committed,
+            materialized: vec![observation_of("books/b.jpg", 200, entry(7, 0))],
+            released,
+        })
+        .await;
+    assert!(
+        matches!(
+            &result,
+            Err(IndexError::AlreadyApplied { generation, checkpoint })
+                if generation.get() == 0 && checkpoint.get() == 0
+        ),
+        "expected a refresh of a record at the checkpoint to be refused as already applied, \
+         got {result:?}"
+    );
+
+    assert_eq!(
+        index
+            .snapshot()
+            .await
+            .expect("an applied catalog has a state to checkpoint"),
+        stood_at,
+        "the refused refresh leaves the catalog standing at the record it holds",
     );
     assert_device_state_intact(index).await;
 }

@@ -13,6 +13,9 @@ use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
 use crate::commit::{after_commit, candidate, catch_up, first_head, journal, keyring, rebase};
 use crate::committed_batch::CommittedBatch;
+use crate::device_state::{LocalObservation, ReservationId};
+use crate::index::Index;
+use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
 
 /// Makes a prepared batch the Library's next committed state.
@@ -77,7 +80,10 @@ use crate::object_store::ObjectStore;
 /// record already removed or as an Entry Path collision with its own Containers
 /// (spec: CP-18, EP-6). That is why it is an error and not a
 /// finding on [`CommitOutcome`] — there is nothing the caller may do with this
-/// batch next.
+/// batch next. A refresh another process got to first — one refused as
+/// [`IndexError::AlreadyApplied`] — is not such a failure: the record is in the
+/// Index already, so the run records the rest of the batch through
+/// [`Index::complete_applied`] and completes (spec: CK-9).
 ///
 /// Neither half of the refresh is lost by failing here. The Library-wide half is
 /// the record, which any later catch-up replays. The device-local half — which
@@ -162,13 +168,7 @@ async fn attempt_until_committed(
             if let Attempted::Committed(landed) =
                 first_head::write(store, keys, &policy, committing).await?
             {
-                index
-                    .refresh(CommittedBatch {
-                        record: landed.record,
-                        materialized: Vec::new(),
-                        released: Vec::new(),
-                    })
-                    .await?;
+                refresh(index, &landed.record, &[], &[]).await?;
             }
             // Not an attempt at this batch: the next pass catches up onto the
             // head just written, or onto whichever writer's got there first.
@@ -232,13 +232,7 @@ async fn attempt_until_committed(
         };
         committing.committed();
 
-        index
-            .refresh(CommittedBatch {
-                record: landed.record.clone(),
-                materialized: batch.materialized.clone(),
-                released: batch.released.clone(),
-            })
-            .await?;
+        refresh(index, &landed.record, &batch.materialized, &batch.released).await?;
 
         let untrashed =
             after_commit::trash_removals(store, &policy, &caught.listing, landed.record.removals())
@@ -266,6 +260,44 @@ async fn attempt_until_committed(
     Err(CommitError::ConflictLimitReached {
         attempts: policy.attempts,
     })
+}
+
+/// Refreshes the Index with this device's own batch, just committed.
+///
+/// Another process over the same Index — a server answering a browser while a
+/// `sync` runs in a terminal — may replay the record between the create and
+/// this refresh, and the refresh is then refused as
+/// [`IndexError::AlreadyApplied`] with nothing of the batch's own recorded
+/// (spec: CK-9). The record is in the catalog either way, and the record at
+/// that generation is this batch's, so the refusal says only that the
+/// device-local half is still to do: the Index records it as one operation and
+/// the commit completes (spec: EP-10, OC-2, PK-17).
+async fn refresh(
+    index: &dyn Index,
+    record: &JournalRecord,
+    materialized: &[LocalObservation],
+    released: &[ReservationId],
+) -> CommitResult<()> {
+    let batch = || CommittedBatch {
+        record: record.clone(),
+        materialized: materialized.to_vec(),
+        released: released.to_vec(),
+    };
+    match index.refresh(batch()).await {
+        Ok(()) => Ok(()),
+        Err(IndexError::AlreadyApplied {
+            generation,
+            checkpoint,
+        }) => {
+            debug!(
+                generation = generation.get(),
+                checkpoint = checkpoint.get(),
+                "another process applied this commit's record first; completing the rest",
+            );
+            Ok(index.complete_applied(batch()).await?)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// Extends `held` with the Journal records after the last one it holds — or

@@ -470,6 +470,16 @@ impl fmt::Display for FetchError {
             // below does not; what the operating system said is left to
             // `cause`, which `source` hands on, for the reason the four above
             // leave theirs.
+            // A lock the filesystem would not give is the folder's filesystem
+            // and nothing about the file, and what remedies it is a mapped
+            // folder on a local disk, which is what the line says (spec: OC-8).
+            Self::Io {
+                operation: LocalOperation::Locking,
+                ..
+            } => f.write_str(
+                "a local folder could not be locked — its filesystem provides no file lock, and \
+                 a mapped folder has to be on a local disk",
+            ),
             Self::Io { operation, .. } => {
                 write!(f, "a local file or folder could not be {operation}")
             }
