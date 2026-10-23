@@ -1,4 +1,4 @@
-use coffret_model::EntryPath;
+use coffret_model::{EntryLocation, EntryPath};
 use coffret_usecase::device_state::{DeviceTime, LocalEntry, LocalEntryState, LocalObservation};
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -256,6 +256,45 @@ pub(crate) fn present_under(
                 params![present, prefix.as_str(), lower, upper],
                 OPERATION,
                 rows::local_entry,
+            )
+        }
+    }
+}
+
+/// Every current Entry under a prefix that this device does not have on disk,
+/// ordered by Entry Path bytes: the catalog's Entries joined against the rows
+/// [`present_under`] reads, in one statement.
+pub(crate) fn entries_absent_under(
+    connection: &Connection,
+    prefix: Option<&EntryPath>,
+) -> IndexResult<Vec<EntryLocation>> {
+    const OPERATION: &str = "reading a subtree's Entries this device does not have";
+    let present = rows::state_text(LocalEntryState::Present);
+    match prefix {
+        None => collect(
+            connection,
+            "SELECT entries.* FROM entries \
+             LEFT JOIN local_entries ON local_entries.path = entries.path \
+             AND local_entries.state = ?1 AND local_entries.relocate_to IS NULL \
+             WHERE local_entries.path IS NULL \
+             ORDER BY entries.path",
+            params![present],
+            OPERATION,
+            rows::entry_location,
+        ),
+        Some(prefix) => {
+            let (lower, upper) = subtree_range(prefix);
+            collect(
+                connection,
+                "SELECT entries.* FROM entries \
+                 LEFT JOIN local_entries ON local_entries.path = entries.path \
+                 AND local_entries.state = ?1 AND local_entries.relocate_to IS NULL \
+                 WHERE local_entries.path IS NULL \
+                 AND (entries.path = ?2 OR (entries.path >= ?3 AND entries.path < ?4)) \
+                 ORDER BY entries.path",
+                params![present, prefix.as_str(), lower, upper],
+                OPERATION,
+                rows::entry_location,
             )
         }
     }

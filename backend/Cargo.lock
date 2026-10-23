@@ -1041,6 +1041,7 @@ dependencies = [
  "coffret-logging",
  "coffret-server",
  "coffret-shell",
+ "getrandom 0.4.3",
  "http-body 1.1.0",
  "reqwest",
  "serde",
@@ -1205,7 +1206,6 @@ dependencies = [
 name = "coffret-napi"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "coffret-desktop-core",
  "napi",
  "napi-build",

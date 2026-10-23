@@ -1,5 +1,4 @@
 use std::fmt;
-use std::sync::Arc;
 
 use coffret_model::{ControlObjectName, Redacted};
 
@@ -10,12 +9,11 @@ use crate::error::Error;
 ///
 /// A value of its own rather than the [`CommitError`] the write failed with,
 /// because what a failed checkpoint leaves is a finding a run reports after its
-/// commit stood, and a finding is copied wherever the run's report goes. A
-/// `CommitError` cannot be cloned, and a sentence made of it could not be
-/// matched on.
-/// So the ways a checkpoint write fails that a caller could decide on keep
-/// their own variant and the value they carry, and the rest keep only their
-/// redacted sentence.
+/// commit stood, and the ways a checkpoint write fails that a caller could
+/// decide on are named here: a Storage refusal, a format fault, a slot something
+/// else stands at. Each keeps its cause as the value it was, so a caller can
+/// match on it rather than on a sentence; any other failure is kept as the
+/// [`CommitError`] itself.
 ///
 /// What it renders is the redacted form throughout, because what a run reports
 /// is read on a terminal and in an explorer alike, and a checkpoint's
@@ -39,16 +37,12 @@ pub enum CheckpointFailure {
         /// The name the slot was read under.
         object: ControlObjectName,
         /// What about the object there did not hold.
-        ///
-        /// Shared rather than owned, because the fault is not itself clonable
-        /// and a finding is copied: the value survives for a caller to match
-        /// on, where its sentence would not.
-        fault: Arc<ControlObjectFault>,
+        fault: ControlObjectFault,
     },
-    /// Any other way the write failed, as its redacted sentence.
+    /// Any other way the write failed.
     Other {
-        /// The failure's redacted form.
-        reason: String,
+        /// What the write failed with.
+        cause: CommitError,
     },
 }
 
@@ -63,13 +57,10 @@ impl CheckpointFailure {
         match error {
             CommitError::Storage(error) => Self::Storage(error),
             CommitError::Format(error) => Self::Format(error),
-            CommitError::CorruptControlObject { object, fault } => Self::SlotTaken {
-                object,
-                fault: Arc::new(fault),
-            },
-            other => Self::Other {
-                reason: other.redacted(),
-            },
+            CommitError::CorruptControlObject { object, fault } => {
+                Self::SlotTaken { object, fault }
+            }
+            cause => Self::Other { cause },
         }
     }
 }
@@ -87,7 +78,7 @@ impl Redacted for CheckpointFailure {
                     fault.redacted()
                 )
             }
-            Self::Other { reason } => format!("Checkpoint::Other: {reason}"),
+            Self::Other { cause } => format!("Checkpoint::Other: {}", cause.redacted()),
         }
     }
 }
@@ -146,7 +137,7 @@ mod tests {
             matches!(
                 &failure,
                 CheckpointFailure::SlotTaken { fault, .. }
-                    if matches!(**fault, ControlObjectFault::GenerationMismatch { .. })
+                    if matches!(fault, ControlObjectFault::GenerationMismatch { .. })
             ),
             "{failure:?}",
         );
@@ -155,6 +146,27 @@ mod tests {
                 .to_string()
                 .starts_with(&format!("Checkpoint::SlotTaken(object={object}): ")),
             "{failure}",
+        );
+    }
+
+    // Any other cause is kept as the commit error it was, so a caller can still
+    // match on it, and is said in its redacted form.
+    #[test]
+    fn any_other_cause_is_kept_as_the_commit_error_it_was() {
+        let failure = CheckpointFailure::of_checkpoint_write(CommitError::FirstHeadUnlisted);
+
+        assert!(
+            matches!(
+                &failure,
+                CheckpointFailure::Other {
+                    cause: CommitError::FirstHeadUnlisted
+                }
+            ),
+            "{failure:?}",
+        );
+        assert_eq!(
+            failure.to_string(),
+            "Checkpoint::Other: Commit::FirstHeadUnlisted"
         );
     }
 }

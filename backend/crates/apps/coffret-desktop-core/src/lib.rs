@@ -36,8 +36,14 @@ pub use coffret_device::{Dropped, DroppedRow, NotTakenRow};
 mod door;
 pub use door::{DoorMode, DoorUrl};
 
+mod drawn;
+pub use drawn::Drawn;
+
 mod entered_passphrase;
 pub use entered_passphrase::EnteredPassphrase;
+
+mod error;
+pub use error::{Error, Result};
 
 mod event;
 pub use event::Event;
@@ -47,6 +53,9 @@ pub use events::EventSink;
 
 mod idle_minutes;
 pub use idle_minutes::{idle_minutes, IDLE_MINUTES};
+
+mod io_step;
+pub use io_step::IoStep;
 
 mod open_library;
 mod opened;
@@ -68,14 +77,13 @@ mod shared;
 #[cfg(test)]
 mod testing;
 
-use anyhow::Context;
 use coffret_device::LibraryDir;
 
 /// The names of the Libraries on this device, for a Passphrase window to
 /// choose between.
-pub fn libraries() -> anyhow::Result<Vec<String>> {
+pub fn libraries() -> Result<Vec<String>> {
     Ok(LibraryDir::on_this_device()
-        .context("the Libraries on this device could not be listed")?
+        .map_err(|cause| Error::LibrariesUnlisted { cause })?
         .iter()
         .map(|dir| dir.name().to_owned())
         .collect())

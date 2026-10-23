@@ -35,6 +35,9 @@
 mod assess_root;
 pub(crate) use assess_root::assess_root;
 
+mod root_refused;
+pub(crate) use root_refused::RootRefused;
+
 mod root_state;
 pub(crate) use root_state::RootState;
 

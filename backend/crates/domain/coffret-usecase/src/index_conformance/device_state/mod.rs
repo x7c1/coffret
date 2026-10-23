@@ -27,6 +27,7 @@ pub use local_entries::{
     a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
     a_materialization_keeps_the_hash_it_was_recorded_with,
     only_a_file_this_device_had_can_go_absent,
+    the_entries_absent_under_a_prefix_are_the_ones_not_on_disk,
 };
 
 mod mappings;

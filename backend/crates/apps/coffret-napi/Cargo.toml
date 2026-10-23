@@ -28,9 +28,6 @@ napi-build = { workspace = true }
 [dependencies]
 coffret-desktop-core = { workspace = true }
 
-# The refusals the core answers with, rendered into the exceptions the shell
-# catches.
-anyhow = { workspace = true }
 napi = { workspace = true }
 napi-derive = { workspace = true }
 # An event the shell could not be handed is said in the log.

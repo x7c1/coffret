@@ -120,19 +120,12 @@ pub async fn file(
         // this Entry again, and its line is where a person who only opens
         // files hears of them (spec: KL-15, PK-21). A fetch another caller had
         // already made read nothing, and has nothing to carry.
-        //
-        // The run on record is noted before it is armed over: arming with
-        // nothing running replaces a finished run on the record, and a page of
-        // that folder answered from disk later must still know it ended.
-        EntryFetch::Placed => {
-            state.ended_fills.note(&state.fills);
-            fill_folder(
-                Arc::clone(&state),
-                Folder::holding(&path),
-                fetched.short,
-                fetched.unheld,
-            )
-        }
+        EntryFetch::Placed => fill_folder(
+            Arc::clone(&state),
+            Folder::holding(&path),
+            fetched.short,
+            fetched.unheld,
+        ),
         EntryFetch::AlreadyPresent => {}
         // A declined Entry arms nothing, and what its fetch read of the Keyring
         // stays in the line the run wrote to the log. Only a locked one read it
@@ -178,8 +171,8 @@ pub async fn file(
 /// waiting at the first page that is not here (spec: PK-16).
 ///
 /// Not on every page turned, though: a folder a run has ended on arms nothing
-/// here, for the reason [`EndedFills`](crate::fill::EndedFills) gives
-/// (spec: EP-11).
+/// here, for the reason [`Fills::has_ended`](crate::fill::Fills::has_ended)
+/// gives (spec: EP-11).
 ///
 /// The same fill a placement arms, with nothing to carry: no fetch ran, so
 /// nothing of the Keyring was read and no kept parcel was found unheld. A
@@ -191,8 +184,7 @@ async fn fill_unless_whole(
     path: &EntryPath,
 ) -> Result<(), ApiError> {
     let folder = Folder::holding(path);
-    state.ended_fills.note(&state.fills);
-    if state.ended_fills.has_ended(&folder) {
+    if state.fills.has_ended(&folder) {
         return Ok(());
     }
     if !library.wholly_present(folder.listed()).await? {

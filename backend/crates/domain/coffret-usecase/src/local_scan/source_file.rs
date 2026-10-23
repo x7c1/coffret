@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use coffret_model::{Btime, ContentHash, EntryPath, Mtime};
 
-use crate::local_error::LocalError;
 use crate::local_io_error::LocalIoError;
 use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
@@ -59,7 +58,10 @@ impl SourceFile {
     /// own, so that a capability answering both would have one behaviour to get
     /// right instead of two — and so that the length is the read's answer, not
     /// a stat's.
-    pub(crate) async fn read(&self, roots: &dyn MappedRoots) -> Result<Vec<u8>, LocalError> {
+    ///
+    /// Fails only as the disk refuses, as [`content_hash`](Self::content_hash)
+    /// does, and says so in its type.
+    pub(crate) async fn read(&self, roots: &dyn MappedRoots) -> Result<Vec<u8>, LocalIoError> {
         let mut reader = self.reader(roots).await?;
         let mut content = Vec::new();
         let mut buffer = vec![0u8; READ_CHUNK];
@@ -103,10 +105,12 @@ impl SourceFile {
     /// What a Pack does with every file it holds — hashing it before the entry
     /// table is written, and feeding it through the encoder afterwards — so
     /// neither step is bounded by what fits in memory (spec: FM-2, FM-5, FM-9).
+    ///
+    /// Fails only as the disk refuses to open the file.
     pub(crate) async fn reader(
         &self,
         roots: &dyn MappedRoots,
-    ) -> Result<Box<dyn SourceReader>, LocalError> {
-        Ok(roots.source_reader(&self.root, &self.relative).await?)
+    ) -> Result<Box<dyn SourceReader>, LocalIoError> {
+        roots.source_reader(&self.root, &self.relative).await
     }
 }

@@ -69,7 +69,7 @@ export type {
   SyncStatus,
   TurnTaker,
 } from './work';
-export { checkSession, launch, revokeSession } from './auth';
+export { checkSession, launch } from './auth';
 export type { Launched, SessionStanding } from './auth';
 export {
   dropToken,
