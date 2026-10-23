@@ -136,14 +136,17 @@ Concept background: [Library](../../concepts/library/),
   with no run under way, nothing waiting, and no last outcome, and work a
   stopped server had waiting is done only once something asks for it again.
   The one recorded exception is a drop's choice of a Pack, which the drop
-  writes on the device as a reservation before its first file lands (PK-17): a
-  server takes every reservation up once its start-up catch-up has finished,
-  and again once the Library is unlocked in place, in the order they were made,
-  so a book a stopped server was packing is packed rather than left for a sync
-  to carry in one file at a time. Which reservations a drop is still receiving
-  into — live, and decided by no other run (PK-17) — is the process's own state
-  like the rest, so a server started afterwards holds none live and takes every
-  reservation up.
+  writes on the device as a reservation before its first file lands and marks
+  received once its last has (PK-17): a server takes every received
+  reservation up once its start-up catch-up has finished, and again once the
+  Library is unlocked in place, in the order they were made, so a book a
+  stopped server was packing is packed rather than left for a sync to carry in
+  one file at a time. A reservation whose drop the stopped server was still
+  receiving is kept rather than taken up, and the next drop onto its folder
+  continues it, so the book that drop finishes is packed as one rather than as
+  the part that had landed and a second Pack of the rest. Which reservations a
+  drop is still receiving into — live (PK-17) — is the process's own state like
+  the rest, so a server started afterwards holds none live.
   Every answer about that work carries an identifier the process draws as it
   starts, so a browser holding what one process told it can tell that account
   from the next process's. What such work does that lasts is recorded by the

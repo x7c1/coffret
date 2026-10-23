@@ -99,11 +99,16 @@ the Entry count — decides `freeze` eligibility.
 - That choice outlives the process that took the drop. It is recorded on the
   device as a reservation of the drop's files before the first of them lands,
   so a sync leaves them for their Pack rather than carrying them in one
-  Container each, and a server started after a quit or a crash packs them
-  (spec: PK-17, LA-12). The `freeze` that does so first settles what the
-  interrupted one left (spec: OC-9).
+  Container each. Where the drop had received all its files, a server started
+  after a quit or a crash packs them (spec: PK-17, LA-12); the `freeze` that
+  does so first settles what the interrupted one left (spec: OC-9). Where the
+  quit cut the drop off part way, the files that arrived wait as a drop in
+  progress, and dropping the same folder again continues it, so the book still
+  comes to one set of Packs rather than one for the part that arrived and
+  another for the rest (spec: PK-17).
 - A `freeze` the person asks for on a folder packs every eligible file under
-  it (spec: PK-17).
+  it, save the files of a drop still in progress, which wait for the `freeze`
+  that drop arms once it finishes (spec: PK-17).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means reading from that set the

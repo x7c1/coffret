@@ -60,11 +60,15 @@
 //! What this server holds about the books it is packing is the process's own
 //! and goes with it (spec: LA-12). The one exception is the drop's choice
 //! itself: the upload route writes it on the device as a reservation before the
-//! first page lands, the freeze that packs the pages releases it with its
-//! commit, and a server started afterwards — or the Library unlocked again —
-//! takes every reservation up, in the order the drops were made
-//! ([`resume_reserved`]). So a book whose server was quit half way is packed,
-//! rather than carried in by the next sync one page at a time (spec: PK-17).
+//! first page lands and marks it received once the last has, the freeze that
+//! packs the pages releases it with its commit, and a server started
+//! afterwards — or the Library unlocked again — takes every received
+//! reservation up, in the order the drops were made ([`resume_reserved`]). So
+//! a book whose server was quit before its freeze committed is packed, rather
+//! than carried in by the next sync one page at a time. A book whose server was
+//! quit while it was still being received is kept as the drop in progress it
+//! was, and the next drop of its folder takes it over, so the pages that had
+//! landed and the ones dropped again come to one Pack (spec: PK-17, LA-12).
 //!
 //! And a run that returns `Ok` has still to be read for what it left alone
 //! (spec: PK-14, EP-12). Those findings reach the browser as

@@ -13,12 +13,13 @@ use crate::reported::Reported;
 use crate::routes::RefusalDto;
 use crate::state::ServerState;
 
+use super::drop_reservation::DropReservation;
 use super::finish_drop::{finish_drop, FinishedDrop};
 use super::outran::outran;
 use super::receive::{receive, Reserving};
 use super::refusal::Refusal;
 use super::refused_dto::RefusedDto;
-use super::release::release;
+use super::release::release_stopped;
 use super::UploadDto;
 
 use self::held_file::HeldFile;
@@ -54,7 +55,8 @@ const OPERATION: &str = "import";
 ///
 /// From there it is the upload, and through the same code: the folder is asked
 /// once whether a mapping reaches it, a Pack is reserved before the first file
-/// lands where one was asked for (spec: PK-17), each file is taken by
+/// lands where one was asked for — or a drop onto the folder that was cut off
+/// part way is taken over (spec: PK-17, LA-12) — each file is taken by
 /// [`receive`] — the room this device has for what is still coming, the name
 /// and fence refusals, the write to a scratch and the rename — and the flow
 /// that carries what landed in is armed the same way. It answers in the
@@ -102,13 +104,18 @@ pub async fn import(
     if !library.list(folder.as_ref()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }
-    let reservation = match request.freeze {
-        true => Some(library.reserve(folder.as_ref()).await?),
-        false => None,
+    // Taking over a drop onto this folder that was cut off part way, as the
+    // upload does.
+    let (reservation, mut reserved) = match request.freeze {
+        true => {
+            let (held, received) =
+                DropReservation::hold(&library, folder.as_ref(), OPERATION).await?;
+            (Some(held), received)
+        }
+        false => (None, BTreeSet::new()),
     };
 
     let mut written = Vec::new();
-    let mut reserved = BTreeSet::new();
     let mut refused = Vec::new();
     let mut bytes = 0u64;
     // What is still to come, for the room this device is asked to have: the
@@ -122,8 +129,8 @@ pub async fn import(
                     refusal: RefusalDto::of(&Reported::recorded(&refusal, OPERATION)),
                 });
             };
-            let reserving = reservation.as_ref().map(|live| Reserving {
-                id: live.id(),
+            let reserving = reservation.as_ref().map(|held| Reserving {
+                id: held.id(),
                 paths: &mut reserved,
             });
             let outcome = match HeldFile::open(file).await {
@@ -160,7 +167,7 @@ pub async fn import(
     }
     .await;
     if let Err(stopped) = taken {
-        release(&library, reservation, OPERATION).await;
+        release_stopped(&library, reservation, OPERATION).await;
         return Err(stopped.having_written(written));
     }
     finish_drop(

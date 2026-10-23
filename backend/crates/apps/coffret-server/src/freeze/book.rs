@@ -67,9 +67,10 @@ impl Book {
     /// them up (spec: PK-17).
     ///
     /// The same book the drop armed, so the line naming it is the one the drop
-    /// showed. A reservation naming no file — a drop stopped before its first
-    /// page — is the folder it was made onto, with a selection of nothing: the
-    /// run considers no file, finds none eligible, and releases it.
+    /// showed. Only a reservation whose drop finished receiving is taken up
+    /// this way; one naming no file all the same is the folder it was made
+    /// onto, with a selection of nothing: the run considers no file, finds none
+    /// eligible, and releases it.
     pub fn reserved(reservation: Reservation) -> Self {
         if reservation.paths.is_empty() {
             return Self {

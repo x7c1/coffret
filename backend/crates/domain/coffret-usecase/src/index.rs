@@ -480,6 +480,16 @@ pub trait Index: Send + Sync {
     /// for it.
     async fn extend_reservation(&self, id: ReservationId, path: &EntryPath) -> IndexResult<()>;
 
+    /// Marks the reservation `id` received: its drop has stopped receiving,
+    /// and the paths it names are the whole of what the drop brought
+    /// (spec: PK-17).
+    ///
+    /// Until then the reservation is a drop in progress, which no freeze
+    /// decides and a drop onto its folder may take over. An update and not an
+    /// upsert, for the reason [`extend_reservation`](Self::extend_reservation)
+    /// is one.
+    async fn mark_received(&self, id: ReservationId) -> IndexResult<()>;
+
     /// Every reservation this device holds, in the order they were made
     /// (spec: PK-17).
     async fn reservations(&self) -> IndexResult<Vec<Reservation>>;

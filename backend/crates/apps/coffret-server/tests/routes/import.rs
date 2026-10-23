@@ -220,6 +220,61 @@ async fn a_book_is_reserved_before_its_first_page_and_packed() {
     assert_eq!(served.reservations().await, 0);
 }
 
+// PK-17, LA-12: a book whose drop onto a folder was cut off by its server
+// stopping, dropped again by path onto the same folder, is taken over by the
+// import: the pages received before are not refused as inside a Pack, and the
+// freeze that follows packs every page as one Pack.
+#[tokio::test]
+async fn a_cut_off_drop_imported_again_is_taken_over_and_packed_as_one() {
+    let mut served = Served::library().await;
+    let drop = served.upload_book_streamed("scans");
+    for page in 1..=2 {
+        served
+            .until_landed(&drop.send(&format!("vol-1/page-{page:03}.jpg"), b"a page"))
+            .await;
+    }
+    drop.abandon();
+    served.restart();
+    served.start_up().await;
+    served.freeze_idle().await;
+    assert_eq!(served.reservations().await, 1, "the cut-off drop is kept");
+
+    let source = Source::new();
+    for page in 1..=3 {
+        source.file(
+            &format!("vol-1/page-{page:03}.jpg"),
+            b"a page",
+            1_444_000_000,
+        );
+    }
+    let dropped = served.hold_drop(&[&source.at("vol-1")]).await;
+    let (status, answer) = body_of(served.import_all("scans", &dropped, true).await).await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(written(&answer).len(), 3, "{answer}");
+    assert_eq!(
+        answer["refused"],
+        json!([]),
+        "no page is refused as inside a Pack"
+    );
+    served.freeze_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["status"], "done", "{work}");
+    assert_eq!(freeze(&work)["packs"], 1, "one book, one Pack: {work}");
+    assert_eq!(freeze(&work)["entries"], 3);
+    assert_eq!(
+        rows_of(&served, "scans/vol-1").await,
+        (1..=3)
+            .map(|page| (
+                format!("page-{page:03}.jpg"),
+                "present".to_owned(),
+                "pack".to_owned()
+            ))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(served.reservations().await, 0);
+}
+
 // PK-17, LA-11: an import stopped before anything landed — this device has not
 // the room — arms nothing and releases its reservation.
 #[tokio::test]

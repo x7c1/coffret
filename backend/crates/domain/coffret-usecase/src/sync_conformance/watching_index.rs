@@ -249,6 +249,10 @@ impl Index for WatchingIndex<'_> {
         self.inner.extend_reservation(id, path).await
     }
 
+    async fn mark_received(&self, id: crate::device_state::ReservationId) -> IndexResult<()> {
+        self.inner.mark_received(id).await
+    }
+
     async fn reservations(&self) -> IndexResult<Vec<crate::device_state::Reservation>> {
         self.inner.reservations().await
     }

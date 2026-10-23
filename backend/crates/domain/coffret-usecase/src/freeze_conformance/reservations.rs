@@ -21,7 +21,8 @@ const PAGES: [&str; 4] = [
 ];
 
 /// Lands the book's pages in the source folder, the way a drop writes them:
-/// each one reserved before it lands (spec: PK-17).
+/// each one reserved before it lands, and the reservation marked received
+/// once the last has (spec: PK-17).
 async fn dropped(fixture: &FreezeUnderTest) -> ReservationId {
     let index = fixture.source();
     let reservation = index
@@ -40,7 +41,17 @@ async fn dropped(fixture: &FreezeUnderTest) -> ReservationId {
             &filler(60 + number * 11, 0x40 + number as u8),
         );
     }
+    received(fixture, reservation).await;
     reservation
+}
+
+/// Marks `id` received, as a drop that has stopped receiving does.
+async fn received(fixture: &FreezeUnderTest, id: ReservationId) {
+    fixture
+        .source()
+        .mark_received(id)
+        .await
+        .expect("marking a reservation received must succeed");
 }
 
 fn paths(paths: &[&str]) -> BTreeSet<EntryPath> {
@@ -143,6 +154,7 @@ pub async fn a_reservation_is_released_whether_or_not_its_files_remain(fixture: 
             .await
             .expect("extending a reservation must succeed");
     }
+    received(fixture, gone).await;
 
     let frozen = freeze_folder(request(
         fixture.store(),
@@ -187,11 +199,11 @@ pub async fn a_reservation_is_released_whether_or_not_its_files_remain(fixture: 
     );
 }
 
-/// A reservation naming no path that no drop holds live — one the Index has
-/// just drawn, a moment before the drop holds it, or a drop that stopped
-/// before its first page — is left alone by a freeze of anything else, and
-/// released by the run a server takes it up as: its folder, with a selection
-/// of nothing (spec: PK-17).
+/// A reservation naming no path is left alone by every run while its drop is
+/// in progress — one the Index has just drawn, a moment before the drop holds
+/// it, or a drop cut off before its first page — and, once received, released
+/// by the run a server takes it up as: its folder, with a selection of nothing
+/// (spec: PK-17).
 ///
 /// Every path of such a reservation is trivially one a run considered, so
 /// without the distinction a freeze of an earlier book running in that moment
@@ -225,7 +237,14 @@ pub async fn a_reservation_naming_no_path_is_released_only_by_its_own_run(
         .collect();
     assert_eq!(left, vec![under_way], "the drop under way keeps its own");
 
-    let resumed = freeze_only(fixture, &keys, "scans", &[], TARGET, 2).await;
+    let early = freeze_only(fixture, &keys, "scans", &[], TARGET, 2).await;
+    assert_eq!(
+        early.released, 0,
+        "not even its own run decides it while it is in progress"
+    );
+    received(fixture, under_way).await;
+
+    let resumed = freeze_only(fixture, &keys, "scans", &[], TARGET, 3).await;
     assert_eq!(resumed.released, 1, "its own run releases it");
     assert_eq!(
         resumed.lapsed,
@@ -262,12 +281,14 @@ async fn landing(fixture: &FreezeUnderTest, id: ReservationId, pages: &[&str]) {
 }
 
 /// A freeze of the whole folder running while a drop into it is still
-/// receiving packs the pages landed so far but decides nothing of the drop's
-/// reservation, and the drop's own run, once it stops receiving, packs the
-/// pages that landed after and releases it (spec: PK-17).
+/// receiving packs none of the pages landed so far and decides nothing of the
+/// drop's reservation, and the drop's own run, once it stops receiving, packs
+/// every page in one run and releases it (spec: PK-17).
 ///
-/// Releasing it from the earlier run would leave the later pages landing
-/// unreserved, for a sync after a restart to carry in one Container each.
+/// Packing the pages landed so far would leave the rest of the book for a
+/// second Pack, and releasing the reservation from the earlier run would leave
+/// the later pages landing unreserved, for a sync after a restart to carry in
+/// one Container each.
 pub async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation(
     fixture: &FreezeUnderTest,
 ) {
@@ -291,13 +312,14 @@ pub async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation(
     .expect("a freeze of the folder must succeed");
     assert_eq!(
         beside.frozen_entries(),
-        2,
-        "the pages landed so far are packed"
+        0,
+        "no page of a drop in progress is packed"
     );
     assert_eq!(beside.released, 0, "and the reservation is not released");
     assert_eq!(beside.lapsed, Vec::new());
 
     landing(fixture, id, &PAGES[2..]).await;
+    received(fixture, id).await;
     drop(held);
     let own = freeze_folder(
         request(fixture.store(), index, &keys, fixture.fs(), TARGET, 2)
@@ -309,15 +331,11 @@ pub async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation(
     .expect("the drop's own freeze must succeed");
     assert_eq!(
         own.frozen_entries(),
-        2,
-        "the drop's own run packs the pages that landed after",
+        PAGES.len(),
+        "the drop's own run packs every page, in the one batch it commits",
     );
     assert_eq!(own.released, 1, "and releases the reservation");
-    assert_eq!(
-        own.lapsed,
-        Vec::new(),
-        "the pages packed beside it are not findings"
-    );
+    assert_eq!(own.lapsed, Vec::new());
     assert_eq!(
         index
             .reservations()
@@ -327,27 +345,49 @@ pub async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation(
     );
 }
 
-/// A reservation that was live in a process that has since ended is one the
-/// next process's freeze releases: nothing is live after a restart, so it is
-/// taken up like any other (spec: PK-17, LA-12).
-pub async fn a_reservation_live_before_a_restart_is_released_after_it(fixture: &FreezeUnderTest) {
+/// A reservation whose drop was cut off by the process that took it stopping
+/// is a drop in progress to the next process too: no freeze packs any of its
+/// pages or releases it, so the next drop of its folder can take it over and
+/// bring the book in as one Pack. One whose drop finished receiving before the
+/// process stopped is taken up and packed as any other (spec: PK-17, LA-12).
+pub async fn a_reservation_cut_off_by_a_restart_waits_and_a_received_one_is_packed(
+    fixture: &FreezeUnderTest,
+) {
     let keys = keys();
     let index = fixture.source();
     map(index, None, fixture.source_folder()).await;
     let before = Arc::new(LiveReservations::new());
-    let id = index
+    let cut_off = index
         .reserve(Some(&entry_path("scans")))
         .await
         .expect("recording a reservation must succeed");
     // What the process that took the drop held, still holding it as it was
     // stopped. Nothing of it reaches the next process, which starts holding
     // nothing.
-    let _held = before.hold(id);
-    landing(fixture, id, &PAGES[..3]).await;
+    let _held = before.hold(cut_off);
+    landing(fixture, cut_off, &PAGES[..3]).await;
+    let finished = index
+        .reserve(Some(&entry_path("books")))
+        .await
+        .expect("recording a reservation must succeed");
+    let book = ["books/vol-1/page-001.jpg", "books/vol-1/page-002.jpg"];
+    for (number, path) in book.iter().enumerate() {
+        index
+            .extend_reservation(finished, &entry_path(*path))
+            .await
+            .expect("extending a reservation must succeed");
+        write(
+            fixture.fs(),
+            fixture.source_folder(),
+            path,
+            &filler(70 + number * 13, 0x60 + number as u8),
+        );
+    }
+    received(fixture, finished).await;
 
     let after = Arc::new(LiveReservations::new());
-    assert!(before.is_live(id) && !after.is_live(id));
-    let resumed = freeze_folder(
+    assert!(before.is_live(cut_off) && !after.is_live(cut_off));
+    let waiting = freeze_folder(
         request(fixture.store(), index, &keys, fixture.fs(), TARGET, 2)
             .under(entry_path("scans/vol-1"))
             .only(paths(&PAGES[..3]))
@@ -355,15 +395,50 @@ pub async fn a_reservation_live_before_a_restart_is_released_after_it(fixture: &
     )
     .await
     .expect("the freeze after the restart must succeed");
-    assert_eq!(resumed.frozen_entries(), 3, "the pages it named are packed");
-    assert_eq!(resumed.released, 1, "and the next process releases it");
     assert_eq!(
-        index
-            .reservations()
-            .await
-            .expect("reading the reservations must succeed"),
-        Vec::new(),
+        waiting.frozen_entries(),
+        0,
+        "no page of the cut-off drop is packed"
     );
+    assert_eq!(waiting.released, 0, "and its reservation is left in place");
+    assert_eq!(waiting.lapsed, Vec::new());
+
+    let resumed = freeze_folder(
+        request(fixture.store(), index, &keys, fixture.fs(), TARGET, 3)
+            .under(entry_path("books/vol-1"))
+            .only(paths(&book))
+            .sparing(&after),
+    )
+    .await
+    .expect("the freeze after the restart must succeed");
+    assert_eq!(
+        resumed.frozen_entries(),
+        book.len(),
+        "the received drop's pages are packed"
+    );
+    assert_eq!(resumed.released, 1, "and its reservation released");
+    let left = index
+        .reservations()
+        .await
+        .expect("reading the reservations must succeed");
+    assert_eq!(
+        left.iter()
+            .map(|reservation| (reservation.id, reservation.paths.len()))
+            .collect::<Vec<_>>(),
+        [(cut_off, 3)],
+        "the cut-off drop is still there, with every page it landed",
+    );
+    assert!(left[0].in_progress());
+    for page in &PAGES[..3] {
+        assert!(
+            index
+                .entry_at(&entry_path(*page))
+                .await
+                .expect("reading an Entry must succeed")
+                .is_none(),
+            "{page} waits for its drop to be finished",
+        );
+    }
 }
 
 /// A freeze settles what an interrupted run left before it builds anything of

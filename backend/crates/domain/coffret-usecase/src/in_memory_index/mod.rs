@@ -211,6 +211,11 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
+    async fn mark_received(&self, id: ReservationId) -> IndexResult<()> {
+        self.locked().mark_received(id);
+        Ok(())
+    }
+
     async fn reservations(&self) -> IndexResult<Vec<Reservation>> {
         Ok(self.locked().reservations())
     }
