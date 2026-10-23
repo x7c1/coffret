@@ -2,6 +2,7 @@
 //! stopped, and the freeze a server started afterwards takes up from it
 //! (spec: PK-17, LA-12).
 
+use coffret_logging::testing::CapturedLogs;
 use serde_json::json;
 
 use crate::support::{freeze, json as body_of, listing_of, rows_of, sync, written, Served};
@@ -275,11 +276,12 @@ async fn a_waiting_book_is_taken_up_when_the_library_is_unlocked_in_place() {
 }
 
 /// A freeze of the whole folder that runs while a drop into it is still
-/// receiving packs the pages landed so far and leaves the drop's reservation
-/// alone; once the drop stops receiving, its own run packs the pages that
-/// landed after and releases it (spec: PK-17). Released by the earlier run, the
-/// later pages would land unreserved, for a sync after a restart to carry in
-/// one Container each.
+/// receiving packs none of the pages landed so far and leaves the drop's
+/// reservation alone; once the drop stops receiving, its own run packs every
+/// page and releases it (spec: PK-17). Packing the landed pages would leave the
+/// rest of the book for a second Pack, and releasing the reservation from the
+/// earlier run would leave the later pages landing unreserved, for a sync after
+/// a restart to carry in one Container each.
 #[tokio::test]
 async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation_to_the_drop() {
     let served = Served::library().await;
@@ -294,8 +296,8 @@ async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation_to_the_drop
     assert_eq!(freeze(&beside)["status"], "done");
     assert_eq!(
         freeze(&beside)["entries"],
-        2,
-        "the pages landed so far are packed"
+        0,
+        "no page of a drop still receiving is packed"
     );
     assert_eq!(
         served.reservations().await,
@@ -314,9 +316,10 @@ async fn a_freeze_beside_a_drop_still_landing_leaves_its_reservation_to_the_drop
     assert_eq!(freeze(&own)["status"], "done");
     assert_eq!(
         freeze(&own)["entries"],
-        1,
-        "the drop's own run packs the page that landed after",
+        BOOK.len(),
+        "the drop's own run packs every page",
     );
+    assert_eq!(freeze(&own)["packs"], 1, "as one Pack");
     packed(&served, "scans/vol-1").await;
     assert_eq!(
         served.reservations().await,
@@ -363,12 +366,14 @@ async fn a_drop_does_not_join_the_freeze_under_way() {
     assert_eq!(served.reservations().await, 0);
 }
 
-/// A drop that was still receiving when its server stopped holds its
-/// reservation live in that server alone: the next one holds nothing live,
-/// and takes the reservation up as it starts, packing the pages that landed
-/// (spec: PK-17, LA-12).
+/// A drop that was still receiving when its server stopped is cut off: the
+/// next server holds nothing live, finds the reservation never marked
+/// received, and leaves it where it is rather than packing the pages that
+/// landed — saying, as it starts, that a cut-off drop is in progress. The
+/// listing goes on showing those pages as added and waiting (spec: PK-17,
+/// LA-12).
 #[tokio::test]
-async fn a_reservation_live_when_its_server_stopped_is_taken_up_by_the_next() {
+async fn a_drop_cut_off_by_its_server_stopping_is_left_in_progress_by_the_next() {
     let mut served = Served::library().await;
     let drop = served.upload_book_streamed("scans/vol-1");
     for (name, content) in &BOOK[..2] {
@@ -377,17 +382,46 @@ async fn a_reservation_live_when_its_server_stopped_is_taken_up_by_the_next() {
     drop.abandon();
 
     served.restart();
+    let logs = CapturedLogs::capture();
     served.start_up().await;
     served.freeze_idle().await;
-    let (_, resumed) = body_of(served.get("/api/work").await).await;
-    assert_eq!(freeze(&resumed)["status"], "done");
-    assert_eq!(freeze(&resumed)["entries"], 2, "the pages that landed");
-    assert_eq!(served.reservations().await, 0);
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        rows_of(&served, "scans/vol-1").await,
+        work["freeze"],
+        serde_json::Value::Null,
+        "nothing is taken up: {work}"
+    );
+    assert_eq!(served.reservations().await, 1, "the reservation is kept");
+    assert!(
+        logs.text()
+            .contains("drops cut off part way are in progress"),
+        "{}",
+        logs.text()
+    );
+    assert!(
+        !logs.text().contains("scans/vol-1"),
+        "the event names no folder and no file: {}",
+        logs.text()
+    );
+    let listing = listing_of(&served, "scans/vol-1").await;
+    let rows: Vec<_> = listing["files"]
+        .as_array()
+        .expect("a listing carries files")
+        .iter()
+        .map(|row| {
+            (
+                row["name"].as_str().expect("a name").to_owned(),
+                row["state"].clone(),
+                row["reserved"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
         BOOK[..2]
             .iter()
-            .map(|(name, _)| ((*name).to_owned(), "present".to_owned(), "pack".to_owned()))
+            .map(|(name, _)| ((*name).to_owned(), json!("added"), json!(true)))
             .collect::<Vec<_>>(),
+        "the pages that landed are shown as added and waiting: {listing}",
     );
 }

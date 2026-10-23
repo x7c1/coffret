@@ -1278,6 +1278,13 @@ impl Index for RefusingIndex<'_> {
         self.inner.extend_reservation(id, path).await
     }
 
+    async fn mark_received(
+        &self,
+        id: coffret_usecase::device_state::ReservationId,
+    ) -> IndexResult<()> {
+        self.inner.mark_received(id).await
+    }
+
     async fn reservations(&self) -> IndexResult<Vec<coffret_usecase::device_state::Reservation>> {
         self.inner.reservations().await
     }

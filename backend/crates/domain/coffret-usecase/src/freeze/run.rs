@@ -95,10 +95,12 @@ use crate::upload;
 /// it is released once the run has finished, with a [`Lapsed`] per path, where
 /// none of them was eligible any more. A run that stops before then leaves
 /// every reservation where it was, for the next run to decide. And a run
-/// decides no reservation a drop in this process is still writing into, nor one
-/// that was live at any moment since the run read them: what it read of such
-/// a reservation may be missing pages that landed after, and the drop's own
-/// run, armed once it stops receiving, is the one that decides it.
+/// neither decides nor packs any page of a reservation whose drop has not
+/// finished receiving — one still being written into, or one cut off by the
+/// process that took it stopping — nor decides one that was live at any moment
+/// since the run read them: what it read of such a reservation may be missing
+/// pages that landed after, and the drop's own run, armed once it stops
+/// receiving, is the one that decides it (spec: PK-17, LA-12).
 ///
 /// [`Lapsed`]: crate::freeze::Lapsed
 pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOutcome> {

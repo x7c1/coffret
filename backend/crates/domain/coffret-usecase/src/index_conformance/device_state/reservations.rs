@@ -66,11 +66,13 @@ pub async fn a_reservation_is_kept_in_order_until_it_is_released(fixture: &Index
                 id: first,
                 folder: Some(entry_path("scans")),
                 paths: paths(&["scans/vol-1/a.jpg", "scans/vol-1/b.jpg"]),
+                received: false,
             },
             Reservation {
                 id: second,
                 folder: None,
                 paths: paths(&["loose.jpg"]),
+                received: false,
             },
         ],
         "every reservation, in the order it was made, each path once",
@@ -97,6 +99,7 @@ pub async fn a_reservation_is_kept_in_order_until_it_is_released(fixture: &Index
             id: second,
             folder: None,
             paths: paths(&["loose.jpg"]),
+            received: false,
         }],
     );
 
@@ -104,6 +107,77 @@ pub async fn a_reservation_is_kept_in_order_until_it_is_released(fixture: &Index
     assert!(
         third > second,
         "an identifier is never drawn twice, even once the one before it is gone",
+    );
+}
+
+/// A reservation is a drop in progress until it is marked received, and the
+/// mark is kept with it from then on; marking one that is gone makes none up
+/// (spec: PK-17).
+///
+/// The mark is what tells a reservation whose drop finished receiving — one a
+/// server started afterwards takes up and packs — from one whose drop was cut
+/// off part way, which waits for the same folder to be dropped again.
+pub async fn a_reservation_is_in_progress_until_it_is_marked_received(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    let cut_off = reserved(index, Some("scans"), &["scans/vol-1/a.jpg"]).await;
+    let finished = reserved(index, Some("books"), &["books/page-001.jpg"]).await;
+
+    let read = index
+        .reservations()
+        .await
+        .expect("reading the reservations must succeed");
+    assert!(
+        read.iter().all(Reservation::in_progress),
+        "a reservation just made is a drop in progress: {read:?}",
+    );
+
+    index
+        .mark_received(finished)
+        .await
+        .expect("marking a reservation received must succeed");
+    index
+        .mark_received(finished)
+        .await
+        .expect("marking it twice must succeed");
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed"),
+        [
+            Reservation {
+                id: cut_off,
+                folder: Some(entry_path("scans")),
+                paths: paths(&["scans/vol-1/a.jpg"]),
+                received: false,
+            },
+            Reservation {
+                id: finished,
+                folder: Some(entry_path("books")),
+                paths: paths(&["books/page-001.jpg"]),
+                received: true,
+            },
+        ],
+        "only the one marked is received, and it keeps every path it named",
+    );
+
+    index
+        .release_reservation(finished)
+        .await
+        .expect("releasing a reservation must succeed");
+    index
+        .mark_received(finished)
+        .await
+        .expect("marking a reservation that is gone changes nothing and succeeds");
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed")
+            .into_iter()
+            .map(|reservation| (reservation.id, reservation.received))
+            .collect::<Vec<_>>(),
+        [(cut_off, false)],
     );
 }
 

@@ -158,6 +158,9 @@ pub struct Served {
     /// Which provider the served Library says it is on, so an unlock reopens
     /// it on the same one.
     provider: &'static str,
+    /// The budgets the server was started within, so a server started afresh
+    /// in its place serves within the same ones.
+    allowance: Allowance,
 }
 
 impl Served {
@@ -415,6 +418,7 @@ impl Served {
             prompted,
             parcel_len,
             provider,
+            allowance,
         }
     }
 
@@ -474,7 +478,8 @@ impl Served {
     /// one, the way the desktop app does after a Quit or a crash, without
     /// starting it up.
     ///
-    /// The same Storage, catalog, disk and keys — what the device keeps lasts —
+    /// The same Storage, catalog, disk, keys and budgets — what the device
+    /// keeps lasts, and the binary serves within the same allowance each time —
     /// and a state of its own: whatever the stopped server held about its work
     /// is gone with it (spec: LA-12). [`start_up`](Self::start_up) is the new
     /// server's first act, left to the case so that it can do something to the
@@ -491,6 +496,7 @@ impl Served {
         );
         let state = Arc::new(
             ServerState::new("served".to_owned(), library)
+                .within(self.allowance)
                 .consenting_through(Arc::clone(&self.consent) as _),
         );
         self.router = router(
@@ -516,6 +522,24 @@ impl Served {
             .await
             .expect("the catalog answers")
             .len()
+    }
+
+    /// The paths each reservation of the served device's catalog names, in the
+    /// order the reservations were made (spec: PK-17).
+    pub async fn reserved_paths(&self) -> Vec<Vec<String>> {
+        self.catalog
+            .reservations()
+            .await
+            .expect("the catalog answers")
+            .into_iter()
+            .map(|reservation| {
+                reservation
+                    .paths
+                    .iter()
+                    .map(|path| path.as_str().to_owned())
+                    .collect()
+            })
+            .collect()
     }
 
     /// How many spool files the served device has on its disk.

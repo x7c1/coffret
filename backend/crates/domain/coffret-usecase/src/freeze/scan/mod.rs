@@ -98,7 +98,9 @@ pub(super) struct Reserved<'a> {
 /// The reservations this device holds are read against the same walk
 /// (spec: PK-17): one whose every path this run considered is released — by the
 /// commit, where any of its paths is selected, or on its own, saying why for
-/// each path, where none is ([`Closing`]).
+/// each path, where none is ([`Closing`]). A file a drop in progress reserved
+/// is not considered at all: the drop has not finished bringing its book, and
+/// packing the pages landed so far would leave the rest for a second Pack.
 ///
 /// [`FreezeOutcome::unavailable`]: crate::freeze::FreezeOutcome::unavailable
 pub(super) async fn scan(
@@ -115,7 +117,8 @@ pub(super) async fn scan(
         walked,
         found,
         kinds,
-    } = candidates(index, roots, births, scope).await?;
+        waiting,
+    } = candidates(index, roots, births, scope, reserved.all).await?;
 
     // The re-stamp is this step's own write through the port rather than the
     // walk's, and it is the run's alone: a preview reads the same walk and
@@ -140,7 +143,10 @@ pub(super) async fn scan(
     // segmentation needs (spec: EP-3, PK-3).
     let mut considered = 0usize;
     let mut buffer = vec![0u8; WRITE_CHUNK];
-    for source in found.values().filter(|source| scope.covers(&source.path)) {
+    for source in found
+        .values()
+        .filter(|source| scope.covers(&source.path) && !waiting.contains(&source.path))
+    {
         considered += 1;
         examine(
             index,
@@ -174,6 +180,7 @@ pub(super) async fn scan(
     debug!(
         mappings,
         files = considered,
+        waiting = waiting.len(),
         closing = survey.closing.len(),
         selection = scope.only.map(BTreeSet::len),
         selected = survey.selected.len(),
@@ -195,12 +202,15 @@ struct Walk<'a> {
 /// Which reservations this run decides every path of, and what it makes of
 /// each (spec: PK-17).
 ///
-/// A live reservation is not decided at all: the drop that holds it is still
-/// landing pages the run never read, and releasing it — with the commit or as
-/// lapsed — would leave those pages landing unreserved. Its own run decides
-/// it, once the drop stops receiving. The run still packs whatever of its
-/// landed paths it selected; those are then simply not eligible to that later
-/// run (spec: PK-1, PK-17).
+/// A reservation in progress is not decided at all, nor are any of its paths
+/// selected ([`Candidates::waiting`]): its drop is still landing pages the run
+/// never read, or was cut off before it brought them all, and releasing it —
+/// with the commit or as lapsed — would leave the rest of the book landing
+/// unreserved, or arriving with the next drop of its folder for a Pack of its
+/// own. Its own run decides it, once the drop that holds it or takes it over
+/// has finished receiving (spec: PK-17, LA-12). One a drop in this process
+/// held live at any moment since the run read the reservations is spared as
+/// well, for the reason [`LiveSince`] gives.
 ///
 /// Any other reservation is decided where every one of its paths is one the
 /// run considered: inside its scope, and not under a mapped root the walk
@@ -241,17 +251,15 @@ async fn closing(
 
     let mut closing = Vec::new();
     for reservation in reserved.all {
-        if reserved.live.spares(reservation.id) {
+        if reservation.in_progress() || reserved.live.spares(reservation.id) {
             continue;
         }
-        // A reservation naming no path is a drop stopped before its first
-        // page — or one whose reservation has just been drawn and is not held
-        // live yet, the moment between the Index answering and the drop
-        // holding what it answered. Any run would pass the test below for it,
-        // there being no path to fail it, so only the run taken up for it
-        // decides it: its folder with a selection of nothing. Another run
-        // releasing it in that moment would leave the drop to land its pages
-        // unreserved.
+        // A received reservation naming no path is one no drop leaves — a
+        // drop that landed nothing releases its reservation rather than
+        // marking it — but the Index can hold one all the same. Any run
+        // would pass the test below for it, there being no path to fail it,
+        // so only the run taken up for it decides it: its folder with a
+        // selection of nothing.
         if reservation.paths.is_empty()
             && !(scope.prefix == reservation.folder.as_ref()
                 && scope.only.is_some_and(BTreeSet::is_empty))
@@ -311,6 +319,9 @@ struct Candidates {
     found: BTreeMap<EntryPath, SourceFile>,
     /// The kind of every Container holding an Entry under the folder.
     kinds: BTreeMap<ContainerId, ContainerKind>,
+    /// The paths a drop in progress reserved, which no run selects until the
+    /// drop has finished receiving (spec: PK-17).
+    waiting: BTreeSet<EntryPath>,
 }
 
 async fn candidates(
@@ -318,6 +329,7 @@ async fn candidates(
     roots: &dyn MappedRoots,
     births: &UnknownBirths,
     scope: Scope<'_>,
+    reservations: &[Reservation],
 ) -> FreezeResult<Candidates> {
     let mappings = index.mappings().await?;
     // The stale scratches the walk met are a sync's to remove (spec: OC-8): a
@@ -338,11 +350,17 @@ async fn candidates(
         .into_iter()
         .map(|container| (container.id, container.kind))
         .collect();
+    let waiting = reservations
+        .iter()
+        .filter(|reservation| reservation.in_progress())
+        .flat_map(|reservation| reservation.paths.iter().cloned())
+        .collect();
     Ok(Candidates {
         mappings: mappings.len(),
         walked,
         found,
         kinds,
+        waiting,
     })
 }
 
@@ -350,7 +368,8 @@ async fn candidates(
 /// leave out, without reading a byte of any file and without writing anything.
 ///
 /// The same walk and the same verdict per file as the run (spec: PK-1, PK-2,
-/// EP-10, PK-17), stopped where the run would start hashing: the selection is
+/// EP-10, PK-17) — a file a drop in progress reserved left out of both — stopped
+/// where the run would start hashing: the selection is
 /// decided by the catalog and the stat alone, and the bytes a selected file
 /// would bring are its length as the walk read it. The one question a hash
 /// answers — whether a Pack-held file whose stat moved really changed — is
@@ -379,12 +398,16 @@ pub(super) async fn preview(
     births: &UnknownBirths,
     scope: Scope<'_>,
 ) -> FreezeResult<FreezePreview> {
+    // Read here rather than handed in: a preview decides no reservation, and
+    // what it needs of them is only which files wait for a drop to finish.
+    let reservations = index.reservations().await?;
     let Candidates {
         mappings,
         walked,
         found,
         kinds,
-    } = candidates(index, roots, births, scope).await?;
+        waiting,
+    } = candidates(index, roots, births, scope, &reservations).await?;
 
     let unreachable = |path: &EntryPath| {
         represented_by(&walked, path)
@@ -404,7 +427,10 @@ pub(super) async fn preview(
         ..FreezePreview::default()
     };
     let nothing_lost = BTreeSet::new();
-    for source in found.values().filter(|source| scope.covers(&source.path)) {
+    for source in found
+        .values()
+        .filter(|source| scope.covers(&source.path) && !waiting.contains(&source.path))
+    {
         match judge(index, &kinds, &nothing_lost, source).await? {
             Verdict::New | Verdict::Absorbs(_) => {
                 preview.files += 1;

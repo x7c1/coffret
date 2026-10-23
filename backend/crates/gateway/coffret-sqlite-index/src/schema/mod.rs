@@ -1,7 +1,9 @@
 mod provenance;
 
-// The upgrade that adds the reservations a drop's choice of a Pack is kept in,
-// which a layout-17 file takes on its way to this one (spec: PK-17).
+// The upgrades that add the reservations a drop's choice of a Pack is kept in,
+// which a layout-17 file takes on its way to this one, and the mark saying
+// whether a reservation's drop finished receiving, which a layout-18 or -19
+// file takes (spec: PK-17).
 mod reservations;
 
 // The upgrade that ties each materialization record to the Entry it records,
@@ -29,15 +31,22 @@ use crate::error::classify;
 /// changed its Entry's current path (spec: FM-15, EP-10), version 17 the
 /// Entry each materialized file is a copy of, by its Container and entry number
 /// (spec: FM-9, EP-10), version 18 the reservations a drop's choice of a
-/// Pack is kept in until a freeze has decided its files (spec: PK-17), and
-/// version 19 each Entry's deposit time (spec: FM-15, FM-16).
-pub(crate) const SCHEMA_VERSION: i64 = 19;
+/// Pack is kept in until a freeze has decided its files (spec: PK-17),
+/// version 19 each Entry's deposit time (spec: FM-15, FM-16), and version 20
+/// the mark saying whether a reservation's drop finished receiving
+/// (spec: PK-17, LA-12).
+pub(crate) const SCHEMA_VERSION: i64 = 20;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 18 changed the device-local group and layout 19 only the catalog, so
-/// the floor is 18: a layout-18 file keeps its device group as it is and loses
+/// Layout 20 changed the device-local group, so the floor is this layout and
+/// no older one is read as it is: each takes an upgrade. A layout-19 file keeps
+/// every row it holds, catalog included, and its reservations gain the mark
+/// unset — a build before it never said a drop had finished receiving, so each
+/// reservation it left is read as a drop cut off part way, which waits for its
+/// folder to be dropped again rather than being packed as it stands
+/// (spec: PK-17, LA-12). A layout-18 file takes the same step and then loses
 /// its catalog, whose Entries carry no deposit time and were filled from
 /// objects in a format this build no longer reads, so the rebuild from Storage
 /// refills it (spec: RV-5, FM-15). A layout-17 file keeps every row of its
@@ -75,7 +84,7 @@ pub(crate) const SCHEMA_VERSION: i64 = 19;
 /// the reason above. Other
 /// unreadable device layouts are refused rather than discarded, because
 /// Storage cannot reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 18;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 20;
 
 /// The table of current Entries, part of the Library-wide group below.
 macro_rules! entries_ddl {
@@ -295,7 +304,8 @@ CREATE UNIQUE INDEX attempted_slots_by_batch
     ON attempted_slots (batch, generation, ifnull(provider_id, ''));
 "#;
 
-/// The tables of reservations, which layout 18 added to the device-local group.
+/// The tables of reservations, which layout 18 added to the device-local group
+/// and layout 20 gave the mark of a finished drop.
 ///
 /// Apart from the rest of that group because the upgrade from an older layout
 /// lays them out on their own (spec: PK-17).
@@ -306,9 +316,13 @@ CREATE TABLE reservations (
     -- drawn twice, a released one's included: the order of `id` is the order
     -- the drops were made in, which is the order a server resumes them in.
     -- `folder` is the folder the drop was made onto, NULL for the Library
-    -- root.
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    folder TEXT COLLATE BINARY
+    -- root. `received` is set once the drop has stopped receiving with every
+    -- file it brought: until then the reservation is a drop in progress, which
+    -- no freeze decides and a drop onto the same folder takes over
+    -- (spec: PK-17, LA-12).
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    folder   TEXT COLLATE BINARY,
+    received INTEGER NOT NULL DEFAULT 0 CHECK (received IN (0, 1))
 ) STRICT;
 
 CREATE TABLE reserved_paths (
@@ -326,10 +340,12 @@ CREATE TABLE reserved_paths (
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5) — which is what becomes of a layout-18 file. Below the floor,
+/// (spec: RV-5); in this build that window is empty, the floor being this
+/// layout. Below the floor, layouts 19 and 18 gain the mark of a finished drop
+/// on their reservations, the older of the two losing its catalog as well,
 /// layout 17 gains the tables of reservations and layout 16 has its
-/// materialization records tied to the Entries its catalog holds, and both then
-/// lose their catalog the same way; layouts 7 to 15 have their device-local
+/// materialization records tied to the Entries its catalog holds, and those two
+/// then lose their catalog the same way; layouts 7 to 15 have their device-local
 /// group upgraded in place and lose their catalog too. Anything else — older
 /// than layout 7, or written by a build that came after this one — is refused,
 /// because guessing at a layout this build does not know is how a cache turns
@@ -344,6 +360,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        18 | 19 => reservations::add_the_received_mark(connection),
         17 => reservations::upgrade(connection),
         16 => entry_identities::upgrade(connection),
         7..=15 => provenance::preserve_device_state(connection),
@@ -361,9 +378,9 @@ fn carries_a_readable_device_group(found: i64) -> bool {
 /// constants.
 ///
 /// Split out so the rule can be stated against a synthetic pair of versions: in
-/// this build the real window holds one layout, [`DEVICE_SCHEMA_VERSION`]
-/// itself, and the layouts below it take an upgrade instead, so a case over the
-/// real constants cannot show where its two edges fall.
+/// this build the real window holds no layout, every older one taking an
+/// upgrade instead, so a case over the real constants cannot show where its
+/// two edges fall.
 fn within(window: Range<i64>, found: i64) -> bool {
     window.contains(&found)
 }
@@ -491,8 +508,8 @@ mod tests {
     /// The rule is that a file stamped at or above the device-local floor and
     /// below the current layout keeps its device group and loses its catalog,
     /// and that everything outside is not discarded this way. In this build the
-    /// real window holds layout 18 alone, and the layouts below it take an
-    /// upgrade instead, so this is the one place the rule itself is stated —
+    /// real window holds no layout, every older one taking an upgrade instead,
+    /// so this is the one place the rule itself is stated —
     /// with numbers of its own, the way the suites beside this crate write
     /// their layout versions out rather than reading them off the constants.
     #[test]
@@ -515,20 +532,15 @@ mod tests {
         );
     }
 
-    /// This build's own window holds layout 18 alone: layout 19 changed only
-    /// the catalog, so a layout-18 file keeps its device group and loses its
-    /// catalog, and every layout from 7 to 17 takes an upgrade instead
-    /// (spec: OC-2, EP-10, PK-17, FM-15).
+    /// This build's own window holds no layout: layout 20 changed the
+    /// device-local group, so every layout from 7 to 19 takes an upgrade
+    /// instead of being read as it is (spec: OC-2, EP-10, PK-17, FM-15).
     #[test]
-    fn this_builds_window_holds_the_layout_before_deposit_times() {
-        assert_eq!(DEVICE_SCHEMA_VERSION, 18);
-        assert_eq!(SCHEMA_VERSION, 19);
+    fn this_builds_window_holds_no_layout_since_the_received_mark() {
+        assert_eq!(DEVICE_SCHEMA_VERSION, 20);
+        assert_eq!(SCHEMA_VERSION, 20);
         for found in 0..=SCHEMA_VERSION + 1 {
-            assert_eq!(
-                carries_a_readable_device_group(found),
-                found == 18,
-                "layout {found}"
-            );
+            assert!(!carries_a_readable_device_group(found), "layout {found}");
         }
     }
 }

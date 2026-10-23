@@ -85,8 +85,8 @@ mod reservations;
 pub use reservations::{
     a_freeze_beside_a_drop_still_landing_leaves_its_reservation,
     a_freeze_settles_an_interrupted_spool_before_it_builds,
+    a_reservation_cut_off_by_a_restart_waits_and_a_received_one_is_packed,
     a_reservation_is_released_whether_or_not_its_files_remain,
-    a_reservation_live_before_a_restart_is_released_after_it,
     a_reservation_naming_no_path_is_released_only_by_its_own_run,
     a_sync_leaves_reserved_files_for_their_pack,
 };
@@ -175,7 +175,7 @@ macro_rules! freeze_conformance {
             a_reservation_is_released_whether_or_not_its_files_remain,
             a_reservation_naming_no_path_is_released_only_by_its_own_run,
             a_freeze_beside_a_drop_still_landing_leaves_its_reservation,
-            a_reservation_live_before_a_restart_is_released_after_it,
+            a_reservation_cut_off_by_a_restart_waits_and_a_received_one_is_packed,
             a_file_that_shrinks_under_the_run_stops_its_pack,
             a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed,
             a_second_device_fetches_a_frozen_folder,

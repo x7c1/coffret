@@ -18,7 +18,9 @@ mod mappings;
 pub(crate) use mappings::{mappings, set_mapping};
 
 mod reservations;
-pub(crate) use reservations::{extend_reservation, release_reservation, reservations, reserve};
+pub(crate) use reservations::{
+    extend_reservation, mark_received, release_reservation, reservations, reserve,
+};
 
 mod pending_rows;
 pub(crate) use pending_rows::{

@@ -141,13 +141,14 @@ fn spool_state(row: &Row<'_>, operation: &'static str) -> IndexResult<SpoolState
     }
 }
 
-/// One row of `reservations`: which reservation it is, and the folder its drop
-/// was made onto (spec: PK-17).
-pub(crate) fn reservation(row: &Row<'_>) -> IndexResult<(ReservationId, Option<EntryPath>)> {
+/// One row of `reservations`: which reservation it is, the folder its drop
+/// was made onto, and whether the drop finished receiving (spec: PK-17).
+pub(crate) fn reservation(row: &Row<'_>) -> IndexResult<(ReservationId, Option<EntryPath>, bool)> {
     const OPERATION: &str = "reading a reservation";
     Ok((
         ReservationId::new(from_integer(row, "id", OPERATION)?),
         optional_entry_path(row, "folder", OPERATION)?,
+        row.get("received").map_err(classify(OPERATION))?,
     ))
 }
 

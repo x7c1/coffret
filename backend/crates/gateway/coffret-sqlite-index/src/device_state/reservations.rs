@@ -55,24 +55,38 @@ pub(crate) fn extend_reservation(
     Ok(())
 }
 
+/// Marks a reservation received, its drop having stopped receiving. One that is
+/// gone changes nothing, and none is made up for it (spec: PK-17).
+pub(crate) fn mark_received(connection: &Connection, id: ReservationId) -> IndexResult<()> {
+    const OPERATION: &str = "marking a reservation received";
+    connection
+        .execute(
+            "UPDATE reservations SET received = 1 WHERE id = ?1",
+            params![rows::to_integer(OPERATION, "id", id.get())?],
+        )
+        .map_err(classify(OPERATION))?;
+    Ok(())
+}
+
 /// Every reservation, in the order they were made, each with every path it
-/// names (spec: PK-17).
+/// names and whether its drop finished receiving (spec: PK-17).
 pub(crate) fn reservations(connection: &Connection) -> IndexResult<Vec<Reservation>> {
     let mut reservations: BTreeMap<ReservationId, Reservation> = collect(
         connection,
-        "SELECT id, folder FROM reservations ORDER BY id",
+        "SELECT id, folder, received FROM reservations ORDER BY id",
         [],
         "reading the reservations",
         rows::reservation,
     )?
     .into_iter()
-    .map(|(id, folder)| {
+    .map(|(id, folder, received)| {
         (
             id,
             Reservation {
                 id,
                 folder,
                 paths: Default::default(),
+                received,
             },
         )
     })

@@ -18,6 +18,7 @@ pub use held_parcels::a_held_parcel_is_recorded_until_it_is_let_go;
 mod reservations;
 pub use reservations::{
     a_refresh_releases_the_reservations_its_batch_packs,
+    a_reservation_is_in_progress_until_it_is_marked_received,
     a_reservation_is_kept_in_order_until_it_is_released,
 };
 

@@ -105,9 +105,13 @@
 //! of which the run considered is released by it — with the commit, where it packs
 //! any of them, or on its own with a [`Lapsed`] per path, where it packs none —
 //! so a book a stopped server left is packed by whichever freeze takes it up.
-//! A reservation a drop in this process is still writing into is decided by no
-//! run ([`LiveReservations`](crate::device_state::LiveReservations)): the
-//! drop's own run, once it stops receiving, is what decides it.
+//! A reservation whose drop has not finished receiving
+//! ([`Reservation::received`](crate::device_state::Reservation::received)) is
+//! a drop in progress, decided by no run and with none of its pages packed:
+//! the drop's own run, once it stops receiving — or that of the drop that takes
+//! it over, where it was cut off — is what decides it. One a drop in this
+//! process held live since the run read it is spared as well
+//! ([`LiveReservations`](crate::device_state::LiveReservations)).
 
 mod freeze_error;
 pub use freeze_error::{FreezeError, FreezeResult, SourceChange};
