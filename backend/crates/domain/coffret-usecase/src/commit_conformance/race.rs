@@ -2,6 +2,7 @@ use coffret_model::{ContainerKind, ControlObjectName, Generation, JournalRecord}
 
 use crate::commit::{catch_up, commit_batch, CommitError, CommitOutcome, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
+use crate::commit_conformance::faulty_store::FaultyStore;
 use crate::commit_conformance::fixtures::{
     container_id, control_keys, path, policy, prepared, request,
 };
@@ -237,6 +238,50 @@ pub async fn two_writers_on_one_head_leave_one_successor(fixture: &CommitUnderTe
     }
 }
 
+/// A create that landed and whose answer was lost is recognised as the commit
+/// it is, once (spec: CP-3, CP-14, OC-3).
+///
+/// The retry of such a create is refused, because the slot holds what the
+/// first try wrote. A writer that took the refusal at its word would rebase
+/// onto its own record and commit the same batch a second time. It reads the
+/// slot back instead, and a record there naming exactly this batch's
+/// additions is its own: no other writer's record can name a Container ID
+/// that is never reused.
+pub async fn a_commit_whose_answer_was_lost_is_recognised(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let keys = control_keys();
+
+    Library::upload_container(store, container_id(1)).await;
+    let losing = FaultyStore::losing_the_head_answer(store);
+    let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
+    let outcome = commit_batch(request(&losing, fixture.index(), &keys, batch))
+        .await
+        .expect("a create whose answer was lost has committed, which is not a failure");
+
+    assert_eq!(outcome.attempts, 1, "the batch was attempted once");
+    assert_eq!(outcome.record.generation(), generation(1));
+
+    let library = Library::read(store).await;
+    assert_eq!(
+        library.record(store, generation(1)).await,
+        outcome.record,
+        "the outcome carries the record read back from the slot",
+    );
+    assert!(
+        !library.holds(&ControlObjectName::head(generation(2))),
+        "the batch is in the Journal once, not committed again on top of itself",
+    );
+    assert!(
+        fixture
+            .index()
+            .entry_at(&path("albums/a.jpg"))
+            .await
+            .expect("asking the Index for a path must succeed")
+            .is_some(),
+        "the committing device catalogs its own commit",
+    );
+}
+
 /// Two catch-ups replaying one catalog converge rather than one of them failing
 /// (spec: CK-9, CP-1).
 ///
@@ -319,6 +364,73 @@ pub async fn a_refused_replay_no_checkpoint_explains_is_reported(fixture: &Commi
         Some(Generation::FIRST),
         "the catalog stands at the head before the refused record, and the caller has \
          been told why",
+    );
+}
+
+/// A commit whose record another process applied before its refresh completes
+/// as a success, with the device-local half recorded (spec: CK-9, CP-1, EP-10,
+/// OC-2, PK-17).
+///
+/// The record is created, and a second process over the same catalog file — a
+/// server catching up for a browser while a `sync` commits — replays it before
+/// the committer refreshes. The refresh is refused as already applied, which
+/// says only that the record is in the catalog: the run records the rest of
+/// the batch and reports the commit, rather than failing a batch that
+/// committed and leaving the reservation it packs waiting for a Pack that has
+/// landed.
+pub async fn a_refresh_another_process_got_to_first_completes_the_commit(
+    fixture: &CommitUnderTest,
+) {
+    let store = fixture.store();
+    let keys = control_keys();
+    let index = fixture.index();
+
+    Library::upload_container(store, container_id(1)).await;
+    let packed = index
+        .reserve(Some(&path("albums")))
+        .await
+        .expect("recording a reservation must succeed");
+    let waiting = index
+        .reserve(Some(&path("books")))
+        .await
+        .expect("recording a reservation must succeed");
+
+    let contended = RivalIndex::replaying_before_refresh(index);
+    let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])])
+        .releasing(vec![packed]);
+    let outcome = commit_batch(request(store, &contended, &keys, batch))
+        .await
+        .expect("a record another process applied first is not a failure");
+
+    assert_eq!(outcome.attempts, 1);
+    assert_eq!(outcome.record.generation(), generation(1));
+    assert_eq!(
+        index
+            .checkpoint()
+            .await
+            .expect("reading the checkpoint must succeed")
+            .map(|checkpoint| checkpoint.head_generation()),
+        Some(generation(1)),
+        "the catalog stands at the record, applied once",
+    );
+    assert!(
+        index
+            .entry_at(&path("albums/a.jpg"))
+            .await
+            .expect("asking the Index for a path must succeed")
+            .is_some(),
+        "the committed Entry is catalogued",
+    );
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed")
+            .into_iter()
+            .map(|reservation| reservation.id)
+            .collect::<Vec<_>>(),
+        [waiting],
+        "the reservation the batch packs is released with it, and no other",
     );
 }
 

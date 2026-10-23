@@ -24,13 +24,13 @@
 //! that record names (spec: CP-10, KL-1, KL-2), and a checkpoint under the one
 //! name its head gives it (spec: CK-10).
 //!
-//! Ten of the cases need Storage to misbehave, in six ways — a replica that
-//! never arrives, a head that refuses the create, a snapshot slot a sibling
-//! reached first, a provider that will not trash anything, one that
-//! refuses a replica write, one that holds a replica and will not hand it
-//! over — and reach it by wrapping whatever store the backend handed over. That
-//! keeps them backend-agnostic: the same fault runs against a real provider and
-//! in memory.
+//! Eleven of the cases need Storage to misbehave, in seven ways — a replica
+//! that never arrives, a head that refuses the create, a head whose create
+//! landed and whose answer was lost, a snapshot slot a sibling reached first,
+//! a provider that will not trash anything, one that refuses a replica write,
+//! one that holds a replica and will not hand it over — and reach it by
+//! wrapping whatever store the backend handed over. That keeps them
+//! backend-agnostic: the same fault runs against a real provider and in memory.
 //!
 //! Five of the repair cases wrap that store to *watch* rather than to
 //! misbehave, two of them around one of those faults, because what they assert
@@ -53,11 +53,12 @@
 //! a commit sent it an object, because a commit that reported every step at
 //! the end would record the same list as one that reported each as it went.
 //!
-//! The two catch-up cases wrap the catalog instead, for the same reason: a
-//! second replayer over one Index is another process rather than a fault, and
-//! putting it inside the call under test is what makes it happen on every
-//! backend rather than on the slow ones. What they read back afterwards is that
-//! catalog, since what a catch-up is worth is what it left standing there.
+//! The two catch-up cases, and one about the refresh after a commit, wrap the
+//! catalog instead, for the same reason: a second replayer over one Index is
+//! another process rather than a fault, and putting it inside the call under
+//! test is what makes it happen on every backend rather than on the slow ones.
+//! What they read back afterwards is that catalog, since what a catch-up or a
+//! refresh is worth is what it left standing there.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for, and does no I/O of its own. It is behind the `conformance` feature so
@@ -113,6 +114,8 @@ pub use progress::{
 
 mod race;
 pub use race::{
+    a_commit_whose_answer_was_lost_is_recognised,
+    a_refresh_another_process_got_to_first_completes_the_commit,
     a_refused_replay_no_checkpoint_explains_is_reported,
     a_writer_that_loses_the_slot_rebases_onto_the_new_head, two_replays_of_one_catalog_converge,
     two_writers_agree_on_one_head_chain, two_writers_on_one_head_leave_one_successor,
@@ -161,9 +164,9 @@ mod watching_store;
 /// Whether a name is a link in the control-head chain (spec: FM-12).
 ///
 /// Both store wrappers act at the moment a commit reaches the create of its
-/// record, and that moment is exactly this name — one refusing it, the other
-/// letting a rival in first — so the predicate is shared rather than written
-/// once per wrapper.
+/// record, and that moment is exactly this name — one refusing it or losing
+/// its answer, the other letting a rival in first — so the predicate is shared
+/// rather than written once per wrapper.
 fn is_head(name: &str) -> bool {
     matches!(
         ControlObjectName::parse(name),
@@ -241,9 +244,11 @@ macro_rules! commit_conformance {
             a_removal_leaves_the_current_set_and_is_trashed,
             two_writers_agree_on_one_head_chain,
             a_writer_that_loses_the_slot_rebases_onto_the_new_head,
+            a_commit_whose_answer_was_lost_is_recognised,
             two_writers_on_one_head_leave_one_successor,
             two_replays_of_one_catalog_converge,
             a_refused_replay_no_checkpoint_explains_is_reported,
+            a_refresh_another_process_got_to_first_completes_the_commit,
             a_colliding_entry_path_is_refused_before_any_write,
             a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
             a_rebased_batch_whose_removals_are_current_commits,

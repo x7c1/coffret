@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use coffret_model::{ContainerId, EntryNumber, EntryPath};
 use coffret_usecase::catalog_renames::{check_renames, Named};
+use coffret_usecase::device_state::{LocalObservation, ReservationId};
 use coffret_usecase::{CommittedBatch, IndexError, IndexResult, JournalRecord};
 use rusqlite::{params, Connection};
 
@@ -156,25 +157,58 @@ fn standing_at(
 
 /// Applies this device's own committed batch (spec: CP-1, EP-10, OC-2).
 pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexResult<()> {
-    let uploaded: Vec<ContainerId> = batch
-        .record
+    let CommittedBatch {
+        record,
+        materialized,
+        released,
+    } = batch;
+    let uploaded = uploaded(&record);
+    apply(connection, record)?;
+    complete(connection, &uploaded, materialized, released)
+}
+
+/// Records the device-local half of this device's own batch, whose record the
+/// catalog holds already (spec: EP-10, OC-2, PK-17).
+///
+/// The record is read for the Containers it adds and not applied; the
+/// catalog and its checkpoint stay as they are.
+pub(crate) fn complete_applied(connection: &Connection, batch: CommittedBatch) -> IndexResult<()> {
+    complete(
+        connection,
+        &uploaded(&batch.record),
+        batch.materialized,
+        batch.released,
+    )
+}
+
+/// The Containers a record adds, whose pending rows its commit clears.
+fn uploaded(record: &JournalRecord) -> Vec<ContainerId> {
+    record
         .additions()
         .iter()
         .map(|addition| addition.container().id)
-        .collect();
+        .collect()
+}
 
-    apply(connection, batch.record)?;
-
-    for observation in batch.materialized {
+/// The device-local half of a refresh: the files it put on disk become
+/// `present` (spec: EP-10), its spools stop being pending (spec: OC-2), and the
+/// reservations its batch packs are released (spec: PK-17).
+fn complete(
+    connection: &Connection,
+    uploaded: &[ContainerId],
+    materialized: Vec<LocalObservation>,
+    released: Vec<ReservationId>,
+) -> IndexResult<()> {
+    for observation in materialized {
         device_state::mark_present(connection, &observation)?;
     }
-    for container_id in uploaded {
+    for &container_id in uploaded {
         device_state::clear_pending_row(connection, container_id)?;
     }
     // In the same transaction as the rows they complete, so a drop's Pack is
     // never committed here while its reservation still says it waits for one
     // (spec: PK-17).
-    for id in batch.released {
+    for id in released {
         device_state::release_reservation(connection, id)?;
     }
     Ok(())

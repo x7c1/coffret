@@ -9,7 +9,7 @@ use http_body::Body as _;
 use serde::Deserialize;
 use zeroize::Zeroizing;
 
-use super::Refusal;
+use super::{Refusal, RefusalReason};
 use crate::EnteredPassphrase;
 
 /// How many bytes of body a submission may bring: room for a long Passphrase
@@ -47,9 +47,9 @@ impl Submission {
     pub(crate) async fn read(
         headers: &HeaderMap,
         body: Body,
-    ) -> Result<Self, (Refusal, &'static str)> {
+    ) -> Result<Self, (Refusal, RefusalReason)> {
         if !is_json(headers) {
-            return Err((Refusal::NotJsonContent, "content_type"));
+            return Err((Refusal::NotJsonContent, "content_type".into()));
         }
         let declared = headers
             .get(CONTENT_LENGTH)
@@ -58,26 +58,35 @@ impl Submission {
         match declared {
             Some(Ok(length)) if length <= MAX_BODY_BYTES as u64 => {}
             None => {}
-            Some(_) => return Err((Refusal::BodyTooLarge, "body_bytes")),
+            Some(_) => return Err((Refusal::BodyTooLarge, "body_bytes".into())),
         }
         let gathered = tokio::time::timeout(READ_DEADLINE, gather(body))
             .await
-            .map_err(|_| (Refusal::TooSlow, "body_deadline"))??;
-        serde_json::from_slice(&gathered).map_err(|_| (Refusal::NotJson, "body"))
+            .map_err(|_| (Refusal::TooSlow, "body_deadline".into()))??;
+        // The category the reader filed the failure under (`classify`), and
+        // never the error itself: its rendering may quote the body
+        // (spec: EL-1, EL-4).
+        serde_json::from_slice(&gathered)
+            .map_err(|error| (Refusal::NotJson, RefusalReason::unread_json("body", &error)))
     }
 }
 
 /// Every byte of `body`, up to [`MAX_BODY_BYTES`], into a buffer that is
 /// wiped when it is dropped.
-async fn gather(mut body: Body) -> Result<Zeroizing<Vec<u8>>, (Refusal, &'static str)> {
+async fn gather(mut body: Body) -> Result<Zeroizing<Vec<u8>>, (Refusal, RefusalReason)> {
     let mut gathered = Zeroizing::new(Vec::with_capacity(MAX_BODY_BYTES));
     while let Some(frame) = poll_fn(|cx| Pin::new(&mut body).poll_frame(cx)).await {
-        let frame = frame.map_err(|_| (Refusal::NotJson, "body_broken"))?;
+        let frame = frame.map_err(|error| {
+            (
+                Refusal::NotJson,
+                RefusalReason::broken_frame("body_broken", &error),
+            )
+        })?;
         let Ok(data) = frame.into_data() else {
             continue;
         };
         if gathered.len() + data.len() > MAX_BODY_BYTES {
-            return Err((Refusal::BodyTooLarge, "body_bytes"));
+            return Err((Refusal::BodyTooLarge, "body_bytes".into()));
         }
         gathered.extend_from_slice(&data);
     }
@@ -106,7 +115,7 @@ mod tests {
         headers
     }
 
-    async fn read(body: &'static str) -> Result<Submission, (Refusal, &'static str)> {
+    async fn read(body: &'static str) -> Result<Submission, (Refusal, RefusalReason)> {
         Submission::read(&json_headers(), Body::from(body)).await
     }
 

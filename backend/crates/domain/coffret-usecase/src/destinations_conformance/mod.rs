@@ -98,6 +98,7 @@ pub use root_arrangement::RootArrangement;
 
 mod round_trip;
 pub use round_trip::{
+    a_lock_the_filesystem_cannot_give_leaves_no_scratch,
     a_place_is_written_flushed_stamped_and_published, a_publish_replaces_what_stood_at_the_name,
     a_scratch_name_that_is_taken_is_refused,
 };
@@ -134,6 +135,7 @@ macro_rules! destinations_conformance {
             a_place_is_written_flushed_stamped_and_published,
             a_publish_replaces_what_stood_at_the_name,
             a_scratch_name_that_is_taken_is_refused,
+            a_lock_the_filesystem_cannot_give_leaves_no_scratch,
             a_removal_of_a_name_that_is_already_gone_succeeds,
             a_symlink_on_the_way_blocks_the_reach_and_names_it,
             a_file_where_a_folder_must_be_blocks_the_reach,

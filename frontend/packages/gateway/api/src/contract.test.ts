@@ -111,6 +111,7 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   reserved: true,
   trash_folder: true,
   refused_root: true,
+  no_file_lock: true,
   surfaced: true,
   key_lost: true,
   pack_resident: true,

@@ -81,6 +81,13 @@ impl Index for InMemoryIndex {
         self.write(|state| state.refresh(batch))
     }
 
+    async fn complete_applied(&self, batch: CommittedBatch) -> IndexResult<()> {
+        self.write(|state| {
+            state.complete_applied(batch);
+            Ok(())
+        })
+    }
+
     async fn snapshot(&self) -> IndexResult<SnapshotContent> {
         self.locked().snapshot()
     }

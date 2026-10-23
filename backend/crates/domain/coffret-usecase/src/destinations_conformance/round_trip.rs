@@ -158,3 +158,46 @@ pub async fn a_scratch_name_that_is_taken_is_refused(fixture: &DestinationsUnder
         "the refusal says the file could not be created: {refused:?}",
     );
 }
+
+/// A scratch whose lock the filesystem cannot give is refused as a lock that
+/// failed, and nothing is left behind at its name (spec: OC-8, EP-11).
+///
+/// The lock is what tells a sync in another process to leave a scratch being
+/// written alone, so a writer that could not take one does not write: a
+/// mapped folder on a filesystem that gives no lock is refused rather than
+/// written without one. The empty scratch it had made is removed before the
+/// refusal is answered, because nothing would ever claim it, and the refusal
+/// names the lock, which is what a person has to know to put the folder on a
+/// local disk.
+pub async fn a_lock_the_filesystem_cannot_give_leaves_no_scratch(fixture: &DestinationsUnderTest) {
+    if !fixture.arrange().refuse_locks() {
+        eprintln!("skipping: this backend cannot arrange a filesystem that gives no lock");
+        return;
+    }
+    let expected = registered(fixture);
+    let destination = fixture
+        .destinations()
+        .reach(
+            fixture.root(),
+            Some(&expected),
+            &components(&["spring.jpg"]),
+        )
+        .await
+        .expect("reaching a place directly under the root must succeed");
+
+    let refused = destination
+        .create(SCRATCH)
+        .err()
+        .expect("a scratch that cannot be locked may not be written");
+    assert!(
+        matches!(
+            refused,
+            BelowRootError::Io(ref cause) if matches!(cause.operation, LocalOperation::Locking)
+        ),
+        "the refusal says the file could not be locked: {refused:?}",
+    );
+    assert!(
+        !fixture.arrange().holds(&fixture.root().join(SCRATCH)),
+        "the scratch made before the lock failed is gone",
+    );
+}

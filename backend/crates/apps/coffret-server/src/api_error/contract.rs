@@ -96,6 +96,12 @@ fn every_refusal() -> Vec<ApiError> {
             reason: RootRefused::MarkerMismatch,
         })),
         ApiError::pack_resident(),
+        // A drop into a mapped folder whose filesystem gives no file lock.
+        ApiError::from(Error::Local(coffret_usecase::LocalIoError::new(
+            coffret_device::LocalOperation::Locking,
+            "/mnt/share/albums",
+            std::io::Error::from(std::io::ErrorKind::Unsupported),
+        ))),
     ]);
     refusals.extend([
         ApiError::from(Error::Fetch {

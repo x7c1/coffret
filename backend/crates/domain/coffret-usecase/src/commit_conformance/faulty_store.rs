@@ -14,14 +14,15 @@ use crate::uploaded_object::UploadedObject;
 
 /// A store that does one thing wrong, wrapped around the real one.
 ///
-/// Six of the cases are about what a commit does when Storage does not
+/// Seven of the cases are about what a commit does when Storage does not
 /// cooperate, and none of those states can be reached by driving the flow: a
-/// replica that never arrives, a head that refuses the create, a snapshot slot
-/// another device got to first, a provider that will not trash anything, a
-/// replica write it refuses, an object it will not hand over. Setting
-/// them up by hand afterwards would not be the same test — what is being checked
-/// is where the flow *stops*, or that it declines to, which only shows if the
-/// fault happens while it is running.
+/// replica that never arrives, a head that refuses the create, a head whose
+/// create landed and whose answer was lost, a snapshot slot another device got
+/// to first, a provider that will not trash anything, a replica write it
+/// refuses, an object it will not hand over. Setting them up by hand
+/// afterwards would not be the same test — what is being checked is where the
+/// flow *stops*, or that it declines to, which only shows if the fault happens
+/// while it is running.
 ///
 /// It wraps whatever store the backend handed the suite, so a case runs against
 /// a real provider exactly as it runs in memory.
@@ -50,6 +51,14 @@ enum Fault {
     /// what makes it a faithful sibling: two Snapshots of one head are the same
     /// checkpoint (spec: CK-11).
     SiblingSnapshot,
+    /// Stores the create of a control head, then answers it as a loser is
+    /// answered.
+    ///
+    /// A provider that took the object and lost the answer, as the retry of
+    /// such a create sees it: the slot holds what this writer wrote and the
+    /// create is refused. The writer reads the slot back and recognises its
+    /// own record (spec: CP-3, CP-14).
+    LostHeadAnswer,
     /// Refuses to trash anything, permanently.
     ///
     /// What a Library on credentials that may write but not delete looks like.
@@ -99,6 +108,15 @@ impl<'a> FaultyStore<'a> {
         Self {
             inner,
             fault: Fault::SiblingSnapshot,
+        }
+    }
+
+    /// Stores every create aimed at the control-head chain and answers each as
+    /// refused.
+    pub(super) fn losing_the_head_answer(inner: &'a dyn ObjectStore) -> Self {
+        Self {
+            inner,
+            fault: Fault::LostHeadAnswer,
         }
     }
 
@@ -204,6 +222,14 @@ impl ObjectStore for FaultyStore<'_> {
                 detail: "the commit was interrupted before its record was created".to_owned(),
                 source: None,
             }),
+            Fault::LostHeadAnswer if is_head(slot.name()) => {
+                // The object lands; the answer this writer gets is the one a
+                // retry gets after the first try's answer went missing.
+                self.inner.put_if_absent(slot, body).await?;
+                Err(Error::AlreadyExists {
+                    object: slot.name().to_owned(),
+                })
+            }
             Fault::SiblingSnapshot if is_snapshot(slot.name()) => {
                 // The sibling wins the slot with the same bytes, and this
                 // writer is told what a loser is told.

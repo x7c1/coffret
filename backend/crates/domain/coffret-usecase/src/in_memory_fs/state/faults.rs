@@ -64,9 +64,8 @@ fn code(operation: LocalOperation) -> u8 {
         LocalOperation::Stamping => 6,
         LocalOperation::Renaming => 7,
         LocalOperation::Removing => 8,
-        // Nothing behind the three capabilities takes a lock — what does is a
-        // device keeping a file of its own — so this counter exists to keep the
-        // match exhaustive rather than because a case ever scripts it.
+        // A destination locks the scratch it makes, so a case can script a
+        // filesystem that gives no lock (spec: OC-8).
         LocalOperation::Locking => 9,
         LocalOperation::Discarding => 10,
         LocalOperation::Relocating => 11,

@@ -113,6 +113,12 @@ impl RootArrangement for Arrangement {
     fn holds(&self, path: &Path) -> bool {
         std::fs::symlink_metadata(path).is_ok()
     }
+
+    /// Not here: the temporary directory is on a local disk, whose filesystem
+    /// gives every lock asked of it.
+    fn refuse_locks(&self) -> bool {
+        false
+    }
 }
 
 coffret_usecase::destinations_conformance!(fixture().await);

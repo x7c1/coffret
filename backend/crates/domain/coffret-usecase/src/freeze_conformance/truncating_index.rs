@@ -79,6 +79,10 @@ impl Index for TruncatingIndex<'_> {
         self.inner.refresh(batch).await
     }
 
+    async fn complete_applied(&self, batch: CommittedBatch) -> IndexResult<()> {
+        self.inner.complete_applied(batch).await
+    }
+
     async fn snapshot(&self) -> IndexResult<SnapshotContent> {
         self.inner.snapshot().await
     }

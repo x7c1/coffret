@@ -44,8 +44,8 @@ pub enum LocalOperation {
     /// file was being opened and read, which is what says which folder the root
     /// is (spec: EP-13).
     Reading,
-    /// A spool file, a local writer's scratch, or a directory above one was
-    /// being made.
+    /// A spool file, a local writer's scratch, a directory above one, or the
+    /// lock file a server keeps in its Library's directory was being made.
     Creating,
     /// Ciphertext or fetched plaintext was going into a file.
     Writing,
@@ -79,11 +79,16 @@ pub enum LocalOperation {
     /// to look at.
     Relocating,
     /// A lock was being taken on a file a device keeps for itself, so that one
-    /// process at a time holds what that file stands for.
+    /// process at a time holds what that file stands for — or on a scratch a
+    /// local writer has just made, so that a sync in another process leaves it
+    /// alone while it is written (spec: OC-8).
     ///
-    /// The lock already being held is not this. That is an answer rather than a
-    /// failure, and whoever asked for the lock says in its own words what it
-    /// means; this is the operating system declining to arbitrate at all.
+    /// On a file a device keeps for itself, the lock already being held is not
+    /// this. That is an answer rather than a failure, and whoever asked for the
+    /// lock says in its own words what it means; this is the operating system
+    /// declining to arbitrate at all. A scratch is refused as this either way:
+    /// one made just now and exclusively whose lock somebody holds is a sync
+    /// removing it in the instant since, and is not written.
     Locking,
 }
 

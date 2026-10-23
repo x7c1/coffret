@@ -263,6 +263,14 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn complete_applied(&self, batch: CommittedBatch) -> IndexResult<()> {
+        self.write(
+            "completing this device's own commit another process applied",
+            move |connection| library_state::complete_applied(connection, batch),
+        )
+        .await
+    }
+
     async fn snapshot(&self) -> IndexResult<SnapshotContent> {
         self.read("reading the catalog", library_state::snapshot)
             .await

@@ -15,7 +15,7 @@ use std::path::Path;
 
 use coffret_model::Mtime;
 use coffret_usecase::destinations_conformance::{DestinationsUnderTest, RootArrangement};
-use coffret_usecase::InMemoryFs;
+use coffret_usecase::{InMemoryFs, LocalOperation};
 
 /// Where the cases place, inside the in-memory filesystem they run against.
 const ROOT: &str = "/mapped";
@@ -68,6 +68,11 @@ impl RootArrangement for Arrangement {
 
     fn holds(&self, path: &Path) -> bool {
         self.fs.holds(path)
+    }
+
+    fn refuse_locks(&self) -> bool {
+        self.fs.fail_on(LocalOperation::Locking, 1);
+        true
     }
 }
 

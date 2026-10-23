@@ -63,6 +63,13 @@ Concept background: [Journal](../../concepts/journal/),
     CK-11), and a slot that holds nothing means no successor was committed —
     the writer starts the commit again rather than treating the refusal as a
     final loss.
+  - The refusal may also answer the writer's own create: the object landed,
+    the answer was lost, and the retry found the slot holding it. A refused
+    writer that reads back an authenticated Journal record naming exactly the
+    Containers its batch adds has committed, since a Container ID is never
+    reused (CP-14); it does not rebase. A batch that adds no Container leaves
+    nothing of its own for the record to name, so it is not recognised this
+    way and is treated as having lost the slot.
 - **CP-4.** A writer whose slot was consumed by another Journal record has
   not committed; it refreshes the head, rebases its batch onto it (EP-7), and
   retries. *(Form: test)*

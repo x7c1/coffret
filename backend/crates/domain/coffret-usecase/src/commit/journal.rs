@@ -1,7 +1,9 @@
+use std::collections::BTreeSet;
+
 use coffret_format::{encode_control_object, encode_journal_record, ControlEncodeRequest};
 use coffret_model::{
-    ControlObjectKind, ControlObjectName, EntryRename, Generation, IndexCheckpoint, JournalRecord,
-    KeyringCommitment, Redacted,
+    ContainerId, ControlObjectKind, ControlObjectName, EntryRename, Generation, IndexCheckpoint,
+    JournalRecord, KeyringCommitment, Redacted,
 };
 use tracing::{debug, info, warn};
 
@@ -13,6 +15,7 @@ use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
 use crate::commit::prepared_batch::PreparedBatch;
+use crate::commit::slot_occupant;
 use crate::commit_slot::CommitSlot;
 use crate::control_head::ControlHead;
 use crate::device_state::AttemptedSlot;
@@ -21,7 +24,9 @@ use crate::object_store::ObjectStore;
 
 /// What consuming the commit slot led to.
 pub(super) enum Attempted {
-    /// The record was created, which is the batch's commit point (spec: CP-1).
+    /// The record was created, which is the batch's commit point (spec: CP-1)
+    /// — or the create was refused and the slot read back holds the batch's
+    /// own record, the answer to the create having been lost (spec: CP-3).
     Committed(Box<Committed>),
     /// The slot is taken and holds a successor this device did not write, so
     /// this attempt has committed nothing (spec: CP-3, CP-4).
@@ -224,11 +229,42 @@ pub(super) async fn commit(
             Ok(Attempted::Committed(Box::new(Committed { record })))
         }
         Err(Error::AlreadyExists { .. }) => {
-            // A refusal is a claim that the slot is taken, not proof of it: a
-            // create refused because another was in flight, and that one then
-            // failing, leaves the slot free (spec: CP-3). Either way this
-            // attempt committed nothing and the next one starts from whatever
-            // the head turns out to be.
+            // The refusal may be this run's own create answering back, its
+            // answer having been lost: `own_record` recognises the batch's own
+            // record in the slot (spec: CP-3).
+            //
+            // A batch that adds nothing (removals or renames only) has no
+            // Container of its own for a record to name, and nothing else in a
+            // record is the batch's alone: another writer may remove or rename
+            // the same things. So it is not recognised and stays a conflict;
+            // its rebase then refuses it against the record it finds.
+            let additions: BTreeSet<ContainerId> = batch
+                .additions
+                .iter()
+                .map(|prepared| prepared.addition.container().id)
+                .collect();
+            if !additions.is_empty() {
+                let slot = AttemptedSlot::consuming(generation, &commit_slot);
+                if let Some(record) =
+                    slot_occupant::own_record(store, &policy.retry, keys, &slot, &additions).await
+                {
+                    info!(
+                        object = %name,
+                        generation = generation.get(),
+                        additions = record.additions().len(),
+                        removals = record.removals().len(),
+                        renames = record.renames().len(),
+                        "committed the batch; the commit slot holds its record after the \
+                         answer to its create was lost",
+                    );
+                    return Ok(Attempted::Committed(Box::new(Committed { record })));
+                }
+            }
+            // Otherwise a refusal is a claim that the slot is taken, not proof
+            // of it: a create refused because another was in flight, and that
+            // one then failing, leaves the slot free (spec: CP-3). Either way
+            // this attempt committed nothing and the next one starts from
+            // whatever the head turns out to be.
             debug!(
                 object = %name,
                 generation = generation.get(),

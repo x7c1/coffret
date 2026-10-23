@@ -4,6 +4,7 @@
 use std::fmt;
 
 use coffret_usecase::root_marker::{MANAGEMENT_AREA, MARKER_FILE};
+use coffret_usecase::LocalOperation;
 
 use super::{CreationStep, Error};
 
@@ -33,6 +34,20 @@ impl fmt::Display for Error {
             // this line is read by the person standing at the device with the
             // Library in front of them. Keeping a path out of a diagnostic
             // event is `redacted`'s job, not this one's (spec: EL-1).
+            //
+            // A lock is the one operation whose refusal is the filesystem's
+            // rather than the file's: one that gives no file lock — a network
+            // share, most of the time — refuses every lock asked of it, and
+            // what remedies that is a local disk (spec: OC-8). The path is the
+            // mapped folder a scratch was made in, or the Library's own lock
+            // file, and the remedy is the same for either, so the line names
+            // neither.
+            Self::Local(refused) if matches!(refused.operation, LocalOperation::Locking) => write!(
+                f,
+                "{} could not be locked — its filesystem provides no file lock, and it has to be \
+                 on a local disk",
+                refused.path.display()
+            ),
             Self::Local(refused) => write!(
                 f,
                 "{} could not be {}",

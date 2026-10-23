@@ -105,6 +105,7 @@ it('reads every placement reason the server can send', async () => {
     'reserved',
     'trash_folder',
     'refused_root',
+    'no_file_lock',
     'surfaced',
     'key_lost',
     'pack_resident',
