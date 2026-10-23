@@ -66,6 +66,28 @@ it('says where the dropped folder lands, and that it is new', () => {
   expect(marked).toEqual(['BookX/']);
 });
 
+// A dropped folder already standing on this device's disk is not new: the
+// confirmation says what it is and that what is in it goes in too.
+it('says a dropped folder standing on disk is on disk and not in the Library yet', () => {
+  const onDisk = destinationsOf(
+    'comics',
+    BOOK,
+    (path) => path === 'comics',
+    (path) => path === 'comics/BookX',
+  );
+  render(<DropConfirm summary={BOOK} files={FILES} destinations={onDisk} onChoose={() => undefined} />);
+  const said = screen.getByRole('dialog');
+  expect(said.textContent).toContain(
+    'BookX is on this device’s disk and not in the Library yet — this drop adds it together ' +
+      'with what is already in it',
+  );
+  expect(said.textContent).not.toContain('is new');
+  expect(said.querySelectorAll('[data-new]')).toHaveLength(0);
+  expect([...said.querySelectorAll('[data-on-disk]')].map((level) => level.textContent)).toEqual([
+    'BookX/',
+  ]);
+});
+
 // A drop of files alone is confirmed too: how many, how much, that they go one
 // by one, and where — and nothing goes until Add.
 describe('a drop of files alone', () => {

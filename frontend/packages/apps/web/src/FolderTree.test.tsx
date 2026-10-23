@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NO_FOLDER_HERE } from '@coffret/api';
 
-import { AWAITING } from './awaiting';
+import { COLOR } from './theme';
 import type { Drop } from './drop';
-import { TAKEN } from './dropTarget';
+import { NOT_KNOWN_YET, TAKEN } from './dropTarget';
+import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { FileList } from './FileList';
 import { FolderTree, type TreeDrops } from './FolderTree';
 
@@ -34,11 +35,13 @@ function drawAt(current: string) {
     <FolderTree
       folders={['albums', 'albums/2026', 'albums/2026/08', 'books']}
       stranded={[]}
-      awaiting={[]}
+      prospective={[]}
+      prepared={[]}
       current={current}
       onOpen={() => undefined}
       onDelete={() => undefined}
       onNewFolder={() => undefined}
+      onForget={() => undefined}
       drops={dropsOf()}
     />
   );
@@ -72,25 +75,29 @@ function mount(
   folders: string[],
   stranded: string[] = [],
   drops = dropsOf(),
-  awaiting: string[] = [],
+  prospective: string[] = [],
+  prepared: string[] = [],
 ) {
   Element.prototype.scrollIntoView = () => undefined;
   const onDelete = vi.fn();
   const onOpen = vi.fn();
   const onNewFolder = vi.fn();
+  const onForget = vi.fn();
   const { container } = render(
     <FolderTree
       folders={folders}
       stranded={stranded}
-      awaiting={awaiting}
+      prospective={prospective}
+      prepared={prepared}
       current="albums"
       onOpen={onOpen}
       onDelete={onDelete}
       onNewFolder={onNewFolder}
+      onForget={onForget}
       drops={drops}
     />,
   );
-  return { container, onDelete, onOpen, onNewFolder, drops };
+  return { container, onDelete, onOpen, onNewFolder, onForget, drops };
 }
 
 /** The labels of the items a row's "⋮" offers, opening it to read them. */
@@ -148,8 +155,9 @@ it('offers to delete a book from its row, as the file list does', () => {
         folders_on_disk: [],
         empty_mapped_prefixes: [],
       }}
-      awaiting={[]}
-      awaitingHere={false}
+      prospective={[]}
+      prospectiveHere={false}
+      prepared={[]}
       fill={null}
       freeze={null}
       stranded={false}
@@ -166,6 +174,7 @@ it('offers to delete a book from its row, as the file list does', () => {
       onPack={() => undefined}
       onDelete={fromList}
       onNewFolder={() => undefined}
+      onForget={() => undefined}
     />,
   );
   fireEvent.click(screen.getByLabelText('actions for 2026'));
@@ -218,13 +227,33 @@ describe('"New folder…" on a row of the tree', () => {
 it('marks a folder the Library does not hold yet, and offers no deletion of it', () => {
   mount(['albums', 'comics', 'comics/Series'], [], dropsOf(), ['comics', 'comics/Series']);
   fireEvent.click(screen.getByLabelText('expand comics'));
-  const marks = screen.getAllByTitle(AWAITING);
+  const marks = screen.getAllByTitle(PROSPECTIVE);
   expect(marks).toHaveLength(2);
   expect(marks[0].textContent).toBe('not in Library');
   expect(menuOf('comics')).toEqual(['New folder…']);
   expect(menuOf('Series')).toEqual(['New folder…']);
   // The Library's own folder is drawn as it was.
   expect(screen.getByTitle('albums').parentElement?.textContent).not.toContain('not in Library');
+});
+
+// A mistyped prepared path is let go of from its own row; an empty mapped
+// prefix is the mapping's, and a folder the Library holds is the Library's.
+it('offers to forget a prepared path, and nothing else', () => {
+  const { onForget } = mount(
+    ['albums', 'comics', 'comics/Seris'],
+    [],
+    dropsOf(),
+    ['comics', 'comics/Seris'],
+    ['comics/Seris'],
+  );
+  fireEvent.click(screen.getByLabelText('expand comics'));
+  expect(menuOf('Seris')).toEqual(['New folder…', FORGET_FOLDER]);
+  expect(menuOf('comics')).toEqual(['New folder…']);
+  expect(menuOf('albums')).toEqual(['New folder…', 'Delete…']);
+
+  fireEvent.click(screen.getByLabelText('actions for Seris'));
+  fireEvent.click(screen.getByRole('menuitem', { name: FORGET_FOLDER }));
+  expect(onForget).toHaveBeenCalledWith('comics/Seris');
 });
 
 // The folder of a book whose freeze has not committed is drawn, though the
@@ -330,11 +359,15 @@ describe('a drop onto a row of the tree', () => {
   });
 
   // Not knowing yet is not refusing: the drop asks the folder's own listing.
+  // Nor is it promising, so the row is drawn in neither colour and says the
+  // answer is not in yet.
   it('takes a drop where whether a mapping reaches the folder is not known yet', async () => {
     const { drops } = mount(['albums'], [], dropsOf(() => null));
     const row = dropTargetOf('albums');
     fireEvent.dragEnter(row, carryingFiles);
-    expect(row.textContent).toContain(TAKEN);
+    expect(row.textContent).toContain(NOT_KNOWN_YET);
+    expect(row.textContent).not.toContain(TAKEN);
+    expect((row as HTMLElement).style.outline).toBe(`2px dashed ${COLOR.dim}`);
     fireEvent.drop(row, carrying('cover.png'));
     await waitFor(() => expect(drops.onAdd).toHaveBeenCalledTimes(1));
     expect(drops.onUnmapped).not.toHaveBeenCalled();

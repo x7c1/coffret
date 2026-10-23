@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react';
 
 import type { DeleteTarget } from '@coffret/api';
 
-import { AWAITING, NEW_FOLDER, parentOf } from './awaiting';
+import { FORGET_FOLDER, NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
 import { DropBanner, dropOutline } from './Banner';
 import { DELETE } from './deleteEntries';
 import { useDragOver } from './dragOver';
@@ -34,7 +34,7 @@ import { ancestry, nest, type FolderNode } from './tree';
  * row's folder, and the confirmation says where.
  *
  * So are the folders the Library does not hold yet (see
- * [`awaiting`](./awaiting)) — a path prepared with "New folder…", and a
+ * [`prospective`](./prospective)) — a path prepared with "New folder…", and a
  * top-level folder this device maps with nothing under it — marked as such,
  * so that a place to drop the first files into is somewhere a person can see
  * and walk into.
@@ -48,15 +48,22 @@ import { ancestry, nest, type FolderNode } from './tree';
  * Every row a mapping of this device reaches offers "New folder…" from its
  * "⋮", the root's "Library" among them — in a Library with nothing in it, that
  * is the one row there is, and the way to prepare a path right under the root.
+ *
+ * A prepared path's row offers "Forget this folder" too, which lets go of it
+ * and of every path prepared under it: a mistyped name is otherwise drawn until
+ * a reload, which forgets every other prepared path with it. Not an empty
+ * mapped prefix, which the device's mapping draws and not this page.
  */
 export function FolderTree({
   folders,
   stranded,
-  awaiting,
+  prospective,
+  prepared,
   current,
   onOpen,
   onDelete,
   onNewFolder,
+  onForget,
   drops,
 }: {
   folders: readonly string[];
@@ -67,13 +74,17 @@ export function FolderTree({
    * to drop into: prepared here, or mapped on this device with nothing under
    * them. Each is among `folders` too.
    */
-  awaiting: readonly string[];
+  prospective: readonly string[];
+  /** The paths prepared with "New folder…" on this page: those of `prospective` it can forget. */
+  prepared: readonly string[];
   current: string;
   onOpen: (folder: string) => void;
   /** "Delete…" was chosen from a book's menu: the same as the file list's folder menu. */
   onDelete: (target: DeleteTarget) => void;
   /** "New folder…" was chosen from a row's menu, for a folder inside that row's. */
   onNewFolder: (parent: string) => void;
+  /** "Forget this folder" was chosen from a prepared path's menu. */
+  onForget: (path: string) => void;
   /** What a drop onto a row reaches out to. */
   drops: TreeDrops;
 }) {
@@ -99,10 +110,10 @@ export function FolderTree({
   // above it as it was, and a row that appeared nowhere would be a folder
   // somebody has to go looking for. Only the ones not drawn before, so that a
   // branch somebody closed stays closed.
-  const seen = useRef<ReadonlySet<string>>(new Set(awaiting));
+  const seen = useRef<ReadonlySet<string>>(new Set(prospective));
   useEffect(() => {
-    const fresh = awaiting.filter((path) => !seen.current.has(path));
-    seen.current = new Set(awaiting);
+    const fresh = prospective.filter((path) => !seen.current.has(path));
+    seen.current = new Set(prospective);
     if (fresh.length === 0) {
       return;
     }
@@ -113,7 +124,7 @@ export function FolderTree({
       }
       return new Set([...open, ...above]);
     });
-  }, [awaiting]);
+  }, [prospective]);
 
   const toggle = (path: string) =>
     setExpanded((open) => {
@@ -128,7 +139,8 @@ export function FolderTree({
   // while the folders are still being asked for, so that nothing moves across
   // the screen when they arrive.
   const waiting = new Set(stranded);
-  const unheld = new Set(awaiting);
+  const unheld = new Set(prospective);
+  const forgettable = new Set(prepared);
   return (
     <nav aria-label="folders" style={{ padding: '8px 0' }}>
       {/* No mark: the root is the place the tree hangs from, and what it is
@@ -150,11 +162,13 @@ export function FolderTree({
           current={current}
           expanded={expanded}
           stranded={waiting}
-          awaiting={unheld}
+          prospective={unheld}
+          prepared={forgettable}
           onToggle={toggle}
           onOpen={onOpen}
           onDelete={onDelete}
           onNewFolder={onNewFolder}
+          onForget={onForget}
           drops={drops}
         />
       ))}
@@ -209,11 +223,13 @@ function Branch({
   current,
   expanded,
   stranded,
-  awaiting,
+  prospective,
+  prepared,
   onToggle,
   onOpen,
   onDelete,
   onNewFolder,
+  onForget,
   drops,
 }: {
   node: FolderNode;
@@ -221,17 +237,19 @@ function Branch({
   current: string;
   expanded: ReadonlySet<string>;
   stranded: ReadonlySet<string>;
-  awaiting: ReadonlySet<string>;
+  prospective: ReadonlySet<string>;
+  prepared: ReadonlySet<string>;
   onToggle: (path: string) => void;
   onOpen: (folder: string) => void;
   onDelete: (target: DeleteTarget) => void;
   onNewFolder: (parent: string) => void;
+  onForget: (path: string) => void;
   drops: TreeDrops;
 }) {
   const open = expanded.has(node.path);
   const book = node.children.length === 0;
   const waiting = stranded.has(node.path);
-  const unheld = awaiting.has(node.path);
+  const unheld = prospective.has(node.path);
   return (
     <>
       <Row
@@ -249,6 +267,11 @@ function Branch({
           ...(book && !waiting && !unheld
             ? [{ label: DELETE, onPress: () => onDelete({ folder: node.path, paths: [] }) }]
             : []),
+          // Only a path this page prepared: what the Library holds, and what a
+          // mapping of this device draws, are not the page's to forget.
+          ...(unheld && prepared.has(node.path)
+            ? [{ label: FORGET_FOLDER, onPress: () => onForget(node.path) }]
+            : []),
         ]}
         drops={drops}
       />
@@ -261,11 +284,13 @@ function Branch({
             current={current}
             expanded={expanded}
             stranded={stranded}
-            awaiting={awaiting}
+            prospective={prospective}
+            prepared={prepared}
             onToggle={onToggle}
             onOpen={onOpen}
             onDelete={onDelete}
             onNewFolder={onNewFolder}
+            onForget={onForget}
             drops={drops}
           />
         ))}
@@ -317,11 +342,16 @@ function Row({
 
   // The drop this row takes, answered the way the file list answers one: an
   // outline in the colour of what letting go comes to and the line saying so,
-  // read off the same fact the drop is turned away by. Unknown is taken, since
-  // the drop asks the folder's own listing before anything is sent.
+  // read off the same fact the drop is turned away by. Unknown — the root's
+  // listing not in yet, or not answering for this row (see `mappedAt`) — is
+  // said as unknown and drawn in neither colour, and a drop let go then is not
+  // turned away: the drop asks the folder's own listing before anything is
+  // sent.
   const drag = useDragOver();
-  const mapped = drag.dragged ? drops.mapped(path) : null;
-  const outcome = dropOutcome({ mapped: mapped !== false, freezing: drops.freezing });
+  const outcome = dropOutcome({
+    mapped: drag.dragged ? drops.mapped(path) : null,
+    freezing: drops.freezing,
+  });
   const drop = (event: DragEvent) => {
     event.preventDefault();
     drag.ended();
@@ -394,7 +424,7 @@ function Row({
           {label}
         </button>
         {unheld === true && (
-          <span title={AWAITING} style={MARK}>
+          <span title={PROSPECTIVE} style={MARK}>
             not in Library
           </span>
         )}

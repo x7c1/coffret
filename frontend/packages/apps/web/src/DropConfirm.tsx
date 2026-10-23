@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
 import type { Added } from '@coffret/api';
 
-import { newLine, pathLine, type Destination, type Level } from './destination';
+import { newLine, onDiskLine, pathLine, type Destination, type Level } from './destination';
 import { notTakenNotice, type NotTaken } from './drop';
 import {
   ADD,
@@ -283,6 +283,7 @@ export function DropConfirm({
  */
 function Where({ levels }: { levels: readonly Level[] }) {
   const made = newLine(levels);
+  const standing = onDiskLine(levels);
   return (
     <>
       <span style={{ ...INSET, overflowWrap: 'anywhere' }}>
@@ -292,17 +293,30 @@ function Where({ levels }: { levels: readonly Level[] }) {
           : levels.map((level) => (
               <span
                 key={level.path}
-                data-new={level.exists ? undefined : ''}
-                style={level.exists ? undefined : { color: COLOR.added, fontStyle: 'italic' }}
+                data-new={level.state === 'new' ? '' : undefined}
+                data-on-disk={level.state === 'on_disk' ? '' : undefined}
+                style={LEVEL[level.state]}
               >
                 {`${level.name}/`}
               </span>
             ))}
       </span>
+      {standing !== null && <span style={{ ...INSET, color: COLOR.added }}>{standing}</span>}
       {made !== null && <span style={{ ...INSET, color: COLOR.added }}>{made}</span>}
     </>
   );
 }
+
+/**
+ * How a level is drawn: as the Library names it, or in the colour of what is on
+ * its way in — slanted where the drop is what makes it, upright where it stands
+ * on the disk already.
+ */
+const LEVEL: Record<Level['state'], CSSProperties | undefined> = {
+  named: undefined,
+  on_disk: { color: COLOR.added },
+  new: { color: COLOR.added, fontStyle: 'italic' },
+};
 
 /**
  * What the ticked boxes would rename, group by group: both ends of each run of

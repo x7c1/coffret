@@ -3,14 +3,15 @@ import { expect, it, vi } from 'vitest';
 import type { Listing } from '@coffret/api';
 
 import {
-  awaitingFolders,
-  awaitingIn,
+  forgotten,
+  prospectiveFolders,
+  prospectiveIn,
   folderUnder,
   nameDefect,
   prepare,
   preparedAfter,
   takenIn,
-} from './awaiting';
+} from './prospective';
 import { destinationsOf, namedBy, newLine } from './destination';
 
 function listing(over: Partial<Listing> = {}): Listing {
@@ -80,16 +81,16 @@ it('tells a name the folder already holds from one it does not', () => {
 it('prepares a path, or says why not and asks nothing it need not', async () => {
   const list = vi.fn((path: string) => Promise.resolve(listing({ path, folders_on_disk: ['taken'] })));
   for (const typed of ['', 'a/b', '.coffret']) {
-    const answer = await prepare({ parent: 'comics', typed, awaiting: [], list });
+    const answer = await prepare({ parent: 'comics', typed, prospective: [], list });
     expect(answer).toHaveProperty('refused');
   }
   expect(list).not.toHaveBeenCalled();
 
-  expect(await prepare({ parent: 'comics', typed: 'taken', awaiting: [], list })).toEqual({
+  expect(await prepare({ parent: 'comics', typed: 'taken', prospective: [], list })).toEqual({
     refused: 'there is already something called taken here',
   });
   expect(list).toHaveBeenCalledWith('comics');
-  expect(await prepare({ parent: 'comics', typed: ' Series ', awaiting: [], list })).toEqual({
+  expect(await prepare({ parent: 'comics', typed: ' Series ', prospective: [], list })).toEqual({
     path: 'comics/Series',
   });
 
@@ -97,7 +98,7 @@ it('prepares a path, or says why not and asks nothing it need not', async () => 
   const refused = await prepare({
     parent: '',
     typed: 'comics',
-    awaiting: [],
+    prospective: [],
     list: () => Promise.reject(new Error('down')),
   });
   expect(refused).toHaveProperty('refused');
@@ -111,19 +112,27 @@ it('lets a prepared path go once the Library names it', () => {
   expect(preparedAfter(held, (path) => path === 'comics')).toEqual(['comics/Series']);
 });
 
+// A mistyped path is let go of from its own row, with every path prepared
+// under it, and nothing else prepared goes with it.
+it('forgets a prepared path and the paths prepared under it', () => {
+  const held = ['books', 'comics/Seris', 'comics/Seris/Vol 1', 'comics/Series', 'comics/Seris 2'];
+  expect(forgotten(held, 'comics/Seris')).toEqual(['books', 'comics/Series', 'comics/Seris 2']);
+  expect(forgotten(held, 'albums')).toBe(held);
+});
+
 // The prepared paths and the empty mapped prefixes are one set of folders, in
 // the Library's order, each once — and the latter only from the root's listing.
 it('draws the prepared paths and the empty mapped prefixes together', () => {
   const root = listing({ empty_mapped_prefixes: ['comics', 'albums'] });
-  expect(awaitingFolders(['comics/Series', 'comics', 'books'], root, null)).toEqual([
+  expect(prospectiveFolders(['comics/Series', 'comics', 'books'], root, null)).toEqual([
     'albums',
     'books',
     'comics',
     'comics/Series',
   ]);
-  expect(awaitingFolders(['books'], null, null)).toEqual(['books']);
+  expect(prospectiveFolders(['books'], null, null)).toEqual(['books']);
   expect(
-    awaitingFolders(['books'], listing({ path: 'albums', empty_mapped_prefixes: ['x'] }), null),
+    prospectiveFolders(['books'], listing({ path: 'albums', empty_mapped_prefixes: ['x'] }), null),
   ).toEqual(['books']);
 });
 
@@ -131,21 +140,21 @@ it('draws the prepared paths and the empty mapped prefixes together', () => {
 // names it; the tree's later answer holding it is what takes the mark away.
 it('does not draw as not held yet a folder the tree already names', () => {
   const root = listing({ empty_mapped_prefixes: ['comics'] });
-  expect(awaitingFolders(['books'], root, ['comics', 'comics/Vol 1'])).toEqual(['books']);
-  expect(awaitingFolders(['books'], root, [])).toEqual(['books', 'comics']);
+  expect(prospectiveFolders(['books'], root, ['comics', 'comics/Vol 1'])).toEqual(['books']);
+  expect(prospectiveFolders(['books'], root, [])).toEqual(['books', 'comics']);
 });
 
 // The rows of one folder: those directly in it, reached where a mapping
 // reaches — and none the listing names already.
 it('gives the rows that stand directly in a folder', () => {
-  const awaiting = ['books', 'comics', 'comics/Series', 'comics/Series/Vol 1'];
+  const prospective = ['books', 'comics', 'comics/Series', 'comics/Series/Vol 1'];
   const root = listing({
     mapped: false,
     empty_mapped_prefixes: ['comics'],
     folders: [{ name: 'books', path: 'books', mapped: true }],
   });
-  expect(awaitingIn(root, awaiting)).toEqual([{ name: 'comics', path: 'comics', mapped: true }]);
-  expect(awaitingIn(listing({ path: 'comics', held: false }), awaiting)).toEqual([
+  expect(prospectiveIn(root, prospective)).toEqual([{ name: 'comics', path: 'comics', mapped: true }]);
+  expect(prospectiveIn(listing({ path: 'comics', held: false }), prospective)).toEqual([
     { name: 'Series', path: 'comics/Series', mapped: true },
   ]);
 });
@@ -160,7 +169,7 @@ it('leaves a prepared level new in a drop’s confirmation', () => {
     { folders: [], loose: 3, looseBytes: 30, files: 3 },
     namedBy(['albums'], where),
   );
-  expect(destination.levels.map((level) => level.exists)).toEqual([false, false]);
+  expect(destination.levels.map((level) => level.state)).toEqual(['new', 'new']);
   expect(newLine(destination.levels)).toBe(
     'comics and Series are new — the Library has no such folders yet, and this drop makes them',
   );

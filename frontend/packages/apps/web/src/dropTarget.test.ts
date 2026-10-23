@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 
 import { NO_FOLDER_HERE, type Listing } from '@coffret/api';
 
-import { dropLine, dropOutcome, mappedAt, PACKED_AFTER, TAKEN } from './dropTarget';
+import { dropLine, dropOutcome, mappedAt, NOT_KNOWN_YET, PACKED_AFTER, TAKEN } from './dropTarget';
 import { NOTHING_AT_THIS_PATH } from './unmapped';
 
 // Every drop is confirmed before anything is sent — where it lands and what it
@@ -32,6 +32,17 @@ it('says a folder added as a Pack while a freeze runs is packed after it', () =>
   expect(outcome).toBe('taken_after');
   expect(dropLine(outcome, true)).toBe(`${TAKEN} — ${PACKED_AFTER}`);
   expect(PACKED_AFTER).toContain('packed after it');
+});
+
+// A row of the tree is read off the root's listing, which may not have answered
+// when the drag begins: the line neither promises the drop nor refuses it.
+it('says a drop is not known to be taken while whether a mapping reaches is unknown', () => {
+  for (const freezing of [false, true]) {
+    expect(dropOutcome({ mapped: null, freezing })).toBe('unknown');
+  }
+  expect(dropLine('unknown', true)).toBe(NOT_KNOWN_YET);
+  expect(NOT_KNOWN_YET).toContain('not known yet');
+  expect(NOT_KNOWN_YET).not.toContain(TAKEN);
 });
 
 /** The listing of a Library root, mapped or not, over two top-level folders. */

@@ -94,9 +94,10 @@ can be stored whether or not the reader supports it (spec: FM-9). The
 serves this surface in a window of its own, and has a separate window of its
 own for entering the Passphrase.
 
-The explorer lists the folders of the Library, and beside them two kinds of
-folder the Library does not hold, each marked as not in the Library yet and
-each a place a drop can land:
+The explorer lists the folders of the Library, and beside them the
+**prospective folders**: folders the explorer draws that the Library does not
+hold yet, each marked as not in the Library yet and each offered as a place a
+drop can land. A prospective folder is one of two kinds:
 
 - An **empty mapped prefix**: a top-level component this device maps that no
   Entry stands under yet. The root's listing names it apart from the
@@ -106,7 +107,8 @@ each a place a drop can land:
   it — a series too long for one drop goes in a few volumes at a time under
   one parent. The explorer's page holds it and nothing else does: nothing is
   sent to the server for it, nothing is made on disk, and a reload forgets
-  it.
+  it. "Forget this folder" on its row forgets it sooner, together with the
+  paths prepared under it.
 
 Either becomes an ordinary folder of the Library once an Entry under it is
 committed. A Library with nothing in it and nothing mapped is started from the
