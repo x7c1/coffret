@@ -10,7 +10,7 @@ check_command: 'make check && ! test -e frontend/packages/apps/web/src/awaiting.
 assignee: null
 branch: task/1023-1818-fix-the-explorers-small-defects-and-name-prospective-folders
 created_at: 2026-10-23T09:18:43Z
-updated_at: 2026-10-23T10:08:00Z
+updated_at: 2026-10-23T10:20:00Z
 ---
 
 # fix(explorer): name the folders the Library does not hold yet, and mend seven small defects of the tree, the list and the drop
@@ -142,4 +142,4 @@ shown.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this macOS machine, with `make e2e-it` (or the Electron e2e target where it covers the explorer): a drop onto a prepared path still lands as it did before the rename, so that the rename changed no behaviour. The merging session records the run in the PR.
+- [x] On this macOS machine, with `make e2e-it` (or the Electron e2e target where it covers the explorer): a drop onto a prepared path still lands as it did before the rename, so that the rename changed no behaviour. The merging session records the run in the PR.
