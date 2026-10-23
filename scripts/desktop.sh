@@ -22,6 +22,10 @@
 #                                  before it starts the app (check_dev_sandbox),
 #                                  on any host; scripts/desktop-dev-sandbox-test.sh
 #                                  calls it
+#   scripts/desktop.sh place-addon place the Node-API addon Cargo built
+#                                  (libcoffret_napi.dylib or .so) as
+#                                  backend/target/release/coffret.node under a
+#                                  new inode; `make napi-addon` calls it
 #
 # The app runs the server in its own process through the Node-API addon
 # (coffret-napi, built by `make napi-addon` as backend/target/release/coffret.node
@@ -47,6 +51,20 @@
 # it serves the Libraries under COFFRET_STATE_DIR, which the Makefile exports
 # as the development state directory (docs/guides/environments.md) and without
 # which both `dev` and the app refuse to run.
+#
+# `place-addon` copies the library to a temporary name beside coffret.node and
+# renames it over coffret.node, rather than copying onto coffret.node. A copy
+# onto it rewrites the file under its old inode: on macOS a development app
+# that has the addon loaded then holds a mapping whose file changed under it,
+# and the kernel kills the next app started from that file (its code signature
+# no longer matches the file it was recorded for). The rename makes the path a
+# new file, so what has the old one mapped keeps it until it exits. This
+# variable points it elsewhere, and exists only for its test
+# (scripts/desktop-addon-test.sh):
+#
+#   COFFRET_ADDON_DIR              the directory that holds the library Cargo
+#                                  built and receives coffret.node, by default
+#                                  backend/target/release
 #
 # On Linux the addon is built with the system's C compiler, /usr/bin/cc,
 # whatever PATH puts first, and refused where the system cannot load it
@@ -91,7 +109,7 @@ readonly DEV_IDENTIFIER="io.github.x7c1.coffret.dev"
 readonly SYSTEM_CC="/usr/bin/cc"
 
 usage() {
-  echo "usage: scripts/desktop.sh build|install|dev-build|dev|dev-sandbox-check" >&2
+  echo "usage: scripts/desktop.sh build|install|dev-build|dev|dev-sandbox-check|place-addon" >&2
   exit 2
 }
 
@@ -141,6 +159,35 @@ check_loadable() {
   env -i "$interp" --list "$addon" >/dev/null ||
     fail "$addon does not load with the program interpreter $interp from an empty environment; a library it needs is missing, or it was linked with a compiler other than $SYSTEM_CC"
   echo "$addon loads with $interp"
+}
+
+# Places the library Cargo built in $COFFRET_ADDON_DIR (the .dylib on macOS,
+# the .so on Linux) as coffret.node there, under a new inode: a copy under a
+# temporary name in the same directory, so that the rename over coffret.node
+# stays on one filesystem and is atomic.
+place_addon() {
+  local dir="${COFFRET_ADDON_DIR:-$ROOT/backend/target/release}" built="" candidate
+  for candidate in "$dir/libcoffret_napi.dylib" "$dir/libcoffret_napi.so"; do
+    if [ -f "$candidate" ]; then
+      built="$candidate"
+      break
+    fi
+  done
+  [ -n "$built" ] || fail "the addon's library was not found under $dir"
+  PLACING="$(mktemp "$dir/.coffret.node.XXXXXX")"
+  trap remove_placing EXIT
+  cp "$built" "$PLACING"
+  # mktemp makes the file readable by its owner alone; give it the mode a
+  # plain copy of the library would have.
+  chmod 0755 "$PLACING"
+  mv -f "$PLACING" "$dir/coffret.node"
+  PLACING=""
+  echo "Placed $built as $dir/coffret.node"
+}
+
+PLACING=""
+remove_placing() {
+  [ -z "$PLACING" ] || rm -f "$PLACING"
 }
 
 # The frontend's dependencies, electron and electron-builder among them.
@@ -465,5 +512,6 @@ case "$1" in
   dev-build) dev_build ;;
   dev) dev ;;
   dev-sandbox-check) check_dev_sandbox ;;
+  place-addon) place_addon ;;
   *) usage ;;
 esac

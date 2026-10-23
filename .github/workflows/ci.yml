@@ -246,6 +246,11 @@ jobs:
       - name: Development app sandbox check test
         run: make desktop-dev-sandbox-test
 
+      # The addon is placed as a new file each time, so a running development
+      # app keeps the one it loaded (scripts/desktop.sh place-addon).
+      - name: Development addon placement test
+        run: make desktop-addon-test
+
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to
   # either one can only be shown not to break the other by running both.
