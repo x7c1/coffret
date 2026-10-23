@@ -127,6 +127,10 @@ control for a sync, since a drop starts one.
 
 ## Collocations
 
+- create (a Library, by drawing its Library ID and writing its first head,
+  `head-0`, to [Storage](../storage/) — a [Journal](../journal/) record that
+  adds and removes nothing, so that even the Library's first commit has a head
+  to start from (spec: CP-2))
 - open (a Library on this device, making it available for operations)
 - scan (the mapped local folders for new or changed files)
 - deposit (new content into the Library: adding a file, or replacing a
@@ -345,7 +349,10 @@ control for a sync, since a drop starts one.
     under it (spec: EP-2). A listing of the mapped folder gives such a folder
     by name only, apart from the Library's folders, so a page can tell a name
     already taken by files on disk from one nothing stands at — and a path is
-    never prepared over one. Nor is an empty mapped prefix or a prepared path
+    never prepared over one. Such a folder is not a prospective folder either:
+    a drop let go over it does not make it, since it already stands on disk,
+    and the run that carries the drop in carries in what already stands in it
+    too. Nor is an empty mapped prefix or a prepared path
     (see [Browsing surface](#browsing-surface)) a folder of the Library until
     an Entry under it is committed.
   - A mapped root this device cannot vouch for — missing, or empty while
@@ -413,11 +420,12 @@ control for a sync, since a drop starts one.
     whenever it opens the explorer, and the person does nothing more than open
     it (spec: LA-15, LA-17, LA-21).
     - A browser token lets a page do everything the explorer can do, for one
-      Library, until the token expires, is revoked, or the host restarts
-      (spec: LA-18). It is no narrower than that: there are no read-only
-      tokens and no roles. It is not a key either — it unlocks nothing, and a
-      locked Library stays locked to a page holding one until the
-      Passphrase is entered in the app's own window.
+      Library, until the token expires, is revoked, the host restarts, the
+      server restarts, or the Library served changes (spec: LA-18). It is no
+      narrower than that: there are no read-only tokens and no roles. It is
+      not a key either — it unlocks nothing, and a locked Library stays
+      locked to a page holding one until the Passphrase is entered in the
+      app's own window.
     - A tab holding no token — a bookmark, a typed address, a session that
       ended — reads nothing of the Library, and says to reload the explorer
       from the app (spec: LA-21).
@@ -494,6 +502,17 @@ control for a sync, since a drop starts one.
   is ever placed at a path carrying it (spec: EP-13, EP-14).
   - The cost is the one the reserved prefix above carries: anything of the
     user's own under a folder of that name is not backed up.
+- A mapped root may be the top of a volume, where the desktop keeps its
+  **trash folder** — `.Trash`, `.Trashes`, or `.Trash-` and a number — and
+  where the discard of a departed file lands. Such a folder standing as the
+  first component directly under a mapped root is never part of the Library,
+  decided from the name alone: a scan never enters it, a fetch never places a
+  file in it, and a drop or an import is declined there rather than written,
+  so a sync never carries the trash back in (spec: EP-16).
+  - A folder of the same name anywhere deeper is the person's own and is
+    walked as usual; one of those names at a mapped root's top holding the
+    person's own files is not backed up, the cost the management area's name
+    carries too.
 - The Library's current Container set can be restored from the Master Key and
   Storage while the required control state (defined in
   [Storage Object](../storage-object/)) remains intact. A restore brings back

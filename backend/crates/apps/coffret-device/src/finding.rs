@@ -460,13 +460,24 @@ impl fmt::Display for Finding {
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \
                  now complete"
             ),
+            // Two sentences rather than one: a Container that never reached
+            // Storage left nothing there, and one that did had its object
+            // trashed — where a person looking for it would find it.
             Self::Settled(Settled::Disposed {
                 container_id,
-                disposal: Disposal::NeverUploaded | Disposal::Trashed,
+                disposal: Disposal::NeverUploaded,
             }) => write!(
                 f,
-                "settled container {container_id}: nothing committed it, so what it left was \
-                 disposed of"
+                "settled container {container_id}: nothing committed it, and it never reached \
+                 Storage, so what it left on this device was disposed of"
+            ),
+            Self::Settled(Settled::Disposed {
+                container_id,
+                disposal: Disposal::Trashed,
+            }) => write!(
+                f,
+                "settled container {container_id}: nothing committed it, so its object was \
+                 trashed on Storage"
             ),
             // The row remains the proof needed to retry this trash.
             Self::Settled(Settled::Disposed {

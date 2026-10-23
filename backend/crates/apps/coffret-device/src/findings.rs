@@ -794,24 +794,29 @@ mod tests {
         .to_string()
     }
 
-    // Two of the three disposals leave nothing on Storage — one because the
-    // earlier run never put anything there, the other because the trash took
-    // it — so both are "disposed of". The third is not: Storage refused the
-    // trash, the object is still there, and the sentence says so and what
-    // finds it now, with Storage's own answer (spec: OC-1, OC-4).
+    // Each of the three disposals is said in its own words. One never reached
+    // Storage, so nothing was left there; one had its object trashed, where it
+    // can still be found; and the third is not disposed of at all: Storage
+    // refused the trash, the object is still there, and the sentence says so
+    // and what finds it now, with Storage's own answer (spec: OC-1, OC-4).
     #[test]
-    fn a_disposal_storage_refused_is_not_said_as_disposed_of() {
+    fn each_disposal_is_said_in_its_own_words() {
         let container_id = ContainerId::from_bytes([5; ContainerId::BYTE_LEN]);
-        let disposed = format!(
-            "settled container {container_id}: nothing committed it, so what it left was \
-             disposed of"
-        );
 
         assert_eq!(
             settled_said(container_id, Disposal::NeverUploaded),
-            disposed
+            format!(
+                "settled container {container_id}: nothing committed it, and it never \
+                 reached Storage, so what it left on this device was disposed of"
+            ),
         );
-        assert_eq!(settled_said(container_id, Disposal::Trashed), disposed);
+        assert_eq!(
+            settled_said(container_id, Disposal::Trashed),
+            format!(
+                "settled container {container_id}: nothing committed it, so its object was \
+                 trashed on Storage"
+            ),
+        );
         assert_eq!(
             settled_said(
                 container_id,

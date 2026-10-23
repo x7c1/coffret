@@ -6,13 +6,13 @@ use crate::reconnect::Reconnect;
 ///
 /// No URL, even while a flow waits: the consent page goes back to the request
 /// that pressed and to nobody polling, so a second tab asking what the server
-/// is doing is told a page is open and not handed one to open.
+/// is doing is told a page is open and not handed one to open (spec: SA-10).
 ///
 /// What a waiting flow carries instead is `flow`, which names it without
 /// giving its page away. One flow can end and another begin between two
 /// polls, and the state alone reads `waiting` both times: a window holding the
 /// page its own press was answered with compares that page's [`flow_of`] with
-/// this one, and drops its link once they differ.
+/// this one, and drops its link once they differ (spec: SA-10).
 #[derive(Serialize)]
 pub(super) struct ReconnectDto {
     /// `waiting`, `renewed`, `refused`, `timed_out` or `failed`.
