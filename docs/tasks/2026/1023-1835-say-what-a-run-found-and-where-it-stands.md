@@ -10,7 +10,7 @@ check_command: 'make check && grep -q "ctrl_c" backend/crates/apps/coffret-cli/s
 assignee: null
 branch: task/1023-1835-say-what-a-run-found-and-where-it-stands
 created_at: 2026-10-23T09:35:00Z
-updated_at: 2026-10-23T12:40:00Z
+updated_at: 2026-10-23T12:50:00Z
 ---
 
 # fix(cli,server): say what a run found and where it stands — six gaps in reports, progress and interruption
@@ -123,4 +123,4 @@ does; do not re-implement the meta decoding.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this machine, with the agent's development Library (`libraries-dev/agent`, see `docs/guides/environments.md`): start a `coffret sync` over a drop of a few files, press Ctrl-C during it, and confirm the interrupted line, a non-zero exit, and that the next `coffret sync` settles the leftover (no row stuck). The merging session records what it ran in the PR.
+- [x] On this machine, with the agent's development Library (`libraries-dev/agent`, see `docs/guides/environments.md`): start a `coffret sync` over a drop of a few files, press Ctrl-C during it, and confirm the interrupted line, a non-zero exit, and that the next `coffret sync` settles the leftover (no row stuck). The merging session records what it ran in the PR.
