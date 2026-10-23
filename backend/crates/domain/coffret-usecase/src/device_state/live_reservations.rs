@@ -16,10 +16,13 @@ use super::{LiveReservation, ReservationId};
 ///
 /// Held in memory and nowhere else, like the scratch names a writer holds:
 /// nothing here is ever written to the Index, and a process started afterwards
-/// holds nothing live, so every reservation it finds is one a run may decide
-/// (spec: LA-12). It belongs to whoever opens the Library rather than to one
-/// open handle, so a server that is locked and unlocked again while a drop is
-/// still landing on the old handle goes on knowing that drop is live.
+/// holds nothing live. What tells it which of the reservations it finds a run
+/// may decide is the Index's own mark of a drop that finished receiving
+/// ([`Reservation::received`](super::Reservation::received)): one without it
+/// was cut off and waits for its folder to be dropped again (spec: LA-12). It
+/// belongs to whoever opens the Library rather than to one open handle, so a
+/// server that is locked and unlocked again while a drop is still landing on
+/// the old handle goes on knowing that drop is live.
 #[derive(Debug, Default)]
 pub struct LiveReservations {
     held: Mutex<Held>,
@@ -58,6 +61,22 @@ impl LiveReservations {
         held.live.insert(id);
         held.ever.insert(id);
         LiveReservation::new(id, Arc::clone(self))
+    }
+
+    /// Holds `id` live as [`hold`](Self::hold) does, unless a drop in this
+    /// process holds it already, in which case `None`.
+    ///
+    /// What a drop taking over a reservation it found in progress asks
+    /// (spec: PK-17): two drops of one folder arriving together must not both
+    /// take the same one over, and the question and the hold are one step
+    /// under the lock, so only one of them is answered with it.
+    pub fn try_hold(self: &Arc<Self>, id: ReservationId) -> Option<LiveReservation> {
+        let mut held = self.held();
+        if !held.live.insert(id) {
+            return None;
+        }
+        held.ever.insert(id);
+        Some(LiveReservation::new(id, Arc::clone(self)))
     }
 
     /// Whether a drop in this process holds `id` now.
@@ -120,6 +139,19 @@ mod tests {
 
     use super::LiveReservations;
     use crate::device_state::ReservationId;
+
+    #[test]
+    fn a_reservation_held_already_is_not_held_twice() {
+        let registry = Arc::new(LiveReservations::new());
+        let id = ReservationId::new(1);
+        let hold = registry.try_hold(id).expect("nothing holds it yet");
+        assert!(registry.try_hold(id).is_none(), "a drop holds it");
+        drop(hold);
+        assert!(
+            registry.try_hold(id).is_some(),
+            "and once it lets go, it may be held again"
+        );
+    }
 
     #[test]
     fn a_reservation_is_live_for_as_long_as_its_hold() {

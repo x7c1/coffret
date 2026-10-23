@@ -6,7 +6,9 @@ use coffret_server::Allowance;
 use serde_json::{json, Value};
 use tracing::Level;
 
-use crate::support::{bytes, json as body_of, refusal_of, states, sync, written, Served};
+use crate::support::{
+    bytes, freeze, json as body_of, refusal_of, rows_of, states, sync, written, Served,
+};
 
 // The whole of what a drop is for. Two files land in the folder, the listing
 // shows them at once — nothing has committed them, so no catalog row exists and
@@ -880,4 +882,184 @@ async fn an_upload_that_declares_no_length_is_weighed_against_one_parts_ceiling(
     assert_eq!(event.field("operation"), "upload");
     assert_eq!(event.number("coming"), allowance.part_bytes as i64);
     assert_eq!(event.field("available"), "67108864");
+}
+
+/// The pages of the book the cases about a cut-off drop bring in.
+const BOOK: [(&str, &[u8]); 3] = [
+    ("page-001.jpg", b"the first page"),
+    ("page-002.jpg", b"the second page"),
+    ("page-003.jpg", b"the third page"),
+];
+
+/// Lands the first two pages of [`BOOK`] in `scans/vol-1` as a drop that asked
+/// for a Pack, and stops its server while it is still receiving: a server
+/// started afterwards, and started up, stands in place of `served`.
+async fn cut_off(served: &mut Served) {
+    let drop = served.upload_book_streamed("scans/vol-1");
+    for (name, content) in &BOOK[..2] {
+        served.until_landed(&drop.send(name, content)).await;
+    }
+    drop.abandon();
+    served.restart();
+    served.start_up().await;
+    served.freeze_idle().await;
+}
+
+/// Every page of [`BOOK`] is an Entry this device has in `scans/vol-1`,
+/// packed by one run into one Pack, and nothing waits for a Pack any more.
+async fn one_pack_of_the_book(served: &Served) {
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "scans/vol-1");
+    assert_eq!(freeze(&work)["status"], "done", "{work}");
+    assert_eq!(freeze(&work)["packs"], 1, "one book, one Pack: {work}");
+    assert_eq!(freeze(&work)["entries"], BOOK.len());
+    assert_eq!(
+        rows_of(served, "scans/vol-1").await,
+        BOOK.map(|(name, _)| (name.to_owned(), "present".to_owned(), "pack".to_owned())),
+    );
+    assert_eq!(
+        served.reservations().await,
+        0,
+        "the one reservation went with the commit"
+    );
+}
+
+// PK-17, LA-12: the same folder dropped again after a drop of it was cut off
+// by its server stopping takes the cut-off drop over rather than reserving
+// beside it. The pages the first drop received are not refused as inside a
+// Pack — none was packed — a page sent again replaces the one on disk, and the
+// freeze that follows packs every page of both drops as one Pack.
+#[tokio::test]
+async fn a_cut_off_drop_dropped_again_is_taken_over_and_packed_as_one() {
+    let mut served = Served::library().await;
+    cut_off(&mut served).await;
+
+    let logs = CapturedLogs::capture();
+    let mut again = BOOK;
+    again[0].1 = b"the first page, scanned again";
+    let (status, answer) = body_of(served.upload_book("scans/vol-1", &again).await).await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(
+        written(&answer).len(),
+        BOOK.len(),
+        "every page lands, the ones received before included: {answer}"
+    );
+    assert_eq!(
+        answer["refused"],
+        json!([]),
+        "no page is refused as inside a Pack"
+    );
+    assert!(
+        logs.text()
+            .contains("a drop cut off part way was taken over by a drop of its folder"),
+        "{}",
+        logs.text()
+    );
+    served.freeze_idle().await;
+
+    one_pack_of_the_book(&served).await;
+    assert_eq!(
+        bytes(served.get("/api/file?path=scans/vol-1/page-001.jpg").await).await,
+        b"the first page, scanned again",
+        "the page sent again replaced the one received before",
+    );
+}
+
+// PK-17, LA-12: the drop that takes a cut-off one over starts from the pages
+// that drop received — they are in the reservation before this drop sends a
+// page — so a drop of only the rest of the book still packs all of it.
+#[tokio::test]
+async fn a_drop_taking_a_cut_off_one_over_starts_from_the_pages_it_received() {
+    let mut served = Served::library().await;
+    cut_off(&mut served).await;
+
+    let rest = served.upload_book_streamed("scans/vol-1");
+    let (name, content) = BOOK[2];
+    served.until_landed(&rest.send(name, content)).await;
+    assert_eq!(
+        served.reserved_paths().await,
+        [BOOK.map(|(name, _)| format!("scans/vol-1/{name}")).to_vec()],
+        "one reservation, naming the pages received before and the one landed now",
+    );
+    let (status, answer) = body_of(rest.finish().await).await;
+    assert_eq!(status, 200, "{answer}");
+    served.freeze_idle().await;
+
+    one_pack_of_the_book(&served).await;
+}
+
+// PK-17: a drop that took a cut-off one over and is then stopped as a whole —
+// here a page past the part budget — does not release it: the reservation
+// stays a drop in progress, naming what both drops landed, and the next drop of
+// the folder still brings the whole book in as one Pack. Released, the pages
+// the first drop received would be left loose for a sync to carry in one
+// Container each.
+#[tokio::test]
+async fn a_drop_taking_a_cut_off_one_over_that_is_stopped_leaves_it_in_progress() {
+    let mut served = Served::within(Allowance {
+        part_bytes: 64,
+        ..Allowance::generous()
+    })
+    .await;
+    cut_off(&mut served).await;
+
+    let (status, refusal) = body_of(
+        served
+            .upload_book(
+                "scans/vol-1",
+                &[BOOK[2], ("page-004.jpg", &[b'x'; 128][..])],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413, "{refusal}");
+    assert_eq!(refusal["written"], json!(["scans/vol-1/page-003.jpg"]));
+    served.freeze_idle().await;
+    assert_eq!(
+        served.reserved_paths().await,
+        [BOOK.map(|(name, _)| format!("scans/vol-1/{name}")).to_vec()],
+        "the one reservation is kept, naming the pages of both drops",
+    );
+
+    let (status, answer) = body_of(served.upload_book("scans/vol-1", &BOOK).await).await;
+    assert_eq!(status, 200, "{answer}");
+    served.freeze_idle().await;
+    one_pack_of_the_book(&served).await;
+}
+
+// PK-17: a drop that took a cut-off one over and every file of which is
+// refused still finishes the book the cut-off drop received: its freeze packs
+// those pages as one Pack and releases the reservation.
+#[tokio::test]
+async fn a_drop_taking_a_cut_off_one_over_with_every_file_refused_packs_what_it_received() {
+    let mut served = Served::library().await;
+    cut_off(&mut served).await;
+
+    let (status, answer) = body_of(
+        served
+            .upload_book("scans/vol-1", &[("../escaped.jpg", b"out")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(written(&answer), Vec::<String>::new());
+    assert_eq!(answer["refused"][0]["error"], "bad_path");
+    served.freeze_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["status"], "done", "{work}");
+    assert_eq!(freeze(&work)["packs"], 1, "{work}");
+    assert_eq!(
+        freeze(&work)["entries"],
+        2,
+        "the pages the cut-off drop received"
+    );
+    assert_eq!(
+        rows_of(&served, "scans/vol-1").await,
+        BOOK[..2]
+            .iter()
+            .map(|(name, _)| ((*name).to_owned(), "present".to_owned(), "pack".to_owned()))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(served.reservations().await, 0);
 }

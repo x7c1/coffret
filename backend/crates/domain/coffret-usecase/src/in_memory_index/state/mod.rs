@@ -302,6 +302,7 @@ impl State {
                 id,
                 folder: folder.cloned(),
                 paths: BTreeSet::new(),
+                received: false,
             },
         );
         id
@@ -312,6 +313,12 @@ impl State {
     pub(super) fn extend_reservation(&mut self, id: ReservationId, path: &EntryPath) {
         if let Some(reservation) = self.reservations.get_mut(&id) {
             reservation.paths.insert(path.clone());
+        }
+    }
+
+    pub(super) fn mark_received(&mut self, id: ReservationId) {
+        if let Some(reservation) = self.reservations.get_mut(&id) {
+            reservation.received = true;
         }
     }
 

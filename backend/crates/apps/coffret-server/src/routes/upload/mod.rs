@@ -22,14 +22,17 @@ use crate::state::ServerState;
 use super::RefusalDto;
 
 use self::declared_length::declared_length;
+use self::drop_reservation::DropReservation;
 use self::finish_drop::{finish_drop, FinishedDrop};
 use self::outran::outran;
 use self::receive::{receive, Reserving};
 use self::refusal::Refusal;
 use self::refused_dto::RefusedDto;
-use self::release::release;
+use self::release::release_stopped;
 
 mod declared_length;
+
+mod drop_reservation;
 
 mod finish_drop;
 
@@ -132,18 +135,24 @@ const OPERATION: &str = "upload";
 /// written down on this device before the first page lands: a reservation of
 /// the folder, made before the first part is read and extended by each page
 /// before it lands (spec: PK-17). A sync leaves a reserved page alone and says
-/// it waits for its Pack. While the drop is receiving, the reservation is live
-/// in this process, and no freeze decides it — a run of the whole folder going
-/// on beside the drop may pack the pages already landed, but it leaves the
-/// reservation for the drop's own run. That run is armed once receiving ends,
-/// as a run of its own rather than one taken for the run under way
-/// ([`freeze_dropped`]), and the freeze that packs the pages releases the
-/// reservation with its commit. A server started afterwards takes up every
-/// reservation it finds, in the order they were made
-/// ([`resume_reserved`](crate::freeze::resume_reserved)). A drop refused as a
-/// whole, or one every part of which was refused, arms nothing, and its
-/// reservation is released with it: what it left in the folder waits there as
-/// anything copied into a mapped folder does.
+/// it waits for its Pack. Until the drop has finished receiving, the
+/// reservation is a drop in progress: no freeze packs any of its pages or
+/// decides it — a run of the whole folder going on beside the drop leaves both
+/// for the drop's own run. That run is armed once receiving ends and the
+/// reservation is marked received, as a run of its own rather than one taken
+/// for the run under way ([`freeze_dropped`]), and the freeze that packs the
+/// pages releases the reservation with its commit. A server started afterwards
+/// takes up every received reservation it finds, in the order they were made
+/// ([`resume_reserved`](crate::freeze::resume_reserved)); one whose drop was
+/// cut off by the process stopping stays where it is, and the next drop onto
+/// its folder that asks for a Pack takes it over, so the pages the first drop
+/// received and the ones the second brings are packed as one book
+/// (spec: LA-12). A drop refused as a whole, or one every part of which was
+/// refused, arms nothing, and a reservation it made is released with it: what
+/// it left in the folder waits there as anything copied into a mapped folder
+/// does. A reservation it took over is not let go that way: one refused as a
+/// whole stays in progress, for the next drop of its folder, and one every part
+/// of which was refused still finishes the book the cut-off drop received.
 ///
 /// # Refused before anything lands
 ///
@@ -264,16 +273,21 @@ pub async fn upload(
     // lands, for the reason the `unlocked` above does: a page that lands
     // unreserved is one a sync carries in on its own. Held live for as long as
     // the drop is receiving, so that no freeze in this process decides it while
-    // pages are still to come.
-    let reservation = match query.freeze {
-        true => Some(library.reserve(folder.as_ref()).await?),
-        false => None,
+    // pages are still to come. Where a drop onto this folder was cut off part
+    // way, this one takes its reservation over and goes on adding to it
+    // (`DropReservation::hold`). `reserved` is the paths it names as Entry
+    // Paths, for the freeze's selection: what the reservation names is what
+    // the drop asked to pack, and nothing else in the folder is.
+    let (reservation, mut reserved) = match query.freeze {
+        true => {
+            let (held, received) =
+                DropReservation::hold(&library, folder.as_ref(), OPERATION).await?;
+            (Some(held), received)
+        }
+        false => (None, BTreeSet::new()),
     };
 
     let mut written = Vec::new();
-    // The same paths as Entry Paths, for the freeze's selection: what the drop
-    // reserved is what it asked to pack, and nothing else in the folder is.
-    let mut reserved = BTreeSet::new();
     let mut refused = Vec::new();
     let mut bytes = 0u64;
     let mut seen = 0usize;
@@ -351,8 +365,9 @@ pub async fn upload(
     .await;
     if let Err(stopped) = taken {
         // Nothing is armed for a drop that was stopped, so nothing is to wait
-        // for a Pack either (spec: PK-17).
-        release(&library, reservation, OPERATION).await;
+        // for a Pack either — save the files of a drop cut off earlier that
+        // this one took over, which still do (spec: PK-17).
+        release_stopped(&library, reservation, OPERATION).await;
         return Err(stopped.having_written(written));
     }
     finish_drop(

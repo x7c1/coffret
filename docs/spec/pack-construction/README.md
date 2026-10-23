@@ -216,7 +216,21 @@ Concept background: [Pack](../../concepts/pack/),
     mapping or a pending row (EP-9, OC-2) — never uploaded and in no Index
     Snapshot (CK-7) — and it is the drop's record, not folder state of `freeze`'s
     (PK-2). A drop that is refused as a whole, or that lands nothing, arms no
-    `freeze` and keeps no reservation.
+    `freeze` and keeps no reservation it made.
+  - A reservation is **received** once its drop has stopped receiving with
+    every file it brought: the drop marks it so before it arms its own
+    `freeze`. Until then it is a **drop in progress** — one still being
+    received, or one **cut off** because the process taking the drop stopped
+    part way — and names the files that had landed, not the book. A
+    reservation recorded before the device kept the mark counts as cut off.
+  - A drop that asks for a Pack onto a folder holding a cut-off reservation
+    takes that reservation over instead of making one: its paths are the
+    drop's from the start, a file the drop writes again replaces the one on
+    disk, and the `freeze` the drop arms once it finishes receiving has a
+    selection of every path the reservation names, so the files of both drops
+    come to one book. A drop that took one over and is then refused as a whole
+    keeps it a drop in progress; one every file of which is refused still
+    arms the `freeze` of the files the cut-off drop received.
   - A sync's scan selects no reserved path for addition or update, and reports
     each as waiting for its Pack rather than passing over it (PK-14). A reserved
     file is still a file the walk found, so nothing is inferred deleted for it
@@ -230,26 +244,31 @@ Concept background: [Pack](../../concepts/pack/),
     Pack, or ineligible under PK-1 or EP-10 — it is released once the run has
     finished, with a finding per path saying why. A reservation some of whose
     paths are gone packs the rest. A run that stops before either keeps every
-    reservation as it was, for the next run to decide. A reservation that names
-    no path — its drop's first file has not landed — is decided only by the
-    `freeze` a server takes it up as, so a run over another book never releases
-    the reservation of a drop just made.
-  - While the drop that made it is still receiving, a reservation is **live** in
-    that process: held in memory and nowhere else, so a process started afterwards
-    holds none live. No `freeze` decides a live reservation, nor one that was live
-    at any moment since the run read the reservations — what it read may lack the
-    files that landed after. Such a run may still pack the files of it already
-    landed, which are then not eligible to the drop's own run (PK-1).
+    reservation as it was, for the next run to decide. Only a received
+    reservation is decided: no `freeze` decides a drop in progress, nor selects
+    any path it names, so neither the pages landed so far nor the ones still to
+    come are packed apart from the rest of their book. A received reservation
+    that names no path is decided only by the `freeze` a server takes it up
+    as.
+  - While the drop that made or took over a reservation is still receiving, the
+    reservation is also **live** in that process: held in memory and nowhere
+    else, so a process started afterwards holds none live. No `freeze` decides
+    one that was live at any moment since the run read the reservations — what
+    it read may lack the files that landed after — and no second drop takes a
+    live one over.
   - The drop's own `freeze` is armed once it stops receiving, and is a run of its
     own: it is never taken for a run already under way, even one whose scope
     covers every file the drop wrote, because that run read the reservations
     while the drop was live. It may join a run of the same folder that is still
     waiting its turn, since nothing has walked the folder for that one yet.
-  - A server takes every reservation up once its start-up catch-up has finished,
-    and again once the Library is unlocked in place, in the order they were
-    made: each as a `freeze` whose selection is exactly its paths, taking its
-    turn as any `freeze` does (LA-12). A reservation live in that process is not
-    taken up: its drop arms its own run.
+  - A server takes every received reservation up once its start-up catch-up
+    has finished, and again once the Library is unlocked in place, in the order
+    they were made: each as a `freeze` whose selection is exactly its paths,
+    taking its turn as any `freeze` does (LA-12). A reservation live in that
+    process is not taken up: its drop arms its own run. A cut-off reservation is
+    not taken up either: it is kept in place, its files are listed as received
+    and waiting for their Pack, and the server says as it starts how many such
+    drops are in progress, until a drop of their folder takes each over.
 - **PK-18.** A Pack's entry table is fixed before any of its content is
   written. The layout puts the meta section ahead of the chunk sequence (FM-2,
   FM-9), so `freeze` declares every selected Entry's path, size, and hash from

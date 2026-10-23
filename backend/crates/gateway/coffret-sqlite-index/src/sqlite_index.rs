@@ -479,6 +479,13 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn mark_received(&self, id: ReservationId) -> IndexResult<()> {
+        self.write("marking a reservation received", move |connection| {
+            device_state::mark_received(connection, id)
+        })
+        .await
+    }
+
     async fn reservations(&self) -> IndexResult<Vec<Reservation>> {
         self.read("reading the reservations", device_state::reservations)
             .await

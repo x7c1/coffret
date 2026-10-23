@@ -7,8 +7,9 @@ use crate::state::ServerState;
 
 use super::{freeze_folder, Book};
 
-/// Takes up every drop this device recorded as waiting for its Pack, in the
-/// order the drops were made (spec: PK-17, LA-12).
+/// Takes up every drop this device recorded as waiting for its Pack that
+/// finished receiving, in the order the drops were made, and leaves the ones
+/// cut off part way for their folder to be dropped again (spec: PK-17, LA-12).
 ///
 /// What a server holds about its work lives as long as the process, so a
 /// freeze a stopped server was running or had waiting is gone with it — save
@@ -27,9 +28,14 @@ use super::{freeze_folder, Book};
 /// The freeze the reservation arms takes the keys when its turn comes, as any
 /// does.
 ///
-/// A reservation a drop in this process still holds live is passed over: the
-/// drop arms its own run once it stops receiving. After a restart nothing is
-/// live, so every reservation is taken up.
+/// A reservation whose drop never finished receiving is passed over: it names
+/// the pages that landed before the process taking the drop stopped, not the
+/// book, and packing those would leave the rest — which the person drops again
+/// — for a second Pack. It stays as the drop in progress it is, and the next
+/// drop onto its folder takes it over and packs the whole of it. Each start
+/// says how many there are, so the files they hold, which the listing shows as
+/// received and waiting, are not waiting silently. A drop still landing in this
+/// process is one of these too: it arms its own run once it stops receiving.
 ///
 /// A catalog that will not answer is said and leaves every reservation where
 /// it is, for the next start or unlock.
@@ -48,24 +54,42 @@ pub async fn resume_reserved(state: &Arc<ServerState>) {
             return;
         }
     };
-    if reservations.is_empty() {
+    let (received, in_progress): (Vec<_>, Vec<_>) = reservations
+        .into_iter()
+        .partition(|reservation| reservation.received);
+    // Counts only: a reservation names a folder and the files in it, which are
+    // the user's own names (spec: EL-1). A drop still landing on a handle taken
+    // before a lock is not one cut off, and not counted as one.
+    let cut_off: Vec<_> = in_progress
+        .iter()
+        .filter(|reservation| !library.live.is_live(reservation.id))
+        .collect();
+    if !cut_off.is_empty() {
+        info!(
+            operation = "freeze",
+            reservations = cut_off.len(),
+            paths = cut_off
+                .iter()
+                .map(|reservation| reservation.paths.len())
+                .sum::<usize>(),
+            "drops cut off part way are in progress; dropping their folders again finishes them",
+        );
+    }
+    if received.is_empty() {
         return;
     }
-    // Counts only: a reservation names a folder and the files in it, which are
-    // the user's own names (spec: EL-1).
     info!(
         operation = "freeze",
-        reservations = reservations.len(),
-        paths = reservations
+        reservations = received.len(),
+        paths = received
             .iter()
             .map(|reservation| reservation.paths.len())
             .sum::<usize>(),
         "taking up the drops waiting for their Pack",
     );
-    for reservation in reservations {
-        // A drop still landing on a handle taken before a lock is not one to
-        // take up: it arms its own run once it stops receiving, with every
-        // page it landed (spec: PK-17).
+    for reservation in received {
+        // One marked a moment ago by a drop on a handle taken before a lock,
+        // which arms its own run as it lets go of it (spec: PK-17).
         if library.live.is_live(reservation.id) {
             continue;
         }
