@@ -129,7 +129,7 @@ the module docs which side is the source.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this machine, in a throwaway Library on the local MinIO under a state
+- [x] On this machine, in a throwaway Library on the local MinIO under a state
       directory of the agent's own (never `books` or the production Library):
       map a throwaway folder holding a
       book and `.DS_Store`, `._page-001.jpg`, `Thumbs.db` and a `__MACOSX/`
