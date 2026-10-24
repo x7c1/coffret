@@ -61,11 +61,15 @@ aws-config = { version = "1", features = ["behavior-version-latest"] }
 # which the workspace already builds. `test-util` is the same trap under
 # another name: it turns on `aws-smithy-runtime/legacy-test-util`, which is
 # that connector again — take the test clients from the crate below.
+#
+# `sigv4a` is left out of that set too. It signs for S3 multi-region access
+# points, which a Library never names, and it is the one thing that brings
+# crypto-bigint 0.5 into the tree, whose constant-time arithmetic carries an
+# advisory (RUSTSEC-2026-0387) fixed only on a later line.
 aws-sdk-s3 = { version = "1", default-features = false, features = [
   "default-https-client",
   "http-1x",
   "rt-tokio",
-  "sigv4a",
 ] }
 # The fake clients the S3 gateway's cases answer from, taken from the crate that
 # owns them. `aws_smithy_runtime::client::http::test_util` re-exports the same
