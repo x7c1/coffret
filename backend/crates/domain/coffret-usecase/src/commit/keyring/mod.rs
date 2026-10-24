@@ -17,6 +17,7 @@ use coffret_model::{
 use crate::byte_stream::ByteStream;
 use crate::commit::commit_error::{CommitError, CommitResult, UnusableReplica};
 use crate::commit::control_keys::ControlKeys;
+use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
@@ -136,6 +137,51 @@ async fn read_replica(
         });
     }
     Ok(key_table)
+}
+
+/// Reads one position of a committed set through every object the listing
+/// holds under its name, and decides whether the position is valid
+/// (spec: KL-1, KL-14).
+///
+/// A name usually carries one object. On a Storage whose names are not unique
+/// it can carry more — a repair writes a valid copy beside one that did not
+/// read back valid, and two devices repairing one position both write — and
+/// any one of them that reads back valid is the replica, because the name fixes
+/// the one content a valid copy can hold (spec: KL-14). So the copies are tried
+/// in turn, the one listed last first, since that is the one a repair most
+/// recently wrote on a provider that lists in creation order; the first that
+/// reads back valid answers, and the rest are not fetched. Which copy the
+/// provider happened to list last decides only what the read costs, never what
+/// it finds.
+///
+/// Only a position no copy of reads back valid is unusable, and the verdict is
+/// the most cautious one the copies left: a copy Storage would not hand over
+/// may be exactly the replica its name promises, so where any copy was
+/// unfetchable the position is not known lost and the verdict says so, rather
+/// than inviting a repair on what another copy's damage showed (spec: KL-13).
+/// Otherwise it is the reason of the copy tried last, which is the one listed
+/// first, or [`UnusableReplica::Absent`] where the listing holds no object
+/// under the name at all.
+async fn read_position(
+    store: &dyn ObjectStore,
+    keys: &ControlKeys,
+    retry: &RetryPolicy,
+    listing: &ControlListing,
+    name: &ControlObjectName,
+    expected: &str,
+) -> std::result::Result<KeyTable, UnusableReplica> {
+    let mut verdict = UnusableReplica::Absent;
+    for object in listing.replica_copies(&name.to_string()).iter().rev() {
+        match read_replica(store, keys, retry, name, object, expected).await {
+            Ok(key_table) => return Ok(key_table),
+            Err(cause) => {
+                if !matches!(verdict, UnusableReplica::Unfetchable(_)) {
+                    verdict = cause;
+                }
+            }
+        }
+    }
+    Err(verdict)
 }
 
 /// What Storage reported, as the reason the replica never arrived.

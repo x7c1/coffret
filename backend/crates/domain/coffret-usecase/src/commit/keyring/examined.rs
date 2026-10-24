@@ -4,7 +4,7 @@ use tracing::warn;
 use coffret_format::{encode_keyring, ControlPayload};
 use coffret_model::{ControlObjectName, Generation, KeyTable, KeyringCommitment};
 
-use super::{read_replica, replica_name, write_replica};
+use super::{read_position, read_replica, replica_name, write_replica};
 use crate::commit::commit_error::{CommitError, CommitResult, UnrepairedReplica, UnusableReplica};
 use crate::commit::commit_policy::CommitPolicy;
 use crate::commit::control_keys::ControlKeys;
@@ -72,11 +72,14 @@ impl Examined {
 /// price of the rule.
 ///
 /// A position is in need of repair when the listing does not hold its name or
-/// the object does not read back valid (spec: KL-1). One Storage merely failed
-/// to hand over is not among them: nothing about its content is known, so it is
-/// not known to be lost, and rewriting it on that evidence would be inventing a
-/// verdict. It still keeps the set from being complete, so it holds the gate
-/// closed like any other short position (spec: KL-16).
+/// no object listed under it reads back valid (spec: KL-1). A name listed more
+/// than once is read through every copy, and one valid copy makes the position
+/// valid however the provider ordered them (spec: KL-14), so a repair beside a
+/// damaged copy is a repair made once. One Storage merely failed to hand over
+/// is not among them: nothing about its content is known, so it is not known
+/// to be lost, and rewriting it on that evidence would be inventing a verdict.
+/// It still keeps the set from being complete, so it holds the gate closed
+/// like any other short position (spec: KL-16).
 ///
 /// The repair itself re-materializes the committed generation and nothing else
 /// (spec: KL-13): the key table comes from a committed valid replica, is encoded
@@ -112,19 +115,15 @@ pub(in crate::commit) async fn examine(
 
     // Every position is read at once: the walk is a full one whatever answers,
     // so nothing a read finds decides whether the next is made.
-    let reads = join_all(names.iter().map(|name| async move {
-        let object = listing
-            .handle(&name.to_string())
-            .ok_or(UnusableReplica::Absent)?;
-        read_replica(
+    let reads = join_all(names.iter().map(|name| {
+        read_position(
             store,
             keys,
             &policy.retry,
+            listing,
             name,
-            object,
             commitment.set_digest(),
         )
-        .await
     }))
     .await;
 

@@ -70,10 +70,15 @@ Concept background: [Keyring](../../concepts/keyring/),
   (FM-17); the stored objects still differ, each sealed with a random nonce of
   its own (FM-11), so what is identical is the content the digest covers and
   not the bytes on Storage. Repair is therefore an unconditional write and a
-  duplicate is benign; there is no race whose loser needs reporting. Repair
-  confirms itself by reading the replica back, and what that read-back
-  establishes is the replica's validity (KL-1) — not the exclusivity of the
-  write, and not a byte comparison against what this device wrote.
+  duplicate is benign; there is no race whose loser needs reporting. On a
+  Storage whose names are not unique a duplicate is a second object under the
+  replica's name, beside a copy that did not read back valid or beside another
+  repair's; a reader tries every object listed under the name, and the
+  position is valid when any one of them reads back valid (KL-1), whatever
+  order the listing gives them in. Repair confirms itself by reading the
+  replica back, and what that read-back establishes is the replica's validity
+  (KL-1) — not the exclusivity of the write, and not a byte comparison against
+  what this device wrote.
   *(Form: test)*
   - Unlike a commit (CP-2), a repair has no shared reservation two devices
     could aim at, and needs none: exclusion matters where two writers would
