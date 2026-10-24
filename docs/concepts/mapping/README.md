@@ -82,10 +82,10 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   registered — chosen once, and set by nothing but recording the mapping
   (spec: EP-12, EP-13).
   - The two answer different failures. An unmounted disk leaves an empty
-    folder on another filesystem, which reads as a root to reconnect rather
-    than an emptied one; a disk that came back empty, or a folder that merely
-    answers to the registered name, carries no marker the mapping agrees with,
-    and nothing is placed into it (spec: EP-12, EP-13).
+    folder on another filesystem, which reads as a root to make available
+    again rather than an emptied one; a disk that came back empty, or a
+    folder that merely answers to the registered name, carries no marker the
+    mapping agrees with, and nothing is placed into it (spec: EP-12, EP-13).
 - A folder of the Library is **reached** where a mapping represents it. The
   Library root is reached by a root mapping alone. A folder no mapping
   reaches has nowhere on this device for a file to go, and its listing says so

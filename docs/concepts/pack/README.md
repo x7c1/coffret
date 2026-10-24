@@ -82,6 +82,9 @@ the Entry count — decides `freeze` eligibility.
 - open (a folder by reading, from the distinct Packs containing its current
   Entries, the parcels those Entries overlap; an Entry somebody asked for
   reachable by reading only the parcels it overlaps, ahead of the rest)
+- continue (a drop in progress, by dropping its folder again: the new drop
+  takes the cut-off one over, and its `freeze` packs the files of both as one
+  book (spec: PK-17))
 
 ## Domain Rules
 
@@ -95,7 +98,9 @@ the Entry count — decides `freeze` eligibility.
 - A drop added as a Pack packs the files that drop carried and nothing else:
   its `freeze` names them, so a one-file Container already in the destination
   folder is not absorbed by it, and how many Packs result is the target size's
-  to decide rather than the folder's (spec: PK-17, PK-3).
+  to decide rather than the folder's (spec: PK-17, PK-3). Where the drop
+  continues a drop in progress, the files the cut-off drop received count as
+  its own.
 - That choice outlives the process that took the drop. It is recorded on the
   device as a reservation of the drop's files before the first of them lands,
   so a sync leaves them for their Pack rather than carrying them in one

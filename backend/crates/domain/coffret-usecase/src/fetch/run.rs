@@ -7,7 +7,7 @@ use crate::commit::{catch_up, read_committed};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::fetch_outcome::FetchOutcome;
 use crate::fetch::fetch_request::FetchRequest;
-use crate::fetch::parcel_read::let_go::{let_go_departed, let_go_parcels};
+use crate::fetch::let_go::{let_go_departed, let_go_parcels};
 use crate::fetch::placement::publish_all;
 use crate::fetch::reading::Reading;
 use crate::fetch::surfaced::Surfaced;

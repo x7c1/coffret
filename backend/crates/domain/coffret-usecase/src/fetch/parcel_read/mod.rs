@@ -49,8 +49,6 @@ pub(super) mod front;
 
 mod herald;
 
-pub(super) mod let_go;
-
 mod placements;
 
 mod read_entry;
@@ -104,7 +102,7 @@ pub(super) struct ParcelRead<'r> {
 /// path no local file can stand for, or one colliding with another Entry's
 /// local path. Such an Entry is neither a companion nor waited for by a held
 /// parcel.
-fn never_placed(error: &FetchError) -> bool {
+pub(super) fn never_placed(error: &FetchError) -> bool {
     matches!(
         error,
         FetchError::UnmappedEntryPath { .. }

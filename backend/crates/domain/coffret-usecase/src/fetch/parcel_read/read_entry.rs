@@ -10,7 +10,7 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::parcel_read::herald::Herald;
 use crate::fetch::parcel_read::source::Source;
 use crate::fetch::parcel_read::spread::Spread;
-use crate::fetch::parcel_read::{front, let_go, Member, ParcelRead, Stroke};
+use crate::fetch::parcel_read::{front, Member, ParcelRead, Stroke};
 use crate::fetch::target::Target;
 use crate::fetch::unheld_parcel::UnheldParcel;
 
@@ -40,8 +40,9 @@ impl ParcelRead<'_> {
     ///    other parcel is asked of Storage whole, kept, and opened as it
     ///    arrives. Cancellation is asked before each parcel requested from
     ///    Storage and never inside one.
-    /// 4. **Let go** (spec: PK-21). Every held parcel of this Container whose
-    ///    mapped Entries are all on the device is let go.
+    ///
+    /// Letting go of the held parcels nothing waits for any more is the
+    /// caller's next step, not this read's (spec: PK-21).
     pub(in crate::fetch) async fn read_entry(
         &self,
         summary: &ContainerSummary,
@@ -130,7 +131,7 @@ impl ParcelRead<'_> {
                     match source.read_held(&parcel, &run, &mut spread).await {
                         Ok(None) => continue,
                         Ok(Some(reason)) => {
-                            // Not held after all: said, let go, and asked of
+                            // Not held after all: said, shed, and asked of
                             // Storage below like any parcel never read.
                             warn!(
                                 container = %container_id,
@@ -143,8 +144,7 @@ impl ParcelRead<'_> {
                                 index,
                                 reason,
                             });
-                            if let Err(error) = let_go::let_go(self.index, self.kept, &parcel).await
-                            {
+                            if let Err(error) = self.kept.shed_parcel(self.index, &parcel).await {
                                 spread.abandon();
                                 return Err(error);
                             }
@@ -190,7 +190,6 @@ impl ParcelRead<'_> {
 
         stroke.unheld = herald.into_unheld();
         stroke.parcels_read = read_from_storage;
-        let_go::let_go_settled(self.index, self.kept, container_id).await?;
         debug!(
             container = %container_id,
             object = %container_id.object_name(),

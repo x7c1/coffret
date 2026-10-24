@@ -219,6 +219,9 @@ pub use kept_parcels::KeptParcels;
 mod kept_tally;
 pub use kept_tally::{tally_kept_parcels, KeptTally};
 
+mod let_go;
+pub use let_go::let_go_parcels;
+
 mod local_place;
 pub use local_place::LocalPlace;
 
@@ -233,7 +236,6 @@ pub use never_cancelled::{NeverCancelled, NEVER_CANCELLED};
 mod opened_piece;
 
 mod parcel_read;
-pub use parcel_read::let_go::let_go_parcels;
 
 mod placement;
 

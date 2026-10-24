@@ -46,7 +46,8 @@ a row. A parcel the record says is held whose file is gone, or no longer
 authenticates as that parcel, is **unheld**: it was not held after all. The
 device reads the parcel whole from Storage again and says so, rather than in
 silence, because that second read is one the provider observes (spec: PK-20,
-PK-21).
+PK-21). A parcel that did not arrive whole is not held either, and is asked for
+again whole (spec: PK-21).
 
 For a current Entry, **present** means this device recorded materializing it
 at its current path and has not witnessed its file go. **Remote** means every
@@ -166,10 +167,14 @@ Precise spool transitions and cleanup conditions belong to the
   Entry holds the path its file stands at)
 - complete (an interrupted commit's local records from its pending row, during
   a sync's settlement or right after any other catch-up that finds its
-  Container current)
+  Container current; or this device's own commit, whose record another
+  process over the same Index applied before the commit's refresh)
 - hold (a parcel this device read, by recording it beside its ciphertext)
 - let go (of a held parcel whose mapped Entries are all present or witnessed
   absent, or whose Container left the current set)
+- shed (what this device kept of a parcel that was not held after all, or
+  that did not arrive whole: its file, then its row (spec: PK-21)) — never
+  *let go*, which is for a held parcel
 - discard (a parcel file no row names, as a server opens the Library, before it
   serves anything)
 - dispose (of a proven abandoned spool and uploaded object)
@@ -193,6 +198,12 @@ Precise spool transitions and cleanup conditions belong to the
     nothing, and catch-up steps over that refusal. Two processes catching up
     one Index therefore converge on the head instead of one of them carrying
     the catalog back (spec: CK-9, CK-13, RV-5).
+    - A commit's own refresh meeting that refusal is not a failure: another
+      process replayed the record first, and the record at that head is this
+      commit's. The refresh then records this device's local records alone —
+      the files it placed, the spools that stop being pending, the
+      reservations the commit releases — in one operation, and the commit
+      completes (spec: CK-9, EP-10, OC-2, PK-17).
 - A read from a stale Index answers what the Index lists, which may be an
   Entry's earlier version, while the Container holding it stays within reach:
   readable while it is an untrashed removal, and after trash through a handle

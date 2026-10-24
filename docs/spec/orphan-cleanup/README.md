@@ -135,10 +135,17 @@ Concept background: [Journal](../../concepts/journal/),
     never drawn twice, so one nothing in the process holds is never held
     later. A writer in another process holds an advisory lock on its scratch
     for as long as it writes it, through the rename, and the removal takes
-    that lock first and leaves a scratch whose lock is held; a writer that
-    finds the scratch it has just made already locked refuses the write rather
-    than fill a name that is going away. The operating system releases the
-    lock however the writer ends, so what a killed writer left is stale on
+    that lock first and leaves a scratch whose lock is held. A writer that
+    cannot take the lock on the scratch it has just made removes that scratch,
+    since nothing else would ever claim it, and refuses the write. Either
+    another writer holds the lock already — a sync removing the scratch in the
+    instant since it was made — and the writer does not fill a name that is
+    going away; or the filesystem gives no file lock at all — a network share,
+    mostly — and the writer does not write a scratch a sync could remove
+    mid-write. A mapped folder is therefore expected on a local disk, and on a
+    filesystem without the lock every placement into it is refused. The
+    operating system releases the lock however the writer ends, so what a
+    killed writer left is stale on
     both counts. Only a regular file is removed, never
     through or in place of a symbolic link (EP-8), and a name that merely
     carries the reserved prefix without that shape — the person's own file,

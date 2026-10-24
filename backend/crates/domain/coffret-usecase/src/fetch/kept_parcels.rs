@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 use coffret_format::ParcelLen;
 use coffret_model::ContainerId;
 
+use crate::device_state::HeldParcel;
+use crate::fetch::fetch_error::FetchResult;
+use crate::index::Index;
 use crate::parcel_files::ParcelFiles;
 
 /// Where this device keeps the parcels it read, and how long a parcel is.
@@ -55,5 +58,41 @@ impl<'a> KeptParcels<'a> {
     /// replaces rather than beside it.
     pub(super) fn path_of(&self, container_id: ContainerId, index: u64) -> PathBuf {
         self.dir.join(format!("{container_id}-{index}.parcel"))
+    }
+
+    /// Lets go of a held parcel whose purpose is served (spec: PK-21).
+    pub(super) async fn let_go_parcel(
+        &self,
+        index: &dyn Index,
+        parcel: &HeldParcel,
+    ) -> FetchResult<()> {
+        self.remove(index, parcel).await
+    }
+
+    /// Sheds what this device kept of a parcel that turned out not to be
+    /// held, or that did not arrive whole, so that it is asked for again whole
+    /// (spec: PK-21).
+    pub(super) async fn shed_parcel(
+        &self,
+        index: &dyn Index,
+        parcel: &HeldParcel,
+    ) -> FetchResult<()> {
+        self.remove(index, parcel).await
+    }
+
+    /// Removes what this device kept of one parcel: its file first, then its
+    /// row — what letting go and shedding both come to.
+    ///
+    /// In that order so that the row always covers whatever file there is — a
+    /// removal interrupted between the two leaves a row naming a file that is
+    /// gone, which the next removal discards again and a read meets as a
+    /// parcel not held. Both halves succeed on what is already gone (spec:
+    /// OC-8, PK-21).
+    async fn remove(&self, index: &dyn Index, parcel: &HeldParcel) -> FetchResult<()> {
+        self.files.discard(&parcel.path).await?;
+        index
+            .let_go_parcel(parcel.container_id, parcel.index)
+            .await?;
+        Ok(())
     }
 }

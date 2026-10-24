@@ -232,12 +232,13 @@ fn short_keyring(established: bool) -> &'static str {
 /// under such a root was walked, so a run carrying one has covered less than
 /// this device's mappings do.
 ///
-/// Only the latter needs more than the ordinary reconnect explanation: a root
-/// that is not there is a disk to plug in or a share to mount, and it comes back
-/// on its own. A root that is empty on another filesystem needs the intended
-/// filesystem reconnected, unless its owner deliberately means to map that
-/// empty folder in its place; the command needed for that choice is made
-/// reachable here as it is in [`refused_root_said`].
+/// Only the latter needs more than the ordinary explanation of a root to make
+/// available again: a root that is not there is a disk to plug in or a share to
+/// mount, and it comes back on its own. A root that is empty on another
+/// filesystem needs the intended filesystem plugged in or mounted again, unless
+/// its owner deliberately means to map that empty folder in its place; the
+/// command needed for that choice is made reachable here as it is in
+/// [`refused_root_said`].
 fn unavailable(reason: RootUnavailable) -> &'static str {
     match reason {
         RootUnavailable::Missing => {
@@ -245,8 +246,8 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
         }
         RootUnavailable::AnotherFilesystem => {
             "a folder this device maps is empty and stands on another filesystem, so nothing in \
-             it was looked at. Reconnect the intended filesystem. If this empty folder is \
-             deliberately taking its place, open a terminal on the device serving the Library. \
+             it was looked at. Plug in or mount the intended filesystem. If this empty folder \
+             is deliberately taking its place, open a terminal on the device serving the Library. \
              Run `coffret mappings --library <library>` to inspect the recorded mappings and \
              `coffret map --help` to see how to record it again. Then return to the explorer and \
              try the action again"
@@ -256,7 +257,7 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
 
 /// The guidance shown for a refused root (spec: EP-13).
 ///
-/// Shared guidance for all seven cases distinguishes reconnecting the intended
+/// Shared guidance for all seven cases distinguishes bringing back the intended
 /// folder, re-recording the same mapping after confirming its folder, and
 /// deliberately mapping another folder in its place. The terminal spells out
 /// which case it was; the browser keeps the local folder out of the message.
@@ -571,7 +572,7 @@ mod tests {
         );
         assert!(
             !said(RootUnavailable::Missing).contains("record that mapping again"),
-            "and a root that is not there is one to reconnect rather than one to record",
+            "and a root that is not there is one to make available again, not one to record",
         );
     }
 

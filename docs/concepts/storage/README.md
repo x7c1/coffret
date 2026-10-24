@@ -50,6 +50,10 @@ permission it asks for names no account (spec: SA-3).
   as [Journal](../journal/#domain-rules) defines it)
 - name (an account, on this device)
 - renew (an account's grant on this device)
+- reconnect (a served Library to its Storage, by renewing an account's grant
+  on this device from the explorer once Storage stopped accepting it
+  (spec: SA-10)) — only that: a mapped root whose disk is plugged in again is
+  made *available* again (spec: EP-12), never reconnected
 
 ## Domain Rules
 

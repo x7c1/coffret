@@ -14,7 +14,6 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::kept_parcels::KeptParcels;
 use crate::fetch::opened_piece::OpenedPiece;
 use crate::fetch::parcel_read::front::within_object;
-use crate::fetch::parcel_read::let_go::let_go;
 use crate::fetch::parcel_read::spread::Spread;
 use crate::fetch::unheld_reason::UnheldReason;
 use crate::fetch::TRANSFER_BUFFER;
@@ -99,7 +98,7 @@ impl Source<'_> {
     /// published by `spread` the moment its chunks have passed, but the read
     /// goes on to the parcel's end. The row is recorded before the file is
     /// created, the order a pending row keeps with its spool (spec: OC-2), and
-    /// a parcel that did not arrive whole is let go — file and row — rather
+    /// a parcel that did not arrive whole is shed — file and row — rather
     /// than held, so it is asked for again whole by whoever wants it next
     /// (spec: PK-21).
     ///
@@ -144,12 +143,12 @@ impl Source<'_> {
             Err(storage) => FetchError::Storage(storage),
         };
         // Not held: the row and whatever the file came to go together, and a
-        // refusal to let go is said after the refusal that caused it rather
+        // refusal to shed them is said after the refusal that caused it rather
         // than in its place.
-        if let Err(error) = let_go(self.index, self.kept, &parcel).await {
+        if let Err(error) = self.kept.shed_parcel(self.index, &parcel).await {
             warn!(
                 error = %error.redacted(),
-                "a parcel that did not arrive whole could not be let go",
+                "a parcel that did not arrive whole could not be shed",
             );
         }
         Err(failed)

@@ -489,10 +489,11 @@ pub trait Index: Send + Sync {
     /// parcel index (spec: PK-21).
     async fn held_parcels(&self) -> IndexResult<Vec<HeldParcel>>;
 
-    /// Forgets the row of one held parcel, the parcel having been let go.
+    /// Forgets the row of one kept parcel, the parcel having been let go, or
+    /// shed as not held after all or as one that did not arrive whole.
     ///
     /// Forgetting one that is not there succeeds, so an interrupted letting go
-    /// is simply run again (spec: OC-8, PK-21).
+    /// or shedding is simply run again (spec: OC-8, PK-21).
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()>;
 
     /// Records a drop's choice to add its files to `folder` as a Pack, before
