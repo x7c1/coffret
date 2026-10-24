@@ -53,10 +53,10 @@ it, so nothing in the repository depends on Tauri any more.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this machine, with the new tool installed, `make icons` runs, and a
+- [x] On this machine, with the new tool installed, `make icons` runs, and a
       second run leaves `git status` clean (same bytes). Every regenerated
       PNG is compared with the one on `main` by decoded pixels; the merging
       session records the largest per-channel difference per file in the PR
       and commits the regenerated files only where they differ.
-- [ ] The regenerated `icon.icns` lists the same entry types and sizes as the
+- [x] The regenerated `icon.icns` lists the same entry types and sizes as the
       one on `main` (recorded in the PR).
