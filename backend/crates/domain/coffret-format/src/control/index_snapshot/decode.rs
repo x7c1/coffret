@@ -7,7 +7,7 @@ use coffret_model::{
 use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
     CONTAINERS, ENTRIES, ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
-    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
+    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, entry_number, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -44,7 +44,7 @@ use crate::field_numbers;
 /// The array orders and every `container` index are verified rather than
 /// repaired, for the reason FM-16 gives.
 ///
-/// A Snapshot of a schema below this build's is refused with
+/// A Snapshot of a schema below the lowest a reader accepts is refused with
 /// [`Error::UnsupportedIndexSnapshotSchema`]: its Entries carry no deposit time
 /// (spec: FM-16).
 pub fn decode(
@@ -66,7 +66,7 @@ pub fn decode(
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < LOWEST_READ_SCHEMA {
         return Err(Error::UnsupportedIndexSnapshotSchema { schema });
     }
 

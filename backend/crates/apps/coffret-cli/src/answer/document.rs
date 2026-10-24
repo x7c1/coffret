@@ -7,8 +7,6 @@ use serde::Serialize;
 
 use coffret_device::Findings;
 
-use crate::report::Report;
-
 use super::{said_path, Answer, Failure, Found, Ran, VERSION};
 
 /// The whole object a run prints under `--json`.
@@ -51,7 +49,7 @@ impl<'a> Document<'a> {
         Self {
             version: VERSION,
             command,
-            exit_status: Report::FAILED,
+            exit_status: error.exit_status(),
             log: log.map(said_path),
             answer: None,
             error: Some(error),

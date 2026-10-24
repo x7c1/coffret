@@ -59,6 +59,19 @@ impl Failure {
         }
     }
 
+    /// The status a run that failed with this exits with: [`Report::INTERRUPTED`]
+    /// for a run the person stopped with Ctrl-C, and [`Report::FAILED`] for
+    /// every other failure.
+    ///
+    /// [`Report::INTERRUPTED`]: report::Report::INTERRUPTED
+    /// [`Report::FAILED`]: report::Report::FAILED
+    pub fn exit_status(&self) -> u8 {
+        match self.kind {
+            INTERRUPTED => report::Report::INTERRUPTED,
+            _ => report::Report::FAILED,
+        }
+    }
+
     /// Why the Index file was not opened, where a listing read the mappings
     /// out of it anyway: the refusal is not the run's failure, and is said
     /// beside what the run answered.
@@ -73,6 +86,10 @@ impl Failure {
         }
     }
 }
+
+/// The kind of a run the person stopped with Ctrl-C, which is the one failure
+/// that exits with a status of its own.
+const INTERRUPTED: &str = "interrupted";
 
 /// A failure's kind, and the two numbers the one kind that carries any has.
 struct Classified {
@@ -118,7 +135,7 @@ fn classified<'a>(
         // Stopped by the person at the terminal, whatever it was doing: what
         // it left is the next sync's to settle.
         if link.is::<Interrupted>() {
-            return Classified::kind("interrupted");
+            return Classified::kind(INTERRUPTED);
         }
         if let Some(IndexError::UnsupportedSchema { found, supported }) = link.downcast_ref() {
             return Classified {

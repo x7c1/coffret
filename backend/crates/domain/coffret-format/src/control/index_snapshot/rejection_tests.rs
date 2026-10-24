@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
-use super::{decode, encode, IndexSnapshotPayload, SCHEMA};
+use super::{decode, encode, IndexSnapshotPayload, LOWEST_READ_SCHEMA};
 use crate::control::testing::{array, body_map, field, spelled_by_name, summary, with_body_map};
 use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
@@ -209,12 +209,12 @@ fn a_kind_that_is_no_index_snapshot_is_refused_outright() {
     }
 }
 
-// FM-16: a reader refuses any schema below the one it writes as one it cannot
-// read at all: a Snapshot of schema 2 carries no entry numbers, and none
-// before this one carries deposit times.
+// FM-16: a reader refuses any schema below the lowest it reads as one it
+// cannot read at all: a Snapshot of schema 2 carries no entry numbers, and none
+// before schema 4 carries deposit times.
 #[test]
-fn a_schema_below_the_one_this_build_writes_is_rejected() {
-    for schema in [0, 1, 2, SCHEMA - 1] {
+fn a_schema_below_the_lowest_readable_one_is_rejected() {
+    for schema in [0, 1, 2, LOWEST_READ_SCHEMA - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read_ordinary(&payload);
         assert!(
@@ -225,6 +225,24 @@ fn a_schema_below_the_one_this_build_writes_is_rejected() {
             "expected schema {schema} to be unreadable, got {result:?}"
         );
     }
+}
+
+// FM-16: the lowest schema a reader accepts is its own floor rather than the
+// schema this build writes, so a Snapshot at that floor is read and one below
+// it is refused.
+#[test]
+fn a_snapshot_at_the_lowest_readable_schema_is_read_and_one_below_it_is_not() {
+    let at_floor = tampered(|fields| *field(fields, "schema") = Value::from(LOWEST_READ_SCHEMA));
+    let read = read_ordinary(&at_floor).expect("a Snapshot at the floor is read");
+    assert_eq!(read.content.entries(), ordinary().content.entries());
+    let below = tampered(|fields| *field(fields, "schema") = Value::from(LOWEST_READ_SCHEMA - 1));
+    assert!(
+        matches!(
+            read_ordinary(&below),
+            Err(Error::UnsupportedIndexSnapshotSchema { schema }) if schema == LOWEST_READ_SCHEMA - 1
+        ),
+        "a Snapshot below the floor is refused"
+    );
 }
 
 // FM-16: every Snapshot entry carries `deposited_at`, and one without it is

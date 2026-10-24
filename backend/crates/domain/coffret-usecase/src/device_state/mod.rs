@@ -51,6 +51,9 @@ pub(crate) use live_reservations::{LiveSince, NONE_LIVE};
 mod reservation;
 pub use reservation::Reservation;
 
+mod reservation_claim;
+pub use reservation_claim::ReservationClaim;
+
 mod reservation_id;
 pub use reservation_id::ReservationId;
 

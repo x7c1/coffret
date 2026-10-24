@@ -38,20 +38,30 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload, the one it
-/// implements, and the lowest a reader accepts: 4, the first whose addition
-/// entries carry `deposited_at` (spec: FM-15).
+/// The schema this crate writes for a Journal record payload, and the one it
+/// implements (spec: FM-15).
+///
+/// It is also what every record this build writes names in `required_schema`:
+/// a reader that ignored `deposited_at` would hold a catalog without deposit
+/// times and could commit records no reader of this schema accepts, so the
+/// field is must-understand and every record says so (spec: FM-9, FM-15).
+///
+/// Not what a reader refuses below: that is [`LOWEST_READ_SCHEMA`], so that a
+/// later build writing a new field under a higher schema goes on reading the
+/// records written before it.
+const SCHEMA: u64 = 4;
+
+/// The lowest schema a reader accepts, in `schema` and in `required_schema`
+/// alike: 4, the first whose addition entries carry `deposited_at`
+/// (spec: FM-15).
 ///
 /// A record of an earlier schema carries Entries without a deposit time, which
 /// no catalog this build keeps can hold, so it is refused as a schema this
 /// build does not read rather than read with a time made up. Libraries holding
 /// such records are recreated, not migrated.
 ///
-/// It is also what every record this build writes names in `required_schema`:
-/// a reader that ignored `deposited_at` would hold a catalog without deposit
-/// times and could commit records no reader of this schema accepts, so the
-/// field is must-understand and every record says so (spec: FM-9, FM-15).
-const SCHEMA: u64 = 4;
+/// Equal to [`SCHEMA`] for now.
+const LOWEST_READ_SCHEMA: u64 = 4;
 
 const PREV: &str = "prev";
 const NEXT_COMMIT_SLOT: &str = "next_commit_slot";

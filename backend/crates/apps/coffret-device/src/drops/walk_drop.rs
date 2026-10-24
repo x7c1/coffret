@@ -12,8 +12,9 @@ use tracing::info;
 /// left out; so is one that is not a whole path, which nothing walks from.
 /// Symbolic links are neither followed nor taken, names coffret keeps for
 /// itself inside a mapped folder are reported as refused (spec: EP-11,
-/// EP-14), and whatever could not be read is reported too: nothing that was
-/// let go of disappears without a word.
+/// EP-14), the files an operating system keeps are reported under a reason of
+/// their own (spec: EP-17), and whatever could not be read is reported too:
+/// nothing that was let go of disappears without a word.
 ///
 /// The event it records is counts and nothing else: no path, and no name of
 /// anything that was dropped (spec: EL-1).
@@ -52,11 +53,21 @@ pub async fn walk_drop(paths: &[String]) -> DropWalk {
     let mut walk = walk_dropped(&UnixFs::new(), &items).await;
     refused.append(&mut walk.not_taken);
     walk.not_taken = refused;
+    // What an operating system keeps is counted apart from what was not taken,
+    // as the page says it apart (spec: EP-17, LA-26): almost every drop
+    // carries some, and counted among the rest it would make every drop's
+    // event read as one that left something behind.
+    let system_files = walk
+        .not_taken
+        .iter()
+        .filter(|not_taken| matches!(not_taken.reason, NotTakenReason::System { .. }))
+        .count();
     info!(
         operation = "walk_drop",
         items = paths.len(),
         taken = walk.taken.len(),
-        not_taken = walk.not_taken.len(),
+        not_taken = walk.not_taken.len() - system_files,
+        system_files,
         "walked what a drop let go of",
     );
     walk

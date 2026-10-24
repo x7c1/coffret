@@ -30,7 +30,14 @@ impl OpenLibrary {
     /// it arms its own freeze: while it is held, no freeze in this process
     /// decides the reservation, and until the drop marks it received none packs
     /// a page of it either.
+    ///
+    /// The reservation is made and held in one step, under the
+    /// [`claim`](coffret_usecase::device_state::LiveReservations::claim)
+    /// [`take_over`](Self::take_over) waits on too: between the Index making it
+    /// and this process holding it, it is a drop in progress nobody holds, and a
+    /// second drop of the folder looking in that moment would take it over.
     pub async fn reserve(&self, folder: Option<&EntryPath>) -> Result<LiveReservation> {
+        let _claim = self.live.claim().await;
         let id = self.index.reserve(folder).await?;
         Ok(self.live.hold(id))
     }
@@ -43,22 +50,44 @@ impl OpenLibrary {
     /// What lets a book whose drop was cut off come to one Pack: the same
     /// folder dropped again goes on adding to the reservation the first drop
     /// left, rather than making a second one beside it, and the freeze it arms
-    /// once it finishes receiving packs both drops' files together. Where
-    /// several were cut off on the folder, the earliest is taken; the others
-    /// wait for the next drop.
+    /// once it finishes receiving packs both drops' files together.
+    ///
+    /// Where several were cut off on the folder, the earliest made is taken
+    /// over, and each later one is folded into it: its paths are added to the
+    /// earliest, and then it is released. So the paths answered are every
+    /// cut-off drop's, and the folder is left with one reservation in
+    /// progress rather than one per drop that was cut off. A process stopping
+    /// part way through the folding leaves a path named twice, which the next
+    /// drop folds again. A reservation a drop in this process still holds is
+    /// neither taken over nor folded: it is that drop's.
+    ///
+    /// Under the same claim as [`reserve`](Self::reserve), so a reservation
+    /// another drop has just made is already held when this looks.
     pub async fn take_over(
         &self,
         folder: Option<&EntryPath>,
     ) -> Result<Option<(LiveReservation, BTreeSet<EntryPath>)>> {
+        let _claim = self.live.claim().await;
+        let mut taken: Option<(LiveReservation, BTreeSet<EntryPath>)> = None;
         for reservation in self.reservations().await? {
             if !reservation.in_progress() || reservation.folder.as_ref() != folder {
                 continue;
             }
-            if let Some(held) = self.live.try_hold(reservation.id) {
-                return Ok(Some((held, reservation.paths)));
+            let Some(held) = self.live.try_hold(reservation.id) else {
+                continue;
+            };
+            match &mut taken {
+                None => taken = Some((held, reservation.paths)),
+                Some((earliest, paths)) => {
+                    for path in &reservation.paths {
+                        self.index.extend_reservation(earliest.id(), path).await?;
+                    }
+                    self.index.release_reservation(held.id()).await?;
+                    paths.extend(reservation.paths);
+                }
             }
         }
-        Ok(None)
+        Ok(taken)
     }
 
     /// Adds `path` to the reservation `id`, before the file the drop is writing
@@ -96,3 +125,6 @@ impl OpenLibrary {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests;

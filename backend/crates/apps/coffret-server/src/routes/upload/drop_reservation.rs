@@ -23,8 +23,9 @@ impl DropReservation {
     ///
     /// Where an earlier drop onto the same folder was cut off before it
     /// finished receiving, this drop takes its reservation over
-    /// ([`OpenLibrary::take_over`]) and the paths that drop received are this
-    /// one's from the start. Anywhere else it is a new reservation naming no
+    /// ([`OpenLibrary::take_over`], which folds any later cut-off one into
+    /// it) and the paths every such drop received are this one's from the
+    /// start. Anywhere else it is a new reservation naming no
     /// path.
     ///
     /// The event says a cut-off drop was taken over and how many files it had

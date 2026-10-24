@@ -28,7 +28,7 @@
 //! it there. [`progress`] is where it is rendered, and it renders differently
 //! for a terminal and for anything else.
 //!
-//! # Three exit statuses
+//! # Four exit statuses
 //!
 //! `0` is a run that did everything it was asked to. `1` is a run that failed.
 //! `2` is the one in between, and it is why the statuses are worth spelling out:
@@ -37,6 +37,9 @@
 //! EP-11). Those are findings rather than failures — the run did what it could
 //! and said what it did not do — and a script that only asked whether the
 //! command failed would call them a backup. So they get a status of their own.
+//! `130` is a run the person stopped with Ctrl-C: a failure as well, given a
+//! status of its own so that a script tells it from one the run met by itself
+//! (see [`interrupted`]).
 //!
 //! # Two forms of answer
 //!
@@ -298,7 +301,8 @@ async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
 }
 
 /// Says that `command` failed with `error`, in the form asked for, and exits
-/// as a failure.
+/// as a failure: with 130 where the person stopped it with Ctrl-C, and 1
+/// otherwise.
 ///
 /// What the run did before it failed, and then the whole chain — what failed,
 /// and under it what each layer reported, down to the format crate's or the
@@ -313,6 +317,8 @@ fn failed(
     error: &anyhow::Error,
 ) -> ExitCode {
     let failed = report::failed(error);
+    let failure = Failure::of(error);
+    let exit_status = failure.exit_status();
     if form.is_text() {
         for repaired in failed.repaired {
             println!("{repaired}");
@@ -325,12 +331,12 @@ fn failed(
         Document::failed(
             Some(command),
             log,
-            Failure::of(error),
+            failure,
             &Findings::repaired_before(error.as_ref()),
         )
         .print();
     }
-    ExitCode::FAILURE
+    ExitCode::from(exit_status)
 }
 
 /// A refusal of what was typed, made before any command ran — and so before

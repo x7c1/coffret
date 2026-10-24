@@ -103,7 +103,8 @@ Every answer carries:
 
   version      1, the version of this shape
   command      the subcommand, e.g. \"sync\"
-  exit_status  0, 1 or 2, the status the run exits with
+  exit_status  0, 1, 2 or 130, the status the run exits with: 130 where
+               it was interrupted with Ctrl-C
   log          the log file this run wrote to, or null
   answer       what the command answered, or null where it failed
   error        why it failed, or null where it succeeded
@@ -135,10 +136,10 @@ Passphrase or a Recovery Code refused as it was read is named after the
 refusal, e.g. \"empty_passphrase\", \"passphrases_differ\" or
 \"empty_recovery_code\". What was typed wrongly and refused before the
 command ran is \"usage\", with command and log null. A sync, freeze,
-fetch or rename stopped with Ctrl-C is \"interrupted\": the next sync
-settles what it left. Refused once it has started: flags that leave a
-provider short are \"flags_missing\", and a client secret variable that
-is empty or not Unicode is \"empty_client_secret\" or
+fetch or rename stopped with Ctrl-C is \"interrupted\", and exits 130:
+the next sync settles what it left. Refused once it has started: flags
+that leave a provider short are \"flags_missing\", and a client secret
+variable that is empty or not Unicode is \"empty_client_secret\" or
 \"client_secret_not_unicode\". \"other\" is a failure raised by nothing
 this command knows the kinds of.
 

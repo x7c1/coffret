@@ -55,15 +55,25 @@ import { MAX_ENTRY_NUMBER } from '../model/entryRename.js';
 import { INDEX_SNAPSHOT, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for an Index Snapshot payload, and the lowest
- * a reader accepts: 4, the first whose Entries carry `deposited_at`
- * (spec: FM-16).
+ * The schema this package writes for an Index Snapshot payload (spec: FM-16).
+ *
+ * Not what a reader refuses below: that is
+ * {@link INDEX_SNAPSHOT_LOWEST_READ_SCHEMA}, so that a later build writing a
+ * new field under a higher schema goes on reading the Snapshots written before
+ * it.
+ */
+export const INDEX_SNAPSHOT_SCHEMA = 4n;
+
+/**
+ * The lowest schema a reader accepts: 4, the first whose Entries carry
+ * `deposited_at` (spec: FM-16).
  *
  * A Snapshot of an earlier schema lacks the deposit time of every Entry it
  * lists, and the records it checkpoints lack it too, so nothing could supply
- * one: it is refused as a schema this package does not read.
+ * one: it is refused as a schema this package does not read. Equal to
+ * {@link INDEX_SNAPSHOT_SCHEMA} for now.
  */
-export const INDEX_SNAPSHOT_SCHEMA = 4n;
+export const INDEX_SNAPSHOT_LOWEST_READ_SCHEMA = 4n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_index_snapshot';
@@ -220,7 +230,7 @@ export function decodeIndexSnapshot(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < INDEX_SNAPSHOT_SCHEMA) {
+  if (schema < INDEX_SNAPSHOT_LOWEST_READ_SCHEMA) {
     fail('unsupported_index_snapshot_schema', `unsupported Index Snapshot payload schema ${schema}`);
   }
 

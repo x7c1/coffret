@@ -224,18 +224,19 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     (EP-12), or stands on another filesystem than the one recorded for it
     until a scan re-stamps it; where the two paths do not lie under one mapped
     root (EP-9), or the new path passes through a name a mapped folder keeps
-    for itself (EP-14, EP-16, the scratch prefix of EP-11); where either path
-    crosses a symbolic link or anything else that is not a folder of the root
-    (EP-8); where the file was edited since it was placed — its length and
-    modification time differ from the record's and its content does not hash
-    to the hash the record carries (EP-15); where something stands at the new
-    path that is not this device's placed copy of the same Entry; where the
-    two paths stand on different filesystems, since nothing is copied and
-    deleted in a rename's place; where their filesystem offers no rename that
-    never replaces, or no exchange, since none is emulated by checking that the
-    new path is free and then renaming onto it; and where the root does not
-    vouch for itself (EP-13) or the disk refuses. A later run, once the cause
-    is gone, relocates the file.
+    for itself (EP-14, EP-16, the scratch prefix of EP-11) or one an operating
+    system keeps (EP-17), which no scan would find the file at again; where
+    either path crosses a symbolic link or anything else that is not a folder
+    of the root (EP-8); where the file was edited since it was placed — its
+    length and modification time differ from the record's and its content does
+    not hash to the hash the record carries (EP-15); where something stands at
+    the new path that is not this device's placed copy of the same Entry;
+    where the two paths stand on different filesystems, since nothing is
+    copied and deleted in a rename's place; where their filesystem offers no
+    rename that never replaces, or no exchange, since none is emulated by
+    checking that the new path is free and then renaming onto it; and where
+    the root does not vouch for itself (EP-13) or the disk refuses. A later
+    run, once the cause is gone, relocates the file.
   - Where the new path already holds this device's own copy of the same
     Entry, its record agreeing with the file there (EP-11) — a fetch placed
     it while the old file waited — the old file is redundant: an unedited one
@@ -730,7 +731,13 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - An Entry already in the Library at such a path — carried in before this
     rule — stays until it is deleted, and a scan that does not find its file,
     never having looked, does not report it as deleted locally (EP-10), nor
-    count it in a freeze's preview as one this device has no file for.
+    count it in a freeze's preview as one this device has no file for. Its
+    deletion does not look for the file either: whatever stands at that path
+    on this device is left where it is rather than discarded (EP-15), since it
+    is the operating system's and was never handed to the Library, and the
+    device's record of the path is forgotten as for a file gone from disk.
+  - A rename never moves this device's file to such a path: the relocation is
+    refused as one into a name a mapped folder keeps (EP-10).
   - Whether a root holds nothing (EP-12), and whether the run's discards
     emptied a folder (EP-15), are not changed: a folder holding only such
     files still holds something.

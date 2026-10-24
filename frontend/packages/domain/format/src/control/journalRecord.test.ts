@@ -5,6 +5,7 @@ import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
 import {
+  JOURNAL_RECORD_LOWEST_READ_SCHEMA,
   JOURNAL_RECORD_SCHEMA,
   decodeJournalRecord,
   encodeJournalRecord,
@@ -138,7 +139,7 @@ describe('Journal record payload (spec: FM-15)', () => {
   it('refuses a required schema below the one deposit times need', () => {
     const bare = tampered((map) => map.delete('required_schema'));
     expect(errorCode(() => read(bare))).toBe('malformed_journal_record');
-    for (const required of [0n, 2n, JOURNAL_RECORD_SCHEMA - 1n]) {
+    for (const required of [0n, 2n, JOURNAL_RECORD_LOWEST_READ_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('required_schema', required));
       expect(errorCode(() => read(payload)), `required ${required}`).toBe(
         'malformed_journal_record',
@@ -322,15 +323,33 @@ describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
     expect(errorCode(() => read(payload))).toBe('control_payload_out_of_order');
   });
 
-  // FM-15: a reader refuses any schema below the one this build writes: every
-  // earlier schema's additions carry no deposit time.
+  // FM-15: a reader refuses any schema below the lowest it reads: every earlier
+  // schema's additions carry no deposit time.
   it('refuses a schema below the lowest readable one', () => {
-    for (const schema of [0n, 2n, JOURNAL_RECORD_SCHEMA - 1n]) {
+    for (const schema of [0n, 2n, JOURNAL_RECORD_LOWEST_READ_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => read(payload)), `schema ${schema}`).toBe(
         'unsupported_journal_record_schema',
       );
     }
+  });
+
+  // FM-15: the lowest schema a reader accepts is its own floor rather than the
+  // schema this package writes, so a record at that floor — in `schema` and in
+  // `required_schema` — is read, and the next lower one is refused.
+  it('reads a record at the lowest readable schema and refuses one below it', () => {
+    const atFloor = tampered((map) => {
+      map.set('schema', JOURNAL_RECORD_LOWEST_READ_SCHEMA);
+      map.set('required_schema', JOURNAL_RECORD_LOWEST_READ_SCHEMA);
+    });
+    expect(read(atFloor)).toEqual(canonical(record()));
+
+    const below = tampered((map) => map.set('schema', JOURNAL_RECORD_LOWEST_READ_SCHEMA - 1n));
+    expect(errorCode(() => read(below))).toBe('unsupported_journal_record_schema');
+    const requiringBelow = tampered((map) =>
+      map.set('required_schema', JOURNAL_RECORD_LOWEST_READ_SCHEMA - 1n),
+    );
+    expect(errorCode(() => read(requiringBelow))).toBe('malformed_journal_record');
   });
 
   // `renames` is ordered by Container ID and then entry number, across

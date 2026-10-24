@@ -106,11 +106,13 @@ export {
   type ControlPayload,
 } from './control/payload.js';
 export {
+  JOURNAL_RECORD_LOWEST_READ_SCHEMA,
   JOURNAL_RECORD_SCHEMA,
   decodeJournalRecord,
   encodeJournalRecord,
 } from './control/journalRecord.js';
 export {
+  INDEX_SNAPSHOT_LOWEST_READ_SCHEMA,
   INDEX_SNAPSHOT_SCHEMA,
   decodeIndexSnapshot,
   encodeIndexSnapshot,

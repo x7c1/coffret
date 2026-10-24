@@ -27,8 +27,9 @@ pub enum RelocationRefused {
     OutsideOneRoot,
     /// The new path passes through a name a mapped folder keeps for something
     /// other than content — the device's own management area, a fetch's
-    /// scratch, or a desktop's trash folder at the root's top — and no file is
-    /// placed there (spec: EP-11, EP-14, EP-16).
+    /// scratch, a desktop's trash folder at the root's top, or a name an
+    /// operating system keeps — and no file is placed there (spec: EP-11,
+    /// EP-14, EP-16, EP-17).
     ReservedName,
     /// The file and where it is to go stand on two filesystems, and nothing is
     /// copied across in place of a rename.
@@ -79,7 +80,7 @@ impl fmt::Display for RelocationRefused {
                 f.write_str("its new path is not under the mapped folder the file stands in")
             }
             Self::ReservedName => f.write_str(
-                "its new path passes through a name coffret or the desktop keeps for itself",
+                "its new path passes through a name coffret, the desktop or the operating system keeps for itself",
             ),
             Self::AnotherFilesystem => {
                 f.write_str("its new path is on another filesystem than the file")

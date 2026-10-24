@@ -231,6 +231,14 @@ Concept background: [Pack](../../concepts/pack/),
     come to one book. A drop that took one over and is then refused as a whole
     keeps it a drop in progress; one every file of which is refused still
     arms the `freeze` of the files the cut-off drop received.
+  - Where the folder holds several cut-off reservations — drops of it cut off
+    one after another, or together — the drop takes over the earliest made and
+    folds each later one into it: the later one's paths are added to the
+    earliest, and then the later one is released. So the drop's paths from the
+    start are every cut-off drop's, and the folder is left with one drop in
+    progress rather than one per drop that was cut off. A process that stops
+    part way through folding leaves a path named by two reservations, which
+    the next drop of the folder folds again.
   - A sync's scan selects no reserved path for addition or update, and reports
     each as waiting for its Pack rather than passing over it (PK-14). A reserved
     file is still a file the walk found, so nothing is inferred deleted for it
@@ -255,7 +263,11 @@ Concept background: [Pack](../../concepts/pack/),
     else, so a process started afterwards holds none live. No `freeze` decides
     one that was live at any moment since the run read the reservations — what
     it read may lack the files that landed after — and no second drop takes a
-    live one over.
+    live one over. A drop's reservation is live from the moment it is made:
+    making it and holding it live are one step against a second drop of the
+    folder looking for one to take over, so of two drops of one folder arriving
+    together exactly one holds a given reservation, and the other takes over
+    another or makes its own.
   - The drop's own `freeze` is armed once it stops receiving, and is a run of its
     own: it is never taken for a run already under way, even one whose scope
     covers every file the drop wrote, because that run read the reservations

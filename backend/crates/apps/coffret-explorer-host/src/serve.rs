@@ -31,6 +31,20 @@ const ACCEPT_BACKOFF: Duration = Duration::from_secs(1);
 /// (spec: LA-19). A connection whose request was refused before its body was
 /// read is closed rather than drained.
 pub async fn serve(listener: TcpListener, router: Router) {
+    serve_with_head_deadline(listener, router, READ_DEADLINE).await;
+}
+
+/// Answers as [`serve`] does, with each request's head given `head_deadline`
+/// to arrive in rather than LA-19's five seconds.
+///
+/// What a test of that deadline serves through, so that a head that never
+/// finishes arriving is given up on in a fraction of a second rather than
+/// after five of them. Everything else is [`serve`]'s.
+pub async fn serve_with_head_deadline(
+    listener: TcpListener,
+    router: Router,
+    head_deadline: Duration,
+) {
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(accepted) => accepted,
@@ -52,7 +66,7 @@ pub async fn serve(listener: TcpListener, router: Router) {
         tokio::spawn(async move {
             let served = http1::Builder::new()
                 .timer(TokioTimer::new())
-                .header_read_timeout(READ_DEADLINE)
+                .header_read_timeout(head_deadline)
                 .max_buf_size(MAX_HEAD_BYTES)
                 .serve_connection(TokioIo::new(stream), service)
                 .await;

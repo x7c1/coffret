@@ -11,6 +11,7 @@ use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
 use crate::root_marker;
 use crate::scratch;
+use crate::system_files;
 use crate::trash_folders;
 
 /// The file standing for `path` under `mapping`, as a walk of the mapped
@@ -31,14 +32,26 @@ use crate::trash_folders;
 /// folder or a link there rather than a regular file, a folder on the way down
 /// that is not one, a path that is exactly the mapping's own prefix, and a path
 /// through what the walk steps over — the management area, a fetch's scratch,
-/// or a desktop's trash folder at the top of the root (spec: EP-11, EP-14,
-/// EP-16). A folder that is not there is absence, as it is everywhere this
-/// capability answers (spec: OC-8); only a refusal to list one is an error.
+/// a desktop's trash folder at the top of the root, or a name an operating
+/// system keeps (spec: EP-11, EP-14, EP-16, EP-17). A folder that is not there
+/// is absence, as it is everywhere this capability answers (spec: OC-8); only a
+/// refusal to list one is an error.
+///
+/// The last is asked here rather than in [`mapped_file`], which a relocation
+/// asks of the path a file stands at as well: an Entry carried in at such a
+/// path before EP-17 is deleted without the operating system's file standing
+/// there being discarded with it, since nobody handed that file to the Library.
 pub(crate) async fn mapped_source(
     roots: &dyn MappedRoots,
     mapping: &Mapping,
     path: &EntryPath,
 ) -> Result<Option<SourceFile>, LocalIoError> {
+    let kept_by_system = relative_below(mapping, path).is_some_and(|relative| {
+        system_files::system_component(relative.as_str().split('/')).is_some()
+    });
+    if kept_by_system {
+        return Ok(None);
+    }
     Ok(match mapped_file(roots, mapping, path).await? {
         MappedFile::File(source) => Some(source),
         MappedFile::Nothing | MappedFile::Folder | MappedFile::Fenced { .. } => None,
