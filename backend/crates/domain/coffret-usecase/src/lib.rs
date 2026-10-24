@@ -126,10 +126,9 @@
 //! fetch, or a deletion over them — means. `InMemoryStore`, `InMemoryIndex`,
 //! and `InMemoryFs` are what to drive them — and the crate's own cases —
 //! against without a provider, a container, or a file. This crate runs all ten
-//! suites against those three, and two of them once more against
+//! suites against those three, and three of them once more against
 //! `InMemoryMintingStore`, which mints identifiers the way Google Drive does:
-//! the commit suite, all but its two races over a Library's first record, and
-//! the sync suite.
+//! the `ObjectStore` suite, the commit suite, and the sync suite.
 //! None of the fourteen is linked here, because they are not in the
 //! documentation this crate builds without that feature.
 

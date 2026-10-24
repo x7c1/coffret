@@ -135,6 +135,7 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make desktop-dev` | `make desktop-dev-build`, then runs the app from the checkout over the Libraries under the development state directory, as the development app; on Ubuntu 24.04 and later it first needs an AppArmor profile (see [its sandbox](#the-development-apps-sandbox-on-linux)) |
 | `make napi-addon` | Builds the explorer, then the Node-API addon the desktop app runs the server in, as `backend/target/release/coffret.node` |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
+| `make drive-store-it` | Runs the `ObjectStore` and commit conformance suites, and the cases that pin what Drive answers, against a real Google Drive folder: each case in a subfolder of its own under `COFFRET_DRIVE_FOLDER_ID`, trashed when the case ends. It needs an account and a consent given at a browser (`make drive-authorize`), so CI never runs it; without the variables its cases report themselves skipped. The variables are described at `drive-authorize` and `drive-store-it` in the `Makefile` |
 
 `make server` and `make web` are the two halves of `make dev` in the
 foreground, and take the same variables; `WEB_PORT` moves the explorer's port.

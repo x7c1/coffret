@@ -245,7 +245,13 @@ e2e-electron:
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize
 
-## drive-store-it: run the same ObjectStore conformance suite, plus the Drive-only observation cases, against a real Google Drive folder
+## drive-store-it: run the same ObjectStore and commit conformance suites, plus the Drive-only observation cases, against a real Google Drive folder
+#
+# The commit suite is what holds the two Drive behaviours the commit protocol
+# rests on to Drive itself: a create that succeeds under an id another writer
+# minted with `files.generateIds`, and `AlreadyExists` for a create under an id
+# that names a live file. `make check` runs the same suite over `InMemoryMintingStore`, a
+# double built on those two assumptions, which passes whatever Drive answers.
 #
 # Manual: it needs an account and a grant, so CI never runs it. Authorize first,
 # then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
@@ -274,7 +280,7 @@ drive-authorize:
 # with `fromjson?`.
 .PHONY: drive-store-it
 drive-store-it:
-	cd backend && cargo test -p google-drive-store --test conformance --test pre_minted_id_reuse -- --nocapture
+	cd backend && cargo test -p google-drive-store --test conformance --test commit_conformance --test pre_minted_id_reuse -- --nocapture
 
 ## drive-round-trip-it: take a folder into a Library on real Google Drive and back out of it, from one command
 #
@@ -933,8 +939,9 @@ audit:
 #     a person's OAuth consent and an account to spend, so nothing runs them
 #     unattended, CI included; they are run by hand, each described at its own
 #     target above. What stands for them here is the gateway's own cases over
-#     its scripted transport, and the device layer's cases that create and join
-#     a Library through a stub one.
+#     its scripted transport, the ObjectStore, commit and sync suites over
+#     `InMemoryMintingStore`, a double of Drive's minted ids, and the device
+#     layer's cases that create and join a Library through a stub one.
 #   - `deny` and `audit`: see below.
 #
 # `cargo doc` is here and not only in CI because a broken intra-doc link is the
