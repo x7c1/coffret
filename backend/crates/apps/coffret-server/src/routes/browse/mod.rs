@@ -63,7 +63,7 @@ pub async fn browse(
     // none of that is for the runtime's own threads to wait on.
     tokio::task::spawn_blocking(move || listed(&asked))
         .await
-        .map_err(|_| ApiError::server("BrowseNotJoined".to_owned()))?
+        .map_err(|cause| ApiError::server(crate::api_error::NotJoined("BrowseNotJoined", cause)))?
         .map(Json)
 }
 
@@ -91,7 +91,7 @@ fn listed(asked: &Path) -> Result<BrowsedDto, ApiError> {
     // the path itself goes through all come back as the one folder they name —
     // the form the mapping of it would record.
     let path =
-        fs::canonicalize(asked).map_err(|cause| ApiError::folder_not_listed(asked, &cause))?;
+        fs::canonicalize(asked).map_err(|cause| ApiError::folder_not_listed(asked, cause))?;
     if !path.is_dir() {
         return Err(ApiError::not_a_folder(asked));
     }
@@ -102,8 +102,8 @@ fn listed(asked: &Path) -> Result<BrowsedDto, ApiError> {
     };
 
     let mut folders = Vec::new();
-    for entry in fs::read_dir(&path).map_err(|cause| ApiError::folder_not_listed(&path, &cause))? {
-        let entry = entry.map_err(|cause| ApiError::folder_not_listed(&path, &cause))?;
+    for entry in fs::read_dir(&path).map_err(|cause| ApiError::folder_not_listed(&path, cause))? {
+        let entry = entry.map_err(|cause| ApiError::folder_not_listed(&path, cause))?;
         let Ok(name) = entry.file_name().into_string() else {
             continue;
         };
@@ -114,7 +114,7 @@ fn listed(asked: &Path) -> Result<BrowsedDto, ApiError> {
         // folder is a link, and is left out.
         let is_folder = entry
             .file_type()
-            .map_err(|cause| ApiError::folder_not_listed(&path, &cause))?
+            .map_err(|cause| ApiError::folder_not_listed(&path, cause))?
             .is_dir();
         if !is_folder {
             continue;

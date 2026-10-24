@@ -155,7 +155,7 @@ fn every_refusal() -> Vec<ApiError> {
             container_id,
             path: path(),
         }),
-        ApiError::server("Device::Index".to_owned()),
+        ApiError::server(super::redact::Named("Device::Index")),
         // The one refusal that says what landed before it: a drop stopped
         // part way, whose files are in the folder already.
         ApiError::no_room().having_written(vec!["albums/one.jpg".to_owned()]),

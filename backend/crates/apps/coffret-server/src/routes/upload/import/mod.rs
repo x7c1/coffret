@@ -78,7 +78,7 @@ pub async fn import(
     // Before the handle is used, so that a drop onto a locked server can be
     // made again once it is unlocked (spec: DK-2).
     let library = state.unlocked()?;
-    let Json(request) = body.map_err(|rejection| ApiError::unreadable_json(&rejection))?;
+    let Json(request) = body.map_err(ApiError::unreadable_json)?;
     // Taken out before anything else about the request is read: a handle is
     // used once, whatever the request that named it comes to (spec: LA-26).
     let held = state

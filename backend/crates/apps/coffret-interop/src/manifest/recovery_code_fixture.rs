@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
 use coffret_model::{MasterKey, MasterKeyEpoch};
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 
 /// One Recovery Code in a fixture set, and the pair reading it must give.
 ///
@@ -26,12 +25,12 @@ impl RecoveryCodeFixture {
     /// The Master Key this fixture states.
     pub fn master_key(&self) -> Result<MasterKey> {
         Ok(MasterKey::from_bytes(
-            hex::decode_array(&self.master_key).context("master_key")?,
+            hex::decode_array(&self.master_key).map_err(Error::stated_hex("master_key"))?,
         ))
     }
 
     /// The epoch this fixture states.
     pub fn epoch(&self) -> Result<MasterKeyEpoch> {
-        Ok(MasterKeyEpoch::new(self.epoch)?)
+        MasterKeyEpoch::new(self.epoch).map_err(Error::stated("epoch"))
     }
 }

@@ -13,7 +13,7 @@ use std::path::Path;
 
 use axum::extract::rejection::JsonRejection;
 use axum::http::StatusCode;
-use coffret_device::{Error, Redacted};
+use coffret_device::Error;
 
 use super::{redact, ApiError};
 
@@ -38,7 +38,7 @@ impl ApiError {
     /// a folder at all is `400`, and one the account this server runs as may
     /// not read is `403`. Anything else is this device failing, and travels as
     /// the `500` with only the kind of failure for the log.
-    pub(crate) fn folder_not_listed(path: &Path, cause: &io::Error) -> Self {
+    pub(crate) fn folder_not_listed(path: &Path, cause: io::Error) -> Self {
         match cause.kind() {
             io::ErrorKind::NotFound | io::ErrorKind::NotADirectory => Self::not_a_folder(path),
             io::ErrorKind::PermissionDenied => Self::plain(
@@ -49,7 +49,7 @@ impl ApiError {
                     path.display()
                 ),
             ),
-            _ => Self::server(redact::io_failure(cause)),
+            _ => Self::server(redact::IoFailure(cause)),
         }
     }
 
@@ -82,7 +82,7 @@ impl ApiError {
 
     /// No home directory to start a listing at.
     pub(crate) fn no_home() -> Self {
-        Self::server("NoHome".to_owned())
+        Self::server(redact::Named("NoHome"))
     }
 
     /// A body that is not the JSON a route takes.
@@ -91,16 +91,13 @@ impl ApiError {
     /// quote what was sent, and what is sent to the map route is a local path.
     /// What the log is given is its status, which says which of the ways a body
     /// fails it was.
-    pub(crate) fn unreadable_json(rejection: &JsonRejection) -> Self {
+    pub(crate) fn unreadable_json(rejection: JsonRejection) -> Self {
         Self::plain(
             StatusCode::BAD_REQUEST,
             "bad_request",
             "the request did not arrive as something this route can read".to_owned(),
         )
-        .caused_by(format!(
-            "JsonRejection(status={})",
-            rejection.status().as_u16()
-        ))
+        .caused_by(redact::Json(rejection))
     }
 
     /// What a mapping the device crate would not record is answered with.
@@ -126,8 +123,7 @@ impl ApiError {
                     Some(defect) => format!("{error}: {defect}"),
                     None => error.to_string(),
                 };
-                return Self::plain(StatusCode::BAD_REQUEST, "bad_path", said)
-                    .caused_by(error.redacted());
+                return Self::plain(StatusCode::BAD_REQUEST, "bad_path", said).caused_by(error);
             }
             Error::NoSuchLocalRoot { .. } => StatusCode::BAD_REQUEST,
             Error::ManagementAreaNotADirectory { .. }
@@ -138,6 +134,6 @@ impl ApiError {
             | Error::Local(_) => StatusCode::CONFLICT,
             _ => return Self::from(error),
         };
-        Self::plain(status, "bad_request", error.to_string()).caused_by(error.redacted())
+        Self::plain(status, "bad_request", error.to_string()).caused_by(error)
     }
 }

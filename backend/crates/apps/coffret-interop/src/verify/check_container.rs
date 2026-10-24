@@ -1,10 +1,9 @@
-use anyhow::{bail, Context, Result};
 use coffret_format::{decode, DecodedEntry};
 use coffret_model::{ContainerKind, EntryExtent};
 
 use crate::fixture_set::FixtureReader;
-use crate::hex;
 use crate::manifest::{ContainerFixture, EntryFixture};
+use crate::{hex, Error, Result, Step};
 
 use super::same;
 
@@ -17,7 +16,8 @@ pub(super) fn check_container(reader: &FixtureReader, fixture: &ContainerFixture
     )?;
 
     let bytes = reader.read(&fixture.file)?;
-    let opened = decode(&bytes, &fixture.container_key()?).context("opening the Container")?;
+    let opened =
+        decode(&bytes, &fixture.container_key()?).map_err(Error::format(Step::OpeningContainer))?;
 
     same("container_id", &opened.container_id, &container_id)?;
     same("kind", &opened.kind, &ContainerKind::from(fixture.kind))?;
@@ -26,7 +26,10 @@ pub(super) fn check_container(reader: &FixtureReader, fixture: &ContainerFixture
 
     let mut offset = 0u64;
     for (index, (opened, expected)) in opened.entries.iter().zip(&fixture.entries).enumerate() {
-        check_entry(opened, expected, &mut offset).with_context(|| format!("entry {index}"))?;
+        check_entry(opened, expected, &mut offset).map_err(|cause| Error::InEntry {
+            index,
+            cause: Box::new(cause),
+        })?;
     }
     Ok(())
 }
@@ -49,16 +52,16 @@ fn check_entry(opened: &DecodedEntry, expected: &EntryFixture, offset: &mut u64)
 
     let content = expected.content()?;
     if opened.content != content {
-        bail!(
-            "content: decoded {}, the manifest states {}",
-            hex::encode(&opened.content),
-            hex::encode(&content)
-        );
+        return Err(Error::Differs {
+            field: "content".to_owned(),
+            decoded: hex::encode(&opened.content),
+            stated: hex::encode(&content),
+        });
     }
     // The stream layout is the one expectation the manifest does not state, so
     // it is derived here from the contents the manifest does state.
     let expected_extent = EntryExtent::new(*offset, content.len() as u64)
-        .context("the manifest's own contents lay this Entry inside the address space")?;
+        .map_err(Error::model(Step::LayingOutEntry))?;
     same("extent", &metadata.extent, &expected_extent)?;
     *offset = expected_extent.end();
     Ok(())

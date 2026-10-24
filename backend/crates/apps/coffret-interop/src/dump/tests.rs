@@ -137,13 +137,10 @@ fn a_container_without_a_keyring_says_to_pass_one() {
     )
     .expect_err("a Container needs a Keyring to render");
 
-    assert_eq!(
-        refused.to_string(),
-        format!(
-            "{} is a Container; pass --keyring to render its meta section",
-            fetched.container_name
-        ),
-    );
+    let Error::ContainerNeedsKeyring { object_name } = refused else {
+        panic!("a Container without a Keyring asks for one: {refused:?}");
+    };
+    assert_eq!(object_name, fetched.container_name);
 }
 
 // A control object still renders as before, with or without a Keyring
@@ -163,4 +160,26 @@ fn a_keyring_replica_still_renders_as_a_control_object() {
         dump(&fetched.keyring, &name, &fetched.recovery_code, None).expect("the replica renders");
     let rendered: serde_json::Value = serde_json::from_str(&rendered).expect("the dump is JSON");
     assert_eq!(rendered["kind"], "Keyring");
+}
+
+// A name the object is not stored under opens it under no kind's key — the
+// name is part of what authenticates it — and its header names a Container
+// stored under another name, so the dump says no key opens it.
+#[test]
+fn an_object_under_another_name_is_opened_by_no_key() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let fetched = fetched(dir.path());
+
+    let refused = dump(
+        &fetched.keyring,
+        "head-00000000000000000001",
+        &fetched.recovery_code,
+        None,
+    )
+    .expect_err("the name is not the replica's");
+
+    let Error::NoKeyOpens { object_name } = refused else {
+        panic!("no key opens the object: {refused:?}");
+    };
+    assert_eq!(object_name, "head-00000000000000000001");
 }

@@ -1,6 +1,7 @@
-use anyhow::Result;
 use coffret_model::{Generation, MasterKeyEpoch, ReplicaPosition};
 use serde::{Deserialize, Serialize};
+
+use crate::{Error, Result};
 
 use super::{BodyField, WireControlObjectKind};
 
@@ -31,19 +32,17 @@ pub struct ControlObjectFixture {
 impl ControlObjectFixture {
     /// The generation this fixture states.
     pub fn generation(&self) -> Result<Generation> {
-        Ok(Generation::new(self.generation)?)
+        Generation::new(self.generation).map_err(Error::stated("generation"))
     }
 
     /// The replica position this fixture states.
     pub fn replica(&self) -> Result<ReplicaPosition> {
-        Ok(ReplicaPosition::new(
-            self.replica_index,
-            self.replica_count,
-        )?)
+        ReplicaPosition::new(self.replica_index, self.replica_count)
+            .map_err(Error::stated("replica"))
     }
 
     /// The Master Key epoch this fixture states.
     pub fn master_key_epoch(&self) -> Result<MasterKeyEpoch> {
-        Ok(MasterKeyEpoch::new(self.master_key_epoch)?)
+        MasterKeyEpoch::new(self.master_key_epoch).map_err(Error::stated("master_key_epoch"))
     }
 }

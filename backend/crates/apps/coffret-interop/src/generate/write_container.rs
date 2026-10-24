@@ -1,12 +1,11 @@
-use anyhow::{Context, Result};
 use coffret_format::{
     encode, generate_container_id, generate_container_key, ChunkSize, EncodeRequest, EntrySource,
 };
 use coffret_model::{Btime, ContainerKind, Mtime};
 
 use crate::fixture_set::{FixtureWriter, OBJECTS_DIR};
-use crate::hex;
 use crate::manifest::{ContainerFixture, DerivedFromFixture, EntryFixture, WireContainerKind};
+use crate::{hex, Error, FixtureKind, Result, Step};
 
 use super::{entry_path, EntryPlan};
 
@@ -17,8 +16,9 @@ pub(super) fn write_container(
     chunk_size: ChunkSize,
     plans: &[EntryPlan],
 ) -> Result<ContainerFixture> {
-    let container_id = generate_container_id().context("drawing a Container ID")?;
-    let container_key = generate_container_key().context("drawing a Container Key")?;
+    let container_id = generate_container_id().map_err(Error::format(Step::DrawingContainerId))?;
+    let container_key =
+        generate_container_key().map_err(Error::format(Step::DrawingContainerKey))?;
     let sources: Vec<EntrySource<'_>> = plans
         .iter()
         .map(|plan| EntrySource {
@@ -38,7 +38,13 @@ pub(super) fn write_container(
         chunk_size,
         entries: &sources,
     })
-    .with_context(|| format!("encoding the {fixture:?} Container"))?;
+    .map_err(|cause| {
+        Error::Format {
+            step: Step::EncodingContainer,
+            cause,
+        }
+        .in_fixture(FixtureKind::Container, fixture)
+    })?;
 
     let file = writer.write(OBJECTS_DIR, encoded.object_name(), encoded.bytes())?;
     Ok(ContainerFixture {

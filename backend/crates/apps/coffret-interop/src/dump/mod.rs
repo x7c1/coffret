@@ -16,9 +16,10 @@
 
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
 use coffret_format::{decode_control_object, Purpose, PurposeKey, RecoveryCode};
 use coffret_model::ControlObjectKind;
+
+use crate::{Error, Result, Step};
 
 mod container;
 use container::{container, container_key, container_named};
@@ -42,9 +43,9 @@ pub fn dump(
     recovery_code: &Path,
     keyring: Option<&Path>,
 ) -> Result<String> {
-    let bytes = std::fs::read(object).context("reading the object")?;
-    let code = std::fs::read_to_string(recovery_code).context("reading the Recovery Code")?;
-    let code = RecoveryCode::parse(&code).context("parsing the Recovery Code")?;
+    let bytes = std::fs::read(object).map_err(Error::read(object))?;
+    let code = std::fs::read_to_string(recovery_code).map_err(Error::read(recovery_code))?;
+    let code = RecoveryCode::parse(&code).map_err(Error::format(Step::ParsingRecoveryCode))?;
 
     let opened = ControlObjectKind::ALL.iter().find_map(|kind| {
         let key = PurposeKey::derive(code.master_key(), Purpose::of_control_object(*kind));
@@ -58,14 +59,18 @@ pub fn dump(
                 container(&bytes, &key)?
             }
             None => {
-                bail!("{object_name} is a Container; pass --keyring to render its meta section")
+                return Err(Error::ContainerNeedsKeyring {
+                    object_name: object_name.to_owned(),
+                })
             }
         },
         (None, None) => {
-            bail!("no control-object kind's key opens this object under this name")
+            return Err(Error::NoKeyOpens {
+                object_name: object_name.to_owned(),
+            })
         }
     };
-    serde_json::to_string_pretty(&rendered).context("rendering the object")
+    serde_json::to_string_pretty(&rendered).map_err(|cause| Error::DumpUnrendered { cause })
 }
 
 #[cfg(test)]

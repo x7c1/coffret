@@ -14,13 +14,13 @@ impl ApiError {
     /// mid-part, a boundary that is not one. There is nothing about the Library
     /// in it, and nothing for a screen to say beyond that the request did not
     /// arrive whole.
-    pub fn bad_request(cause: &MultipartError) -> Self {
+    pub fn bad_request(cause: MultipartError) -> Self {
         Self::plain(
             StatusCode::BAD_REQUEST,
             "bad_request",
             "the request did not arrive as something this route can read".to_owned(),
         )
-        .caused_by(redact::multipart(cause))
+        .caused_by(redact::Multipart(cause))
     }
 
     /// A multipart body that could not be read, or that outran the body limit
@@ -34,8 +34,8 @@ impl ApiError {
     /// ran past what it was allowed to read.
     pub fn multipart(cause: MultipartError) -> Self {
         match cause.status() == StatusCode::PAYLOAD_TOO_LARGE {
-            true => Self::whole_drop_too_large().caused_by(redact::multipart(&cause)),
-            false => Self::bad_request(&cause),
+            true => Self::whole_drop_too_large().caused_by(redact::Multipart(cause)),
+            false => Self::bad_request(cause),
         }
     }
 

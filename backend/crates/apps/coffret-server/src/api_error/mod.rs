@@ -8,6 +8,7 @@
 //! event is in [`redact`], and what goes on the wire is in [`into_response`].
 
 use axum::http::StatusCode;
+use coffret_device::Redacted;
 
 mod admission;
 pub(crate) use admission::WayBack;
@@ -29,6 +30,7 @@ mod paths;
 mod placements;
 
 mod redact;
+pub(crate) use redact::NotJoined;
 
 mod refused_root;
 pub(crate) use refused_root::refused_root_said;
@@ -83,6 +85,13 @@ pub(crate) const UNAUTHENTICATED: &str = "unauthenticated";
 pub(crate) const NO_FOLDER_HERE_SAID: &str =
     "no folder on this device holds this part of the Library";
 
+/// What a refusal keeps of the failure under it: the failure itself, behind
+/// the one rendering a diagnostic event may carry.
+///
+/// `Send` and `Sync` because a refusal travels between the tasks that answer a
+/// request and the runs that report one.
+type Cause = Box<dyn Redacted + Send + Sync>;
+
 /// Everything that can come back instead of an answer, in one shape.
 ///
 /// One shape and one place, because the browser is what reads these and a
@@ -98,10 +107,10 @@ pub(crate) const NO_FOLDER_HERE_SAID: &str =
 /// Entry Path, which is the user's own name for their file (spec: EL-1) and not
 /// something to be echoed back out of a failure.
 ///
-/// That second reason is why the cause is held as the redacted rendering of the
-/// failure rather than as the failure itself: an Entry Path may not reach a
-/// diagnostic event either, and the one way to be sure of it is to leave
-/// nothing here for a diagnostic event to render. See [`redact`].
+/// That second reason is why the cause is held as a [`Redacted`] and as
+/// nothing else: an Entry Path may not reach a diagnostic event either, and the
+/// one way to be sure of it is to leave nothing here a diagnostic event could
+/// render but the redacted rendering. See [`redact`].
 pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
@@ -197,9 +206,10 @@ pub struct ApiError {
     /// The set is named here for the reason the others are: it is what a browser
     /// telling one declined path from another branches on.
     surfaced: Option<&'static str>,
-    /// What the layer below reported, as much of it as a diagnostic event may
-    /// carry ([`redact`]). For the log, and for nothing else.
-    cause: Option<String>,
+    /// What the layer below reported, as the value it reported, reachable
+    /// only as much of it as a diagnostic event may carry ([`redact`]). For the
+    /// log, and for nothing else.
+    cause: Option<Cause>,
     /// The Entry Paths a drop had already written when this stopped it, and
     /// `None` on every refusal that is not a drop stopped part way.
     ///
@@ -279,9 +289,10 @@ impl ApiError {
         self
     }
 
-    /// Keeps the redacted rendering of what the layer below reported.
-    fn caused_by(mut self, cause: String) -> Self {
-        self.cause = Some(cause);
+    /// Keeps what the layer below reported, to be rendered redacted where the
+    /// refusal is logged.
+    fn caused_by(mut self, cause: impl Redacted + Send + Sync + 'static) -> Self {
+        self.cause = Some(Box::new(cause));
         self
     }
 

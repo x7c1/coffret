@@ -1,10 +1,9 @@
-use anyhow::{Context, Result};
 use coffret_format::{generate_master_key, RecoveryCode};
 use coffret_model::{MasterKey, MasterKeyEpoch};
 
 use crate::fixture_set::{FixtureWriter, BLOBS_DIR};
-use crate::hex;
 use crate::manifest::RecoveryCodeFixture;
+use crate::{hex, Error, Result, Step};
 
 use super::{EPOCH, LATE_EPOCH};
 
@@ -17,9 +16,11 @@ pub(super) fn write_recovery_codes(
     writer: &FixtureWriter,
     master_key: &MasterKey,
 ) -> Result<Vec<RecoveryCodeFixture>> {
-    let bare = RecoveryCode::encode(same_key_again(master_key), MasterKeyEpoch::new(EPOCH)?);
-    let other = generate_master_key().context("drawing the second Recovery Code's Master Key")?;
-    let grouped = RecoveryCode::encode(same_key_again(&other), MasterKeyEpoch::new(LATE_EPOCH)?);
+    let epoch =
+        |epoch| MasterKeyEpoch::new(epoch).map_err(Error::model(Step::StatingGeneratorValue));
+    let bare = RecoveryCode::encode(same_key_again(master_key), epoch(EPOCH)?);
+    let other = generate_master_key().map_err(Error::format(Step::DrawingMasterKey))?;
+    let grouped = RecoveryCode::encode(same_key_again(&other), epoch(LATE_EPOCH)?);
 
     Ok(vec![
         write_one(writer, "recovery-code", master_key, EPOCH, bare.as_str())?,

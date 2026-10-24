@@ -1,18 +1,17 @@
 //! A control object's payload, keyed by the names the field-number registry
 //! gives its field numbers.
 
-use anyhow::{bail, Context, Result};
 use ciborium::Value;
 use coffret_format::field_numbers::{named_view, payload_map};
 use coffret_format::DecodedControlObject;
 use serde_json::{json, Map};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 
 /// A control object's payload, keyed by field name.
 pub(super) fn control_object(opened: &DecodedControlObject) -> Result<serde_json::Value> {
     let body: Value = ciborium::from_reader(opened.payload.body.as_slice())
-        .context("the payload body is not readable CBOR")?;
+        .map_err(|cause| Error::BodyUnreadable { cause })?;
     let kind = payload_map(opened.kind);
     Ok(json!({
         "kind": format!("{:?}", opened.kind),
@@ -49,13 +48,21 @@ fn to_json(value: &Value) -> Result<serde_json::Value> {
                 let key = match key {
                     Value::Text(text) => text.clone(),
                     Value::Integer(integer) => i128::from(*integer).to_string(),
-                    other => bail!("a payload map key is {other:?}, which this dump cannot name"),
+                    other => {
+                        return Err(Error::UnnamableKey {
+                            found: other.clone(),
+                        })
+                    }
                 };
                 map.insert(key, to_json(value)?);
             }
             serde_json::Value::Object(map)
         }
-        other => bail!("a payload carries {other:?}, which this dump cannot render"),
+        other => {
+            return Err(Error::UnrenderableValue {
+                found: other.clone(),
+            })
+        }
     })
 }
 

@@ -27,6 +27,9 @@
 
 #![forbid(unsafe_code)]
 
+mod error;
+pub use error::{Error, FixtureKind, HexDefect, Result, Step};
+
 mod fixture_set;
 mod hex;
 

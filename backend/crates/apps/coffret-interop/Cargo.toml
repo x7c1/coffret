@@ -10,7 +10,6 @@ publish.workspace = true
 coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 
-anyhow = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }

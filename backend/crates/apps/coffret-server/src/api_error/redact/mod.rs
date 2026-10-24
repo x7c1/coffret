@@ -26,18 +26,36 @@
 //! caller which type each link is, so an allowlist would render everything it
 //! did not recognise as nothing at all.
 //!
-//! Two leaves are not coffret's and stay here, which is the allowlist half:
-//! [`multipart`] and [`io_failure`], for the extractor's refusal and the
-//! operating system's. Both are foreign types under a foreign trait, so neither
-//! could implement `Redacted` even if it were this crate's business to say what
-//! `axum` may write down.
+//! The leaves that are not coffret's stay here, which is the allowlist half:
+//! [`Multipart`], [`Json`] and [`IoFailure`], for the extractors' refusals and
+//! the operating system's. Each is a foreign type under a foreign trait, so
+//! none could implement `Redacted` even if it were this crate's business to say
+//! what `axum` may write down; each is wrapped here instead, as the value it is,
+//! by a type that says what of it an event may carry. [`NotJoined`] is the same
+//! for the runtime's account of a blocking task that ended without an answer,
+//! and [`NotHeld`] and [`Named`] for a refusal of the drop store's that has no
+//! rendering of its own and for a state with nothing below it.
 //!
-//! The rendering is enforced by construction rather than by care at each site:
-//! a refusal holds the redacted text and never the failure, so there is nothing
-//! left for a later `error = %cause` to reach for.
+//! The rendering is enforced by construction rather than by care at each site.
+//! A refusal keeps the failure as the value the layer below reported, but holds
+//! it as a `dyn Redacted` and as nothing else: neither `Display` nor `Debug` is
+//! reachable through it, so the one rendering a later `error = …` can reach for
+//! is this one, and it is made only where the refusal is logged.
 
 mod io_failure;
-pub(crate) use io_failure::io_failure;
+pub(crate) use io_failure::IoFailure;
+
+mod json;
+pub(crate) use json::Json;
 
 mod multipart;
-pub(crate) use multipart::multipart;
+pub(crate) use multipart::Multipart;
+
+mod named;
+pub(crate) use named::Named;
+
+mod not_held;
+pub(crate) use not_held::NotHeld;
+
+mod not_joined;
+pub(crate) use not_joined::NotJoined;

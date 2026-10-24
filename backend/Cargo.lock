@@ -1149,7 +1149,6 @@ dependencies = [
 name = "coffret-interop"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "ciborium",
  "clap",
  "coffret-format",

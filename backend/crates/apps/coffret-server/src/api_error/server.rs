@@ -4,12 +4,14 @@
 
 use axum::http::StatusCode;
 
+use coffret_device::Redacted;
+
 use super::{redact, ApiError, CONFLICT, SERVER};
 
 impl ApiError {
     /// A local file this device believed it had could not be read.
     pub fn unreadable(cause: std::io::Error) -> Self {
-        Self::server(redact::io_failure(&cause))
+        Self::server(redact::IoFailure(cause))
     }
 
     /// Something the server itself could not do, whatever it was.
@@ -19,13 +21,20 @@ impl ApiError {
     /// can do nothing, and what actually went wrong travels as the cause to the
     /// log. Three spellings of that sentence would be three chances for one of
     /// them to start saying more.
-    pub(crate) fn server(cause: String) -> Self {
+    pub(crate) fn server(cause: impl Redacted + Send + Sync + 'static) -> Self {
+        Self::could_not_answer().caused_by(cause)
+    }
+
+    /// The refusal [`server`](Self::server) answers with, before its cause is
+    /// kept: for the classifications in [`from_error`](super::from_error),
+    /// which decide the answer from a part of the failure and then keep the
+    /// whole of it.
+    pub(super) fn could_not_answer() -> Self {
         Self::plain(
             StatusCode::INTERNAL_SERVER_ERROR,
             SERVER,
             "the server could not answer".to_owned(),
         )
-        .caused_by(cause)
     }
 
     /// The consent flow a reconnect asked for ended before it had a page to
@@ -83,7 +92,7 @@ impl ApiError {
     /// generation the activation took. The generation is Storage evidence, for
     /// the log where the cause takes it (spec: EL-5), and nobody enrolling a
     /// device again needs a number to do it.
-    pub(super) fn epoch(cause: String) -> Self {
+    pub(super) fn epoch() -> Self {
         Self::plain(
             StatusCode::CONFLICT,
             "epoch",
@@ -92,7 +101,6 @@ impl ApiError {
              new Recovery Code"
                 .to_owned(),
         )
-        .caused_by(cause)
     }
 
     /// The Library was written before the Journal record schema this build
@@ -108,7 +116,7 @@ impl ApiError {
     ///
     /// The sentence says what to do and names no schema number: that is for
     /// the log, where the cause takes it.
-    pub(super) fn library_predates_format(cause: String) -> Self {
+    pub(super) fn library_predates_format() -> Self {
         Self::plain(
             StatusCode::CONFLICT,
             "library_predates_format",
@@ -116,7 +124,6 @@ impl ApiError {
              and bring its files in again"
                 .to_owned(),
         )
-        .caused_by(cause)
     }
 
     /// The Library moved underneath a batch while it was being assembled:
@@ -135,7 +142,7 @@ impl ApiError {
     /// conflicts with is the Library's current state. The sentence says what
     /// happened and what to do, and names nothing the commit met — the paths
     /// and Containers it collided over go to the log (spec: EL-1).
-    pub(super) fn conflict(cause: String) -> Self {
+    pub(super) fn conflict() -> Self {
         Self::plain(
             StatusCode::CONFLICT,
             CONFLICT,
@@ -143,7 +150,6 @@ impl ApiError {
              again plans from the Library as it is now"
                 .to_owned(),
         )
-        .caused_by(cause)
     }
 
     /// Another run owns this device's pending rows, and the use case refused
@@ -168,7 +174,7 @@ impl ApiError {
     /// Only the sentence differs, naming where the person can see what owns
     /// the rows — the command line — in the words the sibling `conflict`
     /// sentence uses for what happened and what running it again does.
-    pub(super) fn pending_rows_busy(cause: String) -> Self {
+    pub(super) fn pending_rows_busy() -> Self {
         Self::plain(
             StatusCode::CONFLICT,
             CONFLICT,
@@ -176,7 +182,6 @@ impl ApiError {
              nothing was changed — running it again goes through once that finishes"
                 .to_owned(),
         )
-        .caused_by(cause)
     }
 
     /// What arrived from Storage, or reached it, is not what the Library names
@@ -185,7 +190,7 @@ impl ApiError {
     /// One constructor for every flow that meets it, so the kind is spelled
     /// once; the sentence differs with which side of the transfer failed to
     /// match, and is the caller's to say.
-    pub(super) fn unverified(message: &str, cause: String) -> Self {
-        Self::plain(StatusCode::BAD_GATEWAY, "unverified", message.to_owned()).caused_by(cause)
+    pub(super) fn unverified(message: &str) -> Self {
+        Self::plain(StatusCode::BAD_GATEWAY, "unverified", message.to_owned())
     }
 }

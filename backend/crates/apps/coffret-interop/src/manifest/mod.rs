@@ -12,10 +12,9 @@
 //! a kind the exchange gains later arrives beside its neighbours rather than in
 //! the middle of them.
 
-use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 use coffret_model::{MasterKey, Passphrase};
 
 mod argon2_params_fixture;
@@ -129,7 +128,7 @@ impl Manifest {
     /// The Master Key the set's purpose keys derive from.
     pub fn master_key(&self) -> Result<MasterKey> {
         Ok(MasterKey::from_bytes(
-            hex::decode_array(&self.master_key).context("master_key")?,
+            hex::decode_array(&self.master_key).map_err(Error::stated_hex("master_key"))?,
         ))
     }
 
