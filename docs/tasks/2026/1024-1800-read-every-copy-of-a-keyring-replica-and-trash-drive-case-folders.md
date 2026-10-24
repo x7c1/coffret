@@ -92,7 +92,7 @@ failed removal is still printed, not panicked over.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this macOS machine, `make drive-store-it` passes, and no line of
+- [x] On this macOS machine, `make drive-store-it` passes, and no line of
       its output says `could not trash the case folder` (an agent may run
       it: the person granted the test client for this). The merging session
       records the counts and timings in the PR.
