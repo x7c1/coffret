@@ -8,14 +8,13 @@
 #                                  silhouette, since a tray draws it small
 #
 # The sources are the only inputs; everything this script writes is committed.
-# It needs tauri-cli, the shell and python3 (to put the .icns entries in a
-# stable order). tauri-cli is not here for an app of its own: its
-# `cargo tauri icon` is the SVG rasteriser, the one tool that turns an SVG into
-# the PNG sizes, the .icns and the favicon rasters below in one step, without a
-# graphics library installed beside it. Install it once with
-# `cargo install tauri-cli --version '^2' --locked`. Where a variant is needed,
-# the source is nested in a derived SVG in a temp directory and that is
-# rasterised instead:
+# It needs resvg, the shell and python3. resvg is the SVG rasteriser: its CLI
+# turns an SVG into a PNG of any size without a graphics library installed
+# beside it. Install it once with `cargo install resvg --version 0.47.0 --locked`.
+# python3 assembles the .icns from those PNGs (see write_icns), so the script
+# needs no macOS tool and runs on Linux as well. Where a variant is needed, the
+# source is nested in a derived SVG in a temp directory and that is rasterised
+# instead:
 #
 #   frontend/packages/apps/desktop/packaging/   the bundles' app icon:
 #     icon.png                    coffret.svg as is (the .deb's)
@@ -165,9 +164,9 @@ for color in "$FAVICON_LEFT" "$FAVICON_RIGHT"; do
 done
 grep -q "fill=\"$TRAY_BLACK\"" "$TRAY_SOURCE" ||
   die "$TRAY_SOURCE no longer fills with $TRAY_BLACK; update TRAY_BLACK (the white variant swaps it)"
-cargo tauri --version >/dev/null 2>&1 ||
-  die "cargo tauri not found (one-time: cargo install tauri-cli --version '^2' --locked)"
-command -v python3 >/dev/null 2>&1 || die "python3 not found (it puts the .icns entries in a stable order)"
+command -v resvg >/dev/null 2>&1 ||
+  die "resvg not found (one-time: cargo install resvg --version 0.47.0 --locked)"
+command -v python3 >/dev/null 2>&1 || die "python3 not found (it writes the .icns)"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/coffret-gen-icons.XXXXXX")"
 readonly WORK_DIR
@@ -182,39 +181,127 @@ source_body() {
   sed '/^<?xml/d' "$1"
 }
 
-# Rasterise an SVG into a directory with `cargo tauri icon`, which writes a
-# fixed set of sizes (or the ones `-p` asks for) of which the callers keep only
-# what they use. Its per-file progress goes to a log that is shown only when it
-# fails.
+# Rasterise the SVG $1 into the PNG $2, $3 px square. resvg prints nothing on
+# success; what it says when it fails is passed on.
 rasterise() {
-  local svg="$1" out="$2"
-  shift 2
-  mkdir -p "$out"
-  if ! cargo tauri icon "$svg" -o "$out" "$@" >"$out.log" 2>&1; then
-    cat "$out.log" >&2
-    die "cargo tauri icon failed on $svg"
-  fi
+  local svg="$1" out="$2" px="$3"
+  resvg -w "$px" -h "$px" "$svg" "$out" || die "resvg failed on $svg"
 }
 
-# Rewrite an .icns with its entries sorted by type. tauri-cli writes them in
-# hash-map order, which differs between runs; sorting keeps a rerun from
-# changing the committed file's bytes. The format is a header ("icns", total
+# The .icns entries, as type:edge in px: the ones that hold a PNG, then the two
+# legacy ones macOS still reads for the smallest sizes, which hold the pixels
+# raw instead, as RLE-packed RGB with an 8-bit alpha mask in an entry of its
+# own (s8mk for is32, l8mk for il32).
+readonly ICNS_PNG_ENTRIES="ic11:32 ic12:64 ic07:128 ic08:256 ic13:256 ic09:512 ic14:512 ic10:1024"
+readonly ICNS_RLE_ENTRIES="is32:16 il32:32"
+
+# Write the .icns $2 from the SVG $1: rasterise it at every edge an entry
+# needs, then assemble the file in python3, with the entries sorted by type,
+# the order the committed file has. The format is a header ("icns", total
 # length) followed by entries of (4-byte type, 4-byte big-endian length
 # including these 8 bytes, data).
-sort_icns() {
-  python3 - "$1" <<'PY'
-import struct, sys
-path = sys.argv[1]
-data = open(path, "rb").read()
-if data[:4] != b"icns":
-    sys.exit(f"{path}: not an icns file")
-entries, i = [], 8
-while i < len(data):
-    length = struct.unpack(">I", data[i + 4 : i + 8])[0]
-    entries.append(data[i : i + length])
-    i += length
-body = b"".join(sorted(entries, key=lambda entry: entry[:4]))
-open(path, "wb").write(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+write_icns() {
+  local svg="$1" out="$2"
+  local dir entry px
+  dir="$WORK_DIR/icns-$(basename "$svg" .svg)"
+  mkdir -p "$dir"
+  for entry in $ICNS_PNG_ENTRIES $ICNS_RLE_ENTRIES; do
+    px="${entry#*:}"
+    [ -f "$dir/$px.png" ] || rasterise "$svg" "$dir/$px.png" "$px"
+  done
+  python3 - "$dir" "$out" "$ICNS_PNG_ENTRIES" "$ICNS_RLE_ENTRIES" <<'PY'
+import struct, sys, zlib
+
+png_dir, out, png_entries, rle_entries = sys.argv[1:5]
+MASKS = {"is32": b"s8mk", "il32": b"l8mk"}
+
+
+def read_png(px):
+    with open(f"{png_dir}/{px}.png", "rb") as f:
+        return f.read()
+
+
+def decode_rgba(data, px):
+    """The pixels of an 8-bit RGBA, non-interlaced PNG, which resvg writes."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        sys.exit(f"{px}.png: not a PNG")
+    i, idat, header = 8, b"", None
+    while i < len(data):
+        length, kind = struct.unpack(">I4s", data[i : i + 8])
+        chunk = data[i + 8 : i + 8 + length]
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", chunk)
+        elif kind == b"IDAT":
+            idat += chunk
+        i += 12 + length
+    if header != (px, px, 8, 6, 0, 0, 0):
+        sys.exit(f"{px}.png: expected an 8-bit RGBA, non-interlaced {px}x{px} PNG, found IHDR {header}")
+    raw, stride, bpp = zlib.decompress(idat), px * 4, 4
+    rows, prev = [], bytearray(stride)
+    for y in range(px):
+        start = y * (stride + 1)
+        kind, row = raw[start], bytearray(raw[start + 1 : start + 1 + stride])
+        for x in range(stride):
+            a = row[x - bpp] if x >= bpp else 0
+            b = prev[x]
+            c = prev[x - bpp] if x >= bpp else 0
+            if kind == 0:
+                break
+            if kind == 1:
+                row[x] = (row[x] + a) & 0xFF
+            elif kind == 2:
+                row[x] = (row[x] + b) & 0xFF
+            elif kind == 3:
+                row[x] = (row[x] + (a + b) // 2) & 0xFF
+            elif kind == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                row[x] = (row[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 0xFF
+            else:
+                sys.exit(f"{px}.png: unknown PNG filter type {kind}")
+        rows.append(row)
+        prev = row
+    return b"".join(rows)
+
+
+def pack_bits(values):
+    """The icns RLE of one channel: a run of 3 to 130 equal bytes is
+    (n + 125, byte), a literal of 1 to 128 bytes is (n - 1, bytes)."""
+    out, literal, i = bytearray(), bytearray(), 0
+
+    def flush():
+        for start in range(0, len(literal), 128):
+            part = literal[start : start + 128]
+            out.append(len(part) - 1)
+            out.extend(part)
+        literal.clear()
+
+    while i < len(values):
+        run = 1
+        while i + run < len(values) and values[i + run] == values[i] and run < 130:
+            run += 1
+        if run >= 3:
+            flush()
+            out.extend((run + 125, values[i]))
+        else:
+            literal.extend(values[i : i + run])
+        i += run
+    flush()
+    return bytes(out)
+
+
+entries = []
+for entry in png_entries.split():
+    kind, px = entry.split(":")
+    entries.append((kind.encode(), read_png(px)))
+for entry in rle_entries.split():
+    kind, px = entry.split(":")
+    rgba = decode_rgba(read_png(px), int(px))
+    entries.append((kind.encode(), b"".join(pack_bits(rgba[ch::4]) for ch in range(3))))
+    entries.append((MASKS[kind], rgba[3::4]))
+body = b"".join(kind + struct.pack(">I", 8 + len(data)) + data for kind, data in sorted(entries))
+with open(out, "wb") as f:
+    f.write(b"icns" + struct.pack(">I", 8 + len(body)) + body)
 PY
 }
 
@@ -370,28 +457,23 @@ write_favicon_svg() {
 # The bundles' app icon, into PACKAGING_DIR: icon.png from coffret.svg as is,
 # icon.icns from the inset variant of it.
 mkdir -p "$PACKAGING_DIR" "$ASSETS_DIR"
-rasterise "$SOURCE" "$WORK_DIR/installed-full"
-cp "$WORK_DIR/installed-full/icon.png" "$PACKAGING_DIR/icon.png"
+rasterise "$SOURCE" "$PACKAGING_DIR/icon.png" "$SIZE"
 log "wrote $(shown "$PACKAGING_DIR/icon.png")"
 write_continuous_svg "$SOURCE" "$WORK_DIR/installed-continuous.svg"
 write_inset_svg "$WORK_DIR/installed-continuous.svg" "$WORK_DIR/installed-inset.svg"
-rasterise "$WORK_DIR/installed-inset.svg" "$WORK_DIR/installed-inset"
-sort_icns "$WORK_DIR/installed-inset/icon.icns"
-cp "$WORK_DIR/installed-inset/icon.icns" "$PACKAGING_DIR/icon.icns"
+write_icns "$WORK_DIR/installed-inset.svg" "$PACKAGING_DIR/icon.icns"
 log "wrote $(shown "$PACKAGING_DIR/icon.icns") (inset to $INSET_PERCENT %)"
 
 # The development app's window icon: the app icon with the "D" badge. Its Dock
 # icon is the same picture inset, as the installed app's .icns is, since the
 # Dock draws whatever it is handed across the whole tile.
 write_badged_svg "$SOURCE" "$WORK_DIR/dev.svg"
-rasterise "$WORK_DIR/dev.svg" "$WORK_DIR/dev"
-cp "$WORK_DIR/dev/icon.png" "$ASSETS_DIR/icon-dev.png"
+rasterise "$WORK_DIR/dev.svg" "$ASSETS_DIR/icon-dev.png" "$SIZE"
 log "wrote $(shown "$ASSETS_DIR/icon-dev.png")"
 write_continuous_svg "$SOURCE" "$WORK_DIR/continuous.svg"
 write_badged_svg "$WORK_DIR/continuous.svg" "$WORK_DIR/dock-dev-full.svg"
 write_inset_svg "$WORK_DIR/dock-dev-full.svg" "$WORK_DIR/dock-dev.svg"
-rasterise "$WORK_DIR/dock-dev.svg" "$WORK_DIR/dock-dev"
-cp "$WORK_DIR/dock-dev/icon.png" "$ASSETS_DIR/dock-dev.png"
+rasterise "$WORK_DIR/dock-dev.svg" "$ASSETS_DIR/dock-dev.png" "$SIZE"
 log "wrote $(shown "$ASSETS_DIR/dock-dev.png") (inset to $INSET_PERCENT %)"
 
 # macOS 26 draws the tile of an app whose icon is only an .icns in a shape and
@@ -440,10 +522,8 @@ log "wrote $(shown "$PACKAGING_DIR/icon.icon")"
 # $2.png at TRAY_PX and $2@2x.png at TRAY_PX_2X.
 write_tray() {
   local svg="$1" name="$2"
-  local out="$WORK_DIR/$name"
-  rasterise "$svg" "$out" -p "$TRAY_PX" -p "$TRAY_PX_2X"
-  cp "$out/${TRAY_PX}x${TRAY_PX}.png" "$ASSETS_DIR/$name.png"
-  cp "$out/${TRAY_PX_2X}x${TRAY_PX_2X}.png" "$ASSETS_DIR/$name@2x.png"
+  rasterise "$svg" "$ASSETS_DIR/$name.png" "$TRAY_PX"
+  rasterise "$svg" "$ASSETS_DIR/$name@2x.png" "$TRAY_PX_2X"
   log "wrote $(shown "$ASSETS_DIR/$name.png") and $name@2x.png"
 }
 
@@ -479,8 +559,7 @@ for badge in plain badge; do
     esac
     name="favicon$suffix$build"
     write_favicon_svg "$TRAY_SOURCE" "$left" "$right" fixed "$badge" "$WORK_DIR/$name.svg"
-    rasterise "$WORK_DIR/$name.svg" "$WORK_DIR/$name" -p "$FAVICON_PX"
-    cp "$WORK_DIR/$name/${FAVICON_PX}x${FAVICON_PX}.png" "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix$build.png"
+    rasterise "$WORK_DIR/$name.svg" "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix$build.png" "$FAVICON_PX"
     log "wrote $(shown "$WEB_PUBLIC_DIR/favicon-$FAVICON_PX$suffix$build.png")"
   done
 done

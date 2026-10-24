@@ -282,11 +282,12 @@ app's — answers the favicon's paths with the badged files, so its tabs are
 told apart from the installed app's; `index.html` links only the plain ones,
 and the tab's title stays "coffret" whichever host served it.
 
-The script rasterises the SVGs with the Tauri CLI's `cargo tauri icon`, which
-writes every PNG size and the `.icns` without a graphics library beside it; it
-is a tool of the script alone, not of the app. Install it once with
-`cargo install tauri-cli --version '^2' --locked`; the script also needs
-python3, which puts the `.icns` entries in a stable order.
+The script rasterises the SVGs with the `resvg` CLI, which writes a PNG of any
+size without a graphics library beside it; it is a tool of the script alone,
+not of the app. Install it once with
+`cargo install resvg --version 0.47.0 --locked`; the script also needs
+python3, which assembles the `.icns` from those PNGs, so no macOS tool is
+needed and the script runs on Linux as well.
 
 Both apps log where the binaries log, under `COFFRET_LOG_DIR` when that is set.
 
