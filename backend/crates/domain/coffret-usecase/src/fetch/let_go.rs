@@ -1,3 +1,12 @@
+//! Letting go of the parcels this device holds once they have served their
+//! purpose (spec: PK-21).
+//!
+//! Only a held parcel is let go: one whose row says the device keeps it and
+//! that the device does keep. A kept parcel that turns out not to be held —
+//! gone, or no longer authenticating — is shed where the read meets it,
+//! by the same removal of file and row, and never called let go
+//! ([`UnheldParcel`](crate::fetch::unheld_parcel::UnheldParcel)).
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{ContainerId, EntryLocation, EntryNumber};
@@ -6,26 +15,9 @@ use tracing::debug;
 use crate::device_state::HeldParcel;
 use crate::fetch::fetch_error::FetchResult;
 use crate::fetch::kept_parcels::KeptParcels;
+use crate::fetch::parcel_read::never_placed;
 use crate::fetch::translate;
 use crate::index::Index;
-
-/// Lets one held parcel go: its file first, then its row.
-///
-/// In that order so that the row always covers whatever file there is — a
-/// letting go interrupted between the two leaves a row naming a file that is
-/// gone, which the next letting go discards again and a read meets as a parcel
-/// not held. Both halves succeed on what is already gone (spec: OC-8, PK-21).
-pub(in crate::fetch) async fn let_go(
-    index: &dyn Index,
-    kept: &KeptParcels<'_>,
-    parcel: &HeldParcel,
-) -> FetchResult<()> {
-    kept.files.discard(&parcel.path).await?;
-    index
-        .let_go_parcel(parcel.container_id, parcel.index)
-        .await?;
-    Ok(())
-}
 
 /// Lets go of every held parcel whose Container has left the current set
 /// (spec: PK-21).
@@ -53,7 +45,7 @@ pub(in crate::fetch) async fn let_go_departed(
         .iter()
         .filter(|parcel| !current.contains(&parcel.container_id))
     {
-        let_go(index, kept, parcel).await?;
+        kept.let_go_parcel(index, parcel).await?;
         let_go_of += 1;
     }
     if let_go_of > 0 {
@@ -113,7 +105,7 @@ pub(in crate::fetch) async fn let_go_settled(
             }
         }
         if all_settled {
-            let_go(index, kept, parcel).await?;
+            kept.let_go_parcel(index, parcel).await?;
             let_go_of += 1;
         }
     }
@@ -161,7 +153,7 @@ pub async fn let_go_parcels(index: &dyn Index, kept: &KeptParcels<'_>) -> FetchR
 async fn settled(index: &dyn Index, location: &EntryLocation) -> FetchResult<bool> {
     match translate::target_of(index, location.path()).await {
         Ok(_) => {}
-        Err(error) if super::never_placed(&error) => return Ok(true),
+        Err(error) if never_placed(&error) => return Ok(true),
         Err(error) => return Err(error),
     }
     Ok(index.local_entry_at(location.path()).await?.is_some())

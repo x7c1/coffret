@@ -267,7 +267,7 @@ it('shows what a refused mapped root says, on the line a stopped fill already ha
     'the folder this device maps "albums" into is not the folder that mapping was recorded ' +
     'against, so nothing was put into it. Open a terminal on the device serving the Library. Run ' +
     '`coffret mappings --library <library>` to inspect the recorded mappings and `coffret map ' +
-    '--help` to find the arguments. Use that listing to choose one recovery: reconnect the intended ' +
+    '--help` to find the arguments. Use that listing to choose one recovery: bring back the intended ' +
     'folder if it is elsewhere; if the folder at the recorded location is the intended one, record ' +
     'this mapping again with `coffret map`; or map another folder in its place only as a deliberate ' +
     'choice. If `coffret map` reports a local marker problem, correct the problem and run it again. ' +

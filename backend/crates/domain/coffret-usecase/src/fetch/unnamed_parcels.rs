@@ -12,7 +12,7 @@ use crate::index::Index;
 ///
 /// A fetch writes a parcel's row before its file (spec: OC-2), and a letting go
 /// that runs beside it — a catch-up's, which takes none of the turns a fetch
-/// holds — can read the fresh row, find no file yet, and drop the row before
+/// holds — can read the fresh row, find no file yet, and let the parcel go before
 /// the file is written. That file is then ciphertext nothing names, which no
 /// letting go would ever reach, up to a parcel's length each. This is what
 /// reaches it.

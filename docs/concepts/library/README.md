@@ -213,9 +213,11 @@ control for a sync, since a drop starts one.
   whose [marker](../mapping/#definition) the mapping recorded)
 - refuse (to place into a mapped root that will not vouch for itself; any step
   a run cannot take safely, saying why — a freeze, a file that changed after
-  its survey; a deletion, a [Pack](../pack/) it cannot rebuild; a rename, a
-  destination another Entry holds or a path it would leave both a file and a
-  folder; a commit, when another device committed underneath its batch)
+  its survey; a placement, a mapped folder whose filesystem gives no file lock,
+  remedied by keeping the folder on a local disk (spec: OC-8); a deletion, a
+  [Pack](../pack/) it cannot rebuild; a rename, a destination another Entry
+  holds or a path it would leave both a file and a folder; a commit, when
+  another device committed underneath its batch)
 - surface (a file a run reports rather than silently skips)
 - remedy (a refusal, or a state a run keeps reporting, by the gesture its report
   names — renaming a folder, naming a different Entry Path, recording a mapping
@@ -234,9 +236,10 @@ control for a sync, since a drop starts one.
   server stops)
 - drop (files a browser drops into a mapped folder, or the desktop app takes
   by their paths and imports there, for a later run — a sync, or where the drop
-  held a folder the person chose to add as a Pack, a freeze of exactly the
-  files dropped — to carry them into the Library; the system files among them
-  are left out and said quietly)
+  held a folder the person chose to add as a Pack, a freeze of the files
+  dropped, together with those a cut-off drop of the same folder received where
+  this drop continues it — to carry them into the Library; the system files
+  among them are left out and said quietly (spec: PK-17))
 - import (the files a drop onto the desktop app's window let go of, walked on
   this device by their paths, held under a one-time **drop handle**, and placed
   into a mapped folder for a later run to carry in, as a browser's drop is;
@@ -363,8 +366,8 @@ control for a sync, since a drop starts one.
     **unavailable root**: the check establishes whether the root is there to be
     read from at all. Nothing under it is walked and no Entry under it is
     reported as deleted; the run reports the mapping and the reason, so an
-    unplugged disk or an unmounted share reads as a root to reconnect rather
-    than an emptied folder (spec: EP-12).
+    unplugged disk or an unmounted share reads as a root to make available
+    again rather than an emptied folder (spec: EP-12).
   - A mapped root that will not vouch for itself — its marker absent, or
     carrying an identity other than the one recorded for that mapping at
     registration — is a **refused root**: the check establishes whether the
@@ -493,6 +496,12 @@ control for a sync, since a drop starts one.
     every scratch no live writer still holds, and leaves alone a name that
     merely carries the reserved prefix without the shape the writers give their
     scratches — the person's own file, or a folder (spec: OC-8, EP-11).
+  - A writer locks its scratch for as long as it writes it, which is how a sync
+    tells a live writer's scratch from a killed one's, so a mapped folder is
+    expected on a local disk. On a filesystem that gives no file lock — a
+    network share, mostly — the writer removes the scratch it just made and
+    refuses the write, so every placement into that folder is refused, and the
+    remedy is keeping the folder on a local disk (spec: OC-8).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
@@ -521,16 +530,19 @@ control for a sync, since a drop starts one.
   folder, and at a volume's top folders such as `.Spotlight-V100` or
   `$RECYCLE.BIN`. None of them is ever part of the Library, decided from the
   name alone: a scan never enters or reports one and a sync or a freeze says
-  nothing of them, a drop — a browser's or the desktop app's — leaves them out
-  before anything is written and says so quietly rather than as a refusal, and
-  a file sent at such a name anyway is declined. Keeping them out before they
-  become Entries matters because a file inside a [Pack](../pack/) leaves it
-  only with the whole Pack rewritten (spec: EP-17, PK-10).
+  nothing of them, though a freeze's preview counts them among what the freeze
+  leaves as it is, where "Pack this folder…" lists them; a drop — a browser's
+  or the desktop app's — leaves them out before anything is written and says so
+  quietly rather than as a refusal; and a file sent at such a name anyway is
+  declined. Keeping them out before they become Entries matters because a
+  file inside a [Pack](../pack/) leaves it only with the whole Pack rewritten
+  (spec: EP-17, PK-10).
   - The names that stand at a volume's top are left out only there — directly
     under a mapped root, or directly in a dropped folder — and are the
-    person's own deeper down. The rest are left out at any depth, and a name of
-    the person's own beginning `._` is not backed up, the cost the management
-    area's name carries too.
+    person's own deeper down. The rest are left out at any depth. Wherever
+    one of these names is left out, a file or folder of the person's own
+    carrying it — a name beginning `._` included — is not backed up, the cost
+    the management area's name carries too (spec: EP-17).
   - An Entry carried in at such a name before the rule stays until it is
     deleted, and a scan does not read the absence of its file as a deletion.
 - The Library's current Container set can be restored from the Master Key and

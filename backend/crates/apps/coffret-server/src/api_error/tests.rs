@@ -348,7 +348,7 @@ fn every_refused_root_reaches_the_browser_under_one_refused_placement_reason() {
                     "the guidance makes the CLI recovery reachable from the explorer: {message}",
                 );
                 assert!(
-                    message.contains("choose one recovery: reconnect the intended folder")
+                    message.contains("choose one recovery: bring back the intended folder")
                         && message.contains(
                             "if the folder at the recorded location is the intended one, record \
                              this mapping again with `coffret map`",

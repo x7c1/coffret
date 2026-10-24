@@ -143,7 +143,11 @@ pub(super) async fn discard_mapped_copies(
             Ok(None) => {
                 // Gone from the disk as well as from the Library: nothing is
                 // left for a finding to be about, and the row goes, as the
-                // sync's scan would forget it (spec: EP-15).
+                // sync's scan would forget it (spec: EP-15). A path at a name
+                // an operating system keeps lands here too, whatever stands
+                // there: that file is the system's, never handed to the
+                // Library, so it is left in place and only the row goes
+                // (spec: EP-17).
                 if let Err(error) = index.forget_local_entry(path).await {
                     warn!(
                         reason = %error.redacted(),

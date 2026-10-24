@@ -630,12 +630,12 @@
           "reason": "root_missing"
         },
         {
-          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Reconnect the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
+          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Plug in or mount the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
           "path": null,
           "reason": "root_on_another_filesystem"
         },
         {
-          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
+          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: bring back the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
           "path": null,
           "reason": "refused_root"
         },
@@ -793,12 +793,12 @@
           "reason": "root_missing"
         },
         {
-          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Reconnect the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
+          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Plug in or mount the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
           "path": null,
           "reason": "root_on_another_filesystem"
         },
         {
-          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
+          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: bring back the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
           "path": null,
           "reason": "refused_root"
         },

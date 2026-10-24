@@ -8,7 +8,7 @@ use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::fetch_memory::FetchMemory;
-use crate::fetch::parcel_read::let_go::let_go_departed;
+use crate::fetch::let_go::{let_go_departed, let_go_settled};
 use crate::fetch::parcel_read::ParcelRead;
 use crate::fetch::reading::Reading;
 use crate::fetch::run::envelope;
@@ -224,6 +224,9 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         memory,
     };
     let stroke = read.read_entry(&summary, &envelope, target).await?;
+    // Every held parcel of this Container whose mapped Entries are now all on
+    // the device or witnessed absent serves nothing any more (spec: PK-21).
+    let_go_settled(index, &parcels, container_id).await?;
     progress.step(Step::new(Phase::Fetching, 1, 1));
     reads.front(stroke.front);
     reads.parcels(stroke.parcels_read);
