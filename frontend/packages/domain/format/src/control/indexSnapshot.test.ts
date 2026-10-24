@@ -4,6 +4,7 @@ import { errorCode } from '../errors.testing.js';
 import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 import {
+  INDEX_SNAPSHOT_LOWEST_READ_SCHEMA,
   INDEX_SNAPSHOT_SCHEMA,
   decodeIndexSnapshot,
   encodeIndexSnapshot,
@@ -380,16 +381,26 @@ describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
     }
   });
 
-  // FM-16: a reader refuses any schema below the one it writes: a Snapshot of
-  // schema 2 carries no entry numbers, and none before this one carries
-  // deposit times.
-  it('refuses a schema below the one this package writes', () => {
-    for (const schema of [0n, 2n, INDEX_SNAPSHOT_SCHEMA - 1n]) {
+  // FM-16: a reader refuses any schema below the lowest it reads: a Snapshot of
+  // schema 2 carries no entry numbers, and none before schema 4 carries deposit
+  // times.
+  it('refuses a schema below the lowest readable one', () => {
+    for (const schema of [0n, 2n, INDEX_SNAPSHOT_LOWEST_READ_SCHEMA - 1n]) {
       const payload = tampered((map) => map.set('schema', schema));
       expect(errorCode(() => readOrdinary(payload)), `schema ${schema}`).toBe(
         'unsupported_index_snapshot_schema',
       );
     }
+  });
+
+  // FM-16: the lowest schema a reader accepts is its own floor rather than the
+  // schema this package writes, so a Snapshot at that floor is read and one
+  // below it is refused.
+  it('reads a Snapshot at the lowest readable schema and refuses one below it', () => {
+    const atFloor = tampered((map) => map.set('schema', INDEX_SNAPSHOT_LOWEST_READ_SCHEMA));
+    expect(readOrdinary(atFloor)).toEqual({ content: canonical(content()) });
+    const below = tampered((map) => map.set('schema', INDEX_SNAPSHOT_LOWEST_READ_SCHEMA - 1n));
+    expect(errorCode(() => readOrdinary(below))).toBe('unsupported_index_snapshot_schema');
   });
 
   // FM-16: every Snapshot entry carries `deposited_at`, and one without it is

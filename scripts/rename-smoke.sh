@@ -227,9 +227,11 @@ added="$(answered -c '.answer')"
 
 # 3. `coffret rename` of the first book's folder, which uploads nothing and
 #    takes this device's files along with it.
-declare -A contents=()
+# An indexed array, keyed by the page number: bash 3.2, which macOS ships as
+# /bin/bash, has no associative ones.
+contents=()
 for number in $(seq "$PAGES"); do
-  contents[$number]="$(cat "$smoke_dir/book-a/page-0$number.svg")"
+  contents[number]="$(cat "$smoke_dir/book-a/page-0$number.svg")"
 done
 run_step rename --library "$library" \
   --from "$smoke_entry/book-a" --to "$smoke_entry/renamed/book-a"
@@ -242,7 +244,7 @@ for number in $(seq "$PAGES"); do
   old="$smoke_dir/book-a/page-0$number.svg"
   new="$smoke_dir/renamed/book-a/page-0$number.svg"
   [ -f "$new" ] || fail "coffret rename left nothing at $new."
-  [ "$(cat "$new")" = "${contents[$number]}" ] || fail "$new does not hold what $old held."
+  [ "$(cat "$new")" = "${contents[number]}" ] || fail "$new does not hold what $old held."
   [ ! -e "$old" ] || fail "coffret rename left $old where it was."
 done
 renamed="$(answered -c '.answer')"

@@ -7,7 +7,8 @@ use coffret_model::{
 use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA, SCHEMA, SNAPSHOT_SLOT,
+    LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA, SCHEMA,
+    SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -38,8 +39,10 @@ use crate::field_numbers;
 /// record naming a schema above the one this build implements is refused
 /// there with [`Error::JournalRecordNeedsNewerBuild`]: never skipped, and never
 /// applied in part with the fields this build does not know ignored
-/// (spec: FM-9, FM-15). A record that does not name this schema there is
-/// malformed, since every writer of it names it.
+/// (spec: FM-9, FM-15). A record that names none there, or one below the lowest
+/// schema a reader accepts, is malformed, since every writer of a record this
+/// build reads names one at least that high. A record whose `schema` is below
+/// that lowest one is refused as one this build does not read.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
     let value = read_body(
         &payload.body,
@@ -49,7 +52,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
-    if schema < SCHEMA {
+    if schema < LOWEST_READ_SCHEMA {
         return Err(Error::UnsupportedJournalRecordSchema { schema });
     }
     required_schema(&fields, generation)?;
@@ -99,9 +102,10 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
 /// The schema the record says its reader must implement, held against the one
 /// this build does (spec: FM-9, FM-15).
 ///
-/// Above it, the record needs a newer build. Below it, or absent, the record is
-/// malformed: every record of this schema names it, so a lower value is no
-/// state a writer produces.
+/// Above it, the record needs a newer build. Below the lowest schema a reader
+/// accepts, or absent, the record is malformed: every record a reader accepts
+/// names one at least that high, so a lower value is no state a writer
+/// produces.
 fn required_schema(fields: &Fields<'_>, generation: Generation) -> Result<()> {
     match fields.optional_uint(REQUIRED_SCHEMA)? {
         Some(required) if required > SCHEMA => Err(Error::JournalRecordNeedsNewerBuild {
@@ -109,9 +113,9 @@ fn required_schema(fields: &Fields<'_>, generation: Generation) -> Result<()> {
             required,
             implemented: SCHEMA,
         }),
-        Some(SCHEMA) => Ok(()),
+        Some(required) if required >= LOWEST_READ_SCHEMA => Ok(()),
         found => Err(malformed(format!(
-            "a record names {SCHEMA} or above as its required_schema, found {}",
+            "a record names {LOWEST_READ_SCHEMA} or above as its required_schema, found {}",
             found.map_or_else(|| "none".to_owned(), |required| required.to_string())
         ))),
     }

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use super::{LiveReservation, ReservationId};
+use super::{LiveReservation, ReservationClaim, ReservationId};
 
 /// The reservations a drop in this process is still writing into, and every
 /// one that ever was (spec: PK-17).
@@ -26,6 +26,9 @@ use super::{LiveReservation, ReservationId};
 #[derive(Debug, Default)]
 pub struct LiveReservations {
     held: Mutex<Held>,
+    /// Taken by a drop for the whole of choosing its reservation — finding one
+    /// to take over, or making one and holding it (see [`claim`](Self::claim)).
+    claiming: tokio::sync::Mutex<()>,
 }
 
 #[derive(Debug, Default)]
@@ -52,7 +55,22 @@ impl LiveReservations {
                 live: BTreeSet::new(),
                 ever: BTreeSet::new(),
             }),
+            claiming: tokio::sync::Mutex::const_new(()),
         }
+    }
+
+    /// Waits until no other drop in this process is choosing its reservation,
+    /// and keeps every other one waiting until the value returned drops
+    /// (spec: PK-17).
+    ///
+    /// What makes a drop's choice one step: a reservation is made in the Index
+    /// before it can be held here, and in between it is one in progress that
+    /// nobody holds — exactly what a second drop of the same folder takes over.
+    /// So the drop making one and the drop looking for one to take over each
+    /// claim first, and the reservation one of them made is held before the
+    /// other looks: exactly one of them holds it.
+    pub async fn claim(&self) -> ReservationClaim<'_> {
+        ReservationClaim::new(self.claiming.lock().await)
     }
 
     /// Holds `id` live from now until the value returned drops.

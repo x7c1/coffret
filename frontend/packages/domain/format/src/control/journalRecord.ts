@@ -52,18 +52,30 @@ import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js
 import { JOURNAL_RECORD, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for a Journal record payload, the one it
- * implements, and the lowest a reader accepts: 4, the first whose addition
- * entries carry `deposited_at` (spec: FM-15).
+ * The schema this package writes for a Journal record payload, and the one it
+ * implements (spec: FM-15).
+ *
+ * It is also what every record names in `required_schema`: a reader that
+ * ignored `deposited_at` would hold a catalog without deposit times and could
+ * commit records no reader of this schema accepts, so the field is
+ * must-understand and every record says so (spec: FM-9, FM-15).
+ *
+ * Not what a reader refuses below: that is
+ * {@link JOURNAL_RECORD_LOWEST_READ_SCHEMA}, so that a later build writing a new
+ * field under a higher schema goes on reading the records written before it.
+ */
+export const JOURNAL_RECORD_SCHEMA = 4n;
+
+/**
+ * The lowest schema a reader accepts, in `schema` and in `required_schema`
+ * alike: 4, the first whose addition entries carry `deposited_at`
+ * (spec: FM-15).
  *
  * A record of an earlier schema carries Entries without a deposit time, so it is
  * refused as a schema this package does not read rather than read with a time
- * made up. It is also what every record names in `required_schema`: a reader
- * that ignored `deposited_at` would hold a catalog without deposit times and
- * could commit records no reader of this schema accepts, so the field is
- * must-understand and every record says so (spec: FM-9, FM-15).
+ * made up. Equal to {@link JOURNAL_RECORD_SCHEMA} for now.
  */
-export const JOURNAL_RECORD_SCHEMA = 4n;
+export const JOURNAL_RECORD_LOWEST_READ_SCHEMA = 4n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
@@ -200,7 +212,7 @@ export function decodeJournalRecord(
   );
 
   const schema = requiredUint(map, 'schema', MALFORMED);
-  if (schema < JOURNAL_RECORD_SCHEMA) {
+  if (schema < JOURNAL_RECORD_LOWEST_READ_SCHEMA) {
     fail('unsupported_journal_record_schema', `unsupported Journal record payload schema ${schema}`);
   }
   requireSchemaNamed(map, generation);
@@ -263,9 +275,9 @@ export function decodeJournalRecord(
  * The schema the record says its reader must implement, held against the one
  * this package does (spec: FM-9, FM-15).
  *
- * Above it, the record needs a newer build. Below it, or absent, the record is
- * malformed: every record of this schema names it, so a lower value is no
- * state a writer produces.
+ * Above it, the record needs a newer build. Below the lowest schema a reader
+ * accepts, or absent, the record is malformed: every record a reader accepts
+ * names one at least that high, so a lower value is no state a writer produces.
  */
 function requireSchemaNamed(map: CborMap, generation: Generation): void {
   const required = optionalUint(map, 'required_schema', MALFORMED);
@@ -277,10 +289,10 @@ function requireSchemaNamed(map: CborMap, generation: Generation): void {
         'is needed to read the Library past it',
     );
   }
-  if (required !== JOURNAL_RECORD_SCHEMA) {
+  if (required === undefined || required < JOURNAL_RECORD_LOWEST_READ_SCHEMA) {
     fail(
       MALFORMED,
-      `a record names ${JOURNAL_RECORD_SCHEMA} or above as its required_schema, found ${required ?? 'none'}`,
+      `a record names ${JOURNAL_RECORD_LOWEST_READ_SCHEMA} or above as its required_schema, found ${required ?? 'none'}`,
     );
   }
 }

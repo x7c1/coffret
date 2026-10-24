@@ -368,3 +368,39 @@ pub async fn a_cycle_refused_partway_reports_the_rest_as_waiting(fixture: &SyncU
     }
     assert!(sync(fixture, 4).await.relocations.is_empty());
 }
+
+/// A rename onto a path an operating system keeps is not followed: a file
+/// relocated there would stand where no scan ever looks again, its Entry
+/// pointing at a file this device has stopped seeing. The file waits where it
+/// is, and is reported (spec: EP-10, EP-17).
+pub async fn a_relocation_onto_a_name_the_system_files_rule_leaves_out_is_refused(
+    fixture: &SyncUnderTest,
+) {
+    carry_in(fixture, &[("a.jpg", BYTES), ("b.jpg", BYTES)]).await;
+    let renames = [("a.jpg", "book/.DS_Store"), ("b.jpg", "__MACOSX/b.jpg")];
+    rename(fixture, &renames).await;
+
+    let outcome = sync(fixture, 2).await;
+
+    uploaded_nothing(&outcome);
+    let mut refusals: Vec<(&str, &str, &RelocationRefused)> = outcome
+        .relocations
+        .iter()
+        .map(|one| match one {
+            Relocation::Refused { from, to, reason } => (from.as_str(), to.as_str(), reason),
+            other => panic!("expected every relocation refused, got {other:?}"),
+        })
+        .collect();
+    refusals.sort_by_key(|(from, _, _)| *from);
+    assert_eq!(refusals.len(), renames.len(), "{refusals:?}");
+    for ((from, to, reason), (asked_from, asked_to)) in refusals.into_iter().zip(renames) {
+        assert_eq!((from, to), (asked_from, asked_to));
+        assert!(
+            matches!(reason, RelocationRefused::ReservedName),
+            "{reason:?}"
+        );
+    }
+    for (from, to) in renames {
+        left_waiting(fixture, from, to).await;
+    }
+}

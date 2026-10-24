@@ -47,6 +47,12 @@ impl Report {
     /// failed has no answer to report on.
     pub const FAILED: u8 = 1;
 
+    /// What a run the person stopped with Ctrl-C exits with, which is also a
+    /// failure with no answer: 128 and the number of the signal that stopped
+    /// it, as a shell reports a process the signal ended itself, so a script
+    /// tells a run somebody stopped from one that failed on its own.
+    pub const INTERRUPTED: u8 = 130;
+
     /// The exit status this answer is.
     ///
     /// Here rather than where the process exits, so that what a report exits

@@ -5,7 +5,7 @@ use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
 use super::testing::{first_record, record, renamed_record, GENERATION};
-use super::{decode, encode, SCHEMA};
+use super::{decode, encode, LOWEST_READ_SCHEMA, SCHEMA};
 use crate::control::testing::{
     array, body_map, field, raw_body, spelled_by_name, with_body_map, with_raw_body,
 };
@@ -265,11 +265,11 @@ fn a_prev_on_the_first_record_is_rejected() {
     );
 }
 
-// FM-15: a reader refuses any schema below the lowest it reads, which is the
-// one it writes: every earlier schema's additions carry no deposit time.
+// FM-15: a reader refuses any schema below the lowest it reads: every earlier
+// schema's additions carry no deposit time.
 #[test]
 fn a_schema_below_the_lowest_readable_one_is_rejected() {
-    for schema in [0, 2, 3, SCHEMA - 1] {
+    for schema in [0, 2, 3, LOWEST_READ_SCHEMA - 1] {
         let payload = tampered(|fields| *field(fields, "schema") = Value::from(schema));
         let result = read(&payload);
         assert!(
@@ -313,6 +313,42 @@ fn a_record_requiring_a_newer_reader_is_refused_as_needing_a_newer_build() {
     }
 }
 
+// FM-15: the lowest schema a reader accepts is its own floor rather than the
+// schema this build writes, so a record at that floor — in `schema` and in
+// `required_schema` — is read, and the next lower one is refused.
+#[test]
+fn a_record_at_the_lowest_readable_schema_is_read_and_one_below_it_is_not() {
+    let at_floor = tampered(|fields| {
+        *field(fields, "schema") = Value::from(LOWEST_READ_SCHEMA);
+        *field(fields, "required_schema") = Value::from(LOWEST_READ_SCHEMA);
+    });
+    assert_eq!(
+        read(&at_floor).expect("a record at the floor is read"),
+        record()
+    );
+
+    let below = tampered(|fields| {
+        *field(fields, "schema") = Value::from(LOWEST_READ_SCHEMA - 1);
+    });
+    assert!(
+        matches!(
+            read(&below),
+            Err(Error::UnsupportedJournalRecordSchema { schema }) if schema == LOWEST_READ_SCHEMA - 1
+        ),
+        "a record below the floor is refused"
+    );
+    let requiring_below = tampered(|fields| {
+        *field(fields, "required_schema") = Value::from(LOWEST_READ_SCHEMA - 1);
+    });
+    assert!(
+        matches!(
+            read(&requiring_below),
+            Err(Error::MalformedJournalRecord { .. })
+        ),
+        "and so is one naming a required schema below it"
+    );
+}
+
 // FM-9, FM-15: a record of this schema names the schema its deposit times
 // need, so naming none, or one below it, is malformed.
 #[test]
@@ -324,7 +360,7 @@ fn a_required_schema_below_the_one_deposit_times_need_is_rejected() {
         matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("required_schema")),
         "expected a record naming no required schema to be refused, got {result:?}"
     );
-    for required in [0, 2, SCHEMA - 1] {
+    for required in [0, 2, LOWEST_READ_SCHEMA - 1] {
         let payload = tampered(|fields| {
             *field(fields, "required_schema") = Value::from(required);
         });

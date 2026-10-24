@@ -75,7 +75,7 @@ pub use page_source::PageSource;
 mod refusal;
 
 mod serve;
-pub use serve::serve;
+pub use serve::{serve, serve_with_head_deadline};
 
 use std::sync::Arc;
 use std::time::Duration;

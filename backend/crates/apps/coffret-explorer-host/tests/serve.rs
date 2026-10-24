@@ -3,9 +3,9 @@
 
 mod support;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use coffret_explorer_host::serve;
+use coffret_explorer_host::{serve, serve_with_head_deadline};
 use support::Harness;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -102,4 +102,57 @@ async fn a_head_past_its_bound_is_refused() {
 
     let answer = until_closed(&mut stream).await.expect("the host closes");
     assert!(answer.starts_with("HTTP/1.1 431"), "{answer}");
+}
+
+// LA-19: a request head that is still arriving when the head's read deadline
+// passes is given up on and its connection closed, with nothing forwarded.
+// Served with the deadline shortened, so the case waits a fraction of a second
+// rather than LA-19's five.
+#[tokio::test]
+async fn a_head_that_arrives_too_slowly_is_given_up_on() {
+    const DEADLINE: Duration = Duration::from_millis(300);
+    let Harness {
+        router,
+        listener,
+        authority,
+        upstream,
+        ..
+    } = Harness::start().await;
+    tokio::spawn(serve_with_head_deadline(listener, router, DEADLINE));
+    let started = Instant::now();
+    let mut stream = TcpStream::connect(&authority).await.unwrap();
+    // The request line and one header, and never the blank line that ends the
+    // head.
+    stream
+        .write_all(format!("GET /api/list HTTP/1.1\r\nHost: {authority}\r\n").as_bytes())
+        .await
+        .unwrap();
+
+    // The deadline counts from when the host began reading the connection,
+    // which is after it was made, so nothing closes it this early.
+    let mut early = [0_u8; 1];
+    let before_the_deadline = tokio::time::timeout(DEADLINE / 3, stream.read(&mut early)).await;
+    assert!(
+        before_the_deadline.is_err(),
+        "the host waits for the rest of the head until its deadline: {before_the_deadline:?}"
+    );
+
+    // Well before hyper's own default of half a minute.
+    let mut answer = Vec::new();
+    let read = tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut answer)).await;
+    assert!(
+        read.is_ok(),
+        "the host closes the connection once the deadline passes"
+    );
+    assert!(
+        started.elapsed() >= DEADLINE,
+        "and not before it: {:?}",
+        started.elapsed()
+    );
+    let answer = String::from_utf8_lossy(&answer);
+    assert!(
+        answer.is_empty() || answer.starts_with("HTTP/1.1 408"),
+        "nothing but a timeout is answered: {answer}"
+    );
+    assert_eq!(upstream.connections(), 0, "and nothing reaches the server");
 }

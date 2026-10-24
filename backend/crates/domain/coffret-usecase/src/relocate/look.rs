@@ -5,7 +5,7 @@ use crate::device_state::{LocalEntry, LocalEntryState, Mapping};
 use crate::fetch::{reaching, relative_below};
 use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::unavailable_root::RootUnavailable;
-use crate::{root_marker, scratch, trash_folders};
+use crate::{root_marker, scratch, system_files, trash_folders};
 
 use super::{disk, RelocationRefused, Run};
 
@@ -132,16 +132,46 @@ impl Run<'_> {
 }
 
 /// Whether a path below a mapped root passes through a name the folder keeps
-/// for something other than content (spec: EP-11, EP-14, EP-16).
+/// for something other than content: coffret's own, the desktop's trash, or
+/// one an operating system keeps beside the person's files (spec: EP-11,
+/// EP-14, EP-16, EP-17).
+///
+/// The last because no scan finds a file at such a name: a file relocated
+/// there would leave its Entry with nothing this device ever looks at again.
 fn reserved(below: &EntryPath) -> bool {
     let mut names = below.as_str().split('/');
     names
         .clone()
         .next()
         .is_some_and(trash_folders::is_trash_folder)
+        || system_files::system_component(names.clone()).is_some()
         || names.any(|name| {
             root_marker::is_management_area(name)
                 || root_marker::folds_to_management_area(name)
                 || scratch::is_scratch(name)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reserved;
+    use crate::entry_paths::entry_path;
+
+    // EP-17: a new path through a name an operating system keeps is refused
+    // as the names coffret and the desktop keep are, the volume's folders only
+    // as the first component below the root, as a scan leaves them out.
+    #[test]
+    fn a_new_path_through_a_system_files_name_is_reserved() {
+        for below in [
+            "book/.DS_Store",
+            "._page.jpg",
+            "__MACOSX/book/page.jpg",
+            ".Spotlight-V100/x",
+        ] {
+            assert!(reserved(&entry_path(below)), "{below}");
+        }
+        for below in ["book/page.jpg", "book/.Spotlight-V100/x", "book/.ds_store"] {
+            assert!(!reserved(&entry_path(below)), "{below}");
+        }
+    }
 }

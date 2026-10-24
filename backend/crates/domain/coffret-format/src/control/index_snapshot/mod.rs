@@ -48,15 +48,23 @@ mod size_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for an Index Snapshot payload, and the lowest
-/// a reader accepts: 4, the first whose Entries carry `deposited_at`
-/// (spec: FM-16).
+/// The schema this crate writes for an Index Snapshot payload (spec: FM-16).
+///
+/// Not what a reader refuses below: that is [`LOWEST_READ_SCHEMA`], so that a
+/// later build writing a new field under a higher schema goes on reading the
+/// Snapshots written before it.
+const SCHEMA: u64 = 4;
+
+/// The lowest schema a reader accepts: 4, the first whose Entries carry
+/// `deposited_at` (spec: FM-16).
 ///
 /// A Snapshot of an earlier schema lacks the deposit time of every Entry it
 /// lists, and the records it checkpoints lack it too, so nothing could supply
 /// one: it is refused as a schema this build does not read, and a Library
 /// holding one is recreated rather than migrated.
-const SCHEMA: u64 = 4;
+///
+/// Equal to [`SCHEMA`] for now.
+const LOWEST_READ_SCHEMA: u64 = 4;
 
 const HEAD_GENERATION: &str = "head_generation";
 const JOURNAL_GENERATION: &str = "journal_generation";

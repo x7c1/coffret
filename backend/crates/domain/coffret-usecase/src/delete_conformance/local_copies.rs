@@ -364,3 +364,48 @@ pub async fn a_deletion_on_another_device_leaves_this_devices_copies_to_its_sync
     );
     assert_eq!(fixture.fs().discarded(), [a]);
 }
+
+/// EP-15, EP-17: deleting an Entry carried in at a path an operating system
+/// keeps — before the rule left such names out — leaves whatever stands at
+/// that path on this device where it is: the file is the system's, nobody
+/// handed it to the Library, and the scan would never have found it there. Its
+/// row is forgotten, as for a copy gone from disk.
+pub async fn an_entry_at_a_system_files_path_is_deleted_without_its_local_file(
+    fixture: &DeleteUnderTest,
+) {
+    let index = fixture.index();
+    map_registered(fixture).await;
+    let inner = "albums/.Spotlight-V100/notes.txt";
+    let file = write(fixture, inner, b"what the volume keeps there now");
+    sync(fixture, 1).await;
+    assert!(
+        current(index, inner).await.is_some(),
+        "deeper down a volume's folder name is the person's, and is carried in",
+    );
+
+    // The same folder mapped as a top-level mapping's root: the Entry now
+    // stands at that root's top, where the rule leaves the name out.
+    let albums = fixture.folder().join("albums");
+    fixture.fs().plant_marker(&albums, &registered());
+    index
+        .set_mapping(Mapping::new(Some(entry_path("albums")), albums).expecting(registered()))
+        .await
+        .expect("recording a mapping must succeed");
+
+    let outcome = delete_with_copies(fixture.store(), index, fixture, paths(&[inner]), 2).await;
+
+    assert!(outcome.commit.is_some(), "the deletion committed");
+    assert!(current(index, inner).await.is_none(), "the Entry is gone");
+    assert!(
+        outcome.local.is_empty(),
+        "nothing is said of a file the deletion does not look for: {:?}",
+        outcome.local,
+    );
+    assert!(fixture.fs().discarded().is_empty(), "nothing is discarded");
+    assert_eq!(
+        fixture.fs().content(&file).as_deref(),
+        Some(&b"what the volume keeps there now"[..]),
+        "the file at that path is left where it is",
+    );
+    assert!(!any_row(index, inner).await, "and the row is forgotten");
+}

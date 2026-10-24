@@ -387,7 +387,10 @@ fn relocation_refused(reason: &RelocationRefused) -> &'static str {
             left!("its new path is not under the mapped folder it stands in")
         }
         RelocationRefused::ReservedName => {
-            left!("its new path passes through a name coffret or the desktop keeps for itself")
+            left!(
+                "its new path passes through a name coffret, the desktop or the operating \
+                 system keeps for itself"
+            )
         }
         RelocationRefused::AnotherFilesystem => {
             left!("its new path is on another filesystem")
