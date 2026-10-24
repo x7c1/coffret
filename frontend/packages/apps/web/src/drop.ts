@@ -17,9 +17,15 @@
 // where it was dropped from — never its bytes, and never a path on the device.
 // The files become the same records a browser's walk makes, so the confirmation
 // and the Pack choice are the same; only where their bytes come from differs.
+//
+// Either walk leaves out what an operating system keeps beside the person's
+// files — `.DS_Store`, `Thumbs.db`, `._` files, a `__MACOSX` folder — by the
+// rule a scan of a mapped folder reads (`systemFiles.ts`, spec: EP-17), and
+// says so apart from what was not taken: such files are in almost every drop.
 
 import { addedFile, type Added } from '@coffret/api';
 
+import { isSystemFile, type SystemFile } from './systemFiles';
 import { said } from './useAsked';
 
 /** One thing a drop carried, as much of it as the walk needs. */
@@ -56,9 +62,22 @@ export interface DroppedReader {
   ): void;
 }
 
+/** What a browser's walk of a drop found: the files, and what it left out. */
+export interface Walked {
+  files: Added[];
+  /** What an operating system keeps, in the order the walk met it (spec: EP-17). */
+  systemFiles: SystemFile[];
+}
+
 /**
  * Every file under what was dropped, each with its path relative to the folder
  * it was dropped on.
+ *
+ * A name an operating system keeps is left out wherever it stands, a dropped
+ * item itself included, and a volume's own folders directly in a dropped
+ * folder — where a dropped volume's top holds them — and nothing under a folder
+ * of one is walked. They are handed back apart, for the confirmation to say
+ * quietly (spec: EP-17).
  *
  * Depth first and in the order the browser answered in, so the files of one
  * dropped folder stay together. The server sorts nothing by this — where a row
@@ -70,19 +89,26 @@ export interface DroppedReader {
  * loss — a Library has no folders to add, only Entry Paths whose separators
  * imply them — so there is nothing an empty one could be carried in as.
  */
-export async function filesUnder(entries: DroppedEntry[]): Promise<Added[]> {
-  const added: Added[] = [];
+export async function filesUnder(entries: DroppedEntry[]): Promise<Walked> {
+  const walked: Walked = { files: [], systemFiles: [] };
   for (const entry of entries) {
-    await collect(entry, '', added);
+    await collect(entry, '', walked);
   }
-  return added;
+  return walked;
 }
 
-/** One entry and everything under it, appended to `added`. */
-async function collect(entry: DroppedEntry, under: string, added: Added[]): Promise<void> {
+/** One entry and everything under it, appended to `walked`. */
+async function collect(entry: DroppedEntry, under: string, walked: Walked): Promise<void> {
   const path = under === '' ? entry.name : `${under}/${entry.name}`;
+  // Directly in a dropped folder is a name whose folder is the dropped item
+  // itself, whose path is one component.
+  const atTop = under !== '' && !under.includes('/');
+  if ((entry.isFile || entry.isDirectory) && isSystemFile(entry.name, atTop)) {
+    walked.systemFiles.push({ path, folder: entry.isDirectory });
+    return;
+  }
   if (entry.isFile) {
-    added.push(addedFile(path, await fileOf(entry as DroppedFile)));
+    walked.files.push(addedFile(path, await fileOf(entry as DroppedFile)));
     return;
   }
   if (!entry.isDirectory) {
@@ -92,7 +118,7 @@ async function collect(entry: DroppedEntry, under: string, added: Added[]): Prom
     return;
   }
   for (const child of await childrenOf(entry as DroppedFolder)) {
-    await collect(child, path, added);
+    await collect(child, path, walked);
   }
 }
 
@@ -141,20 +167,25 @@ export async function droppedFiles(transfer: DataTransfer): Promise<Drop> {
       entries.push(entry);
     }
   }
-  // A browser's walk leaves nothing out that it could say: what it cannot read
-  // refuses the whole walk, and what is not a filesystem item has no name.
-  return { files: await filesUnder(entries), notTaken: [] };
+  // A browser's walk leaves nothing out that it could say beside what the
+  // system keeps: what it cannot read refuses the whole walk, and what is not a
+  // filesystem item has no name.
+  const walked = await filesUnder(entries);
+  return { ...walked, notTaken: [] };
 }
 
 /**
- * What one drop carried: the files it is added as, and what the desktop app
- * met in it and did not take — none in a browser, whose walk takes everything
- * it can read or refuses the drop.
+ * What one drop carried: the files it is added as, what the desktop app met in
+ * it and did not take — none in a browser, whose walk takes everything it can
+ * read or refuses the drop — and, apart from both, what either walk left out
+ * because an operating system keeps it.
  */
 export interface Drop {
   files: Added[];
   /** What was not taken, in the order the walk met it; never an empty path. */
   notTaken: NotTaken[];
+  /** What the system keeps, which is said quietly and never as not taken (spec: EP-17). */
+  systemFiles: SystemFile[];
 }
 
 /** One file the desktop app took, as its answer names it. */
@@ -172,7 +203,9 @@ export interface NotTaken {
   /**
    * `empty`, `missing`, `not_a_file_or_folder` (a symbolic link most of all,
    * which is never followed), `reserved` (a name coffret keeps for itself),
-   * `not_text` or `unreadable`.
+   * `not_text` or `unreadable` — or, apart from all of them, `system_file` and
+   * `system_folder` for a name an operating system keeps (spec: EP-17), which
+   * {@link heldBy} takes out into {@link Drop.systemFiles}.
    */
   reason: string;
 }
@@ -234,19 +267,29 @@ export class NothingTaken extends Error {
  * answered the same way: with no records, so the screen says the drop carried
  * no files rather than that a path named nothing. Where something with a path
  * was not taken beside them, that alone is said.
+ *
+ * What it left out because an operating system keeps it is not counted among
+ * what it did not take: it is handed back apart, also where that is all the
+ * drop held, so the screen says so quietly rather than as something that went
+ * wrong (spec: EP-17).
  */
 export async function heldBy(bridge: DesktopBridge, files: readonly File[]): Promise<Drop> {
   if (files.length === 0) {
-    return { files: [], notTaken: [] };
+    return { files: [], notTaken: [], systemFiles: [] };
   }
   const held = await bridge.takeDrop(files);
-  const notTaken = held.notTaken.filter((one) => one.reason !== 'empty');
+  const systemFiles: SystemFile[] = held.notTaken
+    .filter((one) => SYSTEM_REASONS.includes(one.reason))
+    .map((one) => ({ path: one.path, folder: one.reason === 'system_folder' }));
+  const notTaken = held.notTaken.filter(
+    (one) => one.reason !== 'empty' && !SYSTEM_REASONS.includes(one.reason),
+  );
   const handle = held.handle;
   if (handle === null || held.files.length === 0) {
     if (notTaken.length > 0) {
       throw new NothingTaken(notTaken);
     }
-    return { files: [], notTaken: [] };
+    return { files: [], notTaken: [], systemFiles };
   }
   return {
     files: held.files.map((file, index) => ({
@@ -256,8 +299,12 @@ export async function heldBy(bridge: DesktopBridge, files: readonly File[]): Pro
       source: { kind: 'held', handle, index },
     })),
     notTaken,
+    systemFiles,
   };
 }
+
+/** The reasons the desktop app gives what an operating system keeps (spec: EP-17). */
+const SYSTEM_REASONS: readonly string[] = ['system_file', 'system_folder'];
 
 /**
  * What the confirmation and the notice say of a drop the desktop app took only

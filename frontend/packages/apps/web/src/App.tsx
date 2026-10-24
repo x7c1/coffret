@@ -40,6 +40,7 @@ import {
 } from './deleteEntries';
 import { destinationsOf, namedBy, onDiskIn, type Destination } from './destination';
 import { nothingAddedLine, withNotTaken, type Drop, type NotTaken } from './drop';
+import { systemFilesLine, type SystemFile } from './systemFiles';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { mappedAt } from './dropTarget';
@@ -743,6 +744,7 @@ export function App() {
     held: HeldFiles;
     destinations: Destination[];
     notTaken: readonly NotTaken[];
+    systemFiles: readonly SystemFile[];
     answer: (choice: Choice, numbering: Numbering) => void;
   } | null>(null);
   const askAboutDrop = useCallback(
@@ -752,6 +754,7 @@ export function App() {
       held: HeldFiles,
       destinations: Destination[],
       notTaken: readonly NotTaken[],
+      systemFiles: readonly SystemFile[],
     ) =>
       new Promise<Answer>((resolve) => {
         setAsking({
@@ -760,6 +763,7 @@ export function App() {
           held,
           destinations,
           notTaken,
+          systemFiles,
           answer: (choice, numbering) => {
             setAsking(null);
             resolve(choice === 'cancel' ? 'cancel' : { choice, numbering });
@@ -979,15 +983,22 @@ export function App() {
   // mapping reaches, or where it lands could not be read — after the reason
   // nothing was added.
   const add = useCallback(
-    (target: string, { files, notTaken }: Drop) => {
+    (target: string, { files, notTaken, systemFiles }: Drop) => {
       const notAdded = (line: string) => setNotice(withNotTaken(line, notTaken));
       if (files.length === 0) {
         setAdding(null);
         // An empty folder, or something that was never a file — a selection of
         // text, an image dragged out of another page. The gesture was made and
         // there is nothing to show for it, and a screen that does not react at
-        // all is one a person reads as broken rather than as answered.
-        setNotice('nothing was added — that drop carried no files');
+        // all is one a person reads as broken rather than as answered. A drop
+        // of nothing but what the system keeps says that instead, quietly as
+        // the confirmation would (spec: EP-17).
+        const kept = systemFilesLine(systemFiles);
+        setNotice(
+          kept === null
+            ? 'nothing was added — that drop carried no files'
+            : `nothing was added — ${kept}`,
+        );
         return;
       }
       const send = (sending: readonly Added[], freeze: boolean) => {
@@ -1041,7 +1052,7 @@ export function App() {
               namedBy(known, where),
               onDiskIn(where),
             );
-            return askAboutDrop(summary, asked, held, destinations, notTaken);
+            return askAboutDrop(summary, asked, held, destinations, notTaken, systemFiles);
           },
           send,
           refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, libraryName)),
@@ -1374,6 +1385,7 @@ export function App() {
           held={asking.held}
           destinations={asking.destinations}
           notTaken={asking.notTaken}
+          systemFiles={asking.systemFiles}
           onChoose={choose}
         />
       )}

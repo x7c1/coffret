@@ -1,0 +1,20 @@
+{
+  "description": "The names an operating system writes beside a person's own files, which never become Entries (EP-17). Compared byte for byte, case included. `anywhere` and `anywhere_prefixes` are left out at any depth; `top` only as the first component directly under a mapped root or directly in a dropped folder. The backend's `coffret_usecase::system_files` and the explorer's `systemFiles.ts` each declare these names and are held to this file by a test.",
+  "anywhere": [
+    ".DS_Store",
+    "Icon\r",
+    "Thumbs.db",
+    "ehthumbs.db",
+    "desktop.ini",
+    ".directory",
+    "__MACOSX"
+  ],
+  "anywhere_prefixes": ["._"],
+  "top": [
+    ".Spotlight-V100",
+    ".fseventsd",
+    ".TemporaryItems",
+    "$RECYCLE.BIN",
+    "System Volume Information"
+  ]
+}

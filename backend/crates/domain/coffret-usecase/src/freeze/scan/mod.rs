@@ -12,7 +12,8 @@ use crate::freeze::not_frozen::NotFrozen;
 use crate::freeze::survey::{Closing, Survey};
 use crate::index::Index;
 use crate::local_scan::{
-    unavailable_roots, walk_mappings, RootState, SourceFile, UnknownBirths, Walked, WalkedRoot,
+    kept_by_system, unavailable_roots, walk_mappings, RootState, SourceFile, SystemFile,
+    UnknownBirths, Walked, WalkedRoot,
 };
 use crate::mapped_roots::MappedRoots;
 use crate::spool_file::WRITE_CHUNK;
@@ -116,6 +117,7 @@ pub(super) async fn scan(
         mappings,
         walked,
         found,
+        system: _,
         kinds,
         waiting,
     } = candidates(index, roots, births, scope, reserved.all).await?;
@@ -317,6 +319,9 @@ struct Candidates {
     walked: Vec<WalkedRoot>,
     /// The regular files under the available roots, by Entry Path.
     found: BTreeMap<EntryPath, SourceFile>,
+    /// What the walk left out because an operating system keeps it, which a
+    /// preview counts and a run passes over (spec: EP-17).
+    system: Vec<SystemFile>,
     /// The kind of every Container holding an Entry under the folder.
     kinds: BTreeMap<ContainerId, ContainerKind>,
     /// The paths a drop in progress reserved, which no run selects until the
@@ -338,6 +343,7 @@ async fn candidates(
         found,
         roots: walked,
         stale: _,
+        system,
     } = walk_mappings(roots, &mappings, births).await?;
 
     // The kind is what decides eligibility, and the port answers kinds a prefix
@@ -359,6 +365,7 @@ async fn candidates(
         mappings: mappings.len(),
         walked,
         found,
+        system,
         kinds,
         waiting,
     })
@@ -386,6 +393,11 @@ async fn candidates(
 /// would need to fetch either before it could pack it, which is not a freeze's
 /// work (spec: EP-10).
 ///
+/// What an operating system keeps beside the person's files under the folder —
+/// which the walk left out by name — is counted apart, files and unentered
+/// folders each, and an Entry carried in at such a path before that rule is not
+/// counted as not here: its file was never looked for (spec: EP-17).
+///
 /// A mapping whose root this device cannot vouch for is reported where it is
 /// the one representing the folder, and nothing under it is counted at all —
 /// not even as not here, since its files were never looked for (spec: EP-12).
@@ -405,6 +417,7 @@ pub(super) async fn preview(
         mappings,
         walked,
         found,
+        system,
         kinds,
         waiting,
     } = candidates(index, roots, births, scope, &reservations).await?;
@@ -412,6 +425,12 @@ pub(super) async fn preview(
     let unreachable = |path: &EntryPath| {
         represented_by(&walked, path)
             .is_some_and(|root| matches!(root.state, RootState::Unavailable(_)))
+    };
+    // An Entry carried in before EP-17 at a path the walk leaves out: its file
+    // was never looked for, so it is not one this device has not got.
+    let left_out = |path: &EntryPath| {
+        represented_by(&walked, path)
+            .is_some_and(|root| kept_by_system(root.mapping.prefix.as_ref(), path))
     };
     let mut preview = FreezePreview {
         unavailable: match scope.prefix {
@@ -455,8 +474,16 @@ pub(super) async fn preview(
             scope.covers(location.path())
                 && !found.contains_key(location.path())
                 && !unreachable(location.path())
+                && !left_out(location.path())
         })
         .count();
+    for left in system.iter().filter(|left| scope.covers(&left.path)) {
+        if left.folder {
+            preview.system_folders += 1;
+        } else {
+            preview.system_files += 1;
+        }
+    }
 
     // Counts only, for the reason the run gives.
     debug!(
@@ -466,6 +493,8 @@ pub(super) async fn preview(
         in_pack = preview.in_pack,
         changed_in_pack = preview.changed_in_pack,
         not_here = preview.not_here,
+        system_files = preview.system_files,
+        system_folders = preview.system_folders,
         unavailable = preview.unavailable.len(),
         "previewed a freeze of a folder",
     );

@@ -196,6 +196,12 @@ pub use scope::{
 mod staleness;
 pub use staleness::sync_catches_up_before_scanning;
 
+mod system_files;
+pub use system_files::{
+    an_entry_at_a_path_the_rule_leaves_out_is_not_deleted_locally,
+    the_files_an_operating_system_keeps_are_neither_synced_nor_packed,
+};
+
 mod stale_removal;
 pub use stale_removal::a_replacement_for_a_removed_container_is_refused;
 
@@ -274,6 +280,8 @@ macro_rules! sync_conformance {
             a_folder_that_still_holds_an_edited_copy_stays,
             a_folder_empty_before_the_run_stays,
             a_departed_file_in_a_trash_folder_inside_the_root_is_not_carried_back,
+            the_files_an_operating_system_keeps_are_neither_synced_nor_packed,
+            an_entry_at_a_path_the_rule_leaves_out_is_not_deleted_locally,
             a_refused_discard_leaves_the_file_and_is_retried,
             nothing_is_discarded_through_a_refused_root,
             nothing_is_discarded_under_an_unavailable_root,

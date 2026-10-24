@@ -159,7 +159,8 @@ export type RefusalKind =
  * One vocabulary across the kinds that carry it. A fetch's `declined`
  * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `key_lost`,
  * and a drop meets `unmaterializable` and `reserved` the same way, and also
- * `trash_folder`, which only a drop meets. A `refused_placement` carries
+ * `trash_folder` and `system_file`, which only a drop meets. A
+ * `refused_placement` carries
  * `refused_root`, `unmapped` for a drop or a freeze under a folder this device
  * has no folder for, `no_file_lock`, and `pack_resident`,
  * which is a drop's alone: the Library holds an Entry at that path inside a
@@ -192,6 +193,15 @@ export type PlacementReason =
    * would ever be backed up.
    */
   | 'trash_folder'
+  /**
+   * A drop's alone too: the path carries a name an operating system keeps
+   * beside a person's files — `.DS_Store`, `Thumbs.db`, a name beginning `._`,
+   * a `__MACOSX` folder, or a volume's own folder directly under a mapped root.
+   * No scan takes one in, so nothing placed there would ever be backed up. A
+   * page leaves such names out of a browser's drop before sending, so this
+   * answers only a part that arrived anyway.
+   */
+  | 'system_file'
   /**
    * A folder this device maps is not the folder its mapping was recorded
    * against — a copied disk, a mount that came back different — so nothing was
@@ -566,6 +576,7 @@ const REASONS: readonly string[] = [
   'unmaterializable',
   'reserved',
   'trash_folder',
+  'system_file',
   'refused_root',
   'no_file_lock',
   'surfaced',

@@ -157,6 +157,32 @@ async fn a_scratch_name_and_the_management_area_are_refused() {
     );
 }
 
+// EP-17: what an operating system keeps beside the person's files travels to
+// the page under words of its own, a file's apart from a folder's, so the page
+// can say it apart from what was refused.
+#[tokio::test]
+async fn what_an_operating_system_keeps_travels_under_words_of_its_own() {
+    let dir = drops();
+    for path in [
+        "book/page.jpg",
+        "book/.DS_Store",
+        "book/__MACOSX/._page.jpg",
+    ] {
+        write(&dir.path().join(path), b"page");
+    }
+
+    let dropped = walked(&[whole(&dir.path().join("book"))]).await;
+
+    assert_eq!(taken(&dropped), ["book/page.jpg"]);
+    assert_eq!(
+        not_taken(&dropped),
+        [
+            ("book/.DS_Store", "system_file"),
+            ("book/__MACOSX", "system_folder"),
+        ]
+    );
+}
+
 // A browser reads a large folder a hundred entries at a time; this listing is
 // one call, and every entry of a folder past that is taken.
 #[tokio::test]

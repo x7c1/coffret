@@ -505,6 +505,11 @@ pub mod drop_walk;
 // root may be: not coffret's, but never Library content either (spec: EP-16).
 pub mod trash_folders;
 
+// And the files an operating system writes beside a person's own — `.DS_Store`,
+// `Thumbs.db`, AppleDouble `._` files — which no scan and no drop takes in
+// (spec: EP-17).
+pub mod system_files;
+
 // Where a Container waits between being encoded and being committed, as a
 // capability rather than as calls on a filesystem: what the flows promise about
 // an interrupted spool can only be held to what the thing underneath them

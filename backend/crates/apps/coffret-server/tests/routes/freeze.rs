@@ -532,6 +532,10 @@ async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
     served.plant_locally("scans/packed/page-002.jpg", b"the second page, edited here");
     served.plant_locally("scans/stray.jpg", b"a file with the same name");
     served.plant_locally("scans/deep/new.jpg", b"a new page");
+    // What an operating system keeps is left as it is, and counted apart
+    // (spec: EP-17).
+    served.plant_locally("scans/.DS_Store", b"finder");
+    served.plant_locally("scans/__MACOSX/._a.jpg", b"apple double");
 
     let (status, preview) = body_of(served.get("/api/freeze?path=scans").await).await;
     assert_eq!(status, 200, "{preview}");
@@ -545,6 +549,8 @@ async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
             "in_pack": 2,
             "changed_in_pack": 1,
             "not_here": 2,
+            "system_files": 1,
+            "system_folders": 1,
             "unavailable": 0,
             "after_current": false,
             "already_packing": false,

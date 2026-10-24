@@ -424,11 +424,14 @@ Concept background: [Library](../../concepts/library/),
   What the page is told of a drop is the handle and, per file taken, its path
   relative to the folder the dropped item stood in, its size and its
   modification time, beside what was not taken and why — never a path on the
-  device. Only the explorer's own window may hand a drop over, from the
-  explorer's origin, as a list of the items' paths. No event records a
-  handle, a path on the device or a dropped file's name (EL-1): walking,
-  holding and taking a drop, and importing it, are recorded by counts and
-  refusal kinds. *(Form: test)*
+  device. What the walk left out because an operating system keeps it (EP-17)
+  travels in the same list as what was not taken, under a reason of its own —
+  `system_file` or `system_folder`, by what stood there — and the page says it
+  apart, in a quiet line of its own and never as something not taken. Only the
+  explorer's own window may hand a drop over, from the explorer's origin, as a
+  list of the items' paths. No event records a handle, a path on the device or a
+  dropped file's name (EL-1): walking, holding and taking a drop, and
+  importing it, are recorded by counts and refusal kinds. *(Form: test)*
 - **LA-27.** An import (`POST /api/import`) is a JSON body naming the folder of
   the Library, whether the drop goes in as a Pack (PK-17), the handle, and per
   file its index in the held set and the name it is to have relative to the
@@ -456,9 +459,12 @@ Concept background: [Library](../../concepts/library/),
   in the byte order of their names; an empty folder contributes nothing. A name
   coffret keeps for itself inside a mapped folder — the scratch prefix and the
   management area, in the one rule a scan and an upload read them by (EP-11,
-  EP-14) — is reported as refused and not walked. An empty path, a path that is
-  not there, a name that is not text (EP-1), and one the operating system will
-  not read are reported, not left out. The import reads each file again from
-  the folder its dropped item stood in, descending without following a link, so
-  a file replaced by a link since it was dropped is refused rather than
-  followed. *(Form: test)*
+  EP-14) — is reported as refused and not walked. A name an operating system
+  keeps beside the person's own (EP-17) — at any depth, the dropped item
+  itself included, and a volume's own folders directly in a dropped folder — is
+  left out and not walked, and reported apart from what was refused. An empty
+  path, a path that is not there, a name that is not text (EP-1), and one the
+  operating system will not read are reported, not left out. The import reads
+  each file again from the folder its dropped item stood in, descending without
+  following a link, so a file replaced by a link since it was dropped is refused
+  rather than followed. *(Form: test)*

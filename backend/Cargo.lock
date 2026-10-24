@@ -1281,6 +1281,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.4.3",
  "md-5",
+ "serde_json",
  "tokio",
  "tracing",
  "zeroize",

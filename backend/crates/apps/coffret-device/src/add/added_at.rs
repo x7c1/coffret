@@ -22,7 +22,9 @@ impl OpenLibrary {
     /// its management area (spec: EP-14) — so nothing under it is a local file of
     /// this device's, whatever stands there; the path lands in a folder a
     /// desktop keeps its trash in at the top of the mapped root, which a scan
-    /// never enters (spec: EP-16); the mapped root the path falls
+    /// never enters (spec: EP-16); a component of the name is one an operating
+    /// system keeps beside the person's files, which a scan never takes
+    /// (spec: EP-17); the mapped root the path falls
     /// under is unavailable, or the disk does not answer about it — a root this
     /// device cannot reach says nothing about the Library rather than saying the
     /// file under it is gone (spec: EP-12); or nothing is there at all.
@@ -108,6 +110,12 @@ impl OpenLibrary {
         // place rather than of the path, because a top-level mapping's prefix
         // is not a folder on this disk.
         if place.trash_folder_name().is_some() {
+            return Ok(None);
+        }
+        // A name an operating system keeps on the way to it: nothing at it is
+        // a local file of this device's either, which is what `added_locally`
+        // says of the same name (spec: EP-17).
+        if place.system_component().is_some() {
             return Ok(None);
         }
         let standing = match place.look(self.local_fs.as_ref()).await {

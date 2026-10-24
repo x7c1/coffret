@@ -10,12 +10,14 @@ use crate::local_scan::assess_root::assess_root;
 use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::stale_scratch::StaleScratch;
+use crate::local_scan::system_file::SystemFile;
 use crate::local_scan::unknown_births::UnknownBirths;
 use crate::local_scan::walked::Walked;
 use crate::local_scan::walked_root::WalkedRoot;
 use crate::mapped_roots::MappedRoots;
 use crate::reserved_names::{reserved_name, ReservedName};
 use crate::scratch;
+use crate::system_files::{self, Depth};
 use crate::trash_folders;
 use crate::MappedRelativeLocation;
 
@@ -53,6 +55,12 @@ use crate::MappedRelativeLocation;
 /// A scratch is never found, and one of coffret's own shape that no writer in
 /// this process holds is handed back to be removed: its writer is gone, and
 /// nothing else would ever take it out of the folder (spec: OC-8, EP-11).
+///
+/// A name an operating system keeps — `.DS_Store`, `Thumbs.db`, a `._` file, a
+/// `__MACOSX` folder, and at a root's top a volume's own folders — is never
+/// found either, and nothing under a folder of one is walked. It is handed
+/// back apart, which reports nothing: it is there so a freeze's preview can
+/// say what is left as it is (spec: EP-17).
 pub(crate) async fn walk_mappings(
     roots: &dyn MappedRoots,
     mappings: &[Mapping],
@@ -70,6 +78,7 @@ pub(crate) async fn walk_mappings(
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut walked = Vec::with_capacity(mappings.len());
     let mut stale = Vec::new();
+    let mut system = Vec::new();
     for mapping in mappings {
         let state = assess_root(roots, mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
@@ -81,7 +90,11 @@ pub(crate) async fn walk_mappings(
                 Some(_) => BTreeSet::new(),
                 None => represented_elsewhere.clone(),
             };
-            let (sources, scratches) = walk(
+            let RootWalk {
+                sources,
+                scratches,
+                system: left_out,
+            } = walk(
                 roots,
                 &mapping.local_root,
                 mapping.prefix.as_ref(),
@@ -99,6 +112,7 @@ pub(crate) async fn walk_mappings(
                     relative,
                 }));
             }
+            system.extend(left_out);
             for source in sources {
                 let source = match births.birth_of(&source) {
                     Some(btime) => SourceFile { btime, ..source },
@@ -114,11 +128,26 @@ pub(crate) async fn walk_mappings(
             state,
         });
     }
+    system.sort_by(|one: &SystemFile, other| one.path.cmp(&other.path));
     Ok(Walked {
         found,
         roots: walked,
         stale,
+        system,
     })
+}
+
+/// What one root's walk came to.
+struct RootWalk {
+    /// Every regular file under the root, at the Entry Paths the mapping gives
+    /// them.
+    sources: Vec<SourceFile>,
+    /// The locations of the stale scratches it passed over
+    /// ([`scratch::is_stale`]).
+    scratches: Vec<MappedRelativeLocation>,
+    /// The names it left out because an operating system keeps them
+    /// (spec: EP-17).
+    system: Vec<SystemFile>,
 }
 
 /// Every regular file under one local root, at the Entry Paths the mapping
@@ -140,15 +169,17 @@ pub(crate) async fn walk_mappings(
 /// passed over.
 ///
 /// Beside the files, the locations of the stale scratches it passed over
-/// ([`scratch::is_stale`]).
+/// ([`scratch::is_stale`]) and the names an operating system keeps that it left
+/// out (spec: EP-17).
 async fn walk(
     roots: &dyn MappedRoots,
     root: &Path,
     prefix: Option<&EntryPath>,
     elsewhere: &BTreeSet<&str>,
-) -> Result<(Vec<SourceFile>, Vec<MappedRelativeLocation>), LocalError> {
+) -> Result<RootWalk, LocalError> {
     let mut found = Vec::new();
     let mut stale = Vec::new();
+    let mut system = Vec::new();
     // `None` is the root of this walk, which is no path at all: what stands
     // there is a name and not yet a position under it.
     let mut stack: Vec<(Option<EntryPath>, Option<MappedRelativeLocation>)> = vec![(None, None)];
@@ -240,10 +271,27 @@ async fn walk(
             if relative.is_none() && trash_folders::is_trash_folder(name.as_str()) {
                 continue;
             }
+            // A file or folder an operating system keeps beside the person's
+            // own, at any depth, or at the root's top alone for a volume's own
+            // folders. Asked of the name before what it is, like the names
+            // above, so the walk never enters one; nothing reports it, and it
+            // is handed back only to be counted (spec: EP-17).
+            let depth = match relative {
+                None => Depth::Top,
+                Some(_) => Depth::Below,
+            };
+            let left_out = system_files::is_system_file(name.as_str(), depth);
             let below = match &relative {
                 None => name,
                 Some(relative) => relative.below(&name),
             };
+            if left_out {
+                system.push(SystemFile {
+                    path: entry_path(prefix, below),
+                    folder: matches!(entry.kind, FolderEntryKind::Folder),
+                });
+                continue;
+            }
 
             match entry.kind {
                 FolderEntryKind::Folder => stack.push((Some(below), Some(below_local))),
@@ -261,7 +309,11 @@ async fn walk(
             }
         }
     }
-    Ok((found, stale))
+    Ok(RootWalk {
+        sources: found,
+        scratches: stale,
+        system,
+    })
 }
 
 /// Where a file sits in the Library, given the mapping it was found under
@@ -508,6 +560,90 @@ mod tests {
                 parsed("below/.Trash-1000/files/d.jpg"),
             ],
             "the person's files, and nothing under a trash folder at either root's top",
+        );
+    }
+
+    // EP-17: the files and folders an operating system writes beside the
+    // person's own are never found, at a root's top or deeper and under either
+    // mapping, and nothing under a folder of one is walked. A volume's own
+    // folders are left out at a root's top alone. What was left out is handed
+    // back apart, to be counted and never reported.
+    #[tokio::test]
+    async fn the_files_an_operating_system_keeps_are_not_source_files() {
+        let fs = InMemoryFs::new();
+        let library_root = Path::new(ROOT).join("library");
+        let albums_root = Path::new(ROOT).join("albums");
+
+        for relative in [
+            "a.jpg",
+            ".DS_Store",
+            "._a.jpg",
+            "Thumbs.db",
+            "book/page-001.jpg",
+            "book/.DS_Store",
+            "book/._page-001.jpg",
+            "book/Icon\r",
+            "book/desktop.ini",
+            "book/ehthumbs.db",
+            "book/.directory",
+            "__MACOSX/book/._page-001.jpg",
+            ".Spotlight-V100/Store-V2/index",
+            "$RECYCLE.BIN/S-1-5-21/x.jpg",
+            "book/.fseventsd/kept.txt",
+            "Thumbs.DB",
+        ] {
+            fs.write_file(&library_root.join(relative), b"some bytes");
+        }
+        fs.write_file(&albums_root.join("e.jpg"), b"some bytes");
+        fs.write_file(&albums_root.join(".DS_Store"), b"some bytes");
+        fs.write_file(&albums_root.join(".TemporaryItems/f.jpg"), b"some bytes");
+
+        let walked = walk_mappings(
+            &fs,
+            &[
+                Mapping::new(None, library_root),
+                Mapping::new(Some(parsed("albums")), albums_root),
+            ],
+            &NONE_PLACED,
+        )
+        .await
+        .expect("walking mapped folders must succeed");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                parsed("Thumbs.DB"),
+                parsed("a.jpg"),
+                parsed("albums/e.jpg"),
+                parsed("book/.fseventsd/kept.txt"),
+                parsed("book/page-001.jpg"),
+            ],
+            "the person's files, a look-alike and a volume's folder name deeper down among them",
+        );
+        let left_out: Vec<(&str, bool)> = walked
+            .system
+            .iter()
+            .map(|one| (one.path.as_str(), one.folder))
+            .collect();
+        assert_eq!(
+            left_out,
+            [
+                ("$RECYCLE.BIN", true),
+                (".DS_Store", false),
+                (".Spotlight-V100", true),
+                ("._a.jpg", false),
+                ("Thumbs.db", false),
+                ("__MACOSX", true),
+                ("albums/.DS_Store", false),
+                ("albums/.TemporaryItems", true),
+                ("book/.DS_Store", false),
+                ("book/._page-001.jpg", false),
+                ("book/.directory", false),
+                ("book/Icon\r", false),
+                ("book/desktop.ini", false),
+                ("book/ehthumbs.db", false),
+            ],
+            "each name once, a folder of one never entered",
         );
     }
 

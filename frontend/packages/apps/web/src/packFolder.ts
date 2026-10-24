@@ -19,6 +19,7 @@
 import type { FreezePreview } from '@coffret/api';
 
 import { size } from './humanize';
+import { systemCount } from './systemFiles';
 
 /** What the folder's action is called. */
 export const PACK_THIS_FOLDER = 'Pack this folder…';
@@ -118,6 +119,12 @@ function leftOutParts(preview: FreezePreview): string[] {
   }
   if (preview.not_here > 0) {
     parts.push(`${count(preview.not_here)} not on this device`);
+  }
+  // What an operating system keeps beside the pages — `.DS_Store`, `Thumbs.db`
+  // — which the scan leaves out of every freeze (spec: EP-17).
+  const kept = systemCount(preview.system_files, preview.system_folders);
+  if (kept !== null) {
+    parts.push(kept);
   }
   return parts;
 }

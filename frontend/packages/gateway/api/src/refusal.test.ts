@@ -104,6 +104,7 @@ it('reads every placement reason the server can send', async () => {
     'unmaterializable',
     'reserved',
     'trash_folder',
+    'system_file',
     'refused_root',
     'no_file_lock',
     'surfaced',

@@ -67,6 +67,9 @@ pub(super) async fn scan(
         found,
         roots: walked,
         stale,
+        // A sync says nothing of what an operating system keeps: it is no
+        // file of the person's to carry in, nor to report (spec: EP-17).
+        system: _,
     } = walk_mappings(roots, &mappings, births).await?;
 
     for root in &walked {

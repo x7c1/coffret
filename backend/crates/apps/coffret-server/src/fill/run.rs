@@ -202,6 +202,7 @@ fn is_about_one_entry(error: &Error) -> bool {
         | FetchError::ReservedComponent { .. }
         | FetchError::FoldedReservedComponent { .. }
         | FetchError::TrashFolderComponent { .. }
+        | FetchError::SystemFileComponent { .. }
         | FetchError::LocalPathCollision { .. }
         | FetchError::UnstampableMtime { .. }
         | FetchError::EntryNotCurrent { .. } => true,

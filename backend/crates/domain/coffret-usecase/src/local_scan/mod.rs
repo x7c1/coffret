@@ -48,6 +48,10 @@ pub(crate) use source_file::SourceFile;
 mod stale_scratch;
 pub(crate) use stale_scratch::StaleScratch;
 
+// What a scan left out because an operating system keeps it (spec: EP-17).
+mod system_file;
+pub(crate) use system_file::{kept_by_system, SystemFile};
+
 // The files a drop placed with no birth time of their own; the walk records
 // no birth time for a file it holds (spec: FM-9, EP-11).
 mod unknown_births;

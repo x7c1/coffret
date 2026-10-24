@@ -685,3 +685,52 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     reported as deleted locally (EP-10).
   - Whether a root holds nothing (EP-12) is not changed: a trash folder still
     counts as something standing in the root.
+- **EP-17.** The files and folders an operating system writes beside a
+  person's own are never Library content. Left out at any depth: the files
+  `.DS_Store`, `Icon` followed by a carriage return (`Icon\r`), `Thumbs.db`,
+  `ehthumbs.db`, `desktop.ini` and `.directory`, any name beginning `._`
+  (AppleDouble), and the folder `__MACOSX`. Left out only as the first
+  component directly under a mapped root, or directly in a dropped folder:
+  `.Spotlight-V100`, `.fseventsd`, `.TemporaryItems`, `$RECYCLE.BIN` and
+  `System Volume Information`. The list is
+  [`system-files.json`](system-files.json), which the server's rule and the
+  explorer's are each held to by a test. *(Form: test)*
+  - A scan decides from the name alone, before what stands there, as it does
+    for `.coffret` (EP-14) and the trash folders (EP-16): it never enters such a
+    folder, never reports anything at such a name as a file to back up, and
+    says nothing of it — a sync's and a freeze's results do not mention them.
+    A freeze's preview of a folder counts the files and the folders it left
+    out this way, so the explorer can name them among what a freeze leaves as
+    it is.
+  - A drop leaves them out before anything is written. A browser's drop is
+    walked on the page against the same list and such a name is never sent;
+    the desktop app's walk of a drop (LA-29) leaves it out and reports it
+    under a reason of its own, apart from what it did not take. In both, what
+    was left out is said in one quiet line of its own rather than as a
+    refusal: such files are in almost every drop. A part carrying such a name
+    that reaches the upload anyway is declined as `system_file`, in a sentence
+    that names the operating system's files rather than a name coffret keeps,
+    while the rest of the same drop lands; the upload judges the volume's
+    folders as the first component under the mapped root, as a scan does.
+  - Why: a drop carries them in and a sync or a freeze of a mapped folder
+    would make them Entries, and once one is inside a Pack, removing it means
+    rewriting the whole Pack (PK-10). Keeping them out before they become
+    Entries is the one place this costs nothing.
+  - A volume's folders only at the top, because that is the one place a system
+    writes them; a folder of the same name deeper is the person's own and is
+    walked as usual. A dropped item itself is not "directly in a dropped
+    folder": a volume's folder the person let go of by name is taken, while
+    the names left out at any depth are left out there too.
+  - Exactly those spellings, compared byte for byte, case included, as EP-16
+    compares its own: a system writes them so, and `Thumbs.DB` or `.ds_store`
+    is a name somebody chose. The cost is EP-14's kind: a file or folder of the
+    person's own that happens to carry one of these names — any name beginning
+    `._` among them — is not backed up.
+  - A fetch of an Entry already at such a path is not changed by the rule.
+  - An Entry already in the Library at such a path — carried in before this
+    rule — stays until it is deleted, and a scan that does not find its file,
+    never having looked, does not report it as deleted locally (EP-10), nor
+    count it in a freeze's preview as one this device has no file for.
+  - Whether a root holds nothing (EP-12), and whether the run's discards
+    emptied a folder (EP-15), are not changed: a folder holding only such
+    files still holds something.

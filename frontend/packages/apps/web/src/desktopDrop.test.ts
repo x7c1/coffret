@@ -153,7 +153,7 @@ describe('with the desktop app’s bridge', () => {
     await expect(heldBy(bridge, [new File([''], 'link-to-photos')])).rejects.toThrow(
       'link-to-photos is a link',
     );
-    await expect(heldBy(bridge, [])).resolves.toEqual({ files: [], notTaken: [] });
+    await expect(heldBy(bridge, [])).resolves.toEqual({ files: [], notTaken: [], systemFiles: [] });
   });
 
   it('adds nothing and says nothing of a drop that had no paths at all', async () => {
@@ -169,6 +169,43 @@ describe('with the desktop app’s bridge', () => {
     await expect(heldBy(bridge, [new File(['an image'], 'image.png')])).resolves.toEqual({
       files: [],
       notTaken: [],
+      systemFiles: [],
+    });
+  });
+
+  // EP-17: what the app left out because an operating system keeps it is
+  // taken out of what was not taken, so the warning never names it, and it is
+  // handed back apart — also where it is all the drop held.
+  it('hands what the system keeps back apart from what was not taken', async () => {
+    const bridge: DesktopBridge = {
+      takeDrop: async () => ({
+        ...BOOK,
+        notTaken: [
+          { path: 'vol-1/.DS_Store', reason: 'system_file' },
+          { path: 'vol-1/__MACOSX', reason: 'system_folder' },
+          LINK,
+        ],
+      }),
+    };
+
+    const drop = await heldBy(bridge, [new File([''], 'vol-1')]);
+    expect(drop.notTaken).toEqual([LINK]);
+    expect(drop.systemFiles).toEqual([
+      { path: 'vol-1/.DS_Store', folder: false },
+      { path: 'vol-1/__MACOSX', folder: true },
+    ]);
+
+    const only: DesktopBridge = {
+      takeDrop: async () => ({
+        handle: null,
+        files: [],
+        notTaken: [{ path: '.DS_Store', reason: 'system_file' }],
+      }),
+    };
+    await expect(heldBy(only, [new File([''], '.DS_Store')])).resolves.toEqual({
+      files: [],
+      notTaken: [],
+      systemFiles: [{ path: '.DS_Store', folder: false }],
     });
   });
 

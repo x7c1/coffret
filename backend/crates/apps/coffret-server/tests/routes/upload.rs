@@ -587,6 +587,59 @@ async fn a_part_dropped_into_the_desktop_trash_is_refused_in_its_own_words() {
     served.sync_idle().await;
 }
 
+// EP-17: a name the operating system keeps is filtered out of a browser's drop
+// on the page, and a part carrying one that arrives anyway is refused in its
+// own words — at any depth, and a volume's own folder directly under the mapped
+// root — while a sibling in the same drop lands.
+#[tokio::test]
+async fn a_part_carrying_a_name_the_operating_system_keeps_is_refused_in_its_own_words() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    let (status, answer) = body_of(
+        served
+            .upload(
+                "",
+                &[
+                    ("albums/.DS_Store", b"finder"),
+                    ("albums/__MACOSX/._kept.jpg", b"apple double"),
+                    (".Spotlight-V100/index", b"spotlight"),
+                    ("albums/kept.jpg", b"in"),
+                ],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer), ["albums/kept.jpg"]);
+    let refused = answer["refused"]
+        .as_array()
+        .expect("the refusals are listed");
+    let names: Vec<&str> = refused
+        .iter()
+        .map(|one| one["name"].as_str().expect("a refusal names its part"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "albums/.DS_Store",
+            "albums/__MACOSX/._kept.jpg",
+            ".Spotlight-V100/index"
+        ]
+    );
+    for one in refused {
+        assert_eq!(one["error"], "declined");
+        assert_eq!(one["reason"], "system_file");
+        let said = one["message"]
+            .as_str()
+            .expect("a refusal carries a sentence");
+        assert!(said.contains("operating system"), "{said}");
+    }
+    assert!(!served.holds("albums/.DS_Store"));
+    assert!(served.holds("albums/kept.jpg"));
+    served.sync_idle().await;
+}
+
 // EP-2: a part's own name is held to the same shape every other path on these
 // routes is, and a part that climbed out of the folder it was dropped on is
 // refused by the name it was sent under — there being no Entry Path to report it

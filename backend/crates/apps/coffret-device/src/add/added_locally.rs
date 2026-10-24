@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::{local_folder_for, FetchError};
+use coffret_usecase::system_files::{self, Depth};
 use coffret_usecase::{root_marker, scratch, trash_folders, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
@@ -49,6 +50,12 @@ impl OpenLibrary {
     /// At the top of a mapped root alone, the folders a desktop keeps its trash
     /// in are left out too (spec: EP-16): a scan never enters one, so nothing in
     /// it is an addition, and a folder inside one answers empty.
+    ///
+    /// So are the names an operating system keeps beside the person's own —
+    /// `.DS_Store`, `Thumbs.db`, a `._` file, a `__MACOSX` folder, and at the
+    /// root's top a volume's own folders — by the rule the scan reads
+    /// (spec: EP-17): no sync carries one in, and a folder inside one answers
+    /// empty.
     ///
     /// A folder no mapping of this device reaches has no files of its own here,
     /// and neither has one whose mapped folder does not exist — a device that has
@@ -126,6 +133,13 @@ impl OpenLibrary {
         {
             return Ok(LocalAdditions::default());
         }
+        // A folder inside one an operating system keeps holds nothing a sync
+        // carries in either (spec: EP-17).
+        if directory.relative().is_some_and(|relative| {
+            system_files::system_component(relative.text_components()).is_some()
+        }) {
+            return Ok(LocalAdditions::default());
+        }
         // What the Library holds one level down: the Entries standing in the
         // folder itself, and the child folders the Entries deeper down imply
         // (spec: EP-2). A name in either set is the Library's to list, not this.
@@ -182,6 +196,16 @@ impl OpenLibrary {
             // the Library — under a top-level mapping the root's top is a folder
             // one level below the Library's.
             if directory.relative().is_none() && trash_folders::is_trash_folder(&name) {
+                continue;
+            }
+            // A name an operating system keeps, by the scan's own test of it:
+            // at any depth, and a volume's own folders at the root's top alone
+            // (spec: EP-17).
+            let depth = match directory.relative() {
+                None => Depth::Top,
+                Some(_) => Depth::Below,
+            };
+            if system_files::is_system_file(&name, depth) {
                 continue;
             }
             // A name a directory listing returns holds no separator, is never

@@ -535,6 +535,18 @@ fn from_fetch(cause: FetchError) -> ApiError {
              keeps out of the Library: nothing in it is backed up",
             cause,
         ),
+        // A reason of its own again, for the same reason: the name is the
+        // operating system's, neither coffret's nor the desktop's trash, and a
+        // scan leaves it out (spec: EP-17). A page filters such names out of a
+        // browser's drop before sending, so this is met only by a path that
+        // arrives anyway. The name stays out of the body as any component does.
+        FetchError::SystemFileComponent { .. } => ApiError::declined_as(
+            "system_file",
+            "that path carries a name the operating system keeps beside a person's files \
+             (`.DS_Store`, `Thumbs.db`, a name beginning `._`, and the like), which coffret \
+             keeps out of the Library: nothing at it is backed up",
+            cause,
+        ),
         FetchError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FetchError::ContainerUnreachable { .. } => storage_did_not_answer(cause.redacted()),
         FetchError::Commit(ref commit) => from_commit(commit, cause.redacted()),
