@@ -22,11 +22,11 @@ use crate::object_store::ObjectStore;
 /// checkpoint under the one name its head gives it. Every check here goes
 /// through the format layer with keys derived independently of the flow.
 pub(super) struct Library {
-    handles: BTreeMap<String, ObjectRef>,
-    /// How many live objects Storage listed under each name. One, everywhere a
-    /// Library is sound; a store that mints identifiers does not make names
-    /// unique, so this is what a case reads to find out that it was not.
-    listed: BTreeMap<String, usize>,
+    /// Every live object Storage listed under each name, in listing order. One,
+    /// everywhere a Library is sound but for a Keyring replica a repair wrote
+    /// beside a damaged copy; a store that mints identifiers does not make
+    /// names unique, so this is what a case reads to find out that it was not.
+    listed: BTreeMap<String, Vec<ObjectRef>>,
 }
 
 /// How many pages a listing may take before the suite calls Storage broken.
@@ -35,8 +35,7 @@ const MAX_PAGES: usize = 1000;
 impl Library {
     /// Walks the whole listing.
     pub(super) async fn read(store: &dyn ObjectStore) -> Self {
-        let mut handles = BTreeMap::new();
-        let mut listed = BTreeMap::new();
+        let mut listed: BTreeMap<String, Vec<ObjectRef>> = BTreeMap::new();
         let mut token = None;
         let mut pages = 0;
         loop {
@@ -45,13 +44,15 @@ impl Library {
                 .await
                 .expect("listing a store must succeed");
             for object in page.objects {
-                *listed.entry(object.name.clone()).or_insert(0) += 1;
-                handles.insert(object.name, object.object_ref);
+                listed
+                    .entry(object.name)
+                    .or_default()
+                    .push(object.object_ref);
             }
             token = page.next;
             pages += 1;
             if token.is_none() {
-                return Self { handles, listed };
+                return Self { listed };
             }
             assert!(
                 pages < MAX_PAGES,
@@ -62,60 +63,64 @@ impl Library {
 
     /// Every object name in Storage, sorted.
     pub(super) fn names(&self) -> Vec<String> {
-        self.handles.keys().cloned().collect()
+        self.listed.keys().cloned().collect()
     }
 
     /// Whether any live object's name starts with `prefix`.
     pub(super) fn holds_any(&self, prefix: &str) -> bool {
-        self.handles.keys().any(|name| name.starts_with(prefix))
+        self.listed.keys().any(|name| name.starts_with(prefix))
     }
 
     /// Whether one Container's object is still live (spec: FM-3).
     pub(super) fn holds_container(&self, container_id: ContainerId) -> bool {
-        self.handles.contains_key(&container_id.object_name())
+        self.listed.contains_key(&container_id.object_name())
     }
 
     /// How many live objects Storage lists under one name.
     pub(super) fn count(&self, name: &ControlObjectName) -> usize {
-        self.listed.get(&name.to_string()).copied().unwrap_or(0)
+        self.copies(name).len()
+    }
+
+    /// Every live object Storage lists under one name, in listing order.
+    pub(super) fn copies(&self, name: &ControlObjectName) -> &[ObjectRef] {
+        self.listed
+            .get(&name.to_string())
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Whether Storage still lists an object under one name.
     pub(super) fn holds(&self, name: &ControlObjectName) -> bool {
-        self.handles.contains_key(&name.to_string())
+        self.listed.contains_key(&name.to_string())
     }
 
     /// The handle Storage named one object by, which the case expects to be
-    /// there.
+    /// there — the one listed last, where it listed more than one.
     ///
     /// A case that wants a store to misbehave about *one* object needs the
     /// handle rather than the name, because a store that mints identifiers names
     /// nothing by its name — which is the same reason the flow itself carries a
     /// listing around (spec: FM-3, FM-12).
     pub(super) fn handle(&self, name: &ControlObjectName) -> ObjectRef {
-        let spelling = name.to_string();
-        self.handles
-            .get(&spelling)
-            .unwrap_or_else(|| panic!("{spelling:?} must be in Storage"))
-            .clone()
+        self.handle_named(&name.to_string())
     }
 
     /// The handle Storage listed under one name, given as it is listed, which
     /// the case expects to be there.
-    #[cfg(test)]
     pub(super) fn handle_named(&self, name: &str) -> ObjectRef {
-        self.handles
+        self.listed
             .get(name)
+            .and_then(|copies| copies.last())
             .unwrap_or_else(|| panic!("{name:?} must be in Storage"))
             .clone()
     }
 
     /// The bytes of one object, which the case expects to be there.
     pub(super) async fn bytes(&self, store: &dyn ObjectStore, name: &str) -> Vec<u8> {
-        let object = self
-            .handles
-            .get(name)
-            .unwrap_or_else(|| panic!("{name:?} must be in Storage"));
+        Self::bytes_of(store, name, &self.handle_named(name)).await
+    }
+
+    /// The bytes of one object Storage listed under `name`.
+    async fn bytes_of(store: &dyn ObjectStore, name: &str, object: &ObjectRef) -> Vec<u8> {
         store
             .get(object, None)
             .await
@@ -190,7 +195,9 @@ impl Library {
     /// index the commitment declares is present, each one opens under the
     /// Keyring purpose key with a header its name admits, each carries the same
     /// key table, and that key table digests to what the commitment and the names
-    /// promise.
+    /// promise. A position Storage lists more than once is valid when any of its
+    /// copies is (spec: KL-14), so each copy is tried and the position fails only
+    /// when none of them passes.
     pub(super) async fn keyring(
         &self,
         store: &dyn ObjectStore,
@@ -207,30 +214,27 @@ impl Library {
             )
             .expect("a committed digest is a valid one");
             let spelling = name.to_string();
+            let copies = self.copies(&name);
+            assert!(!copies.is_empty(), "{spelling:?} must be in Storage");
 
-            let decoded = decode_control_object(
-                &self.bytes(store, &spelling).await,
-                &spelling,
-                &purpose_key(Purpose::ControlKeyring),
-            )
-            .unwrap_or_else(|error| {
+            let mut refusals = Vec::new();
+            let mut valid = None;
+            for object in copies {
+                let bytes = Self::bytes_of(store, &spelling, object).await;
+                match valid_replica(&bytes, &spelling, replica, commitment) {
+                    Ok(key_table) => {
+                        valid = Some(key_table);
+                        break;
+                    }
+                    Err(refusal) => refusals.push(refusal),
+                }
+            }
+            let key_table = valid.unwrap_or_else(|| {
                 panic!(
-                    "{spelling:?} must open as a Keyring: {}",
-                    every_link(&error)
+                    "no copy of {spelling:?} is a valid replica: {}",
+                    refusals.join("; ")
                 )
             });
-            assert_eq!(decoded.kind, ControlObjectKind::Keyring);
-            assert_eq!(decoded.replica, replica);
-
-            let key_table = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
-                panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
-            });
-            let digest = keyring_set_digest(&key_table).expect("a key table always digests");
-            assert_eq!(
-                digest,
-                commitment.set_digest(),
-                "{spelling:?} carries a key table its name does not promise",
-            );
 
             match &agreed {
                 Some(held) => assert_eq!(
@@ -261,6 +265,31 @@ impl Library {
     }
 }
 
+/// The key table one copy of a replica carries, or why the copy is not a valid
+/// replica of `commitment` at `replica` (spec: KL-1, FM-17).
+fn valid_replica(
+    bytes: &[u8],
+    spelling: &str,
+    replica: ReplicaPosition,
+    commitment: &KeyringCommitment,
+) -> Result<KeyTable, String> {
+    let decoded = decode_control_object(bytes, spelling, &purpose_key(Purpose::ControlKeyring))
+        .map_err(|error| format!("it does not open as a Keyring: {}", every_link(&error)))?;
+    if decoded.kind != ControlObjectKind::Keyring {
+        return Err(format!("it opens as a {:?}", decoded.kind));
+    }
+    if decoded.replica != replica {
+        return Err(format!("its header says {:?}", decoded.replica));
+    }
+    let key_table = decode_keyring(&decoded.payload)
+        .map_err(|error| format!("it does not decode as FM-17: {}", every_link(&error)))?;
+    let digest = keyring_set_digest(&key_table).expect("a key table always digests");
+    if digest != commitment.set_digest() {
+        return Err("it carries a key table its name does not promise".to_owned());
+    }
+    Ok(key_table)
+}
+
 /// The Containers a key table covers, in the order the wire form fixes.
 pub(super) fn mapped(elements: &[KeyringElement]) -> Vec<ContainerId> {
     elements
@@ -289,14 +318,32 @@ pub(super) async fn lose_replica(
     index: u16,
 ) {
     let name = replica_name(commitment, index);
-    let handle = Library::read(store).await.handle(&name);
-    store
-        .trash(&handle)
-        .await
-        .unwrap_or_else(|error| panic!("removing {name} must succeed: {}", every_link(&error)));
+    remove_every_copy(store, &name).await;
+}
+
+/// Trashes every object Storage lists under one name.
+///
+/// Every one rather than the last listed, because a store that mints
+/// identifiers can hold several under a replica name (spec: KL-14), and a case
+/// that means a position to be gone, or replaced, means all of them.
+async fn remove_every_copy(store: &dyn ObjectStore, name: &ControlObjectName) {
+    let library = Library::read(store).await;
+    let copies = library.copies(name);
+    assert!(!copies.is_empty(), "{name} must be in Storage");
+    for object in copies {
+        store
+            .trash(object)
+            .await
+            .unwrap_or_else(|error| panic!("removing {name} must succeed: {}", every_link(&error)));
+    }
 }
 
 /// Replaces one replica with bytes that are no control object at all.
+///
+/// Replaces and does not add: every object under the name goes first, so a
+/// store that mints identifiers is left with the damaged copy alone, as one
+/// keyed by name is. A damaged copy *beside* a valid one is another state, and
+/// another case's (spec: KL-14).
 ///
 /// The other half of losing one: the name is still in the listing and the object
 /// behind it is not a replica this Library can read a key table from — which is
@@ -308,6 +355,7 @@ pub(super) async fn mangle_replica(
     index: u16,
 ) {
     let name = replica_name(commitment, index);
+    remove_every_copy(store, &name).await;
     store
         .put(
             &name.to_string(),
@@ -318,6 +366,9 @@ pub(super) async fn mangle_replica(
 }
 
 /// Replaces one replica with a Keyring that opens and carries another key table.
+///
+/// Every object under the name goes first, for the reason
+/// [`mangle_replica`] gives.
 ///
 /// The subtlest way a replica is not valid, and the one an authenticating reader
 /// would otherwise accept: the object decrypts, its header agrees with its name,
@@ -351,6 +402,7 @@ pub(super) async fn misdigest_replica(
         &payload,
     ))
     .expect("framing a Keyring replica must succeed");
+    remove_every_copy(store, &name).await;
     store
         .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
         .await

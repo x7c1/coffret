@@ -1,6 +1,6 @@
 use coffret_model::{ControlObjectName, KeyTable, KeyringCommitment, ReplicaPosition};
 
-use super::{read_replica, ShortKeyring};
+use super::{read_position, ShortKeyring};
 use crate::commit::commit_error::{CommitError, CommitResult, UnusableReplica};
 use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
@@ -46,11 +46,14 @@ impl ReadKeyring {
 /// valid answers, and the rest are not fetched. A replica Storage will not hand
 /// over, one that does not open, or one whose key table is not the one its name
 /// promises, is stepped over and the walk goes on to the next position, so a
-/// degraded set still serves a read (spec: RV-2). Only a generation no replica
-/// of answers is refused, and whether that is the Keyring loss RV-7 names is
-/// what the reason inside [`CommitError::KeyringUnreadable`] leaves to a caller
-/// — which is why that reason keeps a fetch that failed and an object that was
-/// rejected apart (see [`UnusableReplica`]).
+/// degraded set still serves a read (spec: RV-2). A position whose name Storage
+/// lists more than once is read through each copy before it is stepped over,
+/// because any copy that reads back valid is the replica (spec: KL-14). Only a
+/// generation no replica of answers is refused, and whether that is the Keyring
+/// loss RV-7 names is what the reason inside
+/// [`CommitError::KeyringUnreadable`] leaves to a caller — which is why that
+/// reason keeps a fetch that failed and an object that was rejected apart (see
+/// [`UnusableReplica`]).
 ///
 /// A committed replica the walk had to step over is one this read could not
 /// take the key table from, and where the object is absent or would not open it
@@ -97,12 +100,7 @@ pub(crate) async fn read_committed(
             commitment.set_digest(),
             replica,
         )?;
-        let Some(object) = listing.handle(&name.to_string()) else {
-            last = Some((index_of, UnusableReplica::Absent));
-            lost += 1;
-            continue;
-        };
-        match read_replica(store, keys, retry, &name, object, commitment.set_digest()).await {
+        match read_position(store, keys, retry, listing, &name, commitment.set_digest()).await {
             Ok(key_table) => {
                 return Ok(ReadKeyring {
                     key_table,

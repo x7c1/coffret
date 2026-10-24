@@ -40,7 +40,8 @@ use crate::uploaded_object::UploadedObject;
 /// written once against whichever provider a Library is configured for.
 #[async_trait]
 pub trait ObjectStore: Send + Sync {
-    /// Writes `body` under `name`, replacing anything already stored there.
+    /// Writes `body` under `name`. A store keyed by name replaces anything already
+    /// stored there; one that mints identifiers stores a second object beside it.
     ///
     /// This is the unconditional write, for Containers and Keyring replicas.
     /// A Container's name is drawn from its own random identifier, so two
