@@ -11,6 +11,7 @@ use coffret_model::{
 
 use crate::byte_stream::ByteStream;
 use crate::commit_conformance::fixtures::{container_id, envelope, purpose_key};
+use crate::conformance_library::replace;
 use crate::error_chains::every_link;
 use crate::object_store::ObjectStore;
 
@@ -302,19 +303,22 @@ pub(super) async fn lose_replica(
 /// behind it is not a replica this Library can read a key table from — which is
 /// the degradation a walk finds only by reading, and exactly what makes the full
 /// walk worth its cost (spec: KL-1, KL-5).
+///
+/// The original is purged before the replacement is stored: a store whose names
+/// are not unique would otherwise keep the valid replica beside it, and a reader
+/// that found that one would have nothing to repair.
 pub(super) async fn mangle_replica(
     store: &dyn ObjectStore,
     commitment: &KeyringCommitment,
     index: u16,
 ) {
     let name = replica_name(commitment, index);
-    store
-        .put(
-            &name.to_string(),
-            ByteStream::from(b"not a Keyring replica at all".to_vec()),
-        )
-        .await
-        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {}", every_link(&error)));
+    replace(
+        store,
+        &name.to_string(),
+        b"not a Keyring replica at all".to_vec(),
+    )
+    .await;
 }
 
 /// Replaces one replica with a Keyring that opens and carries another key table.
@@ -323,6 +327,9 @@ pub(super) async fn mangle_replica(
 /// would otherwise accept: the object decrypts, its header agrees with its name,
 /// and the key table inside digests to something its name does not promise
 /// (spec: KL-1, CP-10, FM-17). Only the third check catches it.
+///
+/// As with [`mangle_replica`], the original is purged first, so that a store
+/// whose names are not unique does not keep the valid replica beside this one.
 pub(super) async fn misdigest_replica(
     store: &dyn ObjectStore,
     commitment: &KeyringCommitment,
@@ -351,8 +358,5 @@ pub(super) async fn misdigest_replica(
         &payload,
     ))
     .expect("framing a Keyring replica must succeed");
-    store
-        .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
-        .await
-        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {}", every_link(&error)));
+    replace(store, &name.to_string(), object.bytes().to_vec()).await;
 }

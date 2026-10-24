@@ -10,6 +10,10 @@
 //! It is shared by the sync and freeze suites rather than written twice: what a
 //! second device can open is one question, and two spellings of it could drift
 //! into two answers.
+//!
+//! [`replace`] lives here for the same reason: the commit and fetch suites both
+//! damage objects in place, and what replacing one means on a store whose names
+//! are not unique should be settled once.
 
 use std::collections::BTreeMap;
 
@@ -22,6 +26,7 @@ use coffret_model::{
     JournalRecord, MasterKey, ObjectRef, ReplicaPosition,
 };
 
+use crate::byte_stream::ByteStream;
 use crate::error_chains::every_link;
 use crate::object_store::ObjectStore;
 
@@ -191,4 +196,50 @@ impl Library {
             panic!("{spelling:?} must decode as FM-15: {}", every_link(&error))
         })
     }
+}
+
+/// Makes `bytes` the one live object called `name`, on every store.
+///
+/// A [`put`](ObjectStore::put) alone replaces the object only where the store
+/// keys objects by name. A store that mints identifiers — Google Drive among
+/// them — does not make names unique, so a second put would leave the original
+/// beside the replacement, and a reader that resolves the name could land on
+/// either. A case that damages an object needs the damaged one to be what the
+/// name resolves to, so every live object under the name is purged first, each
+/// by the handle the listing gives it.
+pub(crate) async fn replace(store: &dyn ObjectStore, name: &str, bytes: Vec<u8>) {
+    let mut existing = Vec::new();
+    let mut token = None;
+    for _ in 0..MAX_PAGES {
+        let page = store
+            .list(token.as_ref())
+            .await
+            .expect("listing a store must succeed");
+        existing.extend(
+            page.objects
+                .into_iter()
+                .filter(|object| object.name == name)
+                .map(|object| object.object_ref),
+        );
+        token = page.next;
+        if token.is_none() {
+            break;
+        }
+    }
+    assert!(
+        token.is_none(),
+        "listing did not end within {MAX_PAGES} pages"
+    );
+    for object in &existing {
+        store.purge(object).await.unwrap_or_else(|error| {
+            panic!(
+                "purging the object under {name:?} must succeed: {}",
+                every_link(&error)
+            )
+        });
+    }
+    store
+        .put(name, ByteStream::from(bytes))
+        .await
+        .unwrap_or_else(|error| panic!("storing {name:?} must succeed: {}", every_link(&error)));
 }

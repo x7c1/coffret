@@ -5,8 +5,7 @@ use coffret_model::{
     ContainerId, ControlObjectName, KeyringCommitment, ObjectRef, ReplicaPosition,
 };
 
-use crate::byte_stream::ByteStream;
-use crate::error_chains::every_link;
+use crate::conformance_library::replace;
 use crate::object_store::ObjectStore;
 
 /// Every object in Storage, by the name it is stored under.
@@ -69,14 +68,12 @@ pub(crate) async fn body_start(store: &dyn ObjectStore, object: &ObjectRef) -> u
 /// Replaces the object at one name with bytes of the case's own.
 ///
 /// An unconditional write, which is what a Container's name and a Keyring
-/// replica's name both take (spec: KL-14, FM-3).
+/// replica's name both take (spec: KL-14, FM-3). Whatever was already stored
+/// under the name is purged first: a store whose names are not unique would
+/// otherwise keep the original beside the replacement, and a case that damages
+/// a replica would find the valid one still readable.
 pub(crate) async fn overwrite(store: &dyn ObjectStore, name: &str, bytes: Vec<u8>) {
-    store
-        .put(name, ByteStream::from(bytes))
-        .await
-        .unwrap_or_else(|error| {
-            panic!("overwriting {name:?} must succeed: {}", every_link(&error))
-        });
+    replace(store, name, bytes).await;
 }
 
 /// The name of one replica of the Keyring generation a checkpoint selected
