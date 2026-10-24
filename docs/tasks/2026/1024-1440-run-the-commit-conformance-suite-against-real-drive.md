@@ -63,7 +63,7 @@ Two gaps, both closed here:
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this macOS machine, `make drive-store-it` passes with the commit
+- [x] On this macOS machine, `make drive-store-it` passes with the commit
       suite included, against the test folder configured in
       `~/.config/coffret/local.mk` (an agent may run it: the person granted
       the test client for this). The merging session records the per-suite
