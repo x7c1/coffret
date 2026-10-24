@@ -13,6 +13,8 @@ function preview(over: Partial<FreezePreview> = {}): FreezePreview {
     in_pack: 0,
     changed_in_pack: 0,
     not_here: 0,
+    system_files: 0,
+    system_folders: 0,
     unavailable: 0,
     after_current: false,
     already_packing: false,
@@ -45,6 +47,17 @@ describe('questionOf', () => {
     expect(question.leftOut).toBe(
       'left as they are: 3 files already in a Pack, 1 file in a Pack and changed here, ' +
         '2 files not on this device',
+    );
+  });
+
+  // EP-17: what an operating system keeps beside the pages is one more group
+  // left as it is, and a folder holding nothing else says that is why.
+  it('names what the system keeps among what is left as it is', () => {
+    expect(questionOf(preview({ in_pack: 3, system_files: 2, system_folders: 1 })).leftOut).toBe(
+      'left as they are: 3 files already in a Pack, 2 files and 1 folder the system keeps',
+    );
+    expect(questionOf(preview({ files: 0, bytes: 0, system_files: 1 })).line).toBe(
+      '📁 BookX — nothing to pack: 1 file the system keeps',
     );
   });
 

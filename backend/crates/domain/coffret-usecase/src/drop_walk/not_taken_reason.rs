@@ -14,6 +14,16 @@ pub enum NotTakenReason {
     /// Its name is one coffret keeps for itself inside a mapped folder
     /// (spec: EP-11, EP-14).
     Reserved(ReservedName),
+    /// Its name is one an operating system keeps beside the person's own —
+    /// `.DS_Store`, `Thumbs.db`, a `._` file, a `__MACOSX` folder — and nothing
+    /// under a folder of one was walked (spec: EP-17).
+    ///
+    /// Not a refusal like the others: such a name is in almost every drop, so
+    /// the page says it apart and quietly rather than as something gone wrong.
+    System {
+        /// Whether a folder stood at the name.
+        folder: bool,
+    },
     /// Its name is not text, and so spells no Entry Path (spec: EP-2).
     NotText,
     /// The operating system would not say what it is, or list it.

@@ -49,6 +49,8 @@
     "folder": "albums",
     "in_pack": 0,
     "not_here": 2,
+    "system_files": 0,
+    "system_folders": 0,
     "unavailable": 0
   },
   "library": {

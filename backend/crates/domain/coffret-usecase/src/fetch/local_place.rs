@@ -10,6 +10,7 @@ use crate::device_state::{Mapping, RootMarkerId};
 use crate::mapped_roots::MappedRoots;
 use crate::source_reader::SourceReader;
 use crate::standing::Standing;
+use crate::system_files;
 use crate::trash_folders;
 use crate::{LocalIoError, MappedRelativeLocation};
 
@@ -101,6 +102,17 @@ impl LocalPlace {
             .text_components()
             .next()
             .filter(|top| trash_folders::is_trash_folder(top))
+    }
+
+    /// The first name below the mapped root on the way to this place that an
+    /// operating system keeps, where one is: a drop refused for it names it as
+    /// the component to change (spec: EP-17).
+    ///
+    /// Asked of the components below the *root*, as
+    /// [`trash_folder_name`](Self::trash_folder_name) is, because a volume's
+    /// own folders are left out only as the first of them.
+    pub fn system_component(&self) -> Option<&str> {
+        system_files::system_component(self.relative.text_components())
     }
 
     /// A reader over this mapped file, reached without following a descendant

@@ -78,3 +78,7 @@ coffret-logging = { workspace = true, features = ["testing"] }
 # part of `full`: without it the retry cases would wait out their own backoff in
 # real time.
 tokio = { workspace = true, features = ["test-util"] }
+
+# Reading the registry of the names an operating system keeps (spec: EP-17),
+# which the declarations in `system_files` are held to.
+serde_json = { workspace = true }

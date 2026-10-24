@@ -6,7 +6,9 @@ pub struct NotTakenRow {
     /// Where it stands relative to the folder the dropped item stood in.
     pub path: String,
     /// Why, in one word: `empty`, `missing`, `not_a_file_or_folder`,
-    /// `reserved`, `not_text` or `unreadable`.
+    /// `reserved`, `not_text` or `unreadable` — or `system_file` and
+    /// `system_folder` for a name an operating system keeps, which the page
+    /// says apart from the others (spec: EP-17).
     pub reason: &'static str,
 }
 
@@ -26,6 +28,8 @@ fn reason_word(reason: NotTakenReason) -> &'static str {
         NotTakenReason::Missing => "missing",
         NotTakenReason::NotAFileOrFolder => "not_a_file_or_folder",
         NotTakenReason::Reserved(_) => "reserved",
+        NotTakenReason::System { folder: false } => "system_file",
+        NotTakenReason::System { folder: true } => "system_folder",
         NotTakenReason::NotText => "not_text",
         NotTakenReason::Unreadable => "unreadable",
     }

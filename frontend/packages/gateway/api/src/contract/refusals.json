@@ -76,6 +76,14 @@
   {
     "body": {
       "error": "declined",
+      "message": "that path carries a name the operating system keeps beside a person's files (`.DS_Store`, `Thumbs.db`, a name beginning `._`, and the like), which coffret keeps out of the Library: nothing at it is backed up",
+      "reason": "system_file"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
       "message": "a file this device did not put there stands where this Entry belongs",
       "reason": "surfaced",
       "surfaced": "ForeignFile"

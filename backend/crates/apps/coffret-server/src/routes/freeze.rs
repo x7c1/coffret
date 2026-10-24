@@ -134,6 +134,12 @@ pub struct PreviewDto {
     /// How many Entries under the folder this device has no file of its own
     /// for (spec: EP-10).
     not_here: usize,
+    /// How many files an operating system keeps — `.DS_Store`, `Thumbs.db`
+    /// and the like — the scan left out under the folder (spec: EP-17).
+    system_files: usize,
+    /// How many folders of that kind — `__MACOSX`, and at a mapped root's top
+    /// a volume's own — the scan left out unentered (spec: EP-17).
+    system_folders: usize,
     /// How many of the mappings the folder lies under this device cannot
     /// reach right now — at most one, for a folder — under which nothing was
     /// counted, not even as not here (spec: EP-12).
@@ -161,6 +167,8 @@ impl PreviewDto {
             in_pack: preview.in_pack,
             changed_in_pack: preview.changed_in_pack,
             not_here: preview.not_here,
+            system_files: preview.system_files,
+            system_folders: preview.system_folders,
             unavailable: preview.unavailable.len(),
             after_current,
             already_packing,

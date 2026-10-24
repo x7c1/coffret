@@ -17,6 +17,15 @@
 //! spec: EP-11, EP-14), which a file written under would never reach the
 //! Library, and anything the walk could not read.
 //!
+//! A name an operating system keeps beside the person's own — `.DS_Store`,
+//! `Thumbs.db`, a `._` file, a `__MACOSX` folder, and directly in a dropped
+//! folder a volume's own folders — is left out by the rule a scan reads
+//! ([`system_files`], spec: EP-17), and nothing under a folder of one is
+//! walked. It is reported under a reason of its own, so the page can say it
+//! apart from what was refused.
+//!
+//! [`system_files`]: crate::system_files
+//!
 //! What it does not decide is where the files go, or whether the Library will
 //! have them there: that is the import's, which places each one through the
 //! same writer a browser's drop goes through (spec: EP-9, EP-11).

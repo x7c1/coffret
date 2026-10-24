@@ -66,6 +66,8 @@ it('offers only Close for a folder being packed already', () => {
     in_pack: 0,
     changed_in_pack: 0,
     not_here: 0,
+    system_files: 0,
+    system_folders: 0,
     unavailable: 0,
     after_current: true,
     already_packing: true,

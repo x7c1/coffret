@@ -11,6 +11,7 @@ use crate::local_io_error::LocalIoError;
 use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
 use crate::reserved_names::reserved_name;
+use crate::system_files::{self, Depth};
 
 use super::{DropWalk, DroppedItem, DroppedSource, NotTaken, NotTakenReason};
 
@@ -25,6 +26,11 @@ use super::{DropWalk, DroppedItem, DroppedSource, NotTaken, NotTakenReason};
 /// Each folder an item stands in is listed once, however many items of the
 /// drop stand in it, so a drop of hundreds of photographs out of one folder is
 /// one listing of it rather than hundreds.
+///
+/// A name an operating system keeps is left out wherever it stands, the
+/// dropped item itself included, and a volume's own folders directly in a
+/// dropped folder — the place they stand in a dropped volume's top — but not
+/// deeper, and not as an item the person let go of by name (spec: EP-17).
 ///
 /// Nothing here fails the drop as a whole. A folder that could not be read is
 /// reported and the rest is walked, because the person let go of all of it
@@ -123,6 +129,21 @@ async fn walk_item(roots: &dyn MappedRoots, root: &Path, item: FolderEntry, walk
             walk.not_taken.push(NotTaken {
                 path,
                 reason: NotTakenReason::Reserved(reserved),
+            });
+            continue;
+        }
+        // Directly in a dropped folder is a name whose folder is the dropped
+        // item itself, whose text is therefore one component.
+        let depth = match &above {
+            Some((_, text)) if !text.contains('/') => Depth::Top,
+            _ => Depth::Below,
+        };
+        if system_files::is_system_file(&name, depth) {
+            walk.not_taken.push(NotTaken {
+                path,
+                reason: NotTakenReason::System {
+                    folder: matches!(entry.kind, FolderEntryKind::Folder),
+                },
             });
             continue;
         }
@@ -264,6 +285,59 @@ mod tests {
             [
                 NotTakenReason::Reserved(ReservedName::ManagementArea),
                 NotTakenReason::Reserved(ReservedName::Scratch),
+            ]
+        );
+    }
+
+    // EP-17: what an operating system keeps is left out wherever it stands,
+    // the dropped item itself included, and reported under a reason of its own;
+    // nothing under a folder of one is walked. A volume's own folder is left out
+    // directly in a dropped folder and taken deeper down.
+    #[tokio::test]
+    async fn what_an_operating_system_keeps_is_left_out_and_reported_apart() {
+        let fs = InMemoryFs::new();
+        for path in [
+            "/drops/book/page-001.jpg",
+            "/drops/book/.DS_Store",
+            "/drops/book/._page-001.jpg",
+            "/drops/book/Thumbs.db",
+            "/drops/book/__MACOSX/._page-001.jpg",
+            "/drops/book/.Spotlight-V100/index",
+            "/drops/book/inner/.Spotlight-V100/kept.txt",
+            "/drops/book/inner/desktop.ini",
+            "/drops/book/Thumbs.DB",
+            "/drops/.DS_Store",
+        ] {
+            fs.write_file(Path::new(path), b"page");
+        }
+
+        let walk = walk_dropped(&fs, &[item("/drops/book"), item("/drops/.DS_Store")]).await;
+
+        assert_eq!(
+            taken(&walk),
+            [
+                "book/Thumbs.DB",
+                "book/inner/.Spotlight-V100/kept.txt",
+                "book/page-001.jpg",
+            ]
+        );
+        let left: Vec<(&str, NotTakenReason)> = walk
+            .not_taken
+            .iter()
+            .map(|one| (one.path.as_str(), one.reason))
+            .collect();
+        let file = NotTakenReason::System { folder: false };
+        let folder = NotTakenReason::System { folder: true };
+        assert_eq!(
+            left,
+            [
+                ("book/.DS_Store", file),
+                ("book/.Spotlight-V100", folder),
+                ("book/._page-001.jpg", file),
+                ("book/Thumbs.db", file),
+                ("book/__MACOSX", folder),
+                ("book/inner/desktop.ini", file),
+                (".DS_Store", file),
             ]
         );
     }

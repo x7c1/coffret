@@ -7,6 +7,7 @@ import { destinationsOf, type Destination } from './destination';
 import { DropConfirm } from './DropConfirm';
 import { summarize, type DropSummary, type HeldFiles } from './packChoice';
 import { NO_NUMBERING } from './renumber';
+import { COLOR } from './theme';
 
 afterEach(() => {
   cleanup();
@@ -184,6 +185,68 @@ describe('what the desktop app did not take', () => {
     expect(screen.getByRole('dialog').textContent).not.toContain('not taken');
   });
 });
+
+// What either walk left out because an operating system keeps it is said in
+// one dim line of its own, naming the distinct names, and never in the warning
+// line about what was not taken (spec: EP-17).
+describe('what the system keeps', () => {
+  const KEPT = [
+    { path: 'BookX/.DS_Store', folder: false },
+    { path: 'BookX/sub/.DS_Store', folder: false },
+    { path: 'BookX/Thumbs.db', folder: false },
+  ];
+  const LINE = 'left out 3 files the system keeps (.DS_Store, Thumbs.db)';
+  const LINK = [{ path: 'link-to-photos', reason: 'not_a_file_or_folder' }];
+
+  it('is said in the dim colour, apart from what was not taken', () => {
+    render(
+      <DropConfirm
+        summary={BOOK}
+        files={FILES}
+        destinations={INTO}
+        notTaken={LINK}
+        systemFiles={KEPT}
+        onChoose={() => undefined}
+      />,
+    );
+    const kept = screen.getByText(LINE);
+    expect(kept.style.color).toBe(hex(COLOR.dim));
+    const warned = screen.getByText(/^1 thing in the drop was not taken: link-to-photos/);
+    expect(warned.style.color).toBe(hex(COLOR.warn));
+    expect(warned.textContent).not.toContain('.DS_Store');
+  });
+
+  it('counts the folders it left out apart from the files', () => {
+    render(
+      <DropConfirm
+        summary={BOOK}
+        files={FILES}
+        destinations={INTO}
+        systemFiles={[...KEPT, { path: 'BookX/__MACOSX', folder: true }]}
+        onChoose={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'left out 3 files and 1 folder the system keeps (.DS_Store, Thumbs.db, __MACOSX)',
+    );
+  });
+
+  it('is not said where nothing was left out', () => {
+    render(
+      <DropConfirm summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
+    );
+    const said = screen.getByRole('dialog').textContent;
+    expect(said).not.toContain('the system keeps');
+    expect(said).toContain('1 thing in the drop was not taken');
+  });
+});
+
+/** A colour as the DOM reads an inline style back. */
+function hex(colour: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = colour;
+  return probe.style.color;
+}
 
 // A folder the Library already has where the drop lands is said to exist, and
 // the same answers stand.

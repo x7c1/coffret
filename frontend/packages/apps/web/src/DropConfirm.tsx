@@ -4,6 +4,7 @@ import type { Added } from '@coffret/api';
 
 import { newLine, onDiskLine, pathLine, type Destination, type Level } from './destination';
 import { notTakenNotice, type NotTaken } from './drop';
+import { systemFilesLine, type SystemFile } from './systemFiles';
 import {
   ADD,
   CANCEL,
@@ -72,6 +73,12 @@ const REMEMBERED = {
  * as: what is listed above is what was taken, and what was let go of is more
  * than that (spec: LA-26). A browser's drop has nothing to say here.
  *
+ * What either walk left out because an operating system keeps it — `.DS_Store`,
+ * `Thumbs.db`, `._` files — is neither counted nor sized above, and is said in
+ * one line of its own in the dim colour, naming a few of the distinct names:
+ * such files are in almost every drop, and saying them as the line above says
+ * what was not taken would read as something gone wrong (spec: EP-17).
+ *
  * Where the Library already holds a file at a path the drop is sent under, the
  * confirmation says so by name: how many files replace a one-file Entry, the
  * first few of them spelled out, and how many a Pack holds and so are refused.
@@ -95,6 +102,7 @@ export function DropConfirm({
   destinations,
   held = NOTHING_HELD,
   notTaken = [],
+  systemFiles = [],
   onChoose,
 }: {
   summary: DropSummary;
@@ -106,6 +114,8 @@ export function DropConfirm({
   held?: HeldFiles;
   /** What the desktop app met in the drop and did not take; none in a browser. */
   notTaken?: readonly NotTaken[];
+  /** What the drop left out because an operating system keeps it. */
+  systemFiles?: readonly SystemFile[];
   onChoose: (choice: Choice, numbering: Numbering) => void;
 }) {
   const asked = summary.folders.length > 0;
@@ -137,6 +147,7 @@ export function DropConfirm({
   const replaces = replacesLine(collisions);
   const refused = refusedLine(collisions);
   const left = notTakenNotice(notTaken);
+  const kept = systemFilesLine(systemFiles);
 
   const labels = choiceLabels(summary);
   const question = questionOf(summary);
@@ -202,6 +213,9 @@ export function DropConfirm({
         )}
         {left !== null && (
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{left}</p>
+        )}
+        {kept !== null && (
+          <p style={{ margin: 0, color: COLOR.dim, overflowWrap: 'anywhere' }}>{kept}</p>
         )}
         {replaces !== null && (
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>

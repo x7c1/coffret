@@ -132,7 +132,8 @@ control for a sync, since a drop starts one.
   adds and removes nothing, so that even the Library's first commit has a head
   to start from (spec: CP-2))
 - open (a Library on this device, making it available for operations)
-- scan (the mapped local folders for new or changed files)
+- scan (the mapped local folders for new or changed files, never taking the
+  system files an operating system writes beside them)
 - deposit (new content into the Library: adding a file, or replacing a
   file's content with content of a different hash, each of which sets the
   deposit time the [Catalog](../catalog/) keeps for that content)
@@ -234,12 +235,14 @@ control for a sync, since a drop starts one.
 - drop (files a browser drops into a mapped folder, or the desktop app takes
   by their paths and imports there, for a later run — a sync, or where the drop
   held a folder the person chose to add as a Pack, a freeze of exactly the
-  files dropped — to carry them into the Library)
+  files dropped — to carry them into the Library; the system files among them
+  are left out and said quietly)
 - import (the files a drop onto the desktop app's window let go of, walked on
   this device by their paths, held under a one-time **drop handle**, and placed
   into a mapped folder for a later run to carry in, as a browser's drop is;
   a link is neither followed nor taken, and what was not taken is reported,
-  not left out (spec: LA-26, LA-27, LA-28, LA-29))
+  not left out — except what an operating system keeps, which is left out and
+  said apart (spec: LA-26, LA-27, LA-28, LA-29, EP-17))
 - fill (the folder around an Entry somebody just opened, by reading in the
   background the parcels holding the rest of what that folder holds and this
   device has not got — parcel after parcel, never Entry by Entry, and none it
@@ -513,6 +516,23 @@ control for a sync, since a drop starts one.
     walked as usual; one of those names at a mapped root's top holding the
     person's own files is not backed up, the cost the management area's name
     carries too.
+- An operating system writes **system files** beside the person's own —
+  `.DS_Store`, `Thumbs.db`, `desktop.ini`, AppleDouble `._` files, a `__MACOSX`
+  folder, and at a volume's top folders such as `.Spotlight-V100` or
+  `$RECYCLE.BIN`. None of them is ever part of the Library, decided from the
+  name alone: a scan never enters or reports one and a sync or a freeze says
+  nothing of them, a drop — a browser's or the desktop app's — leaves them out
+  before anything is written and says so quietly rather than as a refusal, and
+  a file sent at such a name anyway is declined. Keeping them out before they
+  become Entries matters because a file inside a [Pack](../pack/) leaves it
+  only with the whole Pack rewritten (spec: EP-17, PK-10).
+  - The names that stand at a volume's top are left out only there — directly
+    under a mapped root, or directly in a dropped folder — and are the
+    person's own deeper down. The rest are left out at any depth, and a name of
+    the person's own beginning `._` is not backed up, the cost the management
+    area's name carries too.
+  - An Entry carried in at such a name before the rule stays until it is
+    deleted, and a scan does not read the absence of its file as a deletion.
 - The Library's current Container set can be restored from the Master Key and
   Storage while the required control state (defined in
   [Storage Object](../storage-object/)) remains intact. A restore brings back

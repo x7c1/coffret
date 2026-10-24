@@ -245,6 +245,24 @@ pub enum FetchError {
         /// and never a diagnostic event (spec: EL-1).
         component: String,
     },
+    /// A file was to be placed at a name an operating system keeps beside the
+    /// person's own — `.DS_Store`, `Thumbs.db`, a `._` file, inside a
+    /// `__MACOSX` folder, or directly under the mapped root inside a volume's
+    /// own folder (spec: EP-17).
+    ///
+    /// The verdict a drop gets, and only a drop: a scan leaves such a name
+    /// out, so a file placed there would sit in the mapped folder and never be
+    /// carried in. A fetch of an Entry already at such a path is not changed by
+    /// the rule and never meets this.
+    SystemFileComponent {
+        /// The path that carries it.
+        path: EntryPath,
+        /// The name, as a component below the mapped root.
+        ///
+        /// A component of an Entry Path, so it reaches a person in the message
+        /// and never a diagnostic event (spec: EL-1).
+        component: String,
+    },
     /// The mapped root a file was to go into is not the root the mapping was
     /// recorded against (spec: EP-13).
     ///
@@ -562,6 +580,15 @@ impl fmt::Display for FetchError {
                  Library and no sync carries what is in it, so nothing was placed",
                 path.as_str(),
             ),
+            // Not the reserved sentence either: the name is the operating
+            // system's, and what it says is why nothing goes there.
+            Self::SystemFileComponent { path, component } => write!(
+                f,
+                "the Entry Path {:?} carries {component:?}, a name the operating system keeps \
+                 beside a person's own files: coffret keeps those out of the Library and no \
+                 sync carries one in, so nothing was placed",
+                path.as_str(),
+            ),
             // The refusal's own sentence, which names the folder to look at, the
             // mapping the gesture is to be aimed at, and the gesture — said by
             // the value rather than here, because the refusal a device raises
@@ -646,6 +673,7 @@ impl error::Error for FetchError {
             | Self::ReservedComponent { .. }
             | Self::FoldedReservedComponent { .. }
             | Self::TrashFolderComponent { .. }
+            | Self::SystemFileComponent { .. }
             | Self::LocalPathCollision { .. }
             | Self::ContainerUnreachable { .. }
             | Self::CiphertextMismatch { .. }
@@ -718,6 +746,12 @@ impl Redacted for FetchError {
             // out with the path.
             Self::TrashFolderComponent { path, .. } => format!(
                 "Fetch::TrashFolderComponent(path_len={})",
+                path.as_str().len()
+            ),
+            // The name is a component of the path, so it stays out with the
+            // path.
+            Self::SystemFileComponent { path, .. } => format!(
+                "Fetch::SystemFileComponent(path_len={})",
                 path.as_str().len()
             ),
             // Which shape the wrong folder took, which is the whole of what an
@@ -931,6 +965,25 @@ mod tests {
             "the trash is not one of coffret's own names: {said}",
         );
         assert_eq!(error.redacted(), "Fetch::TrashFolderComponent(path_len=17)");
+    }
+
+    // EP-17: a drop of a name the operating system keeps is told so in its own
+    // words, and the event holds neither the name nor the path.
+    #[test]
+    fn a_system_file_component_names_the_operating_system_and_not_coffret_s_own_names() {
+        let error = FetchError::SystemFileComponent {
+            path: entry_path("book/.DS_Store"),
+            component: ".DS_Store".to_owned(),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains(".DS_Store\""), "{said}");
+        assert!(said.contains("operating system"), "{said}");
+        assert!(
+            !said.contains("keeps for itself") && !said.contains(".coffret"),
+            "the name is not one of coffret's own: {said}",
+        );
+        assert_eq!(error.redacted(), "Fetch::SystemFileComponent(path_len=14)");
     }
 
     // An integrity verdict is worth reading, and reading one means knowing

@@ -5,7 +5,7 @@ use coffret_model::{EntryLocation, EntryPath};
 
 use crate::device_state::{LocalEntry, Mapping};
 use crate::index::Index;
-use crate::local_scan::{RootState, SourceFile, WalkedRoot};
+use crate::local_scan::{kept_by_system, RootState, SourceFile, WalkedRoot};
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -59,6 +59,10 @@ pub(super) struct Deletions {
 /// themselves, nothing is left for a finding to be about, so the row goes into
 /// [`Survey::forgotten`] instead (spec: EP-15).
 ///
+/// A row at a path the walk leaves out because an operating system keeps the
+/// name — an Entry carried in before that rule — is neither: the walk never
+/// looked for its file, so it is not read as gone (spec: EP-17).
+///
 /// A gone file whose Entry is still current is handed back rather than
 /// reported here: whether it is a deletion or one half of a rename is decided
 /// once the files that appeared are known (spec: EP-10). The records whose
@@ -89,6 +93,12 @@ pub(super) async fn deletions(
             if prefix.is_none()
                 && represented_elsewhere.contains(local.observation.path.top_level())
             {
+                continue;
+            }
+            // A path a scan leaves out because an operating system keeps the
+            // name: its file is never found, so its absence is no deletion,
+            // and the record stays as it is (spec: EP-17).
+            if kept_by_system(prefix, &local.observation.path) {
                 continue;
             }
             let path = local.observation.path.clone();

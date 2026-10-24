@@ -64,6 +64,12 @@ impl OpenLibrary {
     /// than `ReservedComponent`, because the folder is the desktop's rather
     /// than a name coffret keeps, and the sentence a person reads says so.
     ///
+    /// The same `Error::FileNotAdded` carrying `SystemFileComponent` where the
+    /// path carries a name an operating system keeps beside a person's files —
+    /// `.DS_Store`, `Thumbs.db`, a `._` file, a `__MACOSX` folder at any depth,
+    /// and a volume's own folders as the first component under the mapped
+    /// root — which a scan leaves out (spec: EP-17).
+    ///
     /// The same `Error::FileNotAdded` carrying `FoldedReservedComponent`
     /// where a component only folds to the management area's name under ASCII
     /// case folding (spec: EP-14). Refused for the same reason and said in a
@@ -134,6 +140,18 @@ impl OpenLibrary {
         if let Some(component) = place.trash_folder_name() {
             return Err(Error::FileNotAdded {
                 cause: Box::new(FetchError::TrashFolderComponent {
+                    path: path.clone(),
+                    component: component.to_owned(),
+                }),
+            });
+        }
+        // A name an operating system keeps beside the person's own, which a
+        // scan leaves out and so would never carry in (spec: EP-17). Asked of
+        // the place for the trash folder's reason: a volume's own folders are
+        // left out only as the first component under the root.
+        if let Some(component) = place.system_component() {
+            return Err(Error::FileNotAdded {
+                cause: Box::new(FetchError::SystemFileComponent {
                     path: path.clone(),
                     component: component.to_owned(),
                 }),

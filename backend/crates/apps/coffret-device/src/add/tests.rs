@@ -672,6 +672,73 @@ async fn a_desktop_trash_folder_at_the_top_of_the_root_is_kept_out() {
         .expect("a folder of that name deeper down takes a drop");
 }
 
+/// A name an operating system keeps beside the person's files is neither listed
+/// nor opened as a local file, nor dropped at, and the refusal is one of its own
+/// (spec: EP-17). A volume's own folder is left out at the root's top alone.
+#[tokio::test]
+async fn a_name_the_operating_system_keeps_is_kept_out() {
+    let device = device().await;
+    for relative in [
+        ".DS_Store",
+        "page.jpg",
+        "albums/._page.jpg",
+        "albums/Thumbs.db",
+        ".Spotlight-V100/index",
+        "__MACOSX/._page.jpg",
+        "albums/.Spotlight-V100/kept.txt",
+    ] {
+        let at = device.root.join(relative);
+        std::fs::create_dir_all(at.parent().expect("a case writes below a folder"))
+            .expect("making a folder must succeed");
+        std::fs::write(at, DROPPED).expect("writing a file must succeed");
+    }
+
+    let listed = device
+        .library
+        .added_locally(None)
+        .await
+        .expect("reading the mapped root must succeed");
+    let names: Vec<&str> = listed.files.iter().map(|file| file.name.as_str()).collect();
+    assert_eq!(names, ["page.jpg"]);
+    assert_eq!(listed.folders, ["albums"]);
+    let deeper = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect("reading a mapped folder must succeed");
+    assert!(deeper.files.is_empty(), "{deeper:?}");
+    assert_eq!(deeper.folders, [".Spotlight-V100"]);
+    let inside = device
+        .library
+        .added_locally(Some(&entry_path("__MACOSX")))
+        .await
+        .expect("a folder the system keeps is an empty answer and not a refusal");
+    assert!(inside.is_empty(), "{inside:?}");
+    assert!(device
+        .library
+        .added_at(&entry_path("albums/Thumbs.db"))
+        .await
+        .expect("asking about a local file must succeed")
+        .is_none());
+
+    let refused = drop_file(&device.library, "albums/.DS_Store")
+        .await
+        .expect_err("a drop at a name the system keeps must be refused");
+    match refused {
+        Error::FileNotAdded { cause } => match *cause {
+            FetchError::SystemFileComponent { path, component } => {
+                assert_eq!(path.as_str(), "albums/.DS_Store");
+                assert_eq!(component, ".DS_Store");
+            }
+            other => panic!("the drop must be refused as a system file, and was {other:?}"),
+        },
+        other => panic!("the drop must be refused as a system file, and was {other:?}"),
+    }
+    drop_file(&device.library, "albums/.Spotlight-V100/x.jpg")
+        .await
+        .expect("a volume's folder name deeper down takes a drop");
+}
+
 /// A file standing in a desktop's trash folder at the top of the mapped root is
 /// not opened as a local file, which is what the listing beside it already says
 /// of the folder; the same name deeper down is the person's (spec: EP-16).
