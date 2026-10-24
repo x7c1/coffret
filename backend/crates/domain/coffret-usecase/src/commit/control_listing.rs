@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{ContainerId, ControlObjectName, Generation, KeyringCommitment, ObjectRef};
@@ -20,16 +21,29 @@ use crate::retry::RetryPolicy;
 /// [`get`](crate::ObjectStore::get) accepts — only the listing can, and it
 /// already did.
 ///
-/// The Keyring replica names are kept as well, by name, with the generation
-/// and the set digest each states: a commit interrupted after it put its
-/// candidate's replicas leaves objects no head names, which are suspected
-/// orphans a run may report and never removes (spec: OC-4).
+/// The Keyring replicas are kept apart from the other handles, by name, with
+/// the generation and the set digest each states and every object listed under
+/// it. The generation and the digest are for a commit interrupted after it put
+/// its candidate's replicas, which leaves objects no head names: suspected
+/// orphans a run may report and never removes (spec: OC-4). Every object is
+/// kept because on a Storage whose names are not unique one replica name can
+/// carry several, and any one of them that reads back valid is the replica
+/// (spec: KL-14) — which one that is, only a read can say.
 #[derive(Debug, Default)]
 pub(crate) struct ControlListing {
     handles: BTreeMap<String, ObjectRef>,
     heads: BTreeSet<Generation>,
     snapshots: BTreeSet<Generation>,
-    keyring_replicas: BTreeMap<String, (Generation, String)>,
+    keyring_replicas: BTreeMap<String, ListedReplica>,
+}
+
+/// One Keyring replica name as the listing gave it.
+#[derive(Debug)]
+struct ListedReplica {
+    generation: Generation,
+    set_digest: String,
+    /// Every object listed under the name, in listing order.
+    copies: Vec<ObjectRef>,
 }
 
 /// How many pages a listing may take before the walk calls Storage broken.
@@ -87,9 +101,37 @@ impl ControlListing {
     /// fixes its key table, so a duplicate is the benign outcome of two repairs
     /// of one position, or of a repair beside a copy that did not read back
     /// valid, and either copy that does read back valid is the replica
-    /// (spec: KL-14). The handle listed last is the one kept.
+    /// (spec: KL-14). Every copy is kept, and a reader tries them until one
+    /// reads back valid (see [`replica_copies`](Self::replica_copies)): keeping
+    /// one would leave which copy is read to the order the provider lists in,
+    /// and a provider that lists the corrupt copy last would have every commit
+    /// find the position lost and repair it again.
     fn record(&mut self, name: String, object_ref: ObjectRef) -> CommitResult<()> {
         let parsed = ControlObjectName::parse(&name);
+        if let Ok(ControlObjectName::KeyringReplica {
+            generation,
+            set_digest,
+            ..
+        }) = parsed
+        {
+            let listed = match self.keyring_replicas.entry(name) {
+                Entry::Occupied(listed) => {
+                    debug!(
+                        object = %listed.key(),
+                        copies = listed.get().copies.len() + 1,
+                        "Storage lists a Keyring replica more than once; each copy is read until one is valid",
+                    );
+                    listed.into_mut()
+                }
+                Entry::Vacant(unlisted) => unlisted.insert(ListedReplica {
+                    generation,
+                    set_digest,
+                    copies: Vec::new(),
+                }),
+            };
+            listed.copies.push(object_ref);
+            return Ok(());
+        }
         let listed_before = self.handles.get(&name);
         match (parsed, listed_before) {
             (
@@ -116,24 +158,8 @@ impl ControlListing {
             (Ok(ControlObjectName::IndexSnapshot { generation }), _) => {
                 self.snapshots.insert(generation);
             }
-            (
-                Ok(ControlObjectName::KeyringReplica {
-                    generation,
-                    set_digest,
-                    ..
-                }),
-                listed_before,
-            ) => {
-                if listed_before.is_some() {
-                    debug!(
-                        object = %name,
-                        "Storage lists a Keyring replica twice; only one of them is read",
-                    );
-                }
-                self.keyring_replicas
-                    .insert(name.clone(), (generation, set_digest));
-            }
-            (Err(_), _) => {}
+            // Filed above, before the handles were looked at.
+            (Ok(ControlObjectName::KeyringReplica { .. }), _) | (Err(_), _) => {}
         }
         self.handles.insert(name, object_ref);
         Ok(())
@@ -184,8 +210,26 @@ impl ControlListing {
 
     /// The handle Storage named an object by, or `None` if the walk did not see
     /// it.
+    ///
+    /// Never a Keyring replica's: a replica name can carry more than one object,
+    /// and those are reached through [`replica_copies`](Self::replica_copies).
     pub(crate) fn handle(&self, name: &str) -> Option<&ObjectRef> {
         self.handles.get(name)
+    }
+
+    /// Every object the walk saw under one Keyring replica name, in listing
+    /// order, or none if it saw no such name (spec: KL-14).
+    ///
+    /// One, wherever a position was written once. More where it was written
+    /// again — a repair beside a copy that did not read back valid, or two
+    /// devices repairing one position — on a Storage whose names are not
+    /// unique. Which of them is valid is nothing the listing says, so a reader
+    /// tries them in turn, and a position is lost only when none reads back
+    /// valid (spec: KL-1).
+    pub(crate) fn replica_copies(&self, name: &str) -> &[ObjectRef] {
+        self.keyring_replicas
+            .get(name)
+            .map_or(&[], |listed| listed.copies.as_slice())
     }
 
     /// How many listed Keyring replica objects no head names, by generation
@@ -209,14 +253,15 @@ impl ControlListing {
         committed: Option<&KeyringCommitment>,
     ) -> BTreeMap<Generation, usize> {
         let mut unnamed = BTreeMap::new();
-        for (generation, set_digest) in self.keyring_replicas.values() {
+        for listed in self.keyring_replicas.values() {
+            let generation = listed.generation;
             let named = committed.is_some_and(|committed| {
-                *generation < committed.generation()
-                    || (*generation == committed.generation()
-                        && set_digest == committed.set_digest())
+                generation < committed.generation()
+                    || (generation == committed.generation()
+                        && listed.set_digest == committed.set_digest())
             });
             if !named {
-                *unnamed.entry(*generation).or_insert(0) += 1;
+                *unnamed.entry(generation).or_insert(0) += 1;
             }
         }
         unnamed
@@ -275,8 +320,9 @@ mod tests {
 
     // KL-14: a Keyring replica's name fixes its key table, so one written twice
     // is a harmless duplicate rather than a broken exclusion: it is neither
-    // refused nor warned about. Nor are two distinct names, or a name that is no
-    // control object's at all.
+    // refused nor warned about, only noted, and both copies are kept for a
+    // reader to try. Nor are two distinct names, or a name that is no control
+    // object's at all, refused or warned about.
     #[test]
     fn nothing_else_listed_is_refused_or_warned_about() {
         let logs = CapturedLogs::capture();
@@ -303,10 +349,17 @@ mod tests {
         }
 
         assert_eq!(
-            listing.handle(&replica),
-            Some(&ObjectRef::new("second")),
-            "the replica listed last is the one kept",
+            listing.replica_copies(&replica),
+            [ObjectRef::new("first"), ObjectRef::new("second")],
+            "every copy of the replica is kept, in listing order",
         );
+        assert_eq!(
+            listing.handle(&replica),
+            None,
+            "a replica is reached through its copies, never through one handle",
+        );
+        let noted = logs.only(Level::DEBUG);
+        assert_eq!(noted.field("object"), replica, "{noted}");
         assert_eq!(listing.newest_head(), Some(generation(2)));
         assert!(logs.at(Level::WARN).is_empty(), "{}", logs.text());
     }

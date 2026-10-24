@@ -44,6 +44,11 @@
 //! runtime interleaves them, and a suite that started two writers at once
 //! would pass either way; this puts the collision where it can be asserted.
 //!
+//! One case wraps that store to list a Keyring replica's name twice, a damaged
+//! copy beside the real one and on either side of it, because which copy a
+//! provider whose names are not unique lists last is the provider's business
+//! and what the case asserts must not depend on it (spec: KL-14).
+//!
 //! One case wraps that store to hold each Keyring replica request until the
 //! whole set is in flight, because what it asserts is that a commit sends its
 //! replicas together: a commit that sent them one after another would land all
@@ -144,6 +149,7 @@ pub use repair::{
     a_repair_before_a_refused_record_is_still_reported,
     a_repair_before_the_rebases_ran_out_is_still_reported,
     a_repair_that_stops_reports_what_it_put_back, a_repair_the_provider_refuses_stops_the_commit,
+    a_replica_listed_twice_reads_as_its_valid_copy,
     an_unfetchable_replica_stops_the_commit_unrewritten, an_unreadable_replica_is_replaced,
     two_devices_repairing_one_position_both_commit,
 };
@@ -152,6 +158,8 @@ mod replica_overlap;
 pub use replica_overlap::a_commit_writes_and_reads_back_its_replicas_at_once;
 
 mod rival_index;
+
+mod twinned_store;
 
 mod stale_removal;
 pub use stale_removal::{
@@ -259,6 +267,7 @@ macro_rules! commit_conformance {
             an_untrashed_removal_reports_what_storage_refused,
             a_lost_replica_is_rewritten_before_the_next_commit,
             an_unreadable_replica_is_replaced,
+            a_replica_listed_twice_reads_as_its_valid_copy,
             a_repair_the_provider_refuses_stops_the_commit,
             a_repair_that_stops_reports_what_it_put_back,
             an_unfetchable_replica_stops_the_commit_unrewritten,

@@ -146,15 +146,11 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
     if let Ok(secret) = std::env::var(CLIENT_SECRET) {
         credentials = credentials.with_client_secret(secret);
     }
-
-    let transport: Arc<dyn HttpTransport> = Arc::new(
-        ReqwestTransport::with_default_client().expect("an HTTP client must be buildable"),
-    );
-    let tokens: Arc<dyn AccessTokens> = Arc::new(OAuthTokens::new(
-        transport.clone(),
+    let grant = Grant {
         credentials,
-        TokenCache::new(cache, Arc::new(token_cache_key())),
-    ));
+        cache: TokenCache::new(cache, Arc::new(token_cache_key())),
+    };
+    let (transport, tokens) = grant.connect();
 
     // The gateway's own pre-store operation, so a run against a real account
     // exercises the code that creates a Library's folder rather than a second
@@ -174,9 +170,38 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
     let settings = configure(DriveSettings::new(&folder));
 
     Some(CaseFolder {
-        drive: GoogleDrive::new(transport, tokens, settings),
+        drive: GoogleDrive::new(transport, tokens, settings.clone()),
         folder: ObjectRef::new(folder),
+        grant,
+        settings,
     })
+}
+
+/// What a gateway on the run's account is built from, kept so that one can be
+/// built again.
+///
+/// An HTTP client's pooled connections belong to the runtime that opened them,
+/// so a gateway is only good on the runtime it was first used on. The removal of
+/// a case's folder runs on a runtime of its own (see [`CaseFolder`]'s `Drop`),
+/// and it gets a gateway of its own from this.
+struct Grant {
+    credentials: ClientCredentials,
+    cache: TokenCache,
+}
+
+impl Grant {
+    /// A fresh HTTP client, and the access tokens it is authorized with.
+    fn connect(&self) -> (Arc<dyn HttpTransport>, Arc<dyn AccessTokens>) {
+        let transport: Arc<dyn HttpTransport> = Arc::new(
+            ReqwestTransport::with_default_client().expect("an HTTP client must be buildable"),
+        );
+        let tokens: Arc<dyn AccessTokens> = Arc::new(OAuthTokens::new(
+            transport.clone(),
+            self.credentials.clone(),
+            self.cache.clone(),
+        ));
+        (transport, tokens)
+    }
 }
 
 /// The store one case works in, and the folder it goes away with.
@@ -193,6 +218,9 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
 pub struct CaseFolder {
     drive: GoogleDrive,
     folder: ObjectRef,
+    /// What the removal builds a gateway of its own from.
+    grant: Grant,
+    settings: DriveSettings,
 }
 
 #[async_trait]
@@ -237,6 +265,11 @@ impl Drop for CaseFolder {
         // own, and the drop waits for it. A folder left behind would otherwise
         // outlive the run silently, which is the one outcome this exists to
         // prevent.
+        //
+        // And a gateway of its own, built inside that runtime: the case's
+        // gateway holds an HTTP client whose connections belong to the case's
+        // runtime, and a call through it from here waits on a runtime that is
+        // no longer driving them until the whole-call deadline gives up.
         let removal = std::thread::scope(|scope| {
             scope
                 .spawn(|| {
@@ -244,7 +277,12 @@ impl Drop for CaseFolder {
                         .enable_all()
                         .build()
                         .expect("a runtime for the removal must be buildable")
-                        .block_on(self.drive.trash(&self.folder))
+                        .block_on(async {
+                            let (transport, tokens) = self.grant.connect();
+                            GoogleDrive::new(transport, tokens, self.settings.clone())
+                                .trash(&self.folder)
+                                .await
+                        })
                 })
                 .join()
         });
