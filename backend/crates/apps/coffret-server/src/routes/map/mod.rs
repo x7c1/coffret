@@ -62,7 +62,7 @@ pub async fn map(
     body: Result<Json<MapRequest>, JsonRejection>,
 ) -> Result<Json<MappedDto>, ApiError> {
     let library = state.unlocked()?;
-    let Json(request) = body.map_err(|rejection| ApiError::unreadable_json(&rejection))?;
+    let Json(request) = body.map_err(ApiError::unreadable_json)?;
     let local_root = absolute(&request.local_root)?;
 
     let recorded = library

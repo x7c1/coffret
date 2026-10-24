@@ -1,4 +1,4 @@
-use coffret_device::{EntryPath, ModelError, PathDefect, Redacted};
+use coffret_device::{EntryPath, ModelError, PathDefect};
 use serde::Deserialize;
 
 use crate::api_error::ApiError;
@@ -74,6 +74,6 @@ pub(crate) fn shaped(text: &str) -> Result<EntryPath, ApiError> {
         // It goes where every failure this crate has no reading for goes: what
         // was said reaches the log, and the caller is told only that the server
         // could not answer.
-        other => ApiError::server(other.redacted()),
+        other => ApiError::server(other),
     })
 }

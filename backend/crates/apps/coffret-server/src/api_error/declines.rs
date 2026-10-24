@@ -1,6 +1,6 @@
 //! A fetch's verdict on one Entry it did not place (spec: EP-11).
 
-use coffret_device::{FetchError, Redacted, Surfaced};
+use coffret_device::{FetchError, Surfaced};
 
 use super::ApiError;
 
@@ -59,7 +59,7 @@ impl ApiError {
     }
 
     pub(super) fn declined_as(reason: &'static str, message: &str, cause: FetchError) -> Self {
-        Self::declined_because(reason, None, message).caused_by(cause.redacted())
+        Self::declined_because(reason, None, message).caused_by(cause)
     }
 }
 

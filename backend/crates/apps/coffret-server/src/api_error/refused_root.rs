@@ -36,9 +36,11 @@ impl ApiError {
     /// met it. Composing the line here instead would be a second spelling of a
     /// rendering those types already own, and every one of them would be filed
     /// under whichever layer this function happened to name.
-    pub(crate) fn refused_root(prefix: Option<&EntryPath>, cause: &impl Redacted) -> Self {
-        Self::refused_placement("refused_root", refused_root_said(prefix))
-            .caused_by(cause.redacted())
+    pub(crate) fn refused_root(
+        prefix: Option<&EntryPath>,
+        cause: impl Redacted + Send + Sync + 'static,
+    ) -> Self {
+        Self::refused_placement("refused_root", refused_root_said(prefix)).caused_by(cause)
     }
 }
 

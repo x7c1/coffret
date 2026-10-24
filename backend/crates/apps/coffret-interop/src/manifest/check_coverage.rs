@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use crate::{Error, FixtureKind, Result};
 
 use super::{
     Manifest, REQUIRED_CONTAINERS, REQUIRED_CONTROL_OBJECTS, REQUIRED_KEY_ENVELOPES,
@@ -15,35 +15,35 @@ impl Manifest {
     pub fn check_coverage(&self) -> Result<()> {
         check_schema(self.schema)?;
         require(
-            "container",
+            FixtureKind::Container,
             &REQUIRED_CONTAINERS,
             self.containers
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
         )?;
         require(
-            "control object",
+            FixtureKind::ControlObject,
             &REQUIRED_CONTROL_OBJECTS,
             self.control_objects
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
         )?;
         require(
-            "Key Envelope",
+            FixtureKind::KeyEnvelope,
             &REQUIRED_KEY_ENVELOPES,
             self.key_envelopes
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
         )?;
         require(
-            "stored Master Key",
+            FixtureKind::StoredMasterKey,
             &REQUIRED_STORED_MASTER_KEYS,
             self.stored_master_keys
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
         )?;
         require(
-            "Recovery Code",
+            FixtureKind::RecoveryCode,
             &REQUIRED_RECOVERY_CODES,
             self.recovery_codes
                 .iter()
@@ -55,20 +55,20 @@ impl Manifest {
 /// A reader accepts the schema it knows and nothing else.
 fn check_schema(schema: u64) -> Result<()> {
     if schema != SCHEMA {
-        bail!("manifest schema {schema} is not the schema {SCHEMA} this build reads");
+        return Err(Error::UnknownSchema { found: schema });
     }
     Ok(())
 }
 
 fn require<'a>(
-    what: &str,
-    required: &[&str],
+    kind: FixtureKind,
+    required: &[&'static str],
     present: impl Iterator<Item = &'a str>,
 ) -> Result<()> {
     let present: Vec<&str> = present.collect();
-    for name in required {
-        if !present.contains(name) {
-            bail!("the manifest lists no {what} fixture {name:?}");
+    for &name in required {
+        if !present.contains(&name) {
+            return Err(Error::FixtureUnlisted { kind, name });
         }
     }
     Ok(())
@@ -179,8 +179,14 @@ mod tests {
             .check_coverage()
             .expect_err("the Keyring replica is missing");
         assert!(
-            format!("{error:#}").contains("keyring-replica"),
-            "{error:#}"
+            matches!(
+                error,
+                Error::FixtureUnlisted {
+                    kind: FixtureKind::ControlObject,
+                    name: "keyring-replica",
+                }
+            ),
+            "{error:?}"
         );
     }
 
@@ -188,6 +194,12 @@ mod tests {
     fn a_manifest_of_another_schema_is_rejected() {
         let mut manifest = manifest();
         manifest.schema = SCHEMA + 1;
-        assert!(manifest.check_coverage().is_err());
+        let error = manifest
+            .check_coverage()
+            .expect_err("another schema is refused");
+        assert!(
+            matches!(error, Error::UnknownSchema { found } if found == SCHEMA + 1),
+            "{error:?}"
+        );
     }
 }

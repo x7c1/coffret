@@ -13,9 +13,8 @@
 use std::fmt::Debug;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
-
 use crate::fixture_set::FixtureReader;
+use crate::{Error, FixtureKind, Result};
 
 mod check_container;
 use check_container::check_container;
@@ -42,7 +41,10 @@ use check_stored_master_key::check_stored_master_key;
 pub fn verify(input: &Path) -> Result<()> {
     let reader = FixtureReader::open(input)?;
     let producer = reader.manifest().producer.clone();
-    check_fixtures(&reader).with_context(|| format!("in the fixture set {producer:?} wrote"))
+    check_fixtures(&reader).map_err(|cause| Error::InSet {
+        producer,
+        cause: Box::new(cause),
+    })
 }
 
 fn check_fixtures(reader: &FixtureReader) -> Result<()> {
@@ -51,23 +53,23 @@ fn check_fixtures(reader: &FixtureReader) -> Result<()> {
 
     for fixture in &manifest.containers {
         check_container(reader, fixture)
-            .with_context(|| format!("Container fixture {:?}", fixture.fixture))?;
+            .map_err(|cause| cause.in_fixture(FixtureKind::Container, &fixture.fixture))?;
     }
     for fixture in &manifest.control_objects {
         check_control_object(reader, &master_key, fixture)
-            .with_context(|| format!("control-object fixture {:?}", fixture.fixture))?;
+            .map_err(|cause| cause.in_fixture(FixtureKind::ControlObject, &fixture.fixture))?;
     }
     for fixture in &manifest.key_envelopes {
         check_key_envelope(reader, &master_key, fixture)
-            .with_context(|| format!("Key Envelope fixture {:?}", fixture.fixture))?;
+            .map_err(|cause| cause.in_fixture(FixtureKind::KeyEnvelope, &fixture.fixture))?;
     }
     for fixture in &manifest.stored_master_keys {
         check_stored_master_key(reader, &manifest.passphrase(), fixture)
-            .with_context(|| format!("stored Master Key fixture {:?}", fixture.fixture))?;
+            .map_err(|cause| cause.in_fixture(FixtureKind::StoredMasterKey, &fixture.fixture))?;
     }
     for fixture in &manifest.recovery_codes {
         check_recovery_code(reader, fixture)
-            .with_context(|| format!("Recovery Code fixture {:?}", fixture.fixture))?;
+            .map_err(|cause| cause.in_fixture(FixtureKind::RecoveryCode, &fixture.fixture))?;
     }
     Ok(())
 }
@@ -75,7 +77,11 @@ fn check_fixtures(reader: &FixtureReader) -> Result<()> {
 /// Reports a decoded value that is not the one the manifest states.
 fn same<T: PartialEq + Debug>(field: &str, decoded: &T, stated: &T) -> Result<()> {
     if decoded != stated {
-        bail!("{field}: decoded {decoded:?}, the manifest states {stated:?}");
+        return Err(Error::Differs {
+            field: field.to_owned(),
+            decoded: format!("{decoded:?}"),
+            stated: format!("{stated:?}"),
+        });
     }
     Ok(())
 }

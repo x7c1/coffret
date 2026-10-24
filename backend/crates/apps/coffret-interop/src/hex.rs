@@ -3,7 +3,7 @@
 //! Lowercase only, as every hex spelling in coffret is: two spellings of one
 //! value would be two manifests describing one fixture set.
 
-use anyhow::{bail, Result};
+use crate::HexDefect;
 
 const DIGITS: &[u8; 16] = b"0123456789abcdef";
 
@@ -18,13 +18,10 @@ pub fn encode(bytes: &[u8]) -> String {
 }
 
 /// Reads a lowercase hex string of any even length.
-pub fn decode(hex: &str) -> Result<Vec<u8>> {
+pub fn decode(hex: &str) -> Result<Vec<u8>, HexDefect> {
     let (pairs, remainder) = hex.as_bytes().as_chunks::<2>();
     if !remainder.is_empty() {
-        bail!(
-            "expected an even number of hex characters, found {}",
-            hex.len()
-        );
+        return Err(HexDefect::OddLength { len: hex.len() });
     }
     pairs
         .iter()
@@ -33,22 +30,21 @@ pub fn decode(hex: &str) -> Result<Vec<u8>> {
 }
 
 /// Reads a lowercase hex string that must spell exactly `N` bytes.
-pub fn decode_array<const N: usize>(hex: &str) -> Result<[u8; N]> {
+pub fn decode_array<const N: usize>(hex: &str) -> Result<[u8; N], HexDefect> {
     let bytes = decode(hex)?;
-    let len = bytes.len();
+    let found = bytes.len();
     bytes
         .try_into()
-        .map_err(|_| anyhow::anyhow!("expected {N} bytes, found {len}"))
+        .map_err(|_| HexDefect::WrongLength { expected: N, found })
 }
 
-fn digit(byte: u8) -> Result<u8> {
+fn digit(byte: u8) -> Result<u8, HexDefect> {
     match byte {
         b'0'..=b'9' => Ok(byte - b'0'),
         b'a'..=b'f' => Ok(byte - b'a' + 10),
-        _ => bail!(
-            "expected a lowercase hex character, found {:?}",
-            char::from(byte)
-        ),
+        _ => Err(HexDefect::NotADigit {
+            found: char::from(byte),
+        }),
     }
 }
 
@@ -64,17 +60,29 @@ mod tests {
 
     #[test]
     fn uppercase_is_rejected() {
-        assert!(decode("00FF").is_err());
+        assert!(matches!(
+            decode("00FF"),
+            Err(HexDefect::NotADigit { found: 'F' })
+        ));
     }
 
     #[test]
     fn an_odd_length_is_rejected() {
-        assert!(decode("abc").is_err());
+        assert!(matches!(
+            decode("abc"),
+            Err(HexDefect::OddLength { len: 3 })
+        ));
     }
 
     #[test]
     fn a_fixed_width_value_of_the_wrong_length_is_rejected() {
-        assert!(decode_array::<2>("aabbcc").is_err());
+        assert!(matches!(
+            decode_array::<2>("aabbcc"),
+            Err(HexDefect::WrongLength {
+                expected: 2,
+                found: 3
+            })
+        ));
         assert_eq!(decode_array::<2>("aabb").unwrap(), [0xaa, 0xbb]);
     }
 }

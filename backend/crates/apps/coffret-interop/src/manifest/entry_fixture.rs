@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
 use coffret_model::DerivedFrom;
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 
 use super::DerivedFromFixture;
 
@@ -33,7 +32,7 @@ pub struct EntryFixture {
 impl EntryFixture {
     /// The Entry's plaintext.
     pub fn content(&self) -> Result<Vec<u8>> {
-        hex::decode(&self.content).context("content")
+        hex::decode(&self.content).map_err(Error::stated_hex("content"))
     }
 
     /// The parent this Entry was derived from, if the fixture states one.

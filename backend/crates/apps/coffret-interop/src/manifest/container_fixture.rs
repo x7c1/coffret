@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
 use coffret_model::{ContainerId, ContainerKey};
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 
 use super::{EntryFixture, WireContainerKind};
 
@@ -31,14 +30,14 @@ impl ContainerFixture {
     /// The Container ID this fixture states.
     pub fn container_id(&self) -> Result<ContainerId> {
         Ok(ContainerId::from_bytes(
-            hex::decode_array(&self.container_id).context("container_id")?,
+            hex::decode_array(&self.container_id).map_err(Error::stated_hex("container_id"))?,
         ))
     }
 
     /// The Container Key this fixture states.
     pub fn container_key(&self) -> Result<ContainerKey> {
         Ok(ContainerKey::from_bytes(
-            hex::decode_array(&self.container_key).context("container_key")?,
+            hex::decode_array(&self.container_key).map_err(Error::stated_hex("container_key"))?,
         ))
     }
 }

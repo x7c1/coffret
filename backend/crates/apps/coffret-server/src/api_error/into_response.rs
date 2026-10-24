@@ -24,7 +24,8 @@ impl ApiError {
     /// The whole chain, redacted: what each layer reported, down to the format
     /// crate's or the provider's own answer, as identities and log-safe facts
     /// rather than as messages. Nothing here is left to render unsafely:
-    /// `cause` is already that rendering and never the failure itself (see
+    /// `cause` is the failure held as a `dyn Redacted`, whose one reachable
+    /// rendering is that one, made here and nowhere earlier (see
     /// [`redact`](super::redact)).
     ///
     /// A method rather than a line inside the response, because there are two
@@ -40,7 +41,7 @@ impl ApiError {
             operation,
             status = self.status.as_u16(),
             kind = self.kind,
-            error = cause.as_str(),
+            error = cause.redacted().as_str(),
             "something was refused",
         );
     }

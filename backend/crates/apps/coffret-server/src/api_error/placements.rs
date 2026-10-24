@@ -28,14 +28,14 @@ impl ApiError {
     /// [`refused_root`](Self::refused_root) does not: the log carries the
     /// refusal's redacted rendering, and the folder is the one the request
     /// was aimed at.
-    pub(crate) fn no_file_lock(cause: &impl Redacted) -> Self {
+    pub(crate) fn no_file_lock(cause: impl Redacted + Send + Sync + 'static) -> Self {
         Self::refused_placement(
             "no_file_lock",
             "the mapped folder could not be locked — its filesystem provides no file lock, so \
              nothing was written into it, and a mapped folder has to be on a local disk"
                 .to_owned(),
         )
-        .caused_by(cause.redacted())
+        .caused_by(cause)
     }
 
     /// A file would replace an Entry whose Container is a Pack (spec: PK-15).

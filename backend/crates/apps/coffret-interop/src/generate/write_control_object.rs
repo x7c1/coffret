@@ -1,4 +1,3 @@
-use anyhow::{bail, Context, Result};
 use coffret_format::{
     encode_control_object, ControlEncodeRequest, ControlPayload, Purpose, PurposeKey,
 };
@@ -6,6 +5,7 @@ use coffret_model::{ControlObjectKind, ControlObjectName, MasterKey, MasterKeyEp
 
 use crate::fixture_set::{FixtureWriter, OBJECTS_DIR};
 use crate::manifest::{BodyField, ControlObjectFixture, WireControlObjectKind};
+use crate::{Error, FixtureKind, Result, Step};
 
 use super::EPOCH;
 
@@ -26,15 +26,22 @@ pub(super) fn write_control_object(
     body: Vec<BodyField>,
 ) -> Result<ControlObjectFixture> {
     let key = PurposeKey::derive(master_key, Purpose::of_control_object(kind));
-    let epoch = MasterKeyEpoch::new(EPOCH)?;
+    let epoch = MasterKeyEpoch::new(EPOCH).map_err(Error::model(Step::StatingGeneratorValue))?;
     if payload.master_key_epoch != epoch {
-        bail!(
-            "the {fixture:?} payload names epoch {}, the set is written under {epoch:?}",
-            payload.master_key_epoch.get()
-        );
+        return Err(Error::EpochDiffers {
+            payload: payload.master_key_epoch.get(),
+            set: epoch.get(),
+        }
+        .in_fixture(FixtureKind::ControlObject, fixture));
     }
     let encoded = encode_control_object(&ControlEncodeRequest::new(name, kind, &key, payload))
-        .with_context(|| format!("encoding the {fixture:?} control object"))?;
+        .map_err(|cause| {
+            Error::Format {
+                step: Step::EncodingControlObject,
+                cause,
+            }
+            .in_fixture(FixtureKind::ControlObject, fixture)
+        })?;
 
     let file = writer.write(OBJECTS_DIR, encoded.object_name(), encoded.bytes())?;
     Ok(ControlObjectFixture {

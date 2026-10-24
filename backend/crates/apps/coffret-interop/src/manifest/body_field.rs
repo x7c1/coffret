@@ -1,5 +1,3 @@
-use anyhow::{Context, Result};
-use ciborium::Value;
 use serde::{Deserialize, Serialize};
 
 use crate::hex;
@@ -89,13 +87,6 @@ impl BodyField {
             key: key.to_owned(),
             value: BodyValue::Map { value },
         }
-    }
-
-    /// This field's value as the CBOR item a payload map carries.
-    pub(super) fn to_cbor(&self) -> Result<Value> {
-        self.value
-            .to_cbor()
-            .with_context(|| format!("field {:?}", self.key))
     }
 }
 

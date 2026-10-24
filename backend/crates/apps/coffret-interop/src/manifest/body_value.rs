@@ -1,8 +1,7 @@
-use anyhow::Result;
 use ciborium::Value;
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, HexDefect};
 
 use super::BodyField;
 
@@ -59,8 +58,9 @@ pub enum BodyValue {
 }
 
 impl BodyValue {
-    /// This value as the CBOR item a payload carries.
-    pub(super) fn to_cbor(&self) -> Result<Value> {
+    /// This value as the CBOR item a payload carries, or what is wrong with
+    /// a byte string's hex spelling in it.
+    pub(super) fn to_cbor(&self) -> Result<Value, HexDefect> {
         Ok(match self {
             Self::Uint { value } => Value::from(*value),
             Self::Int { value } => Value::from(*value),
@@ -71,13 +71,13 @@ impl BodyValue {
                 value
                     .iter()
                     .map(Self::to_cbor)
-                    .collect::<Result<Vec<_>>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
             Self::Map { value } => Value::Map(
                 value
                     .iter()
-                    .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
-                    .collect::<Result<Vec<_>>>()?,
+                    .map(|field| Ok((Value::Text(field.key.clone()), field.value.to_cbor()?)))
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
         })
     }

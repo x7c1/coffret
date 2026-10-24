@@ -1,9 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
-
 use crate::manifest::{Manifest, MANIFEST_FILE};
+use crate::{Error, Result};
 
 /// A fixture set being read.
 pub struct FixtureReader {
@@ -15,10 +14,9 @@ impl FixtureReader {
     /// Opens a set and reads its manifest, insisting on full coverage first.
     pub fn open(root: &Path) -> Result<Self> {
         let path = root.join(MANIFEST_FILE);
-        let json =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let json = fs::read_to_string(&path).map_err(Error::read(&path))?;
         let manifest: Manifest =
-            serde_json::from_str(&json).with_context(|| format!("parsing {}", path.display()))?;
+            serde_json::from_str(&json).map_err(|cause| Error::ManifestUnparsed { path, cause })?;
         manifest.check_coverage()?;
         Ok(Self {
             root: root.to_path_buf(),
@@ -39,11 +37,13 @@ impl FixtureReader {
         let mut path = self.root.clone();
         for segment in relative.split('/') {
             if segment.is_empty() || segment == "." || segment == ".." {
-                bail!("{relative:?} is not a path inside the fixture set");
+                return Err(Error::OutsideSet {
+                    relative: relative.to_owned(),
+                });
             }
             path.push(segment);
         }
-        fs::read(&path).with_context(|| format!("reading {}", path.display()))
+        fs::read(&path).map_err(Error::read(path))
     }
 }
 
@@ -65,6 +65,12 @@ mod tests {
             )
             .expect("the manifest parses"),
         };
-        assert!(reader.read("../secrets").is_err());
+        let refused = reader
+            .read("../secrets")
+            .expect_err("the path leaves the set");
+        assert!(
+            matches!(&refused, Error::OutsideSet { relative } if relative == "../secrets"),
+            "{refused:?}"
+        );
     }
 }

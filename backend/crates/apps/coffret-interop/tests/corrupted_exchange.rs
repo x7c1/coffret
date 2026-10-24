@@ -10,6 +10,7 @@ use std::fs;
 use std::path::Path;
 
 use coffret_interop::manifest::{Manifest, MANIFEST_FILE};
+use coffret_interop::{Error, FixtureKind, Step};
 
 /// The fixture whose bytes each case edits.
 const FIXTURE: &str = "multi-entry";
@@ -35,11 +36,20 @@ fn a_flipped_ciphertext_byte_fails_and_names_the_fixture() {
     fs::write(&path, &bytes).expect("the fixture is writable");
 
     let error = coffret_interop::verify(directory.path()).expect_err("the fixture is corrupted");
-    let report = format!("{error:#}");
+    let report = report(&error);
     // Both directions of the exchange are verified by this same code, so the
-    // report has to say which side wrote the set it stopped on.
-    assert!(report.contains(r#""rust""#), "{report}");
-    assert!(report.contains(FIXTURE), "{report}");
+    // failure has to say which side wrote the set it stopped on.
+    let failure = in_fixture(error, "rust", FixtureKind::Container, FIXTURE);
+    assert!(
+        matches!(
+            failure,
+            Error::Format {
+                step: Step::OpeningContainer,
+                ..
+            }
+        ),
+        "{report}"
+    );
     assert!(report.contains("authentication"), "{report}");
 }
 
@@ -66,9 +76,15 @@ fn an_edited_expectation_fails_and_names_the_field() {
     .expect("the manifest is writable");
 
     let error = coffret_interop::verify(directory.path()).expect_err("the manifest disagrees");
-    let report = format!("{error:#}");
-    assert!(report.contains(FIXTURE), "{report}");
-    assert!(report.contains("path"), "{report}");
+    let report = report(&error);
+    let failure = in_fixture(error, "rust", FixtureKind::Container, FIXTURE);
+    let Error::InEntry { index: 0, cause } = failure else {
+        panic!("the first Entry is the one edited: {report}");
+    };
+    assert!(
+        matches!(&*cause, Error::Differs { field, .. } if field == "path"),
+        "{report}"
+    );
 }
 
 #[test]
@@ -91,8 +107,8 @@ fn a_mistyped_recovery_code_fails_and_names_the_fixture() {
     fs::write(&path, mistyped).expect("the code is writable");
 
     let error = coffret_interop::verify(directory.path()).expect_err("the code is mistyped");
-    let report = format!("{error:#}");
-    assert!(report.contains("recovery-code"), "{report}");
+    let report = report(&error);
+    assert_parsing_refused(error, &report);
     assert!(report.contains("checksum"), "{report}");
 }
 
@@ -113,8 +129,8 @@ fn a_code_that_does_not_divide_fails_naming_the_check_and_the_fixture() {
         fs::write(recovery_code_path(directory.path()), code).expect("the code is writable");
 
         let error = coffret_interop::verify(directory.path()).expect_err("the code is malformed");
-        let report = format!("{error:#}");
-        assert!(report.contains("recovery-code"), "{code:?}: {report}");
+        let report = report(&error);
+        assert_parsing_refused(error, &report);
         assert!(report.contains(expected), "{code:?}: {report}");
     }
 }
@@ -133,8 +149,8 @@ fn a_code_pasted_twice_fails_the_checksum_without_quoting_itself() {
     fs::write(&path, format!("{code}{code}")).expect("the code is writable");
 
     let error = coffret_interop::verify(directory.path()).expect_err("the code is doubled");
-    let report = format!("{error:#}");
-    assert!(report.contains("recovery-code"), "{report}");
+    let report = report(&error);
+    assert_parsing_refused(error, &report);
     assert!(report.contains("checksum"), "{report}");
     assert!(!report.contains(&code["coffret1".len()..]), "{report}");
 }
@@ -156,7 +172,62 @@ fn a_set_missing_a_fixture_fails_before_anything_is_opened() {
     .expect("the manifest is writable");
 
     let error = coffret_interop::verify(directory.path()).expect_err("a kind is missing");
-    assert!(format!("{error:#}").contains("index-snapshot"), "{error:#}");
+    assert!(
+        matches!(
+            error,
+            Error::FixtureUnlisted {
+                kind: FixtureKind::ControlObject,
+                name: "index-snapshot",
+            }
+        ),
+        "{error:?}"
+    );
+}
+
+/// The whole chain, link by link: what the format crate itself answered is the
+/// innermost link, and its words are what both readers are held to.
+fn report(error: &Error) -> String {
+    error.chain().join(": ")
+}
+
+/// The failure met in the fixture `fixture` of the set `producer` wrote,
+/// insisting that is where the run stopped.
+fn in_fixture(error: Error, producer: &str, kind: FixtureKind, fixture: &str) -> Error {
+    let report = report(&error);
+    let Error::InSet {
+        producer: wrote,
+        cause,
+    } = error
+    else {
+        panic!("the failure names the set it was met in: {report}");
+    };
+    assert_eq!(wrote, producer, "{report}");
+    let Error::InFixture {
+        kind: met_in,
+        fixture: name,
+        cause,
+    } = *cause
+    else {
+        panic!("the failure names the fixture it was met at: {report}");
+    };
+    assert_eq!((met_in, name.as_str()), (kind, fixture), "{report}");
+    *cause
+}
+
+/// Insists the run stopped on the format crate refusing the bare Recovery
+/// Code this side wrote.
+fn assert_parsing_refused(error: Error, report: &str) {
+    let failure = in_fixture(error, "rust", FixtureKind::RecoveryCode, "recovery-code");
+    assert!(
+        matches!(
+            failure,
+            Error::Format {
+                step: Step::ParsingRecoveryCode,
+                ..
+            }
+        ),
+        "{report}"
+    );
 }
 
 fn read_manifest(path: &Path) -> Manifest {

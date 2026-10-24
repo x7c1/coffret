@@ -6,8 +6,8 @@
 //! exchange.
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
-use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -50,8 +50,27 @@ enum Command {
     },
 }
 
-fn main() -> Result<()> {
-    match Args::parse().command {
+/// Runs the step asked for, and on a failure prints the whole chain of causes
+/// — the fixture, the field and the lower layer's own answer — and exits
+/// non-zero.
+fn main() -> ExitCode {
+    match run(Args::parse().command) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let mut links = error.chain().into_iter();
+            if let Some(first) = links.next() {
+                eprintln!("Error: {first}");
+            }
+            for link in links {
+                eprintln!("  caused by: {link}");
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(command: Command) -> coffret_interop::Result<()> {
+    match command {
         Command::Generate { out } => coffret_interop::generate(&out),
         Command::Verify { input } => coffret_interop::verify(&input),
         Command::Dump {

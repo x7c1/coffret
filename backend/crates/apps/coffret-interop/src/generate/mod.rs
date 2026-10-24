@@ -23,7 +23,6 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
 use coffret_format::{
     encode_index_snapshot, encode_journal_record, encode_keyring, generate_master_key, ChunkSize,
 };
@@ -32,10 +31,10 @@ use coffret_model::{
 };
 
 use crate::fixture_set::FixtureWriter;
-use crate::hex;
 use crate::manifest::{
     index_snapshot_fields, journal_record_fields, keyring_fields, Manifest, SCHEMA,
 };
+use crate::{hex, Error, FixtureKind, Result, Step};
 
 mod entry_paths;
 use entry_paths::entry_path;
@@ -92,7 +91,7 @@ const SMALL_CHUNK_SIZE: u32 = 64;
 /// Writes a complete fixture set into `out`.
 pub fn generate(out: &Path) -> Result<()> {
     let writer = FixtureWriter::create(out)?;
-    let master_key = generate_master_key().context("drawing the Master Key")?;
+    let master_key = generate_master_key().map_err(Error::format(Step::DrawingMasterKey))?;
 
     let one_file = write_container(
         &writer,
@@ -118,7 +117,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &writer,
         "multi-entry",
         ContainerKind::Pack,
-        ChunkSize::new(SMALL_CHUNK_SIZE)?,
+        ChunkSize::new(SMALL_CHUNK_SIZE).map_err(Error::format(Step::StatingGeneratorValue))?,
         &[
             EntryPlan::new("album/2019/party.jpg", 1_500_000_000, filler(100, 0x37))
                 .mime("image/jpeg"),
@@ -176,7 +175,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &master_key,
         &ControlObjectName::head(generation(JOURNAL_GENERATION)),
         ControlObjectKind::Journal,
-        &encode_journal_record(&record)?,
+        &payload("journal", encode_journal_record(&record))?,
         journal_record_fields(&record),
     )?;
     // The other kind the same name form admits: the Index Snapshot that
@@ -192,7 +191,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &master_key,
         &ControlObjectName::head(generation(ACTIVATION_GENERATION)),
         ControlObjectKind::ActivationSnapshot,
-        &encode_index_snapshot(&activating)?,
+        &payload("activation-snapshot", encode_index_snapshot(&activating))?,
         index_snapshot_fields(&activating),
     )?;
     // A replica that is not the only one of its set: the replica position rides
@@ -208,10 +207,17 @@ pub fn generate(out: &Path) -> Result<()> {
         &ControlObjectName::keyring_replica(
             generation(KEYRING_REPLICA_GENERATION),
             &set_digest(),
-            ReplicaPosition::new(1, 3)?,
-        )?,
+            ReplicaPosition::new(1, 3).map_err(Error::model(Step::StatingGeneratorValue))?,
+        )
+        .map_err(Error::model(Step::StatingGeneratorValue))?,
         ControlObjectKind::Keyring,
-        &encode_keyring(&key_table, MasterKeyEpoch::new(EPOCH)?)?,
+        &payload(
+            "keyring-replica",
+            encode_keyring(
+                &key_table,
+                MasterKeyEpoch::new(EPOCH).map_err(Error::model(Step::StatingGeneratorValue))?,
+            ),
+        )?,
         keyring_fields(&key_table),
     )?;
     // The ordinary checkpoint of one head, carrying the whole Library's Index
@@ -226,7 +232,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &master_key,
         &ControlObjectName::index_snapshot(generation(SNAPSHOT_GENERATION)),
         ControlObjectKind::IndexSnapshot,
-        &encode_index_snapshot(&ordinary)?,
+        &payload("index-snapshot", encode_index_snapshot(&ordinary))?,
         index_snapshot_fields(&ordinary),
     )?;
 
@@ -248,6 +254,18 @@ pub fn generate(out: &Path) -> Result<()> {
         key_envelopes: vec![key_envelope],
         stored_master_keys: vec![stored_master_key],
         recovery_codes,
+    })
+}
+
+/// A control payload the format crate encoded for the fixture `fixture`, or
+/// its refusal reported as met writing that fixture.
+fn payload<T>(fixture: &str, encoded: coffret_format::Result<T>) -> Result<T> {
+    encoded.map_err(|cause| {
+        Error::Format {
+            step: Step::EncodingPayload,
+            cause,
+        }
+        .in_fixture(FixtureKind::ControlObject, fixture)
     })
 }
 

@@ -1,9 +1,10 @@
 //! Checking a control object's payload body against the fields a manifest
 //! states.
 
-use anyhow::{bail, Context, Result};
 use ciborium::Value;
 use coffret_format::field_numbers::{named_view, MapFields};
+
+use crate::{Error, Result};
 
 use super::{BodyField, BodyValue};
 
@@ -26,7 +27,7 @@ use super::{BodyField, BodyValue};
 /// below fails on it.
 pub fn check_cbor_map(bytes: &[u8], expected: &[BodyField], kind: &MapFields) -> Result<()> {
     let value: Value =
-        ciborium::from_reader(bytes).context("the payload body is not readable CBOR")?;
+        ciborium::from_reader(bytes).map_err(|cause| Error::BodyUnreadable { cause })?;
     check_named_map(&named_view(value, kind), expected)
 }
 
@@ -37,21 +38,26 @@ fn check_named_map(found: &Value, expected: &[BodyField]) -> Result<()> {
 
 fn check_map(found: &Value, expected: &[BodyField], what: &str) -> Result<()> {
     let Value::Map(entries) = found else {
-        bail!("{what} is not a CBOR map");
+        return Err(Error::NotAMap {
+            what: what.to_owned(),
+        });
     };
     if entries.len() != expected.len() {
-        bail!(
-            "{what} carries {} fields, the manifest states {}",
-            entries.len(),
-            expected.len()
-        );
+        return Err(Error::FieldCount {
+            what: what.to_owned(),
+            found: entries.len(),
+            stated: expected.len(),
+        });
     }
     for field in expected {
         let found = entries
             .iter()
             .find(|(key, _)| key.as_text() == Some(field.key.as_str()))
             .map(|(_, value)| value)
-            .with_context(|| format!("{what} carries no field {:?}", field.key))?;
+            .ok_or_else(|| Error::NoField {
+                what: what.to_owned(),
+                key: field.key.clone(),
+            })?;
         check_value(
             found,
             &field.value,
@@ -65,14 +71,16 @@ fn check_value(found: &Value, expected: &BodyValue, what: &str) -> Result<()> {
     match expected {
         BodyValue::Array { value } => {
             let Value::Array(items) = found else {
-                bail!("{what} is not an array");
+                return Err(Error::NotAnArray {
+                    what: what.to_owned(),
+                });
             };
             if items.len() != value.len() {
-                bail!(
-                    "{what} holds {} elements, the manifest states {}",
-                    items.len(),
-                    value.len()
-                );
+                return Err(Error::ElementCount {
+                    what: what.to_owned(),
+                    found: items.len(),
+                    stated: value.len(),
+                });
             }
             for (index, (item, expected)) in items.iter().zip(value).enumerate() {
                 check_value(item, expected, &format!("{what}[{index}]"))?;
@@ -81,9 +89,13 @@ fn check_value(found: &Value, expected: &BodyValue, what: &str) -> Result<()> {
         }
         BodyValue::Map { value } => check_map(found, value, what),
         scalar => {
-            let wanted = scalar.to_cbor()?;
+            let wanted = scalar.to_cbor().map_err(Error::stated_hex(what))?;
             if *found != wanted {
-                bail!("{what} decoded to {found:?}, the manifest states {wanted:?}");
+                return Err(Error::Differs {
+                    field: what.to_owned(),
+                    decoded: format!("{found:?}"),
+                    stated: format!("{wanted:?}"),
+                });
             }
             Ok(())
         }
@@ -99,28 +111,30 @@ mod tests {
     /// The generator never takes this direction — every fixture's body is what
     /// `coffret-format`'s own encoder wrote — so it exists to put a body of a
     /// known shape in front of [`check_cbor_map`] and nowhere else.
-    fn to_cbor_map(fields: &[BodyField]) -> Result<Vec<u8>> {
+    fn to_cbor_map(fields: &[BodyField]) -> Vec<u8> {
         let mut bytes = Vec::new();
-        ciborium::into_writer(&named_map(fields)?, &mut bytes)
-            .context("serializing a control-payload body")?;
-        Ok(bytes)
+        ciborium::into_writer(&named_map(fields), &mut bytes).expect("the body serializes");
+        bytes
     }
 
     /// The fields as a map keyed by their names, the shape the comparison
     /// reads once a body's keys have been named.
-    fn named_map(fields: &[BodyField]) -> Result<Value> {
-        Ok(Value::Map(
+    fn named_map(fields: &[BodyField]) -> Value {
+        Value::Map(
             fields
                 .iter()
-                .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
-                .collect::<Result<Vec<_>>>()?,
-        ))
+                .map(|field| {
+                    let value = field.value.to_cbor().expect("the case states real hex");
+                    (Value::Text(field.key.clone()), value)
+                })
+                .collect(),
+        )
     }
 
     /// What the comparison makes of bytes holding a map already keyed by
     /// name: the cases below are about the comparison, not the registry.
     fn check_named_bytes(bytes: &[u8], expected: &[BodyField]) -> Result<()> {
-        let value: Value = ciborium::from_reader(bytes).context("readable CBOR")?;
+        let value: Value = ciborium::from_reader(bytes).expect("readable CBOR");
         check_named_map(&value, expected)
     }
 
@@ -156,13 +170,13 @@ mod tests {
 
     #[test]
     fn a_body_the_manifest_describes_checks_out() {
-        let bytes = to_cbor_map(&fields()).expect("the fields serialize");
+        let bytes = to_cbor_map(&fields());
         check_named_bytes(&bytes, &fields()).expect("the body matches the manifest");
     }
 
     #[test]
     fn a_nested_body_the_manifest_describes_checks_out() {
-        let bytes = to_cbor_map(&nested()).expect("the fields serialize");
+        let bytes = to_cbor_map(&nested());
         check_named_bytes(&bytes, &nested()).expect("the body matches the manifest");
     }
 
@@ -172,7 +186,7 @@ mod tests {
     fn field_order_does_not_matter() {
         let mut reordered = fields();
         reordered.reverse();
-        let bytes = to_cbor_map(&reordered).expect("the fields serialize");
+        let bytes = to_cbor_map(&reordered);
         check_named_bytes(&bytes, &fields()).expect("the body matches the manifest");
     }
 
@@ -186,7 +200,7 @@ mod tests {
             panic!("an addition is a map");
         };
         value.reverse();
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         check_named_bytes(&bytes, &nested()).expect("the body matches the manifest");
     }
 
@@ -200,18 +214,25 @@ mod tests {
             panic!("additions is an array");
         };
         value.reverse();
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &nested()).expect_err("the order differs");
-        assert!(format!("{error:#}").contains("additions"), "{error:#}");
+        // The first addition the body holds is the one with fewer fields.
+        assert!(
+            matches!(&error, Error::FieldCount { what, .. } if what.contains("additions")),
+            "{error:?}"
+        );
     }
 
     #[test]
     fn a_missing_field_is_reported_by_name() {
         let mut written = fields();
         written[2] = BodyField::bytes("checksum", &[0xa1, 0xb2]);
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &fields()).expect_err("a field is missing");
-        assert!(format!("{error:#}").contains("digest"), "{error:#}");
+        assert!(
+            matches!(&error, Error::NoField { key, .. } if key == "digest"),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -224,9 +245,12 @@ mod tests {
             panic!("an addition is a map");
         };
         value[1] = BodyField::int("modified", -1);
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &nested()).expect_err("a field is missing");
-        assert!(format!("{error:#}").contains("mtime"), "{error:#}");
+        assert!(
+            matches!(&error, Error::NoField { key, .. } if key == "mtime"),
+            "{error:?}"
+        );
     }
 
     // A body that dropped a field is a body the writer and the reader disagree
@@ -235,18 +259,31 @@ mod tests {
     fn a_body_with_a_different_field_count_is_rejected() {
         let mut written = fields();
         written.pop();
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &fields()).expect_err("a field is missing");
-        assert!(format!("{error:#}").contains("2 fields"), "{error:#}");
+        assert!(
+            matches!(
+                error,
+                Error::FieldCount {
+                    found: 2,
+                    stated: 3,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
     }
 
     #[test]
     fn a_changed_value_is_reported_by_name() {
         let mut written = fields();
         written[0] = BodyField::uint("records", 3);
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &fields()).expect_err("a value differs");
-        assert!(format!("{error:#}").contains("records"), "{error:#}");
+        assert!(
+            matches!(&error, Error::Differs { field, .. } if field.contains("records")),
+            "{error:?}"
+        );
     }
 
     #[test]
@@ -256,9 +293,19 @@ mod tests {
             panic!("additions is an array");
         };
         value.pop();
-        let bytes = to_cbor_map(&written).expect("the fields serialize");
+        let bytes = to_cbor_map(&written);
         let error = check_named_bytes(&bytes, &nested()).expect_err("an element is missing");
-        assert!(format!("{error:#}").contains("1 element"), "{error:#}");
+        assert!(
+            matches!(
+                error,
+                Error::ElementCount {
+                    found: 1,
+                    stated: 2,
+                    ..
+                }
+            ),
+            "{error:?}"
+        );
     }
 
     // The registry is what turns a body's field numbers into the names a
@@ -298,13 +345,16 @@ mod tests {
     // its name does not match a manifest stating that field.
     #[test]
     fn a_field_under_a_text_key_does_not_match() {
-        let bytes = to_cbor_map(&[BodyField::uint("schema", 1)]).expect("the fields serialize");
+        let bytes = to_cbor_map(&[BodyField::uint("schema", 1)]);
         let error = check_cbor_map(
             &bytes,
             &[BodyField::uint("schema", 1)],
             &coffret_format::field_numbers::KEYRING,
         )
         .expect_err("a text key is not the field");
-        assert!(format!("{error:#}").contains("schema"), "{error:#}");
+        assert!(
+            matches!(&error, Error::NoField { key, .. } if key == "schema"),
+            "{error:?}"
+        );
     }
 }

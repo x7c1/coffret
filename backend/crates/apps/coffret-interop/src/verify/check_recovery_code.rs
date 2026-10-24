@@ -1,9 +1,8 @@
-use anyhow::{bail, Context, Result};
 use coffret_format::RecoveryCode;
 
 use crate::fixture_set::FixtureReader;
-use crate::hex;
 use crate::manifest::RecoveryCodeFixture;
+use crate::{hex, Error, Result, Step};
 
 use super::same;
 
@@ -12,11 +11,9 @@ pub(super) fn check_recovery_code(
     fixture: &RecoveryCodeFixture,
 ) -> Result<()> {
     let bytes = reader.read(&fixture.file)?;
-    let Ok(text) = std::str::from_utf8(&bytes) else {
-        bail!("a Recovery Code is text, and these bytes are not UTF-8");
-    };
+    let text = std::str::from_utf8(&bytes).map_err(|cause| Error::RecoveryCodeNotText { cause })?;
 
-    let code = RecoveryCode::parse(text).context("reading the code the other side wrote")?;
+    let code = RecoveryCode::parse(text).map_err(Error::format(Step::ParsingRecoveryCode))?;
     same(
         "master_key",
         &hex::encode(code.master_key().as_bytes()),

@@ -5,7 +5,7 @@
 use axum::http::StatusCode;
 use coffret_device::DropRefusal;
 
-use super::{ApiError, CONFLICT};
+use super::{redact, ApiError, CONFLICT};
 
 impl ApiError {
     /// The handle an import named holds no drop: it was never drawn, it was
@@ -19,7 +19,7 @@ impl ApiError {
             "bad_request",
             "that drop is no longer held — drop the files again".to_owned(),
         )
-        .caused_by(format!("DropRefusal::{refusal:?}"))
+        .caused_by(redact::NotHeld(refusal))
     }
 
     /// An import named a file by a position the drop holds none at

@@ -3,7 +3,6 @@
 
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
 use coffret_format::{
     decode_control_object, decode_keyring, unwrap_container_key, ContainerOutline, Header, Purpose,
     PurposeKey,
@@ -13,7 +12,7 @@ use coffret_model::{
 };
 use serde_json::json;
 
-use crate::hex;
+use crate::{hex, Error, Result, Step};
 
 /// The Container ID the object's plaintext header names, where the object is
 /// stored under that Container's own name (spec: FM-2, FM-3).
@@ -32,40 +31,36 @@ pub(super) fn container_key(
     master_key: &MasterKey,
     container_id: ContainerId,
 ) -> Result<ContainerKey> {
-    let replica = std::fs::read(keyring).context("reading the Keyring replica")?;
+    let replica = std::fs::read(keyring).map_err(Error::read(keyring))?;
     let name = keyring
         .file_name()
         .and_then(|name| name.to_str())
-        .context("the Keyring replica is saved under a name that is not Unicode")?;
+        .ok_or_else(|| Error::KeyringNameNotUnicode {
+            path: keyring.to_path_buf(),
+        })?;
     let key = PurposeKey::derive(
         master_key,
         Purpose::of_control_object(ControlObjectKind::Keyring),
     );
-    let opened = decode_control_object(&replica, name, &key).with_context(|| {
-        format!("opening the Keyring replica; it has to be saved under its own object name, not {name:?}")
-    })?;
-    let key_table = decode_keyring(&opened.payload).context("reading the Keyring")?;
+    let opened =
+        decode_control_object(&replica, name, &key).map_err(|cause| Error::KeyringUnopened {
+            name: name.to_owned(),
+            cause,
+        })?;
+    let key_table = decode_keyring(&opened.payload).map_err(Error::format(Step::ReadingKeyring))?;
     let element = key_table
         .elements()
         .iter()
         .find(|element| element.container_id == container_id)
-        .with_context(|| {
-            format!(
-                "the Keyring holds nothing for Container {}",
-                container_id.to_hex()
-            )
-        })?;
+        .ok_or(Error::NothingForContainer { container_id })?;
     match &element.key {
         ContainerKeyStatus::Envelope(envelope) => unwrap_container_key(
             &PurposeKey::derive(master_key, Purpose::ContainerWrap),
             &container_id,
             envelope,
         )
-        .context("unwrapping the Container Key"),
-        ContainerKeyStatus::KeyLost => bail!(
-            "the Keyring records the key of Container {} as lost",
-            container_id.to_hex()
-        ),
+        .map_err(Error::format(Step::UnwrappingContainerKey)),
+        ContainerKeyStatus::KeyLost => Err(Error::ContainerKeyLost { container_id }),
     }
 }
 
@@ -74,14 +69,18 @@ pub(super) fn container_key(
 pub(super) fn container(bytes: &[u8], key: &ContainerKey) -> Result<serde_json::Value> {
     let header = bytes
         .get(..Header::LEN)
-        .context("the object is shorter than a Container header")?;
-    let prefix_len =
-        ContainerOutline::prefix_len(header).context("reading the Container header")?;
+        .ok_or(Error::ShorterThanHeader { len: bytes.len() })?;
+    let prefix_len = ContainerOutline::prefix_len(header)
+        .map_err(Error::format(Step::ReadingContainerHeader))?;
     let prefix = usize::try_from(prefix_len)
         .ok()
         .and_then(|len| bytes.get(..len))
-        .context("the object is shorter than the meta section its header declares")?;
-    let outline = ContainerOutline::open(prefix, key).context("opening the meta section")?;
+        .ok_or(Error::ShorterThanMetaSection {
+            len: bytes.len(),
+            declared: prefix_len,
+        })?;
+    let outline =
+        ContainerOutline::open(prefix, key).map_err(Error::format(Step::OpeningMetaSection))?;
     Ok(json!({
         "container_id": outline.container_id().to_hex(),
         "kind": format!("{:?}", outline.kind()),

@@ -954,7 +954,7 @@ mod tests {
             assert_eq!(refusal.surfaced(), finding.surfaced, "{declined:?}");
         }
 
-        let refusal = ApiError::refused_root(None, &coffret_device::Error::NoStateDirectory);
+        let refusal = ApiError::refused_root(None, coffret_device::Error::NoStateDirectory);
         let finding = Finding::of(&coffret_device::Finding::RefusedRoot {
             prefix: None,
             local_root: PathBuf::from(LOCAL_ROOT),

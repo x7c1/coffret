@@ -1,4 +1,3 @@
-use anyhow::{bail, Context, Result};
 use coffret_format::{
     decode_control_object, decode_index_snapshot, decode_journal_record, decode_keyring,
     keyring_set_digest, DecodedControlObject, Purpose, PurposeKey,
@@ -7,6 +6,7 @@ use coffret_model::{ControlObjectKind, ControlObjectName, KeyTable, MasterKey};
 
 use crate::fixture_set::FixtureReader;
 use crate::manifest::{check_cbor_map, ControlObjectFixture};
+use crate::{Error, Result, Step};
 
 use super::same;
 
@@ -30,7 +30,7 @@ pub(super) fn check_control_object(
     // own and not something this side derives from the fields the manifest
     // states.
     let opened = decode_control_object(&bytes, &fixture.object_name, &key)
-        .context("opening the control object")?;
+        .map_err(Error::format(Step::OpeningControlObject))?;
 
     same("kind", &opened.kind, &kind)?;
     same("generation", &opened.generation, &fixture.generation()?)?;
@@ -44,9 +44,8 @@ pub(super) fn check_control_object(
         &opened.payload.body,
         &fixture.body,
         coffret_format::field_numbers::payload_map(kind),
-    )
-    .context("body")?;
-    check_payload_schema(&opened, &fixture.object_name).context("payload schema")
+    )?;
+    check_payload_schema(&opened, &fixture.object_name)
 }
 
 /// Reads the payload again through the schema its kind owns.
@@ -72,14 +71,15 @@ fn check_payload_schema(opened: &DecodedControlObject, object_name: &str) -> Res
     match opened.kind {
         ControlObjectKind::Journal => {
             decode_journal_record(&opened.payload, opened.generation)
-                .context("reading the Journal record")?;
+                .map_err(Error::format(Step::ReadingJournalRecord))?;
         }
         ControlObjectKind::IndexSnapshot | ControlObjectKind::ActivationSnapshot => {
             decode_index_snapshot(&opened.payload, opened.kind, opened.generation)
-                .context("reading the Index Snapshot")?;
+                .map_err(Error::format(Step::ReadingIndexSnapshot))?;
         }
         ControlObjectKind::Keyring => {
-            let key_table = decode_keyring(&opened.payload).context("reading the Keyring")?;
+            let key_table =
+                decode_keyring(&opened.payload).map_err(Error::format(Step::ReadingKeyring))?;
             check_set_digest(&key_table, object_name)?;
         }
     }
@@ -89,13 +89,13 @@ fn check_payload_schema(opened: &DecodedControlObject, object_name: &str) -> Res
 /// Holds the digest of a decoded key table against the one its name states.
 fn check_set_digest(key_table: &KeyTable, object_name: &str) -> Result<()> {
     let stated = ControlObjectName::parse(object_name)
-        .context("parsing the replica's name")?
+        .map_err(Error::model(Step::ParsingReplicaName))?
         .set_digest()
         .map(str::to_owned)
-        .context("a Keyring replica is stored under a name carrying a set_digest")?;
-    let computed = keyring_set_digest(key_table).context("digesting the key table")?;
+        .ok_or(Error::NoSetDigest)?;
+    let computed = keyring_set_digest(key_table).map_err(Error::format(Step::DigestingKeyTable))?;
     if computed != stated {
-        bail!("set_digest: the key table digests to {computed:?}, the name states {stated:?}");
+        return Err(Error::SetDigestDiffers { computed, stated });
     }
     Ok(())
 }

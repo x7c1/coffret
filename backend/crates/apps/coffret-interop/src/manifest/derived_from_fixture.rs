@@ -1,8 +1,7 @@
-use anyhow::{Context, Result};
 use coffret_model::{ContainerId, DerivedFrom, EntryPath};
 use serde::{Deserialize, Serialize};
 
-use crate::hex;
+use crate::{hex, Error, Result};
 
 /// The parent Entry a derived Entry points at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,9 +25,11 @@ impl DerivedFromFixture {
     pub(super) fn to_model(&self) -> Result<DerivedFrom> {
         Ok(DerivedFrom {
             container_id: ContainerId::from_bytes(
-                hex::decode_array(&self.container_id).context("derived_from.container_id")?,
+                hex::decode_array(&self.container_id)
+                    .map_err(Error::stated_hex("derived_from.container_id"))?,
             ),
-            path: EntryPath::stored(self.path.clone()).context("derived_from.path")?,
+            path: EntryPath::stored(self.path.clone())
+                .map_err(Error::stated("derived_from.path"))?,
         })
     }
 
