@@ -7,6 +7,7 @@ use crate::commit_conformance::fixtures::{
     container_id, control_keys, path, prepared, request, request_under, triplicate,
 };
 use crate::commit_conformance::library::{mapped, Library};
+use crate::commit_conformance::vanishing_head::VanishingHead;
 use crate::error::Error;
 use crate::generations::generation;
 
@@ -220,6 +221,60 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
     let library = Library::read(store).await;
     let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(mapped(&keyring), vec![container_id(1)]);
+}
+
+/// CP-16: immediately before consuming a slot, a writer re-reads the head
+/// object the slot came from and aborts if it is gone.
+///
+/// The head disappears after the catch-up has read it and before its slot is
+/// consumed, which is the window a writer that slept through a later epoch's
+/// rotation would wake into. The commit stops with the missing head rather
+/// than creating a successor into a position the Library no longer holds, and
+/// no successor exists afterwards.
+pub async fn a_head_gone_before_its_slot_is_consumed_stops_the_commit(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = control_keys();
+
+    Library::upload_container(store, container_id(1)).await;
+    let first = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
+    commit_batch(request(store, index, &keys, first))
+        .await
+        .expect("the first commit must succeed");
+
+    let head = Library::read(store)
+        .await
+        .handle(&ControlObjectName::head(generation(1)));
+    let vanishing = VanishingHead::purging(store, head);
+    Library::upload_container(store, container_id(2)).await;
+    let second =
+        PreparedBatch::adding(vec![prepared(2, ContainerKind::OneFile, &["albums/b.jpg"])]);
+    let result = commit_batch(request(&vanishing, index, &keys, second))
+        .await
+        .map_err(|failure| *failure.error);
+
+    assert!(
+        vanishing.has_purged(),
+        "the head was taken away while the commit ran"
+    );
+    match result {
+        Err(CommitError::MissingHead {
+            generation: missing,
+        }) => {
+            assert_eq!(
+                missing,
+                generation(1),
+                "the refusal names the head that went"
+            )
+        }
+        other => panic!("expected the missing head to stop the commit, got {other:?}"),
+    }
+    assert!(
+        !Library::read(store)
+            .await
+            .holds(&ControlObjectName::head(generation(2))),
+        "no successor was created into the slot of a head that is gone",
+    );
 }
 
 /// A removal Storage will not trash still commits, and the outcome says why it

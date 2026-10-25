@@ -24,7 +24,7 @@
 //! that record names (spec: CP-10, KL-1, KL-2), and a checkpoint under the one
 //! name its head gives it (spec: CK-10).
 //!
-//! Eleven of the cases need Storage to misbehave, in seven ways — a replica
+//! Twelve of the cases need Storage to misbehave, in seven ways — a replica
 //! that never arrives, a head that refuses the create, a head whose create
 //! landed and whose answer was lost, a snapshot slot a sibling reached first,
 //! a provider that will not trash anything, one that refuses a replica write,
@@ -32,17 +32,25 @@
 //! wrapping whatever store the backend handed over. That keeps them
 //! backend-agnostic: the same fault runs against a real provider and in memory.
 //!
-//! Five of the repair cases wrap that store to *watch* rather than to
+//! Seven of the repair cases wrap that store to *watch* rather than to
 //! misbehave, two of them around one of those faults, because what they assert
 //! is which objects reached Storage: a repair rewrites the positions the
-//! committed set has lost and no others, a complete set costs no write at all,
-//! and a repair that may not go ahead writes over nothing (spec: KL-13, KL-16).
+//! committed set has lost and no others, judged by the count that set
+//! committed to (spec: KL-8), a complete set costs no write at all, and a
+//! repair that may not go ahead writes over nothing, not even out of an older
+//! generation (spec: KL-9, KL-13, KL-16).
 //!
 //! Seven other cases wrap that store to let a rival device commit first, at the
 //! exact moment the writer under test reaches the create of its record. Two
 //! commits merely started together collide or do not depending on how the
 //! runtime interleaves them, and a suite that started two writers at once
 //! would pass either way; this puts the collision where it can be asserted.
+//!
+//! One case wraps that store to permanently delete the head a commit caught up
+//! to, at the moment the commit reserves the slots its record will carry,
+//! because what it asserts is that the head is re-read immediately before its
+//! slot is consumed (spec: CP-16): deleted any earlier, the catch-up would
+//! never have reached it.
 //!
 //! One case wraps that store to list a Keyring replica's name twice, a damaged
 //! copy beside the real one and on either side of it, because which copy a
@@ -76,6 +84,9 @@ mod carried_slot_tests;
 
 #[cfg(test)]
 mod first_head_tests;
+
+mod candidate_keyring;
+pub use candidate_keyring::a_candidate_without_a_removal_leaves_the_committed_keyring_readable;
 
 mod checkpoint_failure;
 mod refused_checkpoint;
@@ -133,7 +144,9 @@ mod rebase_tests;
 
 mod refusals;
 pub use refusals::{
-    a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,
+    a_colliding_entry_path_is_refused_before_any_write,
+    a_head_gone_before_its_slot_is_consumed_stops_the_commit,
+    a_missing_keyring_replica_stops_the_commit,
     a_refused_replica_write_stops_the_commit_before_its_head,
     an_interrupted_commit_leaves_the_head_unchanged,
     an_untrashed_removal_reports_what_storage_refused,
@@ -143,6 +156,7 @@ pub use refusals::{
 mod repair;
 pub use repair::{
     a_complete_set_costs_no_writes_and_reports_no_repair,
+    a_generation_is_judged_by_the_count_it_committed_to,
     a_keyring_no_replica_answers_stays_unreadable,
     a_lost_replica_is_rewritten_before_the_next_commit,
     a_repair_before_a_lost_slot_is_still_reported,
@@ -150,6 +164,7 @@ pub use repair::{
     a_repair_before_the_rebases_ran_out_is_still_reported,
     a_repair_that_stops_reports_what_it_put_back, a_repair_the_provider_refuses_stops_the_commit,
     a_replica_listed_twice_reads_as_its_valid_copy,
+    an_older_generation_does_not_stand_in_for_a_lost_newer_one,
     an_unfetchable_replica_stops_the_commit_unrewritten, an_unreadable_replica_is_replaced,
     two_devices_repairing_one_position_both_commit,
 };
@@ -166,6 +181,8 @@ pub use stale_removal::{
     a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
     a_rebased_batch_whose_removals_are_current_commits,
 };
+
+mod vanishing_head;
 
 mod watching_store;
 
@@ -264,6 +281,8 @@ macro_rules! commit_conformance {
             the_lowest_missing_replica_is_the_one_reported,
             a_refused_replica_write_stops_the_commit_before_its_head,
             an_interrupted_commit_leaves_the_head_unchanged,
+            a_candidate_without_a_removal_leaves_the_committed_keyring_readable,
+            a_head_gone_before_its_slot_is_consumed_stops_the_commit,
             an_untrashed_removal_reports_what_storage_refused,
             a_lost_replica_is_rewritten_before_the_next_commit,
             an_unreadable_replica_is_replaced,
@@ -272,6 +291,8 @@ macro_rules! commit_conformance {
             a_repair_that_stops_reports_what_it_put_back,
             an_unfetchable_replica_stops_the_commit_unrewritten,
             a_keyring_no_replica_answers_stays_unreadable,
+            an_older_generation_does_not_stand_in_for_a_lost_newer_one,
+            a_generation_is_judged_by_the_count_it_committed_to,
             a_complete_set_costs_no_writes_and_reports_no_repair,
             a_repair_before_a_lost_slot_is_still_reported,
             a_repair_before_the_rebases_ran_out_is_still_reported,

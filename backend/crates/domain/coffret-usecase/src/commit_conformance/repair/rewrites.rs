@@ -164,3 +164,77 @@ pub async fn a_complete_set_costs_no_writes_and_reports_no_repair(fixture: &Comm
         "and nothing of the committed generation was written",
     );
 }
+
+/// KL-8: a generation's commitment selects the replica count required for that
+/// generation; a newly prepared generation uses the current replica policy.
+///
+/// The policy changes between commits, both ways. A generation committed at two
+/// replicas is complete at two when a commit under a policy of three examines
+/// it: no third position is asked for and none is written, and the generation
+/// that commit prepares declares three. That generation, short one replica, is
+/// then repaired by a commit under a policy of two at the position its own
+/// count of three declares, which a count of two would not even have, and the
+/// generation prepared next declares two again.
+pub async fn a_generation_is_judged_by_the_count_it_committed_to(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let keys = control_keys();
+
+    Library::upload_container(store, container_id(1)).await;
+    let first = commit_batch(request(store, fixture.index(), &keys, adding(1)))
+        .await
+        .expect("a commit into a newly created Library must succeed");
+    let doubled = first.record.keyring().clone();
+    assert_eq!(doubled.replica_count(), 2);
+
+    Library::upload_container(store, container_id(2)).await;
+    let counting = CountingStore::around(store);
+    let second = commit_batch(request_under(
+        &counting,
+        fixture.index(),
+        &keys,
+        adding(2),
+        triplicate(),
+    ))
+    .await
+    .expect("a commit over a set complete at its own count must succeed");
+    assert!(
+        second.repairs.is_empty(),
+        "a set of two is complete at two under a policy of three, got {:?}",
+        second.repairs,
+    );
+    assert!(
+        replicas_written(&counting, doubled.generation()).is_empty(),
+        "and no third position is written for it",
+    );
+    let tripled = second.record.keyring().clone();
+    assert_eq!(
+        tripled.replica_count(),
+        3,
+        "the generation prepared under a policy of three declares three",
+    );
+    Library::read(store).await.keyring(store, &tripled).await;
+
+    lose_replica(store, &tripled, 2).await;
+    Library::upload_container(store, container_id(3)).await;
+    let counting = CountingStore::around(store);
+    let third = commit_batch(request(&counting, fixture.index(), &keys, adding(3)))
+        .await
+        .expect("a commit over a set one replica short repairs it and commits");
+    let repair = one_repair(&third);
+    assert_eq!(repair.generation, tripled.generation());
+    assert_eq!(
+        repair.rewritten.iter().collect::<Vec<_>>(),
+        vec![2],
+        "the position is required by the generation's count, not by the policy",
+    );
+    assert_eq!(
+        replicas_written(&counting, tripled.generation()),
+        vec![replica_name(&tripled, 2).to_string()],
+    );
+    Library::read(store).await.keyring(store, &tripled).await;
+    assert_eq!(
+        third.record.keyring().replica_count(),
+        2,
+        "the generation prepared under a policy of two declares two",
+    );
+}

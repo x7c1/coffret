@@ -294,3 +294,67 @@ pub async fn a_keyring_no_replica_answers_stays_unreadable(fixture: &CommitUnder
         "and nothing of the batch was committed",
     );
 }
+
+/// KL-9: replication is effective only within one generation: envelopes
+/// introduced by a newer generation are protected only by that generation's
+/// replicas, never by retained older generations.
+///
+/// Two generations are committed and every replica of the newer one is
+/// damaged, while the older one is intact on Storage. The commit reads the
+/// newer generation as Keyring loss: it does not fall back to the older set,
+/// which does not hold the newer generation's envelopes, and it writes
+/// nothing out of it.
+pub async fn an_older_generation_does_not_stand_in_for_a_lost_newer_one(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = control_keys();
+
+    Library::upload_container(store, container_id(1)).await;
+    let older = commit_batch(request(store, index, &keys, adding(1)))
+        .await
+        .expect("a commit into a newly created Library must succeed")
+        .record
+        .keyring()
+        .clone();
+    Library::upload_container(store, container_id(2)).await;
+    let newer = commit_batch(request(store, index, &keys, adding(2)))
+        .await
+        .expect("the second commit must succeed")
+        .record
+        .keyring()
+        .clone();
+
+    for position in 0..newer.replica_count() {
+        mangle_replica(store, &newer, position).await;
+    }
+    Library::read(store).await.keyring(store, &older).await;
+
+    Library::upload_container(store, container_id(3)).await;
+    let counting = CountingStore::around(store);
+    let result = commit_batch(request(&counting, index, &keys, adding(3))).await;
+
+    match result.map_err(|failure| *failure.error) {
+        Err(CommitError::KeyringUnreadable {
+            generation,
+            cause: UnusableReplica::Unreadable(_),
+            ..
+        }) => assert_eq!(
+            generation,
+            newer.generation(),
+            "the loss is the newer generation's, whatever the older one still holds",
+        ),
+        other => panic!("expected Keyring loss rather than a fallback, got {other:?}"),
+    }
+    for generation in [older.generation(), newer.generation()] {
+        assert!(
+            replicas_written(&counting, generation).is_empty(),
+            "nothing is re-materialized from another generation",
+        );
+    }
+    assert!(
+        !Library::read(store)
+            .await
+            .holds(&ControlObjectName::head(generation(3))),
+        "and nothing of the batch was committed",
+    );
+}
