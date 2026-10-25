@@ -21,10 +21,11 @@ Concept background: [Storage](../../concepts/storage/),
   *(Form: test)*
 - **SA-2.** The redirect comes back to a loopback address on a port the
   operating system hands out, and the flow accepts only a redirect carrying
-  the opaque `state` value this run drew. Anything else that arrives on the
-  port is answered and ignored rather than mistaken for the redirect, and a
-  redirect naming a refusal is reported rather than waited out.
-  *(Form: test)*
+  the opaque `state` value this run drew. Any other request that arrives on
+  the port is answered and ignored rather than mistaken for the redirect, a
+  connection that sends nothing before the server stops waiting for it is
+  closed without an answer, and a redirect naming a refusal is reported
+  rather than waited out. *(Form: test)*
 - **SA-3.** coffret asks for exactly one provider permission — a `scope`, in
   the protocol's word and the code's — and asks for no other: on Google
   Drive, the one that reaches only files this application itself created.

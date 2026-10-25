@@ -247,7 +247,6 @@ fn a_loopback_that_will_not_run_reaches_the_port_as_a_local_failure() {
         (RedirectStep::Bind, "could not listen for the redirect"),
         (RedirectStep::Port, "could not read the redirect port"),
         (RedirectStep::Accept, "could not accept the redirect"),
-        (RedirectStep::Read, "could not read the redirect"),
     ];
     for (step, said) in steps {
         let error = Error::LoopbackRedirect {
@@ -331,29 +330,6 @@ fn every_way_the_flow_can_end_without_a_grant_reaches_the_port_as_unauthenticate
         );
         assert!(!crossed.is_retryable(), "{crossed}");
     }
-}
-
-#[test]
-fn a_redirect_target_that_is_not_a_url_reaches_the_port_as_unauthenticated() {
-    let target = ":99999999";
-    let cause =
-        url::Url::parse(&format!("http://127.0.0.1{target}")).expect_err("no port is that large");
-    let error = Error::MalformedRedirect {
-        target: target.to_owned(),
-        cause,
-    };
-
-    // What the browser asked for is quoted, so a target with whitespace or
-    // control bytes in it is still readable in a log.
-    assert!(
-        error.to_string().contains(&format!("{target:?}")),
-        "{error}"
-    );
-    assert!(error::Error::source(&error).is_some());
-    assert!(matches!(
-        coffret_usecase::Error::from(error),
-        coffret_usecase::Error::Unauthenticated { .. }
-    ));
 }
 
 // A client that cannot be built is not something a retry or a fresh

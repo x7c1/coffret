@@ -140,7 +140,6 @@ impl From<Error> for coffret_usecase::Error {
             | Error::RedirectTimedOut { .. }
             | Error::GrantWithoutRefreshToken
             | Error::GrantNotDriveFileAlone { .. }
-            | Error::MalformedRedirect { .. }
             | Error::TokenEndpoint { .. }
             | Error::CodeExchangeWithoutSecret { .. } => Self::Unauthenticated {
                 detail,
