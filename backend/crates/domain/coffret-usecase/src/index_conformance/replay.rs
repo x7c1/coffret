@@ -110,7 +110,7 @@ pub async fn a_restore_replaces_the_whole_catalog(fixture: &IndexUnderTest) {
     );
 }
 
-/// Replaying records reaches the state a restore of the head would.
+/// CP-11: replaying records reaches the state a restore of the head would.
 ///
 /// This is the whole of catching up: a device starts from the newer of its own
 /// Index and the newest checkpoint, then replays only the records after that

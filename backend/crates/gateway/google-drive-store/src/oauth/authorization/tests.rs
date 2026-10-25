@@ -166,7 +166,7 @@ fn the_authorization_url_asks_for_drive_file_and_nothing_else() {
     );
 }
 
-// SA-4, and the case a containment test waves through: `drive.file` is in the
+// SA-4: the case a containment test waves through — `drive.file` is in the
 // answer, and so is a grant over every file in the account. Caching the refresh
 // token behind it would make it a bearer credential for the whole account.
 #[tokio::test]

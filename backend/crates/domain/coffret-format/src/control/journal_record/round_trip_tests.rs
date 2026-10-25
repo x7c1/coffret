@@ -152,8 +152,8 @@ fn the_same_content_in_a_different_order_encodes_identically() {
     assert_eq!(one.body, other.body);
 }
 
-// FM-13: the record's own generation is the header's, and the epoch is the
-// payload field every kind carries — so neither is repeated in the map, and
+// CP-13, FM-13: the record's own generation is the header's, and the epoch is
+// the payload field every kind carries — so neither is repeated in the map, and
 // what comes back is what the framing was told.
 #[test]
 fn the_generation_and_the_epoch_come_from_the_framing() {

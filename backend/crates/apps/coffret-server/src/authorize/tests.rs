@@ -78,7 +78,7 @@ fn the_host_may_leave_the_port_off() {
     );
 }
 
-// LA-5's first fence. A name that resolved to this socket carries the name
+// LA-5: the first fence. A name that resolved to this socket carries the name
 // here, and that is the whole of how a rebound hostname is told from the
 // explorer. The key would not be shown by such a request either, but the
 // `Host` is read first: it costs nothing, and it is the answer whatever else

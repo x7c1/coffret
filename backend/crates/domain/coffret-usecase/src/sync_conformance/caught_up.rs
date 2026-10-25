@@ -76,8 +76,8 @@ async fn recorded_present_at(fixture: &SyncUnderTest, path: &str) -> bool {
         .is_some_and(|local| local.state == LocalEntryState::Present)
 }
 
-/// A batch whose record landed and whose refresh did not is completed by the
-/// next catch-up, before any sync.
+/// OC-7: a batch whose record landed and whose refresh did not is completed by
+/// the next catch-up, before any sync.
 ///
 /// This is a server killed between the commit and the refresh and started
 /// again: its start catches the catalog up, and from then on the file the batch

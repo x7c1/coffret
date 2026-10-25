@@ -88,7 +88,7 @@ Concept background: [Journal](../../concepts/journal/),
   stops until it is re-enrolled in the new epoch. *(Form: test)*
 - **CP-6.** A successful activation Index Snapshot carries the new epoch's
   next commit slot and becomes the head for later Journal records.
-  *(Form: test)*
+  *(Form: test; unimplemented)*
 - **CP-7.** A commit conflict never selects a winner by timestamps or
   silently applies last-write-wins. If both sides changed the same Entry
   Path, the conflict requires explicit resolution before retrying (rebase

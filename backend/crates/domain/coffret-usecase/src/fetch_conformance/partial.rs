@@ -165,8 +165,8 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
     }
 }
 
-/// A damaged chunk inside the parcel a partial fetch asked for is refused,
-/// nothing becomes visible, and the parcel is not held.
+/// PK-22: a damaged chunk inside the parcel a partial fetch asked for is
+/// refused, nothing becomes visible, and the parcel is not held.
 ///
 /// A parcel read cannot check the object's own hash — that hash is a claim
 /// about bytes it did not ask for (spec: PK-22). What holds over a parcel is

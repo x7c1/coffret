@@ -85,8 +85,8 @@ async fn an_empty_folder_contributes_nothing() {
     assert!(dropped.not_taken.is_empty(), "{:?}", dropped.not_taken);
 }
 
-// EP-8: a symbolic link is neither followed nor taken, whether it points at a
-// file or at a folder, and both are reported — under a dropped folder and
+// LA-29, EP-8: a symbolic link is neither followed nor taken, whether it points
+// at a file or at a folder, and both are reported — under a dropped folder and
 // dropped themselves.
 #[tokio::test]
 async fn a_symbolic_link_is_neither_followed_nor_taken_and_is_reported() {

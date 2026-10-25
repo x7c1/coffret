@@ -441,9 +441,10 @@ pub async fn a_reservation_cut_off_by_a_restart_waits_and_a_received_one_is_pack
     }
 }
 
-/// A freeze settles what an interrupted run left before it builds anything of
-/// its own: the spool and the row of a Pack a dead run never finished are
-/// disposed of, and the files are packed afresh (spec: OC-9, OC-2, OC-3).
+/// OC-9: a freeze settles what an interrupted run left before it builds
+/// anything of its own: the spool and the row of a Pack a dead run never
+/// finished are disposed of, and the files are packed afresh (spec: OC-2,
+/// OC-3).
 ///
 /// Without it a Pack-only workflow would keep the dead run's spool — up to one
 /// Pack's size on disk — and its row until a sync happened to run.

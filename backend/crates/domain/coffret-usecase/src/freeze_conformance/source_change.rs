@@ -13,8 +13,8 @@ const SURVEYED: usize = 180;
 /// What is left of it by the time the Pack reads it.
 const KEPT: u64 = 100;
 
-/// A file that stops being the file the scan measured stops the Pack, and the
-/// failure says what moved.
+/// PK-18: a file that stops being the file the scan measured stops the Pack,
+/// and the failure says what moved.
 ///
 /// A Pack's entry table is written before its content, because that is what lets
 /// the content stream (spec: FM-2, FM-5, FM-9), so a file whose length moved in

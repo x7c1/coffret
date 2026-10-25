@@ -12,7 +12,7 @@ defined here. Behavioral rules — the procedures, verifications, and
 parameters needed to build the system correctly — live in the normative
 [specification register](../spec/), which the concept documents cite by
 rule ID as plain text — an ID like `KL-3` is a unique token resolved by
-searching the repository, so citations survive the register's shrinkage.
+searching the repository, wherever the rule is defined.
 
 ## Concept Map
 

@@ -8,8 +8,8 @@ use crate::fetch_conformance::fixtures::{
     sync_source, write,
 };
 
-/// A Container the committed Keyring has no key for is reported unreadable, and the
-/// rest of the batch is fetched.
+/// RV-2: a Container the committed Keyring has no key for is reported
+/// unreadable, and the rest of the batch is fetched.
 ///
 /// A key-lost marker is a statement about the committed control state and nothing
 /// else: the Container stays current, its ciphertext stays where it is, and it
@@ -83,7 +83,8 @@ pub async fn a_key_lost_container_is_reported_and_the_rest_is_fetched(fixture: &
     );
 }
 
-/// A first Keyring replica that will not open costs a read and nothing else.
+/// KL-11: a first Keyring replica that will not open costs a read and nothing
+/// else.
 ///
 /// One committed valid replica carries the whole logical Keyring, so the replica
 /// count is redundancy and never a quorum (spec: KL-6): the walk steps over the

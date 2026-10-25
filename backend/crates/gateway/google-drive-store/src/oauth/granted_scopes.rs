@@ -153,7 +153,7 @@ mod tests {
         assert!(!GrantedScopes::parse(&DRIVE_FILE_SCOPE.to_uppercase()).is_drive_file_alone());
     }
 
-    // SA-5. What is displayed is what the person can be shown, so it has to
+    // SA-5: what is displayed is what the person can be shown, so it has to
     // name every scope — and say so plainly when there were none.
     #[test]
     fn what_was_granted_is_named_in_full() {

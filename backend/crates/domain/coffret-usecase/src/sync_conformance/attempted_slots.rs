@@ -19,10 +19,10 @@ use crate::in_memory_index::InMemoryIndex;
 use crate::index::Index;
 use crate::sync::{sync_folders, Disposal, LibraryKeys, Settled};
 
-/// An attempt whose only recorded slot holds another writer's record, which
-/// names nothing of the batch, is proven not to have committed and is disposed
-/// of like one never attempted: its object trashed, its spool and its row gone
-/// (spec: OC-3, OC-6).
+/// OC-3: an attempt whose only recorded slot holds another writer's record,
+/// which names nothing of the batch, is proven not to have committed and is
+/// disposed of like one never attempted: its object trashed, its spool and its
+/// row gone (spec: OC-6).
 pub async fn an_attempt_whose_slot_another_writer_took_is_disposed(fixture: &SyncUnderTest) {
     let keys = keys();
     let index = fixture.index();

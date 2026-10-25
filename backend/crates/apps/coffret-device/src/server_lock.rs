@@ -149,7 +149,7 @@ mod tests {
         }
     }
 
-    // LA-8. One server at a time, and the first one is left exactly as it was:
+    // LA-8: one server at a time, and the first one is left exactly as it was:
     // it keeps the key it published, so its callers go on being admitted and its
     // hold on the Library is never even asked about.
     #[test]

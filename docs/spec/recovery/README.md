@@ -47,7 +47,9 @@ Concept background: [Library](../../concepts/library/),
   recovery becomes salvage: coffret may present contents from decryptable
   Containers but cannot distinguish current Containers from removed,
   replaced, or uncommitted candidates. Salvage performs no automatic cleanup,
-  never authorizes deletion or mutation, and is not a restore. *(Form: test)*
+  never authorizes deletion or mutation, and is not a restore. *(Form: test; not
+  yet implemented: salvage itself — what is implemented is the captured path a
+  Pack rebuilt after a rename records)*
   - Salvage presents each Entry under the captured path its Container's meta
     section records (FM-9). Renames are carried only by Journal records and
     Index Snapshots (FM-15, FM-16), so salvage cannot know an Entry's current
@@ -101,7 +103,9 @@ Concept background: [Library](../../concepts/library/),
   remain readable, because they are encrypted directly under keys derived
   from the Master Key (RV-3). Once a rebuild (RV-8) commits, the affected
   Containers are carried with key-lost markers — present but unreadable, visible
-  to the user — rather than dropped from the current set. *(Form: test)*
+  to the user — rather than dropped from the current set. *(Form: test; not
+  yet implemented: enumerating and reporting the affected Containers and their
+  Entry Paths)*
 - **RV-8.** After Keyring loss, a device holding authenticated local key
   material — for example cached decrypted Container Keys — MAY rebuild a new
   complete Keyring generation: envelopes for the Containers its material

@@ -129,7 +129,8 @@ mod tests {
         }
     }
 
-    // KD-4, FM-11: each control-object kind is encrypted under its own purpose.
+    // CP-12, KD-4, FM-11: each control-object kind is encrypted under its own
+    // purpose.
     #[test]
     fn each_control_object_kind_maps_to_its_own_purpose() {
         assert_eq!(

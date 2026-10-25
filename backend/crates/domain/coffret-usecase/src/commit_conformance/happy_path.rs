@@ -6,7 +6,7 @@ use crate::commit_conformance::fixtures::{container_id, control_keys, path, prep
 use crate::commit_conformance::library::{mapped, Library};
 use crate::generations::generation;
 
-/// A commit makes the batch the Library's current state (spec: CP-1).
+/// CP-10: a commit makes the batch the Library's current state (spec: CP-1).
 ///
 /// Four things have to be true together for that claim to mean anything, and
 /// only one of them is about the call's return value. The record another device
@@ -75,7 +75,7 @@ pub async fn a_commit_makes_the_batch_the_current_state(fixture: &CommitUnderTes
     assert_eq!(checkpoint.keyring(), outcome.record.keyring());
 }
 
-/// A removal leaves the current set, and its object is trashed.
+/// CP-8, KL-10: a removal leaves the current set, and its object is trashed.
 ///
 /// The record is what makes the Container non-current (spec: CP-1, CP-14) and
 /// trashing the object is what happens after, which is why the two are asserted

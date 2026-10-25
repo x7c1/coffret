@@ -11,7 +11,7 @@ Concept background: [Master Key](../../concepts/master-key/),
 
 - **MR-1.** Rotation re-wraps every current Container Key and refreshes the
   control objects — a few MB — under the new Master Key; Containers remain
-  byte-for-byte unchanged. *(Form: test)*
+  byte-for-byte unchanged. *(Form: test; unimplemented)*
   - Key-lost markers (KL-7) have no envelope to re-wrap; they carry over
     into the new epoch unchanged.
 - **MR-2.** An activation Index Snapshot carries a full Index and checkpoint
@@ -31,7 +31,7 @@ Concept background: [Master Key](../../concepts/master-key/),
   deletion of every reachable old-epoch control object; Form: prose for the
   boundary that a copy retained by an attacker or the Storage provider before
   deletion remains readable with the old Master Key — it involves
-  external-world state rotation cannot reach)*
+  external-world state rotation cannot reach; unimplemented)*
 - **MR-4.** Rotation creates a new Recovery Code carrying the new epoch;
   devices holding the previous Master Key stop at the activation fence (CP-5)
-  and must be enrolled again with that code. *(Form: test)*
+  and must be enrolled again with that code. *(Form: test; unimplemented)*

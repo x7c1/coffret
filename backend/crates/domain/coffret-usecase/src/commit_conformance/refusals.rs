@@ -277,8 +277,8 @@ pub async fn a_head_gone_before_its_slot_is_consumed_stops_the_commit(fixture: &
     );
 }
 
-/// A removal Storage will not trash still commits, and the outcome says why it
-/// was not trashed (spec: CP-14, OC-6).
+/// OC-6: a removal Storage will not trash still commits, and the outcome says
+/// why it was not trashed (spec: CP-14).
 ///
 /// Trashing happens after the commit point, so a provider that refuses it
 /// un-commits nothing: the record stands, the Container is out of the current

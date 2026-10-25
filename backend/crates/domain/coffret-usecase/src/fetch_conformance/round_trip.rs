@@ -11,7 +11,8 @@ use crate::fetch_conformance::fixtures::{
 const FIRST: &[u8] = b"the first file's bytes";
 const SECOND: &[u8] = b"a second file, in a folder below";
 
-/// A folder one device synced arrives, byte for byte, in another device's folder.
+/// RV-3: a folder one device synced arrives, byte for byte, in another device's
+/// folder.
 ///
 /// This is the round trip the whole path exists to make, and it is asserted from
 /// what is on disk rather than from what the call returned. The target device

@@ -106,9 +106,9 @@ async fn what_no_route_answers_is_behind_the_fences() {
     assert_eq!(refusal["error"], "unauthorized");
 }
 
-// Reads and mutations alike, and no exception for the ones that only say what
-// the server knows: an Entry Path is the person's own name for their file, and
-// the file route answers with plaintext.
+// LA-2: reads and mutations alike, and no exception for the ones that only say
+// what the server knows: an Entry Path is the person's own name for their file,
+// and the file route answers with plaintext.
 #[tokio::test]
 async fn no_route_answers_a_request_that_shows_no_key() {
     let served = Served::library().await;
