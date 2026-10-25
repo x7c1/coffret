@@ -14,7 +14,6 @@ impl error::Error for Error {
             Self::UnsealableTokenCache { cause, .. } => Some(cause),
             Self::UnreadableTokenResponse { cause, .. } => Some(cause),
             Self::LoopbackRedirect { cause, .. } => Some(cause),
-            Self::MalformedRedirect { cause, .. } => Some(cause),
             Self::Transport(error) => Some(error),
             Self::EntropyUnavailable { cause } => Some(cause),
             Self::AppFolderNotCreated { cause, .. }

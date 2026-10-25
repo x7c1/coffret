@@ -181,21 +181,16 @@ pub enum Error {
     /// The loopback the browser is redirected back to could not be run.
     ///
     /// Listening on the port, learning which one the operating system handed
-    /// out, taking the browser's connection, reading what it asked for: all of
-    /// it is this machine's own work, and what stopped it is what the operating
-    /// system reported.
+    /// out, taking the browser's connection: all of it is this machine's own
+    /// work, and what stopped it is what the operating system reported. A
+    /// connection that then sends something other than the redirect, or fails
+    /// to send at all, is no such failure: the wait for the redirect goes on
+    /// (spec: SA-2).
     LoopbackRedirect {
         /// The step that failed.
         step: RedirectStep,
         /// What the operating system reported.
         cause: io::Error,
-    },
-    /// The browser came back asking for something that is not a URL.
-    MalformedRedirect {
-        /// What it asked for.
-        target: String,
-        /// What the parser reported.
-        cause: url::ParseError,
     },
     /// The token endpoint refused to issue or refresh a token.
     TokenEndpoint {

@@ -71,12 +71,6 @@ impl fmt::Display for Error {
             Self::LoopbackRedirect { step, .. } => {
                 write!(f, "authorization did not complete: {step}")
             }
-            Self::MalformedRedirect { target, .. } => {
-                write!(
-                    f,
-                    "authorization did not complete: the redirect target {target:?} is not a URL"
-                )
-            }
             Self::TokenEndpoint { status, detail } => {
                 write!(f, "the token endpoint answered {status}: {detail}")
             }
