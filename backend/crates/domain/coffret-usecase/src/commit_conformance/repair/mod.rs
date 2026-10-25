@@ -7,6 +7,7 @@ use crate::commit_conformance::fixtures::prepared;
 mod rewrites;
 pub use rewrites::{
     a_complete_set_costs_no_writes_and_reports_no_repair,
+    a_generation_is_judged_by_the_count_it_committed_to,
     a_lost_replica_is_rewritten_before_the_next_commit, an_unreadable_replica_is_replaced,
 };
 
@@ -19,6 +20,7 @@ mod refusals;
 pub use refusals::{
     a_keyring_no_replica_answers_stays_unreadable, a_repair_that_stops_reports_what_it_put_back,
     a_repair_the_provider_refuses_stops_the_commit,
+    an_older_generation_does_not_stand_in_for_a_lost_newer_one,
     an_unfetchable_replica_stops_the_commit_unrewritten,
 };
 

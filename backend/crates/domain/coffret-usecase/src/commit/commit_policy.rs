@@ -97,3 +97,17 @@ impl CommitPolicy {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CommitPolicy;
+
+    // KL-8: a newly prepared generation uses the current replica policy, whose
+    // initial value is three. That a committed generation is judged by its own
+    // commitment's count, whatever the policy says now, is the commit
+    // conformance suite's to show, since only Storage holds a committed set.
+    #[test]
+    fn the_initial_replica_policy_is_three() {
+        assert_eq!(CommitPolicy::default().replica_count, 3);
+    }
+}
