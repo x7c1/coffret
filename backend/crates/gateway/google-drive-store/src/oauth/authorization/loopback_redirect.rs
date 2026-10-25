@@ -1,5 +1,6 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
+use tracing::warn;
 
 use crate::error::{Error, RedirectStep, Result};
 
@@ -51,8 +52,28 @@ async fn read_redirect(stream: TcpStream, state: &str) -> Result<Option<String>>
         "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{COMPLETION_PAGE}",
         COMPLETION_PAGE.len()
     );
-    let _ = stream.write_all(answer.as_bytes()).await;
-    let _ = stream.shutdown().await;
+    // A failure to answer or to close is logged and passed over rather than
+    // returned. The browser on the other end may have gone away already — a
+    // tab closed, a favicon request abandoned — and that must not end the wait
+    // for the real redirect, nor lose the code of a redirect that did arrive.
+    // Only the kind is recorded: the target, and the code and state
+    // it may carry, stay out of the event (spec: EL-1, spec: EL-3).
+    if let Err(cause) = stream.write_all(answer.as_bytes()).await {
+        warn!(
+            operation = "authorize",
+            step = "answer",
+            io_error_kind = ?cause.kind(),
+            "the loopback server could not answer a request on the redirect port"
+        );
+    }
+    if let Err(cause) = stream.shutdown().await {
+        warn!(
+            operation = "authorize",
+            step = "close",
+            io_error_kind = ?cause.kind(),
+            "the loopback server could not close a connection on the redirect port"
+        );
+    }
 
     parse_redirect(&target, state)
 }
@@ -103,7 +124,16 @@ mod tests {
     //! One arrival at a time: what the flow takes for its redirect, and what
     //! it does with everything else that reaches the port (spec: SA-2).
 
+    use std::time::Duration;
+
+    use tokio::io::AsyncReadExt;
+    use tokio::time::timeout;
+
     use super::*;
+
+    /// How long any one step of the socket test may take before it counts as
+    /// hung rather than slow.
+    const STEP: Duration = Duration::from_secs(5);
 
     // SA-2: a redirect carrying the state this run drew is the redirect, and
     // its code is what the flow takes.
@@ -156,5 +186,57 @@ mod tests {
             parse_redirect("/favicon.ico", "s3cr3t").expect("an unrelated request is not an error"),
             None
         );
+    }
+
+    // SA-2: a request that is not the redirect is answered and its connection
+    // closed — what keeps a browser asking for `/favicon.ico` from hanging —
+    // and the redirect that comes after it still yields its code.
+    #[tokio::test]
+    async fn a_request_that_is_not_the_redirect_is_answered_and_closed() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("a loopback port must be free");
+        let address = listener.local_addr().expect("a bound port has an address");
+        let waiting = tokio::spawn(async move { wait_for_code(&listener, "s3cr3t").await });
+
+        // The request line alone: the server reads no further than that, and
+        // headers left unread when it closes would turn its close into a
+        // reset that races the answer here.
+        let favicon = exchange(address, "GET /favicon.ico HTTP/1.1\r\n").await;
+        assert!(
+            favicon.starts_with("HTTP/1.1 200 "),
+            "an unrelated request must be answered with 200: {favicon:?}"
+        );
+        assert!(
+            !waiting.is_finished(),
+            "an unrelated request must not end the wait"
+        );
+
+        exchange(address, "GET /?code=4%2Fabc&state=s3cr3t HTTP/1.1\r\n").await;
+        let code = timeout(STEP, waiting)
+            .await
+            .expect("the redirect must end the wait")
+            .expect("the waiting task must not panic")
+            .expect("a matching redirect must yield its code");
+        assert_eq!(code, "4/abc");
+    }
+
+    /// Sends one request and reads the answer until the server closes the
+    /// connection; a read that times out instead fails the test.
+    async fn exchange(address: std::net::SocketAddr, request: &str) -> String {
+        let mut client = timeout(STEP, TcpStream::connect(address))
+            .await
+            .expect("connecting must not hang")
+            .expect("the loopback server must accept");
+        timeout(STEP, client.write_all(request.as_bytes()))
+            .await
+            .expect("sending must not hang")
+            .expect("the request must be sent");
+        let mut answer = Vec::new();
+        timeout(STEP, client.read_to_end(&mut answer))
+            .await
+            .expect("the server must close the connection rather than leave it open")
+            .expect("the answer must be readable to its end");
+        String::from_utf8(answer).expect("the answer is text")
     }
 }
