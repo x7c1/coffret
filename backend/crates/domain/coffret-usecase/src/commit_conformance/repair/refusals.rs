@@ -250,8 +250,8 @@ pub async fn an_unfetchable_replica_stops_the_commit_unrewritten(fixture: &Commi
     );
 }
 
-/// A committed generation no replica of reads back is Keyring loss, not a
-/// repair (spec: KL-5, RV-7).
+/// KL-5, RV-7: a committed generation no replica of reads back is Keyring loss,
+/// not a repair.
 ///
 /// With no surviving valid replica there is nothing to copy, so this is not a
 /// degraded set at all and the refusal is the one a read of it would give.

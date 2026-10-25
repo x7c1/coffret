@@ -29,14 +29,14 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   exact committed Keyring tuple it depends on: `master_key_epoch`,
   generation, replica count, and `set_digest` (KL-3). *(Form: test)*
 - **CK-4.** Journal records at or before the Snapshot's last applied Journal
-  generation become eligible for `prune`. *(Form: test)*
+  generation become eligible for `prune`. *(Form: test; unimplemented)*
 - **CK-5.** `prune` may run only when the Snapshot preserves the exact
   committed Keyring tuple and that Keyring replica set is complete (KL-2) —
   otherwise deleting the records could destroy the only evidence or envelopes
-  a recovery still needs. *(Form: test)*
+  a recovery still needs. *(Form: test; unimplemented)*
 - **CK-6.** `prune` deletes only eligible Journal records; it never deletes
   Containers or the Entries inside them. Its purpose is to bound
-  retained Journal history and recovery replay. *(Form: test)*
+  retained Journal history and recovery replay. *(Form: test; unimplemented)*
   - `prune` is the formal operation name in documentation and code.
 - **CK-7.** An Index Snapshot carries the Catalog of the whole Library — every
   current Entry and its Container, including Entries under subtrees the
@@ -59,8 +59,9 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   threshold's worth of Journal to replay until the next Snapshot lands. A
   failed Snapshot upload leaves the commit valid — the records it would have
   covered remain replayable — and the next qualifying moment writes one.
-  *(Form: test for the moments and the failure behaviour; the threshold's
-  value is a design decision recorded outside this register)*
+  *(Form: test for the moments and the failure behaviour; the threshold's value
+  is a design decision recorded outside this register; not yet implemented: the
+  Snapshots written before `prune` and at epoch activation)*
   - A device that has only caught up (CK-9) and finds the Journal since the
     newest checkpoint past the threshold MAY write the current head's
     Snapshot into that head's `snapshot_slot` (CK-10); it is not obliged to.

@@ -100,11 +100,13 @@ fn parse_redirect(target: &str, state: &str) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    //! SA-2, one arrival at a time: what the flow takes for its redirect, and
-    //! what it does with everything else that reaches the port.
+    //! One arrival at a time: what the flow takes for its redirect, and what
+    //! it does with everything else that reaches the port (spec: SA-2).
 
     use super::*;
 
+    // SA-2: a redirect carrying the state this run drew is the redirect, and
+    // its code is what the flow takes.
     #[test]
     fn a_matching_redirect_yields_its_code() {
         let code = parse_redirect("/?code=4%2Fabc&state=s3cr3t", "s3cr3t")
@@ -113,8 +115,8 @@ mod tests {
         assert_eq!(code.as_deref(), Some("4/abc"));
     }
 
-    // The CSRF check failing: a redirect aimed at this port by something that
-    // never saw the state is the case the state exists for.
+    // SA-2: the CSRF check failing — a redirect aimed at this port by something
+    // that never saw the state is the case the state exists for.
     #[test]
     fn a_redirect_carrying_someone_elses_state_is_refused() {
         for target in [
@@ -135,8 +137,8 @@ mod tests {
         }
     }
 
-    // The provider's own word for why it said no travels whole, so a person is
-    // told what they declined rather than that something went wrong.
+    // SA-2: the provider's own word for why it said no travels whole, so a
+    // person is told what they declined rather than that something went wrong.
     #[test]
     fn a_refusal_is_reported_rather_than_waited_out() {
         let outcome = parse_redirect("/?error=access_denied&state=s3cr3t", "s3cr3t");
@@ -146,6 +148,8 @@ mod tests {
         assert_eq!(refusal, "access_denied");
     }
 
+    // SA-2: anything else that arrives on the port is ignored rather than
+    // mistaken for the redirect, and the flow goes on waiting.
     #[test]
     fn anything_that_is_not_the_redirect_keeps_the_flow_waiting() {
         assert_eq!(

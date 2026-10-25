@@ -13,8 +13,8 @@ use crate::object_store::ObjectStore;
 /// without committing sixty-four times to get one.
 const ALWAYS_CHECKPOINT: u64 = 0;
 
-/// A commit past the threshold writes the Snapshot of the head it became
-/// (spec: CK-8, CK-10).
+/// CK-8, KL-4: a commit past the threshold writes the Snapshot of the head it
+/// became (spec: CK-10).
 ///
 /// The Snapshot has to be the Index, not a summary of it: a device that adopts
 /// it stands exactly where the writer stood (spec: CK-7, RV-1). So the case

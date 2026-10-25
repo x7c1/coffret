@@ -9,20 +9,15 @@ possible expression is prose.
 
 ## Rule Forms
 
-Every rule carries a **Form** tag stating its final form — the medium that
-can express the rule, not a pending verification act:
+Every rule carries a **Form** tag saying what expresses it — the medium that
+can state the rule, not a pending verification act:
 
-- `Form: test` — the rule's final form is a test plus its comment. The prose
-  here is an interim expression awaiting migration: once the test exists, the
-  full statement and its ID move into the test comment, the test cases become
-  samples of the rule, and the entry here is deleted — in the same commit, so
-  the migration itself guarantees nothing is lost. Only `Form: test` entries
-  shrink and vanish.
-- `Form: prose` — this statement is already its final form; it remains here
-  permanently as the normative reference, with a brief parenthetical reason.
-  Typical cases: obligations against adversarial counterparties, completion
-  conditions involving the external world, and interop requirements aimed at
-  other implementations.
+- `Form: test` — a test checks the rule: what the rule claims is something a
+  case can observe coffret doing.
+- `Form: prose` — only prose can state the rule, with a brief parenthetical
+  reason. Typical cases: obligations against adversarial counterparties,
+  completion conditions involving the external world, and interop
+  requirements aimed at other implementations.
 - A rule whose parts differ in Form keeps one ID and notes which part is
   test-bound and which part is prose, in Form terms, inside the rule.
 
@@ -38,12 +33,41 @@ Form is an inline per-rule attribute and can be reclassified later; files are
 carved by mechanism only, so rules of both Forms stay adjacent within their
 mechanism's context.
 
-The completeness condition for this register: every rule is either
-`Form: prose`, or `Form: test` and eventually referenced by a test.
-
 Vocabulary, mental models, and guarantee summaries stay in the concept
 documents; decisions and their rationale stay in design records. This
 register holds only the current normative statements.
+
+### Rules and tests
+
+Every rule is `Form: prose`, or `Form: test` and named by at least one test
+that samples it, or marked `unimplemented`. A test names a rule by a comment
+on the case that opens with the rule's ID followed by a colon — `// KD-4: …`
+or `/// KD-4: …` (conformance cases are doc-commented) — and a case sampling
+several rules lists them, as `// KD-4, KD-5: …`. `//!` is only for the
+definition of a rule moved into a test's module doc (see
+[Rule IDs](#rule-ids)), and that module doc names the rule it defines.
+
+One rule is usually sampled by several tests, across crates and Storage
+backends, and by convention every test that samples a rule names it, so a
+rule's samples can all be found from its ID. `make spec-rule-ids` requires at
+least one.
+
+A rule whose behavior is not yet implemented carries `unimplemented` at the
+end of its Form tag, as `*(Form: test; unimplemented)*`; on a rule of mixed
+Form the mark applies to the test-bound part. The change that implements the
+behavior adds the test and drops the mark together. A rule only some of whose
+clauses are not yet implemented carries no mark: it says inside its Form tag
+which clause is not yet implemented, as
+`*(Form: test; not yet implemented: …)*` — the way a rule of mixed Form says
+which part is which — and a test names it for the part that is.
+
+A rule coffret decided not to implement is not kept: it is removed, or
+replaced by a rule stating that coffret does not do it. Either way its ID is
+not reused.
+
+`make spec-rule-ids` refuses a `Form: test` rule here that no test names and
+carries no mark, and a rule marked `unimplemented` that a test names: the
+behavior exists, so the mark was left behind.
 
 ## Rule IDs
 
@@ -52,13 +76,13 @@ prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are never
 renumbered or reused; a gap in the numbering means a rule once lived there,
 and git history holds what it said.
 
-A rule and its ID move together: before migration this register is the ID's
-authoritative home, and after migration the test comment is. Documents cite
-IDs as plain text; an ID is a unique token, so a citation resolves by
-searching the repository for whichever home currently holds it. The
-`Form: test` entries still present here are exactly the rules not yet
-migrated; migrating one deletes its entry and adds the owning test in the
-same commit, so completeness needs no ledger.
+A rule is defined in exactly one place, by default this register. A
+`Form: test` rule whose tests are all in one module may instead have its full
+statement and its ID moved into that module's doc comment, as `//! SA-8: …`,
+with its entry here deleted in the same commit, as SA-8, SA-9 and KD-12 are.
+Leaving a rule in the register is not unfinished work. Documents cite IDs as
+plain text; an ID is a unique token, so a citation resolves by searching the
+repository, wherever the rule is defined.
 
 Where a rule spans mechanisms, it lives in exactly one spec file; other files
 reference its ID.
@@ -74,11 +98,12 @@ is told, not what a search can find.
 
 In code a citation sits in parentheses at the end of the sentence or clause
 it stands behind, as `(spec: KD-4)` or `(spec: EP-9, EP-10)`, except that a
-test comment naming the rule its case samples may open with the ID itself, as
-`// KD-4: …`. A comment cites a rule where what it says is that
-rule's guarantee or rests on it — the doc comment of the type or function that
-honors the rule, or the comment of a test case that samples it — and not
-merely because the code nearby touches the mechanism.
+test comment naming the rule its case samples opens with the ID itself, as
+`// KD-4: …` (see [Rules and tests](#rules-and-tests)). A comment cites a rule
+where what it says is that rule's guarantee or rests on it — the doc comment
+of the type or function that honors the rule, or the comment of a test case
+that samples it — and not merely because the code nearby touches the
+mechanism.
 
 ## Mechanisms
 

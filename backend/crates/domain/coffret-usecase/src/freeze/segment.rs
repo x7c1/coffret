@@ -189,8 +189,8 @@ mod tests {
         }
     }
 
-    // PK-3: an Entry larger than the target stays indivisible and forms an
-    // oversized singleton, and the Entries around it are unaffected.
+    // PK-3, PK-5: an Entry larger than the target stays indivisible and forms
+    // an oversized singleton, and the Entries around it are unaffected.
     #[test]
     fn an_over_target_entry_forms_a_singleton() {
         // Roomy enough for two of the small Entries and not for three, so the

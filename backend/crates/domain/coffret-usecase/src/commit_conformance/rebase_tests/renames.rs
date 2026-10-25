@@ -100,8 +100,8 @@ async fn an_update_and_a_rename_converge_in_either_order() {
     assert_eq!(catalog[0].entry.captured_path, path("albums/a.jpg"));
 }
 
-// EP-7, rule 4: two renames of one Entry are two writes to it, and the one
-// rebased is refused rather than either name winning (spec: CP-7).
+// CP-7, EP-7: two renames of one Entry are two writes to it, as EP-7's rule 4
+// has it, and the one rebased is refused rather than either name winning.
 #[tokio::test]
 async fn a_rename_of_an_entry_renamed_meanwhile_conflicts() {
     let devices = Devices::holding(&[(1, ContainerKind::OneFile, &["albums/a.jpg"])]).await;

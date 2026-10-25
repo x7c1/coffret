@@ -793,17 +793,20 @@ deps:
 spec-citations:
 	./scripts/spec-citations.sh
 
-## spec-rule-ids: refuse a cited spec rule with no home, or with two
+## spec-rule-ids: refuse a cited spec rule with no home, or with two, and a test-bound rule no test names
 #
-# A rule lives in exactly one place, per docs/spec/README.md: a `**KD-4.**`
-# entry in the register, or — once a `Form: test` rule has migrated — the test
-# module doc opening `//! KD-12: …`. The script names every cited ID with
-# neither home and every ID with both; its header says what it cannot see.
+# A rule is defined in exactly one place, per docs/spec/README.md: a
+# `**KD-4.**` entry in the register by default, or the test module doc opening
+# `//! KD-12: …` a `Form: test` rule was moved into. The script names every
+# cited ID with neither home and every ID with both, every `Form: test` rule in
+# the register no `// KD-4: …` comment names and no `unimplemented` mark
+# exempts, and every rule so marked that one does name; its header says what it
+# cannot see.
 .PHONY: spec-rule-ids
 spec-rule-ids:
 	./scripts/spec-rule-ids.sh
 
-## spec-rule-ids-test: show spec-rule-ids refusing a rule with no home and one with two
+## spec-rule-ids-test: show spec-rule-ids refusing a rule with no home, one with two, a test-bound rule no test names and a named rule marked unimplemented
 #
 # The check passes on this repository as it stands, which says nothing about
 # whether it would refuse anything, so the script runs it against throwaway

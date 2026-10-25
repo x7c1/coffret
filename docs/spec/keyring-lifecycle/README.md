@@ -26,7 +26,8 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-4.** An ordinary Index Snapshot records a tuple that was already
   committed; after covered Journal records are pruned, the Snapshot preserves
   the evidence of that earlier selection. Placing a reference to a candidate
-  set in a Snapshot leaves the candidate uncommitted. *(Form: test)*
+  set in a Snapshot leaves the candidate uncommitted. *(Form: test; not yet
+  implemented: preserving the evidence once covered records are pruned)*
 - **KL-5.** A committed replica set with at least one valid replica but fewer
   than the count its commitment selected is **degraded**. Zero committed valid
   replicas is **Keyring loss** (RV-7), not degraded. An incomplete uncommitted
@@ -49,14 +50,17 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-10.** Every Keyring generation belongs to one `master_key_epoch`; the
   generation numbers the successive envelope sets across the Library's whole
   life and never restarts at a rotation, so a generation number is never
-  reused and determines its epoch. *(Form: test)*
+  reused and determines its epoch. *(Form: test; not yet implemented:
+  generations across a Master Key rotation)*
 - **KL-11.** Restore may use any one committed valid replica. If at least one
   but fewer than the committed count remain, restore proceeds with the
   degraded set, but the set must be repaired to complete before another
-  write, `prune`, or Master Key rotation. *(Form: test)*
+  write, `prune`, or Master Key rotation. *(Form: test; not yet implemented: the
+  repair before a `prune` or a Master Key rotation)*
 - **KL-12.** A valid replica set with no reachable committed Journal record
   or Index Snapshot is treated as a suspected orphan; its disposal follows the
-  orphan-cleanup rules (OC-2, OC-3, OC-4, OC-5). *(Form: test)*
+  orphan-cleanup rules (OC-2, OC-3, OC-4). *(Form: test; not yet implemented:
+  disposing of an orphan set OC-3 proves)*
 - **KL-13.** Repair is automatic: whichever device finds the committed
   replica set degraded (KL-5) rewrites the missing replicas from any
   committed valid replica, restoring the full committed count. Repair only

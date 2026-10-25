@@ -17,7 +17,7 @@ const EMPTY_LISTING: &str = r#"{"files":[]}"#;
 const REJECTED: &str =
     r#"{"error":{"message":"Invalid Credentials","errors":[{"reason":"authError"}]}}"#;
 
-// SA-6, the half this suite observes: a later run needs nobody at a browser —
+// SA-6: the half this suite observes — a later run needs nobody at a browser:
 // the rejected call is retried under a token minted on the spot, and carries
 // that one instead. What the token is minted from, and what is kept once it
 // has been, is `OAuthTokens`'s; the source here is a stub that counts

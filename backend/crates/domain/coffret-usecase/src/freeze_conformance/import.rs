@@ -164,7 +164,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     );
 }
 
-/// A prefix narrows the run to one folder and never widens it.
+/// PK-8: a prefix narrows the run to one folder and never widens it.
 ///
 /// Which folder to freeze is the request's to say, and it is an intersection
 /// with the mappings rather than a substitute for them: a mapping is what puts a

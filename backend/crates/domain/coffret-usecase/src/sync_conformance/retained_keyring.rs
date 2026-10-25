@@ -6,7 +6,7 @@ use super::withheld_commit::WithheldCommit;
 use crate::object_store::ObjectStore;
 use crate::sync::{sync_folders, RetainedKeyringReplicas, Settled};
 
-/// A commit interrupted after its Keyring replicas were put leaves a
+/// KL-12: a commit interrupted after its Keyring replicas were put leaves a
 /// generation no head names, and the next run reports it as retained Keyring
 /// replicas — and keeps them, since a suspected orphan is reported for review
 /// and never removed (spec: OC-4).

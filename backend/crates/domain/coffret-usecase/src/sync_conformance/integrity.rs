@@ -6,7 +6,7 @@ use crate::sync_conformance::fixtures::{keys, map, request, spooled, write};
 use crate::sync_conformance::mangling_store::ManglingStore;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
-/// An object Storage says is not the bytes that were sent stops the run.
+/// CP-17: an object Storage says is not the bytes that were sent stops the run.
 ///
 /// The comparison is provider-scoped and that is all it claims to be: it asks
 /// one provider whether what it stored is what left this device. A disagreement

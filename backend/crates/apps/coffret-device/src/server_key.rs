@@ -117,7 +117,7 @@ mod tests {
         dir
     }
 
-    // LA-3, the half of it a caller stands on: the key is what a caller shows,
+    // LA-3: the half of it a caller stands on — the key is what a caller shows,
     // so it has to be in the file a caller reads — byte for byte, with nothing
     // around it to be trimmed off wrongly.
     #[test]
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(mode & 0o777, owner_only::OWNER_ONLY_FILE);
     }
 
-    // LA-4. One key per run: a server that starts over a directory another
+    // LA-4: one key per run — a server that starts over a directory another
     // server already wrote into replaces what is there, so the key a caller
     // reads is always the one the running server will accept.
     #[test]
