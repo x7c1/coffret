@@ -1,5 +1,7 @@
 use std::fmt;
 
+use coffret_model::Redacted;
+
 /// Why a handle took nothing.
 #[derive(Debug, Clone, Copy)]
 pub enum DropRefusal {
@@ -21,3 +23,17 @@ impl fmt::Display for DropRefusal {
 }
 
 impl std::error::Error for DropRefusal {}
+
+impl Redacted for DropRefusal {
+    /// Which refusal it is, and nothing else.
+    ///
+    /// No variant carries a name, so its identity is the whole of what a
+    /// diagnostic event is told.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Unknown => "DropRefusal::Unknown",
+            Self::Expired => "DropRefusal::Expired",
+        }
+        .to_owned()
+    }
+}
