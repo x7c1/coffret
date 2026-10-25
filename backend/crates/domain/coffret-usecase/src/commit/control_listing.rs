@@ -246,6 +246,10 @@ impl ControlListing {
     /// nothing there is counted. In a Library with no head every replica is
     /// one no head names.
     ///
+    /// Objects and not names: on a Storage whose names are not unique one
+    /// replica name can carry several copies (spec: KL-14), and each is an
+    /// object a person reviewing the report would find there.
+    ///
     /// Suspected, never proven: a commit another device is making right now has
     /// put its replicas and not yet its head, and is counted the same way.
     pub(crate) fn unnamed_keyring_replicas(
@@ -261,7 +265,7 @@ impl ControlListing {
                         && listed.set_digest == committed.set_digest())
             });
             if !named {
-                *unnamed.entry(generation).or_insert(0) += 1;
+                *unnamed.entry(generation).or_insert(0) += listed.copies.len();
             }
         }
         unnamed
@@ -362,5 +366,30 @@ mod tests {
         assert_eq!(noted.field("object"), replica, "{noted}");
         assert_eq!(listing.newest_head(), Some(generation(2)));
         assert!(logs.at(Level::WARN).is_empty(), "{}", logs.text());
+    }
+
+    // OC-4, KL-14: the count is of objects, so a replica name a Storage lists
+    // twice is two objects no head names, not one.
+    #[test]
+    fn every_copy_of_an_unnamed_replica_is_counted() {
+        let mut listing = ControlListing::default();
+        let replica = ControlObjectName::keyring_replica(
+            Generation::FIRST,
+            &keyring_set_digest(&KeyTable::default()).expect("a key table always digests"),
+            ReplicaPosition::SINGLE,
+        )
+        .expect("a real digest names a replica")
+        .to_string();
+        for object in ["first", "second"] {
+            listing
+                .record(replica.clone(), ObjectRef::new(object))
+                .expect("a replica listed twice is not refused");
+        }
+
+        assert_eq!(
+            listing.unnamed_keyring_replicas(None),
+            BTreeMap::from([(Generation::FIRST, 2)]),
+            "both copies under the one name are counted",
+        );
     }
 }

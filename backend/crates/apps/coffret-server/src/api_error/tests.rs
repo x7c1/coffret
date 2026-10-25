@@ -1,8 +1,11 @@
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
+use axum::extract::FromRequest;
 use coffret_device::{
-    CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced, UnusableReplica,
+    CommitError, DropRefusal, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced,
+    UnusableReplica,
 };
 use coffret_model::{ContainerId, ContentHash, EntryNumber, Generation};
 use coffret_usecase::commit::{EntryRef, PendingChange, RebaseRule};
@@ -1059,6 +1062,164 @@ fn a_refusal_with_no_failure_under_it_records_nothing() {
     ApiError::declined(&Surfaced::ForeignFile { path: path() }).record("case");
 
     assert!(logs.at(tracing::Level::ERROR).is_empty(), "{}", logs.text());
+}
+
+// LA-26: a handle that holds no drop is answered with one sentence whichever
+// way it came to hold none, and the log is told which way it was.
+#[test]
+fn a_drop_no_longer_held_records_which_refusal_it_was() {
+    assert_eq!(
+        recorded(ApiError::drop_not_held(DropRefusal::Unknown)),
+        "DropRefusal::Unknown",
+    );
+    assert_eq!(
+        recorded(ApiError::drop_not_held(DropRefusal::Expired)),
+        "DropRefusal::Expired",
+    );
+}
+
+// The causes a route builds itself rather than converts from the device layer:
+// a state with nothing below it, the operating system's failure, and a mapping
+// the device layer would not record. Each is recorded by what it is, and none
+// by the local folder it was about — not even where the operating system's own
+// message names it.
+#[test]
+fn the_causes_a_route_builds_are_recorded_by_what_they_are() {
+    assert_eq!(recorded(ApiError::no_home()), "NoHome");
+    let folder = local_folder();
+    let failed = || io::Error::other(format!("{} could not be read", folder.display()));
+    assert_eq!(recorded(ApiError::unreadable(failed())), "Io(kind=Other)");
+    assert_eq!(
+        recorded(ApiError::folder_not_listed(&folder, failed())),
+        "Io(kind=Other)",
+    );
+    assert_eq!(
+        recorded(ApiError::mapping_refused(Error::NoSuchLocalRoot {
+            path: folder.clone(),
+            cause: Some(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{} is not there", folder.display()),
+            )),
+        })),
+        "Device::NoSuchLocalRoot(kind=NotFound)",
+    );
+    assert_eq!(
+        recorded(ApiError::mapping_refused(
+            Error::ManagementAreaNotADirectory { root: folder }
+        )),
+        "Device::ManagementAreaNotADirectory",
+    );
+}
+
+// A body the JSON extractor would not read is recorded by its status alone:
+// what was sent to the map route is a local path, and the extractor's words may
+// quote it.
+#[tokio::test]
+async fn a_body_that_is_not_json_records_its_status_and_not_what_was_sent() {
+    let request = axum::http::Request::builder()
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(format!(
+            "{{\"root\": \"{}\"",
+            local_folder().display()
+        )))
+        .expect("a request this case builds is well formed");
+    let rejection = axum::Json::<serde_json::Value>::from_request(request, &())
+        .await
+        .expect_err("a body that ends mid-object is not JSON");
+
+    assert_eq!(
+        recorded(ApiError::unreadable_json(rejection)),
+        "JsonRejection(status=400)",
+    );
+}
+
+// A multipart body that ends mid-part is recorded by the status the extractor
+// decided on, and not by the part's name or what it held.
+#[tokio::test]
+async fn a_multipart_body_that_is_not_whole_records_its_status_alone() {
+    let request = axum::http::Request::builder()
+        .header(
+            axum::http::header::CONTENT_TYPE,
+            "multipart/form-data; boundary=edge",
+        )
+        .body(axum::body::Body::from(
+            "--edge\r\nContent-Disposition: form-data; name=\"albums\"; \
+             filename=\"SPRING.JPG\"\r\n\r\nspring",
+        ))
+        .expect("a request this case builds is well formed");
+    let mut parts = axum::extract::Multipart::from_request(request, &())
+        .await
+        .expect("a multipart content type is taken");
+    let cause = async {
+        let mut part = parts
+            .next_field()
+            .await
+            .expect("the part's headers arrived whole")
+            .expect("there is a part");
+        loop {
+            match part.chunk().await {
+                Ok(Some(_)) => {}
+                Ok(None) => panic!("the part was meant to end in a failure, and ended"),
+                Err(cause) => return cause,
+            }
+        }
+    }
+    .await;
+
+    assert_eq!(
+        recorded(ApiError::bad_request(cause)),
+        "Multipart(status=400)",
+    );
+}
+
+// A multipart body that outran the body limit is answered as the whole drop
+// being too large, and still records the extractor's refusal under it: the
+// status says which of the two ways the body failed it was.
+#[tokio::test]
+async fn a_multipart_body_past_the_limit_records_its_status_alone() {
+    // Past the 2 MiB an extractor is limited to when no route sets a limit.
+    let past_limit = "spring".repeat(2 * 1024 * 1024 / 6 + 1);
+    let request = axum::http::Request::builder()
+        .header(
+            axum::http::header::CONTENT_TYPE,
+            "multipart/form-data; boundary=edge",
+        )
+        .body(axum::body::Body::from(format!(
+            "--edge\r\nContent-Disposition: form-data; name=\"albums\"; \
+             filename=\"SPRING.JPG\"\r\n\r\n{past_limit}\r\n--edge--\r\n"
+        )))
+        .expect("a request this case builds is well formed");
+    let mut parts = axum::extract::Multipart::from_request(request, &())
+        .await
+        .expect("a multipart content type is taken");
+    // A body whose length is known to be past the limit is refused at the first
+    // read, before even the part's headers are taken.
+    let cause = parts
+        .next_field()
+        .await
+        .expect_err("a body past the limit is not read");
+
+    let refusal = ApiError::multipart(cause);
+    assert_eq!(
+        refusal.status,
+        axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+        "a body past the limit is the whole drop being too large",
+    );
+    assert_eq!(recorded(refusal), "Multipart(status=413)");
+}
+
+// A blocking task that ended without an answer is recorded under the identity
+// its route files it under, and by whether it panicked: one cancelled did not.
+#[tokio::test]
+async fn a_task_cancelled_before_it_answered_records_that_it_did_not_panic() {
+    let task = tokio::spawn(std::future::pending::<()>());
+    task.abort();
+    let cause = task.await.expect_err("an aborted task gives no answer");
+
+    assert_eq!(
+        recorded(ApiError::server(super::NotJoined("BrowseNotJoined", cause))),
+        "BrowseNotJoined(panic=false)",
+    );
 }
 
 /// Where the explorer reads the finding names from, relative to this crate.

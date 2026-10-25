@@ -33,8 +33,7 @@
 //! what `axum` may write down; each is wrapped here instead, as the value it is,
 //! by a type that says what of it an event may carry. [`NotJoined`] is the same
 //! for the runtime's account of a blocking task that ended without an answer,
-//! and [`NotHeld`] and [`Named`] for a refusal of the drop store's that has no
-//! rendering of its own and for a state with nothing below it.
+//! and [`Named`] for a state with nothing below it.
 //!
 //! The rendering is enforced by construction rather than by care at each site.
 //! A refusal keeps the failure as the value the layer below reported, but holds
@@ -53,9 +52,6 @@ pub(crate) use multipart::Multipart;
 
 mod named;
 pub(crate) use named::Named;
-
-mod not_held;
-pub(crate) use not_held::NotHeld;
 
 mod not_joined;
 pub(crate) use not_joined::NotJoined;
