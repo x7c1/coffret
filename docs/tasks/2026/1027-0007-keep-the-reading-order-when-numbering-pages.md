@@ -129,7 +129,7 @@ place that is easy to extend.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium with a
+- [x] On the agent's Library (`.tmp/agent/up.sh 1`, headless Chromium with a
       one-off Playwright script that builds a folder drop the way
       `07-freeze.spec.ts` `dropFolderOnto` does): dropping a book holding
       `cover.jpg`, `p0001.jpg … p0020.jpg` with `p0018.jpg` and `p0019.jpg`
