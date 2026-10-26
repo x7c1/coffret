@@ -177,7 +177,7 @@ describe('chooseAndAdd', () => {
       const numbered = choosing(files, choice, { pages: true, volumes: false });
       expect(await chooseAndAdd(numbered.asking)).toBe('sent');
       expect(numbered.asking.ask).toHaveBeenCalledWith(expect.anything(), files, NOTHING_HELD);
-      expect(numbered.sent).toEqual([['BookX/001.jpg', 'BookX/002.jpg', 'BookX/cover.png']]);
+      expect(numbered.sent).toEqual([['BookX/001.jpg', 'BookX/002.jpg', 'BookX/000_cover.png']]);
 
       const asDropped = choosing(files, choice, NO_NUMBERING);
       await chooseAndAdd(asDropped.asking);
