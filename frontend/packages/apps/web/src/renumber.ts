@@ -9,17 +9,19 @@
 // the drop puts in the request, so renaming at drop time is a matter of sending
 // a different path, and the server needs to know nothing about it.
 //
-// The rule is deliberately narrow, because a rename somebody did not expect is
-// worse than one they did not get:
+// Two rules, one for each option, because a book's pages and its volumes come
+// to the drop in different shapes.
+//
+// What both share:
 //
 // - A page is judged among the files in the same folder, a volume among the
 //   folders under the same parent. The dropped folder's own name is the book or
 //   the series, not a volume, and is never changed.
 // - The number is the last run of digits in the name (a file's without its
-//   extension). Only names sharing the text around that run — its frame — are
-//   renamed together, and where siblings fall into several frames only the most
-//   populous one is; a tie between two is a folder this cannot read, and is
-//   left alone.
+//   extension). Names sharing the text around that run — its frame — are one
+//   sequence, and where siblings fall into several frames the most populous one
+//   is the sequence; a tie between two is a folder this cannot read, and is left
+//   alone.
 // - The new name is the number itself, zero-padded to three digits or to the
 //   width of the largest number in the group. The value is kept rather than
 //   reassigned, so a gap stays a gap and a volume or page found later lines up
@@ -27,10 +29,32 @@
 // - A group is left whole where the rename would lose something: two names
 //   carrying the same number, or a new name that is already a sibling's.
 //
+// Volumes keep a deliberately narrow rule, because a rename somebody did not
+// expect is worse than one they did not get: only the sequence is renamed, and
+// every other folder keeps its name.
+//
+// Pages are read in order, and the order is the one a file manager shows: the
+// natural order of their names, digits compared by value. A rename that kept
+// the numbered pages and left `cover.jpg` or a joined spread `p0018+p0019.jpg`
+// as it was would send both to the end of the book, since a listing sorts by
+// bytes and digits sort before letters. So every page is renamed, and the new
+// names sort by bytes in the order the old ones did naturally:
+//
+// - A spread — two numbers of the sequence's frame joined by `+` or `-` — is
+//   both numbers padded alike, joined as they were: `018+019.jpg`.
+// - Every other name is put after the page before it, by taking that page's
+//   last number and `_` in front of it: `020_note.jpg`, `019_x.jpg` after a
+//   spread, and `000_cover.jpg` for a name before the first page.
+// - Where the new names would not sort in that order after all, or the first
+//   page is `0` and leaves no number for a name before it, the folder's pages
+//   are left whole rather than shuffled.
+//
 // Kept free of DOM and of React so it is unit testable, as `packChoice.ts`
 // beside it is.
 
 import type { Added } from '@coffret/api';
+
+import { inLibraryOrder } from './stranded';
 
 /** Which of the two renames the person asked for. */
 export interface Numbering {
@@ -53,10 +77,18 @@ export interface Rename {
 export type LeftWhole =
   /** Two of its names carry the same number, `01` and `1`. */
   | 'same_number'
-  /** A new name would be the name of a sibling that is not renamed. */
+  /**
+   * A new name would be a sibling's name, or, among pages, the new name of
+   * another page.
+   */
   | 'taken'
   /** Two frames are equally common, and neither is the obvious sequence. */
-  | 'tie';
+  | 'tie'
+  /**
+   * Pages whose new names would not sort in the order the old ones are read
+   * in, or whose first number is `0` with a name before it.
+   */
+  | 'order';
 
 /** What the preview says about one folder's pages or one parent's volumes. */
 export interface Group {
@@ -133,13 +165,13 @@ export function renumber(files: readonly Added[], numbering: Numbering): Renumbe
     const held = folders.get(folder)!;
     let finalFolders = [...held.folders];
     if (numbering.volumes && held.folders.size > 0) {
-      const judged = judge([...held.folders], (name) => [name, ''], [...held.files]);
+      const judged = judgeVolumes([...held.folders], [...held.files]);
       volumeNames.set(folder, judged.names);
       groups.push(groupOf('volumes', folder, judged));
       finalFolders = finalFolders.map((name) => judged.names.get(name) ?? name);
     }
     if (numbering.pages && held.files.size > 0) {
-      const judged = judge([...held.files], splitExtension, finalFolders);
+      const judged = judgePages([...held.files], finalFolders);
       pageNames.set(folder, judged.names);
       groups.push(groupOf('pages', folder, judged));
     }
@@ -162,7 +194,7 @@ export function renumber(files: readonly Added[], numbering: Numbering): Renumbe
       kind,
       folder,
       renamed: [...judged.names]
-        .sort(([, a], [, b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .sort(([, a], [, b]) => inLibraryOrder(a, b))
         .map(([from, name]) => ({ from: within(from), to: to(name) })),
       unchanged: judged.unchanged.sort().map((name) => ({ from: within(name), to: to(name) })),
       leftWhole: judged.leftWhole,
@@ -179,19 +211,27 @@ interface Judged {
   leftWhole: LeftWhole | null;
 }
 
+/** The names of a group sharing the frame its sequence is read from. */
+interface Sequence {
+  /** The text before the number, and after it up to the extension. */
+  frame: [string, string];
+  /** Each name of the frame, its number's value and what it carries over. */
+  members: { name: string; value: string; kept: string }[];
+}
+
 /**
- * The new names of a group of siblings.
+ * The sequence of a group of siblings: the names in its most populous frame.
  *
  * `split` cuts a name into the part the number is read from and what is
  * carried over after the number — a file's extension, lowercased, or nothing
- * for a folder. `others` are the names beside the group that it may not take.
+ * for a folder. Null where no name carries a number, and `'tie'` where two
+ * frames are equally common.
  */
-function judge(
+function sequenceOf(
   names: readonly string[],
   split: (name: string) => [string, string],
-  others: readonly string[],
-): Judged {
-  const numbered = new Map<string, { name: string; digits: string; kept: string }[]>();
+): Sequence | 'tie' | null {
+  const frames = new Map<string, Sequence>();
   for (const name of names) {
     const [stem, kept] = split(name);
     const found = NUMBERED.exec(stem);
@@ -200,63 +240,240 @@ function judge(
     }
     // The frame is the text either side of the number, kept as a pair so that
     // two frames differing only in where one half ends never read as one.
-    const frame = JSON.stringify([found[1] ?? '', found[3]]);
-    const members = numbered.get(frame) ?? [];
-    members.push({ name, digits: found[2], kept });
-    numbered.set(frame, members);
+    const frame: [string, string] = [found[1] ?? '', found[3]];
+    const key = JSON.stringify(frame);
+    const sequence = frames.get(key) ?? { frame, members: [] };
+    sequence.members.push({ name, value: valueOf(found[2]), kept });
+    frames.set(key, sequence);
   }
-
-  const leave = (leftWhole: LeftWhole | null): Judged => ({
-    names: new Map(),
-    unchanged: [...names],
-    leftWhole,
-  });
-
-  const frames = [...numbered.values()].sort((a, b) => b.length - a.length);
-  if (frames.length === 0) {
-    return leave(null);
+  const sorted = [...frames.values()].sort((a, b) => b.members.length - a.members.length);
+  if (sorted.length === 0) {
+    return null;
   }
-  if (frames.length > 1 && frames[0].length === frames[1].length) {
-    return leave('tie');
+  if (sorted.length > 1 && sorted[0].members.length === sorted[1].members.length) {
+    return 'tie';
   }
+  return sorted[0];
+}
 
-  // The value is what the digits say, so `007` and `7` are one value; leading
-  // zeroes are dropped rather than the digits parsed, which keeps a number of
-  // any length exact.
-  const members = frames[0].map((member) => ({
-    ...member,
-    value: member.digits.replace(/^0+(?=\d)/, ''),
-  }));
-  const values = new Set(members.map((member) => member.value));
-  if (values.size !== members.length) {
-    return leave('same_number');
-  }
-  const width = Math.max(WIDTH, ...members.map((member) => member.value.length));
-  const renamed = new Map(
-    members.map((member) => [
-      member.name,
-      `${member.value.padStart(width, '0')}${member.kept}`.normalize('NFC'),
-    ]),
-  );
+/**
+ * The value a run of digits says, so that `007` and `7` are one value.
+ *
+ * Leading zeroes are dropped rather than the digits parsed, which keeps a
+ * number of any length exact.
+ */
+function valueOf(digits: string): string {
+  return digits.replace(/^0+(?=\d)/, '');
+}
 
-  // A new name that is already a sibling's would put two files at one path —
-  // the second replacing the first as it lands — so the group is left whole.
-  // A member keeping its own name (`001.jpg` already is one) takes nothing.
-  const kept = new Set([
-    ...names.filter((name) => !renamed.has(name)),
-    ...others,
-  ]);
-  for (const [from, to] of renamed) {
-    if (to !== from && kept.has(to)) {
-      return leave('taken');
-    }
-  }
+/** Whether any value is carried twice. */
+function repeats(values: readonly string[]): boolean {
+  return new Set(values).size !== values.length;
+}
 
+/** A group with nothing in it renamed, and why where there is a reason. */
+function leftAlone(names: readonly string[], leftWhole: LeftWhole | null): Judged {
+  return { names: new Map(), unchanged: [...names], leftWhole };
+}
+
+/** The new names of `renamed`, leaving out those that keep their own. */
+function judged(names: readonly string[], renamed: Map<string, string>): Judged {
   return {
     names: new Map([...renamed].filter(([from, to]) => from !== to)),
-    unchanged: names.filter((name) => renamed.get(name) === undefined || renamed.get(name) === name),
+    unchanged: names.filter((name) => (renamed.get(name) ?? name) === name),
     leftWhole: null,
   };
+}
+
+/**
+ * The new names of a group of sibling folders: the narrow rule, under which
+ * only the folders of the sequence are renamed. `others` are the files beside
+ * them, whose names a folder may not take.
+ */
+function judgeVolumes(names: readonly string[], others: readonly string[]): Judged {
+  const sequence = sequenceOf(names, (name) => [name, '']);
+  if (sequence === null) {
+    return leftAlone(names, null);
+  }
+  if (sequence === 'tie') {
+    return leftAlone(names, 'tie');
+  }
+  const { members } = sequence;
+  if (repeats(members.map((member) => member.value))) {
+    return leftAlone(names, 'same_number');
+  }
+  const pad = padding(members.map((member) => member.value));
+  const renamed = new Map(
+    members.map((member) => [member.name, `${pad(member.value)}${member.kept}`.normalize('NFC')]),
+  );
+
+  // A new name that is already a sibling's would put two folders at one path,
+  // so the group is left whole. A member keeping its own name (`001` already
+  // is one) takes nothing.
+  const kept = new Set([...names.filter((name) => !renamed.has(name)), ...others]);
+  for (const [from, to] of renamed) {
+    if (to !== from && kept.has(to)) {
+      return leftAlone(names, 'taken');
+    }
+  }
+  return judged(names, renamed);
+}
+
+/** One page of the sequence, a single page or a spread. */
+interface Page {
+  /** The new name. */
+  to: string;
+  /** The value of its first number, and of its last. */
+  first: string;
+  last: string;
+}
+
+/**
+ * The new names of a group of sibling files: every one renamed, in an order
+ * that keeps the order they are read in. `others` are the final names of the
+ * folders beside them, which a file may not take.
+ */
+function judgePages(names: readonly string[], others: readonly string[]): Judged {
+  const sequence = sequenceOf(names, splitExtension);
+  if (sequence === null) {
+    return leftAlone(names, null);
+  }
+  if (sequence === 'tie') {
+    return leftAlone(names, 'tie');
+  }
+
+  const members = new Set(sequence.members.map((member) => member.name));
+  const spreads = names.flatMap((name) => {
+    if (members.has(name)) {
+      return [];
+    }
+    const [stem, kept] = splitExtension(name);
+    const spread = spreadOf(stem, sequence.frame);
+    return spread === null ? [] : [{ name, kept, ...spread }];
+  });
+
+  // A spread's numbers are pages too: `p0019` beside `p0018+p0019` is a page
+  // carried twice, and the widest of them sets the width of all.
+  const values = [
+    ...sequence.members.map((member) => member.value),
+    ...spreads.flatMap((spread) => [spread.first, spread.last]),
+  ];
+  if (repeats(values)) {
+    return leftAlone(names, 'same_number');
+  }
+  const pad = padding(values);
+  const pages = new Map<string, Page>([
+    ...sequence.members.map((member): [string, Page] => [
+      member.name,
+      { to: `${pad(member.value)}${member.kept}`, first: member.value, last: member.value },
+    ]),
+    ...spreads.map((spread): [string, Page] => [
+      spread.name,
+      {
+        to: `${pad(spread.first)}${spread.joint}${pad(spread.last)}${spread.kept}`,
+        first: spread.first,
+        last: spread.last,
+      },
+    ]),
+  ]);
+
+  // Every other name goes after the page before it in the order they are
+  // read in, by the last number of that page. Names before the first page
+  // wait for it, and go under the number one less than its first.
+  const order = [...names].sort(naturally);
+  const renamed = new Map<string, string>();
+  const after = (value: string, name: string) => {
+    const [stem, kept] = splitExtension(name);
+    return `${pad(value)}_${stem}${kept}`;
+  };
+  let before: string | null = null;
+  const waiting: string[] = [];
+  for (const name of order) {
+    const page = pages.get(name);
+    if (page === undefined) {
+      if (before === null) {
+        waiting.push(name);
+      } else {
+        renamed.set(name, after(before, name));
+      }
+      continue;
+    }
+    if (before === null && waiting.length > 0) {
+      if (page.first === '0') {
+        return leftAlone(names, 'order');
+      }
+      const previous = (BigInt(page.first) - 1n).toString();
+      for (const waited of waiting) {
+        renamed.set(waited, after(previous, waited));
+      }
+    }
+    renamed.set(name, page.to);
+    before = page.last;
+  }
+  for (const [from, to] of renamed) {
+    renamed.set(from, to.normalize('NFC'));
+  }
+
+  // Two files at one path would have the second replace the first as it
+  // lands, and a file cannot share its path with a folder.
+  const finals = order.map((name) => renamed.get(name)!);
+  const folders = new Set(others);
+  if (repeats(finals) || finals.some((name) => folders.has(name))) {
+    return leftAlone(names, 'taken');
+  }
+  // The prefix keeps a name after its page, but not two names after one page
+  // in their order between themselves: `a2` and `a10` sort the other way by
+  // bytes. Where that happens the folder is left as it was.
+  for (let at = 1; at < finals.length; at += 1) {
+    if (inLibraryOrder(finals[at - 1], finals[at]) >= 0) {
+      return leftAlone(names, 'order');
+    }
+  }
+  return judged(names, renamed);
+}
+
+/**
+ * The two numbers of a spread — two pages scanned as one image — and what
+ * joins them, or null where `stem` is not one.
+ *
+ * A spread is two numbers of the sequence, each with the frame's text around
+ * it, joined by `+` or `-`: `p0018+p0019`, or `0018-0019` where the frame is
+ * empty. Only that shape is read, since it is the one books have been seen to
+ * use; three pages joined, or a second number without the frame, is read as
+ * any other name. This is the place to widen when a book needs it.
+ */
+function spreadOf(
+  stem: string,
+  [before, after]: [string, string],
+): { first: string; joint: string; last: string } | null {
+  const numbered = `${escaped(before)}(\\d+)${escaped(after)}`;
+  const found = new RegExp(`^${numbered}([+-])${numbered}$`).exec(stem);
+  if (found === null) {
+    return null;
+  }
+  return { first: valueOf(found[1]), joint: found[2], last: valueOf(found[3]) };
+}
+
+/** `text` matched as itself inside a regular expression. */
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+}
+
+/**
+ * Two names in the order a file manager shows them: runs of digits compared
+ * by value, case ignored. The locale is fixed so that the order does not hang
+ * on the machine, and names it calls equal fall back to the Library's order.
+ */
+function naturally(left: string, right: string): number {
+  return NATURAL.compare(left, right) || inLibraryOrder(left, right);
+}
+
+const NATURAL = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+/** A value padded to the width of the widest of `values`, three at least. */
+function padding(values: readonly string[]): (value: string) => string {
+  const width = Math.max(WIDTH, ...values.map((value) => value.length));
+  return (value) => value.padStart(width, '0');
 }
 
 /**
@@ -381,5 +598,7 @@ export function leftWholeLine(leftWhole: LeftWhole): string {
       return 'left as they are: a new name is already taken by a name beside them';
     case 'tie':
       return 'left as they are: their names follow more than one pattern equally';
+    case 'order':
+      return 'left as they are: numbering them would change the order they are read in';
   }
 }

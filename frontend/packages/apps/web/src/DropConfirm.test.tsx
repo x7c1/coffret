@@ -291,9 +291,9 @@ it('previews what ticking a box renames, and carries it to the answer', () => {
   const preview = screen.getByLabelText('what is renamed').textContent ?? '';
   expect(preview).toContain('king01-#001.JPG → 001.jpg');
   expect(preview).toContain('king01-#079.JPG → 079.jpg');
-  expect(preview).toContain('73 more');
+  expect(preview).toContain('74 more');
   expect(preview).not.toContain('king01-#040.JPG');
-  expect(preview).toContain('cover.png (unchanged)');
+  expect(preview).toContain('cover.png → 000_cover.png');
 
   fireEvent.click(screen.getByText('Show all'));
   expect(screen.getByLabelText('what is renamed').textContent).toContain(
@@ -302,6 +302,31 @@ it('previews what ticking a box renames, and carries it to the answer', () => {
 
   fireEvent.click(add());
   expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false });
+});
+
+// The names numbered to keep their place — a cover, a spread — are renames
+// like any other, and a folder the rule cannot keep in order says why.
+it('previews a prefixed name and a spread as renames, and a folder left whole', () => {
+  const file = (path: string) => addedFile(path, { size: 10, lastModified: 0 } as File);
+  const files = [
+    file('BookX/cover.jpg'),
+    file('BookX/p1.jpg'),
+    file('BookX/p2+p3.jpg'),
+    file('BookX/p4.jpg'),
+    file('BookY/cover.jpg'),
+    file('BookY/p0.jpg'),
+    file('BookY/p1.jpg'),
+  ];
+  render(<DropConfirm summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
+  fireEvent.click(screen.getByLabelText('Number the pages'));
+
+  const preview = screen.getByLabelText('what is renamed').textContent ?? '';
+  expect(preview).toContain('cover.jpg → 000_cover.jpg');
+  expect(preview).toContain('p2+p3.jpg → 002+003.jpg');
+  expect(preview).toContain(
+    'left as they are: numbering them would change the order they are read in',
+  );
+  expect(preview).toContain('p0.jpg (unchanged)');
 });
 
 // A person scanning books drops one after another and means the same each time.
@@ -347,14 +372,15 @@ describe('what a drop onto a folder of the same name replaces', () => {
 
   it('says how many a Pack refuses beside the ones replaced, for the paths the drop is sent under', () => {
     const held: HeldFiles = new Map([
-      ['BookX/cover.png', 'one-file'],
+      ['BookX/000_cover.png', 'one-file'],
       ['BookX/001.jpg', 'pack'],
       ['BookX/002.jpg', 'pack'],
     ]);
     render(<DropConfirm summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
     expect(screen.getByRole('dialog').textContent).not.toContain('refused, because');
 
-    // Numbered, two pages land on paths a Pack holds.
+    // Numbered, the cover lands on a one-file Entry and two pages on paths a
+    // Pack holds.
     fireEvent.click(screen.getByLabelText('Number the pages'));
     const said = screen.getByRole('dialog').textContent ?? '';
     expect(said).toContain('1 file in this drop replaces the file the Library already has');

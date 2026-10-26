@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addedFile, type Added } from '@coffret/api';
 
 import { NO_NUMBERING, renumber, unchangedLine, type Numbering } from './renumber';
+import { inLibraryOrder } from './stranded';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
 function added(path: string): Added {
@@ -67,20 +68,91 @@ describe('renumber', () => {
     ]);
   });
 
-  it('leaves a name without a number alone and says so', () => {
-    const result = renumber([added('b/p1.jpg'), added('b/p2.jpg'), added('b/cover.png')], PAGES);
-    expect(result.files.map((file) => file.path)).toEqual(['b/001.jpg', 'b/002.jpg', 'b/cover.png']);
+  // A cover kept as `cover.png` would sort after every numbered page, since
+  // digits sort before letters; numbered after the page before it, it stays
+  // where it was read.
+  it('numbers a name without a number after the page before it, and says so', () => {
+    const result = renumber([added('b/p1.jpg'), added('b/p2.jpg'), added('b/Cover.PNG')], PAGES);
+    expect(result.files.map((file) => file.path)).toEqual([
+      'b/001.jpg',
+      'b/002.jpg',
+      'b/000_Cover.png',
+    ]);
     expect(result.groups).toEqual([
       {
         kind: 'pages',
         folder: 'b',
         renamed: [
+          { from: 'Cover.PNG', to: '000_Cover.png' },
           { from: 'p1.jpg', to: '001.jpg' },
           { from: 'p2.jpg', to: '002.jpg' },
         ],
-        unchanged: [{ from: 'cover.png', to: 'cover.png' }],
+        unchanged: [],
         leftWhole: null,
       },
+    ]);
+  });
+
+  it('keeps the order of a book with a cover and a spread', () => {
+    const files = [
+      added('book/cover.jpg'),
+      ...range(1, 17, (at) => `book/p${String(at).padStart(4, '0')}.jpg`),
+      added('book/p0018+p0019.jpg'),
+      added('book/p0020.jpg'),
+    ];
+    const sent = paths(files, PAGES);
+    expect(sent).toEqual([
+      'book/000_cover.jpg',
+      ...range(1, 17, (at) => `book/${String(at).padStart(3, '0')}.jpg`).map((file) => file.path),
+      'book/018+019.jpg',
+      'book/020.jpg',
+    ]);
+    // Sorted as the Library sorts, the new names are in the order the old
+    // ones were read in.
+    expect([...sent].sort(inLibraryOrder)).toEqual(sent);
+  });
+
+  it('numbers a spread joined by a hyphen, or with no text around its numbers', () => {
+    expect(paths([added('b/p1.jpg'), added('b/p2-p3.jpg'), added('b/p4.jpg')], PAGES)).toEqual([
+      'b/001.jpg',
+      'b/002-003.jpg',
+      'b/004.jpg',
+    ]);
+    expect(paths([added('b/0017.jpg'), added('b/0018+0019.jpg'), added('b/0020.jpg')], PAGES)).toEqual([
+      'b/017.jpg',
+      'b/018+019.jpg',
+      'b/020.jpg',
+    ]);
+  });
+
+  it('numbers a name after a spread by the spread\'s last number', () => {
+    expect(
+      paths([added('b/p17.jpg'), added('b/p18+p19.jpg'), added('b/p19x.jpg'), added('b/p20.jpg')], PAGES),
+    ).toEqual(['b/017.jpg', 'b/018+019.jpg', 'b/019_p19x.jpg', 'b/020.jpg']);
+  });
+
+  it('widens the whole group to the largest number of a spread', () => {
+    expect(paths([added('b/p1.jpg'), added('b/p2.jpg'), added('b/p999+p1000.jpg')], PAGES)).toEqual([
+      'b/0001.jpg',
+      'b/0002.jpg',
+      'b/0999+1000.jpg',
+    ]);
+  });
+
+  // By bytes `p10` comes before `p2`; a file manager, and so the person, puts
+  // it after, and `P2a` between them whatever its case.
+  it('places a numbered-after name by the natural order of the names', () => {
+    expect(
+      paths([added('b/p10.jpg'), added('b/p2.jpg'), added('b/P2a.jpg'), added('b/p3.jpg')], PAGES),
+    ).toEqual(['b/010.jpg', 'b/002.jpg', 'b/002_P2a.jpg', 'b/003.jpg']);
+  });
+
+  // Not yet seen in a book, so read as any other name rather than guessed at.
+  it('numbers three joined pages after the page before them', () => {
+    expect(paths([added('b/p1.jpg'), added('b/p2+p3+p4.jpg'), added('b/p5.jpg')], PAGES)).toEqual([
+      'b/001.jpg',
+      'b/001_p2+p3+p4.jpg',
+      'b/005.jpg',
     ]);
   });
 
@@ -92,18 +164,74 @@ describe('renumber', () => {
     expect(result.groups[0].unchanged).toHaveLength(3);
   });
 
-  // A file already called 001.jpg would be replaced by the page renamed onto
-  // it, so the group is not renamed at all.
-  it('leaves a group whole where a new name is a sibling that is not renamed', () => {
+  // `p2` beside `p2+p3` is page 2 scanned twice, which numbering would not
+  // tell apart.
+  it('leaves a group whole where a page carries a number of a spread', () => {
+    const files = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/p2+p3.jpg'), added('b/p4.jpg')];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({ renamed: [], leftWhole: 'same_number' });
+  });
+
+  // `x.JPG` and `x.jpg` both become `002_x.jpg`, and the second to land would
+  // replace the first.
+  it('leaves a group whole where two names would be numbered to one', () => {
+    const files = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/x.JPG'), added('b/x.jpg')];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({ renamed: [], leftWhole: 'taken' });
+  });
+
+  // A file already called 001.jpg is read before the first page, and goes
+  // there rather than being replaced by the page renamed onto it.
+  it('numbers a file already called by a new name out of its way', () => {
     const files = [
       added('b/king01-#001.jpg'),
       added('b/king01-#002.jpg'),
       added('b/king01-#003.jpg'),
       added('b/001.jpg'),
     ];
+    expect(paths(files, PAGES)).toEqual(['b/001.jpg', 'b/002.jpg', 'b/003.jpg', 'b/000_001.jpg']);
+  });
+
+  // A page renamed onto a folder beside it could not be put there at all.
+  it('leaves a group whole where a new name is a sibling folder', () => {
+    const files = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/001.jpg/x.jpg')];
     const result = renumber(files, PAGES);
     expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
-    expect(result.groups[0].leftWhole).toBe('taken');
+    const pages = result.groups.find((group) => group.folder === 'b');
+    expect(pages?.leftWhole).toBe('taken');
+  });
+
+  it('leaves a group whole where a name comes before page 0', () => {
+    const files = [added('b/cover.jpg'), added('b/p0.jpg'), added('b/p1.jpg')];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({ renamed: [], leftWhole: 'order' });
+  });
+
+  it('numbers from page 0 where nothing comes before it', () => {
+    expect(paths([added('b/p0.jpg'), added('b/p1.jpg'), added('b/x.jpg')], PAGES)).toEqual([
+      'b/000.jpg',
+      'b/001.jpg',
+      'b/001_x.jpg',
+    ]);
+  });
+
+  // `a2` and `a10` both go before page 1, and between themselves would sort
+  // `000_a10` first by bytes, which is not the order they are read in.
+  it('leaves a group whole where the new names would sort out of order', () => {
+    const files = [
+      added('b/p1.jpg'),
+      added('b/p2.jpg'),
+      added('b/p3.jpg'),
+      added('b/a2.jpg'),
+      added('b/a10.jpg'),
+    ];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({ renamed: [], leftWhole: 'order' });
+    expect(result.groups[0].unchanged).toHaveLength(5);
   });
 
   it('renames nothing where two frames are equally common', () => {
@@ -113,7 +241,7 @@ describe('renumber', () => {
     expect(result.groups[0].leftWhole).toBe('tie');
   });
 
-  it('renames only the most common frame', () => {
+  it('numbers a name in a less common frame after the page before it', () => {
     const files = [
       added('b/page-1.jpg'),
       added('b/page-2.jpg'),
@@ -125,9 +253,9 @@ describe('renumber', () => {
       'b/001.jpg',
       'b/002.jpg',
       'b/003.jpg',
-      'b/extra-9.jpg',
+      'b/000_extra-9.jpg',
     ]);
-    expect(result.groups[0].unchanged).toEqual([{ from: 'extra-9.jpg', to: 'extra-9.jpg' }]);
+    expect(result.groups[0].unchanged).toEqual([]);
   });
 
   it('never renames the dropped folder itself', () => {
@@ -163,7 +291,7 @@ describe('renumber', () => {
       'book/002/001.jpg',
       'book/003/001.jpg',
       'book/009.jpg',
-      'book/cover.png',
+      'book/008_cover.png',
     ]);
     // The preview names a page under its renamed volume.
     const firstVolume = both.groups.find((group) => group.folder === 'book/vol1');
@@ -172,15 +300,16 @@ describe('renumber', () => {
 
   it('says where a kept name lands when its volume is renamed', () => {
     const result = renumber(
-      [added('book/vol1/p1.jpg'), added('book/vol1/cover.png'), added('book/vol2/p1.jpg')],
+      [added('book/vol1/001.jpg'), added('book/vol1/cover.png'), added('book/vol2/p1.jpg')],
       BOTH,
     );
     const firstVolume = result.groups.find(
       (group) => group.kind === 'pages' && group.folder === 'book/vol1',
     );
-    expect(firstVolume?.unchanged).toEqual([{ from: 'vol1/cover.png', to: '001/cover.png' }]);
+    expect(firstVolume?.renamed).toEqual([{ from: 'vol1/cover.png', to: '001/001_cover.png' }]);
+    expect(firstVolume?.unchanged).toEqual([{ from: 'vol1/001.jpg', to: '001/001.jpg' }]);
     expect(unchangedLine(firstVolume!.unchanged[0])).toBe(
-      'vol1/cover.png → 001/cover.png (name unchanged)',
+      'vol1/001.jpg → 001/001.jpg (name unchanged)',
     );
     expect(unchangedLine({ from: 'cover.png', to: 'cover.png' })).toBe('cover.png (unchanged)');
   });
