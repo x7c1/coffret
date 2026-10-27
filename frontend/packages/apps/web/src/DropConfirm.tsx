@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 import type { Added } from '@coffret/api';
 
@@ -12,6 +12,7 @@ import {
   collisionsOf,
   existsLine,
   folderLine,
+  foldersReached,
   looseLine,
   NOTHING_HELD,
   questionOf,
@@ -23,16 +24,25 @@ import {
 } from './packChoice';
 import { recall, remember } from './remembered';
 import {
+  corrected,
+  EDITED,
+  editedPath,
   elided,
   groupHeading,
   hasHidden,
   leftWholeLine,
+  misorderedLine,
+  NO_EDITS,
   NO_NUMBERING,
-  renameLine,
+  PUT_BACK,
+  refusalLine,
   renumber,
   unchangedLine,
+  type Edits,
   type Group,
   type Numbering,
+  type Refusal,
+  type Rename,
 } from './renumber';
 import { COLOR } from './theme';
 
@@ -93,6 +103,25 @@ const REMEMBERED = {
  * meant — and Add carries the boxes beside the choice. Files dropped alone are
  * no folder's pages, and are sent under the names they were dropped with.
  *
+ * Where the rule read a name otherwise than the person meant, they correct it
+ * here rather than untick the box and rename after the drop: clicking a new
+ * name in the preview opens it for editing — the last component only, since
+ * the name is what is corrected, not where it lands — and Enter or leaving the
+ * field takes it, Escape puts the field away without it. While the field is
+ * open its Escape is not the dialog's Cancel and its Enter is not Add. A name
+ * that cannot be held where it lands — empty, with `/` in it, `.` or `..`, or
+ * one a name beside it already is — is not taken: the field stays open and
+ * says why, and Add sends the names last taken. A name that breaks the order
+ * the names beside it are read in is taken and said to break it, since it may
+ * be a typo. A corrected line is marked as such and offers to put back the
+ * rule's name. A corrected volume folder carries the pages under it, in the
+ * lines below it and in the paths sent. What the Library holds under the
+ * folder it now names is asked for as the corrections are made (`holding`),
+ * and Add waits for the answer, so a replacement or refusal there is said as
+ * any other is. Add carries the corrections beside the boxes. They belong to
+ * this question only: ticking or unticking either box starts again from the
+ * rule's names, and nothing of them is kept for the next drop.
+ *
  * Escape and a click outside it are Cancel, as they close any dialog — and
  * Cancel costs nothing, because nothing has been sent.
  */
@@ -103,6 +132,7 @@ export function DropConfirm({
   held = NOTHING_HELD,
   notTaken = [],
   systemFiles = [],
+  holding,
   onChoose,
 }: {
   summary: DropSummary;
@@ -116,7 +146,14 @@ export function DropConfirm({
   notTaken?: readonly NotTaken[];
   /** What the drop left out because an operating system keeps it. */
   systemFiles?: readonly SystemFile[];
-  onChoose: (choice: Choice, numbering: Numbering) => void;
+  /**
+   * What the Library holds in the given folders, relative to where the drop
+   * lands — asked where a corrected volume name sends files into a folder
+   * `held` was not read from. It answers with nothing held, rather than
+   * refusing, where a listing cannot be had.
+   */
+  holding?: (folders: readonly string[]) => Promise<HeldFiles>;
+  onChoose: (choice: Choice, numbering: Numbering, edits: Edits) => void;
 }) {
   const asked = summary.folders.length > 0;
   const [how, setHow] = useState<Exclude<Choice, 'cancel'>>(asked ? 'pack' : 'one_by_one');
@@ -126,24 +163,80 @@ export function DropConfirm({
   }));
   // Files alone are numbered by nothing, whatever the last drop ticked.
   const numbering = asked ? ticked : NO_NUMBERING;
+  // The person's corrections of the rule's names, which a box ticked or
+  // unticked discards: the rule's names they corrected are other names then.
+  const [edits, setEdits] = useState<Edits>(NO_EDITS);
   const tick = (which: keyof Numbering, on: boolean) => {
     remember(REMEMBERED[which], on);
     setTicked((held) => ({ ...held, [which]: on }));
+    setEdits(NO_EDITS);
+  };
+  const correct = (path: string, name: string | null): Refusal | null => {
+    const result = corrected(files, numbering, edits, path, name);
+    if ('refused' in result) {
+      return result.refused;
+    }
+    setEdits(result.edits);
+    return null;
   };
 
   useEffect(() => {
     const closing = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onChoose('cancel', numbering);
+        onChoose('cancel', numbering, edits);
       }
     };
     window.addEventListener('keydown', closing);
     return () => window.removeEventListener('keydown', closing);
-  }, [onChoose, numbering]);
+  }, [onChoose, numbering, edits]);
 
-  const renumbered = useMemo(() => renumber(files, numbering), [files, numbering]);
+  const renumbered = useMemo(() => renumber(files, numbering, edits), [files, numbering, edits]);
   const groups = renumbered.groups;
-  const collisions = useMemo(() => collisionsOf(renumbered.files, held), [renumbered, held]);
+
+  // A corrected volume name can send files into a folder no numbering would
+  // have, which `held` was not read from: what the Library holds there is
+  // asked for as the corrections are made, and kept beside `held` — both are
+  // what the Library holds at a path, whichever answer is sent. The folders
+  // are joined into one string so that the effect below asks again only when
+  // they change, not on every new array.
+  const reached = useMemo(() => {
+    const corrects = groups.some(
+      (group) => group.kind === 'volumes' && group.renamed.some((rename) => rename.ruled !== undefined),
+    );
+    return corrects ? foldersReached(renumbered.files).sort().join('\n') : '';
+  }, [groups, renumbered]);
+  const [heldCorrected, setHeldCorrected] = useState<HeldFiles>(NOTHING_HELD);
+  // The folders last answered for. Until the answer for those reached now
+  // comes, Add waits: the person would otherwise send without being told what
+  // the corrected folders replace — as they would by clicking Add straight
+  // from the field, whose leaving takes the name and asks.
+  const [answered, setAnswered] = useState('');
+  const reading = holding !== undefined && reached !== '' && answered !== reached;
+  useEffect(() => {
+    if (holding === undefined || reached === '') {
+      return;
+    }
+    let current = true;
+    void holding(reached.split('\n'))
+      .then((found) => {
+        if (current) {
+          setHeldCorrected((known) => new Map([...known, ...found]));
+        }
+      })
+      .finally(() => {
+        if (current) {
+          setAnswered(reached);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [holding, reached]);
+  const known = useMemo(
+    () => (heldCorrected.size === 0 ? held : new Map([...held, ...heldCorrected])),
+    [held, heldCorrected],
+  );
+  const collisions = useMemo(() => collisionsOf(renumbered.files, known), [renumbered, known]);
   const replaces = replacesLine(collisions);
   const refused = refusedLine(collisions);
   const left = notTakenNotice(notTaken);
@@ -157,7 +250,7 @@ export function DropConfirm({
   return (
     <div
       role="presentation"
-      onClick={() => onChoose('cancel', numbering)}
+      onClick={() => onChoose('cancel', numbering, edits)}
       style={{
         position: 'fixed',
         inset: 0,
@@ -221,6 +314,11 @@ export function DropConfirm({
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
         )}
         {refused !== null && <p style={{ margin: 0, color: COLOR.warn }}>{refused}</p>}
+        {reading && (
+          <p style={{ margin: 0, color: COLOR.dim }}>
+            reading what the Library holds under the corrected folder names…
+          </p>
+        )}
         {asked && (
           <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <legend style={{ padding: 0, marginBottom: 4, color: COLOR.dim }}>add it as</legend>
@@ -257,7 +355,15 @@ export function DropConfirm({
             </label>
           </div>
         )}
-        {(numbering.pages || numbering.volumes) && <Preview groups={groups} />}
+        {/* Keyed by the boxes, so that ticking one also puts away a name
+            being corrected: the corrections are discarded with it. */}
+        {(numbering.pages || numbering.volumes) && (
+          <Preview
+            key={`${numbering.pages}:${numbering.volumes}`}
+            groups={groups}
+            correct={correct}
+          />
+        )}
         {/* At the foot of the dialog and kept in view as it scrolls: a preview
             of a few hundred renames would otherwise push the one thing every
             drop needs answered out of reach. */}
@@ -273,13 +379,14 @@ export function DropConfirm({
             gap: 8,
           }}
         >
-          <button type="button" onClick={() => onChoose('cancel', numbering)} style={CHOICE}>
+          <button type="button" onClick={() => onChoose('cancel', numbering, edits)} style={CHOICE}>
             {CANCEL}
           </button>
           <button
             type="button"
             autoFocus
-            onClick={() => onChoose(how, numbering)}
+            disabled={reading}
+            onClick={() => onChoose(how, numbering, edits)}
             style={{ ...CHOICE, borderColor: COLOR.added }}
           >
             {ADD}
@@ -334,9 +441,17 @@ const LEVEL: Record<Level['state'], CSSProperties | undefined> = {
 
 /**
  * What the ticked boxes would rename, group by group: both ends of each run of
- * renames and the names left as they are, with a way to see all of it.
+ * renames and the names left as they are, with a way to see all of it. A new
+ * name shown is one the person can correct, through `correct`.
  */
-function Preview({ groups }: { groups: readonly Group[] }) {
+function Preview({
+  groups,
+  correct,
+}: {
+  groups: readonly Group[];
+  /** Corrects the new name of a dropped path, or puts it back where null, or says why not. */
+  correct: (path: string, name: string | null) => Refusal | null;
+}) {
   const [all, setAll] = useState(false);
   if (groups.length === 0) {
     return <p style={{ margin: 0, color: COLOR.dim }}>nothing in this drop is renamed</p>;
@@ -365,11 +480,21 @@ function Preview({ groups }: { groups: readonly Group[] }) {
             )}
             <ul style={{ margin: 0, paddingLeft: 16 }}>
               {renamed.head.map((rename) => (
-                <li key={rename.from}>{renameLine(rename)}</li>
+                <RenameLine
+                  key={rename.from}
+                  rename={rename}
+                  path={editedPath(group, rename)}
+                  correct={correct}
+                />
               ))}
               {renamed.hidden > 0 && <li style={{ color: COLOR.dim }}>… {renamed.hidden} more …</li>}
               {renamed.tail.map((rename) => (
-                <li key={rename.from}>{renameLine(rename)}</li>
+                <RenameLine
+                  key={rename.from}
+                  rename={rename}
+                  path={editedPath(group, rename)}
+                  correct={correct}
+                />
               ))}
               {unchanged.head.map((kept) => (
                 <li key={kept.from} style={{ color: COLOR.dim }}>
@@ -396,6 +521,161 @@ function Preview({ groups }: { groups: readonly Group[] }) {
     </div>
   );
 }
+
+/**
+ * One rename, `<from> → <to>`, whose new name is a control that opens it for
+ * correcting. The field holds the last component only, with the stem selected
+ * so that the extension is kept unless it is typed over.
+ */
+function RenameLine({
+  rename,
+  path,
+  correct,
+}: {
+  rename: Rename;
+  /** The dropped path the line's corrections are kept under. */
+  path: string;
+  correct: (path: string, name: string | null) => Refusal | null;
+}) {
+  // What is being typed, or null while the name is shown rather than edited.
+  const [draft, setDraft] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  // Whether the field is still open, read where leaving it would take the
+  // name: Escape and Enter close it before the field goes and its blur comes.
+  const open = useRef(false);
+  // Whether the name shown next takes the focus: where Enter, Escape or put
+  // back puts away the control that had it, which would leave the focus on
+  // nothing and the keyboard with no place in the dialog. Leaving the field
+  // for something else keeps the focus there.
+  const refocus = useRef(false);
+  const cut = rename.to.lastIndexOf('/');
+  const parent = rename.to.slice(0, cut + 1);
+  const name = rename.to.slice(cut + 1);
+
+  const start = () => {
+    open.current = true;
+    setDraft(name);
+    setRefusal(null);
+  };
+  const take = (typed: string) => {
+    if (!open.current) {
+      return;
+    }
+    const refused = correct(path, typed);
+    setRefusal(refused);
+    if (refused === null) {
+      open.current = false;
+      setDraft(null);
+    } else {
+      refocus.current = false;
+    }
+  };
+  const discard = () => {
+    refocus.current = true;
+    open.current = false;
+    setDraft(null);
+    setRefusal(null);
+  };
+
+  return (
+    <li>
+      {rename.from} → {parent}
+      {draft === null ? (
+        <button
+          type="button"
+          title="correct this name"
+          ref={(shown) => {
+            if (shown !== null && refocus.current) {
+              refocus.current = false;
+              shown.focus();
+            }
+          }}
+          onClick={start}
+          style={NAME}
+        >
+          {name}
+        </button>
+      ) : (
+        <input
+          type="text"
+          aria-label={`new name of ${rename.from}`}
+          aria-invalid={refusal !== null}
+          autoFocus
+          value={draft}
+          onFocus={(event) => {
+            const dot = event.target.value.lastIndexOf('.');
+            event.target.setSelectionRange(0, dot > 0 ? dot : event.target.value.length);
+          }}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // The field's own keys: neither may reach the dialog, whose Escape
+            // is Cancel.
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.stopPropagation();
+              refocus.current = true;
+              take(event.currentTarget.value);
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              discard();
+            }
+          }}
+          onBlur={(event) => take(event.currentTarget.value)}
+          style={FIELD}
+        />
+      )}
+      {draft === null && rename.ruled !== undefined && (
+        <>
+          {' '}
+          <span style={{ color: COLOR.dim }}>{EDITED}</span>{' '}
+          <button
+            type="button"
+            title={`back to ${rename.ruled}`}
+            onClick={() => {
+              refocus.current = true;
+              correct(path, null);
+            }}
+            style={{ ...NAME, color: COLOR.dim }}
+          >
+            {PUT_BACK}
+          </button>
+        </>
+      )}
+      {refusal !== null && (
+        <span style={{ display: 'block', color: COLOR.refused }}>{refusalLine(refusal)}</span>
+      )}
+      {draft === null && rename.misordered !== undefined && (
+        <span style={{ display: 'block', color: COLOR.warn }}>
+          {misorderedLine(rename.misordered)}
+        </span>
+      )}
+    </li>
+  );
+}
+
+/** A new name that opens for correcting: read as text, with a dotted line under it. */
+const NAME: CSSProperties = {
+  border: 'none',
+  background: 'none',
+  padding: 0,
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'text',
+  textDecoration: 'underline dotted',
+  textUnderlineOffset: 2,
+};
+
+/** The field a new name is corrected in, as wide as the line lets it be. */
+const FIELD: CSSProperties = {
+  font: 'inherit',
+  color: COLOR.text,
+  background: COLOR.panel,
+  border: `1px solid ${COLOR.border}`,
+  borderRadius: 3,
+  padding: '0 4px',
+  minWidth: '12em',
+};
 
 /** A line under the one it belongs to, set in past the folder's mark. */
 const INSET: CSSProperties = { display: 'block', paddingLeft: 22 };
