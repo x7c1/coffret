@@ -3,22 +3,24 @@
 //!
 //! Both ways a Library appears on a device — created here, or joined from a
 //! Recovery Code — write the same five things in the same order, and both have
-//! to be abandonable at any point. So both build in a directory named after
-//! neither: the directory takes the Library's real name in one rename once the
-//! last step has landed, which is what makes a directory under the real name
-//! always a whole Library and an interrupted attempt something a later one can
-//! discard rather than half a Library nothing can tell from a whole one.
+//! to be abandonable at any point. So both build in a directory under the
+//! staging suffix: the directory takes the Library's real name — its ID — in
+//! one rename once the last step has landed, which is what makes a directory
+//! under the real name always a whole Library and an interrupted attempt
+//! something a later one can discard rather than half a Library nothing can
+//! tell from a whole one.
 
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-use coffret_model::Redacted;
+use coffret_model::{LibraryId, Redacted};
 use coffret_usecase::{LocalIoError, LocalOperation};
 use tracing::{debug, info, warn};
 
 use crate::error::{CreationStep, Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::library_ref::LibraryRef;
 use crate::owner_only;
 
 /// Which way a Library is coming to be on this device.
@@ -47,34 +49,41 @@ impl Flow {
 /// One attempt at putting a Library on this device.
 pub(crate) struct Staging {
     flow: Flow,
-    /// Where the finished Library goes.
-    dir: LibraryDir,
-    /// Where it is built until then.
+    /// What the attempt says it is about: the Library's name for a creation,
+    /// the place given for a join.
+    name: String,
+    /// Where it is built until it takes its real name.
     staging: LibraryDir,
     /// The app folder this attempt cannot take back, where it created one.
     folder: Option<String>,
 }
 
 impl Staging {
-    /// Where a Library called `name` would go, if nothing is there already.
+    /// Where the Library `library_id` goes, if it is not on this device
+    /// already.
     ///
-    /// The two refusals a name alone can earn — it is not one path component, or
-    /// a Library of that name is already on this device — are made here, before
-    /// a directory exists, before Storage is asked anything, and before anybody
-    /// is asked for a Passphrase. Both are answers a person acts on and neither
-    /// costs a file.
-    pub(crate) fn vacant(name: &str) -> Result<LibraryDir> {
-        let dir = LibraryDir::resolve(name)?;
-        if dir.is_present() {
-            return Err(Error::LibraryExists {
-                name: dir.name().to_owned(),
-                path: dir.path().to_path_buf(),
-            });
+    /// The refusal a joined Library's ID alone can earn — it is already here —
+    /// is made as soon as the ID is known, and on S3 that is before a
+    /// directory exists, before Storage is asked anything, and before anybody
+    /// is asked for a secret.
+    pub(crate) fn vacant(library_id: LibraryId) -> Result<LibraryDir> {
+        match LibraryDir::find(&LibraryRef::Id(library_id)) {
+            Ok(held) => Err(Error::LibraryExists {
+                name: held.name().to_owned(),
+                path: held.path().to_path_buf(),
+            }),
+            Err(Error::NoSuchLibrary { .. }) => LibraryDir::of(library_id),
+            Err(other) => Err(other),
         }
-        Ok(dir)
     }
 
-    /// Opens the staging directory a Library is built in.
+    /// Opens the staging directory a Library is built in: `dir` with the
+    /// staging suffix after it.
+    ///
+    /// `dir` names the attempt and need not be where the Library ends up: a
+    /// join on Drive learns the Library's ID only once its folder has been read,
+    /// so it builds beside a directory named after the folder and publishes
+    /// under the ID.
     pub(crate) fn begin(flow: Flow, dir: LibraryDir) -> Result<Self> {
         let staging = dir.staging();
         // What a previous attempt left is discarded rather than resumed:
@@ -101,7 +110,7 @@ impl Staging {
 
         Ok(Self {
             flow,
-            dir,
+            name: dir.name().to_owned(),
             staging,
             folder: None,
         })
@@ -115,6 +124,11 @@ impl Staging {
         &self.staging
     }
 
+    /// Says from here on that the attempt is about the Library called `name`.
+    pub(crate) fn naming(&mut self, name: impl Into<String>) {
+        self.name = name.into();
+    }
+
     /// Records the app folder this attempt created, which a failure from here
     /// on cannot take back.
     pub(crate) fn created_folder(&mut self, folder_id: String) {
@@ -124,7 +138,7 @@ impl Staging {
     /// Reports the step that failed, and — where the flow is one that creates a
     /// folder — the folder this attempt cannot take back.
     pub(crate) fn failed(&self, step: CreationStep, cause: Error) -> Error {
-        let name = self.dir.name().to_owned();
+        let name = self.name.clone();
         let cause = Box::new(cause);
         match self.flow {
             Flow::Creating => Error::LibraryNotCreated {
@@ -139,18 +153,18 @@ impl Staging {
         }
     }
 
-    /// Moves the finished directory to the name the Library is known by, and
-    /// reports where it now is.
-    pub(crate) fn publish(self) -> Result<PathBuf> {
-        if let Err(cause) = fs::rename(self.staging.path(), self.dir.path()) {
+    /// Moves the finished directory to `dir`, the name the Library is known
+    /// by, and reports where it now is.
+    pub(crate) fn publish(self, dir: &LibraryDir) -> Result<PathBuf> {
+        if let Err(cause) = fs::rename(self.staging.path(), dir.path()) {
             let failure = self.failed(
                 CreationStep::Publish,
-                LocalIoError::new(LocalOperation::Renaming, self.dir.path(), cause).into(),
+                LocalIoError::new(LocalOperation::Renaming, dir.path(), cause).into(),
             );
             self.discard();
             return Err(failure);
         }
-        Ok(self.dir.path().to_path_buf())
+        Ok(dir.path().to_path_buf())
     }
 
     /// Removes what an attempt that did not finish had built so far.
@@ -221,9 +235,9 @@ mod tests {
     use super::*;
     use crate::testing::state_dir;
 
-    // EL-1: an I/O message can repeat a private local path, including the name
-    // this device gave the Library. The event keeps the useful operation and
-    // error kind and neither copy of that location.
+    // EL-1: an I/O message can repeat a private local path, including a name
+    // an earlier build gave the Library's directory. The event keeps the useful
+    // operation and error kind and neither copy of that location.
     #[test]
     fn cleanup_records_the_error_kind_without_the_private_location() {
         const LIBRARY: &str = "Family Tax Records";
@@ -359,11 +373,17 @@ mod tests {
         );
     }
 
-    /// Where a Library of this name would be, under this binary's own state
-    /// directory.
+    /// Where a Library would be, under this binary's own state directory: the
+    /// ID `name`'s bytes spell, so that each case has a directory of its own.
     fn library(name: &str) -> LibraryDir {
         state_dir();
-        LibraryDir::resolve(name).expect("a fixture names a Library a directory can be called")
+        let mut bytes = [0; LibraryId::BYTE_LEN];
+        for (at, byte) in name.bytes().enumerate() {
+            bytes[at % LibraryId::BYTE_LEN] ^= byte.rotate_left(at as u32);
+        }
+        LibraryDir::of(LibraryId::from_bytes(bytes))
+            .expect("the state directory is set")
+            .called(name)
     }
 
     /// Puts an ordinary file where the staging directory would be.

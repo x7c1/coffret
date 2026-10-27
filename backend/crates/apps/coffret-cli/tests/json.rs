@@ -150,12 +150,12 @@ fn join_answers_what_it_found_and_carries_no_recovery_code() {
     let device = Device::new();
     let (_, library_id, recovery_code) = created(&device, "source");
     let prefix = format!("archive/coffret-{library_id}/");
+    // A second device: a Library is on a device once.
+    let device = Device::new();
 
     let output = device.run_with(
         &[
             "join",
-            "--name",
-            "joined",
             "--recovery-code-stdin",
             "--s3",
             "--bucket",
@@ -186,7 +186,9 @@ fn join_answers_what_it_found_and_carries_no_recovery_code() {
             "exit_status": 0,
             "log": VARIES,
             "answer": {
-                "library": "joined",
+                // The name it was created with, read from the Library
+                // (spec: FM-15).
+                "library": "source",
                 "library_id": VARIES,
                 "storage": { "provider": "s3", "bucket": "photos", "prefix": prefix },
                 "account": null,

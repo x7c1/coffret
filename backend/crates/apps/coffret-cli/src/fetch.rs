@@ -1,5 +1,6 @@
 //! Putting the Library into the mapped folders.
 
+use crate::library_args::WhichLibrary;
 use std::fmt;
 
 use clap::Args;
@@ -15,9 +16,9 @@ use coffret_shell::passphrase;
 
 #[derive(Args)]
 pub struct FetchArgs {
-    /// The Library on this device to fetch from
-    #[arg(long)]
-    library: String,
+    // The Library on this device to fetch from, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
     /// The part of the Library to fetch; everything the mappings cover when it
     /// is not given
     #[arg(long)]
@@ -49,7 +50,7 @@ pub async fn run(args: FetchArgs, form: Form) -> anyhow::Result<Ran> {
         // says nothing for as long as that takes; this is what says it is
         // moving.
         let watching = Reporting::to_stderr(Units::Fetching);
-        let outcome = run_fetch(&args.library, enter, under, &watching).await?;
+        let outcome = run_fetch(&args.which.library(), enter, under, &watching).await?;
         // Before the summary, so that what the run answered is not written over
         // the line the run was reporting on.
         watching.finish();
@@ -67,7 +68,7 @@ pub async fn run(args: FetchArgs, form: Form) -> anyhow::Result<Ran> {
     // A parcel read out of a Pack is tens of megabytes, after the same
     // catch-up a folder fetch starts with, so one Entry says it is moving too.
     let watching = Reporting::to_stderr(Units::Fetching);
-    let fetched = run_fetch_entry(&args.library, enter, entry, &watching)
+    let fetched = run_fetch_entry(&args.which.library(), enter, entry, &watching)
         .await
         .map_err(next_step)?;
     watching.finish();

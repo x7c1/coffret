@@ -13,7 +13,7 @@ pub async fn run(args: LibraryArgs, form: Form) -> anyhow::Result<Ran> {
     // uploading inside one call, and this is what says so while it happens.
     let watching = Reporting::to_stderr(Units::Syncing);
     let outcome = run_sync(
-        &args.library,
+        &args.library(),
         passphrase::entering(args.passphrase_stdin),
         &watching,
     )

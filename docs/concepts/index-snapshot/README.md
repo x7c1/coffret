@@ -42,7 +42,8 @@ Once the records a Snapshot covers are pruned it is the only place those times
 are kept, so a device restored from it holds the same time for every Entry as
 a device that replayed every record. A Snapshot written before deposit times
 carries none and is refused, as is the Library that holds it (spec: FM-16,
-RV-1).
+RV-1). A Snapshot also carries the [Library](../library/) name the records it
+covers left, so pruning them does not lose it (spec: FM-16).
 
 An ordinary Snapshot records an existing committed head. The Journal records
 it covers can then be pruned, because the Snapshot stands in for them.

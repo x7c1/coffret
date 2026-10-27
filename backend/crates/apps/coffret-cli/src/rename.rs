@@ -1,5 +1,6 @@
 //! Giving a file or a folder of the Library a new Entry Path.
 
+use crate::library_args::WhichLibrary;
 use clap::Args;
 use coffret_device::{run_rename, EntryPath, Findings, RenameOutcome};
 
@@ -10,9 +11,9 @@ use coffret_shell::passphrase;
 
 #[derive(Args)]
 pub struct RenameArgs {
-    /// The Library on this device to rename in
-    #[arg(long)]
-    library: String,
+    // The Library on this device to rename in, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
     /// The Entry Path of the file or folder to rename
     ///
     /// Named rather than positional: a word written after
@@ -42,7 +43,7 @@ pub async fn run(args: RenameArgs, form: Form) -> anyhow::Result<Ran> {
     // Storage, seconds apiece on a provider such as Drive.
     let watching = Reporting::to_stderr(Units::Renaming);
     let outcome = run_rename(
-        &args.library,
+        &args.which.library(),
         passphrase::entering(args.passphrase_stdin),
         from,
         to,

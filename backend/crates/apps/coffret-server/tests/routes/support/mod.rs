@@ -691,6 +691,7 @@ fn opened(
         parcel_dir: spools.join("served-parcels"),
         parcel_len,
         library_id: LibraryId::from_bytes(library_id),
+        name: None,
         epoch: MasterKeyEpoch::FIRST,
         provider,
         grant: None,

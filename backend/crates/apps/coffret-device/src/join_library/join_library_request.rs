@@ -1,16 +1,11 @@
 /// Everything a device joining an existing Library is told.
 ///
-/// The Recovery Code and Passphrase both reach
-/// [`join_library`](super::join_library) through callbacks, so every refusal
-/// needing no key is made before a person is asked for either secret.
+/// No name: the Library's name is its own, kept in its catalog, and the join
+/// reads it from there (spec: FM-15). The Recovery Code and Passphrase both
+/// reach [`join_library`](super::join_library) through callbacks, so every
+/// refusal needing no key is made before a person is asked for either secret.
 #[derive(Debug)]
 pub struct JoinLibraryRequest {
-    /// What this device is to call the Library.
-    ///
-    /// A device-side name and not a Library-wide one: the device that created
-    /// the Library may call it something else, the way it may map its folders
-    /// differently (spec: CK-7).
-    pub name: String,
     /// Where the Library already lives.
     pub provider: JoinedProvider,
     /// Who is asked for the Passphrase of a Library already referencing an

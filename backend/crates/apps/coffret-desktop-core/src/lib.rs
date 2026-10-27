@@ -77,14 +77,21 @@ mod shared;
 #[cfg(test)]
 mod testing;
 
+mod listed_library;
+pub use listed_library::ListedLibrary;
+
 use coffret_device::LibraryDir;
 
-/// The names of the Libraries on this device, for a Passphrase window to
-/// choose between.
-pub fn libraries() -> Result<Vec<String>> {
-    Ok(LibraryDir::on_this_device()
+/// The Libraries on this device, for a Passphrase window to choose between:
+/// each one's ID, and the name it is listed under.
+///
+/// The names are the copies each Library's settings keep (spec: FM-15), which
+/// is all that can be read before an unlock; two Libraries may carry one name,
+/// and the ID is what a window submits.
+pub fn libraries() -> Result<Vec<ListedLibrary>> {
+    Ok(LibraryDir::libraries()
         .map_err(|cause| Error::LibrariesUnlisted { cause })?
-        .iter()
-        .map(|dir| dir.name().to_owned())
+        .into_iter()
+        .map(ListedLibrary::from)
         .collect())
 }

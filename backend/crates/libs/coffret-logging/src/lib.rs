@@ -111,7 +111,7 @@
 //! stays behind once the volume is unmounted, it names paths on a device that
 //! fetched none of the files behind them, and it is the thing that gets
 //! attached to a bug report. So no coffret event may carry an Entry Path or
-//! local path, a device-local Library name, plaintext or any fragment of it,
+//! local path, a Library name, plaintext or any fragment of it,
 //! any key material or the Passphrase or a Recovery Code, or a token or other
 //! bearer credential (spec: EL-1). The rule binds coffret's own events and no
 //! others: a dependency target an operator adds to `COFFRET_LOG` writes down

@@ -7,7 +7,7 @@
 //! Library-wide tables and the device-local ones.
 
 mod catalog;
-pub(crate) use catalog::{checkpoint, container_summary, entry_location};
+pub(crate) use catalog::{checkpoint, container_summary, entry_location, library_name};
 
 mod columns;
 pub(crate) use columns::{kind_text, spool_state_text, state_text, to_integer};

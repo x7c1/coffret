@@ -61,6 +61,7 @@ impl SnapshotContent {
             adopted_from,
             containers,
             entries,
+            library_name: None,
         })
     }
 

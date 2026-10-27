@@ -7,14 +7,14 @@ use serde::Serialize;
 
 use super::fences::presented_token;
 use super::{Door, DoorMode, Refusal};
-use crate::libraries;
+use crate::{libraries, ListedLibrary};
 
 /// What a window is shown: which mode it was opened in, and the Libraries it
 /// may choose between or the one it unlocks.
 #[derive(Serialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
 enum Described {
-    Open { libraries: Vec<String> },
+    Open { libraries: Vec<ListedLibrary> },
     Unlock { library: Option<String> },
 }
 

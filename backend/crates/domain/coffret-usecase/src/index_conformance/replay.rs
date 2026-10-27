@@ -488,3 +488,80 @@ pub async fn an_entry_number_survives_a_replay_and_a_restore(fixture: &IndexUnde
         "a restore takes each Entry's number from the Snapshot",
     );
 }
+
+/// The Library's name is the one the latest record carrying a name gave it, and
+/// a checkpoint carries it (spec: FM-15, FM-16).
+///
+/// The record at generation 0 names the Library, a later record naming nothing
+/// leaves the name as it was, and one naming it again replaces it. A Snapshot
+/// of that catalog carries the name, and a catalog restored from it names the
+/// Library the same way — which is what lets a device that catches up from a
+/// checkpoint alone, the records before it pruned, read the name.
+pub async fn the_library_name_is_the_latest_one_a_record_carried(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    let name =
+        |text: &str| coffret_model::LibraryName::parse(text).expect("a fixture's name is one");
+    assert_eq!(
+        index.library_name().await.expect("a fresh catalog answers"),
+        None,
+        "a catalog that took nothing in names nothing"
+    );
+
+    index
+        .apply(record(0, Vec::new(), Vec::new()).with_library_name(Some(name("books"))))
+        .await
+        .expect("replaying the first head must succeed");
+    index
+        .apply(record(
+            1,
+            vec![addition(1, ContainerKind::OneFile, &["a.txt"])],
+            Vec::new(),
+        ))
+        .await
+        .expect("replaying a record naming nothing must succeed");
+    assert_eq!(
+        index.library_name().await.expect("the catalog answers"),
+        Some(name("books")),
+        "a record naming nothing leaves the name as it was"
+    );
+
+    index
+        .apply(record(2, Vec::new(), Vec::new()).with_library_name(Some(name("photos"))))
+        .await
+        .expect("replaying a record that only names the Library must succeed");
+    assert_eq!(
+        index.library_name().await.expect("the catalog answers"),
+        Some(name("photos"))
+    );
+
+    let checkpointed = index
+        .snapshot()
+        .await
+        .expect("a catalog at a committed state checkpoints");
+    assert_eq!(checkpointed.library_name(), Some(&name("photos")));
+
+    let other = fixture.other();
+    other
+        .restore(checkpointed)
+        .await
+        .expect("restoring the checkpoint must succeed");
+    assert_eq!(
+        other
+            .library_name()
+            .await
+            .expect("the restored catalog answers"),
+        Some(name("photos")),
+        "a device catching up from the checkpoint alone reads the name"
+    );
+
+    // And a checkpoint carrying no name leaves the catalog naming none: a
+    // restore replaces the whole Library-wide state (spec: RV-1).
+    other
+        .restore(snapshot(4, Vec::new(), None))
+        .await
+        .expect("restoring a later checkpoint must succeed");
+    assert_eq!(
+        other.library_name().await.expect("the catalog answers"),
+        None
+    );
+}

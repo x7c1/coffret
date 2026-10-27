@@ -7,6 +7,7 @@
 // suite was started on its own, and a default would send it at whatever
 // happened to be listening instead of saying so.
 
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -102,7 +103,7 @@ export function fromEnvironment(): Environment {
     launchDir: required('COFFRET_E2E_LAUNCH_DIR'),
     stateDir,
     library,
-    serverKeyFile: path.join(stateDir, 'libraries', library, 'server-key'),
+    serverKeyFile: path.join(libraryDirectory(stateDir, library), 'server-key'),
     logDir: required('COFFRET_E2E_LOG_DIR'),
     passphrase: required('COFFRET_E2E_PASSPHRASE'),
     serverPort,
@@ -127,6 +128,35 @@ export function fromEnvironment(): Environment {
     minioContainer: required('COFFRET_E2E_MINIO_CONTAINER'),
     minioUrl: required('COFFRET_E2E_MINIO_URL'),
   };
+}
+
+/**
+ * The directory of the Library called `library` under `stateDir`.
+ *
+ * A Library is kept in a directory named after its ID, and the settings file in
+ * it keeps a copy of its name: that copy is what finds it, the way
+ * `--library` does. A directory an earlier build named after the Library is
+ * found by its own name.
+ */
+function libraryDirectory(stateDir: string, library: string): string {
+  const libraries = path.join(stateDir, 'libraries');
+  for (const entry of readdirSync(libraries)) {
+    if (entry.endsWith('.partial')) {
+      continue;
+    }
+    const directory = path.join(libraries, entry);
+    try {
+      const settings = JSON.parse(readFileSync(path.join(directory, 'settings.json'), 'utf8')) as {
+        name?: string;
+      };
+      if (settings.name === library || (settings.name === undefined && entry === library)) {
+        return directory;
+      }
+    } catch {
+      // Not a whole Library: one being built, or one whose settings went.
+    }
+  }
+  throw new Error(`no Library called ${JSON.stringify(library)} is under ${libraries}`);
 }
 
 function required(name: string): string {

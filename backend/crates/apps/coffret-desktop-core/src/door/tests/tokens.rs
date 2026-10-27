@@ -114,10 +114,19 @@ fn a_window_learns_its_mode_behind_its_token() {
         assert_eq!(answered.status, StatusCode::OK, "{}", answered.text);
         let described = answered.json();
         assert_eq!(described["mode"], "open");
-        assert!(described["libraries"]
+        // Each Library under its name, and with the ID a window submits.
+        let listed = described["libraries"]
             .as_array()
             .unwrap()
-            .contains(&json!("door-look")));
+            .iter()
+            .find(|listed| listed["name"] == "door-look")
+            .expect("the Library is listed by its name")
+            .clone();
+        assert_eq!(
+            listed["id"].as_str().map(str::len),
+            Some(16),
+            "and its ID: {listed}"
+        );
     });
     assert!(
         case.desktop.open_door(DoorMode::Unlock).is_err(),

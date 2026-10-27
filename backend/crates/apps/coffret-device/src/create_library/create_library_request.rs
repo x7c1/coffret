@@ -2,16 +2,17 @@
 ///
 /// The Passphrase is not among them. It reaches
 /// [`create_library`](super::create_library) through a callback instead, so that
-/// every refusal this request can earn — a name that is not one path component,
-/// a Library of that name already here, a base prefix that runs into the
-/// Library's own folder name — is made before anybody is asked to choose one.
+/// every refusal this request can earn — a name nobody can read, a base
+/// prefix that runs into the Library's own folder name — is made before
+/// anybody is asked to choose one.
 #[derive(Debug)]
 pub struct CreateLibraryRequest {
-    /// What this device is to call the Library.
+    /// The Library's name (spec: FM-15).
     ///
-    /// A device-side name and not a Library-wide one: it is this directory's
-    /// name, and another device holding the same Library may call it something
-    /// else.
+    /// The Library's own and not this device's: it is written into the
+    /// Library's first head, and every device that joins reads it from there.
+    /// It names no directory — the Library is kept under its ID — so it is held
+    /// only to a name's own rules: not empty, and no control character.
     pub name: String,
     /// Where the Library is to live.
     pub provider: NewProvider,

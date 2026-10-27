@@ -42,19 +42,24 @@ fn everything_else(dir: &LibraryDir) -> BTreeMap<PathBuf, Vec<u8>> {
 #[tokio::test]
 async fn the_stored_form_opens_under_the_new_passphrase_to_the_same_key() {
     let created = create_s3("changed").await;
-    let dir = LibraryDir::resolve("changed").expect("the name is one component");
+    let dir = LibraryDir::named_here("changed");
     let before = everything_else(&dir);
     assert!(
         before.contains_key(&dir.settings_file()),
         "the settings are among what is compared"
     );
 
-    change_passphrase("changed", passphrase, new_passphrase)
-        .expect("the current Passphrase opens the stored form");
+    change_passphrase(
+        &crate::LibraryRef::named("changed"),
+        passphrase,
+        new_passphrase,
+    )
+    .expect("the current Passphrase opens the stored form");
 
-    let reopened = recovery_code("changed", new_passphrase).expect("the new Passphrase opens it");
+    let reopened = recovery_code(&crate::LibraryRef::named("changed"), new_passphrase)
+        .expect("the new Passphrase opens it");
     assert_eq!(reopened.as_str(), created.recovery_code.as_str());
-    let refused = recovery_code("changed", passphrase);
+    let refused = recovery_code(&crate::LibraryRef::named("changed"), passphrase);
     assert!(
         matches!(
             &refused,
@@ -73,12 +78,12 @@ async fn the_stored_form_opens_under_the_new_passphrase_to_the_same_key() {
 #[tokio::test]
 async fn a_wrong_current_passphrase_changes_nothing() {
     create_s3("not-changed").await;
-    let dir = LibraryDir::resolve("not-changed").expect("the name is one component");
+    let dir = LibraryDir::named_here("not-changed");
     let before = fs::read(dir.master_key_file()).expect("the key file must be readable");
     let wrong = || Ok(Passphrase::from_bytes(b"not the Passphrase".to_vec()));
     let unasked = || panic!("no new Passphrase may be asked for under a wrong current one");
 
-    let result = change_passphrase("not-changed", wrong, unasked);
+    let result = change_passphrase(&crate::LibraryRef::named("not-changed"), wrong, unasked);
     assert!(
         matches!(
             &result,
@@ -102,7 +107,11 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
     create_s3("changed-by-name").await;
     let unasked = || panic!("no Passphrase may be asked for before a refusal that needs none");
 
-    let result = change_passphrase("changed-by-nmae", unasked, unasked);
+    let result = change_passphrase(
+        &crate::LibraryRef::named("changed-by-nmae"),
+        unasked,
+        unasked,
+    );
     assert!(
         matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "changed-by-nmae"),
         "expected the name to be refused, got {result:?}"

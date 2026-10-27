@@ -4,6 +4,7 @@ use crate::entry_rename::EntryRename;
 use crate::generation::Generation;
 use crate::index_checkpoint::IndexCheckpoint;
 use crate::keyring_commitment::KeyringCommitment;
+use crate::library_name::LibraryName;
 use crate::master_key_epoch::MasterKeyEpoch;
 
 mod new;
@@ -42,6 +43,7 @@ pub struct JournalRecord {
     additions: Vec<ContainerAddition>,
     removals: Vec<ContainerId>,
     renames: Vec<EntryRename>,
+    library_name: Option<LibraryName>,
 }
 
 impl JournalRecord {
@@ -129,6 +131,17 @@ impl JournalRecord {
     /// catalog it is applied to.
     pub fn renames(&self) -> &[EntryRename] {
         &self.renames
+    }
+
+    /// The Library's name as this record gives it, and `None` on a record
+    /// that carries none (spec: FM-15).
+    ///
+    /// A record carries a name where its writer set one: the record at
+    /// generation 0 carries the name the Library was created with, and a later
+    /// one carries a name only where it gives the Library a new one. The
+    /// Library's name is the one the latest record carrying a name gives.
+    pub fn library_name(&self) -> Option<&LibraryName> {
+        self.library_name.as_ref()
     }
 
     /// The additions, for a replay that consumes each Container and the Entries

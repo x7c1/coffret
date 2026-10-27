@@ -1,13 +1,13 @@
 use ciborium::Value;
 use coffret_model::{
     ContainerSummary, ControlObjectKind, EntryLocation, Generation, IndexCheckpoint,
-    KeyringCommitment, SnapshotContent,
+    KeyringCommitment, LibraryName, SnapshotContent,
 };
 
 use super::{
     IndexSnapshotPayload, SnapshotActivation, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER,
     CONTAINERS, ENTRIES, ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION,
-    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT,
+    KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST, LIBRARY_NAME, LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, entry_number, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -106,10 +106,17 @@ pub fn decode(
     // A Snapshot carries no device state, so a decoded one says nothing about
     // which checkpoint an Index adopted (spec: CK-7).
     let adopted_from = None;
+    // Absent on a Snapshot of schema 4, and on one whose records never named
+    // the Library (spec: FM-16).
+    let library_name = fields
+        .optional_text(LIBRARY_NAME)?
+        .map(LibraryName::parse)
+        .transpose()?;
 
     Ok(IndexSnapshotPayload {
         content: SnapshotContent::new(checkpoint, adopted_from, containers, entries)
-            .map_err(refused_content)?,
+            .map_err(refused_content)?
+            .with_library_name(library_name),
         activation: activation(&fields, activating, head_generation)?,
     })
 }

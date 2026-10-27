@@ -29,7 +29,7 @@ fn keys() -> LibraryKeys {
 /// A store holding a Library as creating one leaves it: its first head.
 async fn created(keys: &LibraryKeys) -> InMemoryStore {
     let store = InMemoryStore::new(8);
-    write_first_head(&store, keys.control(), &CommitPolicy::default())
+    write_first_head(&store, keys.control(), &CommitPolicy::default(), None)
         .await
         .expect("creating a Library in an empty store must succeed")
         .expect("an empty store holds no head to find instead");

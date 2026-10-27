@@ -39,17 +39,26 @@ mod round_trip_tests;
 mod testing;
 
 /// The schema this crate writes for a Journal record payload, and the one it
-/// implements (spec: FM-15).
-///
-/// It is also what every record this build writes names in `required_schema`:
-/// a reader that ignored `deposited_at` would hold a catalog without deposit
-/// times and could commit records no reader of this schema accepts, so the
-/// field is must-understand and every record says so (spec: FM-9, FM-15).
+/// implements (spec: FM-15): 5, the first whose records may carry
+/// `library_name`.
 ///
 /// Not what a reader refuses below: that is [`LOWEST_READ_SCHEMA`], so that a
 /// later build writing a new field under a higher schema goes on reading the
-/// records written before it.
-const SCHEMA: u64 = 4;
+/// records written before it. Nor what every record names in
+/// `required_schema`: that is [`REQUIRED_SCHEMA_WRITTEN`], since the field this
+/// schema adds is one a reader may go without.
+const SCHEMA: u64 = 5;
+
+/// What every record this build writes names in `required_schema`: 4
+/// (spec: FM-9, FM-15).
+///
+/// A reader that ignored `deposited_at` would hold a catalog without deposit
+/// times and could commit records no reader of schema 4 accepts, so that field
+/// is must-understand and every record says so. `library_name`, which schema 5
+/// adds, is not: a reader that ignores it loses the Library's name and nothing
+/// else, so a reader of schema 4 still applies every record faithfully and the
+/// value stays 4.
+const REQUIRED_SCHEMA_WRITTEN: u64 = 4;
 
 /// The lowest schema a reader accepts, in `schema` and in `required_schema`
 /// alike: 4, the first whose addition entries carry `deposited_at`
@@ -60,7 +69,8 @@ const SCHEMA: u64 = 4;
 /// build does not read rather than read with a time made up. Libraries holding
 /// such records are recreated, not migrated.
 ///
-/// Equal to [`SCHEMA`] for now.
+/// Below [`SCHEMA`]: a record of schema 4 is one written before records could
+/// carry a name, and reads as one that carries none (spec: FM-15).
 const LOWEST_READ_SCHEMA: u64 = 4;
 
 const PREV: &str = "prev";
@@ -74,3 +84,4 @@ const ENTRIES: &str = "entries";
 const REMOVALS: &str = "removals";
 const RENAMES: &str = "renames";
 const REQUIRED_SCHEMA: &str = "required_schema";
+const LIBRARY_NAME: &str = "library_name";

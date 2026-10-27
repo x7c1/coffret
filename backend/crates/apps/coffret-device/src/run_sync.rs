@@ -6,6 +6,7 @@ use tracing::info;
 use crate::batch_id::next_batch_id;
 use crate::device_time::now;
 use crate::error::Result;
+use crate::library_ref::LibraryRef;
 use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
@@ -66,20 +67,20 @@ impl OpenLibrary {
     }
 }
 
-/// Carries the folders this device maps into the Library called `name`.
+/// Carries the folders this device maps into the Library `library` names.
 ///
 /// One unlock and one run, which is what a command line does (spec: DK-9). A
 /// process that opens a Library once and runs many things over it — the
 /// explorer's server — calls [`OpenLibrary::sync`] and reaches the same body.
 pub async fn run_sync<P>(
-    name: &str,
+    library: &LibraryRef,
     enter_passphrase: P,
     progress: &dyn Progress,
 ) -> Result<SyncOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    open_library(name, enter_passphrase)
+    open_library(library, enter_passphrase)
         .await?
         .sync(progress)
         .await
@@ -103,7 +104,12 @@ mod tests {
         state_dir();
         let unasked = || panic!("no Passphrase may be asked for before a refusal that needs none");
 
-        let result = run_sync("nothing-of-that-name", unasked, &coffret_usecase::Unwatched).await;
+        let result = run_sync(
+            &crate::LibraryRef::named("nothing-of-that-name"),
+            unasked,
+            &coffret_usecase::Unwatched,
+        )
+        .await;
         assert!(
             matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "nothing-of-that-name"),
             "expected the name to be refused, got {result:?}"

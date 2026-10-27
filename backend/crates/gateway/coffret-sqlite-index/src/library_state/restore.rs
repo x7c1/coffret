@@ -1,7 +1,9 @@
 use coffret_usecase::{IndexResult, SnapshotContent};
 use rusqlite::Connection;
 
-use super::{insert_container, insert_entry, write_adopted_from, write_checkpoint};
+use super::{
+    insert_container, insert_entry, write_adopted_from, write_checkpoint, write_library_name,
+};
 use crate::device_state;
 use crate::error::classify;
 
@@ -22,6 +24,7 @@ pub(crate) fn restore(connection: &Connection, snapshot: SnapshotContent) -> Ind
         .execute("DELETE FROM containers", [])
         .map_err(classify("clearing the Containers"))?;
 
+    let name = snapshot.library_name().cloned();
     let (checkpoint, adopted_from, containers, entries) = snapshot.into_parts();
     for container in &containers {
         insert_container(connection, container)?;
@@ -49,5 +52,9 @@ pub(crate) fn restore(connection: &Connection, snapshot: SnapshotContent) -> Ind
         "keeping the local files' rows about their Entries",
     )?;
     write_checkpoint(connection, &checkpoint)?;
+    // The Snapshot's name replaces the catalog's, whichever it is, a Snapshot
+    // naming nothing included: a restore replaces the whole Library-wide state
+    // (spec: FM-16, RV-1).
+    write_library_name(connection, name.as_ref())?;
     write_adopted_from(connection, adopted_from.as_ref())
 }

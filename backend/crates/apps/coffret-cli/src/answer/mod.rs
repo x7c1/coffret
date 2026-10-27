@@ -147,10 +147,12 @@ answer, per command:
 
   init           library, library_id, storage, account, consent_asked,
                  recovery_code
-  join           library, library_id, storage, account, consent_asked,
+  join           library (the name read from the Library, or null),
+                 library_id, storage, account, consent_asked,
                  found_on_storage (\"the_library\" or \"nothing_yet\")
-  recovery-code  library, recovery_code
-  change-passphrase  library
+  recovery-code  library (as --library or --library-id gave it),
+                 recovery_code
+  change-passphrase  library (as --library or --library-id gave it)
   authorize      consent_asked
   map            prefix, local_root, replaced, marker (\"written\",
                  \"adopted\" or \"reset\")

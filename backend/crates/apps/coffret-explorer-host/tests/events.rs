@@ -32,7 +32,7 @@ const FILE_REQUEST: &str = "/api/broken?path=AUDIT_PRIVATE_BOOK%2Fpage.jpg";
 /// The pieces of [`FILE_REQUEST`] that no event may hold either.
 const URL_PARTS: &[&str] = &[ENTRY_PATH, "page.jpg", "/api/broken", "path=", "%2F"];
 
-/// A device-local Library name no event may hold.
+/// A Library name no event may hold.
 const LIBRARY_NAME: &str = "AUDIT_PRIVATE_LIBRARY";
 
 /// A port that was free a moment ago and that nothing listens on now.

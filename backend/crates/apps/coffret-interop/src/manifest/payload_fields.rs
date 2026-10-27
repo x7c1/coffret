@@ -28,7 +28,7 @@ use super::{BodyField, BodyValue};
 
 /// The fields FM-15 gives the payload of `record`.
 pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
-    let mut fields = vec![BodyField::uint("schema", 4)];
+    let mut fields = vec![BodyField::uint("schema", 5)];
     if let Some(prev) = record.prev() {
         fields.push(BodyField::uint("prev", prev.get()));
     }
@@ -100,8 +100,13 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
         ));
     }
     // And the schema a reader needs to apply the record, which every record
-    // names: its deposit times are must-understand (spec: FM-9, FM-15).
+    // names: its deposit times are must-understand (spec: FM-9, FM-15). The
+    // Library's name is not, so it leaves the value at 4.
     fields.push(BodyField::uint("required_schema", 4));
+    // Left out where the record names nothing, as the encoder leaves it.
+    if let Some(name) = record.library_name() {
+        fields.push(BodyField::text("library_name", name.as_str()));
+    }
     fields
 }
 
@@ -111,7 +116,7 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     let containers = snapshot.content.containers();
 
     let mut fields = vec![
-        BodyField::uint("schema", 4),
+        BodyField::uint("schema", 5),
         BodyField::uint("head_generation", checkpoint.head_generation().get()),
         BodyField::uint("journal_generation", checkpoint.journal_generation().get()),
     ];
@@ -160,6 +165,10 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
             })
             .collect(),
     ));
+    // Left out where the records it checkpoints never named the Library.
+    if let Some(name) = snapshot.content.library_name() {
+        fields.push(BodyField::text("library_name", name.as_str()));
+    }
 
     // The two fields an activation Snapshot carries and an ordinary one may not
     // (spec: MR-2). `adopted_from` has no field here at all, whichever kind

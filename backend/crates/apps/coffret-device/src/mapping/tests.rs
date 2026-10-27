@@ -18,7 +18,13 @@ use crate::{LibraryDir, ModelError, PathDefect};
 /// Recording a mapping with no wish about the root's identity, which is what
 /// every case here means unless it says otherwise.
 async fn map(library: &str, prefix: Option<&str>, local_root: &Path) -> Result<RecordedMapping> {
-    set_mapping(library, prefix, local_root, MarkerRequest::AdoptWhatIsThere).await
+    set_mapping(
+        &crate::LibraryRef::named(library),
+        prefix,
+        local_root,
+        MarkerRequest::AdoptWhatIsThere,
+    )
+    .await
 }
 
 // EP-9: a device maps the Library root and top-level components, at most one
@@ -41,7 +47,9 @@ async fn mappings_are_listed_root_first_and_remapping_moves_a_prefix() {
         .await
         .expect("the Library root must be mappable");
 
-    let listed = mappings("mapped").await.expect("the mappings must read");
+    let listed = mappings(&crate::LibraryRef::named("mapped"))
+        .await
+        .expect("the mappings must read");
     let listed = listed.mappings();
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].prefix, None);
@@ -55,7 +63,9 @@ async fn mappings_are_listed_root_first_and_remapping_moves_a_prefix() {
     map("mapped", Some("albums"), &moved)
         .await
         .expect("a mapped component must be movable");
-    let listed = mappings("mapped").await.expect("the mappings must read");
+    let listed = mappings(&crate::LibraryRef::named("mapped"))
+        .await
+        .expect("the mappings must read");
     let listed = listed.mappings();
     assert_eq!(listed.len(), 2, "remapping replaces rather than adds");
     assert_eq!(listed[1].local_root, moved.canonicalize().unwrap());
@@ -130,7 +140,7 @@ async fn a_local_root_that_has_never_existed_is_refused() {
         "expected a root that is not there to be refused, got {missing:?}"
     );
 
-    assert!(mappings("refusals")
+    assert!(mappings(&crate::LibraryRef::named("refusals"))
         .await
         .expect("the mappings must read")
         .mappings()
@@ -182,15 +192,13 @@ async fn mappings_are_still_listed_when_the_index_is_refused() {
     // and the fallback below is what stands between that refusal and the owner
     // losing the record of where their Library lives.
     const PREVIOUS_SCHEMA_VERSION: i64 = 6;
-    let index_file = LibraryDir::resolve("old-layout")
-        .expect("the name is a valid device-local Library name")
-        .index_file();
+    let index_file = LibraryDir::named_here("old-layout").index_file();
     Connection::open(&index_file)
         .expect("the Index file must open")
         .pragma_update(None, "user_version", PREVIOUS_SCHEMA_VERSION)
         .expect("stamping a version must succeed");
 
-    let listing = mappings("old-layout")
+    let listing = mappings(&crate::LibraryRef::named("old-layout"))
         .await
         .expect("a refused file still yields its mappings");
     assert!(
@@ -222,9 +230,7 @@ async fn a_catalog_that_will_not_open_is_refused_as_the_catalog() {
 
     // A layout this build refuses, which is the one way a case can make the
     // real catalog decline to open.
-    let index_file = LibraryDir::resolve("unopened-catalog")
-        .expect("the name is a valid device-local Library name")
-        .index_file();
+    let index_file = LibraryDir::named_here("unopened-catalog").index_file();
     Connection::open(&index_file)
         .expect("the Index file must open")
         .pragma_update(None, "user_version", 5_i64)
@@ -261,7 +267,9 @@ fn identity_in(root: &Path) -> RootMarkerId {
 
 /// What one mapping of a Library expects its root's marker to carry.
 async fn expected_in(library: &str, prefix: Option<&str>) -> Option<RootMarkerId> {
-    let listing = mappings(library).await.expect("the mappings must read");
+    let listing = mappings(&crate::LibraryRef::named(library))
+        .await
+        .expect("the mappings must read");
     listing
         .mappings()
         .iter()
@@ -383,7 +391,7 @@ async fn a_root_whose_marker_is_malformed_is_refused_and_nothing_is_written() {
     }
 
     assert!(
-        mappings("malformed")
+        mappings(&crate::LibraryRef::named("malformed"))
             .await
             .expect("the mappings must read")
             .mappings()
@@ -413,7 +421,7 @@ async fn a_root_holding_only_the_management_area_is_refused() {
         !marker_in(&root).exists(),
         "and the marker the refusal named was not written after all"
     );
-    assert!(mappings("half-registered")
+    assert!(mappings(&crate::LibraryRef::named("half-registered"))
         .await
         .expect("the mappings must read")
         .mappings()
@@ -520,7 +528,7 @@ async fn a_root_whose_management_area_or_marker_is_the_wrong_kind_is_refused() {
     );
 
     assert!(
-        mappings("wrong-kind")
+        mappings(&crate::LibraryRef::named("wrong-kind"))
             .await
             .expect("the mappings must read")
             .mappings()
@@ -545,9 +553,14 @@ async fn resetting_the_marker_issues_a_new_identity() {
         .expect("a root with no marker must be mappable");
     let first = identity_in(&root);
 
-    let recorded = set_mapping("reset", None, &root, MarkerRequest::IssueANewIdentity)
-        .await
-        .expect("a root carrying a valid marker must take a new identity");
+    let recorded = set_mapping(
+        &crate::LibraryRef::named("reset"),
+        None,
+        &root,
+        MarkerRequest::IssueANewIdentity,
+    )
+    .await
+    .expect("a root carrying a valid marker must take a new identity");
 
     assert_eq!(recorded.marker, MarkerRecord::Reset);
     let second = identity_in(&root);
@@ -573,7 +586,7 @@ async fn resetting_the_marker_issues_a_new_identity() {
     let fresh = folders.path().join("fresh");
     fs::create_dir(&fresh).expect("the folder must be creatable");
     let recorded = set_mapping(
-        "reset",
+        &crate::LibraryRef::named("reset"),
         Some("albums"),
         &fresh,
         MarkerRequest::IssueANewIdentity,
@@ -586,7 +599,7 @@ async fn resetting_the_marker_issues_a_new_identity() {
     // replaces an identity, it does not repair a broken management area.
     let broken = a_root_whose_marker_holds(folders.path(), "broken", b"not an identity\n");
     let refused = set_mapping(
-        "reset",
+        &crate::LibraryRef::named("reset"),
         Some("books"),
         &broken,
         MarkerRequest::IssueANewIdentity,

@@ -4,7 +4,8 @@ use coffret_model::{ContainerAddition, JournalRecord};
 use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA, SCHEMA, SNAPSHOT_SLOT,
+    LIBRARY_NAME, NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA,
+    REQUIRED_SCHEMA_WRITTEN, SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -28,11 +29,14 @@ use crate::field_numbers;
 /// where the record renames nothing, so a record without renames costs nothing
 /// for them.
 ///
-/// Every record names this schema in `required_schema`: `deposited_at` is
+/// Every record names schema 4 in `required_schema`: `deposited_at` is
 /// must-understand, so a reader of an earlier schema stops at the record
 /// rather than holding a catalog without deposit times — and committing records
 /// without them (spec: FM-9, FM-15). The same field covers `renames`, which an
-/// earlier schema already had to understand.
+/// earlier schema already had to understand. `library_name` is written where
+/// the record carries a name and left out otherwise; a reader of schema 4
+/// ignores it and loses only the name, so it raises `schema` and not
+/// `required_schema`.
 pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
     let mut map = MapBuilder::new();
     map.uint(SCHEMA_FIELD, SCHEMA)
@@ -65,7 +69,11 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
                     .collect(),
             ),
         )
-        .uint(REQUIRED_SCHEMA, SCHEMA);
+        .uint(REQUIRED_SCHEMA, REQUIRED_SCHEMA_WRITTEN)
+        .optional_text(
+            LIBRARY_NAME,
+            record.library_name().map(|name| name.as_str()),
+        );
     if !record.renames().is_empty() {
         map.value(
             RENAMES,

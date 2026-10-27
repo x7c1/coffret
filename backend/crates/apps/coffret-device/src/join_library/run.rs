@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use coffret_format::{RecoveryCode, StoredMasterKey};
-use coffret_model::{LibraryId, Passphrase};
-use google_drive_store::{check_any_head_or_snapshot, read_app_folder_name};
+use coffret_model::{lowercase_hex, LibraryId, MasterKey, Passphrase};
+use coffret_usecase::{LibraryKeys, ObjectStore};
+use google_drive_store::{
+    check_any_head_or_snapshot, read_app_folder_name, DriveSettings, GoogleDrive,
+};
 use tracing::info;
 use zeroize::Zeroizing;
 
+use super::name_from_catalog::name_from_catalog;
 use super::{FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
 use crate::account_envelope::AccountEnvelope;
 use crate::account_grant::{self, Bound};
@@ -13,13 +17,14 @@ use crate::account_name::AccountName;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
+use crate::library_dir::LibraryDir;
 use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::{drive, library_files, s3};
 
 /// What this call is recorded as.
-const OPERATION: &str = "join_library";
+pub(super) const OPERATION: &str = "join_library";
 
 /// Takes up a Library another device created, from its Recovery Code.
 ///
@@ -35,11 +40,21 @@ const OPERATION: &str = "join_library";
 /// wrong keys for everything it read (spec: KD-11, KD-9).
 ///
 /// And nothing is written to Storage. The app folder is already the Library's,
-/// the Keyring and the Journal are already there, and this device's catalog
-/// starts empty — the first sync or fetch catches it up to the Library's head,
-/// which is what a device that has never seen a Library does anyway
-/// (spec: CK-9, RV-5). So a join that fails leaves nothing anywhere but the
-/// staging directory it removes on the way out.
+/// the Keyring and the Journal are already there, and this device's catalog is
+/// caught up to the Library's head from them, once the Recovery Code has opened
+/// the Master Key (spec: CK-9, RV-5). So a join that fails leaves nothing
+/// anywhere but the staging directory it removes on the way out.
+///
+/// That catch-up is where the Library's name comes from: it is the Library's
+/// own, kept in its catalog (spec: FM-15), so a join is told none and reads it
+/// there, and the settings keep a copy of it for listing the Library before it
+/// is unlocked. A catch-up that does not complete leaves the copy out and the
+/// join standing — the first open catches up again and writes it.
+///
+/// The directory the Library is kept in is named after its ID. A Library that
+/// is already on this device is refused rather than joined a second time: on
+/// S3 before either secret is asked for, since the prefix names the ID, and on
+/// Drive once the folder's name has said which Library it is.
 ///
 /// Where the Library lives is stated rather than searched for, and what is
 /// checked is that the place given is one a Library's app folder could be: the
@@ -108,9 +123,12 @@ where
     F: FnOnce(&str) + Send,
 {
     // Validate what was typed outside the secret prompts first. In particular,
-    // a malformed S3 prefix leaves both lines of a script's stdin unread.
-    let dir = Staging::vacant(&request.name)?;
-    validate_provider(&request.provider)?;
+    // a malformed S3 prefix leaves both lines of a script's stdin unread, and
+    // so does a Library already here.
+    let dir = match validate_provider(&request.provider)? {
+        Some(library_id) => Staging::vacant(library_id)?.called(location(&request.provider)),
+        None => joining_folder(&request.provider)?,
+    };
     let account = account_of(&request)?;
     let resolved = resolved_provider(&request.provider).await?;
 
@@ -163,7 +181,7 @@ fn account_of(request: &JoinLibraryRequest) -> Result<Option<(Accounts, Option<C
         Some(name) => {
             let choice = accounts.choose(Some(name))?;
             if let Choice::Held(held) = &choice {
-                Accounts::require_client(held, &request.name, client_id)?;
+                Accounts::require_client(held, &location(&request.provider), client_id)?;
             }
             Some(choice)
         }
@@ -172,12 +190,39 @@ fn account_of(request: &JoinLibraryRequest) -> Result<Option<(Accounts, Option<C
     Ok(Some((accounts, choice)))
 }
 
-/// Refuses locally malformed provider locations before either secret is read.
-fn validate_provider(provider: &JoinedProvider) -> Result<()> {
-    if let JoinedProvider::S3 { prefix, .. } = provider {
-        library_of_prefix(prefix)?;
+/// Refuses locally malformed provider locations before either secret is read,
+/// and hands back the Library a location names where it names one without
+/// asking Storage: an S3 prefix carries the ID (spec: FM-18).
+fn validate_provider(provider: &JoinedProvider) -> Result<Option<LibraryId>> {
+    match provider {
+        JoinedProvider::S3 { prefix, .. } => library_of_prefix(prefix).map(Some),
+        JoinedProvider::Drive { .. } => Ok(None),
     }
-    Ok(())
+}
+
+/// The place a join was given, as what is said about the join calls the
+/// Library until its name is known: the S3 prefix, or the Drive folder's id.
+fn location(provider: &JoinedProvider) -> String {
+    match provider {
+        JoinedProvider::S3 { prefix, .. } => prefix.clone(),
+        JoinedProvider::Drive { folder_id, .. } => folder_id.clone(),
+    }
+}
+
+/// Where a join on Drive builds the Library before its ID is known: a
+/// directory named after the folder's id, which the folder's name replaces
+/// with the ID once it has been read (spec: FM-18).
+///
+/// Spelled in hex, because the id is whatever was typed and has to be one path
+/// component whatever it holds; a second join of the same folder discards what
+/// an interrupted first one left there, as a creation does.
+fn joining_folder(provider: &JoinedProvider) -> Result<LibraryDir> {
+    let folder = location(provider);
+    let spelled: String = folder
+        .bytes()
+        .map(|byte| lowercase_hex::encode(&[byte]))
+        .collect();
+    Ok(LibraryDir::beside(&format!("joining-{spelled}"))?.called(folder))
 }
 
 /// Where the Library turns out to be, for a provider whose answer is knowable
@@ -249,8 +294,17 @@ where
         StoredMasterKey::create(&passphrase, master_key, code.epoch()).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let (library_id, provider, found, new_account) = match (resolved, account) {
-        (Some((provider, found)), _) => (library_of_resolved(&provider)?, provider, found, None),
+    let (library_id, provider, found, new_account, store) = match (resolved, account) {
+        (Some((provider, found)), _) => {
+            let store = s3_store(&provider).await;
+            (
+                library_of_resolved(&provider)?,
+                provider,
+                found,
+                None,
+                store,
+            )
+        }
         (None, Some((accounts, choice))) => {
             drive_folder(
                 reach,
@@ -267,6 +321,24 @@ where
 
     let settings = DeviceSettings::new(library_id, provider);
     library_files::write(staging, &settings, reach)?;
+    let named = match store {
+        Some(store) => {
+            let keys = LibraryKeys::derive(master_key, code.epoch());
+            name_from_catalog(reach.library_store(store), staging, &keys).await
+        }
+        None => None,
+    };
+    let settings = match named {
+        Some(name) => {
+            staging.naming(name.as_str());
+            let settings = settings.named(Some(name.into_string()));
+            settings
+                .write(staging.staged())
+                .map_err(|cause| staging.failed(CreationStep::Settings, cause))?;
+            settings
+        }
+        None => settings,
+    };
     Ok((settings, found, new_account))
 }
 
@@ -300,7 +372,7 @@ async fn drive_folder<F>(
     reach: &Reach,
     request: &JoinLibraryRequest,
     staging: &mut Staging,
-    master_key: &coffret_model::MasterKey,
+    master_key: &MasterKey,
     (accounts, choice, passphrase): (&Accounts, Option<Choice>, &Passphrase),
     open_url: F,
 ) -> Result<(
@@ -308,6 +380,7 @@ async fn drive_folder<F>(
     ProviderSettings,
     FoundOnStorage,
     Option<NewAccount>,
+    Option<Arc<dyn ObjectStore>>,
 )>
 where
     F: FnOnce(&str) + Send,
@@ -383,22 +456,30 @@ where
     // Library ID invented here (spec: FM-18).
     let library_id = library_of_folder_name(&name)
         .map_err(|cause| staging.failed(CreationStep::AppFolderName, cause))?;
+    // And a Library already on this device is not joined a second time.
+    Staging::vacant(library_id)?;
 
     // And now the other question, which the name cannot answer however certain
     // it is: a Library an earlier build created and nobody synced holds nothing
     // in its own folder, and somebody joining one is owed that word rather than
     // an empty `fetch` they have to make sense of themselves.
-    let found = check_any_head_or_snapshot(transport, bound.tokens, folder_id)
-        .await
-        .map_err(|cause| {
-            staging.failed(
-                CreationStep::LibraryObject,
-                Error::Drive {
-                    cause: Box::new(cause),
-                },
-            )
-        })?;
+    let found =
+        check_any_head_or_snapshot(Arc::clone(&transport), Arc::clone(&bound.tokens), folder_id)
+            .await
+            .map_err(|cause| {
+                staging.failed(
+                    CreationStep::LibraryObject,
+                    Error::Drive {
+                        cause: Box::new(cause),
+                    },
+                )
+            })?;
 
+    let store: Arc<dyn ObjectStore> = Arc::new(GoogleDrive::new(
+        transport,
+        bound.tokens,
+        DriveSettings::new(folder_id),
+    ));
     Ok((
         library_id,
         ProviderSettings::Drive {
@@ -409,7 +490,33 @@ where
         },
         FoundOnStorage::of(found),
         bound.new_account,
+        Some(store),
     ))
+}
+
+/// The store over an S3 Library's place, which the join replays its Journal
+/// from.
+async fn s3_store(provider: &ProviderSettings) -> Option<Arc<dyn ObjectStore>> {
+    let ProviderSettings::S3 {
+        bucket,
+        prefix,
+        endpoint,
+        region,
+        path_style,
+    } = provider
+    else {
+        return None;
+    };
+    Some(
+        s3::store(
+            bucket,
+            prefix,
+            endpoint.as_deref(),
+            region.as_deref(),
+            *path_style,
+        )
+        .await,
+    )
 }
 
 /// The Library a resolved provider's place names.
@@ -463,14 +570,15 @@ pub(super) fn library_of_prefix(prefix: &str) -> Result<LibraryId> {
     library_in(name).map_err(not_one)
 }
 
-/// Moves the finished directory to the name the Library is known by.
+/// Moves the finished directory to the name the Library is known by: its ID.
 fn publish(
     staging: Staging,
     settings: DeviceSettings,
     found: FoundOnStorage,
     new_account: Option<NewAccount>,
 ) -> Result<JoinedLibrary> {
-    let path = staging.publish()?;
+    let dir = LibraryDir::of(settings.library_id)?;
+    let path = staging.publish(&dir)?;
     // After the Library; see `NewAccount`.
     if let Some(account) = new_account {
         account.publish()?;

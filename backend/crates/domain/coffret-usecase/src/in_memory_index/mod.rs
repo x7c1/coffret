@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use coffret_model::{
     ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, JournalRecord,
-    SnapshotContent,
+    LibraryName, SnapshotContent,
 };
 
 use crate::committed_batch::CommittedBatch;
@@ -94,6 +94,10 @@ impl Index for InMemoryIndex {
 
     async fn checkpoint(&self) -> IndexResult<Option<IndexCheckpoint>> {
         Ok(self.locked().checkpoint())
+    }
+
+    async fn library_name(&self) -> IndexResult<Option<LibraryName>> {
+        Ok(self.locked().library_name())
     }
 
     async fn entry_at(&self, path: &EntryPath) -> IndexResult<Option<EntryLocation>> {

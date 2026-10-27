@@ -23,9 +23,8 @@ pub struct Serving {
     pub(super) state: Arc<ServerState>,
     pub(super) listener: TcpListener,
     // This server's hold on the Library (spec: LA-8), released when serving
-    // ends rather than before. `None` only for a Library that was not on this
-    // device, which `open_library` has refused by the time a `Serving` exists.
-    pub(super) _hold: Option<ServerLock>,
+    // ends rather than before.
+    pub(super) _hold: ServerLock,
 }
 
 impl Serving {

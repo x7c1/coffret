@@ -140,8 +140,17 @@ impl Case {
     }
 }
 
+/// What a window submits to open the Library a case created as `library`:
+/// that Library's ID, which is what the window lists it under, or `library`
+/// itself where no Library carries the name — for the cases that are refused
+/// before the Library is looked at.
 fn opening(library: &str, passphrase: &str) -> Value {
-    json!({ "library": library, "passphrase": passphrase })
+    let id = coffret_device::LibraryDir::find(&coffret_device::LibraryRef::named(library))
+        .ok()
+        .and_then(|dir| coffret_device::DeviceSettings::read(&dir).ok())
+        .map(|settings| settings.library_id.to_hex())
+        .unwrap_or_else(|| library.to_owned());
+    json!({ "library": id, "passphrase": passphrase })
 }
 
 fn assert_refused(answered: &Answered, status: StatusCode, error: &str) {

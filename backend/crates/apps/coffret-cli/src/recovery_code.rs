@@ -5,10 +5,11 @@ use crate::library_args::LibraryArgs;
 use coffret_shell::passphrase;
 
 pub fn run(args: LibraryArgs, form: Form) -> anyhow::Result<Ran> {
-    let code = recovery_code(&args.library, passphrase::entering(args.passphrase_stdin))?;
+    let library = args.library();
+    let code = recovery_code(&library, passphrase::entering(args.passphrase_stdin))?;
     print_recovery_code(&code, form);
     Ok(Ran::clean(Answer::RecoveryCode(answer::RecoveryCode::new(
-        args.library,
+        library.to_string(),
         &code,
     ))))
 }

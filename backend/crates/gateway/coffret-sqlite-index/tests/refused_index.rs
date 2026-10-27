@@ -22,7 +22,7 @@ use support::{entry_path, rows_in, stamp_of, Scratch};
 ///
 /// Written out rather than read from the adapter, which keeps them to itself
 /// — the sibling suite beside this one does the same.
-const SCHEMA_VERSION: i64 = 20;
+const SCHEMA_VERSION: i64 = 21;
 const OLDEST_UPGRADED_SCHEMA_VERSION: i64 = 7;
 
 /// A layout `SqliteIndex::open` refuses: the newest one older than every

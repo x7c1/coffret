@@ -6,7 +6,9 @@ use coffret_usecase::device_state::{LocalObservation, ReservationId};
 use coffret_usecase::{CommittedBatch, IndexError, IndexResult, JournalRecord};
 use rusqlite::{params, Connection};
 
-use super::{entry_at, insert_container, insert_entry, read_checkpoint, write_checkpoint};
+use super::{
+    entry_at, insert_container, insert_entry, read_checkpoint, write_checkpoint, write_library_name,
+};
 use crate::device_state;
 use crate::error::classify;
 use crate::query::first;
@@ -27,6 +29,7 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
         }
     }
     let checkpoint = record.checkpoint();
+    let library_name = record.library_name().cloned();
     let added: Vec<ContainerId> = record
         .additions()
         .iter()
@@ -111,7 +114,13 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
     )?;
     // The checkpoint the record reaches; which Snapshot this catalog once
     // adopted is unchanged by a replay.
-    write_checkpoint(connection, &checkpoint)
+    write_checkpoint(connection, &checkpoint)?;
+    // The latest record carrying a name names the Library, and one carrying
+    // none leaves the name as it was (spec: FM-15).
+    match &library_name {
+        Some(name) => write_library_name(connection, Some(name)),
+        None => Ok(()),
+    }
 }
 
 /// What the catalog holds under one `(Container ID, entry number)`, for a

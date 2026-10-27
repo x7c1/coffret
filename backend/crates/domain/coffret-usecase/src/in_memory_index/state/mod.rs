@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{
     ContainerId, ContainerSummary, ControlObjectName, EntryLocation, EntryPath, IndexCheckpoint,
-    SnapshotContent,
+    LibraryName, SnapshotContent,
 };
 
 use crate::device_state::{
@@ -31,6 +31,7 @@ pub(super) struct State {
     adopted_from: Option<ControlObjectName>,
     containers: BTreeMap<ContainerId, ContainerSummary>,
     entries: BTreeMap<EntryPath, EntryLocation>,
+    library_name: Option<LibraryName>,
 
     // Device-local: never uploaded, and touched by the operations above only
     // in what each materialization record says about the Entry it names
@@ -69,6 +70,7 @@ impl State {
             self.containers.values().cloned().collect(),
             self.entries.values().cloned().collect(),
         )
+        .map(|content| content.with_library_name(self.library_name.clone()))
         .map_err(|cause| IndexError::UnreadableCatalog {
             operation: "reading the Library-wide state",
             cause: std::sync::Arc::new(cause),
@@ -77,6 +79,10 @@ impl State {
 
     pub(super) fn checkpoint(&self) -> Option<IndexCheckpoint> {
         self.checkpoint.clone()
+    }
+
+    pub(super) fn library_name(&self) -> Option<LibraryName> {
+        self.library_name.clone()
     }
 
     pub(super) fn entry_at(&self, path: &EntryPath) -> Option<EntryLocation> {

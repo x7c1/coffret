@@ -11,15 +11,30 @@ Storage account do share on a device is that account's grant, which the
 provider never told apart by Library in the first place (see
 [Storage](../storage/)).
 
-Each device also gives a Library a **device-local Library name**, used for its
-directory and user interface on that device. It is chosen by the person, is
-never written to Storage, and may differ between devices. This is distinct
-from the **Library ID**, the random Library-wide value the Library's
-recognizable Storage app folder is named after. The device-local name must not
-appear in a diagnostic event (spec: EL-1); the Library ID identifies no person
-or file and may remain as Storage evidence (spec: EL-5). The names inside a
-Library — its Entry Paths and file names — stay out of diagnostic events too,
-by the rule the [Entry Path](../entry-path/#domain-rules) concept states.
+A Library has a **Library name**: what a person calls it, the same on every
+device that holds it. It is chosen when the Library is created — or, for a
+Library a build before names made, given on its first open by a build that
+has them — and kept
+with the Library on Storage, in its [Catalog](../catalog/) under the
+[Master Key](../master-key/), so a device that joins reads it from there
+rather than being told one (spec: FM-15, FM-16). A name is anything a person
+can read — it is not empty and holds no control character — and two Libraries
+may carry the same one. This is distinct from the **Library ID**, the random
+Library-wide value that names both the Library's recognizable Storage app
+folder and the directory a device keeps the Library in. The Library name must
+not appear in a diagnostic event (spec: EL-1); the Library ID identifies no
+person or file and may remain as Storage evidence (spec: EL-5).
+The names inside a Library — its Entry Paths and file names — stay out of
+diagnostic events too, by the rule the [Entry Path](../entry-path/#domain-rules)
+concept states.
+
+Before a Library is unlocked nothing of its Catalog can be read, so each
+device keeps a copy of the Library name beside the Library and writes it again
+whenever it creates, joins, or unlocks the Library. That copy is what a device
+lists its Libraries by, and finds one by when a person names it. Until a
+Library a build before names put on a device is first unlocked there, it is
+listed and found by the name of the directory that build kept it in. Where two
+Libraries on one device carry one name, it is their IDs that tell them apart.
 
 A Library on a device **references** the Storage account it reaches its
 objects through, by that account's **device-local account name**, and holds
@@ -129,8 +144,11 @@ control for a sync, since a drop starts one.
 
 - create (a Library, by drawing its Library ID and writing its first head,
   `head-0`, to [Storage](../storage/) — a [Journal](../journal/) record that
-  adds and removes nothing, so that even the Library's first commit has a head
-  to start from (spec: CP-2))
+  adds and removes nothing and carries the Library name it is created with, so
+  that even the Library's first commit has a head to start from (spec: CP-2,
+  FM-15))
+- give (a Library its Library name — at creation, or by a later record; never
+  *rename*, which is the verb for Entries and folders)
 - open (a Library on this device, making it available for operations)
 - scan (the mapped local folders for new or changed files, never taking the
   system files an operating system writes beside them)
@@ -277,12 +295,22 @@ control for a sync, since a drop starts one.
     material, so a [Recovery Code](../recovery-code/) does not carry it — which
     is part of what keeps a code short enough to write down (spec: FM-18,
     KD-11).
+  - A device keeps each Library it holds in a directory named after the
+    Library ID, so nothing a person chose names anything on the device's disk
+    either. A Library a build before Library names put on a device is in a
+    directory named after what that device called it; the first time it is
+    opened it is given that name — or the one its records already give it,
+    where another device named it first — by a record carrying the name and
+    nothing else, and moved to the directory its ID names, while no server
+    holds it and on a later open where one does. A server moves it before it
+    holds it, keeping the directory's name beside the Library until the unlock
+    that gives it (spec: FM-15, LA-8).
   - What a device records about a Library it holds — that ID, where on Storage
-    the Library is, the device-local name, the account it references, the
+    the Library is, the copy of its name, the account it references, the
     mappings — is the device's own settings, kept on the device and never
-    uploaded. So two devices may hold
-    one Library under different names, in different folders, and still restore
-    the same [Catalog](../catalog/) (spec: EP-9, CK-7).
+    uploaded. So two devices may hold one Library mapped onto different
+    folders and still restore the same [Catalog](../catalog/), name included
+    (spec: EP-9, CK-7).
 - A local folder maps either to the Library root or to a top-level component
   of the Entry Path namespace, and [Mapping](../mapping/) defines the record
   that says so. A device may have at most one root mapping, and

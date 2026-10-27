@@ -48,10 +48,14 @@ on both platforms:
 | `XDG_STATE_HOME` set | `$XDG_STATE_HOME/coffret/` |
 | otherwise | `~/.local/state/coffret/` |
 
-It holds the Libraries on this device (`libraries/<name>/`, each with its
-settings, its Master Key under the Passphrase, and its catalog) and the logs
-(`logs/`). An app started from the desktop or the application menu is not
-given `COFFRET_STATE_DIR`, so it always uses this directory; the
+It holds the Libraries on this device (`libraries/<library id>/`, each with
+its settings, its Master Key under the Passphrase, and its catalog) and the
+logs (`logs/`). A Library a build before Library names put there is in a
+directory named after what this device called it. The first time this build
+opens it — from the app or with a `coffret` command — it is given that name
+and its directory is moved to its ID. An app started from the desktop or
+the application menu is not given `COFFRET_STATE_DIR`, so it always uses this
+directory; the
 [Environments](../environments.md#two-state-directories) guide explains how
 this differs from a checkout's development state directory.
 

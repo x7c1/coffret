@@ -12,6 +12,7 @@ use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::drive;
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::library_ref::LibraryRef;
 use crate::reach::Reach;
 use crate::referencing_passphrase::ReferencingPassphrase;
 use crate::stored_master_key_file::StoredMasterKeyFile;
@@ -27,7 +28,7 @@ pub enum AuthorizeRequest {
     /// The account a Library references, named by the Library.
     Library {
         /// The Library on this device.
-        name: String,
+        library: LibraryRef,
         /// The account to bring the Library onto, for a Library that
         /// references none yet — one whose own previous grant cannot go to
         /// `default`, or one with no grant at all. For a Library that already
@@ -89,8 +90,8 @@ where
     F: FnOnce(&str) + Send,
 {
     let (account, credentials) = match request {
-        AuthorizeRequest::Library { name, account } => {
-            library_account(reach, &name, account.as_deref(), enter_passphrase).await?
+        AuthorizeRequest::Library { library, account } => {
+            library_account(reach, &library, account.as_deref(), enter_passphrase).await?
         }
         AuthorizeRequest::Account { name } => named_account(&name, enter_passphrase)?,
     };
@@ -113,14 +114,14 @@ where
 /// client it renews through.
 async fn library_account<P>(
     reach: &Reach,
-    name: &str,
+    library: &LibraryRef,
     account: Option<&str>,
     enter_passphrase: P,
 ) -> Result<(Opened, google_drive_store::ClientCredentials)>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    let dir = LibraryDir::resolve(name)?;
+    let dir = LibraryDir::find(library)?;
     let mut settings = DeviceSettings::read(&dir)?;
     let ProviderSettings::Drive {
         client_id,

@@ -19,8 +19,8 @@
 //! `$HOME/.local/state` where that is unset:
 //!
 //! ```text
-//! coffret/libraries/<name>/
-//!   settings.json      where the Library lives (this crate's contract)
+//! coffret/libraries/<library id>/
+//!   settings.json      where the Library lives, and a copy of its name
 //!   master-key.cfmk    the Master Key under the Passphrase (spec: KD-9)
 //!   account.cfke       the key to its account's grant (spec: KD-12), Drive only
 //!   index.sqlite       the catalog
@@ -33,11 +33,20 @@
 //!   settings.json      the OAuth client that grant was issued to
 //! ```
 //!
-//! `<name>` is what this device calls the Library, not what the Library calls
-//! itself: another device holding the same Library may call it something else,
-//! the way it may map its folders differently (spec: CK-7). The six files and
-//! the directory are created owner-only, and none of them is named in
-//! `settings.json` — the layout is the single answer to where each piece is.
+//! `<library id>` is the Library's ID (spec: FM-18), so nothing a person chose
+//! names a directory. The Library's name is the Library's own, the same on
+//! every device: it is chosen at [`create_library`], kept in the catalog on
+//! Storage under the Master Key (spec: FM-15, FM-16), and copied into
+//! `settings.json` at every creation, join and unlock, which is what lets a
+//! device list and find its Libraries by name before one is unlocked
+//! ([`LibraryDir::find`], [`LibraryRef`]). A Library a build before names put
+//! here is in a directory named after what this device called it then; the
+//! first [`open_library`] gives the Library that name and moves the directory
+//! to its ID. A server moves it before it unlocks it instead
+//! ([`move_to_its_id`]), keeping the directory's name in `settings.json` for
+//! the unlock to give. The six files and the directory are created owner-only,
+//! and none of them is named in `settings.json` — the layout is the single
+//! answer to where each piece is.
 //!
 //! A grant is the one thing a Library uses that is not kept in its directory. It
 //! belongs to the device and the Storage account a person consented as, so a
@@ -60,23 +69,26 @@
 //!
 //! [`STATE_DIRECTORY`] stands in for the `coffret` directory itself rather than
 //! for what is above it, so a Library of a run under it is at
-//! `$COFFRET_STATE_DIR/libraries/<name>/` and not under a second `coffret`.
+//! `$COFFRET_STATE_DIR/libraries/<library id>/` and not under a second
+//! `coffret`.
 //!
 //! # What the settings file is for
 //!
 //! [`DeviceSettings`] is a contract rather than a convenience: the explorer will
 //! read the same file, so it is versioned, and a version this build does not
-//! know is refused rather than repaired. It holds two things — which Library
-//! this is, and where on Storage it is — and no credential a device could not
-//! obtain again for itself.
+//! know is refused rather than repaired. It holds which Library this is, where
+//! on Storage it is, and the copy of its name — and no credential a device
+//! could not obtain again for itself.
 //!
 //! # Two ways a Library appears here, and five things a device does with one
 //!
 //! [`create_library`] draws a Master Key, stores it under the Passphrase, and
 //! hands back the [`RecoveryCode`] — the one copy of that key which exists off
-//! the device. [`join_library`] is the same directory built from such a code:
-//! the Master Key is entered rather than drawn, and nothing is written to
-//! Storage, because the Library is already there.
+//! the device — writing the Library's name into its first head.
+//! [`join_library`] is the same directory built from such a code: the Master
+//! Key is entered rather than drawn, nothing is written to Storage, because the
+//! Library is already there, and the name is read from the catalog the join
+//! replays rather than given.
 //!
 //! [`run_sync`], [`run_freeze`], [`run_fetch`] and [`run_fetch_entry`] are the
 //! flows over a Library that exists. Each one opens the Library, supplies the
@@ -146,12 +158,13 @@
 //!
 //! Every call that needs a Passphrase takes it as a callback rather than as a
 //! value, and calls it only once every refusal that needs no key has passed. A
-//! name that is not one path component, a Library that is not on this device, a
-//! bucket that does not answer: none of those is worth a person typing a
-//! Passphrase twice to be told about. A Recovery Code reaches [`join_library`]
-//! the same way and for the same reason: it is the Master Key in the form a
-//! person writes down (spec: KD-11), so it is asked for after those refusals
-//! and never taken as a value a caller could print or leave in a command line.
+//! name nobody can read, a Library that is not on this device, a name two
+//! Libraries here carry, a bucket that does not answer: none of those is worth
+//! a person typing a Passphrase twice to be told about. A Recovery Code reaches
+//! [`join_library`] the same way and for the same reason: it is the Master Key
+//! in the form a person writes down (spec: KD-11), so it is asked for after
+//! those refusals and never taken as a value a caller could print or leave in a
+//! command line.
 //!
 //! Recording a mapping needs no Passphrase at all, because a mapping is device
 //! state in a plaintext catalog and says nothing the Library keeps secret
@@ -220,7 +233,7 @@ mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
 mod error;
-pub use error::{ClientMismatch, CreationStep, Error, NameDefect, PromotionObstacle, Result};
+pub use error::{ClientMismatch, CreationStep, Error, PromotionObstacle, Result};
 
 mod finding;
 pub use finding::Finding;
@@ -246,6 +259,12 @@ mod kept_parcels;
 
 mod library_dir;
 pub use library_dir::{state_directory, LibraryDir, STATE_DIRECTORY};
+
+mod library_on_device;
+pub use library_on_device::LibraryOnDevice;
+
+mod library_ref;
+pub use library_ref::LibraryRef;
 
 // The three things both ways of putting a Library on this device write once its
 // Master Key and its place on Storage are decided.
@@ -278,7 +297,7 @@ mod recorded_mapping;
 pub use recorded_mapping::RecordedMapping;
 
 mod open_library;
-pub use open_library::{open_library, OpenLibrary};
+pub use open_library::{move_to_its_id, open_library, OpenLibrary};
 
 // How a device's own files are created: owner-only, and through a rename, so an
 // interrupted write leaves what was there rather than half of what replaces it.
@@ -407,12 +426,17 @@ mod catalog_refusal_tests;
 // `coffret_model::lowercase_hex` goes out for the same reason: it is the one
 // spelling of the identifiers a shell writes down of its own, and a shell that
 // spelled them by hand would drift from it.
+// `LibraryId` and `LibraryName` go out because a shell names a Library by one
+// of them (`LibraryRef`) and reads the other off what it opened, and
+// `LibraryNameDefect` because it is what [`Error::InvalidLibraryName`]
+// carries.
 pub use coffret_format::{
     CborDecodeFailure, Error as FormatError, MalformedDetail, Purpose, RecoveryCode,
 };
 pub use coffret_model::{
     lowercase_hex, Btime, ContainerId, ContainerKind, ContentHash, DepositedAt, EntryNumber,
-    EntryPath, Error as ModelError, Generation, Mtime, Passphrase, PathDefect, Redacted,
+    EntryPath, Error as ModelError, Generation, LibraryId, LibraryName, LibraryNameDefect, Mtime,
+    Passphrase, PathDefect, Redacted,
 };
 pub use coffret_model::{ControlObjectKind, ControlObjectName, ObjectRef};
 pub use coffret_usecase::catch_up::{CatchUpOutcome, RemoteHead};

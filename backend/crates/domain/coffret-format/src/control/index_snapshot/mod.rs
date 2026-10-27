@@ -48,12 +48,13 @@ mod size_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for an Index Snapshot payload (spec: FM-16).
+/// The schema this crate writes for an Index Snapshot payload (spec: FM-16):
+/// 5, the first whose Snapshots may carry `library_name`.
 ///
 /// Not what a reader refuses below: that is [`LOWEST_READ_SCHEMA`], so that a
 /// later build writing a new field under a higher schema goes on reading the
 /// Snapshots written before it.
-const SCHEMA: u64 = 4;
+const SCHEMA: u64 = 5;
 
 /// The lowest schema a reader accepts: 4, the first whose Entries carry
 /// `deposited_at` (spec: FM-16).
@@ -63,7 +64,8 @@ const SCHEMA: u64 = 4;
 /// one: it is refused as a schema this build does not read, and a Library
 /// holding one is recreated rather than migrated.
 ///
-/// Equal to [`SCHEMA`] for now.
+/// Below [`SCHEMA`]: a Snapshot of schema 4 was written before a checkpoint
+/// could carry a name, and reads as one that carries none.
 const LOWEST_READ_SCHEMA: u64 = 4;
 
 const HEAD_GENERATION: &str = "head_generation";
@@ -78,6 +80,7 @@ const CONTAINER: &str = "container";
 const ENTRY: &str = "entry";
 const BASE_HEAD_GENERATION: &str = "base_head_generation";
 const ACTIVATION_SLOT: &str = "activation_slot";
+const LIBRARY_NAME: &str = "library_name";
 
 /// One Index Snapshot payload: the Library-wide content, activation or not.
 #[derive(Debug, Clone, PartialEq, Eq)]

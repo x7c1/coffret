@@ -29,9 +29,17 @@ export type DesktopEvent =
   | 'PassphraseWindowSpent'
   | 'ServerStopped';
 
+/** One Library on this device, as the addon lists it. */
+export interface ListedLibrary {
+  /** Its ID, in the 16 lowercase hex characters it is spelled in. */
+  id: string;
+  /** The name it is listed under: its name, or its ID where nothing has named it yet. */
+  name: string;
+}
+
 /** The Library served, as the addon tells of it. */
 export interface ServedLibrary {
-  /** The name it has on this device. */
+  /** Its name, or its ID where nothing has named it yet. */
   name: string;
   /** Whether it is unlocked, or has locked itself and waits for the Passphrase. */
   unlocked: boolean;
@@ -74,8 +82,8 @@ export interface Addon {
    * is what `COFFRET_IDLE_MINUTES` was set to, if anything.
    */
   start(identifier: string, idleMinutes?: string | null): void;
-  /** The names of the Libraries on this device. */
-  libraries(): string[];
+  /** The Libraries on this device, each by its ID and the name it is listed under. */
+  libraries(): ListedLibrary[];
   /**
    * The URL to load one Passphrase window from, opened in `mode`, with a fresh
    * door token in its fragment: for the window and nothing else, a log

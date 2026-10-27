@@ -44,11 +44,13 @@ use crate::unlocked::Unlocked;
 /// reaches a response — and what a browser is answered with is drawn from it a
 /// request at a time.
 pub struct ServerState {
-    /// What this device calls the Library, which is what was typed to start the
-    /// server and what the status bar shows.
+    /// The Library's name, which is what the status bar shows: the one its
+    /// catalog held when the server started, and the Library's ID where
+    /// nothing has named it yet.
     ///
-    /// It is this device's name for it rather than the Library's own: another
-    /// device holding the same Library may call it something else (spec: CK-7).
+    /// The Library's own and not this device's: every device holding the
+    /// Library calls it the same (spec: FM-15). A person chose it, so it is
+    /// never written into a diagnostic event (spec: EL-1).
     pub name: String,
     /// The Library this is (spec: FM-18), as the identity route spells it.
     library_id: String,
@@ -193,7 +195,7 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    /// Serves the Library that was opened, under the name it was opened by.
+    /// Serves the Library that was opened, under the name `name`.
     pub fn new(name: String, library: OpenLibrary) -> Self {
         let live = Arc::clone(&library.live);
         Self {
@@ -320,10 +322,10 @@ impl ServerState {
     /// A Library already open is left as it is and what was handed in is
     /// dropped at once, which wipes its keys (spec: DK-7): two unlocks under way
     /// together end with one set of keys, the first to arrive. A Library that
-    /// is not the one this server serves is refused, whatever it is called on
-    /// this device — the name a Passphrase reopened could have been made to
-    /// point somewhere else since the server started, and serving that under
-    /// this server's identity would be answering for one Library with another.
+    /// is not the one this server serves is refused, whatever it is called —
+    /// a shell reopens by the ID it was given, and one handing over another
+    /// Library would have this server answering for one Library with
+    /// another under its identity.
     ///
     /// Once it has taken the Library the idle lock is armed afresh, so the
     /// interval is counted from this moment (spec: DK-4).
@@ -334,8 +336,8 @@ impl ServerState {
     pub fn unlock(&self, mut library: OpenLibrary) -> anyhow::Result<Unlocked> {
         ensure!(
             library.library_id.to_hex() == self.library_id,
-            "the Library called {:?} on this device is no longer the one this server was \
-             started for; quit the app and open it again",
+            "the Library {:?} reopened is no longer the one this server was started for; quit \
+             the app and open it again",
             self.name,
         );
         library.live = Arc::clone(&self.live);
@@ -402,8 +404,10 @@ impl ServerState {
         self.custody.unlocked()?.kept_tally().await
     }
 
-    /// The Library this is, for the one route that answers while locked.
-    pub(crate) fn library_id(&self) -> &str {
+    /// The Library this is, in the hex it is spelled in: for the one route
+    /// that answers while locked, and for a shell that reopens the Library by
+    /// it to unlock it in place (spec: FM-18).
+    pub fn library_id(&self) -> &str {
         self.library_id.as_str()
     }
 

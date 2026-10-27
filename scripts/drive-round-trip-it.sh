@@ -8,16 +8,17 @@
 # Library from the device that made it to a device that only ever had its
 # Recovery Code.
 #
-# Two Libraries stand for two devices, because that is what a second device is
-# from Storage's point of view: `main` creates the Library and syncs a folder
-# into it, `second` takes the same Library up from the Recovery Code and
-# fetches it into a folder of its own — and then syncs that folder, which is
-# what a person does next on a device they have just filled, and which has to
-# put nothing back up.
+# Two state directories stand for two devices, because that is what a second
+# device is from Storage's point of view: `main` creates the Library — called
+# `main` — and syncs a folder into it, `second` takes the same Library up from
+# the Recovery Code, reading its name from the Library, and fetches it into a
+# folder of its own — and then syncs that folder, which is what a person does
+# next on a device they have just filled, and which has to put nothing back up.
+# A device holds a Library once, so the two cannot share a state directory.
 #
 # The state is deliberately kept rather than thrown away. Everything lives
 # under `.tmp/drive-round-trip/`, which is gitignored, so a second run finds
-# the two Libraries the first one made: it asks for no consent, adds a fresh
+# the two devices the first one made: it asks for no consent, adds a fresh
 # batch of files beside the earlier ones, and commits the next head. A batch is
 # five generated JPEGs of about 100 KB together, small on purpose.
 #
@@ -73,7 +74,10 @@ readonly ROOT
 # Everything this script writes is under one directory, and none of it is
 # temporary: the run after this one opens the Libraries this one leaves.
 readonly WORK="$ROOT/.tmp/drive-round-trip"
+# The two devices' state directories: the first one's is where the Library was
+# created, and keeps the name it had when one device held both Libraries.
 readonly STATE_DIR="$WORK/state"
+readonly JOINER_STATE_DIR="$WORK/second-state"
 readonly LOG_DIR="$WORK/logs"
 readonly TRANSCRIPT="$WORK/transcript.log"
 # And this script's own account of the run, which the transcript is not: the
@@ -94,10 +98,12 @@ readonly LAST="$WORK/last-command.log"
 # And what it answered: the one JSON object `--json` prints on standard output.
 readonly ANSWER="$WORK/last-answer.json"
 
-# The two names the two devices know the one Library by. They are device-side
-# names and nothing on Drive carries either of them.
+# The two devices, and the name the one Library has on both: the Library's own,
+# chosen when `main` creates it and read from the Library by `second` as it
+# joins (spec: FM-15).
 readonly UPLOADER="main"
 readonly JOINER="second"
+readonly LIBRARY="$UPLOADER"
 
 # The one top-level component both devices map, and the folder each maps it to.
 readonly PREFIX="runs"
@@ -212,7 +218,7 @@ fi
 command -v jq >/dev/null ||
   fail "jq is not on this PATH, and this target reads what the CLI answers with it."
 
-mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$UPLOADER_ROOT" "$JOINER_ROOT"
+mkdir -p "$WORK" "$STATE_DIR" "$JOINER_STATE_DIR" "$LOG_DIR" "$UPLOADER_ROOT" "$JOINER_ROOT"
 
 # From here on, everything this script says goes to the report as well as to the
 # terminal — both streams, in the order they were said, which is the order a
@@ -279,27 +285,52 @@ export COFFRET_LOG_DIR="$LOG_DIR"
 # this pins what the assertion already assumes rather than asking for more.
 export COFFRET_LOG=info
 
-# Whether a Library is on this device is the settings file and not the
-# directory: an interrupted creation leaves a directory that nothing opens.
-library_present() {
-  [ -f "$STATE_DIR/libraries/$1/settings.json" ]
+# The directory of the Library called $2 on the device whose state directory is
+# $1, or nothing.
+#
+# A Library is kept in a directory named after its ID, and its settings keep a
+# copy of its name, which is what finds it here, as `--library` finds it. A
+# directory an earlier build named after the Library is found by that name.
+library_dir() {
+  local settings
+  for settings in "$1"/libraries/*/settings.json; do
+    [ -f "$settings" ] || continue
+    case "$settings" in */*.partial/settings.json) continue ;; esac
+    if jq --exit-status --arg name "$2" '.name == $name' "$settings" >/dev/null 2>&1 ||
+      [ "$(basename "$(dirname "$settings")")" = "$2" ]; then
+      dirname "$settings"
+      return 0
+    fi
+  done
 }
 
-# One string out of a Library's settings file.
+# Whether the Library is on a device ($1, its state directory) is the settings
+# file and not the directory: an interrupted creation leaves a directory that
+# nothing opens.
+library_present() {
+  [ -n "$(library_dir "$1" "$LIBRARY")" ]
+}
+
+# One string out of the Library's settings file on the first device.
 #
 # Read back rather than remembered, so that the report says where the Library
 # is on every run and not only on the one that created it.
 settings_value() {
-  jq --raw-output --arg key "$2" \
+  jq --raw-output --arg key "$1" \
     'first(.. | objects | .[$key]? | strings) // empty' \
-    "$STATE_DIR/libraries/$1/settings.json"
+    "$(library_dir "$STATE_DIR" "$LIBRARY")/settings.json"
+}
+
+# Runs the CLI as the second device.
+as_joiner() {
+  COFFRET_STATE_DIR="$JOINER_STATE_DIR" run_cli "$@"
 }
 
 # Which Library a command was for, out of what it was told.
 #
 # For the renewal command below, which has to name one: `--library` on the
-# commands that act on a Library this device has, `--name` on the two that put
-# one there, and those are the only two flags that name one.
+# commands that act on a Library a device has, and `--name` on the one that
+# creates one; a join names none, and the Library it joins is $LIBRARY.
 library_of() {
   local previous=""
   local word
@@ -312,7 +343,7 @@ library_of() {
     esac
     previous="$word"
   done
-  printf '%s\n' "$UPLOADER"
+  printf '%s\n' "$LIBRARY"
 }
 
 # Runs the CLI, showing what it says as it happens and keeping a copy of it.
@@ -370,7 +401,7 @@ The grant on $library is gone. Renewing it means opening a browser at somebody,
 which is a question this script was never asked, so it stops here instead. Run:
 
   printf '%s\n' '$PASSPHRASE' |
-    COFFRET_STATE_DIR='$STATE_DIR' '$COFFRET' authorize --library $library --passphrase-stdin
+    COFFRET_STATE_DIR='$COFFRET_STATE_DIR' '$COFFRET' authorize --library $library --passphrase-stdin
 
 EOF
     fail "It prints a URL of its own: open it, answer there, then run this target again."
@@ -460,15 +491,15 @@ echo
 # What the run is going to ask of whoever started it, said before the build
 # rather than when the first URL appears: a run that asks for nothing can be
 # walked away from, and a run that asks is one to stay at the terminal for.
-# One at most: the grant belongs to the account rather than to either Library,
-# so the join takes up the account $UPLOADER's grant is kept under — through
-# $UPLOADER, which is kept under the same Passphrase — and asks for none.
+# One per device at most: a grant belongs to an account on a device, so the
+# second device, holding no account yet, consents as it joins.
 consents=0
-library_present "$UPLOADER" || consents=1
+library_present "$STATE_DIR" || consents=$((consents + 1))
+library_present "$JOINER_STATE_DIR" || consents=$((consents + 1))
 
-# The client is asked for by either Library being put here, the join included:
-# it records the client in the Library's settings whether or not it consents.
-if ! library_present "$UPLOADER" || ! library_present "$JOINER"; then
+# The client is asked for by either Library being put on a device, the join
+# included: it records the client in the Library's settings.
+if ! library_present "$STATE_DIR" || ! library_present "$JOINER_STATE_DIR"; then
   if [ -z "${COFFRET_DRIVE_CLIENT_ID:-}" ]; then
     fail "COFFRET_DRIVE_CLIENT_ID is not set, and putting a Library on this device needs an OAuth desktop client to authorize as."
   fi
@@ -479,11 +510,8 @@ if [ "$consents" -gt 0 ]; then
   echo "nothing opens a browser for you — and waits there, giving up after five"
   echo "minutes. The build comes first; the rest is the CLI's own output, and"
   echo "the whole run takes a few minutes."
-elif ! library_present "$JOINER"; then
-  echo "$UPLOADER is already on this device and $JOINER joins through its"
-  echo "account's grant: no consent to answer, and nothing in this run waits on you."
 else
-  echo "$UPLOADER and $JOINER are already on this device: no consent to answer,"
+  echo "$UPLOADER and $JOINER both hold the Library already: no consent to answer,"
   echo "and nothing in this run waits on you."
 fi
 echo
@@ -509,17 +537,17 @@ readonly FIXTURES="$ROOT/backend/target/release/coffret-fixtures"
 #    script reads the code back out of, and in the report beside it — one more
 #    reason nothing you would keep belongs in the Libraries under
 #    `.tmp/drive-round-trip/`.
-if ! library_present "$UPLOADER"; then
+if ! library_present "$STATE_DIR"; then
   echo
-  echo "--- creating the Library as $UPLOADER ---"
-  echo "The one consent: a URL is about to be printed, and the run"
+  echo "--- creating the Library $LIBRARY on $UPLOADER ---"
+  echo "$UPLOADER's consent: a URL is about to be printed, and the run"
   echo "waits at it until you have opened it in a browser and answered. Nothing"
   echo "on the account is read or changed beyond the folder coffret creates —"
   echo "a new one, so where the Libraries were removed from this device by hand,"
   echo "the folder the run before them made stays on the account untouched."
   echo
   run_cli init \
-    --name "$UPLOADER" \
+    --name "$LIBRARY" \
     --drive \
     --parent "$COFFRET_DRIVE_FOLDER_ID" \
     --client-id "$COFFRET_DRIVE_CLIENT_ID" \
@@ -547,7 +575,7 @@ created before the failure and is the account's to remove."
     fail "init did not say which Drive folder the Library is in."
 fi
 
-if ! library_present "$JOINER"; then
+if ! library_present "$JOINER_STATE_DIR"; then
   # Whether $UPLOADER was created a moment ago in this same run, which decides
   # what the join can be held to about what it found there. Creating a Library
   # writes its first head as its last step (spec: CP-2), so a Library made in
@@ -562,24 +590,37 @@ if ! library_present "$JOINER"; then
   # account.
   if [ -z "${recovery_code:-}" ]; then
     created_this_run=false
+    # A Library an earlier build created is kept in a directory named after
+    # it, and carries no name until a build that knows of one opens it, which
+    # gives it the directory's. The join below reads the name from the
+    # Library, so $UPLOADER opens it first: a sync, with nothing new to carry
+    # up yet, and with the findings the deletion step of an earlier run left.
+    if [ "$(basename "$(library_dir "$STATE_DIR" "$LIBRARY")")" = "$LIBRARY" ]; then
+      echo
+      echo "--- opening $UPLOADER, which an earlier build created, to give it its name ---"
+      status=0
+      run_cli sync --library "$LIBRARY" --passphrase-stdin || status=$?
+      case "$status" in
+        0 | "$FINDINGS") ;;
+        *) fail "sync on $UPLOADER failed with status $status." ;;
+      esac
+    fi
     echo
     echo "--- reading $UPLOADER's Recovery Code back, to join with ---"
-    run_cli recovery-code --library "$UPLOADER" --passphrase-stdin
+    run_cli recovery-code --library "$LIBRARY" --passphrase-stdin
     recovery_code="$(said_recovery_code)"
     [ -n "$recovery_code" ] || fail "$UPLOADER printed no Recovery Code."
-    app_folder_id="$(settings_value "$UPLOADER" folder_id)"
+    app_folder_id="$(settings_value folder_id)"
     [ -n "$app_folder_id" ] || fail "$UPLOADER's settings name no Drive folder."
   fi
 
   echo
   echo "--- taking the same Library up as $JOINER ---"
-  echo "No consent this time: a grant belongs to an account on this device"
-  echo "rather than to a Library, and the join finds the account whose Drive"
-  echo "lists the folder through $UPLOADER, which is kept under the same"
-  echo "Passphrase. A URL printed here is the join failing to find it."
+  echo "$JOINER's consent: a grant belongs to an account on a device, and"
+  echo "$JOINER holds none yet, so the join prints a URL of its own and waits at"
+  echo "it. It names no Library: the name is the Library's, read from it."
   echo
-  run_cli join \
-    --name "$JOINER" \
+  as_joiner join \
     --recovery-code-stdin \
     --drive \
     --folder-id "$app_folder_id" \
@@ -590,15 +631,11 @@ $JOINER did not join. Running this target again asks $UPLOADER for the Recovery
 Code and joins again; it creates no second Library and no second folder on the
 account."
 
-  # One consent for the two Libraries: the join reached the account through
-  # $UPLOADER and asked nobody (spec: SA-8). A consent URL in what it printed is
-  # a device that kept a grant per Library after all.
-  if answered '.answer.consent_asked' >/dev/null; then
-    fail "
-$JOINER asked for a consent of its own. A grant belongs to an account on this
-device, and the join should have found the one $UPLOADER's grant is kept under
-— see \`account_grant::search\` in backend/crates/apps/coffret-device/src."
-  fi
+  # The Library's name is its own, read from the Library as the join replayed
+  # it (spec: FM-15).
+  # shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+  answered --arg name "$LIBRARY" '.answer.library == $name' >/dev/null || fail "
+$JOINER joined, and did not read the Library's name, $LIBRARY, from it: $(the_answer)"
 
   # A join asks the place it was given whether it holds anything of the Library
   # and says what it found, on Drive as on S3. Where $UPLOADER was created in
@@ -632,14 +669,14 @@ echo "$generated files."
 #    folder is the answer that nothing moved.
 echo
 echo "--- carrying $PREFIX into the Library from $UPLOADER ---"
-run_cli map --library "$UPLOADER" --prefix "$PREFIX" "$UPLOADER_ROOT"
+run_cli map --library "$LIBRARY" --prefix "$PREFIX" "$UPLOADER_ROOT"
 
 # The upload is the longest stretch of the run, and the run itself now says
 # where it has got to: a line per phase and per tenth of the way through it,
 # because everything here goes through a pipe rather than to a terminal.
 echo "uploading $generated files to Drive; the run says how far along it is as it goes."
 status=0
-run_cli sync --library "$UPLOADER" --passphrase-stdin || status=$?
+run_cli sync --library "$LIBRARY" --passphrase-stdin || status=$?
 
 # A run after the first one inherits the findings the deletion step below
 # leaves: the Entry stays in the Library, the file stays gone from this disk,
@@ -670,7 +707,7 @@ echo "committed head $committed_head."
 #    Code.
 echo
 echo "--- fetching $PREFIX into $JOINER ---"
-run_cli map --library "$JOINER" --prefix "$PREFIX" "$JOINER_ROOT"
+as_joiner map --library "$LIBRARY" --prefix "$PREFIX" "$JOINER_ROOT"
 
 # Counted before the fetch, because what the folder already held is what says
 # which of the two answers below is the right one.
@@ -681,7 +718,7 @@ held_before="$(files_under "$JOINER_ROOT")"
 # pulls them back.
 echo "downloading into $JOINER; the run says which Container it is on as it goes."
 status=0
-run_cli fetch --library "$JOINER" --under "$PREFIX" --passphrase-stdin || status=$?
+as_joiner fetch --library "$LIBRARY" --under "$PREFIX" --passphrase-stdin || status=$?
 [ "$status" = 0 ] || fail "fetch on $JOINER failed with status $status."
 
 summary="$(the_answer)"
@@ -724,7 +761,7 @@ echo
 echo "--- syncing $JOINER, the device that has just fetched ---"
 joiner_holds="$(files_under "$JOINER_ROOT")"
 status=0
-run_cli sync --library "$JOINER" --passphrase-stdin || status=$?
+as_joiner sync --library "$LIBRARY" --passphrase-stdin || status=$?
 joiner_log="$(log_of_the_last_run)"
 [ -n "$joiner_log" ] || fail "the sync on $JOINER did not say which log file it was writing to."
 
@@ -775,7 +812,7 @@ echo "removed $PREFIX/$relative from this device."
 echo
 
 status=0
-run_cli sync --library "$UPLOADER" --passphrase-stdin || status=$?
+run_cli sync --library "$LIBRARY" --passphrase-stdin || status=$?
 [ "$status" = "$FINDINGS" ] ||
   fail "a sync that left something to act on must exit $FINDINGS, and this one exited $status."
 # shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
@@ -784,8 +821,8 @@ answered --arg path "$PREFIX/$relative" \
   >/dev/null || fail "the sync did not surface $PREFIX/$relative as gone from disk."
 
 # 8. What the run did, in one block, so that nobody has to read back up.
-library_id="$(settings_value "$UPLOADER" library_id)"
-folder_id="$(settings_value "$UPLOADER" folder_id)"
+library_id="$(settings_value library_id)"
+folder_id="$(settings_value folder_id)"
 
 echo
 echo "=== the round trip held ==="
@@ -803,7 +840,7 @@ echo "Transcript:      $TRANSCRIPT"
 echo "Report:          $REPORT"
 echo "CLI logs:        $LOG_DIR"
 echo "  $JOINER's sync: $joiner_log"
-echo "Libraries:       $STATE_DIR/libraries"
+echo "Libraries:       $STATE_DIR/libraries, and $JOINER's in $JOINER_STATE_DIR/libraries"
 echo
 echo "Run this again to add another batch without a consent. Nothing on the"
 echo "account is removed by it: the app folder above is the only one coffret"

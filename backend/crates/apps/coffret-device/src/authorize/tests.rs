@@ -41,7 +41,7 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
 /// Renewing the grant of the account the Library called `name` references.
 fn library(name: &str) -> AuthorizeRequest {
     AuthorizeRequest::Library {
-        name: name.to_owned(),
+        library: crate::LibraryRef::named(name),
         account: None,
     }
 }

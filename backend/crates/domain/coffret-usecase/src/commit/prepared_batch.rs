@@ -1,4 +1,4 @@
-use coffret_model::{ContainerId, Generation};
+use coffret_model::{ContainerId, Generation, LibraryName};
 
 use crate::commit::pending_rename::PendingRename;
 use crate::commit::prepared_addition::PreparedAddition;
@@ -31,6 +31,12 @@ pub struct PreparedBatch {
     pub materialized: Vec<LocalObservation>,
     /// The Entries the batch gives a new current Entry Path (spec: FM-15).
     pub renames: Vec<PendingRename>,
+    /// The name the batch gives the Library, carried by its record, and `None`
+    /// for a batch that leaves the Library's name as it is (spec: FM-15).
+    ///
+    /// A batch carrying nothing else is still a change: its record is how a
+    /// Library made before records carried a name is given one.
+    pub library_name: Option<LibraryName>,
     /// The reservations the batch packs, released by the refresh that
     /// completes its rows (spec: PK-17).
     ///
@@ -72,6 +78,13 @@ impl PreparedBatch {
         self
     }
 
+    /// The same batch, giving the Library the name `name` as well
+    /// (spec: FM-15).
+    pub fn naming(mut self, name: LibraryName) -> Self {
+        self.library_name = Some(name);
+        self
+    }
+
     /// The same batch, prepared against the head at `base`.
     pub(crate) fn prepared_at(mut self, base: Option<Generation>) -> Self {
         self.base = base;
@@ -79,13 +92,16 @@ impl PreparedBatch {
     }
 
     /// Whether the batch changes nothing: it adds no Container, removes none,
-    /// and renames no Entry.
+    /// renames no Entry, and names nothing.
     ///
     /// What a commit writes for such a batch is a record with nothing in it,
     /// which is exactly a Library's first head (spec: CP-2, FM-13) and nothing
     /// a later head needs.
     pub fn is_empty(&self) -> bool {
-        self.additions.is_empty() && self.removals.is_empty() && self.renames.is_empty()
+        self.additions.is_empty()
+            && self.removals.is_empty()
+            && self.renames.is_empty()
+            && self.library_name.is_none()
     }
 
     /// The same batch, recording what this device put on disk for it.

@@ -12,7 +12,9 @@ use super::Storage;
 /// went in is the one that exists.
 #[derive(Serialize)]
 pub struct Joined {
-    library: String,
+    /// The Library's name, as the join read it from the Library, and null
+    /// where it could not.
+    library: Option<String>,
     library_id: String,
     storage: Storage,
     account: Option<String>,
@@ -21,15 +23,11 @@ pub struct Joined {
 }
 
 impl Joined {
-    /// The Library `library` as `join` took it up.
-    pub fn new(
-        library: String,
-        joined: &coffret_device::JoinedLibrary,
-        consent_asked: bool,
-    ) -> Self {
+    /// The Library as `join` took it up.
+    pub fn new(joined: &coffret_device::JoinedLibrary, consent_asked: bool) -> Self {
         let provider = &joined.settings.provider;
         Self {
-            library,
+            library: joined.settings.name.clone(),
             library_id: joined.settings.library_id.to_string(),
             storage: Storage::from(provider),
             account: crate::storage_location::account(provider).map(str::to_owned),

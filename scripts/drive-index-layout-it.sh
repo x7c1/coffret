@@ -98,10 +98,12 @@ readonly LAST_ERR="$WORK/last-command.err"
 # standard output, which is where every fact asserted on is read from.
 readonly ANSWER="$WORK/last-answer.json"
 
-# The name this device knows the Library by, and the names the two copies of it
-# are given: the one scenario B stamps too old to open, and the one scenario C
-# takes the grant away from. All three are device-side names and nothing on
-# Drive carries any of them.
+# The name the Library is created with, and the names the two copies of it are
+# given: the one scenario B stamps too old to open, and the one scenario C takes
+# the grant away from. The first is the Library's own, kept on Drive under its
+# Master Key; the copies are named only in the copy of the name each one's
+# settings keep, which is what `--library` finds a Library by before it is
+# opened.
 readonly LIBRARY="layout"
 readonly REFUSED="refused"
 readonly UNGRANTED="ungranted"
@@ -117,7 +119,8 @@ readonly PREFIX="notes"
 readonly LOCAL_ROOT="$WORK/$LIBRARY/$PREFIX"
 
 # The Index files the scenarios read the stamp out of and write it back into.
-readonly INDEX="$STATE_DIR/libraries/$LIBRARY/index.sqlite"
+# The Library's own is wherever its directory is, which is named after its ID
+# and so known only once it has been created; see `library_dir`.
 readonly REFUSED_DIR="$STATE_DIR/libraries/$REFUSED"
 readonly REFUSED_INDEX="$REFUSED_DIR/index.sqlite"
 # Scenario C's copy is kept on a device of its own: the grant it loses is the
@@ -351,7 +354,28 @@ readonly SCHEMA_VERSION DEVICE_SCHEMA_VERSION
 # and not about a layout, so it has the same question to ask on either build,
 # and a target that refused outright here would leave this build with no
 # scenario at all.
-if [ "$DEVICE_SCHEMA_VERSION" -lt "$SCHEMA_VERSION" ]; then
+# Whether `prepare` meets the stamp $1 with an upgrade of its own — an arm that
+# names it — rather than with the discard the window between the two versions
+# otherwise gets. Read out of the source like the versions are.
+upgraded_in_place() {
+  grep -Eq "^ *([0-9]+ \| )*$1( \| [0-9]+)* => " "$SCHEMA_FILE"
+}
+
+# The oldest stamp in that window whose catalog is discarded, or nothing where
+# every stamp in it is upgraded in place instead: a layout that only gained a
+# column keeps its catalog, so stamping a current Index back to it describes a
+# file no build wrote, and the open that upgraded it would trip on the column
+# it already has.
+DISCARDED_LAYOUT=""
+for ((stamp = DEVICE_SCHEMA_VERSION; stamp < SCHEMA_VERSION; stamp++)); do
+  if ! upgraded_in_place "$stamp"; then
+    DISCARDED_LAYOUT="$stamp"
+    break
+  fi
+done
+readonly DISCARDED_LAYOUT
+
+if [ -n "$DISCARDED_LAYOUT" ]; then
   readonly LAYOUT_SCENARIOS=yes
   readonly SCENARIOS_RUN="scenarios A, B and C"
 else
@@ -361,7 +385,7 @@ fi
 
 # Why they were skipped. Said where the scenarios would have been rather than
 # here, so that it is read in its place.
-readonly EMPTY_BOUNDARY="DEVICE_SCHEMA_VERSION is $DEVICE_SCHEMA_VERSION and SCHEMA_VERSION is $SCHEMA_VERSION: no stamp lies between them, so there is no older layout for this build to discard."
+readonly EMPTY_BOUNDARY="DEVICE_SCHEMA_VERSION is $DEVICE_SCHEMA_VERSION and SCHEMA_VERSION is $SCHEMA_VERSION: no stamp between them is one this build discards rather than upgrades in place, so there is no older layout for it to discard."
 
 # The oldest layout this build still opens: the floor of the range `prepare`
 # carries forward by upgrading its device-local group in place. Read out of the
@@ -380,10 +404,42 @@ readonly OLDEST_CARRIED
 # can carry forward, which is the whole of what makes it refused.
 readonly TOO_OLD=$((OLDEST_CARRIED - 1))
 
+# The directory of the Library called $1 on this device, or nothing.
+#
+# A Library is kept in a directory named after its ID, and its settings keep a
+# copy of its name, which is what finds it here, as `--library` finds it. A
+# directory an earlier build named after the Library is found by that name.
+library_dir() {
+  local settings
+  for settings in "$STATE_DIR"/libraries/*/settings.json; do
+    [ -f "$settings" ] || continue
+    case "$settings" in */*.partial/settings.json) continue ;; esac
+    if jq --exit-status --arg name "$1" '.name == $name' "$settings" >/dev/null 2>&1 ||
+      [ "$(basename "$(dirname "$settings")")" = "$1" ]; then
+      dirname "$settings"
+      return 0
+    fi
+  done
+}
+
 # Whether a Library is on this device is the settings file and not the
 # directory: an interrupted creation leaves a directory that nothing opens.
 library_present() {
-  [ -f "$STATE_DIR/libraries/$1/settings.json" ]
+  [ -n "$(library_dir "$1")" ]
+}
+
+# The Library's own Index file.
+library_index() {
+  printf '%s/index.sqlite\n' "$(library_dir "$LIBRARY")"
+}
+
+# Gives the copy of a Library at $1 the name $2, in the copy of the name its
+# settings keep, so that `--library $2` finds the copy and `--library $LIBRARY`
+# still finds the Library alone.
+name_the_copy() {
+  local settings="$1/settings.json"
+  jq --arg name "$2" '.name = $name' "$settings" >"$settings.renamed"
+  mv "$settings.renamed" "$settings"
 }
 
 # One string out of a Library's settings file.
@@ -393,7 +449,7 @@ library_present() {
 settings_value() {
   jq --raw-output --arg key "$2" \
     'first(.. | objects | .[$key]? | strings) // empty' \
-    "$STATE_DIR/libraries/$1/settings.json"
+    "$(library_dir "$1")/settings.json"
 }
 
 # Which Library a command was for, out of what it was told.
@@ -581,7 +637,7 @@ rows_in() {
 discard_warnings_in() {
   grep -F '"level":"WARN"' "$1" |
     grep -F 'older layout' |
-    grep -F "\"found\":$DEVICE_SCHEMA_VERSION" |
+    grep -F "\"found\":$DISCARDED_LAYOUT" |
     grep -cF "\"supported\":$SCHEMA_VERSION" || true
 }
 
@@ -781,9 +837,9 @@ run_cli sync --library "$LIBRARY" --passphrase-stdin || status=$?
 echo
 echo "--- what the Library holds before any scenario ---"
 assert_equal "the catalog holds the $FILES files under $PREFIX/ and nothing else" \
-  "$(expected_paths)" "$(paths_in "$INDEX")"
+  "$(expected_paths)" "$(paths_in "$(library_index)")"
 assert_equal "the Index is stamped at the current layout" \
-  "$SCHEMA_VERSION" "$(stamp_of "$INDEX")"
+  "$SCHEMA_VERSION" "$(stamp_of "$(library_index)")"
 
 # What a captured command said is in a file rather than on the terminal, so a
 # failure of one shows it: a verdict with the error it was reached from nowhere
@@ -793,8 +849,8 @@ run_cli_apart mappings --library "$LIBRARY" || {
   fail "coffret mappings failed on $LIBRARY before any scenario had run."
 }
 mappings_before="$(mappings_listed)"
-entries_before="$(entries_in "$INDEX")"
-containers_before="$(containers_in "$INDEX")"
+entries_before="$(entries_in "$(library_index)")"
+containers_before="$(containers_in "$(library_index)")"
 answered '.answer.mappings | length > 0' >/dev/null ||
   fail "$LIBRARY has no mappings recorded; the scenarios need at least one."
 [ -n "$containers_before" ] || fail "the catalog holds no Containers; the scenarios have nothing to compare."
@@ -824,10 +880,10 @@ else
   echo
   echo "=== scenario A: an older layout is discarded and rebuilt from Drive ==="
   echo
-  echo "--- stamping the Index at $DEVICE_SCHEMA_VERSION, the oldest layout this build carries forward ---"
-  restamp "$INDEX" "$DEVICE_SCHEMA_VERSION"
+  echo "--- stamping the Index at $DISCARDED_LAYOUT, the oldest layout this build discards ---"
+  restamp "$(library_index)" "$DISCARDED_LAYOUT"
   assert_equal "the Index now claims the older layout" \
-    "$DEVICE_SCHEMA_VERSION" "$(stamp_of "$INDEX")"
+    "$DISCARDED_LAYOUT" "$(stamp_of "$(library_index)")"
   echo
 
   echo "--- syncing again, the open that discards the catalog and rebuilds it ---"
@@ -843,7 +899,7 @@ else
   assert_answered "it added nothing and found the $FILES files unchanged" \
     --argjson files "$FILES" '.answer | .added == 0 and .replaced == 0 and .unchanged == $files'
   assert_equal "the Index is stamped at the current layout again" \
-    "$SCHEMA_VERSION" "$(stamp_of "$INDEX")"
+    "$SCHEMA_VERSION" "$(stamp_of "$(library_index)")"
 
   run_cli_apart mappings --library "$LIBRARY" || {
     cat "$LAST_ERR" >&2
@@ -851,10 +907,10 @@ else
   }
   assert_equal "the mappings survived the discard" "$mappings_before" "$(mappings_listed)"
   assert_equal "the rebuilt catalog holds the same $FILES Entries" \
-    "$entries_before" "$(entries_in "$INDEX")"
+    "$entries_before" "$(entries_in "$(library_index)")"
   assert_equal "and the same Containers, so nothing was re-packed" \
-    "$containers_before" "$(containers_in "$INDEX")"
-  assert_equal "nothing is left spooled to upload" 0 "$(rows_in "$INDEX" pending_rows)"
+    "$containers_before" "$(containers_in "$(library_index)")"
+  assert_equal "nothing is left spooled to upload" 0 "$(rows_in "$(library_index)" pending_rows)"
   assert_equal "the run logged the discard once, with both versions" \
     1 "$(discard_warnings_in "$log")"
   assert_equal "and uploaded no Container" 0 "$(uploads_in "$log")"
@@ -872,7 +928,8 @@ else
   echo
   echo "--- copying $LIBRARY to $REFUSED and stamping it at $TOO_OLD, below the $OLDEST_CARRIED this build carries forward ---"
   rm -rf "$REFUSED_DIR"
-  cp -r "$STATE_DIR/libraries/$LIBRARY" "$REFUSED_DIR"
+  cp -r "$(library_dir "$LIBRARY")" "$REFUSED_DIR"
+  name_the_copy "$REFUSED_DIR" "$REFUSED"
   # From here on the copy goes whatever happens. Handed to the trap above rather
   # than trapped here, so that the line saying how the run ended is not replaced
   # by it.
@@ -943,7 +1000,8 @@ rm -rf "$UNGRANTED_STATE"
 mkdir -p "$UNGRANTED_STATE/libraries" "$UNGRANTED_STATE/accounts/$account"
 # As in scenario B: the copy goes whatever happens.
 COPY_TO_REMOVE="$UNGRANTED_STATE"
-cp -r "$STATE_DIR/libraries/$LIBRARY" "$UNGRANTED_DIR"
+cp -r "$(library_dir "$LIBRARY")" "$UNGRANTED_DIR"
+name_the_copy "$UNGRANTED_DIR" "$UNGRANTED"
 # Asserted to be there before it is left behind, because an account that never
 # held one would leave this scenario checking the same refusal for a different
 # reason — and saying nothing about a grant that was spent and is gone.
@@ -1014,7 +1072,7 @@ echo "  its id:        $folder_id"
 echo "  inside:        $COFFRET_DRIVE_FOLDER_ID"
 echo "  to look at it: https://drive.google.com/drive/folders/$folder_id"
 if [ "$LAYOUT_SCENARIOS" = yes ]; then
-  echo "Layout:          A discarded at $DEVICE_SCHEMA_VERSION and rebuilt to $SCHEMA_VERSION; B refused at $TOO_OLD"
+  echo "Layout:          A discarded at $DISCARDED_LAYOUT and rebuilt to $SCHEMA_VERSION; B refused at $TOO_OLD"
 else
   echo "Layout:          A and B skipped; $SCHEMA_VERSION is both the current layout and the oldest carried forward"
 fi

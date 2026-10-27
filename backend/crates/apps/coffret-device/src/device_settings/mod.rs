@@ -32,10 +32,10 @@ mod tests;
 
 /// One Library's entry in a device's own configuration.
 ///
-/// Two fields and no more: which Library this is, and where on Storage it is.
-/// Everything else a device needs — the Master Key, the catalog, the spool — is
-/// found by the directory layout, and everything the Library itself knows is on
-/// Storage under the Master Key.
+/// Which Library this is, where on Storage it is, and a copy of what it is
+/// called. Everything else a device needs — the Master Key, the catalog, the
+/// spool — is found by the directory layout, and everything the Library itself
+/// knows is on Storage under the Master Key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceSettings {
     /// The shape this file is in. [`write`](Self::write) records
@@ -53,18 +53,48 @@ pub struct DeviceSettings {
     pub library_id: LibraryId,
     /// Where on Storage the Library's objects are.
     pub provider: ProviderSettings,
+    /// A copy of the Library's name, as the catalog held it when the Library
+    /// was last created, joined or unlocked here (spec: FM-15).
+    ///
+    /// The name itself is the Library's and is kept on Storage under the
+    /// Master Key, which nothing can reach before an unlock; this copy is what
+    /// lets a device list its Libraries by name, and find one by name, before
+    /// that. It is written again at every unlock, so a name another device
+    /// gave the Library reaches this file the next time it is opened here.
+    /// Absent on a Library whose catalog names none yet, which is what a build
+    /// before names wrote; a reader that does not know the field ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The name of the directory an earlier build kept this Library in, where
+    /// a server moved the directory to the Library's ID before an unlock gave
+    /// the Library that name (spec: FM-15).
+    ///
+    /// Kept apart from [`name`](Self::name), which is only ever copied from
+    /// the catalog. Until the unlock that finds the catalog naming the Library,
+    /// which drops it, it is what the Library is listed and found by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub earlier_name: Option<String>,
 }
 
 impl DeviceSettings {
     /// The version this build writes and reads.
     pub const VERSION: u32 = 1;
 
-    /// Settings for a Library at this build's version.
+    /// Settings for a Library at this build's version, with no copy of its
+    /// name yet.
     pub fn new(library_id: LibraryId, provider: ProviderSettings) -> Self {
         Self {
             version: Self::VERSION,
             library_id,
             provider,
+            name: None,
+            earlier_name: None,
         }
+    }
+
+    /// The same settings, keeping `name` as the copy of the Library's name.
+    pub fn named(mut self, name: Option<String>) -> Self {
+        self.name = name;
+        self
     }
 }

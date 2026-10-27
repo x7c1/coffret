@@ -11,6 +11,7 @@ use crate::commit::committing::Committing;
 use crate::commit::control_keys::ControlKeys;
 use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
+use crate::commit::prepared_batch::PreparedBatch;
 use crate::commit::{after_commit, candidate, catch_up, first_head, journal, keyring, rebase};
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{LocalObservation, ReservationId};
@@ -166,7 +167,8 @@ async fn attempt_until_committed(
             }
             wrote_first_head = true;
             if let Attempted::Committed(landed) =
-                first_head::write(store, keys, &policy, committing).await?
+                first_head::write(store, keys, &policy, committing, &PreparedBatch::default())
+                    .await?
             {
                 refresh(index, &landed.record, &[], &[]).await?;
             }

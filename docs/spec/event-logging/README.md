@@ -17,7 +17,7 @@ state.
 ## Rules
 
 - **EL-1.** A diagnostic event must not contain an Entry Path, a local path or
-  filename, a device-local Library name, a device-local account name,
+  filename, a Library name, a device-local account name,
   plaintext file content, a
   cryptographic key, a Passphrase, a Recovery Code, or a token or other bearer
   credential — the server key, the explorer host's browser tokens and launch

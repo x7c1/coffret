@@ -179,7 +179,7 @@ async fn duplicate(store: &dyn ObjectStore, name: &str) {
 
 /// A created Library on a minting store with one commit in it, checkpointed.
 async fn committed_once(store: &InMemoryMintingStore) {
-    write_first_head(store, &control_keys(), &policy())
+    write_first_head(store, &control_keys(), &policy(), None)
         .await
         .expect("creating a Library in an empty store must succeed");
     let batch = uploaded(store, 1).await;

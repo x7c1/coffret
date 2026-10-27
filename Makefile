@@ -540,7 +540,7 @@ fixtures:
 # COFFRET_STATE_DIR would then mean a directory under it rather than the one
 # that was typed.
 #
-#   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second
+#   COFFRET_STATE_DIR=.tmp/drive-round-trip/second-state make server LIBRARY=main
 .PHONY: server
 server:
 	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY) --port $(PORT)
@@ -566,7 +566,7 @@ server:
 # COFFRET_STATE_DIR given in the environment means a directory under the
 # repository root, as it does for `server`:
 #
-#   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make web LIBRARY=second
+#   COFFRET_STATE_DIR=.tmp/drive-round-trip/second-state make web LIBRARY=main
 .PHONY: web
 web:
 	./scripts/dev.sh web $(LIBRARY) $(PORT) $(WEB_PORT)

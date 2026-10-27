@@ -1,5 +1,6 @@
 //! Listing what this device has mapped.
 
+use crate::library_args::WhichLibrary;
 use clap::Args;
 use coffret_device::MappingListing;
 
@@ -7,9 +8,9 @@ use crate::answer::{Answer, Failure, Form, Mappings, Ran};
 
 #[derive(Args)]
 pub struct MappingsArgs {
-    /// The Library on this device to list the mappings of
-    #[arg(long)]
-    library: String,
+    // The Library on this device to list the mappings of, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
 }
 
 /// Lists what this device has mapped, the Library root first.
@@ -21,7 +22,7 @@ pub struct MappingsArgs {
 /// standard output sees the same two columns either way. Under `--json` the
 /// listing is in the answer instead, with the refusal beside it as `refused`.
 pub async fn run(args: MappingsArgs, form: Form) -> anyhow::Result<Ran> {
-    let listing = coffret_device::mappings(&args.library).await?;
+    let listing = coffret_device::mappings(&args.which.library()).await?;
     let mappings = listing.mappings();
     if mappings.is_empty() {
         eprintln!("Nothing is mapped yet.");

@@ -14,11 +14,12 @@
 //!
 //! - The **device-local account name** is the person's, because coffret cannot
 //!   tell accounts apart by what it was granted: the one permission it asks for
-//!   names no account (spec: SA-3). Like a device-local Library name, it is
-//!   chosen by the person, is never written to Storage, and never reaches a
-//!   diagnostic event (spec: EL-1). It is optional while the device holds one
-//!   account and required when a second is added, so creating a Library on a
-//!   device holding more than one account refuses to start without it. An
+//!   names no account (spec: SA-3). Unlike a Library's name it is this
+//!   device's alone: it is chosen by the person, is never written to Storage,
+//!   and never reaches a diagnostic event (spec: EL-1). It is optional while
+//!   the device holds one account and required when a second is added, so
+//!   creating a Library on a device holding more than one account refuses to
+//!   start without it. An
 //!   account the person leaves unnamed is named `default`, the name the
 //!   promotion below also gives, so every envelope has a name to be bound to
 //!   (spec: SA-9).
@@ -106,7 +107,7 @@ use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 #[cfg(unix)]
 use crate::testing::mode_of;
-use crate::testing::{consent, create_s3, every_link, DriveStub, CLIENT_ID};
+use crate::testing::{consent, create_elsewhere, every_link, DriveStub, CLIENT_ID};
 
 /// The Passphrase the cases' Libraries are kept under.
 const PASSPHRASE: &[u8] = b"one passphrase for this device";
@@ -162,8 +163,22 @@ async fn create(drive: &Arc<DriveStub>, name: &str, account: Option<&str>) {
 
 /// The account the Library called `name` references, as its settings say.
 fn account_of(name: &str) -> Option<String> {
-    let dir = LibraryDir::resolve(name).expect("a case names a Library one component long");
-    match DeviceSettings::read(&dir)
+    account_of_dir(&LibraryDir::named_here(name))
+}
+
+/// The account the Library `joined` references, found by its ID: a Library
+/// joined on Drive here is named by the Library's own catalog, which these
+/// cases' stand-in Drive does not carry.
+fn account_of_joined(joined: &crate::JoinedLibrary) -> Option<String> {
+    account_of_dir(
+        &LibraryDir::find(&crate::LibraryRef::Id(joined.settings.library_id))
+            .expect("the joined Library is here"),
+    )
+}
+
+/// The account the Library in `dir` references, as its settings say.
+fn account_of_dir(dir: &LibraryDir) -> Option<String> {
+    match DeviceSettings::read(dir)
         .expect("the Library's settings read")
         .provider
     {
@@ -193,7 +208,7 @@ fn accounts_on(device: &isolated::Device) -> Vec<String> {
 /// The refresh token the account called `account` holds, opened through the
 /// envelope of the Library called `library`.
 fn refresh_token_of(library: &str, account: &str, passphrase: &[u8]) -> Option<String> {
-    let dir = LibraryDir::resolve(library).expect("a case names a Library one component long");
+    let dir = LibraryDir::named_here(library);
     let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(passphrase.to_vec()))
         .expect("the Library opens with its Passphrase");
     let name = AccountName::parse(account).expect("a case names an account a name");
@@ -232,7 +247,7 @@ async fn two_libraries_of_one_account_hold_one_cache() {
         .is_file());
     let mut envelopes = Vec::new();
     for name in ["first", "second"] {
-        let dir = LibraryDir::resolve(name).expect("the name is one component");
+        let dir = LibraryDir::named_here(name);
         assert_eq!(account_of(name).as_deref(), Some("default"));
         assert!(
             !dir.previous_token_cache_file().exists(),
@@ -252,7 +267,7 @@ async fn two_libraries_of_one_account_hold_one_cache() {
         assert_eq!(mode_of(&account), 0o700);
         assert_eq!(mode_of(&account.join("token-cache.cftc")), 0o600);
         assert_eq!(mode_of(&account.join("settings.json")), 0o600);
-        let first = LibraryDir::resolve("first").expect("resolves");
+        let first = LibraryDir::named_here("first");
         assert_eq!(mode_of(&first.account_envelope_file()), 0o600);
     }
 }
@@ -265,13 +280,21 @@ async fn either_library_s_passphrase_opens_the_one_cache() {
     let drive = DriveStub::empty();
     create(&drive, "first", None).await;
     create(&drive, "second", None).await;
-    crate::change_passphrase("second", pass(PASSPHRASE), pass(OTHER_PASSPHRASE))
-        .expect("the Library is kept under a Passphrase of its own");
+    crate::change_passphrase(
+        &crate::LibraryRef::named("second"),
+        pass(PASSPHRASE),
+        pass(OTHER_PASSPHRASE),
+    )
+    .expect("the Library is kept under a Passphrase of its own");
 
     for (name, passphrase) in [("first", PASSPHRASE), ("second", OTHER_PASSPHRASE)] {
-        open_library_through(&reach(&drive), name, pass(passphrase))
-            .await
-            .unwrap_or_else(|error| panic!("{name} must open: {}", every_link(&error)));
+        open_library_through(
+            &reach(&drive),
+            &crate::LibraryRef::named(name),
+            pass(passphrase),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{name} must open: {}", every_link(&error)));
         assert_eq!(
             refresh_token_of(name, "default", passphrase).as_deref(),
             Some("1//stub-refresh-1"),
@@ -290,14 +313,18 @@ async fn a_cache_outlives_each_library_but_not_all_of_them() {
     create(&drive, "first", None).await;
     create(&drive, "second", None).await;
 
-    fs::remove_dir_all(LibraryDir::resolve("first").expect("resolves").path())
+    fs::remove_dir_all(LibraryDir::named_here("first").path())
         .expect("the Library's directory is removable");
-    open_library_through(&reach(&drive), "second", pass(PASSPHRASE))
-        .await
-        .expect("the other Library still opens the account's cache");
+    open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("second"),
+        pass(PASSPHRASE),
+    )
+    .await
+    .expect("the other Library still opens the account's cache");
     assert_eq!(accounts_on(&device), ["default"]);
 
-    fs::remove_dir_all(LibraryDir::resolve("second").expect("resolves").path())
+    fs::remove_dir_all(LibraryDir::named_here("second").path())
         .expect("the Library's directory is removable");
     assert!(
         device
@@ -361,7 +388,7 @@ async fn join_takes_the_account_whose_drive_lists_the_folder() {
     let drive = DriveStub::empty();
     create(&drive, "at-work", Some("work")).await;
     create(&drive, "at-home", Some("home")).await;
-    let origin = create_s3("origin").await;
+    let origin = create_elsewhere("origin").await;
     // Only the second consent's grant — `home` — sees the folder.
     drive.add_folder_for(
         "joined-folder",
@@ -371,7 +398,7 @@ async fn join_takes_the_account_whose_drive_lists_the_folder() {
 
     let joined = join_library_through(
         &reach(&drive),
-        join_request("joined", "joined-folder", None),
+        join_request("joined-folder", None),
         || Ok(Zeroizing::new(origin.recovery_code.to_grouped_string())),
         pass(PASSPHRASE),
         no_consent,
@@ -380,7 +407,7 @@ async fn join_takes_the_account_whose_drive_lists_the_folder() {
     .unwrap_or_else(|error| panic!("the join must find the account: {}", every_link(&error)));
 
     assert_eq!(joined.settings.library_id, origin.settings.library_id);
-    assert_eq!(account_of("joined").as_deref(), Some("home"));
+    assert_eq!(account_of_joined(&joined).as_deref(), Some("home"));
     assert_eq!(drive.consents(), 2, "the join asked for no consent");
 }
 
@@ -392,7 +419,7 @@ async fn a_join_no_account_reaches_asks_for_a_name() {
     let _device = isolated::device();
     let drive = DriveStub::empty();
     create(&drive, "at-work", Some("work")).await;
-    let origin = create_s3("origin").await;
+    let origin = create_elsewhere("origin").await;
     // Seen only by the grant the next consent brings, which `work`'s is not.
     drive.add_folder_for(
         "elsewhere",
@@ -402,7 +429,7 @@ async fn a_join_no_account_reaches_asks_for_a_name() {
 
     let result = join_library_through(
         &reach(&drive),
-        join_request("joined", "elsewhere", None),
+        join_request("elsewhere", None),
         || Ok(Zeroizing::new(origin.recovery_code.to_grouped_string())),
         pass(PASSPHRASE),
         no_consent,
@@ -423,16 +450,16 @@ async fn a_join_no_account_reaches_asks_for_a_name() {
          folder is in"
     );
 
-    join_library_through(
+    let joined = join_library_through(
         &reach(&drive),
-        join_request("joined", "elsewhere", Some("other")),
+        join_request("elsewhere", Some("other")),
         || Ok(Zeroizing::new(origin.recovery_code.to_grouped_string())),
         pass(PASSPHRASE),
         consent,
     )
     .await
     .unwrap_or_else(|error| panic!("a named account is consented to: {}", every_link(&error)));
-    assert_eq!(account_of("joined").as_deref(), Some("other"));
+    assert_eq!(account_of_joined(&joined).as_deref(), Some("other"));
     assert_eq!(drive.consents(), 2);
 }
 
@@ -445,8 +472,8 @@ async fn an_envelope_opens_for_its_own_library_and_account_only() {
     let drive = DriveStub::empty();
     create(&drive, "first", None).await;
     create(&drive, "second", None).await;
-    let first = LibraryDir::resolve("first").expect("resolves");
-    let second = LibraryDir::resolve("second").expect("resolves");
+    let first = LibraryDir::named_here("first");
+    let second = LibraryDir::named_here("second");
 
     // Another Library's envelope, carried over: sealed under another key.
     fs::copy(
@@ -454,7 +481,12 @@ async fn an_envelope_opens_for_its_own_library_and_account_only() {
         second.account_envelope_file(),
     )
     .expect("the envelope is copyable");
-    let result = open_library_through(&reach(&drive), "second", pass(PASSPHRASE)).await;
+    let result = open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("second"),
+        pass(PASSPHRASE),
+    )
+    .await;
     assert!(
         matches!(
             &result,
@@ -470,7 +502,12 @@ async fn an_envelope_opens_for_its_own_library_and_account_only() {
         *account = Some("renamed".to_owned());
     }
     settings.write(&first).expect("writes");
-    let result = open_library_through(&reach(&drive), "first", pass(PASSPHRASE)).await;
+    let result = open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("first"),
+        pass(PASSPHRASE),
+    )
+    .await;
     let Err(refused @ Error::UnreadableAccountEnvelope { cause: Some(_), .. }) = &result else {
         panic!(
             "an envelope must not open for another name: {:?}",
@@ -485,7 +522,12 @@ async fn an_envelope_opens_for_its_own_library_and_account_only() {
 
     // And one that is not there at all.
     fs::remove_file(second.account_envelope_file()).expect("removable");
-    let result = open_library_through(&reach(&drive), "second", pass(PASSPHRASE)).await;
+    let result = open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("second"),
+        pass(PASSPHRASE),
+    )
+    .await;
     assert!(
         matches!(
             &result,
@@ -524,13 +566,18 @@ async fn a_library_of_another_client_is_refused_the_account() {
     );
 
     // And a Library already here whose settings came to name another.
-    let dir = LibraryDir::resolve("first").expect("resolves");
+    let dir = LibraryDir::named_here("first");
     let mut settings = DeviceSettings::read(&dir).expect("reads");
     if let ProviderSettings::Drive { client_id, .. } = &mut settings.provider {
         *client_id = "edited.apps.googleusercontent.com".to_owned();
     }
     settings.write(&dir).expect("writes");
-    let result = open_library_through(&reach(&drive), "first", pass(PASSPHRASE)).await;
+    let result = open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("first"),
+        pass(PASSPHRASE),
+    )
+    .await;
     assert!(
         matches!(&result, Err(Error::ClientMismatch(_))),
         "{:?}",
@@ -569,7 +616,7 @@ async fn renewing_an_account_renews_it_for_every_library() {
     authorize_through(
         &reach(&drive),
         AuthorizeRequest::Library {
-            name: "second".to_owned(),
+            library: crate::LibraryRef::named("second"),
             account: None,
         },
         pass(PASSPHRASE),
@@ -594,11 +641,15 @@ async fn a_library_s_previous_grant_is_promoted_when_it_is_opened() {
     into_previous_shape("old", "1//a-grant-kept-per-library");
     fs::remove_dir_all(device.path().join("accounts")).expect("the accounts are removable");
 
-    open_library_through(&reach(&drive), "old", pass(PASSPHRASE))
-        .await
-        .unwrap_or_else(|error| panic!("the old Library must open: {}", every_link(&error)));
+    open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("old"),
+        pass(PASSPHRASE),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("the old Library must open: {}", every_link(&error)));
 
-    let dir = LibraryDir::resolve("old").expect("resolves");
+    let dir = LibraryDir::named_here("old");
     assert_eq!(account_of("old").as_deref(), Some("default"));
     assert!(dir.account_envelope_file().is_file());
     assert!(!dir.previous_token_cache_file().exists());
@@ -623,19 +674,22 @@ async fn a_promotion_into_a_held_default_is_the_choice_a_join_makes() {
     create(&drive, "elsewhere", None).await;
     into_previous_shape("reaching", "1//unused");
     into_previous_shape("elsewhere", "1//kept");
-    let dir = LibraryDir::resolve("elsewhere").expect("resolves");
+    let dir = LibraryDir::named_here("elsewhere");
     let mut settings = DeviceSettings::read(&dir).expect("reads");
     if let ProviderSettings::Drive { folder_id, .. } = &mut settings.provider {
         *folder_id = "a-folder-default-does-not-see".to_owned();
     }
     settings.write(&dir).expect("writes");
 
-    open_library_through(&reach(&drive), "reaching", pass(PASSPHRASE))
-        .await
-        .unwrap_or_else(|error| panic!("it must open: {}", every_link(&error)));
+    open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("reaching"),
+        pass(PASSPHRASE),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("it must open: {}", every_link(&error)));
     assert_eq!(account_of("reaching").as_deref(), Some("default"));
-    assert!(!LibraryDir::resolve("reaching")
-        .expect("resolves")
+    assert!(!LibraryDir::named_here("reaching")
         .previous_token_cache_file()
         .exists());
     assert_eq!(
@@ -644,7 +698,12 @@ async fn a_promotion_into_a_held_default_is_the_choice_a_join_makes() {
         "the account's grant is untouched, and the Library's own was not used"
     );
 
-    let result = open_library_through(&reach(&drive), "elsewhere", pass(PASSPHRASE)).await;
+    let result = open_library_through(
+        &reach(&drive),
+        &crate::LibraryRef::named("elsewhere"),
+        pass(PASSPHRASE),
+    )
+    .await;
     let Err(
         refused @ Error::PromotionNeedsName {
             obstacle: PromotionObstacle::FolderNotReached,
@@ -669,7 +728,7 @@ async fn a_promotion_into_a_held_default_is_the_choice_a_join_makes() {
     authorize_through(
         &reach(&drive),
         AuthorizeRequest::Library {
-            name: "elsewhere".to_owned(),
+            library: crate::LibraryRef::named("elsewhere"),
             account: Some("another".to_owned()),
         },
         pass(PASSPHRASE),
@@ -694,15 +753,15 @@ async fn no_account_name_reaches_a_diagnostic_event() {
 
     create(&drive, "at-work", Some(WORK)).await;
     create(&drive, "at-home", Some(HOME)).await;
-    let origin = create_s3("origin").await;
+    let origin = create_elsewhere("origin").await;
     drive.add_folder_for(
         "joined-folder",
         &origin.settings.library_id.app_folder_name(),
         2,
     );
-    join_library_through(
+    let joined = join_library_through(
         &reach(&drive),
-        join_request("joined", "joined-folder", None),
+        join_request("joined-folder", None),
         || Ok(Zeroizing::new(origin.recovery_code.to_grouped_string())),
         pass(PASSPHRASE),
         no_consent,
@@ -722,7 +781,7 @@ async fn no_account_name_reaches_a_diagnostic_event() {
     authorize_through(
         &reach(&drive),
         AuthorizeRequest::Library {
-            name: "at-home".to_owned(),
+            library: crate::LibraryRef::named("at-home"),
             account: None,
         },
         pass(PASSPHRASE),
@@ -730,10 +789,14 @@ async fn no_account_name_reaches_a_diagnostic_event() {
     )
     .await
     .expect("the account is renewed through a Library");
-    for name in ["at-work", "at-home", "joined"] {
-        open_library_through(&reach(&drive), name, pass(PASSPHRASE))
+    for library in [
+        crate::LibraryRef::named("at-work"),
+        crate::LibraryRef::named("at-home"),
+        crate::LibraryRef::Id(joined.settings.library_id),
+    ] {
+        open_library_through(&reach(&drive), &library, pass(PASSPHRASE))
             .await
-            .unwrap_or_else(|error| panic!("{name} must open: {}", every_link(&error)));
+            .unwrap_or_else(|error| panic!("{library} must open: {}", every_link(&error)));
     }
     // And the refusals that are about an account: a name required, and a
     // Passphrase that opens none of an account's Libraries.
@@ -758,10 +821,9 @@ async fn no_account_name_reaches_a_diagnostic_event() {
     logs.assert_free_of(&[WORK, HOME]);
 }
 
-/// What joining the Drive folder `folder_id` under `name` asks for.
-fn join_request(name: &str, folder_id: &str, account: Option<&str>) -> JoinLibraryRequest {
+/// What joining the Drive folder `folder_id` asks for.
+fn join_request(folder_id: &str, account: Option<&str>) -> JoinLibraryRequest {
     JoinLibraryRequest {
-        name: name.to_owned(),
         provider: JoinedProvider::Drive {
             folder_id: folder_id.to_owned(),
             client_id: CLIENT_ID.to_owned(),
@@ -776,7 +838,7 @@ fn join_request(name: &str, folder_id: &str, account: Option<&str>) -> JoinLibra
 /// grant of its own holding `refresh_token`, sealed under its token-cache
 /// purpose key (spec: KD-10), no envelope, and settings that name no account.
 fn into_previous_shape(name: &str, refresh_token: &str) {
-    let dir = LibraryDir::resolve(name).expect("resolves");
+    let dir = LibraryDir::named_here(name);
     let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
         .expect("opens");
     TokenCache::new(
@@ -873,10 +935,7 @@ async fn an_account_nobody_can_open_is_refused_naming_the_library_that_would() {
              Passphrase given does not open one; the Passphrase of the Library \"first\" does"
         );
     }
-    assert!(!LibraryDir::resolve("second")
-        .expect("resolves")
-        .path()
-        .exists());
+    assert!(LibraryDir::find(&crate::LibraryRef::named("second")).is_err());
     assert_eq!(accounts_on(&device), ["work"]);
     assert_eq!(drive.consents(), 1);
 }
@@ -890,7 +949,7 @@ async fn a_damaged_envelope_behind_the_right_passphrase_is_refused_as_itself() {
     let _device = isolated::device();
     let drive = DriveStub::empty();
     create(&drive, "first", Some("work")).await;
-    let first = LibraryDir::resolve("first").expect("resolves");
+    let first = LibraryDir::named_here("first");
     fs::write(first.account_envelope_file(), b"not an envelope").expect("writable");
 
     let (answered, _) = answering(PASSPHRASE);
@@ -932,7 +991,7 @@ async fn a_join_asks_only_for_the_accounts_its_own_passphrase_does_not_open() {
     )
     .await
     .expect("a second account is created under its own Passphrase");
-    let origin = create_s3("origin").await;
+    let origin = create_elsewhere("origin").await;
     // Only `work`'s grant — the second consent — sees the folder.
     drive.add_folder_for(
         "joined-folder",
@@ -941,9 +1000,9 @@ async fn a_join_asks_only_for_the_accounts_its_own_passphrase_does_not_open() {
     );
 
     let (referencing, asked) = answering(OTHER_PASSPHRASE);
-    let mut request = join_request("joined", "joined-folder", None);
+    let mut request = join_request("joined-folder", None);
     request.referencing_passphrase = referencing;
-    join_library_through(
+    let joined = join_library_through(
         &reach(&drive),
         request,
         || Ok(Zeroizing::new(origin.recovery_code.to_grouped_string())),
@@ -959,6 +1018,6 @@ async fn a_join_asks_only_for_the_accounts_its_own_passphrase_does_not_open() {
         "`home` opened with the join's own Passphrase and was asked about first; only `work` \
          needed a question"
     );
-    assert_eq!(account_of("joined").as_deref(), Some("work"));
+    assert_eq!(account_of_joined(&joined).as_deref(), Some("work"));
     assert_eq!(drive.consents(), 2);
 }

@@ -122,6 +122,12 @@ pub use key_table::KeyTable;
 mod library_id;
 pub use library_id::LibraryId;
 
+mod library_name;
+pub use library_name::LibraryName;
+
+mod library_name_defect;
+pub use library_name_defect::LibraryNameDefect;
+
 // The one hex spelling every identifier and digest in coffret is written in,
 // shared by the names that carry one and the commitments that select by one.
 // Public because not every value spelled this way is one this crate holds: the

@@ -130,6 +130,7 @@ export const JOURNAL_RECORD: MapFields = {
     field('removals', 9),
     field('renames', 10, () => RENAME),
     field('required_schema', 11),
+    field('library_name', 12),
   ],
 };
 
@@ -186,6 +187,7 @@ export const INDEX_SNAPSHOT: MapFields = {
     field('entries', 9, () => SNAPSHOT_ENTRY),
     field('base_head_generation', 10),
     field('activation_slot', 11),
+    field('library_name', 12),
   ],
 };
 

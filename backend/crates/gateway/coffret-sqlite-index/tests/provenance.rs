@@ -421,7 +421,7 @@ async fn a_layout_12_file_keeps_its_device_state_and_loses_its_catalog() {
     let reopened = SqliteIndex::open(&path).unwrap();
     assert_eq!(
         stamp_of(&path),
-        20,
+        21,
         "the file is upgraded to the current layout"
     );
     assert!(

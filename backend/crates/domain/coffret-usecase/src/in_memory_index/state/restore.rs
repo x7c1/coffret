@@ -14,6 +14,7 @@ impl State {
         &mut self,
         snapshot: SnapshotContent,
     ) -> IndexResult<()> {
+        let library_name = snapshot.library_name().cloned();
         let (checkpoint, adopted_from, held, located) = snapshot.into_parts();
         let mut containers = BTreeMap::new();
         for container in held {
@@ -32,6 +33,7 @@ impl State {
         self.entries = entries;
         self.checkpoint = Some(checkpoint);
         self.adopted_from = adopted_from;
+        self.library_name = library_name;
 
         // A record whose Entry the Snapshot still holds stays with it, wherever
         // it stands now. One whose Entry is gone is carried over to the Entry

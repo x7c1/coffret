@@ -1,11 +1,14 @@
 use coffret_format::{generate_library_id, generate_master_key, RecoveryCode, StoredMasterKey};
 use std::sync::Arc;
 
-use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch, Passphrase};
+use coffret_model::{
+    JournalRecord, LibraryId, LibraryName, MasterKey, MasterKeyEpoch, Passphrase, Redacted,
+};
+use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::commit::{write_first_head, CommitPolicy, ControlKeys};
-use coffret_usecase::ObjectStore;
+use coffret_usecase::{Index, IndexError, ObjectStore};
 use google_drive_store::{create_app_folder, DriveSettings, GoogleDrive};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::account_envelope::AccountEnvelope;
@@ -14,6 +17,8 @@ use crate::account_name::AccountName;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
+use crate::library_dir::LibraryDir;
+use crate::library_ref::library_name;
 use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
 use crate::stored_master_key_file::StoredMasterKeyFile;
@@ -25,12 +30,17 @@ const OPERATION: &str = "create_library";
 /// Creates a Library and hands back the one copy of its Master Key that leaves
 /// this device.
 ///
+/// The name the request gives is the Library's own, written into its first head
+/// (spec: FM-15) and copied into the settings beside it; the directory the
+/// Library is kept in is named after its ID. Another Library on this device may
+/// carry the same name, and a caller naming either is then asked for its ID.
+///
 /// `enter_passphrase` is asked for the Passphrase the Master Key is to be stored
 /// under, and it is a callback rather than a field of the request for one
 /// reason: every refusal that needs no key is made before it is called. A name
-/// that is not one path component, a Library of that name already on this
-/// device, a base prefix that does not end in `/`, a bucket that does not answer
-/// — a person hears all of those without having chosen a Passphrase twice first.
+/// nobody can read, a base prefix that does not end in `/`, a bucket that does
+/// not answer — a person hears all of those without having chosen a Passphrase
+/// twice first.
 ///
 /// `open_url` is handed the consent URL where the provider needs a person at a
 /// browser, and is never called otherwise. It is a callback for the same reason
@@ -73,18 +83,19 @@ where
 {
     // Everything a refusal can be made of that needs no key, in the order it
     // costs: the name, then the place, and only then a directory. The Library ID
-    // is drawn here because the S3 prefix is a function of it and nothing about
-    // it comes from the Master Key (spec: FM-18).
-    let dir = Staging::vacant(&request.name)?;
+    // is drawn here because the S3 prefix is a function of it, and so is the
+    // directory, and nothing about it comes from the Master Key (spec: FM-18).
+    let name = library_name(&request.name)?;
     let account = account_of(&request)?;
     let library_id = generate_library_id().map_err(|cause| Error::KeyMaterial { cause })?;
+    let dir = LibraryDir::of(library_id)?.called(name.as_str());
     let resolved = resolved_provider(&request.provider, library_id).await?;
 
-    let mut staging = Staging::begin(Flow::Creating, dir)?;
+    let mut staging = Staging::begin(Flow::Creating, dir.clone())?;
     match build(
         reach,
         &request,
-        library_id,
+        (library_id, &name),
         resolved,
         account,
         &mut staging,
@@ -93,7 +104,7 @@ where
     )
     .await
     {
-        Ok(built) => publish(staging, built),
+        Ok(built) => publish(staging, &dir, built),
         Err(failure) => {
             staging.discard();
             Err(failure)
@@ -181,7 +192,7 @@ async fn resolved_provider(
 async fn build<P, F>(
     reach: &Reach,
     request: &CreateLibraryRequest,
-    library_id: LibraryId,
+    (library_id, name): (LibraryId, &LibraryName),
     resolved: Option<ProviderSettings>,
     account: Option<(Accounts, Choice)>,
     staging: &mut Staging,
@@ -224,9 +235,16 @@ where
         (None, None) => unreachable!("a Drive Library resolves its account before a file exists"),
     };
 
-    let settings = DeviceSettings::new(library_id, provider);
+    let settings = DeviceSettings::new(library_id, provider).named(Some(name.as_str().to_owned()));
     library_files::write(staging, &settings, reach)?;
-    first_head(reach.first_head_store(store), &master_key, epoch, staging).await?;
+    first_head(
+        reach.library_store(store),
+        &master_key,
+        epoch,
+        name,
+        staging,
+    )
+    .await?;
 
     Ok(Built {
         recovery_code: RecoveryCode::encode(master_key, epoch),
@@ -342,7 +360,8 @@ async fn provider_store(provider: &ProviderSettings) -> Arc<dyn ObjectStore> {
 
 /// Writes the Library's first head to its Storage (spec: CP-2, FM-13).
 ///
-/// `head-0` with nothing in it, carrying the slot the first commit consumes.
+/// `head-0` with nothing in it but the Library's name (spec: FM-15), carrying
+/// the slot the first commit consumes.
 /// Written here, before any other device can know the Library exists, so that
 /// no commit ever starts from no head: one that did would reserve a slot of its
 /// own, and on a Storage that mints identifiers two of them would both succeed
@@ -356,25 +375,57 @@ async fn first_head(
     store: Arc<dyn ObjectStore>,
     master_key: &MasterKey,
     epoch: MasterKeyEpoch,
+    name: &LibraryName,
     staging: &Staging,
 ) -> Result<()> {
     let keys = ControlKeys::derive(master_key, epoch);
-    write_first_head(store.as_ref(), &keys, &CommitPolicy::default())
-        .await
-        .map_err(|cause| {
-            staging.failed(
-                CreationStep::FirstHead,
-                Error::FirstHead {
-                    cause: Box::new(cause),
-                },
-            )
-        })?;
+    let written = write_first_head(
+        store.as_ref(),
+        &keys,
+        &CommitPolicy::default(),
+        Some(name.clone()),
+    )
+    .await
+    .map_err(|cause| {
+        staging.failed(
+            CreationStep::FirstHead,
+            Error::FirstHead {
+                cause: Box::new(cause),
+            },
+        )
+    })?;
+    if let Some(record) = written {
+        catalog_first_head(staging, record).await;
+    }
     Ok(())
 }
 
-/// Moves the finished directory to the name the Library is known by.
-fn publish(staging: Staging, built: Built) -> Result<CreatedLibrary> {
-    let path = staging.publish()?;
+/// Replays the first head into the new Library's catalog, so that the catalog
+/// names the Library from the start (spec: FM-15).
+///
+/// Recorded rather than raised where it fails: the head is on Storage by now,
+/// which this flow cannot take back, and a catalog left standing at nothing is
+/// one the Library's first open catches up — name included.
+async fn catalog_first_head(staging: &Staging, record: JournalRecord) {
+    let applied: std::result::Result<(), IndexError> = async {
+        SqliteIndex::open(staging.staged().index_file())?
+            .apply(record)
+            .await
+    }
+    .await;
+    if let Err(refused) = applied {
+        warn!(
+            operation = OPERATION,
+            reason = %refused.redacted(),
+            "the new Library's first head was not replayed into its catalog; its first open \
+             catches up"
+        );
+    }
+}
+
+/// Moves the finished directory to the name the Library is known by: its ID.
+fn publish(staging: Staging, dir: &LibraryDir, built: Built) -> Result<CreatedLibrary> {
+    let path = staging.publish(dir)?;
     // After the Library; see `NewAccount`.
     if let Some(account) = built.new_account {
         account.publish()?;

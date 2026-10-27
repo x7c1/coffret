@@ -7,6 +7,7 @@ use tracing::info;
 
 use crate::device_time::now;
 use crate::error::{Error, Result};
+use crate::library_ref::LibraryRef;
 use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
@@ -84,17 +85,20 @@ impl OpenLibrary {
     }
 }
 
-/// Brings the catalog of the Library called `name` to its head.
+/// Brings the catalog of the Library `library` names to its head.
 ///
 /// One unlock and one run, which is what a command line does (spec: DK-9). A
 /// process that opens a Library once and runs many things over it — the
 /// explorer's server, which catches up as it starts and again whenever somebody
 /// asks what is new — calls [`OpenLibrary::catch_up`] and reaches the same body.
-pub async fn run_catch_up<P>(name: &str, enter_passphrase: P) -> Result<CatchUpOutcome>
+pub async fn run_catch_up<P>(library: &LibraryRef, enter_passphrase: P) -> Result<CatchUpOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    open_library(name, enter_passphrase).await?.catch_up().await
+    open_library(library, enter_passphrase)
+        .await?
+        .catch_up()
+        .await
 }
 
 #[cfg(test)]
@@ -133,6 +137,7 @@ mod tests {
             parcel_dir: std::env::temp_dir().join("coffret-a-catch-up-keeps-no-parcel"),
             parcel_len: coffret_format::PARCEL_LEN,
             library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
+            name: None,
             epoch: MasterKeyEpoch::FIRST,
             provider: "s3",
             grant: None,

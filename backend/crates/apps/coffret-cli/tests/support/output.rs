@@ -65,3 +65,14 @@ pub fn printed_prefix(output: &Output) -> String {
         .expect("a Library's location is a bucket and a prefix");
     prefix.to_owned()
 }
+
+/// The Library ID `init` or `join` printed, as the 16 hex characters
+/// `--library-id` takes.
+pub fn printed_library_id(output: &Output) -> String {
+    stderr(output)
+        .lines()
+        .find_map(|line| line.strip_prefix("Library ID: "))
+        .unwrap_or_else(|| panic!("the run must print the Library ID:\n{}", stderr(output)))
+        .trim()
+        .to_owned()
+}

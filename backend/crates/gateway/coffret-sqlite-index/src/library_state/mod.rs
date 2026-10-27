@@ -8,7 +8,7 @@
 //! FM-15).
 
 use coffret_model::{
-    ContainerSummary, ControlObjectName, EntryLocation, IndexCheckpoint, ObjectRef,
+    ContainerSummary, ControlObjectName, EntryLocation, IndexCheckpoint, LibraryName, ObjectRef,
 };
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::{params, Connection};
@@ -27,7 +27,7 @@ mod restore;
 pub(crate) use restore::restore;
 
 mod snapshot;
-pub(crate) use snapshot::{checkpoint, snapshot};
+pub(crate) use snapshot::{checkpoint, library_name, snapshot};
 
 fn read_checkpoint(
     connection: &Connection,
@@ -87,6 +87,32 @@ fn write_checkpoint(connection: &Connection, checkpoint: &IndexCheckpoint) -> In
             ],
         )
         .map_err(classify(OPERATION))?;
+    Ok(())
+}
+
+/// The Library's name the checkpoint row holds, `None` where it holds none or
+/// there is no row (spec: FM-15, FM-16).
+fn read_library_name(connection: &Connection) -> IndexResult<Option<LibraryName>> {
+    const OPERATION: &str = "reading the Library's name";
+    let stored = first(
+        connection,
+        "SELECT library_name FROM checkpoint",
+        [],
+        OPERATION,
+        rows::library_name,
+    )?;
+    Ok(stored.flatten())
+}
+
+/// Records `name` as the Library's name, on the checkpoint row a restore or a
+/// replay has just written (spec: FM-15, FM-16).
+fn write_library_name(connection: &Connection, name: Option<&LibraryName>) -> IndexResult<()> {
+    connection
+        .execute(
+            "UPDATE checkpoint SET library_name = ?1",
+            params![name.map(LibraryName::as_str)],
+        )
+        .map_err(classify("recording the Library's name"))?;
     Ok(())
 }
 

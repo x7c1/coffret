@@ -200,6 +200,7 @@ pub(super) async fn commit(
         batch.removals.clone(),
     )
     .and_then(|record| record.with_renames(renames(batch)?))
+    .map(|record| record.with_library_name(batch.library_name.clone()))
     .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
     let name = ControlObjectName::head(generation);
     let payload = encode_journal_record(&record)?;

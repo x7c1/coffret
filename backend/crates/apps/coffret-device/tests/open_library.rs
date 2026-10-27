@@ -6,8 +6,8 @@
 //! case for that is a store built from those five things reaching the bucket.
 
 use coffret_device::{
-    create_library, mappings, open_library, set_mapping, CreateLibraryRequest, MarkerRequest,
-    NewProvider, Passphrase, ProviderSettings,
+    create_library, mappings, open_library, set_mapping, CreateLibraryRequest, LibraryRef,
+    MarkerRequest, NewProvider, Passphrase, ProviderSettings,
 };
 mod minio;
 
@@ -57,7 +57,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
     );
 
     set_mapping(
-        "opened",
+        &LibraryRef::named("opened"),
         None,
         folders.path(),
         MarkerRequest::AdoptWhatIsThere,
@@ -65,9 +65,11 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
     .await
     .expect("the Library root must be mappable");
 
-    let open = open_library("opened", || Ok(Passphrase::from_bytes(PASSPHRASE.to_vec())))
-        .await
-        .expect("the Passphrase must open the Library");
+    let open = open_library(&LibraryRef::named("opened"), || {
+        Ok(Passphrase::from_bytes(PASSPHRASE.to_vec()))
+    })
+    .await
+    .expect("the Passphrase must open the Library");
 
     // An S3 bucket is reached with the machine's own credentials, so there is
     // no grant for a running process to renew.
@@ -110,7 +112,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         .expect("the catalog must be readable");
     assert_eq!(
         listed.as_slice(),
-        mappings("opened")
+        mappings(&LibraryRef::named("opened"))
             .await
             .expect("the mappings read")
             .mappings()
