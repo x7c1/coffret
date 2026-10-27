@@ -159,7 +159,7 @@ async fn a_library_is_joined_once() {
     )
     .await;
     assert!(
-        matches!(&result, Err(Error::LibraryExists { name, .. }) if name == "joined-once"),
+        matches!(&result, Err(Error::LibraryExists { library, .. }) if *library == crate::LibraryRef::named("joined-once")),
         "expected a second join of one Library to be refused, got {result:?}"
     );
 }

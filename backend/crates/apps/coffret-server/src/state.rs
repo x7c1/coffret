@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::ensure;
-use coffret_device::{Drops, EntryFetches, KeptTally, LiveReservations, OpenLibrary};
+use coffret_device::{
+    Drops, EntryFetches, KeptTally, LibraryId, LibraryRef, LiveReservations, OpenLibrary,
+};
 use tokio::sync::watch;
 use tokio::time::Instant;
 
@@ -53,8 +55,8 @@ pub struct ServerState {
     /// Library calls it the same (spec: FM-15). A person chose it, so it is
     /// never written into a diagnostic event (spec: EL-1).
     pub name: Option<String>,
-    /// The Library this is (spec: FM-18), as the identity route spells it.
-    library_id: String,
+    /// The Library this is (spec: FM-18).
+    library_id: LibraryId,
     /// What this process calls itself, which every answer about work in flight
     /// carries.
     ///
@@ -202,7 +204,7 @@ impl ServerState {
         let live = Arc::clone(&library.live);
         Self {
             name,
-            library_id: library.library_id.to_hex(),
+            library_id: library.library_id,
             server: ServerId::drawn(),
             provider: library.provider,
             custody: Custody::holding(library),
@@ -337,7 +339,7 @@ impl ServerState {
     /// drop that took its handle before the lock is still live (spec: PK-17).
     pub fn unlock(&self, mut library: OpenLibrary) -> anyhow::Result<Unlocked> {
         ensure!(
-            library.library_id.to_hex() == self.library_id,
+            library.library_id == self.library_id,
             "{} reopened is no longer the one this server was started for; quit the app and \
              open it again",
             self.the_library(),
@@ -406,23 +408,21 @@ impl ServerState {
         self.custody.unlocked()?.kept_tally().await
     }
 
-    /// The Library this is, in the hex it is spelled in: for the one route
-    /// that answers while locked, and for a shell that reopens the Library by
-    /// it to unlock it in place (spec: FM-18).
-    pub fn library_id(&self) -> &str {
-        self.library_id.as_str()
+    /// The Library this is: for the one route that answers while locked, and
+    /// for a shell that reopens the Library by it to unlock it in place
+    /// (spec: FM-18).
+    pub fn library_id(&self) -> LibraryId {
+        self.library_id
     }
 
     /// The Library as a sentence names it: by its name, or — where nothing
     /// has named it yet — said to have none, and by its ID as its ID.
     pub fn the_library(&self) -> String {
-        match &self.name {
-            Some(name) => format!("the Library {name:?}"),
-            None => format!(
-                "the Library with ID {} (it has no name yet)",
-                self.library_id
-            ),
-        }
+        let which = match &self.name {
+            Some(name) => LibraryRef::named(name.as_str()),
+            None => LibraryRef::Id(self.library_id),
+        };
+        which.the_library().to_string()
     }
 
     /// Which provider it is on, for the same route and the same reason.

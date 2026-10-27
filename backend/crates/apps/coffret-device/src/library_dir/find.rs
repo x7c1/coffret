@@ -21,11 +21,12 @@ impl LibraryDir {
     /// settings keep — so a Library is found by the same name before and after
     /// it is moved to its ID.
     ///
-    /// A device holds a Library once. Two directories whose settings carry one
-    /// ID — a copy of a Library's directory, or one an earlier build kept
-    /// beside the one its ID names — are a fault rather than two Libraries or
-    /// a choice between them: either may be the one the other was copied from,
-    /// so neither is opened until one of them is gone.
+    /// A device holds a Library once. A directory holds the ID its settings
+    /// carry or, where they cannot be read, the ID it is named after; two
+    /// directories that hold one ID — a copy of a Library's directory, or one
+    /// an earlier build kept beside the one its ID names — are a fault rather
+    /// than two Libraries or a choice between them: either may be the one the
+    /// other was copied from, so neither is opened until one of them is gone.
     ///
     /// # Errors
     ///
@@ -66,7 +67,7 @@ impl LibraryDir {
         match found.as_slice() {
             [one] => Ok(one.dir.clone()),
             [] => Err(Error::NoSuchLibrary {
-                name: which.to_string(),
+                library: which.clone(),
                 path: libraries_root()?,
             }),
             several => Err(Error::AmbiguousLibraryName {
@@ -407,6 +408,44 @@ mod tests {
                     needs_attention: false,
                 },
             ]
+        );
+    }
+
+    // FM-15: a directory whose settings cannot be read holds the ID it is
+    // named after, so one named after a Library's ID beside that Library's
+    // directory is a second directory of it: refused by name and by ID alike,
+    // and the Library listed once, marked as needing attention.
+    #[test]
+    fn an_unreadable_directory_named_after_a_librarys_id_is_a_second_directory() {
+        let device = isolated::device();
+        plant(&device, "books", 1, Some("books"));
+        let unreadable = LibraryDir {
+            name: library_id(1).to_hex(),
+            unnamed: None,
+            path: device.path().join("libraries").join(library_id(1).to_hex()),
+        };
+        fs::create_dir_all(unreadable.path()).unwrap();
+        fs::write(unreadable.settings_file(), b"not settings").unwrap();
+
+        for which in [LibraryRef::named("books"), LibraryRef::Id(library_id(1))] {
+            match LibraryDir::find(&which) {
+                Err(Error::LibraryInSeveralDirectories {
+                    library_id: id,
+                    paths,
+                }) => {
+                    assert_eq!(id, library_id(1));
+                    assert_eq!(paths.len(), 2, "{paths:?}");
+                }
+                other => panic!("{which} must be refused as held twice, got {other:?}"),
+            }
+        }
+        assert_eq!(
+            LibraryDir::libraries().expect("the libraries directory must be listable"),
+            [LibraryOnDevice {
+                library_id: library_id(1),
+                name: Some("books".to_owned()),
+                needs_attention: true,
+            }]
         );
     }
 

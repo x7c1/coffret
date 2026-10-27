@@ -43,16 +43,10 @@ pub fn run(args: ChangePassphraseArgs) -> anyhow::Result<Ran> {
 /// (spec: DK-6). The Library is named by its name, or — where this device
 /// knows none yet — said to have none and named by its ID.
 fn changed(library: &LibraryOnDevice) -> String {
-    let which = match &library.name {
-        Some(name) => format!("the Library {name:?}"),
-        None => format!(
-            "the Library with ID {} (it has no name yet)",
-            library.library_id
-        ),
-    };
     format!(
-        "The Passphrase of {which} is changed on this device only.\n\
-         Other devices holding it keep the Passphrase they have."
+        "The Passphrase of {} is changed on this device only.\n\
+         Other devices holding it keep the Passphrase they have.",
+        library.which().the_library()
     )
 }
 

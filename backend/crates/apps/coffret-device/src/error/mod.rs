@@ -43,6 +43,9 @@ mod from;
 mod joined_place;
 pub use joined_place::JoinedPlace;
 
+mod mismatched_library;
+pub use mismatched_library::MismatchedLibrary;
+
 mod promotion_obstacle;
 pub use promotion_obstacle::PromotionObstacle;
 
@@ -103,15 +106,15 @@ pub enum Error {
     /// Joining it a second time is refused rather than merged into: its
     /// directory holds a Master Key and a catalog this device is already using.
     LibraryExists {
-        /// The Library that is already here.
-        name: String,
+        /// The Library that is already here, as a command names it.
+        library: LibraryRef,
         /// The directory it occupies.
         path: PathBuf,
     },
     /// No Library on this device answers to what was asked for.
     NoSuchLibrary {
-        /// The Library that was asked for: a name, or an ID in hex.
-        name: String,
+        /// The Library that was asked for: by a name, or by its ID.
+        library: LibraryRef,
         /// Where the Libraries on this device are kept.
         path: PathBuf,
     },
@@ -268,8 +271,8 @@ pub enum Error {
     },
     /// The Library is not on Google Drive, so there is no grant to renew.
     NotADriveLibrary {
-        /// The Library that was asked for.
-        name: String,
+        /// The Library that was asked for, as a command names it.
+        library: LibraryRef,
     },
     /// The Drive Library has no usable grant, so nothing can reach its Storage.
     ///
@@ -315,8 +318,8 @@ pub enum Error {
     /// Never reported as a Library that references no account: a damaged
     /// envelope is not quietly answered with a second consent.
     UnreadableAccountEnvelope {
-        /// The Library whose envelope it is.
-        library: String,
+        /// The Library whose envelope it is, as a command names it.
+        library: LibraryRef,
         /// The account the Library references.
         account: String,
         /// What the format layer made of the file, where there was one.
@@ -333,8 +336,9 @@ pub enum Error {
     AccountNotOpened {
         /// The account that was asked for.
         account: String,
-        /// The Library whose Passphrase would open it: one that references it.
-        library: String,
+        /// The Library whose Passphrase would open it: one that references it,
+        /// as a command names it.
+        library: LibraryRef,
     },
     /// A Library's previous per-Library grant would go into an account the
     /// device already holds, and that account cannot take it in, for the

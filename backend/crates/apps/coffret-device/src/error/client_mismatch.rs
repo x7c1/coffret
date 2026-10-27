@@ -1,3 +1,5 @@
+use super::MismatchedLibrary;
+
 /// A Library and the account it would use naming two different OAuth clients
 /// (spec: SA-8).
 ///
@@ -7,7 +9,7 @@
 #[derive(Debug)]
 pub struct ClientMismatch {
     /// The Library that was being put here, or opened.
-    pub library: String,
+    pub library: MismatchedLibrary,
     /// The OAuth client that Library names.
     pub library_client: String,
     /// The account it would reference.

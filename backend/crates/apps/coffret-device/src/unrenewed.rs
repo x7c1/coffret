@@ -67,7 +67,7 @@ mod tests {
         );
         assert_eq!(
             Unrenewed::of(&Error::NotADriveLibrary {
-                name: "albums".to_owned(),
+                library: crate::LibraryRef::named("albums"),
             }),
             Unrenewed::Failed,
         );

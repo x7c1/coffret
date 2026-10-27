@@ -7,6 +7,7 @@ use std::sync::Arc;
 use coffret_model::Passphrase;
 
 use crate::error::Result;
+use crate::library_ref::LibraryRef;
 
 /// What a flow putting a Library on an account this device holds asks for the
 /// Passphrase of one Library that already references the account, named by its
@@ -26,8 +27,8 @@ use crate::error::Result;
 #[derive(Clone, Default)]
 pub struct ReferencingPassphrase(Option<Arc<Ask>>);
 
-/// The question itself: what a Library is called in, its Passphrase out.
-type Ask = dyn Fn(&str) -> Result<Passphrase> + Send + Sync;
+/// The question itself: which Library it is in, its Passphrase out.
+type Ask = dyn Fn(&LibraryRef) -> Result<Passphrase> + Send + Sync;
 
 impl ReferencingPassphrase {
     /// A caller with nobody to ask.
@@ -35,15 +36,15 @@ impl ReferencingPassphrase {
         Self(None)
     }
 
-    /// A caller that asks `ask`, handing it the Library's name, or its ID
-    /// where nothing has named it yet.
-    pub fn asking(ask: impl Fn(&str) -> Result<Passphrase> + Send + Sync + 'static) -> Self {
+    /// A caller that asks `ask`, handing it the Library by its name, or by its
+    /// ID where nothing has named it yet — never its ID as a name, so that the
+    /// question can say which it is (spec: FM-15).
+    pub fn asking(ask: impl Fn(&LibraryRef) -> Result<Passphrase> + Send + Sync + 'static) -> Self {
         Self(Some(Arc::new(ask)))
     }
 
-    /// The Passphrase of the Library called `library`, or `None` where there is
-    /// nobody to ask.
-    pub(crate) fn ask(&self, library: &str) -> Option<Result<Passphrase>> {
+    /// The Passphrase of `library`, or `None` where there is nobody to ask.
+    pub(crate) fn ask(&self, library: &LibraryRef) -> Option<Result<Passphrase>> {
         self.0.as_ref().map(|ask| ask(library))
     }
 }

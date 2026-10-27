@@ -233,7 +233,9 @@ mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
 mod error;
-pub use error::{ClientMismatch, CreationStep, Error, JoinedPlace, PromotionObstacle, Result};
+pub use error::{
+    ClientMismatch, CreationStep, Error, JoinedPlace, MismatchedLibrary, PromotionObstacle, Result,
+};
 
 mod finding;
 pub use finding::Finding;
@@ -364,6 +366,9 @@ pub use stored_master_key_file::StoredMasterKeyFile;
 mod stub_bucket;
 #[cfg(feature = "stub-bucket")]
 pub use stub_bucket::stub_endpoint;
+
+mod the_library;
+pub use the_library::TheLibrary;
 
 mod unrenewed;
 pub use unrenewed::Unrenewed;

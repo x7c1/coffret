@@ -16,7 +16,7 @@ use crate::account_grant::{self, Bound};
 use crate::account_name::AccountName;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{CreationStep, Error, JoinedPlace, Result};
+use crate::error::{CreationStep, Error, JoinedPlace, MismatchedLibrary, Result};
 use crate::library_dir::LibraryDir;
 use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
@@ -181,7 +181,11 @@ fn account_of(request: &JoinLibraryRequest) -> Result<Option<(Accounts, Option<C
         Some(name) => {
             let choice = accounts.choose(Some(name))?;
             if let Choice::Held(held) = &choice {
-                Accounts::require_client(held, &location(&request.provider), client_id)?;
+                Accounts::require_client(
+                    held,
+                    MismatchedLibrary::JoinedFrom(place(&request.provider)),
+                    client_id,
+                )?;
             }
             Some(choice)
         }

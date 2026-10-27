@@ -13,7 +13,7 @@ async fn authorizing_a_library_that_is_not_on_drive_is_refused() {
     })
     .await;
     assert!(
-        matches!(&result, Err(Error::NotADriveLibrary { name }) if name == "no-grant"),
+        matches!(&result, Err(Error::NotADriveLibrary { library }) if *library == crate::LibraryRef::named("no-grant")),
         "expected an S3 Library to have no grant to renew, got {result:?}"
     );
 }
@@ -33,7 +33,7 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
     })
     .await;
     assert!(
-        matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "no-grant-to-renew-here"),
+        matches!(&result, Err(Error::NoSuchLibrary { library, .. }) if *library == crate::LibraryRef::named("no-grant-to-renew-here")),
         "expected the name to be refused, got {result:?}"
     );
 }
