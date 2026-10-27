@@ -96,7 +96,7 @@ Library by name) and the CLI help where the behavior above changes them.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On a throwaway state directory under `.tmp/` against the local MinIO,
+- [x] On a throwaway state directory under `.tmp/` against the local MinIO,
       with `COFFRET_STATE_DIR` and `COFFRET_LOG_DIR` set: a copy of a
       Library's directory beside it is refused with both paths by
       `coffret sync --library <name>`, and a Library joined before its
