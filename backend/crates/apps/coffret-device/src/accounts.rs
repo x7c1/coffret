@@ -15,7 +15,7 @@ use crate::account_envelope::AccountEnvelope;
 use crate::account_name::AccountName;
 use crate::account_settings::AccountSettings;
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{Error, Result};
+use crate::error::{Error, MismatchedLibrary, Result};
 use crate::library_dir::{accounts_root, entries, LibraryDir};
 use crate::referencing_passphrase::ReferencingPassphrase;
 use crate::stored_master_key_file::StoredMasterKeyFile;
@@ -216,9 +216,9 @@ impl Accounts {
         };
         let not_opened = || Error::AccountNotOpened {
             account: account.as_str().to_owned(),
-            library: library.name().to_owned(),
+            library: library.which(),
         };
-        let Some(given) = referencing.ask(library.name()) else {
+        let Some(given) = referencing.ask(&library.which()) else {
             return Err(unread.unwrap_or_else(not_opened));
         };
         let given = given?;
@@ -255,7 +255,7 @@ impl Accounts {
     /// to (spec: SA-8).
     pub(crate) fn require_client(
         account: &AccountDir,
-        library: &str,
+        library: MismatchedLibrary,
         library_client: &str,
     ) -> Result<()> {
         let Some(settings) = AccountSettings::read(account)? else {
@@ -266,7 +266,7 @@ impl Accounts {
         }
         Err(Error::ClientMismatch(Box::new(
             crate::error::ClientMismatch {
-                library: library.to_owned(),
+                library,
                 library_client: library_client.to_owned(),
                 account: account.name().as_str().to_owned(),
                 account_client: settings.client_id,

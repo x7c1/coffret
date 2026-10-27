@@ -35,7 +35,7 @@ pub struct LibraryDto {
 pub async fn library(State(state): State<Arc<ServerState>>) -> Json<LibraryDto> {
     Json(LibraryDto {
         name: state.name.clone(),
-        library_id: state.library_id().to_owned(),
+        library_id: state.library_id().to_hex(),
         provider: state.provider(),
     })
 }

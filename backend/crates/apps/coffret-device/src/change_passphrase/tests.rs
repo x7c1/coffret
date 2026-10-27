@@ -115,7 +115,7 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
         unasked,
     );
     assert!(
-        matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "changed-by-nmae"),
+        matches!(&result, Err(Error::NoSuchLibrary { library, .. }) if *library == crate::LibraryRef::named("changed-by-nmae")),
         "expected the name to be refused, got {result:?}"
     );
 }

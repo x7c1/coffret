@@ -27,7 +27,7 @@ fn chain(error: &dyn error::Error) -> Vec<String> {
 #[test]
 fn a_library_that_is_already_here_is_recorded_without_its_name() {
     let error = Error::LibraryExists {
-        name: "holiday-photos".to_owned(),
+        library: LibraryRef::named("holiday-photos"),
         path: PathBuf::from("/home/someone/.local/state/coffret/holiday-photos"),
     };
 
@@ -626,7 +626,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         (
             Error::AccountNotOpened {
                 account: ACCOUNT.to_owned(),
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
             },
             "the account \"family_photos\" opens only through a Library that references it, \
              and the Passphrase given does not open one; the Passphrase of the Library \
@@ -653,7 +653,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::UnreadableAccountEnvelope {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 cause: None,
             },
@@ -663,7 +663,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::ClientMismatch(Box::new(ClientMismatch {
-                library: LIBRARY.to_owned(),
+                library: MismatchedLibrary::Which(LibraryRef::named(LIBRARY)),
                 library_client: "one.apps.googleusercontent.com".to_owned(),
                 account: ACCOUNT.to_owned(),
                 account_client: "two.apps.googleusercontent.com".to_owned(),
@@ -677,7 +677,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::UnreadableAccountEnvelope {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 cause: Some(Box::new(
                     coffret_format::Error::AccountCacheKeyEnvelopeLength { actual: 15 },
@@ -700,7 +700,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
                 library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 obstacle: PromotionObstacle::ClientDiffers(Box::new(ClientMismatch {
-                    library: LIBRARY.to_owned(),
+                    library: MismatchedLibrary::Which(LibraryRef::named(LIBRARY)),
                     library_client: "one.apps.googleusercontent.com".to_owned(),
                     account: ACCOUNT.to_owned(),
                     account_client: "two.apps.googleusercontent.com".to_owned(),
@@ -816,6 +816,104 @@ fn advice_names_a_library_with_no_name_by_its_id() {
         named.to_string(),
         "the Library \"Summer 2026\" has no usable grant on Google Drive; run `coffret \
          authorize --library Summer 2026`"
+    );
+}
+
+// FM-15: the refusals that name a Library say a Library with no name yet has
+// none and name it by its ID as its ID, never quoting the ID where its name
+// goes; a Library with a name is quoted by it as before.
+#[test]
+fn the_refusals_name_a_library_with_no_name_by_its_id() {
+    let id = LibraryId::from_bytes([0xab; LibraryId::BYTE_LEN]);
+    let refusals = |library: LibraryRef| {
+        let mismatch = || {
+            Box::new(ClientMismatch {
+                library: MismatchedLibrary::Which(library.clone()),
+                library_client: "one.apps.googleusercontent.com".to_owned(),
+                account: "family_photos".to_owned(),
+                account_client: "two.apps.googleusercontent.com".to_owned(),
+            })
+        };
+        [
+            Error::LibraryExists {
+                library: library.clone(),
+                path: PathBuf::from("/state/coffret/libraries/abababababababab"),
+            },
+            Error::NotADriveLibrary {
+                library: library.clone(),
+            },
+            Error::UnreadableAccountEnvelope {
+                library: library.clone(),
+                account: "family_photos".to_owned(),
+                cause: None,
+            },
+            Error::AccountNotOpened {
+                account: "family_photos".to_owned(),
+                library: library.clone(),
+            },
+            Error::ClientMismatch(mismatch()),
+        ]
+    };
+
+    for refused in refusals(LibraryRef::Id(id)) {
+        let said = refused.to_string();
+        assert!(
+            said.contains("the Library with ID abababababababab (it has no name yet)"),
+            "{said}"
+        );
+        assert!(!said.contains("the Library \"abababababababab\""), "{said}");
+    }
+    for refused in refusals(LibraryRef::named("Summer 2026")) {
+        let said = refused.to_string();
+        assert!(said.contains("the Library \"Summer 2026\""), "{said}");
+        assert!(!said.contains("with ID"), "{said}");
+    }
+}
+
+// FM-15: a Library asked for by its ID and not found is said to be one
+// with that ID, never quoted as though the ID were its name; one asked for by
+// its name keeps the name quoted.
+#[test]
+fn no_such_library_says_an_id_is_an_id() {
+    let path = PathBuf::from("/state/coffret/libraries");
+    let by_id = Error::NoSuchLibrary {
+        library: LibraryRef::Id(LibraryId::from_bytes([0; LibraryId::BYTE_LEN])),
+        path: path.clone(),
+    };
+    assert_eq!(
+        by_id.to_string(),
+        "no Library with ID 0000000000000000 is on this device; none of the Libraries in \
+         /state/coffret/libraries answers to it"
+    );
+    let by_name = Error::NoSuchLibrary {
+        library: LibraryRef::named("holiday-photos"),
+        path,
+    };
+    assert_eq!(
+        by_name.to_string(),
+        "no Library \"holiday-photos\" is on this device; none of the Libraries in \
+         /state/coffret/libraries answers to it"
+    );
+}
+
+// A Library being joined is known by nothing but the place the join was
+// given, so a client it names that differs from the account's is said of that
+// place rather than of a name it does not have.
+#[test]
+fn a_client_mismatch_on_a_join_names_the_place() {
+    let refused = Error::ClientMismatch(Box::new(ClientMismatch {
+        library: MismatchedLibrary::JoinedFrom(JoinedPlace::DriveFolder {
+            folder_id: "1AbCdEf".to_owned(),
+        }),
+        library_client: "one.apps.googleusercontent.com".to_owned(),
+        account: "family_photos".to_owned(),
+        account_client: "two.apps.googleusercontent.com".to_owned(),
+    }));
+    assert!(
+        refused.to_string().starts_with(
+            "the Library in the Google Drive folder \"1AbCdEf\" names the OAuth client"
+        ),
+        "{refused}"
     );
 }
 

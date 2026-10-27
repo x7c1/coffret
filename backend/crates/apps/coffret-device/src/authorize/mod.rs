@@ -130,7 +130,7 @@ where
     } = &settings.provider
     else {
         return Err(Error::NotADriveLibrary {
-            name: dir.name().to_owned(),
+            library: dir.which(),
         });
     };
     let credentials = drive::credentials(client_id, client_secret.as_deref());

@@ -70,7 +70,7 @@ impl Staging {
     pub(crate) fn vacant(library_id: LibraryId) -> Result<LibraryDir> {
         match LibraryDir::find(&LibraryRef::Id(library_id)) {
             Ok(held) => Err(Error::LibraryExists {
-                name: held.name().to_owned(),
+                library: held.which(),
                 path: held.path().to_path_buf(),
             }),
             Err(Error::NoSuchLibrary { .. }) => LibraryDir::of(library_id),

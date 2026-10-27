@@ -51,7 +51,7 @@ impl AccountEnvelope {
         account: &AccountName,
     ) -> Result<AccountCacheKey> {
         let unreadable = |cause| Error::UnreadableAccountEnvelope {
-            library: dir.name().to_owned(),
+            library: dir.which(),
             account: account.as_str().to_owned(),
             cause,
         };

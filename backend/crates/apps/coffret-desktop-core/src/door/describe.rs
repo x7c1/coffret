@@ -45,7 +45,7 @@ pub(super) async fn describe(State(door): State<Arc<Door>>, request: Request) ->
         },
         DoorMode::Unlock => Described::Unlock {
             library: door.shared.served().map(|opened| ListedLibrary {
-                id: opened.state.library_id().to_owned(),
+                id: opened.state.library_id().to_hex(),
                 name: opened.state.name.clone(),
                 needs_attention: false,
             }),

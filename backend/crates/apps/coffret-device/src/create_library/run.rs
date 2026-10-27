@@ -16,9 +16,9 @@ use crate::account_grant;
 use crate::account_name::AccountName;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{CreationStep, Error, Result};
+use crate::error::{CreationStep, Error, MismatchedLibrary, Result};
 use crate::library_dir::LibraryDir;
-use crate::library_ref::library_name;
+use crate::library_ref::{library_name, LibraryRef};
 use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
 use crate::stored_master_key_file::StoredMasterKeyFile;
@@ -139,7 +139,11 @@ fn account_of(request: &CreateLibraryRequest) -> Result<Option<(Accounts, Choice
     let accounts = Accounts::open()?;
     let choice = accounts.choose(requested)?;
     if let Choice::Held(held) = &choice {
-        Accounts::require_client(held, &request.name, client_id)?;
+        Accounts::require_client(
+            held,
+            MismatchedLibrary::Which(LibraryRef::named(request.name.as_str())),
+            client_id,
+        )?;
     }
     Ok(Some((accounts, choice)))
 }

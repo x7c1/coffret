@@ -21,7 +21,7 @@ use crate::account_settings::AccountSettings;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::drive;
-use crate::error::{Error, PromotionObstacle, Result};
+use crate::error::{Error, MismatchedLibrary, PromotionObstacle, Result};
 use crate::library_dir::LibraryDir;
 use crate::reach::Reach;
 use crate::referencing_passphrase::ReferencingPassphrase;
@@ -250,7 +250,11 @@ pub(crate) async fn of_library(
 
     let key = Arc::new(AccountEnvelope::open(dir, master_key, &account)?);
     let account_dir = AccountDir::resolve(&account)?;
-    Accounts::require_client(&account_dir, dir.name(), drive_client(settings).0)?;
+    Accounts::require_client(
+        &account_dir,
+        MismatchedLibrary::Which(dir.which()),
+        drive_client(settings).0,
+    )?;
     if previous {
         complete_promotion(dir, settings, master_key, &account_dir, &key)?;
     }
@@ -277,7 +281,7 @@ pub(crate) fn bind(
     let (client_id, _) = drive_client(settings);
     let (account, key) = match accounts.choose(requested)? {
         Choice::Held(held) => {
-            Accounts::require_client(&held, dir.name(), client_id)?;
+            Accounts::require_client(&held, MismatchedLibrary::Which(dir.which()), client_id)?;
             let key =
                 accounts.key_for(held.name(), passphrase, &ReferencingPassphrase::unasked())?;
             (held, key)
@@ -339,7 +343,7 @@ async fn promote(
         };
         // Only another client asks for another name; a settings file that
         // cannot be read is reported as itself.
-        match Accounts::require_client(held, dir.name(), client_id) {
+        match Accounts::require_client(held, MismatchedLibrary::Which(dir.which()), client_id) {
             Ok(()) => {}
             Err(Error::ClientMismatch(mismatch)) => {
                 return Err(needs_name(PromotionObstacle::ClientDiffers(mismatch)))

@@ -63,11 +63,14 @@ pub fn referencing(from_stdin: bool) -> coffret_device::ReferencingPassphrase {
     })
 }
 
-/// What a person is asked for the Passphrase of the Library called `library`.
-fn referencing_prompt(library: &str) -> String {
+/// What a person is asked for the Passphrase of `library`: named by its name,
+/// or — where this device knows none — said to have none and named by its ID
+/// as its ID (spec: FM-15).
+fn referencing_prompt(library: &coffret_device::LibraryRef) -> String {
     format!(
         "The Passphrase given does not open a Library that already uses this account. \
-         Enter the Passphrase of the Library {library:?}: "
+         Enter the Passphrase of {}: ",
+        library.the_library()
     )
 }
 
@@ -176,9 +179,22 @@ mod tests {
     #[test]
     fn the_referencing_prompt_names_the_library() {
         assert_eq!(
-            referencing_prompt("at-work"),
+            referencing_prompt(&coffret_device::LibraryRef::named("at-work")),
             "The Passphrase given does not open a Library that already uses this account. \
              Enter the Passphrase of the Library \"at-work\": "
+        );
+    }
+
+    // FM-15: a Library with no name yet is said to have none and named by its
+    // ID as its ID, never with its ID quoted where the name goes.
+    #[test]
+    fn the_referencing_prompt_names_a_library_with_no_name_by_its_id() {
+        let id = coffret_device::LibraryId::from_bytes([0xab; coffret_device::LibraryId::BYTE_LEN]);
+        assert_eq!(
+            referencing_prompt(&coffret_device::LibraryRef::Id(id)),
+            "The Passphrase given does not open a Library that already uses this account. \
+             Enter the Passphrase of the Library with ID abababababababab (it has no name \
+             yet): "
         );
     }
 

@@ -111,7 +111,7 @@ mod tests {
         )
         .await;
         assert!(
-            matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "nothing-of-that-name"),
+            matches!(&result, Err(Error::NoSuchLibrary { library, .. }) if *library == crate::LibraryRef::named("nothing-of-that-name")),
             "expected the name to be refused, got {result:?}"
         );
     }

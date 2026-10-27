@@ -33,7 +33,7 @@ impl StoredMasterKeyFile {
             Ok(bytes) => bytes,
             Err(cause) if cause.kind() == ErrorKind::NotFound => {
                 return Err(Error::NoSuchLibrary {
-                    name: dir.name().to_owned(),
+                    library: dir.which(),
                     path: dir.path().to_path_buf(),
                 })
             }

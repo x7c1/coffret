@@ -101,7 +101,7 @@ pub(crate) async fn attempt(
                 .and_then(|id| LibraryId::from_hex(id).ok())
                 .ok_or(AttemptRefused::NoLibraryNamed)?;
             if let Some(opened) = shared.served() {
-                return if opened.state.library_id() == library_id.to_hex() {
+                return if opened.state.library_id() == library_id {
                     Ok(Attempted::AlreadyOpen)
                 } else {
                     Err(AttemptRefused::AnotherLibraryOpen)
@@ -126,8 +126,7 @@ pub(crate) async fn attempt(
             // closure — and what that produced is handed to the running
             // server, which holds it until the next lock and arms that lock
             // afresh (spec: DK-1).
-            let library_id = LibraryId::from_hex(state.library_id())
-                .expect("a server spells the ID of the Library it serves in hex");
+            let library_id = state.library_id();
             let reopened = reopen(&LibraryRef::Id(library_id), move || Ok(passphrase))
                 .await
                 .map_err(|refused| AttemptRefused::Library(Error::Device(refused)))?;

@@ -42,15 +42,26 @@ impl fmt::Display for Error {
                 "neither COFFRET_STATE_DIR, XDG_STATE_HOME, nor HOME is set, \
                  so there is nowhere to keep Libraries",
             ),
-            Self::LibraryExists { name, path } => {
-                write!(f, "the Library {name:?} is already at {}", path.display())
-            }
-            Self::NoSuchLibrary { name, path } => write!(
+            Self::LibraryExists { library, path } => write!(
                 f,
-                "no Library {name:?} is on this device; none of the Libraries in {} answers to \
-                 it",
+                "{} is already at {}",
+                library.the_library(),
                 path.display()
             ),
+            // A name quoted as one, and an ID said to be one: an ID quoted
+            // where a name goes would read as a name nothing answered to
+            // (spec: FM-15).
+            Self::NoSuchLibrary { library, path } => {
+                match library {
+                    LibraryRef::Named(name) => write!(f, "no Library {name:?}")?,
+                    LibraryRef::Id(id) => write!(f, "no Library with ID {id}")?,
+                }
+                write!(
+                    f,
+                    " is on this device; none of the Libraries in {} answers to it",
+                    path.display()
+                )
+            }
             // Which file it was and what was being done to it, in the
             // operation's own word. What the operating system answered is not
             // repeated here: it is the `io::Error` underneath, and a shell that
@@ -127,7 +138,7 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "{} is already being served on this device",
-                    TheLibrary(library)
+                    library.the_library()
                 )?;
                 if let Some(by) = by {
                     write!(f, ", by process {by}")?;
@@ -140,7 +151,11 @@ impl fmt::Display for Error {
             // No server is there to stop: the lock is held by a move of the
             // directory, which ends by itself (spec: LA-8).
             Self::LibraryBeingMoved { library, by } => {
-                write!(f, "the directory of {} is being moved", TheLibrary(library))?;
+                write!(
+                    f,
+                    "the directory of {} is being moved",
+                    library.the_library()
+                )?;
                 if let Some(by) = by {
                     write!(f, " by process {by}")?;
                 }
@@ -155,14 +170,15 @@ impl fmt::Display for Error {
             // reaches nothing. The head line has to stay true of every cause
             // printed under it.
             Self::Drive { .. } => f.write_str("a step that reaches Google Drive did not complete"),
-            Self::NotADriveLibrary { name } => write!(
+            Self::NotADriveLibrary { library } => write!(
                 f,
-                "the Library {name:?} is not on Google Drive, so it has no grant to renew"
+                "{} is not on Google Drive, so it has no grant to renew",
+                library.the_library()
             ),
             Self::NotAuthorized { library, .. } => write!(
                 f,
                 "{} has no usable grant on Google Drive; run `coffret authorize {}`",
-                TheLibrary(library),
+                library.the_library(),
                 Flag(library)
             ),
             // What a name may be, in one sentence: a person told only which
@@ -186,7 +202,7 @@ impl fmt::Display for Error {
             ),
             Self::ClientMismatch(mismatch) => write!(
                 f,
-                "the Library {:?} names the OAuth client {:?} and the account {:?} names {:?}; \
+                "{} names the OAuth client {:?} and the account {:?} names {:?}; \
                  an account's grant is used only through the client it was consented to; give \
                  --account a new name to consent through the Library's client as another account",
                 mismatch.library,
@@ -200,8 +216,9 @@ impl fmt::Display for Error {
                 cause,
             } => write!(
                 f,
-                "the envelope that opens the account {account:?} for the Library {library:?} {}; \
-                 nothing was renewed and no consent was asked for",
+                "the envelope that opens the account {account:?} for {} {}; nothing was renewed \
+                 and no consent was asked for",
+                library.the_library(),
                 match cause {
                     Some(_) => "could not be read",
                     None => "is missing",
@@ -210,8 +227,8 @@ impl fmt::Display for Error {
             Self::AccountNotOpened { account, library } => write!(
                 f,
                 "the account {account:?} opens only through a Library that references it, and \
-                 the Passphrase given does not open one; the Passphrase of the Library \
-                 {library:?} does"
+                 the Passphrase given does not open one; the Passphrase of {} does",
+                library.the_library()
             ),
             Self::PromotionNeedsName {
                 library, account, ..
@@ -220,7 +237,7 @@ impl fmt::Display for Error {
                 "{} keeps a grant of its own from an earlier build, and the account {account:?} \
                  this device already holds cannot take it in; name an account for it with \
                  `coffret authorize {} --account NAME`",
-                TheLibrary(library),
+                library.the_library(),
                 Flag(library)
             ),
             Self::NoSuchAccount { account } => {
@@ -235,7 +252,7 @@ impl fmt::Display for Error {
                 "{} references the account {account:?}, not {requested:?}, and the account a \
                  Library references cannot be changed yet; run `coffret authorize {}` to renew \
                  that account's grant",
-                TheLibrary(library),
+                library.the_library(),
                 Flag(library)
             ),
             // The model's refusal quotes the prefix and says which part of the
@@ -459,20 +476,6 @@ impl fmt::Display for Error {
                     None => Ok(()),
                 }
             }
-        }
-    }
-}
-
-/// A Library as a sentence names it: by its name, or — for a Library this
-/// device knows no name for — by its ID, said to be one, rather than by its ID
-/// where the name goes.
-struct TheLibrary<'a>(&'a LibraryRef);
-
-impl fmt::Display for TheLibrary<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            LibraryRef::Named(name) => write!(f, "the Library {name:?}"),
-            LibraryRef::Id(id) => write!(f, "the Library with ID {id} (it has no name yet)"),
         }
     }
 }

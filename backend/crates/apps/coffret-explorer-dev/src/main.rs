@@ -50,11 +50,16 @@ const DIST: &str = concat!(
 )]
 #[command(group(clap::ArgGroup::new("which_library").required(true).args(["library", "library_id"])))]
 struct Args {
-    /// The Library the server is serving, by its name
+    /// The Library the server is serving, by its name. Where more than one
+    /// Library on this device carries the name, the start is refused with
+    /// their IDs, and --library-id says which one. Where more than one
+    /// directory holds the Library, it is refused with both directories
     #[arg(long)]
     library: Option<String>,
     /// The Library the server is serving, by its ID: the 16 lowercase hex
-    /// characters `coffret init` and `coffret join` print
+    /// characters `coffret init` and `coffret join` print, and how a Library
+    /// with no name yet is named. Where more than one directory holds the
+    /// Library, it is refused with both directories, as it is by --library
     #[arg(long, value_parser = coffret_shell::which_library::library_id)]
     library_id: Option<LibraryId>,
     /// The loopback port the server is listening on

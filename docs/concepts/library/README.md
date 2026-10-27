@@ -35,6 +35,9 @@ lists its Libraries by, and finds one by when a person names it. Until a
 Library a build before names put on a device is first unlocked there, it is
 listed and found by the name of the directory that build kept it in. Where two
 Libraries on one device carry one name, it is their IDs that tell them apart.
+A Library a device knows no name for — one joined before its Catalog caught
+up — is said to have none and named by its ID as its ID, never with its ID in
+the name's place (spec: FM-15).
 
 A Library on a device **references** the Storage account it reaches its
 objects through, by that account's **device-local account name**, and holds
@@ -305,6 +308,11 @@ control for a sync, since a drop starts one.
     holds it and on a later open where one does. A server moves it before it
     holds it, keeping the directory's name beside the Library until the unlock
     that gives it (spec: FM-15, LA-8).
+  - A device holds a Library once. Two directories that hold one Library ID
+    — a copy of one, or an earlier build's directory beside the one the
+    Library was moved to — are a fault: the Library is listed once, marked as
+    needing attention, and not opened by its name or by its ID until one of
+    the directories is gone (spec: FM-15).
   - What a device records about a Library it holds — that ID, where on Storage
     the Library is, the copy of its name, the account it references, the
     mappings — is the device's own settings, kept on the device and never

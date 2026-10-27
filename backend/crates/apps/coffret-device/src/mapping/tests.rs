@@ -156,7 +156,7 @@ async fn mapping_a_library_that_is_not_here_creates_no_catalog() {
 
     let result = map("never-created", None, folders.path()).await;
     assert!(
-        matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "never-created"),
+        matches!(&result, Err(Error::NoSuchLibrary { library, .. }) if *library == crate::LibraryRef::named("never-created")),
         "expected a Library that is not here to be refused, got {result:?}"
     );
     assert!(!state_dir().join("libraries").join("never-created").exists());

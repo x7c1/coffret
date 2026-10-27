@@ -874,7 +874,7 @@ fn answering(
         record
             .lock()
             .expect("no case panics while holding this")
-            .push(library.to_owned());
+            .push(library.to_string());
         Ok(Passphrase::from_bytes(passphrase.to_vec()))
     });
     (referencing, asked)
