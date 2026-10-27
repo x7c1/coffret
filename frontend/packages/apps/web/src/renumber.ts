@@ -163,10 +163,10 @@ export interface Group {
   /** What is renamed, in the order of the new names. */
   renamed: Rename[];
   /**
-   * The names left as they are, in the order they are read in — among pages,
-   * the files that are no pages after them — both sides relative to the
-   * dropped folder. A name kept in a volume that is renamed still moves with
-   * it, so `to` is where it lands rather than always `from`.
+   * The names left as they are, both sides relative to the dropped folder, in
+   * no order of their own: {@link linesOf} puts them among the renamed in the
+   * order they are read in. A name kept in a volume that is renamed still moves
+   * with it, so `to` is where it lands rather than always `from`.
    */
   unchanged: Rename[];
   /** Why nothing in it is renamed, where that is not for want of numbers. */
@@ -247,9 +247,7 @@ export function renumber(
           }
           return rename;
         }),
-      unchanged: [...judged.unchanged]
-        .sort((a, b) => inReadingOrder(kind, a, b))
-        .map((name) => ({ from: within(name), to: to(name) })),
+      unchanged: judged.unchanged.map((name) => ({ from: within(name), to: to(name) })),
       leftWhole: judged.leftWhole,
     };
   }
@@ -604,7 +602,9 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
   }
   // What the names above were built to keep, checked rather than assumed:
   // where a listing would read two of them out of order the folder is left as
-  // it was, naming the two.
+  // it was, naming the two. A spread written last page first, `p4+p3`, does
+  // that to a name read after it, which goes under the spread's last number,
+  // `003_`, and so before `004+003`.
   for (let at = 1; at < finals.length; at += 1) {
     if (!readInOrder(finals[at - 1], finals[at])) {
       return leftAlone(names, { reason: 'order', earlier: order[at - 1], later: order[at] });
