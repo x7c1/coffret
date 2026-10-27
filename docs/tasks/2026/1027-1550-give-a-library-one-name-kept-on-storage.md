@@ -124,14 +124,14 @@ Key, and read by every device that joins.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library (`~/.local/state/coffret-agent`, MinIO
+- [x] On the agent's Library (`~/.local/state/coffret-agent`, MinIO
       `coffret-minio-agent`): opening `agent` with the new build names it
       `agent` and moves its directory to `libraries/<library id>/`; the server
       and explorer started with `--library agent` work, and the listing is
       unchanged
-- [ ] With a second state directory, `join` without `--name` lists the Library
+- [x] With a second state directory, `join` without `--name` lists the Library
       as `agent`
-- [ ] A Library made by the build on `main` before this change, on the agent's
+- [x] A Library made by the build on `main` before this change, on the agent's
       MinIO, with a mapped folder synced, keeps what this device put on disk
       when the new build first opens it: a following `sync` and `fetch` report
       no file as one this device did not put there
