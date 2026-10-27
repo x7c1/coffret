@@ -323,10 +323,37 @@ it('previews a prefixed name and a spread as renames, and a folder left whole', 
   const preview = screen.getByLabelText('what is renamed').textContent ?? '';
   expect(preview).toContain('cover.jpg → 000_cover.jpg');
   expect(preview).toContain('p2+p3.jpg → 002+003.jpg');
+  // The line names the two names read out of order, so the person knows
+  // which to rename.
   expect(preview).toContain(
-    'left as they are: numbering them would change the order they are read in',
+    'left as they are: numbering them would change the order they are read in ' +
+      '(cover.jpg is read before p0.jpg)',
   );
   expect(preview).toContain('p0.jpg (unchanged)');
+});
+
+// A page already named as its number stands among its neighbours, and the
+// files that are no pages come after the pages.
+it('lists renamed and unchanged names in the order they are read in', () => {
+  const file = (path: string) => addedFile(path, { size: 10, lastModified: 0 } as File);
+  const files = [
+    file('BookX/ComicInfo.xml'),
+    file('BookX/0.jpg'),
+    file('BookX/001.jpg'),
+    file('BookX/2.jpg'),
+  ];
+  render(<DropConfirm summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
+  fireEvent.click(screen.getByLabelText('Number the pages'));
+
+  const lines = [...screen.getByLabelText('what is renamed').querySelectorAll('li')].map(
+    (line) => line.textContent,
+  );
+  expect(lines).toEqual([
+    '0.jpg → 000.jpg',
+    '001.jpg (unchanged)',
+    '2.jpg → 002.jpg',
+    'ComicInfo.xml (unchanged)',
+  ]);
 });
 
 // A person scanning books drops one after another and means the same each time.
@@ -551,13 +578,19 @@ describe('correcting a new name in the preview', () => {
     // Add waits for what the Library holds there, which it would otherwise
     // send without saying.
     expect(add()).toHaveProperty('disabled', true);
-    expect(
-      await screen.findByText(
-        '1 file in this drop replaces the file the Library already has at the same path: BookX/first/p.jpg',
-      ),
-    ).toBeTruthy();
-    expect(holding).toHaveBeenCalledWith(expect.arrayContaining(['BookX', 'BookX/first']));
+    // Said beside Add too, where a long preview may have scrolled the line
+    // above away: why a press of Add does nothing yet.
+    expect(add().parentElement?.textContent).toContain(
+      'reading what the Library holds under the corrected folder names…',
+    );
     await waitFor(() => expect(add()).toHaveProperty('disabled', false));
+    // And then what the read turned up, above and beside Add.
+    const line =
+      '1 file in this drop replaces the file the Library already has at the same path: BookX/first/p.jpg';
+    expect(screen.getAllByText(line)).toHaveLength(2);
+    expect(add().parentElement?.textContent).toContain(line);
+    expect(add().parentElement?.textContent).not.toContain('reading what the Library holds');
+    expect(holding).toHaveBeenCalledWith(expect.arrayContaining(['BookX', 'BookX/first']));
 
     fireEvent.click(add());
     expect(onChoose).toHaveBeenCalledWith(
