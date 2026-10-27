@@ -27,8 +27,9 @@
 // drop also carries — never a whole subtree the drop does not reach.
 //
 // The same question offers to number the pages and volumes of what was
-// dropped (see `renumber.ts`). The answer brings the two options back beside
-// the choice, and the drop is renumbered before it is sent either way.
+// dropped (see `renumber.ts`), and lets the person correct a new name the rule
+// gave. The answer brings the two options and the corrections back beside the
+// choice, and the drop is renumbered before it is sent either way.
 //
 // Kept free of DOM and of React so it is unit testable, as `dropped.ts` beside
 // it is.
@@ -42,7 +43,7 @@ import {
 } from '@coffret/api';
 
 import { size } from './humanize';
-import { renumber, type Numbering } from './renumber';
+import { renumber, type Edits, type Numbering } from './renumber';
 
 /** One folder a drop carried, and what is in it at every depth. */
 export interface DroppedFolder {
@@ -75,10 +76,13 @@ export interface DropSummary {
 export type Choice = 'pack' | 'one_by_one' | 'cancel';
 
 /**
- * The answer as the drop acts on it: nothing at all, or how it is added and
- * which of its names are numbered on the way.
+ * The answer as the drop acts on it: nothing at all, or how it is added, which
+ * of its names are numbered on the way, and which new names the person
+ * corrected.
  */
-export type Answer = 'cancel' | { choice: Exclude<Choice, 'cancel'>; numbering: Numbering };
+export type Answer =
+  | 'cancel'
+  | { choice: Exclude<Choice, 'cancel'>; numbering: Numbering; edits: Edits };
 
 /**
  * What the drop holds.
@@ -276,21 +280,48 @@ function under(folder: string, relative: string): string {
  * folders the drop itself names, so a drop onto a large Library lists a few
  * folders rather than walking it.
  */
-export async function heldUnder(
+export function heldUnder(
   landing: Listing,
   files: readonly Added[],
   list: (folder: string) => Promise<Listing>,
 ): Promise<HeldFiles> {
-  // The folders, relative to the landing folder, that some answer sends a file
-  // into.
+  return heldIn(
+    landing,
+    EVERY_NUMBERING.flatMap((numbering) => foldersReached(renumber(files, numbering).files)),
+    list,
+  );
+}
+
+/**
+ * The folders, relative to the folder dropped onto, that `files` are sent
+ * into — each one's parents too — in no particular order.
+ */
+export function foldersReached(files: readonly Added[]): string[] {
   const reached = new Set<string>();
-  for (const numbering of EVERY_NUMBERING) {
-    for (const { path } of renumber(files, numbering).files) {
-      for (let cut = path.indexOf('/'); cut !== -1; cut = path.indexOf('/', cut + 1)) {
-        reached.add(path.slice(0, cut));
-      }
+  for (const { path } of files) {
+    for (let cut = path.indexOf('/'); cut !== -1; cut = path.indexOf('/', cut + 1)) {
+      reached.add(path.slice(0, cut));
     }
   }
+  return [...reached];
+}
+
+/**
+ * What the Library holds in the folders `reached`, relative to `landing`: the
+ * listing of the folder the drop lands in, and one more for each of those
+ * folders that the Library has.
+ *
+ * Asked by {@link heldUnder} before the question goes up, and asked again where
+ * the person corrects a volume folder's new name, since that sends files into
+ * a folder no numbering would have: what is held there is then said as what is
+ * held under any other folder of the drop.
+ */
+export async function heldIn(
+  landing: Listing,
+  folders: readonly string[],
+  list: (folder: string) => Promise<Listing>,
+): Promise<HeldFiles> {
+  const reached = new Set(folders);
   const held = new Map<string, ContainerKind>();
   const prefix = landing.path === '' ? '' : `${landing.path}/`;
   const read = (listing: Listing): string[] => {
@@ -360,7 +391,8 @@ export type Chosen = 'sent' | 'refused' | 'cancelled';
  * them — which keep their names, since they are no folder's pages.
  *
  * The summary counts the files as dropped, and numbering changes none of what
- * it counts: renaming moves no file in or out of a folder it names.
+ * it counts: renaming moves no file in or out of a folder it names. The paths
+ * sent are the numbered ones with the person's corrections in place.
  */
 export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
   const overdrawn = overdrawnBy(choosing.files);
@@ -380,6 +412,9 @@ export async function chooseAndAdd(choosing: Choosing): Promise<Chosen> {
     await choosing.send(choosing.files, false);
     return 'sent';
   }
-  await choosing.send(renumber(choosing.files, answer.numbering).files, answer.choice === 'pack');
+  await choosing.send(
+    renumber(choosing.files, answer.numbering, answer.edits).files,
+    answer.choice === 'pack',
+  );
   return 'sent';
 }

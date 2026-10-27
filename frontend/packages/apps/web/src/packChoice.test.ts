@@ -8,6 +8,7 @@ import {
   collisionsOf,
   existsLine,
   folderLine,
+  heldIn,
   heldUnder,
   looseLine,
   NOTHING_HELD,
@@ -19,7 +20,7 @@ import {
   type Choosing,
   type HeldFiles,
 } from './packChoice';
-import { NO_NUMBERING, type Numbering } from './renumber';
+import { NO_EDITS, NO_NUMBERING, type Edits, type Numbering } from './renumber';
 
 /** One dropped file of `size` bytes at `path`, relative to the folder dropped onto. */
 function added(path: string, size = 10): Added {
@@ -88,7 +89,12 @@ describe('chooseAndAdd', () => {
    * A drop that answers the question with `choice` and `numbering`, recording
    * what it was asked and the paths it sent.
    */
-  function choosing(files: Added[], choice: Choice = 'pack', numbering: Numbering = NO_NUMBERING) {
+  function choosing(
+    files: Added[],
+    choice: Choice = 'pack',
+    numbering: Numbering = NO_NUMBERING,
+    edits: Edits = NO_EDITS,
+  ) {
     const order: string[] = [];
     const sent: string[][] = [];
     const asking: Choosing = {
@@ -97,7 +103,7 @@ describe('chooseAndAdd', () => {
       held: vi.fn(async () => NOTHING_HELD),
       ask: vi.fn(async () => {
         order.push('asked');
-        return choice === 'cancel' ? choice : { choice, numbering };
+        return choice === 'cancel' ? choice : { choice, numbering, edits };
       }),
       send: vi.fn(async (sending: readonly Added[], freeze: boolean) => {
         order.push(freeze ? 'sent as a Pack' : 'sent one by one');
@@ -184,6 +190,23 @@ describe('chooseAndAdd', () => {
       expect(asDropped.sent).toEqual([files.map((file) => file.path)]);
     },
   );
+
+  // A new name the person corrected is the name the file goes up under: the
+  // answer carries the corrections, and the drop is numbered with them.
+  it('sends the corrected paths the answer carries', async () => {
+    const files = [
+      added('BookX/vol1/king-#1.jpg'),
+      added('BookX/vol1/king-#2.jpg'),
+      added('BookX/vol2/king-#1.jpg'),
+    ];
+    const edits: Edits = new Map([
+      ['BookX/vol1', 'first'],
+      ['BookX/vol1/king-#2.jpg', 'two.jpg'],
+    ]);
+    const { asking, sent } = choosing(files, 'pack', { pages: true, volumes: true }, edits);
+    expect(await chooseAndAdd(asking)).toBe('sent');
+    expect(sent).toEqual([['BookX/first/001.jpg', 'BookX/first/two.jpg', 'BookX/002/001.jpg']]);
+  });
 
   it('sends nothing when the question is cancelled', async () => {
     const { asking } = choosing(book('BookX', 2), 'cancel');
@@ -316,6 +339,24 @@ describe('heldUnder', () => {
       holding({ 'BookX/p1.jpg': 'one-file' }),
     );
     expect(list).toHaveBeenCalledWith('BookX');
+  });
+
+  // A corrected volume name sends files into a folder no numbering would, and
+  // what is held there is asked for by the folders the corrected drop reaches.
+  it('lists the folders it is given, as far as the Library has them', async () => {
+    const landing = listingOf('albums', {}, ['BookX']);
+    const listings: Record<string, Listing> = {
+      'albums/BookX': listingOf('albums/BookX', {}, ['first']),
+      'albums/BookX/first': listingOf('albums/BookX/first', { '001.jpg': 'pack' }),
+    };
+    const list = vi.fn(async (folder: string) => listings[folder]);
+    expect(await heldIn(landing, ['BookX', 'BookX/first', 'BookX/second'], list)).toEqual(
+      holding({ 'BookX/first/001.jpg': 'pack' }),
+    );
+    expect(list.mock.calls.map(([folder]) => folder).sort()).toEqual([
+      'albums/BookX',
+      'albums/BookX/first',
+    ]);
   });
 
   it('asks for nothing where no dropped folder is already there', async () => {

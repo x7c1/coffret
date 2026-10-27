@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import { addedFile, type Added } from '@coffret/api';
 
-import { NO_NUMBERING, renumber, unchangedLine, type Numbering } from './renumber';
+import {
+  corrected,
+  editedPath,
+  misorderedLine,
+  NO_EDITS,
+  NO_NUMBERING,
+  refusalLine,
+  renumber,
+  unchangedLine,
+  type Edits,
+  type Numbering,
+} from './renumber';
 import { inLibraryOrder } from './stranded';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
@@ -327,5 +338,124 @@ describe('renumber', () => {
       'p2.jpg',
       'b/001.jpg',
     ]);
+  });
+});
+
+// The rule cannot read every book the way its owner meant, so a new name can be
+// corrected before the drop is sent: the last component only, laid over the
+// rule's names.
+describe('correcting a new name', () => {
+  /** `edits` with `path` corrected to `name`, failing where it is refused. */
+  function correct(
+    files: Added[],
+    numbering: Numbering,
+    edits: Edits,
+    path: string,
+    name: string | null,
+  ): Edits {
+    const result = corrected(files, numbering, edits, path, name);
+    if ('refused' in result) {
+      throw new Error(`refused: ${result.refused}`);
+    }
+    return result.edits;
+  }
+
+  /** Why `name` is not taken for `path`, or null where it is. */
+  function refusal(files: Added[], numbering: Numbering, edits: Edits, path: string, name: string) {
+    const result = corrected(files, numbering, edits, path, name);
+    return 'refused' in result ? result.refused : null;
+  }
+
+  const BOOK = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/p3.jpg')];
+
+  it('sends a corrected page under its corrected name, and marks its line', () => {
+    const edits = correct(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '002a.jpg');
+    const result = renumber(BOOK, PAGES, edits);
+    expect(result.files.map((file) => file.path)).toEqual(['b/001.jpg', 'b/002a.jpg', 'b/003.jpg']);
+    expect(result.groups[0].renamed[1]).toEqual({ from: 'p2.jpg', to: '002a.jpg', ruled: '002.jpg' });
+    expect(editedPath(result.groups[0], result.groups[0].renamed[1])).toBe('b/p2.jpg');
+  });
+
+  it('moves every file under a corrected volume, in the paths and in the lines below it', () => {
+    const files = [
+      added('series/第1巻/p1.jpg'),
+      added('series/第1巻/p2.jpg'),
+      added('series/第2巻/p1.jpg'),
+    ];
+    const edits = correct(files, BOTH, NO_EDITS, 'series/第1巻', '001 first');
+    const result = renumber(files, BOTH, edits);
+    expect(result.files.map((file) => file.path)).toEqual([
+      'series/001 first/001.jpg',
+      'series/001 first/002.jpg',
+      'series/002/001.jpg',
+    ]);
+    const pages = result.groups.find((group) => group.folder === 'series/第1巻');
+    expect(pages?.renamed[0]).toEqual({ from: '第1巻/p1.jpg', to: '001 first/001.jpg' });
+  });
+
+  it('puts back the name the rule gave, and keeps no correction to the rule’s own name', () => {
+    const edits = correct(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', 'two.jpg');
+    expect(correct(BOOK, PAGES, edits, 'b/p2.jpg', null)).toEqual(NO_EDITS);
+    expect(correct(BOOK, PAGES, edits, 'b/p2.jpg', '002.jpg')).toEqual(NO_EDITS);
+  });
+
+  it('refuses an empty name, a name with a separator, and a dot, each with its reason', () => {
+    expect(refusal(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '')).toBe('empty');
+    expect(refusal(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', 'x/002.jpg')).toBe('separator');
+    expect(refusal(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '..')).toBe('dots');
+    expect(refusalLine('empty')).toBe('a name cannot be empty');
+    expect(refusalLine('separator')).toBe(
+      'a name cannot contain /: only the name is corrected here, not where it lands',
+    );
+    expect(refusalLine('dots')).toBe('a name cannot be . or ..');
+  });
+
+  // Two files at one path would have the second replace the first, and a file
+  // cannot share its path with a folder.
+  it('refuses a name a sibling ends up with, among files, folders and corrections', () => {
+    expect(refusal(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '003.jpg')).toBe('taken');
+    expect(refusalLine('taken')).toBe('there is already something with this name here');
+
+    const once = correct(BOOK, PAGES, NO_EDITS, 'b/p1.jpg', 'one.jpg');
+    expect(refusal(BOOK, PAGES, once, 'b/p2.jpg', 'one.jpg')).toBe('taken');
+    // The name a correction gave up is free again.
+    expect(refusal(BOOK, PAGES, once, 'b/p2.jpg', '001.jpg')).toBeNull();
+
+    const beside = [...BOOK, added('b/scans/x.jpg')];
+    expect(refusal(beside, PAGES, NO_EDITS, 'b/p2.jpg', 'scans')).toBe('taken');
+
+    const volumes = [added('s/v1/x.jpg'), added('s/v2/x.jpg'), added('s/notes.txt')];
+    expect(refusal(volumes, VOLUMES, NO_EDITS, 's/v1', '002')).toBe('taken');
+    expect(refusal(volumes, VOLUMES, NO_EDITS, 's/v1', 'notes.txt')).toBe('taken');
+    expect(refusal(volumes, VOLUMES, NO_EDITS, 's/v1', 'first')).toBeNull();
+  });
+
+  // Taken, since it may be what was meant, and said, since it may be a typo.
+  it('takes a name that breaks the reading order and says so, and says nothing of one that keeps it', () => {
+    const late = renumber(BOOK, PAGES, correct(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '020.jpg'));
+    expect(late.files.map((file) => file.path)).toEqual(['b/001.jpg', 'b/020.jpg', 'b/003.jpg']);
+    expect(late.groups[0].renamed[1].misordered).toEqual({ sorts: 'after', neighbour: '003.jpg' });
+    expect(misorderedLine(late.groups[0].renamed[1].misordered!)).toBe(
+      'read out of order: this name sorts after 003.jpg',
+    );
+
+    const early = renumber(BOOK, PAGES, correct(BOOK, PAGES, NO_EDITS, 'b/p3.jpg', '000.jpg'));
+    expect(early.groups[0].renamed[2].misordered).toEqual({ sorts: 'before', neighbour: '002.jpg' });
+
+    const kept = renumber(BOOK, PAGES, correct(BOOK, PAGES, NO_EDITS, 'b/p2.jpg', '002a.jpg'));
+    expect(kept.groups[0].renamed.map((rename) => rename.misordered)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('checks the order among volume folders too', () => {
+    const files = [added('s/v1/x.jpg'), added('s/v2/x.jpg'), added('s/v3/x.jpg')];
+    const result = renumber(files, VOLUMES, correct(files, VOLUMES, NO_EDITS, 's/v3', '0015'));
+    expect(result.groups[0].renamed[2]).toMatchObject({
+      to: '0015',
+      misordered: { sorts: 'before', neighbour: '002' },
+    });
   });
 });

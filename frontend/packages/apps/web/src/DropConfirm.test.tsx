@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { addedFile, type Added } from '@coffret/api';
 
 import { destinationsOf, type Destination } from './destination';
 import { DropConfirm } from './DropConfirm';
-import { summarize, type DropSummary, type HeldFiles } from './packChoice';
-import { NO_NUMBERING } from './renumber';
+import { NOTHING_HELD, summarize, type DropSummary, type HeldFiles } from './packChoice';
+import { NO_EDITS, NO_NUMBERING } from './renumber';
 import { COLOR } from './theme';
 
 afterEach(() => {
@@ -45,9 +45,9 @@ it('names the folder with its count and size, and offers a Pack or one by one', 
   fireEvent.click(add());
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(onChoose.mock.calls).toEqual([
-    ['pack', NO_NUMBERING],
-    ['one_by_one', NO_NUMBERING],
-    ['cancel', NO_NUMBERING],
+    ['pack', NO_NUMBERING, NO_EDITS],
+    ['one_by_one', NO_NUMBERING, NO_EDITS],
+    ['cancel', NO_NUMBERING, NO_EDITS],
   ]);
 });
 
@@ -118,7 +118,7 @@ describe('a drop of files alone', () => {
     expect(onChoose).not.toHaveBeenCalled();
 
     fireEvent.click(add());
-    expect(onChoose).toHaveBeenCalledWith('one_by_one', NO_NUMBERING);
+    expect(onChoose).toHaveBeenCalledWith('one_by_one', NO_NUMBERING, NO_EDITS);
   });
 
   it('names the top of the Library where they are dropped there', () => {
@@ -145,7 +145,7 @@ describe('a drop of files alone', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onChoose.mock.calls).toEqual([['cancel', NO_NUMBERING]]);
+    expect(onChoose.mock.calls).toEqual([['cancel', NO_NUMBERING, NO_EDITS]]);
   });
 });
 
@@ -269,7 +269,7 @@ it('is cancelled by Escape, as any dialog is', () => {
   const onChoose = vi.fn();
   render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
   fireEvent.keyDown(window, { key: 'Escape' });
-  expect(onChoose).toHaveBeenCalledWith('cancel', NO_NUMBERING);
+  expect(onChoose).toHaveBeenCalledWith('cancel', NO_NUMBERING, NO_EDITS);
 });
 
 // Off unless somebody ticked them: a drop names its files the way it always
@@ -301,7 +301,7 @@ it('previews what ticking a box renames, and carries it to the answer', () => {
   );
 
   fireEvent.click(add());
-  expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false });
+  expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false }, NO_EDITS);
 });
 
 // The names numbered to keep their place — a cover, a spread — are renames
@@ -385,5 +385,185 @@ describe('what a drop onto a folder of the same name replaces', () => {
     const said = screen.getByRole('dialog').textContent ?? '';
     expect(said).toContain('1 file in this drop replaces the file the Library already has');
     expect(said).toContain('2 files are refused, because a Pack holds the file at that path');
+  });
+});
+
+// The rule cannot read every book the way its owner meant, so a new name in
+// the preview can be corrected before anything is sent.
+describe('correcting a new name in the preview', () => {
+  /** The confirmation of `BOOK` with its pages numbered, and what it answers with. */
+  function numbered() {
+    const onChoose = vi.fn();
+    render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+    fireEvent.click(screen.getByLabelText('Number the pages'));
+    return onChoose;
+  }
+
+  /** The preview's text. */
+  function preview(): string {
+    return screen.getByLabelText('what is renamed').textContent ?? '';
+  }
+
+  /** Opens the new name `name` for correcting, types `typed` and presses `key`. */
+  function correct(name: string, typed: string, key = 'Enter'): HTMLInputElement {
+    fireEvent.click(screen.getByRole('button', { name }));
+    const field = screen.getByRole<HTMLInputElement>('textbox');
+    fireEvent.change(field, { target: { value: typed } });
+    fireEvent.keyDown(field, { key });
+    return field;
+  }
+
+  it('opens a new name for editing, takes it on Enter, marks it, and sends it on Add', () => {
+    const onChoose = numbered();
+    fireEvent.click(screen.getByRole('button', { name: '001.jpg' }));
+    const field = screen.getByLabelText<HTMLInputElement>('new name of king01-#001.JPG');
+    expect(field.value).toBe('001.jpg');
+
+    fireEvent.change(field, { target: { value: '001 first.jpg' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(preview()).toContain('king01-#001.JPG → 001 first.jpg (edited)');
+    expect(preview()).not.toContain('read out of order');
+    // Enter in the field took the name and did not press Add.
+    expect(onChoose).not.toHaveBeenCalled();
+
+    // Leaving the field takes what was typed, as Enter does.
+    fireEvent.click(screen.getByRole('button', { name: '002.jpg' }));
+    const second = screen.getByRole('textbox');
+    fireEvent.change(second, { target: { value: '002 second.jpg' } });
+    fireEvent.blur(second);
+    expect(preview()).toContain('king01-#002.JPG → 002 second.jpg (edited)');
+
+    fireEvent.click(add());
+    expect(onChoose).toHaveBeenCalledWith(
+      'pack',
+      { pages: true, volumes: false },
+      new Map([
+        ['BookX/king01-#001.JPG', '001 first.jpg'],
+        ['BookX/king01-#002.JPG', '002 second.jpg'],
+      ]),
+    );
+  });
+
+  it('puts the field away on Escape without the edit, and without cancelling the dialog', () => {
+    const onChoose = numbered();
+    correct('001.jpg', 'typo.jpg', 'Escape');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(preview()).toContain('king01-#001.JPG → 001.jpg');
+    expect(preview()).not.toContain('(edited)');
+    expect(onChoose).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('puts back the name the rule gave', () => {
+    const onChoose = numbered();
+    correct('001.jpg', 'one.jpg');
+    expect(preview()).toContain('king01-#001.JPG → one.jpg (edited)');
+    fireEvent.click(screen.getByRole('button', { name: 'put back' }));
+    expect(preview()).toContain('king01-#001.JPG → 001.jpg');
+    expect(preview()).not.toContain('(edited)');
+    fireEvent.click(add());
+    expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false }, NO_EDITS);
+  });
+
+  // The control that had the focus goes away with Enter, Escape or put back;
+  // the focus lands on the name shown in its place rather than on nothing.
+  it('gives the focus back to the name when the field or put back goes away', () => {
+    numbered();
+    correct('001.jpg', 'one.jpg');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'one.jpg' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'put back' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '001.jpg' }));
+
+    correct('002.jpg', 'typo.jpg', 'Escape');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '002.jpg' }));
+  });
+
+  // The field stays open and says why; Add sends the names last taken.
+  it('keeps a refused name open with its reason', () => {
+    const onChoose = numbered();
+    const field = correct('001.jpg', '002.jpg');
+    expect(screen.getByRole('textbox')).toBe(field);
+    expect(preview()).toContain('there is already something with this name here');
+
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(preview()).toContain('a name cannot be empty');
+
+    fireEvent.change(field, { target: { value: 'x/001.jpg' } });
+    fireEvent.blur(field);
+    expect(screen.getByRole('textbox')).toBe(field);
+    expect(preview()).toContain('a name cannot contain /');
+
+    fireEvent.click(add());
+    expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false }, NO_EDITS);
+  });
+
+  it('takes a name that breaks the reading order, and warns of it', () => {
+    numbered();
+    correct('001.jpg', '100.jpg');
+    expect(preview()).toContain('king01-#001.JPG → 100.jpg (edited)');
+    expect(preview()).toContain('read out of order: this name sorts after 002.jpg');
+  });
+
+  it.each(['Number the pages', 'Number the volume folders'])(
+    'discards every edit when "%s" is toggled',
+    (box) => {
+      const onChoose = vi.fn();
+      render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+      if (box === 'Number the pages') {
+        // Ticked, so that toggling it twice comes back to a preview to edit.
+        fireEvent.click(screen.getByLabelText('Number the volume folders'));
+      }
+      fireEvent.click(screen.getByLabelText('Number the pages'));
+      correct('001.jpg', 'one.jpg');
+      // And one left open, which goes with them.
+      fireEvent.click(screen.getByRole('button', { name: '002.jpg' }));
+
+      fireEvent.click(screen.getByLabelText(box));
+      fireEvent.click(screen.getByLabelText(box));
+      expect(screen.queryByRole('textbox')).toBeNull();
+      expect(preview()).not.toContain('(edited)');
+      expect(preview()).toContain('king01-#001.JPG → 001.jpg');
+      fireEvent.click(add());
+      expect(onChoose.mock.calls[0][2]).toEqual(NO_EDITS);
+    },
+  );
+
+  // A corrected volume name sends files into a folder no numbering would, and
+  // what the Library holds there is asked for and said as any other.
+  it('says what replaces a file the Library holds under a corrected volume name', async () => {
+    const file = (path: string) => addedFile(path, { size: 10, lastModified: 0 } as File);
+    const files = [file('BookX/vol1/p.jpg'), file('BookX/vol2/p.jpg')];
+    const holding = vi.fn(async (folders: readonly string[]): Promise<HeldFiles> =>
+      folders.includes('BookX/first') ? new Map([['BookX/first/p.jpg', 'one-file']]) : NOTHING_HELD,
+    );
+    const onChoose = vi.fn();
+    render(
+      <DropConfirm summary={BOOK} files={files} destinations={INTO} holding={holding} onChoose={onChoose} />,
+    );
+    fireEvent.click(screen.getByLabelText('Number the volume folders'));
+    expect(holding).not.toHaveBeenCalled();
+
+    correct('001', 'first');
+    expect(preview()).toContain('vol1 → first (edited)');
+    // Add waits for what the Library holds there, which it would otherwise
+    // send without saying.
+    expect(add()).toHaveProperty('disabled', true);
+    expect(
+      await screen.findByText(
+        '1 file in this drop replaces the file the Library already has at the same path: BookX/first/p.jpg',
+      ),
+    ).toBeTruthy();
+    expect(holding).toHaveBeenCalledWith(expect.arrayContaining(['BookX', 'BookX/first']));
+    await waitFor(() => expect(add()).toHaveProperty('disabled', false));
+
+    fireEvent.click(add());
+    expect(onChoose).toHaveBeenCalledWith(
+      'pack',
+      { pages: false, volumes: true },
+      new Map([['BookX/vol1', 'first']]),
+    );
   });
 });

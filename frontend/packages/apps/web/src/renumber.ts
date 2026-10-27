@@ -49,6 +49,25 @@
 //   page is `0` and leaves no number for a name before it, the folder's pages
 //   are left whole rather than shuffled.
 //
+// Neither rule can read every book the way its owner meant, so the person may
+// correct a new name before anything is sent: the last component of a name the
+// rule renamed, never the folder it lands in. A correction is kept as data
+// beside the rule — the dropped path it corrects and the name it gives — and
+// `renumber` lays it over the rule's names, so a volume's corrected name moves
+// the pages under it as the rule's name would have. The rule itself is decided
+// as if nothing were corrected, which keeps the name it gave to put back.
+//
+// - A name that cannot be held beside its siblings is refused: an empty one,
+//   one with `/` in it, `.` and `..`, and one another new or kept name in the
+//   same folder already is — a file's among the files and folders beside it, a
+//   folder's likewise.
+// - A name that breaks the order its siblings are read in is taken all the
+//   same, since it may be what was meant, and said, since it may be a typo.
+//   The order is the one the page rule keeps: the byte order of the final
+//   names against the natural order of the dropped ones, among pages and among
+//   volumes alike. Only an order the correction breaks is said, not one the
+//   rule already left as it was among the volumes it does not rename.
+//
 // Kept free of DOM and of React so it is unit testable, as `packChoice.ts`
 // beside it is.
 
@@ -71,7 +90,34 @@ export const NO_NUMBERING: Numbering = { pages: false, volumes: false };
 export interface Rename {
   from: string;
   to: string;
+  /**
+   * Where the person corrected the new name: the name the rule gave it, the
+   * last component only, which putting it back restores.
+   */
+  ruled?: string;
+  /** Where a corrected name breaks the order its siblings are read in. */
+  misordered?: Misordered;
 }
+
+/**
+ * How a corrected name breaks the order: it sorts before the name read just
+ * before it, or after the one read just after it — `neighbour`, as that name
+ * ends up.
+ */
+export interface Misordered {
+  sorts: 'before' | 'after';
+  neighbour: string;
+}
+
+/**
+ * The person's corrections of the rule's new names, keyed by the path as
+ * dropped of what each corrects — a file's for a page, a folder's for a volume
+ * — and holding the last component it goes up under instead.
+ */
+export type Edits = ReadonlyMap<string, string>;
+
+/** No correction, which is how every drop starts. */
+export const NO_EDITS: Edits = new Map();
 
 /** Why a group that had numbered names was left whole. */
 export type LeftWhole =
@@ -117,20 +163,99 @@ export interface Renumbered {
 }
 
 /**
- * The drop with its pages and volumes numbered as `numbering` asks.
+ * The drop with its pages and volumes numbered as `numbering` asks, and the
+ * new names in `edits` taken in place of the rule's.
  *
  * Loose files — dropped beside the folders rather than in one — are no book's
  * pages and are sent as they are. With both options off every path is returned
- * as it came.
+ * as it came. A correction of a name the rule does not rename is no correction
+ * the preview offers, and is passed over.
  */
-export function renumber(files: readonly Added[], numbering: Numbering): Renumbered {
+export function renumber(
+  files: readonly Added[],
+  numbering: Numbering,
+  edits: Edits = NO_EDITS,
+): Renumbered {
   if (!numbering.pages && !numbering.volumes) {
     return { files: [...files], groups: [] };
   }
+  const { folders, judgedGroups, named } = numbered(files, numbering, edits);
+  const groups = judgedGroups.map(({ kind, folder, judged }) =>
+    groupOf(kind, folder, judged, (kind === 'volumes' ? named.volumes : named.pages).get(folder)!),
+  );
+  return {
+    files: files.map((added) => {
+      const to = renamedPath(added.path, named.volumes, named.pages);
+      return to === added.path ? added : { ...added, path: to };
+    }),
+    groups,
+  };
 
+  /**
+   * One judged group as the preview shows it, paths relative to the drop and
+   * `final` its names as corrected. The renames are in the order of the rule's
+   * names, so a corrected line stays where the person found it.
+   */
+  function groupOf(
+    kind: Group['kind'],
+    folder: string,
+    judged: Judged,
+    final: ReadonlyMap<string, string>,
+  ): Group {
+    const within = (name: string) => relative(`${folder}/${name}`);
+    const parentTo = relative(renamedFolder(folder, named.volumes));
+    const to = (name: string) => (parentTo === '' ? name : `${parentTo}/${name}`);
+    const held = folders.get(folder)!;
+    const misordered = misorderedIn(
+      kind === 'volumes' ? [...held.folders] : [...held.files],
+      judged.names,
+      final,
+    );
+    return {
+      kind,
+      folder,
+      renamed: [...judged.names]
+        .sort(([, a], [, b]) => inLibraryOrder(a, b))
+        .map(([from, name]) => {
+          const as = final.get(from) ?? name;
+          const rename: Rename = { from: within(from), to: to(as) };
+          if (as !== name) {
+            rename.ruled = name;
+          }
+          const broken = misordered.get(from);
+          if (broken !== undefined) {
+            rename.misordered = broken;
+          }
+          return rename;
+        }),
+      unchanged: judged.unchanged.sort().map((name) => ({ from: within(name), to: to(name) })),
+      leftWhole: judged.leftWhole,
+    };
+  }
+}
+
+/** What each folder of a drop holds directly: its files and folders, by name. */
+type Holdings = Map<string, { files: Set<string>; folders: Set<string> }>;
+
+/** Each folder's new names, keyed by its path as dropped. */
+type NamesIn = Map<string, Map<string, string>>;
+
+/** A drop numbered: what was judged by the rule, and the names with `edits` laid over. */
+interface Numbered {
+  folders: Holdings;
+  /** Each judged group, ordered by folder, volumes before the pages beside them. */
+  judgedGroups: { kind: Group['kind']; folder: string; judged: Judged }[];
+  /** The rule's names, of volumes and of pages. */
+  rule: { volumes: NamesIn; pages: NamesIn };
+  /** The rule's names with the corrections in `edits` in place of theirs. */
+  named: { volumes: NamesIn; pages: NamesIn };
+}
+
+/** The work behind {@link renumber}, kept apart so a correction can be checked against it. */
+function numbered(files: readonly Added[], numbering: Numbering, edits: Edits): Numbered {
   // What each folder of the drop holds directly: its files and its folders,
   // by name. A folder is a separator in a path, so this is read off the paths.
-  const folders = new Map<string, { files: Set<string>; folders: Set<string> }>();
+  const folders: Holdings = new Map();
   const holding = (folder: string) => {
     let held = folders.get(folder);
     if (held === undefined) {
@@ -158,48 +283,89 @@ export function renumber(files: readonly Added[], numbering: Numbering): Renumbe
   // Each folder's new names, keyed by its path as dropped. Volumes are decided
   // before pages so that a page's new name can be checked against the names
   // its sibling folders end up with.
-  const volumeNames = new Map<string, Map<string, string>>();
-  const pageNames = new Map<string, Map<string, string>>();
-  const groups: Group[] = [];
+  const volumeNames: NamesIn = new Map();
+  const pageNames: NamesIn = new Map();
+  const judgedGroups: Numbered['judgedGroups'] = [];
   for (const folder of [...folders.keys()].sort()) {
     const held = folders.get(folder)!;
     let finalFolders = [...held.folders];
     if (numbering.volumes && held.folders.size > 0) {
       const judged = judgeVolumes([...held.folders], [...held.files]);
       volumeNames.set(folder, judged.names);
-      groups.push(groupOf('volumes', folder, judged));
+      judgedGroups.push({ kind: 'volumes', folder, judged });
       finalFolders = finalFolders.map((name) => judged.names.get(name) ?? name);
     }
     if (numbering.pages && held.files.size > 0) {
       const judged = judgePages([...held.files], finalFolders);
       pageNames.set(folder, judged.names);
-      groups.push(groupOf('pages', folder, judged));
+      judgedGroups.push({ kind: 'pages', folder, judged });
     }
   }
 
   return {
-    files: files.map((added) => {
-      const to = renamedPath(added.path, volumeNames, pageNames);
-      return to === added.path ? added : { ...added, path: to };
-    }),
-    groups,
+    folders,
+    judgedGroups,
+    rule: { volumes: volumeNames, pages: pageNames },
+    named: { volumes: overlaid(volumeNames, edits), pages: overlaid(pageNames, edits) },
   };
+}
 
-  /** One judged group as the preview shows it, paths relative to the drop. */
-  function groupOf(kind: Group['kind'], folder: string, judged: Judged): Group {
-    const within = (name: string) => relative(`${folder}/${name}`);
-    const parentTo = relative(renamedFolder(folder, volumeNames));
-    const to = (name: string) => (parentTo === '' ? name : `${parentTo}/${name}`);
-    return {
-      kind,
-      folder,
-      renamed: [...judged.names]
-        .sort(([, a], [, b]) => inLibraryOrder(a, b))
-        .map(([from, name]) => ({ from: within(from), to: to(name) })),
-      unchanged: judged.unchanged.sort().map((name) => ({ from: within(name), to: to(name) })),
-      leftWhole: judged.leftWhole,
-    };
+/** `names` with each correction in `edits` of a name in it taken in place of the rule's. */
+function overlaid(names: NamesIn, edits: Edits): NamesIn {
+  const laid: NamesIn = new Map([...names].map(([folder, within]) => [folder, new Map(within)]));
+  for (const [path, name] of edits) {
+    const [folder, own] = split(path);
+    const within = laid.get(folder);
+    if (within?.has(own)) {
+      within.set(own, name);
+    }
   }
+  return laid;
+}
+
+/** A dropped path cut into the folder it is in and its own name. */
+function split(path: string): [string, string] {
+  const cut = path.lastIndexOf('/');
+  return cut === -1 ? ['', path] : [path.slice(0, cut), path.slice(cut + 1)];
+}
+
+/**
+ * Which corrected names of one group of siblings break the order they are
+ * read in, and how — judged among all of `siblings`, as dropped, with `rule`
+ * the rule's new names and `final` those names as corrected. A pair the
+ * rule's names already read out of order is the rule's to answer for, not the
+ * correction's, and is not said.
+ */
+function misorderedIn(
+  siblings: readonly string[],
+  rule: ReadonlyMap<string, string>,
+  final: ReadonlyMap<string, string>,
+): Map<string, Misordered> {
+  const said = new Map<string, Misordered>();
+  const order = [...siblings].sort(naturally);
+  const ruled = order.map((name) => rule.get(name) ?? name);
+  const finals = order.map((name) => final.get(name) ?? name);
+  const breaks = (at: number) =>
+    !readInOrder(finals[at - 1], finals[at]) && readInOrder(ruled[at - 1], ruled[at]);
+  order.forEach((name, at) => {
+    if (finals[at] === ruled[at]) {
+      return;
+    }
+    if (at > 0 && breaks(at)) {
+      said.set(name, { sorts: 'before', neighbour: finals[at - 1] });
+    } else if (at < order.length - 1 && breaks(at + 1)) {
+      said.set(name, { sorts: 'after', neighbour: finals[at + 1] });
+    }
+  });
+  return said;
+}
+
+/**
+ * Whether a name read before another still comes first in a listing, which
+ * sorts by bytes. Every check of the order the pages are read in asks this.
+ */
+function readInOrder(earlier: string, later: string): boolean {
+  return inLibraryOrder(earlier, later) < 0;
 }
 
 /** What one group of sibling names came to. */
@@ -425,7 +591,7 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
   // in their order between themselves: `a2` and `a10` sort the other way by
   // bytes. Where that happens the folder is left as it was.
   for (let at = 1; at < finals.length; at += 1) {
-    if (inLibraryOrder(finals[at - 1], finals[at]) >= 0) {
+    if (!readInOrder(finals[at - 1], finals[at])) {
       return leftAlone(names, 'order');
     }
   }
@@ -508,7 +674,7 @@ function relative(path: string): string {
 }
 
 /** A folder's path with every volume above and including it renamed. */
-function renamedFolder(folder: string, volumeNames: Map<string, Map<string, string>>): string {
+function renamedFolder(folder: string, volumeNames: NamesIn): string {
   const parts = folder.split('/');
   for (let depth = 1; depth < parts.length; depth += 1) {
     const parent = parts.slice(0, depth).join('/');
@@ -520,17 +686,113 @@ function renamedFolder(folder: string, volumeNames: Map<string, Map<string, stri
 /** A dropped file's path with its folders and its own name renamed. */
 function renamedPath(
   path: string,
-  volumeNames: Map<string, Map<string, string>>,
-  pageNames: Map<string, Map<string, string>>,
+  volumeNames: NamesIn,
+  pageNames: NamesIn,
 ): string {
-  const cut = path.lastIndexOf('/');
-  if (cut === -1) {
+  if (!path.includes('/')) {
     return path;
   }
-  const folder = path.slice(0, cut);
-  const name = path.slice(cut + 1);
+  const [folder, name] = split(path);
   return `${renamedFolder(folder, volumeNames)}/${pageNames.get(folder)?.get(name) ?? name}`;
 }
+
+/** Why a corrected name cannot be taken. */
+export type Refusal =
+  /** It is empty. */
+  | 'empty'
+  /** It has `/` in it, which would say where the file lands rather than its name. */
+  | 'separator'
+  /** It is `.` or `..`, which no Entry Path holds (spec: EP-2). */
+  | 'dots'
+  /** Another new or kept name in the same folder already is it. */
+  | 'taken';
+
+/** The dropped path a line of `group` corrects, which {@link Edits} are keyed by. */
+export function editedPath(group: Group, rename: Rename): string {
+  return `${group.folder}/${split(rename.from)[1]}`;
+}
+
+/**
+ * `edits` with the new name of the dropped `path` corrected to `name`, or put
+ * back to the rule's where `name` is null — or why `name` cannot be taken.
+ *
+ * The name is checked against what the drop comes to with every other
+ * correction in place: a page's against the final names of the files and the
+ * folders beside it, a volume's likewise, since a file and a folder cannot
+ * share a path either. A name the rule gave is no correction, and leaves none.
+ */
+export function corrected(
+  files: readonly Added[],
+  numbering: Numbering,
+  edits: Edits,
+  path: string,
+  name: string | null,
+): { edits: Edits } | { refused: Refusal } {
+  const others = new Map(edits);
+  others.delete(path);
+  if (name === null) {
+    return { edits: others };
+  }
+  const as = name.normalize('NFC');
+  if (as === '') {
+    return { refused: 'empty' };
+  }
+  if (as.includes('/')) {
+    return { refused: 'separator' };
+  }
+  if (as === '.' || as === '..') {
+    return { refused: 'dots' };
+  }
+  const [folder, own] = split(path);
+  const { folders, rule, named } = numbered(files, numbering, others);
+  const held = folders.get(folder);
+  const volume = held?.folders.has(own) ?? false;
+  const ruled = (volume ? rule.volumes : rule.pages).get(folder)?.get(own);
+  if (held === undefined || ruled === undefined) {
+    // Nothing the rule renames, so no line the preview offers to correct.
+    return { edits: others };
+  }
+  const beside = [
+    ...[...held.files]
+      .filter((sibling) => volume || sibling !== own)
+      .map((sibling) => named.pages.get(folder)?.get(sibling) ?? sibling),
+    ...[...held.folders]
+      .filter((sibling) => !volume || sibling !== own)
+      .map((sibling) => named.volumes.get(folder)?.get(sibling) ?? sibling),
+  ];
+  if (beside.includes(as)) {
+    return { refused: 'taken' };
+  }
+  if (as !== ruled) {
+    others.set(path, as);
+  }
+  return { edits: others };
+}
+
+/** Why a corrected name was not taken, said on its line. */
+export function refusalLine(refusal: Refusal): string {
+  switch (refusal) {
+    case 'empty':
+      return 'a name cannot be empty';
+    case 'separator':
+      return 'a name cannot contain /: only the name is corrected here, not where it lands';
+    case 'dots':
+      return 'a name cannot be . or ..';
+    case 'taken':
+      return 'there is already something with this name here';
+  }
+}
+
+/** What a corrected line says of the order it breaks, since it may be a typo. */
+export function misorderedLine(misordered: Misordered): string {
+  return `read out of order: this name sorts ${misordered.sorts} ${misordered.neighbour}`;
+}
+
+/** The mark on a line whose new name the person corrected. */
+export const EDITED = '(edited)';
+
+/** What puts back the name the rule gave. */
+export const PUT_BACK = 'put back';
 
 /**
  * How many renames the preview shows at each end of a group before it says
@@ -571,11 +833,6 @@ export function hasHidden(groups: readonly Group[]): boolean {
 /** The heading over one group: `Pages in BookX/vol1`, `Volume folders in BookX`. */
 export function groupHeading(group: Group): string {
   return `${group.kind === 'pages' ? 'Pages' : 'Volume folders'} in ${group.folder}`;
-}
-
-/** One rename as the preview writes it. */
-export function renameLine(rename: Rename): string {
-  return `${rename.from} → ${rename.to}`;
 }
 
 /**

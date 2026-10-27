@@ -54,6 +54,7 @@ import { MapPicker } from './MapPicker';
 import { NewFolderDialog } from './NewFolderDialog';
 import {
   chooseAndAdd,
+  heldIn,
   heldUnder,
   NOTHING_HELD,
   type Answer,
@@ -68,7 +69,7 @@ import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
 import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
-import type { Numbering } from './renumber';
+import type { Edits, Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
 import { Region, TRY_AGAIN } from './Region';
@@ -745,7 +746,8 @@ export function App() {
     destinations: Destination[];
     notTaken: readonly NotTaken[];
     systemFiles: readonly SystemFile[];
-    answer: (choice: Choice, numbering: Numbering) => void;
+    holding: (folders: readonly string[]) => Promise<HeldFiles>;
+    answer: (choice: Choice, numbering: Numbering, edits: Edits) => void;
   } | null>(null);
   const askAboutDrop = useCallback(
     (
@@ -755,6 +757,7 @@ export function App() {
       destinations: Destination[],
       notTaken: readonly NotTaken[],
       systemFiles: readonly SystemFile[],
+      holding: (folders: readonly string[]) => Promise<HeldFiles>,
     ) =>
       new Promise<Answer>((resolve) => {
         setAsking({
@@ -764,16 +767,18 @@ export function App() {
           destinations,
           notTaken,
           systemFiles,
-          answer: (choice, numbering) => {
+          holding,
+          answer: (choice, numbering, edits) => {
             setAsking(null);
-            resolve(choice === 'cancel' ? 'cancel' : { choice, numbering });
+            resolve(choice === 'cancel' ? 'cancel' : { choice, numbering, edits });
           },
         });
       }),
     [],
   );
   const choose = useCallback(
-    (choice: Choice, numbering: Numbering) => asking?.answer(choice, numbering),
+    (choice: Choice, numbering: Numbering, edits: Edits) =>
+      asking?.answer(choice, numbering, edits),
     [asking],
   );
 
@@ -1017,6 +1022,10 @@ export function App() {
           library: libraryName,
         });
       };
+      const unlisted = (refused: unknown): HeldFiles => {
+        console.warn('the explorer could not list where a drop lands', refused);
+        return NOTHING_HELD;
+      };
       const confirm = async (where: Listing) => {
         if (!where.mapped) {
           // As the list says it of a drop onto a folder no mapping reaches.
@@ -1037,10 +1046,7 @@ export function App() {
           // without the names — rather than holding the drop up: the sending
           // itself refuses a Pack's file part by part either way.
           held: (dropped) =>
-            heldUnder(where, dropped, (path) => getListing(path)).catch((refused: unknown) => {
-              console.warn('the explorer could not list where a drop lands', refused);
-              return NOTHING_HELD;
-            }),
+            heldUnder(where, dropped, (path) => getListing(path)).catch(unlisted),
           ask: (summary, asked, held) => {
             // The line saying the drop is being read stands down while the
             // confirmation is up: the reading is over, and nothing is being
@@ -1052,7 +1058,11 @@ export function App() {
               namedBy(known, where),
               onDiskIn(where),
             );
-            return askAboutDrop(summary, asked, held, destinations, notTaken, systemFiles);
+            // Asked again of the folders a corrected volume name sends files
+            // into, which no numbering would have.
+            const holding = (folders: readonly string[]) =>
+              heldIn(where, folders, (path) => getListing(path)).catch(unlisted);
+            return askAboutDrop(summary, asked, held, destinations, notTaken, systemFiles, holding);
           },
           send,
           refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, libraryName)),
@@ -1386,6 +1396,7 @@ export function App() {
           destinations={asking.destinations}
           notTaken={asking.notTaken}
           systemFiles={asking.systemFiles}
+          holding={asking.holding}
           onChoose={choose}
         />
       )}
