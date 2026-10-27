@@ -245,6 +245,19 @@ describe('renumber', () => {
     );
   });
 
+  // Read after the spread, `x` goes under the spread's last number, `003_x`,
+  // which a listing puts before `004+003`.
+  it('leaves a group whole where its new names would not sort as they are read', () => {
+    const files = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/p4+p3.jpg'), added('b/x.jpg')];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({
+      renamed: [],
+      leftWhole: { reason: 'order', earlier: 'p4+p3.jpg', later: 'x.jpg' },
+    });
+    expect(result.groups[0].unchanged).toHaveLength(4);
+  });
+
   it('numbers from page 0 where nothing comes before it', () => {
     expect(paths([added('b/p0.jpg'), added('b/p1.jpg'), added('b/x.jpg')], PAGES)).toEqual([
       'b/000.jpg',
