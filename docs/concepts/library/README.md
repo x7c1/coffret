@@ -12,7 +12,9 @@ provider never told apart by Library in the first place (see
 [Storage](../storage/)).
 
 A Library has a **Library name**: what a person calls it, the same on every
-device that holds it. It is chosen once, when the Library is created, and kept
+device that holds it. It is chosen when the Library is created — or, for a
+Library a build before names made, given on its first open by a build that
+has them — and kept
 with the Library on Storage, in its [Catalog](../catalog/) under the
 [Master Key](../master-key/), so a device that joins reads it from there
 rather than being told one (spec: FM-15, FM-16). A name is anything a person
@@ -29,7 +31,9 @@ concept states.
 Before a Library is unlocked nothing of its Catalog can be read, so each
 device keeps a copy of the Library name beside the Library and writes it again
 whenever it creates, joins, or unlocks the Library. That copy is what a device
-lists its Libraries by, and finds one by when a person names it. Where two
+lists its Libraries by, and finds one by when a person names it. Until a
+Library a build before names put on a device is first unlocked there, it is
+listed and found by the name of the directory that build kept it in. Where two
 Libraries on one device carry one name, it is their IDs that tell them apart.
 
 A Library on a device **references** the Storage account it reaches its
@@ -140,8 +144,11 @@ control for a sync, since a drop starts one.
 
 - create (a Library, by drawing its Library ID and writing its first head,
   `head-0`, to [Storage](../storage/) — a [Journal](../journal/) record that
-  adds and removes nothing, so that even the Library's first commit has a head
-  to start from (spec: CP-2))
+  adds and removes nothing and carries the Library name it is created with, so
+  that even the Library's first commit has a head to start from (spec: CP-2,
+  FM-15))
+- give (a Library its Library name — at creation, or by a later record; never
+  *rename*, which is the verb for Entries and folders)
 - open (a Library on this device, making it available for operations)
 - scan (the mapped local folders for new or changed files, never taking the
   system files an operating system writes beside them)

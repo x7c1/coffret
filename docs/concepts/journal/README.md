@@ -21,6 +21,10 @@ four vocabularies:
   Entry Path — the old name is the Catalog's and is not repeated
 - the exact [Keyring](../keyring/) commitment the batch selected
 
+Beside them a record may carry the [Library](../library/) name; the Library's
+name is the one the latest record carrying one gave it, and the first head
+carries the name the Library is created with (spec: FM-15).
+
 Replaying the Journal reconstructs the Catalog, including the current Container
 set and its Entries. This is what makes
 removal expressible: without it, a scan that finds an old Container and its
@@ -42,7 +46,8 @@ the successor's name `head-<generation + 1>`, re-derived rather than stored,
 where it names objects. A writer never reserves a slot of its own
 (spec: CP-2, CP-3, CP-15). So that even a Library's first commit has a head
 to start from, the first head is written when the Library is created:
-`head-0`, a record that adds and removes nothing.
+`head-0`, a record that adds and removes nothing and carries the Library's
+name.
 
 A batch and its Journal record move through one lifecycle:
 

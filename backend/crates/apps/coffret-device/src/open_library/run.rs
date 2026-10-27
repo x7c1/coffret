@@ -35,9 +35,9 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// carrying the name and nothing else — and moved to the directory its ID
 /// names while no server holds it. One a server moved there before it unlocked
 /// it ([`move_to_its_id`](crate::move_to_its_id)) is given the name the
-/// settings kept from the directory. Settling the name reaches Storage, and a
-/// device that cannot reach it opens the Library all the same and tries again
-/// at the next open.
+/// settings kept from the directory. Reading or giving the name reaches
+/// Storage, and a device that cannot reach it opens the Library all the same
+/// and tries again at the next open.
 pub async fn open_library<P>(library: &LibraryRef, enter_passphrase: P) -> Result<OpenLibrary>
 where
     P: FnOnce() -> Result<Passphrase> + Send,

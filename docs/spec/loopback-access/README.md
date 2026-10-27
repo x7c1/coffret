@@ -79,7 +79,15 @@ Concept background: [Library](../../concepts/library/),
   system's, so it is released however the holding process ends — a killed
   server leaves a lock nobody holds, and the next start takes it (LA-4). The
   refusal names the Library and, where it can, the process already serving it,
-  and never the key or the file it is in. *(Form: test)*
+  and never the key or the file it is in. A device that moves a Library's
+  directory to the one its ID names — a command as it opens the Library, or a
+  server before it takes its own lock — takes the same lock for the move and
+  holds it across the rename, writing nothing beside the Library while another
+  holds it; where the lock is held, the directory is not moved, and a server
+  starting meanwhile is refused as this rule has it. A server lets the move's
+  lock go before it takes its own where the directory now is, and a start that
+  takes it in between refuses that server as it would any second one.
+  *(Form: test)*
 - **LA-9.** One multipart upload — the request a browser's drop carries
   files into the Library in — is taken within three
   budgets of this server's own: at most 64 GiB across the whole request,
