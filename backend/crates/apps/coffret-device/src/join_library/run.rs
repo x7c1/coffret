@@ -16,7 +16,7 @@ use crate::account_grant::{self, Bound};
 use crate::account_name::AccountName;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{CreationStep, Error, Result};
+use crate::error::{CreationStep, Error, JoinedPlace, Result};
 use crate::library_dir::LibraryDir;
 use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
@@ -139,7 +139,7 @@ where
         RecoveryCode::parse(&entered).map_err(|cause| Error::MalformedRecoveryCode { cause })?
     };
 
-    let mut staging = Staging::begin(Flow::Joining, dir)?;
+    let mut staging = Staging::begin(Flow::Joining(place(&request.provider)), dir)?;
     match build(
         reach,
         &request,
@@ -206,6 +206,20 @@ fn location(provider: &JoinedProvider) -> String {
     match provider {
         JoinedProvider::S3 { prefix, .. } => prefix.clone(),
         JoinedProvider::Drive { folder_id, .. } => folder_id.clone(),
+    }
+}
+
+/// The place a join was given, by what it is: what a failed join says it was
+/// joining.
+fn place(provider: &JoinedProvider) -> JoinedPlace {
+    match provider {
+        JoinedProvider::S3 { bucket, prefix, .. } => JoinedPlace::S3 {
+            bucket: bucket.clone(),
+            prefix: prefix.clone(),
+        },
+        JoinedProvider::Drive { folder_id, .. } => JoinedPlace::DriveFolder {
+            folder_id: folder_id.clone(),
+        },
     }
 }
 
@@ -330,7 +344,6 @@ where
     };
     let settings = match named {
         Some(name) => {
-            staging.naming(name.as_str());
             let settings = settings.named(Some(name.into_string()));
             settings
                 .write(staging.staged())

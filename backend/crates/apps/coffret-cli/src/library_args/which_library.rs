@@ -9,11 +9,14 @@ pub use coffret_shell::which_library::library_id;
 pub struct WhichLibrary {
     /// The Library on this device to act on, by its name. Where more than one
     /// Library on this device carries the name, the command is refused with
-    /// their IDs, and --library-id says which one
+    /// their IDs, and --library-id says which one. Where more than one
+    /// directory holds the Library, it is refused with both directories
     #[arg(long)]
     pub library: Option<String>,
     /// The Library on this device to act on, by its ID: the 16 lowercase hex
-    /// characters `init` and `join` print
+    /// characters `init` and `join` print, and how a Library with no name yet
+    /// is named. Where more than one directory holds the Library, it is
+    /// refused with both directories, as it is by --library
     #[arg(long, value_parser = library_id)]
     pub library_id: Option<LibraryId>,
 }

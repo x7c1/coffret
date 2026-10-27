@@ -233,7 +233,7 @@ mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
 mod error;
-pub use error::{ClientMismatch, CreationStep, Error, PromotionObstacle, Result};
+pub use error::{ClientMismatch, CreationStep, Error, JoinedPlace, PromotionObstacle, Result};
 
 mod finding;
 pub use finding::Finding;

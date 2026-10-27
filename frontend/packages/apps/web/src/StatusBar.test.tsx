@@ -193,6 +193,7 @@ function draw({
   trouble = null,
   reconnect = null,
   locked = null,
+  name = 'Home',
 }: {
   kept?: KeptParcels | null;
   adding?: string | null;
@@ -206,12 +207,13 @@ function draw({
   trouble?: Trouble | null;
   reconnect?: Offer | null;
   locked?: UnlockOffer | null;
+  name?: string | null;
 }): string {
   return renderToStaticMarkup(
     <StatusBar
       library={{
         status: 'ready',
-        value: { name: 'Home', library_id: 'library-id', provider: 'Storage' },
+        value: { name, library_id: 'library-id', provider: 'Storage' },
       }}
       kept={kept}
       fetching={null}
@@ -242,6 +244,14 @@ it('names the Library alone, without the Storage it is kept on', () => {
   expect(html).toContain('>Home</span>');
   expect(html).not.toContain('Storage');
   expect(html).not.toContain(' — on ');
+});
+
+// FM-15: a Library nothing has named yet is said to have no name, and its ID
+// is given as its ID rather than where the name goes.
+it('says a Library with no name yet has none, and gives its ID as its ID', () => {
+  const html = draw({ name: null });
+  expect(html).toContain('>a Library with no name yet (ID library-id)</span>');
+  expect(html).not.toContain('>library-id</span>');
 });
 
 // The parcels a reader's fetches kept are said beside the Library's name, with

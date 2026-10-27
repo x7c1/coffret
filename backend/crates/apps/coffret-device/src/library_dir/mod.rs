@@ -7,6 +7,7 @@ use coffret_model::LibraryId;
 use coffret_usecase::{LocalIoError, LocalOperation};
 
 use crate::error::{Error, Result};
+use crate::library_ref::LibraryRef;
 
 // Which whole Libraries are on this device, and the one a name or an ID picks
 // out of them.
@@ -90,6 +91,10 @@ pub struct LibraryDir {
     /// What a message says this Library is: its name where this device knows
     /// one, and its ID otherwise.
     name: String,
+    /// The Library's ID, where [`name`](Self::name) is that ID because this
+    /// device knows no name for it: what tells a Library with no name yet from
+    /// one whose name happens to be spelled in hex.
+    unnamed: Option<LibraryId>,
     path: PathBuf,
 }
 
@@ -101,6 +106,7 @@ impl LibraryDir {
         Ok(Self {
             path: libraries_root()?.join(&id),
             name: id,
+            unnamed: Some(library_id),
         })
     }
 
@@ -110,12 +116,22 @@ impl LibraryDir {
         Ok(Self {
             path: libraries_root()?.join(component),
             name: component.to_owned(),
+            unnamed: None,
         })
     }
 
     /// The same directory, called `name` in what is said about it.
     pub(crate) fn called(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
+        self.unnamed = None;
+        self
+    }
+
+    /// The same directory, holding the Library `library_id` that this device
+    /// knows no name for: what is said about it names it by that ID.
+    pub(crate) fn unnamed(mut self, library_id: LibraryId) -> Self {
+        self.name = library_id.to_hex();
+        self.unnamed = Some(library_id);
         self
     }
 
@@ -123,6 +139,16 @@ impl LibraryDir {
     /// where one is known, and its ID otherwise.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// How a command names this Library: by its name where this device knows
+    /// one, and by its ID where it knows none — never by its ID spelled as a
+    /// name, which `--library` would not find.
+    pub fn which(&self) -> LibraryRef {
+        match self.unnamed {
+            Some(library_id) => LibraryRef::Id(library_id),
+            None => LibraryRef::Named(self.name.clone()),
+        }
     }
 
     /// The directory everything about this Library is kept in.
@@ -140,6 +166,7 @@ impl LibraryDir {
         staged.push(STAGING_SUFFIX);
         Self {
             name: self.name.clone(),
+            unnamed: self.unnamed,
             path: PathBuf::from(staged),
         }
     }
@@ -365,6 +392,7 @@ mod tests {
     fn every_file_is_under_the_directory_named_after_the_library() {
         let dir = LibraryDir {
             name: "alpha".to_owned(),
+            unnamed: None,
             path: PathBuf::from("/state/coffret/libraries/alpha"),
         };
 
@@ -424,6 +452,7 @@ mod tests {
     fn a_staging_directory_is_a_sibling_of_the_finished_one() {
         let dir = LibraryDir {
             name: "alpha".to_owned(),
+            unnamed: None,
             path: PathBuf::from("/state/coffret/libraries/0123456789abcdef"),
         };
         let staging = dir.staging();

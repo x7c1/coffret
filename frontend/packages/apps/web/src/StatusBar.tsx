@@ -797,14 +797,16 @@ function shownAs(folder: string): string {
 /**
  * What the bar calls the Library: its name alone. Which Storage it is kept on
  * is the server's word for a provider, and not something a reader chose or
- * needs to tell one Library from another by.
+ * needs to tell one Library from another by. A Library nothing has named yet
+ * is said to have no name, and its ID is given as its ID rather than where the
+ * name goes.
  */
 function named(library: Asked<Library>): string {
   switch (library.status) {
     case 'loading':
       return 'opening the Library…';
     case 'ready':
-      return library.value.name;
+      return library.value.name ?? `a Library with no name yet (ID ${library.value.library_id})`;
     case 'failed':
       return library.message;
   }

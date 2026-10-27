@@ -242,7 +242,7 @@ pub(crate) async fn of_library(
     };
     if let Some(requested) = requested.filter(|requested| **requested != account) {
         return Err(Error::AccountFixed {
-            library: dir.name().to_owned(),
+            library: dir.which(),
             account: account.as_str().to_owned(),
             requested: requested.as_str().to_owned(),
         });
@@ -324,7 +324,7 @@ async fn promote(
         // Never read as an empty cache (spec: KD-10).
         Err(cause) => {
             return Err(Error::NotAuthorized {
-                name: dir.name().to_owned(),
+                library: dir.which(),
                 cause: Some(Box::new(cause)),
             })
         }
@@ -333,7 +333,7 @@ async fn promote(
 
     if let Some(held) = accounts.get(&target) {
         let needs_name = |obstacle| Error::PromotionNeedsName {
-            library: dir.name().to_owned(),
+            library: dir.which(),
             account: target.as_str().to_owned(),
             obstacle,
         };

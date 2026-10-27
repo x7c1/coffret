@@ -69,7 +69,7 @@ async fn drive_store(
     .await?;
     let LibraryGrant::Opened(opened) = grant else {
         return Err(Error::NotAuthorized {
-            name: dir.name().to_owned(),
+            library: dir.which(),
             cause: None,
         });
     };
@@ -83,13 +83,13 @@ async fn drive_store(
         Ok(Some(_)) => {}
         Ok(None) => {
             return Err(Error::NotAuthorized {
-                name: dir.name().to_owned(),
+                library: dir.which(),
                 cause: None,
             })
         }
         Err(cause) => {
             return Err(Error::NotAuthorized {
-                name: dir.name().to_owned(),
+                library: dir.which(),
                 cause: Some(Box::new(cause)),
             })
         }

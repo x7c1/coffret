@@ -455,8 +455,18 @@ fields until a coordinated implementation changes the format.
     that copy, the settings of a Library that has no name yet may keep the
     name of the directory a build before names kept it in, which is what such
     a Library is given by the record above where its records give it none, and
-    which the unlock that finds the Library named drops. And no diagnostic
-    event carries the name (EL-1).
+    which the unlock that finds the Library named drops. A device finds a
+    Library by name against those copies, and by ID against the ID its
+    settings carry. It holds a Library once: two directories whose settings
+    carry one Library ID — a copy of one, or a directory a build before names
+    kept beside the one its ID names — are a fault. Until one of them is
+    gone, the device refuses to open the Library by its name or by its ID
+    alike, naming both directories and the ID, and lists the Library once,
+    marked as needing attention. A Library a device knows no name for is said
+    to have none, and named by its ID as its ID — never with its ID in the
+    name's place; a command a device suggests for it names it with
+    `--library-id`.
+    And no diagnostic event carries the name (EL-1).
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte string),

@@ -9,8 +9,12 @@ import { apiUrl, askedForJson } from './request';
  * by; it names the provider and nothing about the account.
  */
 export interface Library {
-  /** What this device calls the Library, which is what the status bar shows. */
-  name: string;
+  /**
+   * The Library's name, which is what the status bar shows, and null where
+   * nothing has named it yet: `library_id` is its ID and never stands in for
+   * the name.
+   */
+  name: string | null;
   library_id: string;
   provider: string;
 }

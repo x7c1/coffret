@@ -18,6 +18,7 @@ pub struct AuthorizeArgs {
     library: Option<String>,
     /// The same Library by its ID: the 16 lowercase hex characters `init` and
     /// `join` print, for a name more than one Library on this device carries
+    /// and for a Library with no name yet
     #[arg(long, value_parser = crate::library_args::library_id)]
     library_id: Option<coffret_device::LibraryId>,
     /// An account on this device, by the name it was given: its grant is

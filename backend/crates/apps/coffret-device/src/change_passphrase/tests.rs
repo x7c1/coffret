@@ -49,14 +49,16 @@ async fn the_stored_form_opens_under_the_new_passphrase_to_the_same_key() {
         "the settings are among what is compared"
     );
 
-    change_passphrase(
+    let changed = change_passphrase(
         &crate::LibraryRef::named("changed"),
         passphrase,
         new_passphrase,
     )
     .expect("the current Passphrase opens the stored form");
+    assert_eq!(changed.name.as_deref(), Some("changed"));
+    assert_eq!(changed.library_id, created.settings.library_id);
 
-    let reopened = recovery_code(&crate::LibraryRef::named("changed"), new_passphrase)
+    let (reopened, _) = recovery_code(&crate::LibraryRef::named("changed"), new_passphrase)
         .expect("the new Passphrase opens it");
     assert_eq!(reopened.as_str(), created.recovery_code.as_str());
     let refused = recovery_code(&crate::LibraryRef::named("changed"), passphrase);

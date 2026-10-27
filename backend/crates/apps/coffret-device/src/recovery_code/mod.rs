@@ -1,8 +1,10 @@
 use coffret_format::RecoveryCode;
 use coffret_model::Passphrase;
 
+use crate::device_settings::DeviceSettings;
 use crate::error::Result;
 use crate::library_dir::LibraryDir;
+use crate::library_on_device::LibraryOnDevice;
 use crate::library_ref::LibraryRef;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 
@@ -21,13 +23,23 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// found on this device and its stored form found in its directory: a Library
 /// that is not here needs no key to be refused, so a mistyped name costs nobody
 /// a Passphrase.
-pub fn recovery_code<P>(library: &LibraryRef, enter_passphrase: P) -> Result<RecoveryCode>
+///
+/// The code comes back with the Library it is the code of: its ID, and its
+/// name where this device knows one.
+pub fn recovery_code<P>(
+    library: &LibraryRef,
+    enter_passphrase: P,
+) -> Result<(RecoveryCode, LibraryOnDevice)>
 where
     P: FnOnce() -> Result<Passphrase>,
 {
     let dir = LibraryDir::find(library)?;
+    let settings = DeviceSettings::read(&dir)?;
     let unlocked = StoredMasterKeyFile::unlock_asking(&dir, enter_passphrase)?;
-    Ok(RecoveryCode::encode(unlocked.master_key, unlocked.epoch))
+    Ok((
+        RecoveryCode::encode(unlocked.master_key, unlocked.epoch),
+        dir.on_device(&settings),
+    ))
 }
 
 #[cfg(test)]

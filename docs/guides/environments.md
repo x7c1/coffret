@@ -68,7 +68,11 @@ is, through `make cli ARGS="init …"` or `make cli ARGS="join …"`;
 `make cli ARGS="--help"` lists the commands. Every command after those names a
 Library by `--library <name>` — the name `init` gave it, which a device that
 joins reads from the Library — or by `--library-id <id>`, which tells apart two
-Libraries on one device that carry the same name.
+Libraries on one device that carry the same name, and names a Library that has
+no name yet (one joined before its catalog caught up). A device holds a Library
+once: where two directories under `libraries/` carry one Library ID, a copy of
+one beside it, say, either flag is refused with both directories until one of
+them is moved out.
 
 A Library just made can then be started from the explorer, with no `map` or
 `sync` at the command line: the empty root offers to map a folder of this

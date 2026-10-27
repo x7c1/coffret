@@ -2,7 +2,14 @@ import { expect, it, vi } from 'vitest';
 
 import { OverBudget, Refusal, type Upload } from '@coffret/api';
 
-import { askToAdd, brokeOff, overBudgetLine } from './dropped';
+import { askToAdd, brokeOff, overBudgetLine, type Named } from './dropped';
+
+/** A Library called `name`. */
+function named(name: string | null): Named {
+  return { name, library_id: '0123456789abcdef' };
+}
+
+const FAMILY = named('family');
 
 /** One drop, with everything it reaches out to recorded in the order it went. */
 function dropping(ask: () => Promise<Upload>) {
@@ -17,7 +24,7 @@ function dropping(ask: () => Promise<Upload>) {
         notice: (line) => notice.push(line),
         reload: () => order.push('reload'),
         follow: () => order.push('follow'),
-        library: 'family',
+        library: FAMILY,
       }),
   };
 }
@@ -122,7 +129,7 @@ it('asks the folder again when the request itself was never answered', async () 
 // the server is gone, or that the files were refused. What it knows is that the
 // drop did not finish and that the folder is the thing to look at.
 it('does not report a broken transfer as a server that did not answer', async () => {
-  const line = brokeOff(broken(), 'family');
+  const line = brokeOff(broken(), FAMILY);
 
   expect(line).not.toContain('did not answer');
   expect(line).not.toContain('refused');
@@ -133,7 +140,7 @@ it('does not report a broken transfer as a server that did not answer', async ()
 // is true and leaves a person who has just lost twenty minutes of sending with
 // nothing to do next, which is the state the sentence before it left them in.
 it('tells the person what to do about a drop that broke', async () => {
-  const line = brokeOff(broken(), 'family');
+  const line = brokeOff(broken(), FAMILY);
 
   expect(line).toContain('the rows below are the folder as it stands now');
   expect(line).toContain('can be dropped again');
@@ -159,7 +166,7 @@ it('shows a refusal the server did answer with as the server wrote it', async ()
 it('says the explorer failed where what was thrown is not a refusal', async () => {
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-  expect(brokeOff(new TypeError('files is not iterable'), 'family')).toBe(
+  expect(brokeOff(new TypeError('files is not iterable'), FAMILY)).toBe(
     'the explorer could not finish that',
   );
 
@@ -194,7 +201,7 @@ it('says which file is too large to drop and how to add it instead', async () =>
 // LA-9, LA-10: more files than one drop may carry is refused before it is
 // sent, and the sentence names both ways past it.
 it('says how many files are too many to drop and both ways to add them instead', () => {
-  expect(overBudgetLine({ budget: 'parts', count: 5210, limit: 4096 }, 'family')).toBe(
+  expect(overBudgetLine({ budget: 'parts', count: 5210, limit: 4096 }, FAMILY)).toBe(
     'this drop holds 5210 files, more than the 4096 one drop can carry. Drop fewer files at ' +
       'a time, or copy them into this folder on the device it is mapped to and run ' +
       '`coffret sync --library family`.',
@@ -204,7 +211,7 @@ it('says how many files are too many to drop and both ways to add them instead',
 // The request budget is said in the same shape: the reason, and what to do.
 it('says how much is too much to drop at once and both ways to add it instead', () => {
   expect(
-    overBudgetLine({ budget: 'request', carried: 70e9, limit: 64 * GiB }, 'family'),
+    overBudgetLine({ budget: 'request', carried: 70e9, limit: 64 * GiB }, FAMILY),
   ).toBe(
     'this drop comes to 70.0 GB, more than the 68.7 GB one drop can carry. Drop fewer ' +
       'files at a time, or copy them into this folder on the device it is mapped to and run ' +
@@ -217,7 +224,7 @@ it('says how much is too much to drop at once and both ways to add it instead', 
 // than 1.1 GB.
 it('gives sizes in bytes where the size and the budget would read the same', () => {
   expect(
-    overBudgetLine({ budget: 'part', name: 'clip.mov', size: GiB + 5e6, limit: GiB }, 'family'),
+    overBudgetLine({ budget: 'part', name: 'clip.mov', size: GiB + 5e6, limit: GiB }, FAMILY),
   ).toContain('clip.mov is 1,078,741,824 bytes, more than the 1,073,741,824 bytes one file can be');
 });
 
@@ -230,11 +237,19 @@ it('leaves the Library to name where the page does not know it', () => {
   );
 });
 
+// A Library nothing has named yet is named by its ID with `--library-id`, which
+// finds it, and not with `--library`, which would not.
+it('names a Library with no name yet by its ID', () => {
+  const line = overBudgetLine({ budget: 'parts', count: 5000, limit: 4096 }, named(null));
+  expect(line).toContain('`coffret sync --library-id 0123456789abcdef`');
+  expect(line).not.toContain('--library 0123');
+});
+
 // A Library's name may hold a space or a quote, and the command it is named in
 // is there to be pasted: such a name is quoted so it stays one argument.
 it('quotes a Library name a shell would split', () => {
   const parts = { budget: 'parts', count: 5000, limit: 4096 } as const;
 
-  expect(overBudgetLine(parts, 'My Books')).toContain("`coffret sync --library 'My Books'`");
-  expect(overBudgetLine(parts, "Bob's")).toContain("`coffret sync --library 'Bob'\\''s'`");
+  expect(overBudgetLine(parts, named('My Books'))).toContain("`coffret sync --library 'My Books'`");
+  expect(overBudgetLine(parts, named("Bob's"))).toContain("`coffret sync --library 'Bob'\\''s'`");
 });

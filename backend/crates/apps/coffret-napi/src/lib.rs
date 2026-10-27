@@ -65,8 +65,8 @@ pub fn start(identifier: String, idle_minutes: Option<String>) -> Result<()> {
         .map_err(failed)
 }
 
-/// The Libraries on this device: each one's ID, and the name it is listed
-/// under.
+/// The Libraries on this device, each listed once: its ID, its name where
+/// something has named it, and whether more than one directory holds it.
 #[napi(catch_unwind)]
 pub fn libraries() -> Result<Vec<ListedLibrary>> {
     Ok(core::libraries()
@@ -75,6 +75,7 @@ pub fn libraries() -> Result<Vec<ListedLibrary>> {
         .map(|listed| ListedLibrary {
             id: listed.id,
             name: listed.name,
+            needs_attention: listed.needs_attention,
         })
         .collect())
 }

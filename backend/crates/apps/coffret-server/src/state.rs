@@ -45,13 +45,14 @@ use crate::unlocked::Unlocked;
 /// request at a time.
 pub struct ServerState {
     /// The Library's name, which is what the status bar shows: the one its
-    /// catalog held when the server started, and the Library's ID where
-    /// nothing has named it yet.
+    /// catalog held when the server started, and `None` where nothing has
+    /// named it yet — which is said as such, never with the Library's ID in
+    /// the name's place.
     ///
     /// The Library's own and not this device's: every device holding the
     /// Library calls it the same (spec: FM-15). A person chose it, so it is
     /// never written into a diagnostic event (spec: EL-1).
-    pub name: String,
+    pub name: Option<String>,
     /// The Library this is (spec: FM-18), as the identity route spells it.
     library_id: String,
     /// What this process calls itself, which every answer about work in flight
@@ -195,8 +196,9 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    /// Serves the Library that was opened, under the name `name`.
-    pub fn new(name: String, library: OpenLibrary) -> Self {
+    /// Serves the Library that was opened, under the name `name`, or under
+    /// none where nothing has named it yet.
+    pub fn new(name: Option<String>, library: OpenLibrary) -> Self {
         let live = Arc::clone(&library.live);
         Self {
             name,
@@ -336,9 +338,9 @@ impl ServerState {
     pub fn unlock(&self, mut library: OpenLibrary) -> anyhow::Result<Unlocked> {
         ensure!(
             library.library_id.to_hex() == self.library_id,
-            "the Library {:?} reopened is no longer the one this server was started for; quit \
-             the app and open it again",
-            self.name,
+            "{} reopened is no longer the one this server was started for; quit the app and \
+             open it again",
+            self.the_library(),
         );
         library.live = Arc::clone(&self.live);
         if !self.custody.unlock(library) {
@@ -409,6 +411,18 @@ impl ServerState {
     /// it to unlock it in place (spec: FM-18).
     pub fn library_id(&self) -> &str {
         self.library_id.as_str()
+    }
+
+    /// The Library as a sentence names it: by its name, or — where nothing
+    /// has named it yet — said to have none, and by its ID as its ID.
+    pub fn the_library(&self) -> String {
+        match &self.name {
+            Some(name) => format!("the Library {name:?}"),
+            None => format!(
+                "the Library with ID {} (it has no name yet)",
+                self.library_id
+            ),
+        }
     }
 
     /// Which provider it is on, for the same route and the same reason.

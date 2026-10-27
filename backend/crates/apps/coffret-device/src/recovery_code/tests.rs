@@ -13,9 +13,11 @@ use crate::testing::{create_s3, passphrase};
 async fn the_recovery_code_can_be_asked_for_again() {
     let created = create_s3("printed-again").await;
 
-    let again = recovery_code(&crate::LibraryRef::named("printed-again"), passphrase)
+    let (again, library) = recovery_code(&crate::LibraryRef::named("printed-again"), passphrase)
         .expect("the Passphrase must open it");
     assert_eq!(again.as_str(), created.recovery_code.as_str());
+    assert_eq!(library.name.as_deref(), Some("printed-again"));
+    assert_eq!(library.library_id, created.settings.library_id);
 }
 
 // A mistyped Library name is the refusal a person meets most

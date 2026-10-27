@@ -955,9 +955,9 @@ export function App() {
     }
   }, [known, go]);
 
-  // What this device calls the Library, which a drop too large for this route
-  // names in the command that can carry it in instead.
-  const libraryName = library.state.status === 'ready' ? library.state.value.name : null;
+  // The Library, which a drop too large for this route names in the command
+  // that can carry it in instead.
+  const knownLibrary = library.state.status === 'ready' ? library.state.value : null;
 
   // Files dropped on the list are added to the folder it is showing, and files
   // dropped on a row of the tree to that row's folder. The listing is asked for
@@ -1019,7 +1019,7 @@ export function App() {
           notice: setNotice,
           reload: reloadListing,
           follow: work.follow,
-          library: libraryName,
+          library: knownLibrary,
         });
       };
       const unlisted = (refused: unknown): HeldFiles => {
@@ -1065,7 +1065,7 @@ export function App() {
             return askAboutDrop(summary, asked, held, destinations, notTaken, systemFiles, holding);
           },
           send,
-          refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, libraryName)),
+          refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, knownLibrary)),
         });
       };
       const where =
@@ -1074,7 +1074,7 @@ export function App() {
         notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
       void where.then(confirm, unread).finally(() => setAdding(null));
     },
-    [listed, known, stranded, prospective, askAboutDrop, work, reloadListing, libraryName],
+    [listed, known, stranded, prospective, askAboutDrop, work, reloadListing, knownLibrary],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser

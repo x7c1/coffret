@@ -21,6 +21,13 @@
 //! has to be deleted by hand, which is what LA-4 already promises about the key
 //! file beside it.
 //!
+//! The same lock is what moving a Library's directory to the one its ID names
+//! holds while it moves it — a command as it opens the Library, or a server
+//! before it takes its own lock (spec: LA-8) — since a server holds the
+//! files in the directory by their paths. The file says which of the two holds
+//! it, so that a server starting meanwhile is told the directory is being moved
+//! rather than that a server it would look for in vain is serving the Library.
+//!
 //! A `flock` belongs to an open file description, so two of them from one
 //! process conflict exactly as two processes do — which is what lets the rule be
 //! stated as a test rather than as a run of the binary.
@@ -53,16 +60,32 @@ pub struct ServerLock {
 impl ServerLock {
     /// Takes the hold on `dir`, or says who has it.
     ///
-    /// The refusal is [`Error::LibraryAlreadyServed`] and nothing else: an
-    /// operating system that declined to arbitrate at all is a local failure
-    /// like any other, and reading it as "somebody is serving this Library"
-    /// would name a server that is not there.
+    /// The refusal is [`Error::LibraryAlreadyServed`], or
+    /// [`Error::LibraryBeingMoved`] where a move of the directory holds the
+    /// lock, and nothing else: an operating system that declined to arbitrate
+    /// at all is a local failure like any other, and reading it as "somebody
+    /// is serving this Library" would name a server that is not there.
     ///
     /// The directory has to be one a Library is in. A caller asks
     /// [`LibraryDir::is_present`] first, so that a Library that is not on this
     /// device is refused by whoever opens it rather than by the file this would
     /// try to create beside nothing.
     pub fn take(dir: &LibraryDir) -> Result<Self> {
+        Self::take_as(dir, Holder::Server)
+    }
+
+    /// Takes the hold on `dir` for as long as its directory is moved to the
+    /// one its ID names, or says who has it.
+    ///
+    /// The hold a server takes, recorded as a move's, so that a server
+    /// starting meanwhile is refused with [`Error::LibraryBeingMoved`] rather
+    /// than told a server is serving the Library.
+    pub(crate) fn take_to_move(dir: &LibraryDir) -> Result<Self> {
+        Self::take_as(dir, Holder::Move)
+    }
+
+    /// Takes the hold on `dir` as `holder`, or says who has it.
+    fn take_as(dir: &LibraryDir, holder: Holder) -> Result<Self> {
         let path = dir.server_lock_file();
         // Opened as a creation, not as a lock: a directory this cannot write
         // into, or a disk with no room, refused the file, and the line a person
@@ -75,10 +98,12 @@ impl ServerLock {
             // else holds it, which is the state this whole module exists to
             // report.
             Err(Errno::WOULDBLOCK) => {
-                return Err(Error::LibraryAlreadyServed {
-                    name: dir.name().to_owned(),
-                    by: holder_of(&mut file),
-                })
+                let library = dir.which();
+                return Err(match holder_of(&mut file) {
+                    Some((Holder::Move, by)) => Error::LibraryBeingMoved { library, by },
+                    Some((Holder::Server, by)) => Error::LibraryAlreadyServed { library, by },
+                    None => Error::LibraryAlreadyServed { library, by: None },
+                });
             }
             Err(cause) => {
                 return Err(Error::Local(LocalIoError::new(
@@ -92,30 +117,55 @@ impl ServerLock {
         // After the lock and never before it: whatever a previous server wrote
         // stays readable to whoever is refused until this one has actually won,
         // and two starts racing cannot leave the file naming the one that lost.
-        write_number(&mut file, &path)?;
+        write_holder(&mut file, &path, holder)?;
         Ok(Self { _file: file })
     }
 }
 
-/// The number the server holding the lock wrote down, where it wrote one.
-///
-/// Nothing here is trusted: the number is read for a sentence, and a file
-/// holding something else — a server killed between taking the lock and writing
-/// its number, or anything at all — leaves the sentence one clause shorter
-/// rather than turning a refusal into a failure.
-fn holder_of(file: &mut File) -> Option<u32> {
-    let mut written = String::new();
-    file.read_to_string(&mut written).ok()?;
-    written.trim().parse().ok()
+/// What holds the lock: a server, or a move of the directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Holder {
+    /// A server serving the Library, which is stopped to free it.
+    Server,
+    /// A process moving the directory to the one its ID names — a command
+    /// opening the Library, or a server before it takes its own lock — which
+    /// frees it by itself once the rename is done.
+    Move,
 }
 
-/// Writes this process's number, so that whoever is refused next is told which
-/// server to stop.
-fn write_number(file: &mut File, path: &Path) -> Result<()> {
-    let number = process::id().to_string();
+/// The word a move writes before its number; a server writes its number alone,
+/// as every build before moves did.
+const MOVE_WORD: &str = "move";
+
+/// What the holder of the lock wrote down, where it wrote anything: which kind
+/// of holder it is, and its number where that reads.
+///
+/// Nothing here is trusted: it is read for a sentence, and a file holding
+/// something else — a holder killed between taking the lock and writing its
+/// number, or anything at all — leaves the sentence one clause shorter rather
+/// than turning a refusal into a failure. A file naming no move is read as a
+/// server's, which is what the lock is for.
+fn holder_of(file: &mut File) -> Option<(Holder, Option<u32>)> {
+    let mut written = String::new();
+    file.read_to_string(&mut written).ok()?;
+    let written = written.trim();
+    Some(match written.strip_prefix(MOVE_WORD) {
+        Some(number) => (Holder::Move, number.trim().parse().ok()),
+        None => (Holder::Server, written.parse().ok()),
+    })
+}
+
+/// Writes what holds the lock and this process's number, so that whoever is
+/// refused next is told whether a server is to be stopped, and which, or a
+/// move waited for.
+fn write_holder(file: &mut File, path: &Path, holder: Holder) -> Result<()> {
+    let written = match holder {
+        Holder::Server => process::id().to_string(),
+        Holder::Move => format!("{MOVE_WORD} {}", process::id()),
+    };
     file.set_len(0)
         .map_err(Error::local(LocalOperation::Writing, path))?;
-    file.write_all(number.as_bytes())
+    file.write_all(written.as_bytes())
         .map_err(Error::local(LocalOperation::Writing, path))
 }
 
@@ -160,7 +210,10 @@ mod tests {
 
         let refused = refusal(&dir);
         assert!(
-            matches!(&refused, Error::LibraryAlreadyServed { name, .. } if name == dir.name()),
+            matches!(
+                &refused,
+                Error::LibraryAlreadyServed { library, .. } if *library == dir.which()
+            ),
             "expected a second server over one Library to be refused, got {refused:?}"
         );
 
@@ -245,6 +298,37 @@ mod tests {
 
         let _one = ServerLock::take(&first).expect("the first Library is served");
         let _other = ServerLock::take(&second).expect("the second Library is served too");
+    }
+
+    // LA-8: a server starting while a directory move holds the lock is told
+    // the directory is being moved, by which process, and that it can start
+    // again — not that a server is serving the Library.
+    #[test]
+    fn a_lock_a_move_holds_is_refused_as_a_move() {
+        let dir = directory("server-lock-held-by-a-move");
+        let moving = ServerLock::take_to_move(&dir).expect("the move takes the lock");
+
+        let refused = refusal(&dir);
+        assert!(
+            matches!(
+                &refused,
+                Error::LibraryBeingMoved { library, by: Some(by) }
+                    if *library == dir.which() && *by == process::id()
+            ),
+            "expected a refusal saying the directory is being moved, got {refused:?}"
+        );
+        let said = refused.to_string();
+        assert!(said.contains("is being moved"), "{said}");
+        assert!(said.contains("run this again"), "{said}");
+        assert!(!said.contains("served"), "{said}");
+
+        // And a move that meets a server is told a server holds it.
+        drop(moving);
+        let _served = ServerLock::take(&dir).expect("the server takes the freed lock");
+        assert!(matches!(
+            ServerLock::take_to_move(&dir),
+            Err(Error::LibraryAlreadyServed { by: Some(_), .. })
+        ));
     }
 
     // LA-8. Owner-only like everything else in this directory, for a reason of

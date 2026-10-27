@@ -204,7 +204,7 @@ fn join_answers_what_it_found_and_carries_no_recovery_code() {
 #[test]
 fn recovery_code_answers_the_code_init_answered() {
     let device = Device::new();
-    let (_, _, recovery_code) = created(&device, "again");
+    let (_, library_id, recovery_code) = created(&device, "again");
 
     let output = device.run_with(
         &[
@@ -224,7 +224,11 @@ fn recovery_code_answers_the_code_init_answered() {
             "command": "recovery-code",
             "exit_status": 0,
             "log": VARIES,
-            "answer": { "library": "again", "recovery_code": recovery_code },
+            "answer": {
+                "library": "again",
+                "library_id": library_id,
+                "recovery_code": recovery_code,
+            },
             "error": null,
             "findings": [],
         }),
@@ -235,7 +239,7 @@ fn recovery_code_answers_the_code_init_answered() {
 #[test]
 fn change_passphrase_answers_the_library() {
     let device = Device::new();
-    created(&device, "rekeyed");
+    let (_, library_id, _) = created(&device, "rekeyed");
 
     let output = device.run_with(
         &[
@@ -255,11 +259,81 @@ fn change_passphrase_answers_the_library() {
             "command": "change-passphrase",
             "exit_status": 0,
             "log": VARIES,
-            "answer": { "library": "rekeyed" },
+            "answer": { "library": "rekeyed", "library_id": library_id },
             "error": null,
             "findings": [],
         }),
     );
+}
+
+// FM-15: a Library this device knows no name for yet — one joined before its
+// catalog caught up — is answered with a null name beside its ID, and the text
+// says it has none, rather than putting its ID where the name goes.
+#[test]
+fn a_library_with_no_name_yet_is_answered_with_a_null_name_and_its_id() {
+    let device = Device::new();
+    let (_, library_id, recovery_code) = created(&device, "nameless");
+    forget_the_name(&device, "nameless");
+
+    let output = device.run_with(
+        &[
+            "--json",
+            "recovery-code",
+            "--library-id",
+            &library_id,
+            "--passphrase-stdin",
+        ],
+        Some(PASSPHRASE),
+    );
+    succeeded(&output, "recovery-code");
+    assert_eq!(
+        answer_logged(&output)["answer"],
+        json!({
+            "library": null,
+            "library_id": library_id,
+            "recovery_code": recovery_code,
+        }),
+    );
+
+    for form in [&["--json"][..], &[][..]] {
+        let mut args = form.to_vec();
+        args.extend([
+            "change-passphrase",
+            "--library-id",
+            &library_id,
+            "--passphrase-stdin",
+        ]);
+        let output = device.run_with(&args, Some(&format!("{PASSPHRASE}\n{PASSPHRASE}")));
+        succeeded(&output, "change-passphrase");
+        let said = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            said.contains(&format!(
+                "The Passphrase of the Library with ID {library_id} (it has no name yet)"
+            )),
+            "{said}"
+        );
+        if !form.is_empty() {
+            assert_eq!(
+                answer_logged(&output)["answer"],
+                json!({ "library": null, "library_id": library_id }),
+            );
+        }
+    }
+}
+
+/// Takes the copy of the Library `name`'s name out of the settings beside it,
+/// as a Library joined before its catalog caught up has none.
+fn forget_the_name(device: &Device, name: &str) {
+    let settings = device.library(name).join("settings.json");
+    let mut value: Value =
+        serde_json::from_slice(&std::fs::read(&settings).expect("the settings are readable"))
+            .expect("the settings are JSON");
+    value
+        .as_object_mut()
+        .expect("the settings are an object")
+        .remove("name")
+        .expect("a created Library's settings carry its name");
+    std::fs::write(&settings, serde_json::to_vec(&value).unwrap()).expect("written back");
 }
 
 #[test]

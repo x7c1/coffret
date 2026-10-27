@@ -150,9 +150,10 @@ answer, per command:
   join           library (the name read from the Library, or null),
                  library_id, storage, account, consent_asked,
                  found_on_storage (\"the_library\" or \"nothing_yet\")
-  recovery-code  library (as --library or --library-id gave it),
-                 recovery_code
-  change-passphrase  library (as --library or --library-id gave it)
+  recovery-code  library (its name, or null where it has none yet),
+                 library_id, recovery_code
+  change-passphrase  library (its name, or null where it has none yet),
+                 library_id
   authorize      consent_asked
   map            prefix, local_root, replaced, marker (\"written\",
                  \"adopted\" or \"reset\")

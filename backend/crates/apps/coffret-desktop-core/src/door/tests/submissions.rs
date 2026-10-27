@@ -54,7 +54,7 @@ fn a_ticket_from_the_core_exchanges_once() {
         assert_refused(&used, StatusCode::UNAUTHORIZED, "authentication_required");
 
         let served = case.desktop.served().expect("the Library is served");
-        assert_eq!(served.name, "door-ticket");
+        assert_eq!(served.name.as_deref(), Some("door-ticket"));
         assert!(served.unlocked);
         let explorer = case
             .desktop
@@ -98,7 +98,10 @@ fn submissions_at_once_open_one_library() {
             "Another Library is already open in this app."
         );
     });
-    assert_eq!(case.desktop.served().unwrap().name, "door-race");
+    assert_eq!(
+        case.desktop.served().unwrap().name.as_deref(),
+        Some("door-race")
+    );
     assert_eq!(*told.lock().unwrap(), [Event::LibraryOpened]);
 }
 
@@ -144,9 +147,13 @@ fn an_unlock_the_explorer_asks_for_is_taken_through_the_door() {
 
         let unlocking = case.token(DoorMode::Unlock);
         let described = case.send(case.look(&unlocking)).await.json();
+        assert_eq!(described["mode"], "unlock");
+        assert_eq!(described["library"]["name"], "door-unlock");
+        assert_eq!(described["library"]["needs_attention"], false);
         assert_eq!(
-            described,
-            json!({ "mode": "unlock", "library": "door-unlock" })
+            described["library"]["id"].as_str().map(str::len),
+            Some(16),
+            "{described}"
         );
         let wrong = case
             .send(case.submission(&unlocking, json!({ "passphrase": "wrong" })))

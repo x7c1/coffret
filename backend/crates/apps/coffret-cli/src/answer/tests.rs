@@ -360,7 +360,7 @@ fn a_fetch_of_one_entry_answers_which_of_its_answers_it_is() {
 #[test]
 fn a_library_with_no_grant_answers_not_authorized() {
     let error = Error::NotAuthorized {
-        name: "main".to_owned(),
+        library: coffret_device::LibraryRef::named("main"),
         cause: None,
     };
 
