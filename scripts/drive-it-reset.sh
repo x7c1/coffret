@@ -168,12 +168,30 @@ export COFFRET_LOG_DIR="$LOG_DIR"
 export COFFRET_LOG=info
 
 # What a Library is called in what this tool prints: the copy of its name its
-# settings keep, or the name of its directory, which a build before Library
-# names named after the Library and a later one names after its ID.
+# settings keep, or — for a Library nothing has named yet — that it has none,
+# beside its ID. Never its ID or its directory's name where the name goes.
 library_label() {
   local name
   name="$(settings_value "$1" name)"
-  printf '%s\n' "${name:-$(basename "$(dirname "$1")")}"
+  if [ -n "$name" ]; then
+    printf '%s\n' "$name"
+  else
+    printf '(no name yet) %s\n' "$(settings_value "$1" library_id)"
+  fi
+}
+
+# Whether the Library a settings file carries was already listed for this
+# scenario, and records it if not: a device holds a Library once, and two
+# devices of one scenario, or two directories of one device, holding the same
+# Library ID are the one Library, listed once. The caller declares `seen`.
+seen_before() {
+  local key
+  key="$1/$(settings_value "$2" library_id)"
+  case " ${seen[*]} " in
+    *" $key "*) return 0 ;;
+  esac
+  seen+=("$key")
+  return 1
 }
 
 # One string out of a Library's settings file, by file rather than by name:
@@ -192,10 +210,12 @@ settings_value() {
 # will ever open again.
 scenario_of() {
   local folder="$1" work settings library found=""
+  local seen=()
   for work in "$ROUND_TRIP" "$INDEX_LAYOUT"; do
     for settings in "$work"/state/libraries/*/settings.json "$work"/second-state/libraries/*/settings.json; do
       [ -f "$settings" ] || continue
       [ "$(settings_value "$settings" folder_id)" = "$folder" ] || continue
+      seen_before "$(basename "$work")" "$settings" && continue
       library="$(library_label "$settings")"
       found="${found:+$found, }$(basename "$work")/$library"
     done
@@ -219,6 +239,7 @@ scenario_of() {
 # the `IN USE BY` column prints.
 collect_not_listed() {
   local work settings library folder listed i
+  local seen=()
   for work in "$ROUND_TRIP" "$INDEX_LAYOUT"; do
     for settings in "$work"/state/libraries/*/settings.json "$work"/second-state/libraries/*/settings.json; do
       [ -f "$settings" ] || continue
@@ -234,6 +255,7 @@ collect_not_listed() {
         fi
       done
       if [ -z "$listed" ]; then
+        seen_before "$(basename "$work")" "$settings" && continue
         library="$(library_label "$settings")"
         not_listed+=("$(basename "$work")/$library"$'\t'"$folder")
       fi

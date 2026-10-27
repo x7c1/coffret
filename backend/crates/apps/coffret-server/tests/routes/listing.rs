@@ -146,6 +146,24 @@ async fn the_status_bar_is_told_which_library_this_is() {
     );
 }
 
+// FM-15: a Library nothing has named yet is answered with a null name beside
+// its ID, never with the ID in the name's place.
+#[tokio::test]
+async fn a_library_with_no_name_yet_is_answered_with_a_null_name() {
+    let served = Served::nameless().await;
+
+    let (status, library) = body_of(served.get("/api/library").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        library,
+        json!({
+            "name": null,
+            "library_id": "1111111111111111",
+            "provider": "drive",
+        }),
+    );
+}
+
 // A file whose Entry left the Library — another device removed the Container
 // holding it — is the same state as one just dropped, and is shown the same way:
 // this device has it and the Library does not.

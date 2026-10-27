@@ -26,6 +26,8 @@ use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::{LocalIoError, LocalOperation, RefusedRoot};
 
+use crate::library_ref::LibraryRef;
+
 mod client_mismatch;
 pub use client_mismatch::ClientMismatch;
 
@@ -37,6 +39,9 @@ mod display;
 mod exchange_without_client_secret;
 
 mod from;
+
+mod joined_place;
+pub use joined_place::JoinedPlace;
 
 mod promotion_obstacle;
 pub use promotion_obstacle::PromotionObstacle;
@@ -121,6 +126,20 @@ pub enum Error {
         /// The Libraries carrying it (spec: FM-18).
         libraries: Vec<LibraryId>,
     },
+    /// More than one directory on this device holds the Library asked for:
+    /// their settings carry one ID (spec: FM-15).
+    ///
+    /// A device holds a Library once, so a copy of a Library's directory, or
+    /// one an earlier build kept beside the one its ID names, is a fault
+    /// rather than a second Library or a choice between two. Either directory
+    /// may be the one the other was copied from, so neither is opened: the
+    /// refusal names both, and a person keeps one.
+    LibraryInSeveralDirectories {
+        /// The Library they hold.
+        library_id: LibraryId,
+        /// Every directory holding it.
+        paths: Vec<PathBuf>,
+    },
     /// A file or directory on this device could not be read or written: one of
     /// the Library's own, or one in a folder it maps.
     ///
@@ -201,14 +220,30 @@ pub enum Error {
     /// the answer is the operating system's rather than a file this crate
     /// reads and believes.
     LibraryAlreadyServed {
-        /// The Library that is already being served.
-        name: String,
+        /// The Library that is already being served, as a command names it.
+        library: LibraryRef,
         /// The process serving it, where it wrote its number down.
         ///
         /// `None` where it had not got that far or the number could not be
         /// read. It is a courtesy and never the verdict: what says a server is
         /// there is the lock it holds, and the number only says which one to
         /// stop.
+        by: Option<u32>,
+    },
+    /// The Library's directory is being moved to the one its ID names — by a
+    /// command opening the Library, or by a server before it takes its own
+    /// lock — which holds the lock a server would take for as long as the move
+    /// lasts (spec: FM-15, LA-8).
+    ///
+    /// Not [`LibraryAlreadyServed`](Self::LibraryAlreadyServed): nothing is
+    /// serving the Library, and nothing has to be stopped. The move is a
+    /// rename and ends by itself; the command refused can be run again once it
+    /// has.
+    LibraryBeingMoved {
+        /// The Library whose directory is being moved, as a command names it.
+        library: LibraryRef,
+        /// The process moving it, where it wrote its number down; see
+        /// [`LibraryAlreadyServed`](Self::LibraryAlreadyServed).
         by: Option<u32>,
     },
     /// The Library ID could not be placed under the prefix that was asked for.
@@ -242,8 +277,8 @@ pub enum Error {
     /// here and are still told apart in `cause`: an unreadable token cache is
     /// never read as "nothing is cached" (spec: KD-10).
     NotAuthorized {
-        /// The Library whose grant is missing.
-        name: String,
+        /// The Library whose grant is missing, as a command names it.
+        library: LibraryRef,
         /// Why there is no grant, where a file was there and could not be read.
         ///
         /// Boxed for the reason `Drive`'s cause is.
@@ -305,8 +340,8 @@ pub enum Error {
     /// device already holds, and that account cannot take it in, for the
     /// reason [`PromotionObstacle`] says (spec: SA-8).
     PromotionNeedsName {
-        /// The Library whose grant it is.
-        library: String,
+        /// The Library whose grant it is, as a command names it.
+        library: LibraryRef,
         /// The account the promotion would have referenced.
         account: String,
         /// Why the held account cannot take it in.
@@ -322,8 +357,8 @@ pub enum Error {
     /// The name is bound into every envelope of the account (spec: SA-9), so a
     /// Library moving to another name is a re-seal no command performs yet.
     AccountFixed {
-        /// The Library that was named.
-        library: String,
+        /// The Library that was named, as a command names it.
+        library: LibraryRef,
         /// The account it references.
         account: String,
         /// The account that was asked for instead.
@@ -818,8 +853,10 @@ pub enum Error {
     /// there — the app folder is already the Library's, and the first commit
     /// after the join is what puts anything new in it.
     LibraryNotJoined {
-        /// The Library that was being joined.
-        name: String,
+        /// Where the Library being joined was looked for. A join names no
+        /// Library: the name is the Library's own and read from it, so what a
+        /// failed join can say is the place it was given.
+        place: JoinedPlace,
         /// The step that failed.
         step: CreationStep,
         /// What that step reported.

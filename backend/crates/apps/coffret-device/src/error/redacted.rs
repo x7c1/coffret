@@ -48,6 +48,12 @@ impl Redacted for Error {
                 "Device::AmbiguousLibraryName(libraries={})",
                 libraries.len()
             ),
+            // How many directories, and none of their paths, which name the
+            // person's own state directory (spec: EL-1).
+            Self::LibraryInSeveralDirectories { paths, .. } => format!(
+                "Device::LibraryInSeveralDirectories(directories={})",
+                paths.len()
+            ),
             Self::Local(refused) => format!("Device::Local: {}", refused.redacted()),
             Self::MalformedSettings { .. } => "Device::MalformedSettings".to_owned(),
             Self::UnsupportedSettingsVersion {
@@ -70,6 +76,13 @@ impl Redacted for Error {
             // to know is which two runs were racing (spec: EL-1).
             Self::LibraryAlreadyServed { by, .. } => format!(
                 "Device::LibraryAlreadyServed(by={})",
+                match by {
+                    Some(by) => by.to_string(),
+                    None => "unknown".to_owned(),
+                }
+            ),
+            Self::LibraryBeingMoved { by, .. } => format!(
+                "Device::LibraryBeingMoved(by={})",
                 match by {
                     Some(by) => by.to_string(),
                     None => "unknown".to_owned(),

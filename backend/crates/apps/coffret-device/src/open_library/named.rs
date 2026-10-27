@@ -245,8 +245,16 @@ pub(super) fn move_with(dir: LibraryDir, settings: &DeviceSettings) -> Result<Li
         );
         return Ok(dir);
     }
-    let hold = match ServerLock::take(&dir) {
+    let hold = match ServerLock::take_to_move(&dir) {
         Ok(hold) => hold,
+        Err(Error::LibraryBeingMoved { .. }) => {
+            info!(
+                operation = OPERATION,
+                library = %library_id,
+                "left a Library's directory to another process moving it"
+            );
+            return Ok(dir);
+        }
         Err(Error::LibraryAlreadyServed { .. }) => {
             info!(
                 operation = OPERATION,

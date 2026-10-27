@@ -15,7 +15,7 @@ use crate::{libraries, ListedLibrary};
 #[serde(tag = "mode", rename_all = "lowercase")]
 enum Described {
     Open { libraries: Vec<ListedLibrary> },
-    Unlock { library: Option<String> },
+    Unlock { library: Option<ListedLibrary> },
 }
 
 /// `GET /window`: what the window that presents its token is opened to do
@@ -44,7 +44,11 @@ pub(super) async fn describe(State(door): State<Arc<Door>>, request: Request) ->
             }
         },
         DoorMode::Unlock => Described::Unlock {
-            library: door.shared.served().map(|opened| opened.state.name.clone()),
+            library: door.shared.served().map(|opened| ListedLibrary {
+                id: opened.state.library_id().to_owned(),
+                name: opened.state.name.clone(),
+                needs_attention: false,
+            }),
         },
     };
     Json(described).into_response()

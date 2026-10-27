@@ -21,7 +21,7 @@ use crate::library_name_defect::LibraryNameDefect;
 /// A name is something a person chose, so it never reaches a diagnostic event
 /// (spec: EL-1): nothing that records one may render it, and a refusal that
 /// names one renders only its length in a [`Redacted`](crate::Redacted) form.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryName(String);
 
 impl LibraryName {

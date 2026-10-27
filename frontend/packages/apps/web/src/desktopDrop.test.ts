@@ -271,7 +271,7 @@ describe('a drop the app took only part of', () => {
       send: async () => {
         throw new Error('a drop that cannot be sent is not sent');
       },
-      refuse: (overdrawn) => said.push(withNotTaken(overBudgetLine(overdrawn, 'main'), notTaken)),
+      refuse: (overdrawn) => said.push(withNotTaken(overBudgetLine(overdrawn, { name: 'main', library_id: '0123456789abcdef' }), notTaken)),
     });
 
     expect(chosen).toBe('refused');

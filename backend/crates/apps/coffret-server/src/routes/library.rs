@@ -16,7 +16,9 @@ use crate::state::ServerState;
 /// nothing about the account.
 #[derive(Serialize)]
 pub struct LibraryDto {
-    name: String,
+    /// The Library's name, and null where nothing has named it yet: the ID
+    /// beside it is its ID and never stands in for the name (spec: FM-15).
+    name: Option<String>,
     library_id: String,
     provider: &'static str,
 }

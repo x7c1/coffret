@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use coffret_model::{LibraryId, Redacted};
 use tracing::warn;
 
@@ -19,12 +21,20 @@ impl LibraryDir {
     /// settings keep — so a Library is found by the same name before and after
     /// it is moved to its ID.
     ///
+    /// A device holds a Library once. Two directories whose settings carry one
+    /// ID — a copy of a Library's directory, or one an earlier build kept
+    /// beside the one its ID names — are a fault rather than two Libraries or
+    /// a choice between them: either may be the one the other was copied from,
+    /// so neither is opened until one of them is gone.
+    ///
     /// # Errors
     ///
-    /// [`Error::NoSuchLibrary`] where no Library here answers to it, and
+    /// [`Error::NoSuchLibrary`] where no Library here answers to it,
     /// [`Error::AmbiguousLibraryName`] where more than one carries the name:
     /// one of them is never chosen for the caller, and their IDs are what
-    /// tells them apart.
+    /// tells them apart; and [`Error::LibraryInSeveralDirectories`] where the
+    /// Library it names is in more than one directory, by its name and by its
+    /// ID alike.
     pub fn find(which: &LibraryRef) -> Result<Self> {
         let listed = listed()?;
         let found: Vec<&Listed> = match which {
@@ -32,18 +42,27 @@ impl LibraryDir {
                 .iter()
                 .filter(|library| library.name.as_deref() == Some(name.as_str()))
                 .collect(),
-            // The directory named after its ID first, where an interrupted move
-            // left one under both names.
-            LibraryRef::Id(id) => {
-                let mut held: Vec<&Listed> = listed
-                    .iter()
-                    .filter(|library| library.id == Some(*id))
-                    .collect();
-                held.sort_by_key(|library| !library.under_its_id());
-                held.truncate(1);
-                held
-            }
+            LibraryRef::Id(id) => listed
+                .iter()
+                .filter(|library| library.id == Some(*id))
+                .collect(),
         };
+        // Every directory of a Library that answered, whichever of them
+        // answered: a copy that carries another name copy is the same Library.
+        for library in &found {
+            let Some(id) = library.id else { continue };
+            let paths: Vec<PathBuf> = listed
+                .iter()
+                .filter(|other| other.id == Some(id))
+                .map(|other| other.dir.path().to_path_buf())
+                .collect();
+            if paths.len() > 1 {
+                return Err(Error::LibraryInSeveralDirectories {
+                    library_id: id,
+                    paths,
+                });
+            }
+        }
         match found.as_slice() {
             [one] => Ok(one.dir.clone()),
             [] => Err(Error::NoSuchLibrary {
@@ -54,6 +73,20 @@ impl LibraryDir {
                 name: which.to_string(),
                 libraries: several.iter().filter_map(|library| library.id).collect(),
             }),
+        }
+    }
+
+    /// The Library this directory holds, as a person is shown it: its ID,
+    /// and the name it was found under, or none where this device knows none
+    /// — never its ID in the name's place.
+    pub(crate) fn on_device(&self, settings: &DeviceSettings) -> LibraryOnDevice {
+        LibraryOnDevice {
+            library_id: settings.library_id,
+            name: match self.which() {
+                LibraryRef::Named(name) => Some(name),
+                LibraryRef::Id(_) => None,
+            },
+            needs_attention: false,
         }
     }
 
@@ -70,24 +103,53 @@ impl LibraryDir {
         Ok(listed()?.into_iter().map(|library| library.dir).collect())
     }
 
-    /// Every whole Library on this device, with its ID and the name it is
-    /// listed under, for a person choosing one.
+    /// Every whole Library on this device, once each, with its ID and the
+    /// name it is listed under, for a person choosing one.
     ///
     /// The name is the copy the Library's settings keep, or — for a Library an
     /// earlier build put here and nothing has named yet — the name of the
     /// directory that build kept it in. A Library
     /// whose settings cannot be read is left out: nothing about it can be
-    /// opened until they can.
+    /// opened until they can. A Library in more than one directory is listed
+    /// once, under the first name one of them carries, and marked as needing
+    /// attention: opening it is refused until one directory is left
+    /// ([`find`](Self::find)).
     pub fn libraries() -> Result<Vec<LibraryOnDevice>> {
-        Ok(listed()?
-            .into_iter()
-            .filter_map(|library| {
-                Some(LibraryOnDevice {
-                    library_id: library.id.filter(|_| library.readable)?,
+        let (readable, unreadable): (Vec<Listed>, Vec<Listed>) =
+            listed()?.into_iter().partition(|library| library.readable);
+        let mut libraries: Vec<LibraryOnDevice> = Vec::new();
+        for library in readable {
+            let Some(library_id) = library.id else {
+                continue;
+            };
+            match libraries
+                .iter_mut()
+                .find(|listed| listed.library_id == library_id)
+            {
+                Some(listed) => {
+                    listed.needs_attention = true;
+                    if listed.name.is_none() {
+                        listed.name = library.name;
+                    }
+                }
+                None => libraries.push(LibraryOnDevice {
+                    library_id,
                     name: library.name,
-                })
-            })
-            .collect())
+                    needs_attention: false,
+                }),
+            }
+        }
+        // A directory whose settings cannot be read, named after an ID a
+        // listed Library carries, is a second directory of that Library too.
+        for library in unreadable {
+            if let Some(listed) = libraries
+                .iter_mut()
+                .find(|listed| Some(listed.library_id) == library.id)
+            {
+                listed.needs_attention = true;
+            }
+        }
+        Ok(libraries)
     }
 }
 
@@ -113,14 +175,6 @@ struct Listed {
     readable: bool,
 }
 
-impl Listed {
-    /// Whether the directory is the one its ID names.
-    fn under_its_id(&self) -> bool {
-        self.id
-            .is_some_and(|id| self.dir.earlier_name(id).is_none())
-    }
-}
-
 /// Every whole Library directory on this device, by directory name.
 ///
 /// A settings file that cannot be read leaves the directory listed under what
@@ -136,6 +190,7 @@ fn listed() -> Result<Vec<Listed>> {
         let dir = LibraryDir {
             path: root.join(&entry),
             name: entry.clone(),
+            unnamed: None,
         };
         if !dir.is_present() {
             continue;
@@ -148,7 +203,10 @@ fn listed() -> Result<Vec<Listed>> {
                     .or_else(|| dir.earlier_name(settings.library_id).map(str::to_owned))
                     .or_else(|| settings.earlier_name.clone());
                 Listed {
-                    dir: dir.called(name.clone().unwrap_or_else(|| settings.library_id.to_hex())),
+                    dir: match &name {
+                        Some(name) => dir.called(name.clone()),
+                        None => dir.unnamed(settings.library_id),
+                    },
                     id: Some(settings.library_id),
                     name,
                     readable: true,
@@ -162,7 +220,10 @@ fn listed() -> Result<Vec<Listed>> {
                 let id = LibraryId::from_hex(&entry).ok();
                 Listed {
                     name: id.is_none().then(|| entry.clone()),
-                    dir,
+                    dir: match id {
+                        Some(id) => dir.unnamed(id),
+                        None => dir,
+                    },
                     id,
                     readable: false,
                 }
@@ -188,6 +249,7 @@ mod tests {
     fn plant(device: &isolated::Device, directory: &str, seed: u8, name: Option<&str>) {
         let dir = LibraryDir {
             name: directory.to_owned(),
+            unnamed: None,
             path: device.path().join("libraries").join(directory),
         };
         fs::create_dir_all(dir.path()).unwrap();
@@ -236,10 +298,12 @@ mod tests {
                 LibraryOnDevice {
                     library_id: library_id(1),
                     name: Some("books".to_owned()),
+                    needs_attention: false,
                 },
                 LibraryOnDevice {
                     library_id: library_id(2),
                     name: Some("albums".to_owned()),
+                    needs_attention: false,
                 },
             ]
         );
@@ -298,5 +362,70 @@ mod tests {
             other => panic!("a name two Libraries carry must be refused, got {other:?}"),
         }
         assert!(LibraryDir::find(&LibraryRef::Id(library_id(2))).is_ok());
+    }
+
+    // FM-15: a device holds a Library once. Two directories whose settings
+    // carry one ID — a copy beside the original, or the directory an earlier
+    // build kept beside the one its ID names — are refused by name and by ID
+    // alike, with both paths, and listed once, marked as needing attention.
+    #[test]
+    fn two_directories_of_one_library_are_a_fault() {
+        let device = isolated::device();
+        plant(&device, &library_id(1).to_hex(), 1, Some("books"));
+        plant(&device, "books", 1, None);
+        plant(&device, &library_id(2).to_hex(), 2, Some("albums"));
+
+        let both = [
+            device.path().join("libraries").join(library_id(1).to_hex()),
+            device.path().join("libraries").join("books"),
+        ];
+        for which in [LibraryRef::named("books"), LibraryRef::Id(library_id(1))] {
+            match LibraryDir::find(&which) {
+                Err(Error::LibraryInSeveralDirectories {
+                    library_id: id,
+                    paths,
+                }) => {
+                    assert_eq!(id, library_id(1));
+                    assert_eq!(paths, both);
+                }
+                other => panic!("{which} must be refused as held twice, got {other:?}"),
+            }
+        }
+        assert!(LibraryDir::find(&LibraryRef::named("albums")).is_ok());
+
+        assert_eq!(
+            LibraryDir::libraries().expect("the libraries directory must be listable"),
+            [
+                LibraryOnDevice {
+                    library_id: library_id(1),
+                    name: Some("books".to_owned()),
+                    needs_attention: true,
+                },
+                LibraryOnDevice {
+                    library_id: library_id(2),
+                    name: Some("albums".to_owned()),
+                    needs_attention: false,
+                },
+            ]
+        );
+    }
+
+    // FM-15: a Library nothing has named yet is found by its ID and known by
+    // it, and a command naming it names it by that ID rather than by a name.
+    #[test]
+    fn a_library_with_no_name_is_known_by_its_id() {
+        let device = isolated::device();
+        plant(&device, &library_id(3).to_hex(), 3, None);
+
+        let found = LibraryDir::find(&LibraryRef::Id(library_id(3))).expect("found by its ID");
+        assert_eq!(found.which(), LibraryRef::Id(library_id(3)));
+        assert_eq!(
+            LibraryDir::libraries().unwrap(),
+            [LibraryOnDevice {
+                library_id: library_id(3),
+                name: None,
+                needs_attention: false,
+            }]
+        );
     }
 }

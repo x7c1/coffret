@@ -17,7 +17,14 @@
 // Kept free of DOM and of React so it is unit testable, the way the lock and
 // the refresh beside it are.
 
-import { isOverBudget, isRefusal, type Overdrawn, type RefusedPart, type Upload } from '@coffret/api';
+import {
+  isOverBudget,
+  isRefusal,
+  type Library,
+  type Overdrawn,
+  type RefusedPart,
+  type Upload,
+} from '@coffret/api';
 
 import { size } from './humanize';
 import { said } from './useAsked';
@@ -33,10 +40,10 @@ export interface Dropping {
   /** Follows the sync or the freeze that would carry what landed in. */
   follow: () => void;
   /**
-   * What this device calls the Library, for the command a drop too large for
-   * this route is pointed to; `null` while the page does not know it yet.
+   * The Library, for the command a drop too large for this route is pointed
+   * to; `null` while the page does not know it yet.
    */
-  library: string | null;
+  library: Named | null;
 }
 
 /**
@@ -132,7 +139,7 @@ export function refusedLine(refused: readonly RefusedPart[]): string {
  * said by {@link overBudgetLine}. Every other refusal is the server's own, read
  * off an answer that did arrive, and is shown as it is written.
  */
-export function brokeOff(refused: unknown, library: string | null): string {
+export function brokeOff(refused: unknown, library: Named | null): string {
   if (isOverBudget(refused)) {
     return overBudgetLine(refused.overdrawn, library);
   }
@@ -158,14 +165,15 @@ export function brokeOff(refused: unknown, library: string | null): string {
  * many files or too much at once rather than one file too large, dropping fewer
  * files at a time is the other.
  *
- * The Library is named as this device calls it, which is what `--library`
- * takes; a page that does not know the name yet leaves `<library>` in its place,
- * the placeholder the server's own sentences use. A name is only refused for
- * not being one path component, so it may hold a space or a quote, and is
+ * The Library is named by its name, which is what `--library` takes, and a
+ * Library nothing has named yet by its ID, which is what `--library-id` takes:
+ * `--library` would not find it by its ID. A page that does not know which
+ * Library it is yet leaves `<library>` in its place, the placeholder the
+ * server's own sentences use. A name may hold a space or a quote, and is
  * quoted where it does — the command is there to be typed or pasted as it stands.
  */
-export function overBudgetLine(overdrawn: Overdrawn, library: string | null): string {
-  const sync = `\`coffret sync --library ${library === null ? '<library>' : typed(library)}\``;
+export function overBudgetLine(overdrawn: Overdrawn, library: Named | null): string {
+  const sync = `\`coffret sync ${flag(library)}\``;
   // Fewer files at a time, and not subfolders: a drop of loose files has none,
   // and a folder dropped whole may have none either.
   const instead =
@@ -204,6 +212,19 @@ function against(bytes: number, limit: number): [string, string] {
   }
   const exact = (n: number) => `${n.toLocaleString('en-US')} bytes`;
   return [exact(bytes), exact(limit)];
+}
+
+/** What a sentence needs of the Library to name it in a command. */
+export type Named = Pick<Library, 'name' | 'library_id'>;
+
+/** The flag a command names `library` with. */
+function flag(library: Named | null): string {
+  if (library === null) {
+    return '--library <library>';
+  }
+  return library.name === null
+    ? `--library-id ${library.library_id}`
+    : `--library ${typed(library.name)}`;
 }
 
 /**

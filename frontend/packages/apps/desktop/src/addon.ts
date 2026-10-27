@@ -33,14 +33,16 @@ export type DesktopEvent =
 export interface ListedLibrary {
   /** Its ID, in the 16 lowercase hex characters it is spelled in. */
   id: string;
-  /** The name it is listed under: its name, or its ID where nothing has named it yet. */
-  name: string;
+  /** Its name, or null where nothing has named it yet. */
+  name: string | null;
+  /** Whether more than one directory on this device holds it; opening it is refused until one is gone. */
+  needsAttention: boolean;
 }
 
 /** The Library served, as the addon tells of it. */
 export interface ServedLibrary {
-  /** Its name, or its ID where nothing has named it yet. */
-  name: string;
+  /** Its name, or null where nothing has named it yet. */
+  name: string | null;
   /** Whether it is unlocked, or has locked itself and waits for the Passphrase. */
   unlocked: boolean;
 }

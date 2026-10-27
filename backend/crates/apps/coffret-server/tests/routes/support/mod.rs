@@ -161,6 +161,9 @@ pub struct Served {
     /// The budgets the server was started within, so a server started afresh
     /// in its place serves within the same ones.
     allowance: Allowance,
+    /// The name the server serves the Library under, and `None` for a Library
+    /// nothing has named yet, so a server started afresh keeps it.
+    name: Option<String>,
 }
 
 impl Served {
@@ -179,6 +182,15 @@ impl Served {
             .await
             .started()
             .await
+    }
+
+    /// The same, over a Library nothing has named yet: one joined before its
+    /// catalog caught up (spec: FM-15).
+    pub async fn nameless() -> Self {
+        let mut served = Self::library().await;
+        served.name = None;
+        served.restart();
+        served
     }
 
     /// The same, serving within an allowance a case can actually reach: the
@@ -387,7 +399,7 @@ impl Served {
         );
 
         let consent = Arc::new(ScriptedConsent::default());
-        let state = ServerState::new("served".to_owned(), library)
+        let state = ServerState::new(Some("served".to_owned()), library)
             .within(allowance)
             .consenting_through(Arc::clone(&consent) as _);
         let (state, prompted) = if prompting {
@@ -419,6 +431,7 @@ impl Served {
             parcel_len,
             provider,
             allowance,
+            name: Some("served".to_owned()),
         }
     }
 
@@ -495,7 +508,7 @@ impl Served {
             self.provider,
         );
         let state = Arc::new(
-            ServerState::new("served".to_owned(), library)
+            ServerState::new(self.name.clone(), library)
                 .within(self.allowance)
                 .consenting_through(Arc::clone(&self.consent) as _),
         );

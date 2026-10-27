@@ -829,7 +829,7 @@ it('reads every other answer the server sends through its type', () => {
   const library: Library = (() => {
     const fields = object(answers.library, 'library', ['name', 'library_id', 'provider']);
     return {
-      name: string(fields.name, 'library.name'),
+      name: nullable(fields.name, (value) => string(value, 'library.name')),
       library_id: string(fields.library_id, 'library.library_id'),
       provider: string(fields.provider, 'library.provider'),
     };

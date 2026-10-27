@@ -83,11 +83,14 @@ Concept background: [Library](../../concepts/library/),
   directory to the one its ID names — a command as it opens the Library, or a
   server before it takes its own lock — takes the same lock for the move and
   holds it across the rename, writing nothing beside the Library while another
-  holds it; where the lock is held, the directory is not moved, and a server
-  starting meanwhile is refused as this rule has it. A server lets the move's
-  lock go before it takes its own where the directory now is, and a start that
-  takes it in between refuses that server as it would any second one.
-  *(Form: test)*
+  holds it; where the lock is held, the directory is not moved. The lock file
+  records which holds it — a server, or a move — beside the holder's process,
+  and a server starting while a move holds the lock is refused with a sentence
+  saying the Library's directory is being moved and that the start can be made
+  again once it has, not that a server is serving the Library: nothing is to be
+  stopped. A server lets the move's lock go before it takes its own where the
+  directory now is, and a start that takes it in between refuses that server as
+  it would any second one. *(Form: test)*
 - **LA-9.** One multipart upload — the request a browser's drop carries
   files into the Library in — is taken within three
   budgets of this server's own: at most 64 GiB across the whole request,

@@ -7,6 +7,7 @@ use coffret_usecase::root_marker::{MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::RootRefused;
 
 use super::*;
+use crate::library_ref::LibraryRef;
 use crate::testing::entry_path;
 
 /// The links a caller printing `{error:#}` reads, outermost first.
@@ -40,7 +41,7 @@ fn a_library_that_is_already_here_is_recorded_without_its_name() {
 #[test]
 fn a_library_already_being_served_is_recorded_without_its_name() {
     let error = Error::LibraryAlreadyServed {
-        name: "holiday-photos".to_owned(),
+        library: LibraryRef::named("holiday-photos"),
         by: Some(4213),
     };
 
@@ -53,7 +54,7 @@ fn a_library_already_being_served_is_recorded_without_its_name() {
     // leaves the sentence one clause shorter rather than no refusal at all:
     // what says a server is there is the lock, not the number.
     let anonymous = Error::LibraryAlreadyServed {
-        name: "holiday-photos".to_owned(),
+        library: LibraryRef::named("holiday-photos"),
         by: None,
     };
 
@@ -367,7 +368,9 @@ fn a_creation_refused_at_the_exchange_without_a_secret_is_seen_through_its_wrapp
     assert!(created.is_exchange_without_client_secret(), "{created}");
 
     let joined = Error::LibraryNotJoined {
-        name: "holiday-photos".to_owned(),
+        place: JoinedPlace::DriveFolder {
+            folder_id: "1AbCdEf".to_owned(),
+        },
         step: CreationStep::Authorization,
         cause: Box::new(sent_no_secret()),
     };
@@ -639,7 +642,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::AccountFixed {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 requested: "work".to_owned(),
             },
@@ -694,7 +697,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::PromotionNeedsName {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 obstacle: PromotionObstacle::ClientDiffers(Box::new(ClientMismatch {
                     library: LIBRARY.to_owned(),
@@ -710,7 +713,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::PromotionNeedsName {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 obstacle: PromotionObstacle::NotOpened,
             },
@@ -721,7 +724,7 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
         ),
         (
             Error::PromotionNeedsName {
-                library: LIBRARY.to_owned(),
+                library: LibraryRef::named(LIBRARY),
                 account: ACCOUNT.to_owned(),
                 obstacle: PromotionObstacle::FolderNotReached,
             },
@@ -761,4 +764,147 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
 #[test]
 fn a_device_error_is_no_wider_than_its_widest_inline_variant() {
     assert_eq!(std::mem::size_of::<Error>(), 88);
+}
+
+// FM-15: a Library with no name yet is named in the advice by `--library-id`,
+// which finds it, rather than by its ID given to `--library`, which would not;
+// one with a name keeps `--library <name>`.
+#[test]
+fn advice_names_a_library_with_no_name_by_its_id() {
+    let id = LibraryId::from_bytes([0xab; LibraryId::BYTE_LEN]);
+    let unnamed = LibraryRef::Id(id);
+    let gone = Error::NotAuthorized {
+        library: unnamed.clone(),
+        cause: None,
+    };
+    assert_eq!(
+        gone.to_string(),
+        "the Library with ID abababababababab (it has no name yet) has no usable grant on \
+         Google Drive; run `coffret authorize --library-id abababababababab`"
+    );
+    let missing = Error::PromotionNeedsName {
+        library: unnamed.clone(),
+        account: "family_photos".to_owned(),
+        obstacle: PromotionObstacle::NotOpened,
+    };
+    assert!(
+        missing
+            .to_string()
+            .ends_with("`coffret authorize --library-id abababababababab --account NAME`"),
+        "{missing}"
+    );
+    let fixed = Error::AccountFixed {
+        library: unnamed,
+        account: "family_photos".to_owned(),
+        requested: "work".to_owned(),
+    };
+    assert!(
+        fixed
+            .to_string()
+            .contains("run `coffret authorize --library-id abababababababab` to renew"),
+        "{fixed}"
+    );
+    for error in [&gone, &missing, &fixed] {
+        assert!(!error.to_string().contains("--library abab"), "{error}");
+    }
+
+    let named = Error::NotAuthorized {
+        library: LibraryRef::named("Summer 2026"),
+        cause: None,
+    };
+    assert_eq!(
+        named.to_string(),
+        "the Library \"Summer 2026\" has no usable grant on Google Drive; run `coffret \
+         authorize --library Summer 2026`"
+    );
+}
+
+// A join names no Library: what failed is said of the place it was given, by
+// what that place is.
+#[test]
+fn a_failed_join_names_the_place_and_no_library() {
+    let cause = || {
+        Box::new(Error::NoSuchAccount {
+            account: "family_photos".to_owned(),
+        })
+    };
+    let drive = Error::LibraryNotJoined {
+        place: JoinedPlace::DriveFolder {
+            folder_id: "1AbCdEf".to_owned(),
+        },
+        step: CreationStep::Authorization,
+        cause: cause(),
+    };
+    let said = drive.to_string();
+    assert!(
+        said.starts_with("no Library was joined from the Google Drive folder \"1AbCdEf\""),
+        "{said}"
+    );
+    assert!(!said.contains("the Library \""), "{said}");
+
+    let s3 = Error::LibraryNotJoined {
+        place: JoinedPlace::S3 {
+            bucket: "photos".to_owned(),
+            prefix: "coffret-abababababababab/".to_owned(),
+        },
+        step: CreationStep::Index,
+        cause: cause(),
+    };
+    let said = s3.to_string();
+    assert!(
+        said.starts_with(
+            "no Library was joined from the prefix \"coffret-abababababababab/\" of the S3 \
+             bucket \"photos\""
+        ),
+        "{said}"
+    );
+    assert!(!said.contains("the Library \""), "{said}");
+    for error in [&drive, &s3] {
+        let recorded = error.redacted();
+        assert!(
+            !recorded.contains("1AbCdEf") && !recorded.contains("photos"),
+            "{recorded}"
+        );
+    }
+}
+
+// FM-15, EL-1: a Library in two directories is refused with both of them and
+// its ID; the diagnostic event keeps how many and none of the paths.
+#[test]
+fn a_library_in_two_directories_is_refused_with_both() {
+    let error = Error::LibraryInSeveralDirectories {
+        library_id: LibraryId::from_bytes([0xab; LibraryId::BYTE_LEN]),
+        paths: vec![
+            PathBuf::from("/state/libraries/abababababababab"),
+            PathBuf::from("/state/libraries/holiday-photos"),
+        ],
+    };
+    let said = error.to_string();
+    for part in [
+        "abababababababab",
+        "/state/libraries/abababababababab",
+        "/state/libraries/holiday-photos",
+    ] {
+        assert!(said.contains(part), "{said}");
+    }
+    assert_eq!(
+        error.redacted(),
+        "Device::LibraryInSeveralDirectories(directories=2)"
+    );
+}
+
+// LA-8: a directory being moved is not a server being served: nothing is to
+// be stopped, and the command can run again once the move is done.
+#[test]
+fn a_library_being_moved_says_so_and_not_that_it_is_served() {
+    let error = Error::LibraryBeingMoved {
+        library: LibraryRef::named("holiday-photos"),
+        by: Some(4213),
+    };
+    assert_eq!(
+        error.to_string(),
+        "the directory of the Library \"holiday-photos\" is being moved by process 4213 to the \
+         one its ID names; run this again once that has finished"
+    );
+    assert_eq!(error.redacted(), "Device::LibraryBeingMoved(by=4213)");
 }

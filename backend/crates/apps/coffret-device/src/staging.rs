@@ -18,7 +18,7 @@ use coffret_model::{LibraryId, Redacted};
 use coffret_usecase::{LocalIoError, LocalOperation};
 use tracing::{debug, info, warn};
 
-use crate::error::{CreationStep, Error, Result};
+use crate::error::{CreationStep, Error, JoinedPlace, Result};
 use crate::library_dir::LibraryDir;
 use crate::library_ref::LibraryRef;
 use crate::owner_only;
@@ -28,20 +28,21 @@ use crate::owner_only;
 /// The one word the two flows differ in: a failure has to say whether the
 /// Library was not created or not joined, because only one of the two can have
 /// left anything on Storage behind.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum Flow {
     /// A Library that did not exist anywhere until now.
     Creating,
-    /// A Library another device created, being taken up by this one.
-    Joining,
+    /// A Library another device created, being taken up by this one from the
+    /// place a join was given.
+    Joining(JoinedPlace),
 }
 
 impl Flow {
     /// What a run of this flow is recorded as.
-    fn operation(self) -> &'static str {
+    fn operation(&self) -> &'static str {
         match self {
             Self::Creating => "create_library",
-            Self::Joining => "join_library",
+            Self::Joining(_) => "join_library",
         }
     }
 }
@@ -49,8 +50,8 @@ impl Flow {
 /// One attempt at putting a Library on this device.
 pub(crate) struct Staging {
     flow: Flow,
-    /// What the attempt says it is about: the Library's name for a creation,
-    /// the place given for a join.
+    /// What a creation says it is about: the Library's name. A join says
+    /// what its [`Flow`] carries instead.
     name: String,
     /// Where it is built until it takes its real name.
     staging: LibraryDir,
@@ -124,11 +125,6 @@ impl Staging {
         &self.staging
     }
 
-    /// Says from here on that the attempt is about the Library called `name`.
-    pub(crate) fn naming(&mut self, name: impl Into<String>) {
-        self.name = name.into();
-    }
-
     /// Records the app folder this attempt created, which a failure from here
     /// on cannot take back.
     pub(crate) fn created_folder(&mut self, folder_id: String) {
@@ -138,18 +134,21 @@ impl Staging {
     /// Reports the step that failed, and — where the flow is one that creates a
     /// folder — the folder this attempt cannot take back.
     pub(crate) fn failed(&self, step: CreationStep, cause: Error) -> Error {
-        let name = self.name.clone();
         let cause = Box::new(cause);
-        match self.flow {
+        match &self.flow {
             Flow::Creating => Error::LibraryNotCreated {
-                name,
+                name: self.name.clone(),
                 step,
                 orphan_folder: self.folder.clone(),
                 cause,
             },
             // No orphan folder: a join creates nothing on Storage, so there is
             // nothing it can leave there.
-            Flow::Joining => Error::LibraryNotJoined { name, step, cause },
+            Flow::Joining(place) => Error::LibraryNotJoined {
+                place: place.clone(),
+                step,
+                cause,
+            },
         }
     }
 
@@ -180,7 +179,7 @@ impl Staging {
             // the Library is not on this device either way — so it is recorded
             // rather than reported over the failure that actually stopped the
             // attempt.
-            record_cleanup_failure(self.flow, &refused);
+            record_cleanup_failure(&self.flow, &refused);
         }
     }
 }
@@ -217,7 +216,7 @@ fn discard_directory(path: &Path) -> std::result::Result<Discarded, LocalIoError
 
 /// Records a cleanup refusal by its operation and error kind, never by the
 /// staging directory or an operating-system message that may repeat it.
-fn record_cleanup_failure(flow: Flow, refused: &LocalIoError) {
+fn record_cleanup_failure(flow: &Flow, refused: &LocalIoError) {
     warn!(
         operation = flow.operation(),
         reason = %refused.redacted(),
@@ -253,7 +252,7 @@ mod tests {
             ),
         );
 
-        record_cleanup_failure(Flow::Creating, &refused);
+        record_cleanup_failure(&Flow::Creating, &refused);
 
         let event = logs.only(Level::WARN);
         assert_eq!(event.field("operation"), "create_library");
@@ -356,7 +355,12 @@ mod tests {
         let dir = library("begin-refused-for-another-reason");
         put_a_file_where_the_directory_would_be(dir.staging().path());
 
-        let refused = match Staging::begin(Flow::Joining, dir) {
+        let refused = match Staging::begin(
+            Flow::Joining(JoinedPlace::DriveFolder {
+                folder_id: "begin-refused".to_owned(),
+            }),
+            dir,
+        ) {
             Err(refused) => refused,
             Ok(_) => panic!("a refusal that is not absence must stop the attempt"),
         };

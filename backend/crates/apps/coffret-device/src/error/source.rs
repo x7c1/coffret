@@ -15,7 +15,9 @@ impl error::Error for Error {
             | Self::NoSuchLibrary { .. }
             | Self::AmbiguousLibraryName { .. }
             | Self::NotADriveLibrary { .. }
+            | Self::LibraryInSeveralDirectories { .. }
             | Self::LibraryAlreadyServed { .. }
+            | Self::LibraryBeingMoved { .. }
             | Self::ManagementAreaNotADirectory { .. }
             | Self::ManagementAreaIncomplete { .. }
             | Self::ManagementAreaFolded { .. }

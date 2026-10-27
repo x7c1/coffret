@@ -213,7 +213,8 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
       await explorer.getByRole('button', { name: 'unlock', exact: true }).first().click();
       await expect.poll(() => shown(doorWindow)).toBe(true);
     }
-    await expect(door.locator('#library')).toHaveValue(setting.library);
+    // The one Library served, listed under its name and chosen by its ID.
+    await expect(door.locator('#library option:checked')).toHaveText(setting.library);
     await shot(door, '04-unlock');
 
     // Unlocked in place: the window goes, and the explorer that was open is

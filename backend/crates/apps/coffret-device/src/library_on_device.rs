@@ -7,6 +7,11 @@ pub struct LibraryOnDevice {
     pub library_id: LibraryId,
     /// What it is listed under: the copy of its name its settings keep, or
     /// the directory an earlier build named after it. `None` for a Library
-    /// whose catalog names nothing yet.
+    /// whose catalog names nothing yet, which is shown as having no name
+    /// rather than under its ID.
     pub name: Option<String>,
+    /// Whether more than one directory on this device holds it: a device holds
+    /// a Library once, so it is listed once, and opening it is refused, with
+    /// both directories named, until one of them is gone.
+    pub needs_attention: bool,
 }

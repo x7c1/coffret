@@ -54,12 +54,9 @@ impl Launch {
         // already bound a port would state it once per request instead of once.
         let library = open_library(&self.library, enter_passphrase).await?;
         // The Library's own name, as its catalog holds it (spec: FM-15), and
-        // its ID where nothing has named it yet.
-        let name = library
-            .name
-            .as_ref()
-            .map(|name| name.as_str().to_owned())
-            .unwrap_or_else(|| library.library_id.to_hex());
+        // none where nothing has named it yet: its ID is its ID, and never
+        // stands in for the name.
+        let name = library.name.as_ref().map(|name| name.as_str().to_owned());
         let state = ServerState::new(name, library);
         let state = Arc::new(match self.unlock_prompt.clone() {
             Some(prompt) => state.prompting_through(prompt),

@@ -8,7 +8,9 @@
 //
 // *Open*, as the app starts: which Library to open, and its Passphrase. Each
 // Library is listed under its name and chosen by its ID, since two Libraries
-// on one device may carry the same name.
+// on one device may carry the same name. One nothing has named yet is said to
+// have no name and shown by its ID, and one held in more than one directory
+// is listed once and marked as needing attention.
 //
 // *Unlock*, once the Library being served has locked itself: the list holds
 // that one Library alone and cannot be changed, and the Library is unlocked in
@@ -41,6 +43,13 @@ function end(sentence) {
   library.disabled = true;
   passphrase.disabled = true;
   open.disabled = true;
+}
+
+// What a Library is listed as: its name, or that it has none yet beside its
+// ID, never its ID where the name goes; and a mark where it needs attention.
+function labelOf(listed) {
+  const named = listed.name == null ? `(no name yet) ${listed.id}` : listed.name;
+  return listed.needs_attention ? `${named} — needs attention: in more than one directory` : named;
 }
 
 function offer(value, label) {
@@ -96,13 +105,13 @@ async function load() {
       end("No Library is open in this app to unlock.");
       return;
     }
-    offer(described.library, described.library);
+    offer(described.library.id, labelOf(described.library));
     library.disabled = true;
     open.textContent = "Unlock";
   } else {
     const libraries = described.libraries || [];
     for (const listed of libraries) {
-      offer(listed.id, listed.name);
+      offer(listed.id, labelOf(listed));
     }
     if (libraries.length === 0) {
       end("There is no Library on this device.");
