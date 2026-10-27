@@ -153,7 +153,7 @@ describe('renumber', () => {
     ]);
   });
 
-  it('numbers a name after a spread by the spread\'s last number', () => {
+  it('numbers a name after a spread by the spread\'s larger number', () => {
     expect(
       paths([added('b/p17.jpg'), added('b/p18+p19.jpg'), added('b/p19x.jpg'), added('b/p20.jpg')], PAGES),
     ).toEqual(['b/017.jpg', 'b/018+019.jpg', 'b/019_p19x.jpg', 'b/020.jpg']);
@@ -245,15 +245,54 @@ describe('renumber', () => {
     );
   });
 
-  // Read after the spread, `x` goes under the spread's last number, `003_x`,
-  // which a listing puts before `004+003`.
-  it('leaves a group whole where its new names would not sort as they are read', () => {
-    const files = [added('b/p1.jpg'), added('b/p2.jpg'), added('b/p4+p3.jpg'), added('b/x.jpg')];
+  // A spread whose new name starts with the number `0` leaves no number for
+  // a name before it, as `p0` does.
+  it('leaves a group whole where a name comes before a spread written as p0+p1', () => {
+    const files = [added('b/cover.jpg'), added('b/p0+p1.jpg'), added('b/p2.jpg'), added('b/p3.jpg')];
     const result = renumber(files, PAGES);
     expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
     expect(result.groups[0]).toMatchObject({
       renamed: [],
-      leftWhole: { reason: 'order', earlier: 'p4+p3.jpg', later: 'x.jpg' },
+      leftWhole: { reason: 'order', earlier: 'cover.jpg', later: 'p0+p1.jpg' },
+    });
+  });
+
+  // A spread written last page first, as a book read right to left may name
+  // it, keeps its numbers as written; the names around it go by their values,
+  // so `p4x`, read between it and `p5`, goes under `004_`: after `004+003`
+  // (`+` sorts before `_`) and before `005`.
+  it('numbers a name after a spread written last page first by its larger number', () => {
+    expect(
+      paths(
+        [added('b/p1.jpg'), added('b/p2.jpg'), added('b/p4+p3.jpg'), added('b/p4x.jpg'), added('b/p5.jpg')],
+        PAGES,
+      ),
+    ).toEqual(['b/001.jpg', 'b/002.jpg', 'b/004+003.jpg', 'b/004_p4x.jpg', 'b/005.jpg']);
+  });
+
+  // A name before the first page goes under the number that page's new name
+  // starts with, less one, so it sorts before it whichever way a spread is
+  // written: `001_cover` before `002+001`, `000_cover` before `001+000`.
+  // `p3` and `p4` make the sequence; `p2+p1` alone beside `p3` would be a
+  // frame of its own as common as `p3`'s, and the folder would be left whole.
+  it('numbers a name before a first page written last page first by its first number', () => {
+    expect(
+      paths([added('b/cover.jpg'), added('b/p2+p1.jpg'), added('b/p3.jpg'), added('b/p4.jpg')], PAGES),
+    ).toEqual(['b/001_cover.jpg', 'b/002+001.jpg', 'b/003.jpg', 'b/004.jpg']);
+    expect(
+      paths([added('b/cover.jpg'), added('b/p1+p0.jpg'), added('b/p2.jpg'), added('b/p3.jpg')], PAGES),
+    ).toEqual(['b/000_cover.jpg', 'b/001+000.jpg', 'b/002.jpg', 'b/003.jpg']);
+  });
+
+  // Read after the spread `p2+p4`, `p2x` goes under its larger number,
+  // `004_p2x`, which a listing puts after `003`, the page read next.
+  it('leaves a group whole where its new names would not sort as they are read', () => {
+    const files = [added('b/p1.jpg'), added('b/p2+p4.jpg'), added('b/p2x.jpg'), added('b/p3.jpg')];
+    const result = renumber(files, PAGES);
+    expect(result.files.map((file) => file.path)).toEqual(files.map((file) => file.path));
+    expect(result.groups[0]).toMatchObject({
+      renamed: [],
+      leftWhole: { reason: 'order', earlier: 'p2x.jpg', later: 'p3.jpg' },
     });
     expect(result.groups[0].unchanged).toHaveLength(4);
   });

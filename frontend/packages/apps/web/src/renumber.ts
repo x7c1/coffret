@@ -53,17 +53,23 @@
 //   plus one: `p0018-2.jpg` is a scanner's second take of page 18, not pages
 //   18 to 2, and is put after page 18 as any other name.
 // - Every other name is put after the page before it, by taking that page's
-//   last number and `_` in front of it: `020_note.jpg`, `019_x.jpg` after a
-//   spread, and `000_cover.jpg` for a name before the first page.
+//   largest number and `_` in front of it: `020_note.jpg`, `019_x.jpg` after
+//   `p18+p19.jpg`, and `004_p4x.jpg` after `p4+p3.jpg`, a spread written last
+//   page first as a book read right to left may name it; `+` sorts before
+//   `_`, so the name lands after the spread and before the next page. A name
+//   before the first page takes the number that page's new name starts with,
+//   less one: `000_cover.jpg` before `001.jpg` or `001+000.jpg`, and
+//   `001_cover.jpg` before `002+001.jpg`.
 // - Where the names put after one page would not sort by bytes in the order
 //   they are read in — `cover.jpg` before `Credits.jpg`, `a2` before `a10` —
 //   each of them also takes its place among them, between the page's number
 //   and the name: `000_1_cover.jpg`, `000_2_Credits.jpg`. Names that sort by
 //   bytes already keep the shorter form.
 // - Where the new names would not sort in that order after all, or the first
-//   page is `0` and leaves no number for a name before it, the folder's pages
-//   are left whole rather than shuffled, and the two names read out of order
-//   are said, so the person knows which to rename.
+//   page's new name starts with the number `0` and leaves no number for a
+//   name before it, the folder's pages are left whole rather than shuffled,
+//   and the two names read out of order are said, so the person knows which
+//   to rename.
 //
 // Neither rule can read every book the way its owner meant, so the person may
 // correct a new name before anything is sent: the last component of a name the
@@ -148,9 +154,10 @@ export type LeftWhole =
   | { reason: 'tie' }
   /**
    * Pages whose new names would not sort in the order the old ones are read
-   * in, or whose first number is `0` with a name before it: `earlier` is read
-   * just before `later`, and numbered they would not stay so. Both are names
-   * as dropped, the last component only.
+   * in, or whose first page's new name starts with the number `0`, `p0` or
+   * `p0+p1`, with a name before it: `earlier` is read just before `later`,
+   * and numbered they would not stay so. Both are names as dropped, the last
+   * component only.
    */
   | { reason: 'order'; earlier: string; later: string };
 
@@ -513,9 +520,13 @@ function judgeVolumes(names: readonly string[], others: readonly string[]): Judg
 interface Page {
   /** The new name. */
   to: string;
-  /** The value of its first number, and of its last. */
+  /**
+   * The value of the number its new name starts with, the one written first,
+   * and of its largest number, which differ only for a spread: `p4+p3` is `4`
+   * and `4`, `p3+p4` is `3` and `4`.
+   */
   first: string;
-  last: string;
+  high: string;
 }
 
 /**
@@ -556,21 +567,22 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
   const pages = new Map<string, Page>([
     ...sequence.members.map((member): [string, Page] => [
       member.name,
-      { to: `${pad(member.value)}${member.kept}`, first: member.value, last: member.value },
+      { to: `${pad(member.value)}${member.kept}`, first: member.value, high: member.value },
     ]),
     ...spreads.map((spread): [string, Page] => [
       spread.name,
       {
         to: `${pad(spread.first)}${spread.joint}${pad(spread.last)}${spread.kept}`,
         first: spread.first,
-        last: spread.last,
+        high: BigInt(spread.first) < BigInt(spread.last) ? spread.last : spread.first,
       },
     ]),
   ]);
 
   // Every other name goes after the page before it in the order they are
-  // read in, by the last number of that page. Names before the first page
-  // wait for it, and go under the number one less than its first.
+  // read in, by the largest number of that page. Names before the first page
+  // wait for it, and go under the number one less than the one its new name
+  // starts with: `001_cover` before `002+001`, `000_cover` before `001+000`.
   const order = [...names].sort(naturally);
   const renamed = new Map<string, string>();
   let run: { value: string | null; names: string[] } = { value: null, names: [] };
@@ -588,7 +600,7 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
     }
     putAfter(run, renamed, pad);
     renamed.set(name, page.to.normalize('NFC'));
-    run = { value: page.last, names: [] };
+    run = { value: page.high, names: [] };
   }
   putAfter(run, renamed, pad);
 
@@ -602,9 +614,8 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
   }
   // What the names above were built to keep, checked rather than assumed:
   // where a listing would read two of them out of order the folder is left as
-  // it was, naming the two. A spread written last page first, `p4+p3`, does
-  // that to a name read after it, which goes under the spread's last number,
-  // `003_`, and so before `004+003`.
+  // it was, naming the two. A spread whose numbers are not neighbours does
+  // that: after `p2+p4`, `p2x` goes under `004_`, and so after `p3`'s `003`.
   for (let at = 1; at < finals.length; at += 1) {
     if (!readInOrder(finals[at - 1], finals[at])) {
       return leftAlone(names, { reason: 'order', earlier: order[at - 1], later: order[at] });
@@ -614,7 +625,7 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
 }
 
 /**
- * The new names of the names read after one page, `run.value` its last
+ * The new names of the names read after one page, `run.value` its largest
  * number, set in `renamed`: that number and `_` in front of each name.
  *
  * The prefix keeps a name after its page, but not two names after one page in
