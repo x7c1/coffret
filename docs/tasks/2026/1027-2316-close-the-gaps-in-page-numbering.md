@@ -108,7 +108,7 @@ Update the `renumber.ts` header comment wherever it describes these rules.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library, headless Chromium with a one-off Playwright
+- [x] On the agent's Library, headless Chromium with a one-off Playwright
       script that drops a folder the way `07-freeze.spec.ts`
       `dropFolderOnto` does (`.tmp/agent/v368-drop.mjs` is a working
       example): dropping `cover.jpg, Credits.jpg, ComicInfo.xml, p001.jpg …
