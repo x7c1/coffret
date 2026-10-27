@@ -135,7 +135,7 @@ Key, and read by every device that joins.
       MinIO, with a mapped folder synced, keeps what this device put on disk
       when the new build first opens it: a following `sync` and `fetch` report
       no file as one this device did not put there
-- [ ] `drive-round-trip-it.sh` and `drive-index-layout-it.sh` pass against a
+- [x] `drive-round-trip-it.sh` and `drive-index-layout-it.sh` pass against a
       real Drive (needs a person for the consent)
 
 
