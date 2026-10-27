@@ -65,7 +65,7 @@ describe a spread as two numbers each with the frame's text around them.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library, headless Chromium with a one-off Playwright
+- [x] On the agent's Library, headless Chromium with a one-off Playwright
       script that drops a folder the way `07-freeze.spec.ts` `dropFolderOnto`
       does (`.tmp/agent/v368-drop.mjs` is a working example): dropping
       `foobar19_0001.jpg … foobar19_0017.jpg, foobar19_0018+0019.jpg,
