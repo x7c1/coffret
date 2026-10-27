@@ -136,6 +136,21 @@ describe('renumber', () => {
     ]);
   });
 
+  // Books write the second number of a spread without the frame's leading
+  // text as often as with it. The `19` in `foobar19_` is text, not a number.
+  it('numbers a spread whose second number drops the frame\'s leading text', () => {
+    const book = (joined: string) =>
+      paths([added('b/foobar19_0017.jpg'), added(`b/${joined}.jpg`), added('b/foobar19_0020.jpg')], PAGES);
+    expect(book('foobar19_0018+0019')).toEqual(['b/017.jpg', 'b/018+019.jpg', 'b/020.jpg']);
+    expect(book('foobar19_0018-0019')).toEqual(['b/017.jpg', 'b/018-019.jpg', 'b/020.jpg']);
+    expect(book('foobar19_0018+foobar19_0019')).toEqual(['b/017.jpg', 'b/018+019.jpg', 'b/020.jpg']);
+    expect(paths([added('b/p0017.jpg'), added('b/p0018+0019.jpg'), added('b/p0020.jpg')], PAGES)).toEqual([
+      'b/017.jpg',
+      'b/018+019.jpg',
+      'b/020.jpg',
+    ]);
+  });
+
   it('numbers a name after a spread by the spread\'s last number', () => {
     expect(
       paths([added('b/p17.jpg'), added('b/p18+p19.jpg'), added('b/p19x.jpg'), added('b/p20.jpg')], PAGES),
