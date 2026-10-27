@@ -354,7 +354,28 @@ readonly SCHEMA_VERSION DEVICE_SCHEMA_VERSION
 # and not about a layout, so it has the same question to ask on either build,
 # and a target that refused outright here would leave this build with no
 # scenario at all.
-if [ "$DEVICE_SCHEMA_VERSION" -lt "$SCHEMA_VERSION" ]; then
+# Whether `prepare` meets the stamp $1 with an upgrade of its own — an arm that
+# names it — rather than with the discard the window between the two versions
+# otherwise gets. Read out of the source like the versions are.
+upgraded_in_place() {
+  grep -Eq "^ *([0-9]+ \| )*$1( \| [0-9]+)* => " "$SCHEMA_FILE"
+}
+
+# The oldest stamp in that window whose catalog is discarded, or nothing where
+# every stamp in it is upgraded in place instead: a layout that only gained a
+# column keeps its catalog, so stamping a current Index back to it describes a
+# file no build wrote, and the open that upgraded it would trip on the column
+# it already has.
+DISCARDED_LAYOUT=""
+for ((stamp = DEVICE_SCHEMA_VERSION; stamp < SCHEMA_VERSION; stamp++)); do
+  if ! upgraded_in_place "$stamp"; then
+    DISCARDED_LAYOUT="$stamp"
+    break
+  fi
+done
+readonly DISCARDED_LAYOUT
+
+if [ -n "$DISCARDED_LAYOUT" ]; then
   readonly LAYOUT_SCENARIOS=yes
   readonly SCENARIOS_RUN="scenarios A, B and C"
 else
@@ -364,7 +385,7 @@ fi
 
 # Why they were skipped. Said where the scenarios would have been rather than
 # here, so that it is read in its place.
-readonly EMPTY_BOUNDARY="DEVICE_SCHEMA_VERSION is $DEVICE_SCHEMA_VERSION and SCHEMA_VERSION is $SCHEMA_VERSION: no stamp lies between them, so there is no older layout for this build to discard."
+readonly EMPTY_BOUNDARY="DEVICE_SCHEMA_VERSION is $DEVICE_SCHEMA_VERSION and SCHEMA_VERSION is $SCHEMA_VERSION: no stamp between them is one this build discards rather than upgrades in place, so there is no older layout for it to discard."
 
 # The oldest layout this build still opens: the floor of the range `prepare`
 # carries forward by upgrading its device-local group in place. Read out of the
@@ -616,7 +637,7 @@ rows_in() {
 discard_warnings_in() {
   grep -F '"level":"WARN"' "$1" |
     grep -F 'older layout' |
-    grep -F "\"found\":$DEVICE_SCHEMA_VERSION" |
+    grep -F "\"found\":$DISCARDED_LAYOUT" |
     grep -cF "\"supported\":$SCHEMA_VERSION" || true
 }
 
@@ -859,10 +880,10 @@ else
   echo
   echo "=== scenario A: an older layout is discarded and rebuilt from Drive ==="
   echo
-  echo "--- stamping the Index at $DEVICE_SCHEMA_VERSION, the oldest layout this build carries forward ---"
-  restamp "$(library_index)" "$DEVICE_SCHEMA_VERSION"
+  echo "--- stamping the Index at $DISCARDED_LAYOUT, the oldest layout this build discards ---"
+  restamp "$(library_index)" "$DISCARDED_LAYOUT"
   assert_equal "the Index now claims the older layout" \
-    "$DEVICE_SCHEMA_VERSION" "$(stamp_of "$(library_index)")"
+    "$DISCARDED_LAYOUT" "$(stamp_of "$(library_index)")"
   echo
 
   echo "--- syncing again, the open that discards the catalog and rebuilds it ---"
@@ -1051,7 +1072,7 @@ echo "  its id:        $folder_id"
 echo "  inside:        $COFFRET_DRIVE_FOLDER_ID"
 echo "  to look at it: https://drive.google.com/drive/folders/$folder_id"
 if [ "$LAYOUT_SCENARIOS" = yes ]; then
-  echo "Layout:          A discarded at $DEVICE_SCHEMA_VERSION and rebuilt to $SCHEMA_VERSION; B refused at $TOO_OLD"
+  echo "Layout:          A discarded at $DISCARDED_LAYOUT and rebuilt to $SCHEMA_VERSION; B refused at $TOO_OLD"
 else
   echo "Layout:          A and B skipped; $SCHEMA_VERSION is both the current layout and the oldest carried forward"
 fi

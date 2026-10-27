@@ -590,6 +590,21 @@ if ! library_present "$JOINER_STATE_DIR"; then
   # account.
   if [ -z "${recovery_code:-}" ]; then
     created_this_run=false
+    # A Library an earlier build created is kept in a directory named after
+    # it, and carries no name until a build that knows of one opens it, which
+    # gives it the directory's. The join below reads the name from the
+    # Library, so $UPLOADER opens it first: a sync, with nothing new to carry
+    # up yet, and with the findings the deletion step of an earlier run left.
+    if [ "$(basename "$(library_dir "$STATE_DIR" "$LIBRARY")")" = "$LIBRARY" ]; then
+      echo
+      echo "--- opening $UPLOADER, which an earlier build created, to give it its name ---"
+      status=0
+      run_cli sync --library "$LIBRARY" --passphrase-stdin || status=$?
+      case "$status" in
+        0 | "$FINDINGS") ;;
+        *) fail "sync on $UPLOADER failed with status $status." ;;
+      esac
+    fi
     echo
     echo "--- reading $UPLOADER's Recovery Code back, to join with ---"
     run_cli recovery-code --library "$LIBRARY" --passphrase-stdin
