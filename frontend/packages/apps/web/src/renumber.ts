@@ -40,8 +40,10 @@
 // bytes and digits sort before letters. So every page is renamed, and the new
 // names sort by bytes in the order the old ones did naturally:
 //
-// - A spread — two numbers of the sequence's frame joined by `+` or `-` — is
-//   both numbers padded alike, joined as they were: `018+019.jpg`.
+// - A spread — two numbers of the sequence's frame joined by `+` or `-`, the
+//   second written with the frame's leading text or without it — is both
+//   numbers padded alike, joined as they were: `p0018+p0019.jpg` and
+//   `p0018+0019.jpg` are both `018+019.jpg`.
 // - Every other name is put after the page before it, by taking that page's
 //   last number and `_` in front of it: `020_note.jpg`, `019_x.jpg` after a
 //   spread, and `000_cover.jpg` for a name before the first page.
@@ -602,18 +604,23 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
  * The two numbers of a spread — two pages scanned as one image — and what
  * joins them, or null where `stem` is not one.
  *
- * A spread is two numbers of the sequence, each with the frame's text around
- * it, joined by `+` or `-`: `p0018+p0019`, or `0018-0019` where the frame is
- * empty. Only that shape is read, since it is the one books have been seen to
- * use; three pages joined, or a second number without the frame, is read as
- * any other name. This is the place to widen when a book needs it.
+ * A spread is two numbers of the sequence joined by `+` or `-`. The first
+ * carries the frame's text around it; the second carries it too, or drops the
+ * frame's leading text and keeps only the digits and the trailing text, as
+ * books write it as often: `p0018+p0019` and `p0018+0019` alike, or
+ * `foobar19_0018-0019` beside `foobar19_0017`, or `0018-0019` where the frame
+ * is empty. Only the digits after the frame's leading text are a number, so
+ * the `19` of `foobar19_` is never taken for one. Only those shapes are read,
+ * since they are the ones books have been seen to use; three pages joined is
+ * read as any other name. This is the place to widen when a book needs it.
  */
 function spreadOf(
   stem: string,
   [before, after]: [string, string],
 ): { first: string; joint: string; last: string } | null {
-  const numbered = `${escaped(before)}(\\d+)${escaped(after)}`;
-  const found = new RegExp(`^${numbered}([+-])${numbered}$`).exec(stem);
+  const framed = `${escaped(before)}(\\d+)${escaped(after)}`;
+  const bare = `(?:${escaped(before)})?(\\d+)${escaped(after)}`;
+  const found = new RegExp(`^${framed}([+-])${bare}$`).exec(stem);
   if (found === null) {
     return null;
   }
