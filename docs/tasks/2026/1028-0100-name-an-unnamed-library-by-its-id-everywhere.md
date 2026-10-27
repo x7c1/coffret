@@ -106,7 +106,7 @@ display it through the same `TheLibrary` wording the other variants in
 
 ### Before merge (verified outside the check command)
 
-- [ ] On a throwaway state directory under `.tmp/` holding a copy of a
+- [x] On a throwaway state directory under `.tmp/` holding a copy of a
       Library's directory with its name copy removed, with
       `COFFRET_STATE_DIR` and `COFFRET_LOG_DIR` set: `coffret join` of the
       same Library again is refused naming it by its ID as its ID, and
