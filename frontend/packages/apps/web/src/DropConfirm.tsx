@@ -31,6 +31,7 @@ import {
   groupHeading,
   hasHidden,
   leftWholeLine,
+  linesOf,
   misorderedLine,
   NO_EDITS,
   NO_NUMBERING,
@@ -40,6 +41,7 @@ import {
   unchangedLine,
   type Edits,
   type Group,
+  type Line,
   type Numbering,
   type Refusal,
   type Rename,
@@ -100,8 +102,10 @@ const REMEMBERED = {
  * volume folders of what was dropped, off unless the last drop ticked them.
  * Ticking one shows what it would rename before anything is sent, because a
  * rename is only worth having where it reads the names the way the person
- * meant — and Add carries the boxes beside the choice. Files dropped alone are
- * no folder's pages, and are sent under the names they were dropped with.
+ * meant — and Add carries the boxes beside the choice. The preview lists each
+ * folder's names in the order they are read in, renamed or not, and the files
+ * that are no pages after them. Files dropped alone are no folder's pages, and
+ * are sent under the names they were dropped with.
  *
  * Where the rule read a name otherwise than the person meant, they correct it
  * here rather than untick the box and rename after the drop: clicking a new
@@ -118,9 +122,12 @@ const REMEMBERED = {
  * lines below it and in the paths sent. What the Library holds under the
  * folder it now names is asked for as the corrections are made (`holding`),
  * and Add waits for the answer, so a replacement or refusal there is said as
- * any other is. Add carries the corrections beside the boxes. They belong to
- * this question only: ticking or unticking either box starts again from the
- * rule's names, and nothing of them is kept for the next drop.
+ * any other is. A press of Add while it waits does nothing, so the reading,
+ * and then what it turned up, is said beside Add as well as above, where a
+ * long preview may have scrolled it away. Add carries the corrections beside
+ * the boxes. They belong to this question only: ticking or unticking either
+ * box starts again from the rule's names, and nothing of them is kept for the
+ * next drop.
  *
  * Escape and a click outside it are Cancel, as they close any dialog — and
  * Cancel costs nothing, because nothing has been sent.
@@ -239,6 +246,16 @@ export function DropConfirm({
   const collisions = useMemo(() => collisionsOf(renumbered.files, known), [renumbered, known]);
   const replaces = replacesLine(collisions);
   const refused = refusedLine(collisions);
+  // What the read under the corrected folder names turned up, said again
+  // beside Add: the lines above may be scrolled out of view by a long preview
+  // while the person waits for Add to come back.
+  const found = useMemo(
+    () => collisionsOf(reached === '' ? [] : renumbered.files, heldCorrected),
+    [renumbered, heldCorrected, reached],
+  );
+  const foundLines = [replacesLine(found), refusedLine(found)].filter(
+    (line): line is string => line !== null,
+  );
   const left = notTakenNotice(notTaken);
   const kept = systemFilesLine(systemFiles);
 
@@ -314,11 +331,7 @@ export function DropConfirm({
           <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
         )}
         {refused !== null && <p style={{ margin: 0, color: COLOR.warn }}>{refused}</p>}
-        {reading && (
-          <p style={{ margin: 0, color: COLOR.dim }}>
-            reading what the Library holds under the corrected folder names…
-          </p>
-        )}
+        {reading && <p style={{ margin: 0, color: COLOR.dim }}>{READING}</p>}
         {asked && (
           <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
             <legend style={{ padding: 0, marginBottom: 4, color: COLOR.dim }}>add it as</legend>
@@ -376,9 +389,26 @@ export function DropConfirm({
             background: COLOR.panel,
             display: 'flex',
             justifyContent: 'flex-end',
+            alignItems: 'center',
             gap: 8,
           }}
         >
+          {(reading || foundLines.length > 0) && (
+            <div
+              aria-live="polite"
+              style={{ marginRight: 'auto', display: 'flex', flexDirection: 'column', gap: 2, overflowWrap: 'anywhere' }}
+            >
+              {reading ? (
+                <span style={{ color: COLOR.dim }}>{READING}</span>
+              ) : (
+                foundLines.map((line) => (
+                  <span key={line} style={{ color: COLOR.warn }}>
+                    {line}
+                  </span>
+                ))
+              )}
+            </div>
+          )}
           <button type="button" onClick={() => onChoose('cancel', numbering, edits)} style={CHOICE}>
             {CANCEL}
           </button>
@@ -440,9 +470,10 @@ const LEVEL: Record<Level['state'], CSSProperties | undefined> = {
 };
 
 /**
- * What the ticked boxes would rename, group by group: both ends of each run of
- * renames and the names left as they are, with a way to see all of it. A new
- * name shown is one the person can correct, through `correct`.
+ * What the ticked boxes would rename, group by group: both ends of each group's
+ * names, renamed or left as they are, in the order they are read in (see
+ * `linesOf`), with a way to see all of it. A new name shown is one the person
+ * can correct, through `correct`.
  */
 function Preview({
   groups,
@@ -470,8 +501,20 @@ function Preview({
       }}
     >
       {groups.map((group) => {
-        const renamed = elided(group.renamed, all);
-        const unchanged = elided(group.unchanged, all);
+        const lines = elided(linesOf(group), all);
+        const shown = (line: Line) =>
+          'renamed' in line ? (
+            <RenameLine
+              key={line.renamed.from}
+              rename={line.renamed}
+              path={editedPath(group, line.renamed)}
+              correct={correct}
+            />
+          ) : (
+            <li key={line.unchanged.from} style={{ color: COLOR.dim }}>
+              {unchangedLine(line.unchanged)}
+            </li>
+          );
         return (
           <div key={`${group.kind}:${group.folder}`}>
             <p style={{ margin: 0, color: COLOR.dim }}>{groupHeading(group)}</p>
@@ -479,36 +522,9 @@ function Preview({
               <p style={{ margin: 0, color: COLOR.warn }}>{leftWholeLine(group.leftWhole)}</p>
             )}
             <ul style={{ margin: 0, paddingLeft: 16 }}>
-              {renamed.head.map((rename) => (
-                <RenameLine
-                  key={rename.from}
-                  rename={rename}
-                  path={editedPath(group, rename)}
-                  correct={correct}
-                />
-              ))}
-              {renamed.hidden > 0 && <li style={{ color: COLOR.dim }}>… {renamed.hidden} more …</li>}
-              {renamed.tail.map((rename) => (
-                <RenameLine
-                  key={rename.from}
-                  rename={rename}
-                  path={editedPath(group, rename)}
-                  correct={correct}
-                />
-              ))}
-              {unchanged.head.map((kept) => (
-                <li key={kept.from} style={{ color: COLOR.dim }}>
-                  {unchangedLine(kept)}
-                </li>
-              ))}
-              {unchanged.hidden > 0 && (
-                <li style={{ color: COLOR.dim }}>… {unchanged.hidden} more unchanged …</li>
-              )}
-              {unchanged.tail.map((kept) => (
-                <li key={kept.from} style={{ color: COLOR.dim }}>
-                  {unchangedLine(kept)}
-                </li>
-              ))}
+              {lines.head.map(shown)}
+              {lines.hidden > 0 && <li style={{ color: COLOR.dim }}>… {lines.hidden} more …</li>}
+              {lines.tail.map(shown)}
             </ul>
           </div>
         );
@@ -653,6 +669,9 @@ function RenameLine({
     </li>
   );
 }
+
+/** What Add waits on after a volume folder's name is corrected. */
+const READING = 'reading what the Library holds under the corrected folder names…';
 
 /** A new name that opens for correcting: read as text, with a dotted line under it. */
 const NAME: CSSProperties = {
