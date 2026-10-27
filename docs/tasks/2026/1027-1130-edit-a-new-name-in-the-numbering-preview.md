@@ -116,7 +116,7 @@ and record why in the PR.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's Library, headless Chromium with a one-off Playwright
+- [x] On the agent's Library, headless Chromium with a one-off Playwright
       script that drops a folder the way `07-freeze.spec.ts` `dropFolderOnto`
       does (`.tmp/agent/v368-drop.mjs` is a working example): drop a book with
       "Number the pages" ticked, edit one page's new name and one that breaks
