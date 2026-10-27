@@ -3,9 +3,14 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+use coffret_model::LibraryId;
 use coffret_usecase::{LocalIoError, LocalOperation};
 
-use crate::error::{Error, NameDefect, Result};
+use crate::error::{Error, Result};
+
+// Which whole Libraries are on this device, and the one a name or an ID picks
+// out of them.
+mod find;
 
 /// Names the directory Libraries are kept under, in place of the default one.
 ///
@@ -51,6 +56,9 @@ const SERVER_LOCK_FILE: &str = "server.lock";
 const SPOOL_DIRECTORY: &str = "spool";
 /// The directory the parcels a fetch read are kept in (spec: PK-21).
 const PARCEL_DIRECTORY: &str = "parcels";
+/// The directory a Library an earlier build put here has its records replayed
+/// into afresh, to read its name from, while it is first opened.
+const NAMING_DIRECTORY: &str = "naming";
 
 /// One Library's directory on this device, and the seven things in it.
 ///
@@ -60,77 +68,59 @@ const PARCEL_DIRECTORY: &str = "parcels";
 /// (spec: SA-8, SA-9).
 ///
 /// Everything a device keeps for a Library is under one directory named after
-/// the Library, so nothing but the directory's own name has to be configured
-/// and removing the directory removes the device's whole part in that Library.
-/// That is why the settings file carries no paths: the layout says where each
+/// the Library's ID (spec: FM-18), so removing the directory removes the
+/// device's whole part in that Library. Nothing a person chose names a
+/// directory: the Library's name is anything at all (spec: FM-15), and is kept
+/// as a copy in the settings file rather than spelled into the layout. That is
+/// also why the settings file carries no paths: the layout says where each
 /// piece is, and a file that also said would be a second answer able to
 /// disagree with the first.
 ///
-/// The directory is not required to exist. `resolve` works out where a Library
-/// of a given name would be, which is what both the call that creates one and
-/// the call that refuses to create a second one need.
+/// A Library an earlier build put here is in a directory named after what this
+/// device called it then. It is found there as well as under its ID, and the
+/// first open by this build moves it to its ID (see
+/// [`open_library`](crate::open_library) and
+/// [`move_to_its_id`](crate::move_to_its_id), which a server moves it with
+/// before it holds it).
+///
+/// The directory is not required to exist: `of` works out where a
+/// Library of a given ID goes, which is what putting one on this device needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryDir {
+    /// What a message says this Library is: its name where this device knows
+    /// one, and its ID otherwise.
     name: String,
     path: PathBuf,
 }
 
 impl LibraryDir {
-    /// Works out where the Library called `name` is kept.
-    ///
-    /// The name is one path component and is held to that here rather than
-    /// wherever a path is next joined: it comes from a person, it becomes a
-    /// directory name, and a name with a separator in it would put a Library
-    /// somewhere no other command would look for it.
-    ///
-    /// One check more than a path component owes, and only here: a name ending
-    /// in the staging suffix would name the directory another Library of that
-    /// name is half-built in. That is this directory's own concern, so nothing
-    /// else that has to be one component is held to it.
-    pub fn resolve(name: &str) -> Result<Self> {
-        let staging_collision = || {
-            name.ends_with(STAGING_SUFFIX)
-                .then_some(NameDefect::StagingSuffix)
-        };
-        if let Some(defect) = defect_in(name).or_else(staging_collision) {
-            return Err(Error::InvalidLibraryName {
-                name: name.to_owned(),
-                defect,
-            });
-        }
+    /// Where the Library with the ID `library_id` is kept, whether or not it
+    /// is on this device.
+    pub(crate) fn of(library_id: LibraryId) -> Result<Self> {
+        let id = library_id.to_hex();
         Ok(Self {
-            name: name.to_owned(),
-            path: libraries_root()?.join(name),
+            path: libraries_root()?.join(&id),
+            name: id,
         })
     }
 
-    /// Every whole Library on this device, by name.
-    ///
-    /// Whole as [`is_present`](Self::is_present) means it: a directory still
-    /// being built under the staging suffix is somebody's `init` or `join` in
-    /// progress (or one that was interrupted), and a directory with no settings
-    /// in it is what an interrupted removal leaves — neither is a Library
-    /// anything can be opened from, so neither is offered. A name this build
-    /// would refuse to resolve is not one it ever gave a Library, and is passed
-    /// over for the same reason. No `libraries/` directory at all is a device
-    /// that has none yet, which is an empty list rather than a refusal.
-    pub fn on_this_device() -> Result<Vec<Self>> {
-        let mut found = Vec::new();
-        for name in entries(&libraries_root()?)? {
-            if name.ends_with(STAGING_SUFFIX) {
-                continue;
-            }
-            let Ok(dir) = Self::resolve(&name) else {
-                continue;
-            };
-            if dir.is_present() {
-                found.push(dir);
-            }
-        }
-        Ok(found)
+    /// A directory beside the Libraries, called `component`: where a Library
+    /// is staged before its ID is known.
+    pub(crate) fn beside(component: &str) -> Result<Self> {
+        Ok(Self {
+            path: libraries_root()?.join(component),
+            name: component.to_owned(),
+        })
     }
 
-    /// The Library's name on this device.
+    /// The same directory, called `name` in what is said about it.
+    pub(crate) fn called(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// What this device calls the Library in what it says about it: its name
+    /// where one is known, and its ID otherwise.
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -140,17 +130,29 @@ impl LibraryDir {
         &self.path
     }
 
-    /// The directory a Library of this name is built in before it is finished.
+    /// The directory this one is built in before it is finished: its own
+    /// name with the staging suffix after it.
     ///
     /// The same accessors work on it, so every step of a creation writes
     /// through the staging directory and the last step is a rename.
     pub fn staging(&self) -> Self {
+        let mut staged = self.path.clone().into_os_string();
+        staged.push(STAGING_SUFFIX);
         Self {
             name: self.name.clone(),
-            path: self
-                .path
-                .with_file_name(format!("{}{STAGING_SUFFIX}", self.name)),
+            path: PathBuf::from(staged),
         }
+    }
+
+    /// The name of the directory an earlier build kept this Library in, where
+    /// it is in one: a directory named after anything but `library_id`.
+    ///
+    /// That name was what the device called the Library then, and it is the
+    /// name a Library whose catalog holds none is given when it is first
+    /// opened by this build (spec: FM-15).
+    pub(crate) fn earlier_name(&self, library_id: LibraryId) -> Option<&str> {
+        let name = self.path.file_name()?.to_str()?;
+        (name != library_id.to_hex()).then_some(name)
     }
 
     /// The device settings file, which is the contract this crate and the
@@ -219,7 +221,18 @@ impl LibraryDir {
         self.path.join(PARCEL_DIRECTORY)
     }
 
-    /// Whether a whole Library of this name is on this device.
+    /// Where a Library an earlier build put here has its records replayed into
+    /// afresh while it is first opened, to read the name they give it
+    /// (spec: FM-15).
+    ///
+    /// A catalog of its own and not the Library's: it is made, read and
+    /// removed within that one open, and one an interrupted open left is
+    /// removed by the next.
+    pub(crate) fn naming_dir(&self) -> PathBuf {
+        self.path.join(NAMING_DIRECTORY)
+    }
+
+    /// Whether a whole Library is in this directory.
     ///
     /// The settings file is what is asked about rather than the directory: a
     /// directory with no settings in it is what an interrupted removal leaves,
@@ -227,35 +240,6 @@ impl LibraryDir {
     pub fn is_present(&self) -> bool {
         self.settings_file().is_file()
     }
-}
-
-/// What is wrong with `name` as the name of a directory on this device, if
-/// anything is.
-///
-/// One path component, and one this device's own naming leaves alone: a name
-/// with a separator in it would put a Library where no other command would look
-/// for it, and a name carrying a control character is one a person cannot see
-/// what they typed of. It is not an Entry Path and is held to none of EP-2's
-/// shape — a Library's name never reaches Storage and names nothing inside the
-/// Library.
-///
-/// The staging suffix is asked about by [`LibraryDir::resolve`] and not here,
-/// because it is the one rule about where a name would land rather than about
-/// the name.
-fn defect_in(name: &str) -> Option<NameDefect> {
-    if name.is_empty() {
-        return Some(NameDefect::Empty);
-    }
-    if name == "." || name == ".." {
-        return Some(NameDefect::Relative);
-    }
-    if name.contains('/') || name.contains('\\') {
-        return Some(NameDefect::Separator);
-    }
-    if name.chars().any(char::is_control) {
-        return Some(NameDefect::Control);
-    }
-    None
 }
 
 /// The names in the directory at `path`, sorted, or none where there is no
@@ -321,7 +305,7 @@ fn state_root() -> Result<PathBuf> {
 
 /// A state directory one case has to itself.
 ///
-/// Libraries are told apart by name, so cases sharing one state directory stay
+/// Libraries are told apart by ID, so cases sharing one state directory stay
 /// out of each other's way; accounts are the device's and not a Library's, so a
 /// case that counts them, or removes the Libraries that reference one, needs a
 /// device of its own. The override is the calling thread's, which is every
@@ -370,49 +354,13 @@ pub(crate) mod isolated {
 mod tests {
     use super::*;
 
-    // The name becomes a directory name, so a name that is not one component is
-    // refused before anything is looked at, let alone created.
-    #[test]
-    fn a_name_that_is_not_one_path_component_is_refused() {
-        assert!(matches!(refusal(""), NameDefect::Empty));
-        assert!(matches!(refusal(".."), NameDefect::Relative));
-        assert!(matches!(refusal("."), NameDefect::Relative));
-        assert!(matches!(refusal("albums/2026"), NameDefect::Separator));
-        assert!(matches!(refusal("../escape"), NameDefect::Separator));
-        assert!(matches!(refusal("albums\\2026"), NameDefect::Separator));
-        assert!(matches!(refusal("albums\n2026"), NameDefect::Control));
-        assert!(matches!(
-            refusal("albums.partial"),
-            NameDefect::StagingSuffix
-        ));
-    }
-
-    /// What `resolve` refused `name` for, or a panic saying what it did instead.
-    fn refusal(name: &str) -> NameDefect {
-        match LibraryDir::resolve(name) {
-            Err(Error::InvalidLibraryName { defect, .. }) => defect,
-            other => panic!("{name:?} must be refused as a name, got {other:?}"),
-        }
-    }
-
-    // The staging suffix is this directory's own concern. A Library folder
-    // called `albums.partial` is an ordinary top-level component (spec: EP-9),
-    // and refusing to map it would be this device's private naming leaking into
-    // what a person may keep in their Library.
-    #[test]
-    fn only_a_library_name_is_held_to_the_staging_suffix() {
-        assert!(defect_in("albums.partial").is_none());
-        assert!(matches!(
-            LibraryDir::resolve("albums.partial"),
-            Err(Error::InvalidLibraryName {
-                defect: NameDefect::StagingSuffix,
-                ..
-            })
-        ));
+    /// The ID a case's Library `seed` carries.
+    pub(super) fn library_id(seed: u8) -> LibraryId {
+        LibraryId::from_bytes([seed; LibraryId::BYTE_LEN])
     }
 
     // Everything a device keeps for a Library sits in the directory named after
-    // it, which is what lets the settings file carry no paths at all.
+    // its ID, which is what lets the settings file carry no paths at all.
     #[test]
     fn every_file_is_under_the_directory_named_after_the_library() {
         let dir = LibraryDir {
@@ -458,34 +406,16 @@ mod tests {
         );
     }
 
-    // Only whole Libraries are offered: one still being built under the
-    // staging suffix, and a directory an interrupted removal left with no
-    // settings in it, are not anything a Library can be opened from.
+    // A Library's directory is its ID, whatever it is called (spec: FM-18).
     #[test]
-    fn only_whole_libraries_are_on_this_device() {
+    fn a_library_is_kept_under_its_id() {
         let device = isolated::device();
-        assert!(
-            LibraryDir::on_this_device()
-                .expect("a device with no Libraries must list none")
-                .is_empty(),
-            "a device with no libraries directory has no Libraries"
+        let dir = LibraryDir::of(library_id(7)).unwrap();
+        assert_eq!(
+            dir.path(),
+            device.path().join("libraries").join(library_id(7).to_hex())
         );
-
-        let libraries = device.path().join("libraries");
-        for whole in ["books", "albums"] {
-            fs::create_dir_all(libraries.join(whole)).unwrap();
-            fs::write(libraries.join(whole).join(SETTINGS_FILE), "{}").unwrap();
-        }
-        fs::create_dir_all(libraries.join("drafts.partial")).unwrap();
-        fs::write(libraries.join("drafts.partial").join(SETTINGS_FILE), "{}").unwrap();
-        fs::create_dir_all(libraries.join("emptied")).unwrap();
-
-        let names: Vec<String> = LibraryDir::on_this_device()
-            .expect("the libraries directory must be listable")
-            .iter()
-            .map(|dir| dir.name().to_owned())
-            .collect();
-        assert_eq!(names, ["albums", "books"]);
+        assert_eq!(dir.earlier_name(library_id(7)), None);
     }
 
     // A creation writes through the staging directory and renames at the end,
@@ -494,17 +424,17 @@ mod tests {
     fn a_staging_directory_is_a_sibling_of_the_finished_one() {
         let dir = LibraryDir {
             name: "alpha".to_owned(),
-            path: PathBuf::from("/state/coffret/libraries/alpha"),
+            path: PathBuf::from("/state/coffret/libraries/0123456789abcdef"),
         };
         let staging = dir.staging();
 
         assert_eq!(
             staging.path(),
-            Path::new("/state/coffret/libraries/alpha.partial")
+            Path::new("/state/coffret/libraries/0123456789abcdef.partial")
         );
         assert_eq!(
             staging.settings_file(),
-            Path::new("/state/coffret/libraries/alpha.partial/settings.json")
+            Path::new("/state/coffret/libraries/0123456789abcdef.partial/settings.json")
         );
         assert_eq!(staging.name(), "alpha");
     }

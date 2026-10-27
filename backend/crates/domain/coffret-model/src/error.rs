@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::{ContainerId, EntryNumber, Generation, PathDefect, Redacted};
+use crate::{ContainerId, EntryNumber, Generation, LibraryNameDefect, PathDefect, Redacted};
 
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -291,6 +291,16 @@ pub enum Error {
     /// which path it was is Library content, and the caller placing the
     /// refusal knows which element carried it.
     RenameIntoReservedNamespace,
+    /// A piece of text is not a Library's name (spec: FM-15).
+    ///
+    /// The name is what a person chose, so the redacted rendering keeps its
+    /// length and the defect and none of the text (spec: EL-1).
+    InvalidLibraryName {
+        /// The text as it was presented.
+        name: String,
+        /// What is wrong with it.
+        defect: LibraryNameDefect,
+    },
 }
 
 impl fmt::Display for Error {
@@ -401,6 +411,9 @@ impl fmt::Display for Error {
             Self::RenameIntoReservedNamespace => f.write_str(
                 "a rename's new Entry Path lies under the component reserved for derived Entries",
             ),
+            Self::InvalidLibraryName { name, defect } => {
+                write!(f, "{name:?} is not a Library name: {defect}")
+            }
         }
     }
 }
@@ -510,6 +523,12 @@ impl Redacted for Error {
                 format!("Model::EntryNumberOutOfRange(number={number})")
             }
             Self::RenameIntoReservedNamespace => "Model::RenameIntoReservedNamespace".to_owned(),
+            // A name a person chose: its defect and its length, and none of it
+            // (spec: EL-1).
+            Self::InvalidLibraryName { name, defect } => format!(
+                "Model::InvalidLibraryName(defect={defect}, name_len={})",
+                name.len()
+            ),
         }
     }
 }

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use coffret_format::ParcelLen;
 use coffret_local_fs::UnixFs;
-use coffret_model::{LibraryId, MasterKeyEpoch};
+use coffret_model::{LibraryId, LibraryName, MasterKeyEpoch};
 use coffret_usecase::device_state::LiveReservations;
 use coffret_usecase::fetch::FetchMemory;
 use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
@@ -26,6 +26,11 @@ mod run;
 pub use run::open_library;
 #[cfg(test)]
 pub(crate) use run::open_library_through;
+
+// The Library's name as it is opened, and the move of a directory an earlier
+// build named after it to the one its ID names (spec: FM-15, LA-8).
+mod named;
+pub use named::move_to_its_id;
 
 mod store;
 
@@ -64,6 +69,12 @@ pub struct OpenLibrary {
     pub parcel_len: ParcelLen,
     /// The Library this is (spec: FM-18).
     pub library_id: LibraryId,
+    /// The Library's name, as its catalog held it when it was opened, or the
+    /// copy kept beside it where the catalog could not say (spec: FM-15).
+    ///
+    /// `None` for a Library nothing has named yet. A person chose it, so
+    /// nothing records it in a diagnostic event (spec: EL-1).
+    pub name: Option<LibraryName>,
     /// The Master Key epoch [`keys`](Self::keys) belongs to.
     pub epoch: MasterKeyEpoch,
     /// Which provider the Library's Storage is, in the settings file's own word.
@@ -109,3 +120,6 @@ pub struct OpenLibrary {
     /// down).
     pub live: Arc<LiveReservations>,
 }
+
+#[cfg(test)]
+mod tests;

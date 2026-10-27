@@ -51,18 +51,20 @@ import type { ContainerSummary } from '../model/containerSummary.js';
 import type { EntryLocation } from '../model/entryLocation.js';
 import type { ControlObjectKind } from '../model/kinds.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
+import { requireLibraryName } from '../model/libraryName.js';
 import { MAX_ENTRY_NUMBER } from '../model/entryRename.js';
 import { INDEX_SNAPSHOT, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
- * The schema this package writes for an Index Snapshot payload (spec: FM-16).
+ * The schema this package writes for an Index Snapshot payload (spec: FM-16):
+ * 5, the first whose Snapshots may carry `library_name`.
  *
  * Not what a reader refuses below: that is
  * {@link INDEX_SNAPSHOT_LOWEST_READ_SCHEMA}, so that a later build writing a
  * new field under a higher schema goes on reading the Snapshots written before
  * it.
  */
-export const INDEX_SNAPSHOT_SCHEMA = 4n;
+export const INDEX_SNAPSHOT_SCHEMA = 5n;
 
 /**
  * The lowest schema a reader accepts: 4, the first whose Entries carry
@@ -70,8 +72,9 @@ export const INDEX_SNAPSHOT_SCHEMA = 4n;
  *
  * A Snapshot of an earlier schema lacks the deposit time of every Entry it
  * lists, and the records it checkpoints lack it too, so nothing could supply
- * one: it is refused as a schema this package does not read. Equal to
- * {@link INDEX_SNAPSHOT_SCHEMA} for now.
+ * one: it is refused as a schema this package does not read. A Snapshot of
+ * schema 4 was written before a checkpoint could carry a name, and reads as one
+ * that carries none.
  */
 export const INDEX_SNAPSHOT_LOWEST_READ_SCHEMA = 4n;
 
@@ -180,6 +183,14 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
       return entry;
     }),
   );
+  // Where the records it checkpoints named the Library, so that pruning them
+  // does not lose the name (spec: FM-16).
+  if (payload.content.libraryName !== undefined) {
+    map.set(
+      'library_name',
+      requireLibraryName(payload.content.libraryName, 'control_payload_encode_failed'),
+    );
+  }
 
   if (payload.activation !== undefined) {
     map.set(BASE_HEAD_GENERATION, payload.activation.baseHeadGeneration.value);
@@ -299,6 +310,10 @@ export function decodeIndexSnapshot(
   const nextCommitSlot = optionalText(map, 'next_commit_slot', MALFORMED);
   if (nextCommitSlot !== undefined) {
     content.checkpoint.nextCommitSlot = nextCommitSlot;
+  }
+  const libraryName = optionalText(map, 'library_name', MALFORMED);
+  if (libraryName !== undefined) {
+    content.libraryName = requireLibraryName(libraryName, MALFORMED);
   }
 
   if (!activating) {

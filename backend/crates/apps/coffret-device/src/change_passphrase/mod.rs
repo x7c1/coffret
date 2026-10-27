@@ -3,9 +3,10 @@ use coffret_model::Passphrase;
 
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::library_ref::LibraryRef;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 
-/// Keeps this device's Master Key of the Library called `name` under a new
+/// Keeps this device's Master Key of the Library `library` names under a new
 /// Passphrase.
 ///
 /// Each device has a Passphrase of its own, and what it protects is that
@@ -32,12 +33,12 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// A process that already holds the Library open keeps the keys it derived
 /// until it locks; the change reaches it at its next unlock, which reads the
 /// stored form again.
-pub fn change_passphrase<E, C>(name: &str, enter_current: E, choose_new: C) -> Result<()>
+pub fn change_passphrase<E, C>(library: &LibraryRef, enter_current: E, choose_new: C) -> Result<()>
 where
     E: FnOnce() -> Result<Passphrase>,
     C: FnOnce() -> Result<Passphrase>,
 {
-    let dir = LibraryDir::resolve(name)?;
+    let dir = LibraryDir::find(library)?;
     let unlocked = StoredMasterKeyFile::unlock_asking(&dir, enter_current)?;
     let new = choose_new()?;
     let stored = StoredMasterKey::create(&new, &unlocked.master_key, unlocked.epoch)

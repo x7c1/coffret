@@ -5,12 +5,13 @@
 //! coffret-explorer-dev --library main --server-port 8787 --port 5173
 //! ```
 //!
-//! The Library's directory is resolved the way the binaries resolve it, so
-//! `COFFRET_STATE_DIR` has to name the state directory that server runs from;
-//! the Makefile sets it for its own targets. The page is read from the
-//! explorer's build output on disk, `frontend/packages/apps/web/dist` unless
-//! `--dist` names another, so a build in watch mode beside this is picked up by
-//! reloading the tab.
+//! `--library` names the Library by its name and `--library-id` by its ID, as
+//! every binary takes them. The Library's directory is found the way the
+//! binaries find it, so `COFFRET_STATE_DIR` has to name the state directory
+//! that server runs from; the Makefile sets it for its own targets. The page is
+//! read from the explorer's build output on disk,
+//! `frontend/packages/apps/web/dist` unless `--dist` names another, so a build
+//! in watch mode beside this is picked up by reloading the tab.
 //!
 //! A browser is admitted only by a browser token, which a page gets by
 //! exchanging the ticket in the launch file this prints the path of. Open that
@@ -27,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use clap::Parser;
-use coffret_device::LibraryDir;
+use coffret_device::{LibraryDir, LibraryId};
 use coffret_explorer_dev::{host, LaunchKeeper, Settings, Tick};
 use coffret_explorer_host::launch_file::LaunchDir;
 use coffret_explorer_host::{serve, KeyFile};
@@ -47,10 +48,15 @@ const DIST: &str = concat!(
     version,
     about = "Serve the explorer's build on disk in front of a running coffret server"
 )]
+#[command(group(clap::ArgGroup::new("which_library").required(true).args(["library", "library_id"])))]
 struct Args {
-    /// The Library the server is serving
+    /// The Library the server is serving, by its name
     #[arg(long)]
-    library: String,
+    library: Option<String>,
+    /// The Library the server is serving, by its ID: the 16 lowercase hex
+    /// characters `coffret init` and `coffret join` print
+    #[arg(long, value_parser = coffret_shell::which_library::library_id)]
+    library_id: Option<LibraryId>,
     /// The loopback port the server is listening on
     #[arg(long, default_value_t = 8787)]
     server_port: u16,
@@ -80,14 +86,8 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     coffret_shell::logging::start()?;
 
-    let library =
-        LibraryDir::resolve(&args.library).context("resolving the Library's directory")?;
-    anyhow::ensure!(
-        library.is_present(),
-        "there is no Library called {:?} under the state directory, at {}",
-        args.library,
-        library.path().display(),
-    );
+    let which = coffret_shell::which_library::library(args.library, args.library_id);
+    let library = LibraryDir::find(&which).context("finding the Library's directory")?;
     let launch_dir = args
         .launch_dir
         .unwrap_or_else(|| library.path().join("explorer-launch"));

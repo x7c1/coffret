@@ -19,7 +19,9 @@ rpassword = { workspace = true }
 # The argument parser's error type alone: clap refuses an argument it did not
 # expect by quoting it, so its refusal has to be read here before it is printed,
 # in case what it would quote is a secret. Nothing in this crate defines a
-# parser — each binary keeps its own.
+# parser — each binary keeps its own; what is shared is what the flags every
+# parser declares mean, such as which Library `--library` and `--library-id`
+# name.
 clap = { workspace = true }
 
 # The `Zeroize` trait alone: what wipes the bytes a Recovery Code that failed to

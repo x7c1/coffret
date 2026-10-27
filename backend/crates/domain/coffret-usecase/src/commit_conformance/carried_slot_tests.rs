@@ -55,7 +55,7 @@ async fn commit_checkpointed(
 /// Creates a Library in an empty store, returning its first head
 /// (spec: CP-2, FM-13).
 async fn created(store: &dyn ObjectStore) -> JournalRecord {
-    write_first_head(store, &control_keys(), &policy())
+    write_first_head(store, &control_keys(), &policy(), None)
         .await
         .expect("creating a Library in an empty store must succeed")
         .expect("an empty store holds no head to find instead")

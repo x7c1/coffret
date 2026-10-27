@@ -49,22 +49,32 @@ import { storedPath } from '../internal/entryFields.js';
 import { Generation } from '../model/generation.js';
 import { requireKeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
+import { requireLibraryName } from '../model/libraryName.js';
 import { JOURNAL_RECORD, fromWire, toWire } from '../internal/fieldNumbers.js';
 
 /**
  * The schema this package writes for a Journal record payload, and the one it
- * implements (spec: FM-15).
- *
- * It is also what every record names in `required_schema`: a reader that
- * ignored `deposited_at` would hold a catalog without deposit times and could
- * commit records no reader of this schema accepts, so the field is
- * must-understand and every record says so (spec: FM-9, FM-15).
+ * implements (spec: FM-15): 5, the first whose records may carry
+ * `library_name`.
  *
  * Not what a reader refuses below: that is
  * {@link JOURNAL_RECORD_LOWEST_READ_SCHEMA}, so that a later build writing a new
  * field under a higher schema goes on reading the records written before it.
+ * Nor what every record names in `required_schema`: that is
+ * {@link JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN}.
  */
-export const JOURNAL_RECORD_SCHEMA = 4n;
+export const JOURNAL_RECORD_SCHEMA = 5n;
+
+/**
+ * What every record names in `required_schema`: 4 (spec: FM-9, FM-15).
+ *
+ * A reader that ignored `deposited_at` would hold a catalog without deposit
+ * times and could commit records no reader of schema 4 accepts, so that field
+ * is must-understand and every record says so. `library_name`, which schema 5
+ * adds, is not: a reader that ignores it loses the Library's name and nothing
+ * else, so the value stays 4.
+ */
+export const JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN = 4n;
 
 /**
  * The lowest schema a reader accepts, in `schema` and in `required_schema`
@@ -73,7 +83,8 @@ export const JOURNAL_RECORD_SCHEMA = 4n;
  *
  * A record of an earlier schema carries Entries without a deposit time, so it is
  * refused as a schema this package does not read rather than read with a time
- * made up. Equal to {@link JOURNAL_RECORD_SCHEMA} for now.
+ * made up. A record of schema 4 is one written before records could carry a
+ * name, and reads as one that carries none.
  */
 export const JOURNAL_RECORD_LOWEST_READ_SCHEMA = 4n;
 
@@ -123,7 +134,11 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
   // Every record names the schema its deposit times need, so a reader of an
   // earlier schema stops at it rather than holding a catalog without them
   // (spec: FM-9, FM-15).
-  map.set('required_schema', JOURNAL_RECORD_SCHEMA);
+  map.set('required_schema', JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN);
+  // Left out where the record gives the Library no name (spec: FM-15).
+  if (record.libraryName !== undefined) {
+    map.set('library_name', requireLibraryName(record.libraryName, 'control_payload_encode_failed'));
+  }
 
   return {
     masterKeyEpoch: record.masterKeyEpoch,
@@ -267,6 +282,12 @@ export function decodeJournalRecord(
   const snapshotSlot = optionalText(map, 'snapshot_slot', MALFORMED);
   if (snapshotSlot !== undefined) {
     record.snapshotSlot = snapshotSlot;
+  }
+  // Absent on a record that names nothing, which every record of schema 4 is
+  // (spec: FM-15).
+  const libraryName = optionalText(map, 'library_name', MALFORMED);
+  if (libraryName !== undefined) {
+    record.libraryName = requireLibraryName(libraryName, MALFORMED);
   }
   return record;
 }

@@ -261,6 +261,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::NoStateDirectory => "no_state_directory",
         Error::LibraryExists { .. } => "library_exists",
         Error::NoSuchLibrary { .. } => "no_such_library",
+        Error::AmbiguousLibraryName { .. } => "ambiguous_library_name",
         Error::Local(_) => "local",
         Error::MalformedSettings { .. } => "malformed_settings",
         Error::UnsupportedSettingsVersion { .. } => "unsupported_settings_version",

@@ -5,6 +5,7 @@ use tracing::info;
 
 use crate::device_time::now;
 use crate::error::Result;
+use crate::library_ref::LibraryRef;
 use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
@@ -70,13 +71,13 @@ impl OpenLibrary {
     }
 }
 
-/// Renames `from` to `to` in the Library called `name`.
+/// Renames `from` to `to` in the Library `library` names.
 ///
 /// One unlock and one run, which is what a command line does (spec: DK-9). A
 /// process that opens a Library once and runs many things over it calls
 /// [`OpenLibrary::rename`] and reaches the same body.
 pub async fn run_rename<P>(
-    name: &str,
+    library: &LibraryRef,
     enter_passphrase: P,
     from: EntryPath,
     to: EntryPath,
@@ -85,7 +86,7 @@ pub async fn run_rename<P>(
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    open_library(name, enter_passphrase)
+    open_library(library, enter_passphrase)
         .await?
         .rename(from, to, progress)
         .await

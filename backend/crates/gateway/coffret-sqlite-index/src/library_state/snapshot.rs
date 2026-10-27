@@ -1,8 +1,8 @@
-use coffret_model::IndexCheckpoint;
+use coffret_model::{IndexCheckpoint, LibraryName};
 use coffret_usecase::{IndexError, IndexResult, SnapshotContent};
 use rusqlite::Connection;
 
-use super::read_checkpoint;
+use super::{read_checkpoint, read_library_name};
 use crate::error::unreadable_model;
 use crate::query::collect;
 use crate::rows;
@@ -34,11 +34,19 @@ pub(crate) fn snapshot(connection: &Connection) -> IndexResult<SnapshotContent> 
         rows::entry_location,
     )?;
 
+    let name = read_library_name(connection)?;
+
     SnapshotContent::new(checkpoint, adopted_from, containers, entries)
+        .map(|content| content.with_library_name(name))
         .map_err(unreadable_model(OPERATION))
 }
 
 /// The committed Library state this catalog stands at (spec: CK-9).
 pub(crate) fn checkpoint(connection: &Connection) -> IndexResult<Option<IndexCheckpoint>> {
     Ok(read_checkpoint(connection)?.map(|(checkpoint, _)| checkpoint))
+}
+
+/// The Library's name as this catalog holds it (spec: FM-15, FM-16).
+pub(crate) fn library_name(connection: &Connection) -> IndexResult<Option<LibraryName>> {
+    read_library_name(connection)
 }

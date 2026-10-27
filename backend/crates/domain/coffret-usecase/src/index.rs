@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use coffret_model::{
     ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, JournalRecord,
-    SnapshotContent,
+    LibraryName, SnapshotContent,
 };
 
 use crate::committed_batch::CommittedBatch;
@@ -30,8 +30,9 @@ use crate::index_error::IndexResult;
 /// Everything here divides in two, and the division is structural rather than
 /// conventional:
 ///
-/// - **Library-wide** — the checkpoint, the current Containers, and every
-///   current Entry. This is precisely what an Index Snapshot carries, so
+/// - **Library-wide** — the checkpoint, the current Containers, every
+///   current Entry, and the Library's name (spec: FM-15, FM-16). This is
+///   precisely what an Index Snapshot carries, so
 ///   [`restore`](Self::restore) replaces it wholesale and
 ///   [`snapshot`](Self::snapshot) hands it back (spec: CK-7).
 /// - **Device-local** — how this device maps the Library onto its folders
@@ -103,6 +104,10 @@ pub trait Index: Send + Sync {
     /// under a purpose key derived from the Master Key, and its checkpoint names
     /// the committed Keyring tuple it depends on (spec: CK-9, CK-3, RV-3).
     ///
+    /// The Library's name the content carries replaces the one the catalog
+    /// held, and a content carrying none leaves the catalog naming none
+    /// (spec: FM-16).
+    ///
     /// The content's provenance comes with it:
     /// [`SnapshotContent::adopted_from`](crate::SnapshotContent::adopted_from)
     /// becomes the checkpoint object this catalog was last adopted from,
@@ -155,6 +160,10 @@ pub trait Index: Send + Sync {
     ///
     /// No Container is opened: the record carries each new Container's kind and
     /// entry table (spec: CP-11).
+    ///
+    /// A record carrying the Library's name makes it the catalog's name; one
+    /// carrying none leaves the name the catalog held, since the Library's name
+    /// is the one the latest record carrying a name gives (spec: FM-15).
     ///
     /// Which checkpoint object this catalog was adopted from is left as it was.
     /// A replay carries the catalog past the Snapshot it started from without
@@ -223,6 +232,22 @@ pub trait Index: Send + Sync {
     /// on Storage to decide which of the two is the newer starting point
     /// (spec: CK-9).
     async fn checkpoint(&self) -> IndexResult<Option<IndexCheckpoint>>;
+
+    /// The Library's name as this catalog holds it, or `None` where no record
+    /// or Snapshot it took in carried one (spec: FM-15, FM-16).
+    ///
+    /// Read without asking Storage anything, so it is the name as of the head
+    /// the catalog stands at. The default reads it off
+    /// [`snapshot`](Self::snapshot), which an adapter holding the name apart
+    /// answers more cheaply; a catalog standing at no committed state names
+    /// nothing.
+    async fn library_name(&self) -> IndexResult<Option<LibraryName>> {
+        match self.snapshot().await {
+            Ok(content) => Ok(content.library_name().cloned()),
+            Err(crate::IndexError::NoCheckpoint) => Ok(None),
+            Err(other) => Err(other),
+        }
+    }
 
     /// Where the current Entry at one Entry Path lives, or `None` if the path
     /// holds none.

@@ -9,8 +9,9 @@ use crate::error::{Error, Result};
 ///
 /// coffret cannot tell accounts apart by what it was granted — the one
 /// permission it asks for names no account (spec: SA-3) — so the person does,
-/// by naming each one. Like a device-local Library name it is theirs, is never
-/// written to Storage, and never reaches a diagnostic event (spec: EL-1): it is
+/// by naming each one. It is theirs and this device's alone — unlike a Library's
+/// name, which is the Library's and kept on Storage — is never written to
+/// Storage, and never reaches a diagnostic event (spec: EL-1): it is
 /// the directory the account's grant is kept in, and it is bound into every
 /// envelope that opens that grant (spec: SA-9).
 ///

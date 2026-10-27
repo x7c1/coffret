@@ -321,3 +321,35 @@ fn read(
 ) -> crate::Result<IndexSnapshotPayload> {
     decode(payload, kind, generation(GENERATION))
 }
+
+// FM-16: a checkpoint carries the Library's name the records it checkpoints
+// left, so a device that catches up from the Snapshot alone reads it — and a
+// Snapshot of schema 4, written before one could carry a name, reads as one
+// naming nothing.
+#[test]
+fn a_snapshot_carries_the_library_name() {
+    let name = coffret_model::LibraryName::parse("books").expect("a fixture's name is one");
+    let named =
+        IndexSnapshotPayload::ordinary(super::testing::content().with_library_name(Some(name)));
+    let payload = encode(&named).expect("encoding succeeds");
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(
+        decoded.content.library_name().map(|name| name.as_str()),
+        Some("books")
+    );
+
+    let unnamed = encode(&ordinary()).expect("encoding succeeds");
+    let mut fields = body_map(&unnamed, &field_numbers::INDEX_SNAPSHOT);
+    assert!(!fields
+        .iter()
+        .any(|(key, _)| key.as_text() == Some("library_name")));
+    *field(&mut fields, "schema") = Value::from(4u64);
+    let older = with_body_map(
+        unnamed.master_key_epoch,
+        fields,
+        &field_numbers::INDEX_SNAPSHOT,
+    );
+    let decoded =
+        read(&older, ControlObjectKind::IndexSnapshot).expect("a schema-4 Snapshot reads");
+    assert_eq!(decoded.content.library_name(), None);
+}

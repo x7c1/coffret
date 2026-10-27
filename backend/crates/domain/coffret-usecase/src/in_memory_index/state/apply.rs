@@ -36,6 +36,10 @@ impl State {
         // Where the Entries of the rows this record's removals reach stand,
         // read before they are taken out: a replacement takes a row over at
         // the path its Entry stood at (spec: EP-6, EP-10).
+        // The latest record carrying a name names the Library (spec: FM-15).
+        if let Some(name) = record.library_name() {
+            self.library_name = Some(name.clone());
+        }
         let removed = record.removals();
         let stood = self.standing_of(|entry| removed.contains(&entry.container_id));
         for removed in record.removals() {

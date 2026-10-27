@@ -45,6 +45,7 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
         parcel_dir: std::env::temp_dir().join("parcels"),
         parcel_len: coffret_format::PARCEL_LEN,
         library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
+        name: None,
         epoch: MasterKeyEpoch::FIRST,
         provider: "s3",
         grant: None,

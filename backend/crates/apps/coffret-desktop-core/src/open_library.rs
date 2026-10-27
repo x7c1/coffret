@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
-use coffret_device::{LibraryDir, Passphrase};
+use coffret_device::{LibraryDir, LibraryId, LibraryRef, Passphrase};
 use coffret_explorer_host::credentials::{Credentials, SystemClock};
 use coffret_explorer_host::Config;
 use coffret_server::{Launch, Serving, UnlockPrompt};
@@ -12,7 +12,7 @@ use crate::opened::Opened;
 use crate::shared::Shared;
 use crate::{refusal_evidence, Drawn, Error, Event, IoStep, Result};
 
-/// Opens the Library called `name` with `passphrase`, serves the explorer in
+/// Opens the Library `library_id` with `passphrase`, serves the explorer in
 /// front of it, and records both in `shared`. No launch file is written: the
 /// shell is handed tickets directly
 /// ([`Desktop::issue_ticket`](crate::Desktop::issue_ticket)).
@@ -22,14 +22,14 @@ use crate::{refusal_evidence, Drawn, Error, Event, IoStep, Result};
 /// server's tasks.
 pub(crate) async fn open_library(
     shared: &Arc<Shared>,
-    name: String,
+    library_id: LibraryId,
     passphrase: Passphrase,
 ) -> Result<()> {
     // The server's way of asking for the Passphrase again once it has locked:
     // the explorer's *unlock* reaches the shell through it (spec: DK-1).
     let (prompt, asked) = UnlockPrompt::channel();
     let launch = Launch {
-        library: name,
+        library: LibraryRef::Id(library_id),
         port: 0,
         idle_minutes: shared.idle_minutes,
         unlock_prompt: Some(prompt),
@@ -43,7 +43,7 @@ pub(crate) async fn open_library(
         .map_err(Error::Server)?;
     let server = serving.address();
     let state = Arc::clone(serving.state());
-    let library = LibraryDir::resolve(&state.name)?;
+    let library = LibraryDir::find(&LibraryRef::Id(library_id))?;
 
     // Loopback, for the reason the server's own socket is (spec: LA-1), and
     // any free port. Bound before the host is built, because the host answers

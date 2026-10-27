@@ -1,3 +1,4 @@
+use std::fs;
 use std::sync::Arc;
 
 use coffret_format::RecoveryCode;
@@ -15,8 +16,10 @@ use crate::library_dir::{isolated, LibraryDir};
 use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::testing::{
-    consent, create_s3, every_link, state_dir, unopenable_catalog, DriveStub, CLIENT_ID, PASSPHRASE,
+    consent, create_elsewhere, every_link, state_dir, unopenable_catalog, DriveStub, CLIENT_ID,
+    PASSPHRASE,
 };
+use crate::LibraryRef;
 
 /// The Passphrase the joining device chooses, which is deliberately not the one
 /// the Library was created under: the stored form is per device (spec: KD-9),
@@ -35,10 +38,9 @@ fn unasked_recovery_code() -> crate::error::Result<Zeroizing<String>> {
     panic!("no Recovery Code may be asked for before a refusal that needs none")
 }
 
-/// What joining `prefix` under `name` asks for.
-fn request(name: &str, prefix: &str) -> JoinLibraryRequest {
+/// What joining `prefix` asks for.
+fn request(prefix: &str) -> JoinLibraryRequest {
     JoinLibraryRequest {
-        name: name.to_owned(),
         provider: JoinedProvider::S3 {
             bucket: "photos".to_owned(),
             prefix: prefix.to_owned(),
@@ -58,10 +60,10 @@ fn prefix_of(settings: &DeviceSettings) -> String {
     prefix.clone()
 }
 
-/// Joins the Library `created` under `name`, and hands back what it recorded.
-async fn join(name: &str, code: &RecoveryCode, prefix: &str) -> JoinedLibrary {
+/// Joins the Library at `prefix` with `code`, and hands back what it recorded.
+async fn join(code: &RecoveryCode, prefix: &str) -> JoinedLibrary {
     join_library(
-        request(name, prefix),
+        request(prefix),
         || Ok(Zeroizing::new(code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),
@@ -72,16 +74,20 @@ async fn join(name: &str, code: &RecoveryCode, prefix: &str) -> JoinedLibrary {
 
 // The whole of what a second device gets from a Recovery Code: the same Library,
 // the same Master Key at the epoch the code was written at, and a directory of
-// its own with its own Passphrase on it.
+// its own, named after the Library's ID, with its own Passphrase on it.
 #[tokio::test]
 async fn a_joined_library_holds_the_same_master_key_under_this_device_s_passphrase() {
-    let created = create_s3("first-device").await;
+    let created = create_elsewhere("first-device").await;
     let prefix = prefix_of(&created.settings);
 
-    let joined = join("second-device", &created.recovery_code, &prefix).await;
-    let dir = LibraryDir::resolve("second-device").expect("the name is one component");
+    let joined = join(&created.recovery_code, &prefix).await;
+    let dir = LibraryDir::of(created.settings.library_id).expect("the state directory is set");
 
     assert_eq!(joined.path, dir.path());
+    assert_eq!(
+        joined.path, created.path,
+        "the directory is the Library's ID"
+    );
     for path in [dir.settings_file(), dir.master_key_file(), dir.index_file()] {
         assert!(path.is_file(), "{} must be a file", path.display());
     }
@@ -108,24 +114,53 @@ async fn a_joined_library_holds_the_same_master_key_under_this_device_s_passphra
     );
 }
 
-// A device joining twice under one name would draw a second directory over the
-// first, so it is refused — and refused before a Passphrase is asked for.
+// FM-15: the Library's name is its own, so a join is told none and reads the
+// one it was created with from the catalog it replays — into the copy beside
+// the Library and the list of the Libraries on this device.
 #[tokio::test]
-async fn a_library_of_one_name_is_joined_once() {
-    let created = create_s3("joined-once").await;
+async fn a_joined_library_carries_the_name_it_was_created_with() {
+    let created = create_elsewhere("named-by-its-creator").await;
+    let joined = join(&created.recovery_code, &prefix_of(&created.settings)).await;
+
+    assert_eq!(
+        joined.settings.name.as_deref(),
+        Some("named-by-its-creator")
+    );
+    let dir = LibraryDir::named_here("named-by-its-creator");
+    assert_eq!(dir.path(), joined.path);
+    assert_eq!(
+        DeviceSettings::read(&dir)
+            .expect("the settings this build wrote must read")
+            .name
+            .as_deref(),
+        Some("named-by-its-creator")
+    );
+    assert!(LibraryDir::libraries()
+        .expect("the Libraries on this device list")
+        .iter()
+        .any(|listed| listed.library_id == created.settings.library_id
+            && listed.name.as_deref() == Some("named-by-its-creator")));
+}
+
+// A device joining a Library it already holds would draw a second directory
+// over the first, so it is refused — and refused before a Passphrase is asked
+// for, since the prefix names the Library's ID.
+#[tokio::test]
+async fn a_library_is_joined_once() {
+    let created = create_elsewhere("joined-once").await;
     let prefix = prefix_of(&created.settings);
-    join("joined-twice", &created.recovery_code, &prefix).await;
+    join(&created.recovery_code, &prefix).await;
 
     let result = join_library(
-        request("joined-twice", &prefix),
+        request(&prefix),
         unasked_recovery_code,
         unasked_passphrase,
         |_| (),
     )
     .await;
     assert!(
-        matches!(&result, Err(Error::LibraryExists { name, .. }) if name == "joined-twice"),
-        "expected a second join of one name to be refused, got {result:?}"
+        matches!(&result, Err(Error::LibraryExists { name, .. }) if name == "joined-once"),
+        "expected a second join of one Library to be refused, got {result:?}"
     );
 }
 
@@ -135,12 +170,12 @@ async fn a_library_of_one_name_is_joined_once() {
 // which leaves the name free and the Library on Storage untouched.
 #[tokio::test]
 async fn a_passphrase_that_is_refused_joins_nothing() {
-    let created = create_s3("passphrase-asked").await;
+    let created = create_elsewhere("passphrase-asked").await;
     let prefix = prefix_of(&created.settings);
-    let dir = LibraryDir::resolve("no-passphrase").expect("the name is one component");
+    let dir = LibraryDir::of(created.settings.library_id).expect("the state directory is set");
 
     let result = join_library(
-        request("no-passphrase", &prefix),
+        request(&prefix),
         || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || {
             Err(Error::PassphraseNotGiven {
@@ -161,12 +196,12 @@ async fn a_passphrase_that_is_refused_joins_nothing() {
 
 #[tokio::test]
 async fn a_recovery_code_that_is_not_given_joins_nothing() {
-    let created = create_s3("recovery-code-asked").await;
+    let created = create_elsewhere("recovery-code-asked").await;
     let prefix = prefix_of(&created.settings);
-    let dir = LibraryDir::resolve("no-recovery-code").expect("the name is one component");
+    let dir = LibraryDir::of(created.settings.library_id).expect("the state directory is set");
 
     let result = join_library(
-        request("no-recovery-code", &prefix),
+        request(&prefix),
         || {
             Err(Error::RecoveryCodeNotGiven {
                 cause: "standard input ended before a Recovery Code was given".into(),
@@ -189,7 +224,7 @@ async fn a_recovery_code_that_is_not_given_joins_nothing() {
 // different one, and the check it failed travels as the format crate named it.
 #[tokio::test]
 async fn a_code_that_is_not_one_is_refused_as_the_format_layer_refused_it() {
-    let created = create_s3("code-checked").await;
+    let created = create_elsewhere("code-checked").await;
     let prefix = prefix_of(&created.settings);
 
     // One character changed for another the alphabet holds, which is exactly the
@@ -198,7 +233,7 @@ async fn a_code_that_is_not_one_is_refused_as_the_format_layer_refused_it() {
     let last = typed.pop().expect("a code is never empty");
     typed.push(if last == 'q' { 'p' } else { 'q' });
     let result = join_library(
-        request("mistyped", &prefix),
+        request(&prefix),
         || Ok(Zeroizing::new(typed)),
         unasked_passphrase,
         |_| (),
@@ -214,7 +249,11 @@ async fn a_code_that_is_not_one_is_refused_as_the_format_layer_refused_it() {
         ),
         "expected the format layer's own refusal, got {result:?}"
     );
-    assert!(!state_dir().join("libraries").join("mistyped").exists());
+    assert!(!created.path.exists());
+    assert!(!state_dir()
+        .join("libraries")
+        .join(format!("{}.partial", created.settings.library_id.to_hex()))
+        .exists());
 }
 
 // FM-18: a Library's keys start at its own folder's name, so a prefix that does
@@ -222,7 +261,7 @@ async fn a_code_that_is_not_one_is_refused_as_the_format_layer_refused_it() {
 // this device at a place nothing else is configured against.
 #[tokio::test]
 async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
-    let created = create_s3("prefix-checked").await;
+    let created = create_elsewhere("prefix-checked").await;
     let prefix = prefix_of(&created.settings);
 
     for (asked, what) in [
@@ -238,7 +277,7 @@ async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
         ("archive/coffret-not-hex-at-all/", "a malformed Library ID"),
     ] {
         let result = join_library(
-            request("elsewhere", asked),
+            request(asked),
             unasked_recovery_code,
             unasked_passphrase,
             |_| (),
@@ -252,7 +291,7 @@ async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
             "expected {what} to be refused, got {result:?}"
         );
     }
-    assert!(!state_dir().join("libraries").join("elsewhere").exists());
+    assert!(!created.path.exists());
 }
 
 // A prefix is a prefix like any other until something has been written under
@@ -264,10 +303,10 @@ async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
 // created and never synced, which this flow cannot tell from it.
 #[tokio::test]
 async fn a_created_library_is_found_and_a_prefix_holding_nothing_says_so() {
-    let created = create_s3("never-synced").await;
+    let created = create_elsewhere("never-synced").await;
     let its_own = prefix_of(&created.settings);
 
-    let fresh = join("fresh-join", &created.recovery_code, &its_own).await;
+    let fresh = join(&created.recovery_code, &its_own).await;
     assert_eq!(
         fresh.found,
         FoundOnStorage::TheLibrary,
@@ -276,12 +315,7 @@ async fn a_created_library_is_found_and_a_prefix_holding_nothing_says_so() {
 
     // The same shape with a Library ID that is not this Library's: well-formed,
     // so nothing refuses it, and empty.
-    let mistyped = join(
-        "mistyped-join",
-        &created.recovery_code,
-        "archive/coffret-0123456789abcdef/",
-    )
-    .await;
+    let mistyped = join(&created.recovery_code, "archive/coffret-0123456789abcdef/").await;
     assert_eq!(
         mistyped.found,
         FoundOnStorage::NothingYet,
@@ -356,10 +390,9 @@ fn a_prefix_names_the_library_its_last_component_does() {
 /// The id the Drive a join case stands in for gave the Library's app folder.
 const DRIVE_FOLDER_ID: &str = "stub-library-folder";
 
-/// What joining the Drive folder [`DRIVE_FOLDER_ID`] under `name` asks for.
-fn drive_request(name: &str) -> JoinLibraryRequest {
+/// What joining the Drive folder [`DRIVE_FOLDER_ID`] asks for.
+fn drive_request() -> JoinLibraryRequest {
     JoinLibraryRequest {
-        name: name.to_owned(),
         provider: JoinedProvider::Drive {
             folder_id: DRIVE_FOLDER_ID.to_owned(),
             client_id: CLIENT_ID.to_owned(),
@@ -375,13 +408,13 @@ fn drive_request(name: &str) -> JoinLibraryRequest {
 // directory, and nothing under the name that the next command could open.
 #[tokio::test]
 async fn a_catalog_that_will_not_open_leaves_no_joined_library_behind() {
-    let created = create_s3("catalog-first").await;
+    let created = create_elsewhere("catalog-first").await;
     let prefix = prefix_of(&created.settings);
-    let dir = LibraryDir::resolve("catalog-refused").expect("the name is one component");
+    let dir = LibraryDir::of(created.settings.library_id).expect("the state directory is set");
 
     let result = join_library_through(
         &Reach::this_device().opening_index_with(unopenable_catalog),
-        request("catalog-refused", &prefix),
+        request(&prefix),
         || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),
@@ -407,20 +440,21 @@ async fn a_catalog_that_will_not_open_leaves_no_joined_library_behind() {
 #[tokio::test]
 async fn a_drive_library_is_joined_from_its_folder_s_name() {
     let device = isolated::device();
-    let created = create_s3("drive-origin").await;
+    let created = create_elsewhere("drive-origin").await;
     let library_id = created.settings.library_id;
     let drive = DriveStub::holding(DRIVE_FOLDER_ID, &library_id.app_folder_name());
 
     let joined = join_library_through(
         &Reach::this_device().reaching_drive_through(Arc::clone(&drive) as _),
-        drive_request("joined-on-drive"),
+        drive_request(),
         || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         consent,
     )
     .await
     .expect("a Recovery Code, a consent and the Library's folder are all a join needs");
-    let dir = LibraryDir::resolve("joined-on-drive").expect("the name is one component");
+    let dir = LibraryDir::find(&LibraryRef::Id(library_id)).expect("the joined Library is here");
+    assert_eq!(dir.path(), joined.path);
 
     assert_eq!(
         joined.settings.library_id, library_id,
@@ -470,7 +504,7 @@ async fn a_drive_library_is_joined_from_its_folder_s_name() {
 /// `objects` in it, under `name`, and says what the join found there.
 async fn found_in_drive_folder(name: &str, objects: &[&str]) -> FoundOnStorage {
     let _device = isolated::device();
-    let created = create_s3(&format!("{name}-origin")).await;
+    let created = create_elsewhere(&format!("{name}-origin")).await;
     let drive = DriveStub::holding_objects(
         DRIVE_FOLDER_ID,
         &created.settings.library_id.app_folder_name(),
@@ -479,7 +513,7 @@ async fn found_in_drive_folder(name: &str, objects: &[&str]) -> FoundOnStorage {
 
     join_library_through(
         &Reach::this_device().reaching_drive_through(drive),
-        drive_request(name),
+        drive_request(),
         || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         consent,
@@ -534,14 +568,13 @@ async fn a_folder_holding_neither_a_head_nor_a_snapshot_holds_nothing_yet() {
 // through Drive as through S3 the refusal leaves nothing on this device.
 #[tokio::test]
 async fn a_drive_folder_that_is_not_a_library_s_is_refused() {
-    let _device = isolated::device();
-    let created = create_s3("drive-misnamed-origin").await;
+    let device = isolated::device();
+    let created = create_elsewhere("drive-misnamed-origin").await;
     let drive = DriveStub::holding(DRIVE_FOLDER_ID, "Holiday photos");
-    let dir = LibraryDir::resolve("misnamed-on-drive").expect("the name is one component");
 
     let result = join_library_through(
         &Reach::this_device().reaching_drive_through(drive),
-        drive_request("misnamed-on-drive"),
+        drive_request(),
         || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         consent,
@@ -558,6 +591,11 @@ async fn a_drive_folder_that_is_not_a_library_s_is_refused() {
         ),
         "expected the folder's name to be refused, got {result:?}",
     );
-    assert!(!dir.staging().path().exists());
-    assert!(!dir.path().exists());
+    assert_eq!(
+        fs::read_dir(device.path().join("libraries"))
+            .map(|listing| listing.count())
+            .unwrap_or(0),
+        0,
+        "nothing is left among the Libraries, staged or whole"
+    );
 }

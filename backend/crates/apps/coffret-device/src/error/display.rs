@@ -14,6 +14,16 @@ impl fmt::Display for Error {
             Self::InvalidLibraryName { name, defect } => {
                 write!(f, "{name:?} cannot name a Library: {defect}")
             }
+            Self::AmbiguousLibraryName { name, libraries } => write!(
+                f,
+                "more than one Library on this device is called {name:?} ({}); say which one \
+                 with --library-id",
+                libraries
+                    .iter()
+                    .map(|id| id.to_hex())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Self::NoStateDirectory => f.write_str(
                 "neither COFFRET_STATE_DIR, XDG_STATE_HOME, nor HOME is set, \
                  so there is nowhere to keep Libraries",
@@ -23,7 +33,8 @@ impl fmt::Display for Error {
             }
             Self::NoSuchLibrary { name, path } => write!(
                 f,
-                "no Library {name:?} is on this device; nothing is at {}",
+                "no Library {name:?} is on this device; none of the Libraries in {} answers to \
+                 it",
                 path.display()
             ),
             // Which file it was and what was being done to it, in the

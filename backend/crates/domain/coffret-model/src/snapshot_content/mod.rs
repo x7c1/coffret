@@ -2,6 +2,7 @@ use crate::container_summary::ContainerSummary;
 use crate::control_object_name::ControlObjectName;
 use crate::entry_location::EntryLocation;
 use crate::index_checkpoint::IndexCheckpoint;
+use crate::library_name::LibraryName;
 
 mod new;
 
@@ -41,6 +42,7 @@ pub struct SnapshotContent {
     adopted_from: Option<ControlObjectName>,
     containers: Vec<ContainerSummary>,
     entries: Vec<EntryLocation>,
+    library_name: Option<LibraryName>,
 }
 
 impl SnapshotContent {
@@ -72,6 +74,24 @@ impl SnapshotContent {
     /// device that has only ever replayed records holds `None`.
     pub const fn adopted_from(&self) -> Option<&ControlObjectName> {
         self.adopted_from.as_ref()
+    }
+
+    /// The same content, giving the Library the name `name`, or none where it
+    /// is `None` (spec: FM-16).
+    ///
+    /// A checkpoint carries the name the records it checkpoints left, so that
+    /// pruning the records before it does not lose it. No rule here is about a
+    /// name, so stamping one cannot make a value that holds stop holding.
+    #[must_use]
+    pub fn with_library_name(mut self, name: Option<LibraryName>) -> Self {
+        self.library_name = name;
+        self
+    }
+
+    /// The Library's name at the checkpoint, and `None` where no record up to
+    /// it carried one (spec: FM-16).
+    pub fn library_name(&self) -> Option<&LibraryName> {
+        self.library_name.as_ref()
     }
 
     /// The current Containers, ordered by Container ID.

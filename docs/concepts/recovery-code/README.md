@@ -18,11 +18,13 @@ has the Master Key it carries and does not need a device's Passphrase.
 ## Examples
 
 - Entering the code on a new device from a script, which hands both secrets
-  over on standard input in the order `join` reads them:
+  over on standard input in the order `join` reads them. No name is given: the
+  Library's name is its own, and `join` reads it from the Library once the code
+  has opened it:
 
   ```console
   $ { printf '%s\n' "$RECOVERY_CODE"; printf '%s\n' "$NEW_PASSPHRASE"; } |
-      coffret join --name second --recovery-code-stdin --passphrase-stdin \
+      coffret join --recovery-code-stdin --passphrase-stdin \
         --s3 --bucket example --prefix archive/coffret-0123456789abcdef/
   ```
 

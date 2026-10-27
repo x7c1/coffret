@@ -17,8 +17,8 @@ use std::process::{Command, Output, Stdio};
 use tempfile::TempDir;
 
 use support::{
-    code, printed_code, printed_prefix, stderr, stdout, stub_endpoint, succeeded, Device,
-    PASSPHRASE, RECOVERY_CODE_PREFIX, REGION,
+    code, printed_code, printed_library_id, printed_prefix, stderr, stdout, stub_endpoint,
+    succeeded, Device, PASSPHRASE, RECOVERY_CODE_PREFIX, REGION,
 };
 
 /// Creates an S3 Library called `name` on `device`.
@@ -176,23 +176,19 @@ fn a_wrong_passphrase_prints_no_recovery_code() {
     );
 }
 
-// A second `init` would strand whatever the first put on Storage, and the shell
-// has to report that as a failed run rather than as a line of prose.
-//
-// Refused with nothing on standard input, which is the point of the case: the
+// A name nobody can read is refused before a Passphrase is read: the
 // Passphrase is asked for through a callback the device layer only reaches once
-// every refusal that needs no key has passed, so a script whose Library already
-// exists is told that rather than told that its empty Passphrase protects
-// nothing.
+// every refusal that needs no key has passed, so a script giving such a name is
+// told that rather than told that its empty Passphrase protects nothing.
+// Refused with nothing on standard input, which is the point of the case.
 #[test]
-fn a_second_library_of_one_name_is_refused_before_a_passphrase_is_read() {
+fn a_name_nobody_can_read_is_refused_before_a_passphrase_is_read() {
     let device = Device::new();
-    init_s3(&device, "twice");
 
     let output = device.run(&[
         "init",
         "--name",
-        "twice",
+        "tab\there",
         "--s3",
         "--bucket",
         "photos",
@@ -208,9 +204,46 @@ fn a_second_library_of_one_name_is_refused_before_a_passphrase_is_read() {
     assert!(!stdout(&output).contains(RECOVERY_CODE_PREFIX));
     let said = stderr(&output);
     assert!(
-        said.contains("already at"),
-        "the refusal must be the one about the Library, not about the Passphrase: {said:?}"
+        said.contains("cannot name a Library"),
+        "the refusal must be the one about the name, not about the Passphrase: {said:?}"
     );
+}
+
+// FM-15: a name is the Library's and not a directory's, so a second Library of
+// one name is a Library of its own — and a command naming either is refused
+// with both IDs, which `--library-id` then picks from.
+#[test]
+fn two_libraries_of_one_name_are_told_apart_by_their_ids() {
+    let device = Device::new();
+    let first = init_s3(&device, "twice");
+    let second = init_s3(&device, "twice");
+    let first_id = printed_library_id(&first);
+    let second_id = printed_library_id(&second);
+    assert_ne!(first_id, second_id);
+
+    let output = device.run(&["recovery-code", "--library", "twice", "--passphrase-stdin"]);
+    assert_eq!(code(&output), 1);
+    let said = stderr(&output);
+    assert!(
+        said.contains(&first_id) && said.contains(&second_id),
+        "the refusal names both IDs: {said}"
+    );
+
+    for id in [&first_id, &second_id] {
+        let output = device.run_with(
+            &["recovery-code", "--library-id", id, "--passphrase-stdin"],
+            Some(PASSPHRASE),
+        );
+        succeeded(&output, "recovery-code --library-id");
+    }
+    let both = device.run(&[
+        "recovery-code",
+        "--library",
+        "twice",
+        "--library-id",
+        &first_id,
+    ]);
+    assert_eq!(code(&both), 1, "the two flags are never given together");
 }
 
 // The prompt refuses an empty Passphrase, and so must the line a script pipes:
@@ -244,7 +277,7 @@ fn an_empty_passphrase_from_a_script_creates_nothing() {
         "an empty Passphrase must not create a Library"
     );
     assert!(!stdout(&output).contains(RECOVERY_CODE_PREFIX));
-    assert!(!device.libraries().join("unprotected").exists());
+    assert!(device.library_named("unprotected").is_none());
 }
 
 // `--version` is answered by the parser, before any Library is looked for, and
@@ -391,8 +424,6 @@ fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
         (
             vec![
                 "join",
-                "--name",
-                "clientless",
                 "--drive",
                 "--folder-id",
                 "1a2B3c",
@@ -506,8 +537,6 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
 
     let elsewhere = device.run(&[
         "join",
-        "--name",
-        "elsewhere",
         "--recovery-code-stdin",
         "--s3",
         "--bucket",
@@ -524,15 +553,14 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
         "--passphrase-stdin",
     ]);
     assert_eq!(code(&elsewhere), 1);
-    assert!(!device.libraries().join("elsewhere").exists());
     let said = stderr(&elsewhere);
     assert!(said.contains("is not where a Library lives"), "{said}");
     assert!(!said.contains("standard input ended"), "{said}");
 
-    let bad_name = device.run(&[
+    // A Library already on this device is refused the same way: it is joined
+    // once, and the prefix says which Library it is before anything is read.
+    let again = device.run(&[
         "join",
-        "--name",
-        "not/one/name",
         "--recovery-code-stdin",
         "--s3",
         "--bucket",
@@ -546,18 +574,17 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
         "--path-style",
         "--passphrase-stdin",
     ]);
-    assert_eq!(code(&bad_name), 1);
-    let said = stderr(&bad_name);
-    assert!(said.contains("cannot name a Library"), "{said}");
+    assert_eq!(code(&again), 1);
+    let said = stderr(&again);
+    assert!(said.contains("is already at"), "{said}");
     assert!(!said.contains("standard input ended"), "{said}");
 
-    // And a code that is not one is refused the same way, whatever place it is
-    // offered with (spec: KD-11).
-    let mistyped = device.run_with(
+    // And a code that is not one is refused, whatever place it is offered with
+    // (spec: KD-11), on a device that does not hold the Library yet.
+    let joiner = Device::new();
+    let mistyped = joiner.run_with(
         &[
             "join",
-            "--name",
-            "mistyped",
             "--recovery-code-stdin",
             "--s3",
             "--bucket",
@@ -574,7 +601,10 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
         Some("coffret1not-a-code"),
     );
     assert_eq!(code(&mistyped), 1);
-    assert!(!device.libraries().join("mistyped").exists());
+    assert!(
+        !joiner.libraries().exists() || joiner.libraries().read_dir().unwrap().count() == 0,
+        "nothing is left on the joining device"
+    );
 }
 
 #[test]
@@ -585,12 +615,11 @@ fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
     let prefix = printed_prefix(&created);
     let joined_passphrase = "a passphrase belonging to the joined device";
     let input = format!("{recovery_code}\n{joined_passphrase}");
+    let joiner = Device::new();
 
-    let joined = device.run_with(
+    let joined = joiner.run_with(
         &[
             "join",
-            "--name",
-            "joined",
             "--recovery-code-stdin",
             "--s3",
             "--bucket",
@@ -608,7 +637,8 @@ fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
     );
 
     succeeded(&joined, "join");
-    assert!(device.libraries().join("joined").exists());
+    // FM-15: joined with no name, it carries the one it was created with.
+    assert!(joiner.library_named("source").is_some());
     assert!(!stdout(&joined).contains(&recovery_code));
     assert!(!stderr(&joined).contains(&recovery_code));
 
@@ -622,8 +652,8 @@ fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
         "{said}"
     );
 
-    let reopened = device.run_with(
-        &["recovery-code", "--library", "joined", "--passphrase-stdin"],
+    let reopened = joiner.run_with(
+        &["recovery-code", "--library", "source", "--passphrase-stdin"],
         Some(joined_passphrase),
     );
     succeeded(&reopened, "recovery-code on the joined device");
@@ -635,10 +665,9 @@ fn join_reports_missing_invalid_and_overlong_input_without_leaking_it() {
     let device = Device::new();
     let created = init_s3(&device, "input-errors");
     let prefix = printed_prefix(&created);
+    let device = Device::new();
     let arguments = [
         "join",
-        "--name",
-        "not-joined",
         "--recovery-code-stdin",
         "--s3",
         "--bucket",
@@ -683,7 +712,9 @@ fn join_reports_missing_invalid_and_overlong_input_without_leaking_it() {
             assert!(!out.contains(secret_fragment), "{out}");
             assert!(!said.contains(secret_fragment), "{said}");
         }
-        assert!(!device.libraries().join("not-joined").exists());
+        assert!(
+            !device.libraries().exists() || device.libraries().read_dir().unwrap().count() == 0
+        );
     }
 }
 
@@ -739,8 +770,6 @@ fn a_value_after_recovery_code_stdin_is_not_echoed() {
     ] {
         let mut arguments = vec![
             "join",
-            "--name",
-            "beta",
             "--s3",
             "--bucket",
             "photos",
@@ -789,7 +818,7 @@ fn a_value_after_recovery_code_stdin_is_not_echoed() {
             "and that what was already typed is past saving: {said}",
         );
         // Nothing of the Library was made on the way to refusing it.
-        assert!(!device.libraries().join("beta").exists());
+        assert!(device.library_named("beta").is_none());
     }
 }
 
@@ -806,8 +835,6 @@ fn a_secret_typed_as_a_bare_argument_is_not_echoed() {
     for arguments in [
         vec![
             "join",
-            "--name",
-            "beta",
             "--s3",
             "--bucket",
             "photos",
@@ -856,7 +883,7 @@ fn a_secret_typed_as_a_bare_argument_is_not_echoed() {
             "and that what was already typed is past saving: {said}",
         );
         // Nothing of the Library was made on the way to refusing it.
-        assert!(!device.libraries().join("beta").exists());
+        assert!(device.library_named("beta").is_none());
     }
 }
 
@@ -929,7 +956,7 @@ fn a_bucket_that_does_not_answer_creates_nothing() {
         stderr(&output)
     );
     assert!(!stdout(&output).contains(RECOVERY_CODE_PREFIX));
-    assert!(!device.libraries().join("nowhere").exists());
+    assert!(device.library_named("nowhere").is_none());
 }
 
 // EP-2: `--under` is read before the Passphrase is asked for. A path with a
@@ -990,7 +1017,7 @@ fn change_passphrase(device: &Device, library: &str, input: &str, json: bool) ->
 
 /// The bytes of `library`'s stored Master Key on `device`.
 fn stored_master_key(device: &Device, library: &str) -> Vec<u8> {
-    fs::read(device.libraries().join(library).join("master-key.cfmk"))
+    fs::read(device.library(library).join("master-key.cfmk"))
         .expect("the stored Master Key must be readable")
 }
 
@@ -1107,7 +1134,7 @@ fn an_empty_new_passphrase_changes_nothing() {
 fn a_change_never_reaches_storage() {
     let device = Device::new();
     init_s3(&device, "offline");
-    let settings = device.libraries().join("offline").join("settings.json");
+    let settings = device.library("offline").join("settings.json");
     let kept = fs::read_to_string(&settings).expect("the settings must be readable");
     assert!(
         kept.contains(stub_endpoint()),

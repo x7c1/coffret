@@ -229,7 +229,7 @@ pub(crate) async fn create_library_in(
     keys: &crate::commit::ControlKeys,
     policy: &crate::commit::CommitPolicy,
 ) {
-    crate::commit::write_first_head(store, keys, policy)
+    crate::commit::write_first_head(store, keys, policy, None)
         .await
         .expect("creating a Library in an empty store must succeed")
         .expect("an empty store holds no head to find instead");

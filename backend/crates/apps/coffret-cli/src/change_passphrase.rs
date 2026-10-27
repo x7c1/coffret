@@ -1,5 +1,6 @@
 //! Keeping this device's Master Key under a new Passphrase.
 
+use crate::library_args::WhichLibrary;
 use clap::Args;
 
 use crate::answer::{Answer, ChangedPassphrase, Ran};
@@ -12,9 +13,9 @@ use coffret_shell::passphrase;
 /// says which is which.
 #[derive(Args)]
 pub struct ChangePassphraseArgs {
-    /// The Library on this device whose Passphrase to change
-    #[arg(long)]
-    library: String,
+    // The Library on this device whose Passphrase to change, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
     /// Read the current Passphrase from the first line of standard input and
     /// the new one from the next, instead of asking for them, which is what a
     /// script does
@@ -23,14 +24,16 @@ pub struct ChangePassphraseArgs {
 }
 
 pub fn run(args: ChangePassphraseArgs) -> anyhow::Result<Ran> {
+    let library = args.which.library();
     coffret_device::change_passphrase(
-        &args.library,
+        &library,
         passphrase::entering(args.passphrase_stdin),
         passphrase::choosing(args.passphrase_stdin),
     )?;
-    eprintln!("{}", changed(&args.library));
+    let library = library.to_string();
+    eprintln!("{}", changed(&library));
     Ok(Ran::clean(Answer::ChangedPassphrase(
-        ChangedPassphrase::new(args.library),
+        ChangedPassphrase::new(library),
     )))
 }
 

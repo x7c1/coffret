@@ -11,11 +11,12 @@
 //! used, and what ships builds them the one way it always has:
 //! [`Reach::this_device`] is the only constructor outside the cases.
 //!
-//! Creating a Library also writes its first head to Storage, and a case over a
-//! stood-in Drive transport would otherwise need that transport to answer the
-//! whole Storage port. So the store that head goes to is the third thing a
-//! case may stand in, and what ships always writes to the Storage the new
-//! settings name.
+//! Creating a Library also writes its first head to Storage, and joining one
+//! replays its Journal from there, and a case over a stood-in Drive transport
+//! would otherwise need that transport to answer the whole Storage port. So the
+//! store those control objects are written to and read from is the third thing
+//! a case may stand in, and what ships always reaches the Storage the settings
+//! name.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -38,8 +39,9 @@ pub(crate) type IndexOpener = fn(&Path) -> IndexResult<()>;
 pub(crate) struct Reach {
     open_index: IndexOpener,
     drive: DriveTransport,
-    /// The Storage a new Library's first head is written to, where a case
-    /// stands one in for the provider's own.
+    /// The Storage a Library's control objects are written to and read from
+    /// while it is put on this device, where a case stands one in for the
+    /// provider's own.
     #[cfg(test)]
     storage: Option<Arc<dyn ObjectStore>>,
 }
@@ -92,8 +94,9 @@ impl Reach {
         }
     }
 
-    /// The same, with a new Library's first head written to `store` instead of
-    /// to the Storage its settings name.
+    /// The same, with a new Library's first head written to `store`, and a
+    /// joined one's Journal read from it, instead of the Storage its settings
+    /// name.
     #[cfg(test)]
     pub(crate) fn storing_into(self, store: Arc<dyn ObjectStore>) -> Self {
         Self {
@@ -102,9 +105,10 @@ impl Reach {
         }
     }
 
-    /// The Storage a new Library's first head goes to: `built`, the store over
-    /// the place its settings name, unless a case stood another one in.
-    pub(crate) fn first_head_store(&self, built: Arc<dyn ObjectStore>) -> Arc<dyn ObjectStore> {
+    /// The Storage a new Library's first head goes to, and a joined one's
+    /// Journal is read from: `built`, the store over the place its settings
+    /// name, unless a case stood another one in.
+    pub(crate) fn library_store(&self, built: Arc<dyn ObjectStore>) -> Arc<dyn ObjectStore> {
         #[cfg(test)]
         if let Some(store) = &self.storage {
             return Arc::clone(store);

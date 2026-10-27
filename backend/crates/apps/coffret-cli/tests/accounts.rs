@@ -8,8 +8,6 @@
 
 mod support;
 
-use std::path::Path;
-
 use support::{code, stderr, write_file, Device};
 
 /// The OAuth client a laid-out account was consented to.
@@ -69,7 +67,7 @@ fn refused(device: &Device, arguments: &[&str], said: &str, name: &str) {
         printed.contains(said),
         "{arguments:?} must say {said:?}; stderr was:\n{printed}"
     );
-    assert!(!Path::new(&device.libraries().join(name).join("settings.json")).exists());
+    assert!(device.library_named(name).is_none());
 }
 
 // SA-8: a name that is not a plain directory name is refused with the sentence
@@ -88,8 +86,6 @@ fn an_account_name_that_is_not_one_is_refused_saying_what_one_is() {
             "authorize" => vec!["authorize", "--passphrase-stdin"],
             _ => vec![
                 "join",
-                "--name",
-                name,
                 "--drive",
                 "--folder-id",
                 "1a2B3c",

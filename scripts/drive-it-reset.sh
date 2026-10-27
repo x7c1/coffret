@@ -167,6 +167,15 @@ export COFFRET_MASTER_KEY="$MASTER_KEY"
 export COFFRET_LOG_DIR="$LOG_DIR"
 export COFFRET_LOG=info
 
+# What a Library is called in what this tool prints: the copy of its name its
+# settings keep, or the name of its directory, which a build before Library
+# names named after the Library and a later one names after its ID.
+library_label() {
+  local name
+  name="$(settings_value "$1" name)"
+  printf '%s\n' "${name:-$(basename "$(dirname "$1")")}"
+}
+
 # One string out of a Library's settings file, by file rather than by name:
 # the two targets keep their Libraries in directories of their own, and this
 # reads both.
@@ -184,10 +193,10 @@ settings_value() {
 scenario_of() {
   local folder="$1" work settings library found=""
   for work in "$ROUND_TRIP" "$INDEX_LAYOUT"; do
-    for settings in "$work"/state/libraries/*/settings.json; do
+    for settings in "$work"/state/libraries/*/settings.json "$work"/second-state/libraries/*/settings.json; do
       [ -f "$settings" ] || continue
       [ "$(settings_value "$settings" folder_id)" = "$folder" ] || continue
-      library="$(basename "$(dirname "$settings")")"
+      library="$(library_label "$settings")"
       found="${found:+$found, }$(basename "$work")/$library"
     done
   done
@@ -205,12 +214,13 @@ scenario_of() {
 # usable, its folder still exists under the old parent, and a reset run here
 # would remove the state while leaving the folder behind.
 #
-# Each line is `<scenario>/<library id>` and the folder id, tab separated, in
-# the same `drive-round-trip/main` form the `IN USE BY` column prints.
+# Each line is `<scenario>/<library>`, the Library as `library_label` calls
+# it, and the folder id, tab separated, in the same `drive-round-trip/main` form
+# the `IN USE BY` column prints.
 collect_not_listed() {
   local work settings library folder listed i
   for work in "$ROUND_TRIP" "$INDEX_LAYOUT"; do
-    for settings in "$work"/state/libraries/*/settings.json; do
+    for settings in "$work"/state/libraries/*/settings.json "$work"/second-state/libraries/*/settings.json; do
       [ -f "$settings" ] || continue
       folder="$(settings_value "$settings" folder_id)"
       # A Library with no folder id in its settings points at nothing yet, so
@@ -224,7 +234,7 @@ collect_not_listed() {
         fi
       done
       if [ -z "$listed" ]; then
-        library="$(basename "$(dirname "$settings")")"
+        library="$(library_label "$settings")"
         not_listed+=("$(basename "$work")/$library"$'\t'"$folder")
       fi
     done

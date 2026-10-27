@@ -41,6 +41,13 @@ impl Redacted for Error {
             Self::NoStateDirectory => "Device::NoStateDirectory".to_owned(),
             Self::LibraryExists { .. } => "Device::LibraryExists".to_owned(),
             Self::NoSuchLibrary { .. } => "Device::NoSuchLibrary".to_owned(),
+            // How many carry the name, and none of the name; the IDs are
+            // Storage's names for them and say nothing anybody chose, but the
+            // count is all a reader grouping refusals needs (spec: EL-1).
+            Self::AmbiguousLibraryName { libraries, .. } => format!(
+                "Device::AmbiguousLibraryName(libraries={})",
+                libraries.len()
+            ),
             Self::Local(refused) => format!("Device::Local: {}", refused.redacted()),
             Self::MalformedSettings { .. } => "Device::MalformedSettings".to_owned(),
             Self::UnsupportedSettingsVersion {

@@ -13,6 +13,7 @@ impl error::Error for Error {
             | Self::NoStateDirectory
             | Self::LibraryExists { .. }
             | Self::NoSuchLibrary { .. }
+            | Self::AmbiguousLibraryName { .. }
             | Self::NotADriveLibrary { .. }
             | Self::LibraryAlreadyServed { .. }
             | Self::ManagementAreaNotADirectory { .. }

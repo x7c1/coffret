@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use coffret_device::{open_library, LibraryDir, Passphrase, ServerKey, ServerLock};
+use coffret_device::{move_to_its_id, open_library, LibraryDir, Passphrase, ServerKey, ServerLock};
 use tokio::net::TcpListener;
 
 use super::{Launch, Serving};
@@ -23,7 +23,14 @@ impl Launch {
     where
         P: FnOnce() -> coffret_device::Result<Passphrase> + Send,
     {
-        let directory = LibraryDir::resolve(&self.library)?;
+        let directory = LibraryDir::find(&self.library)?;
+        // A Library an earlier build put here is moved to the directory its ID
+        // names first: once the lock below is taken, the directory stays where
+        // it is for as long as this server runs. The move takes the lock itself
+        // and lets it go before this takes its own; where another server holds
+        // it, nothing moves and the lock below refuses this one
+        // (spec: FM-15, LA-8).
+        let directory = move_to_its_id(directory)?;
 
         // Before the Passphrase, deliberately, and so before anything else
         // here: one server at a time serves a Library (spec: LA-8), and being
@@ -32,23 +39,28 @@ impl Launch {
         // key, its callers and its hold on the Library are none of this
         // process's business.
         //
-        // Only for a Library that is on this device, so that one which is not is
-        // refused by `open_library` in its own words rather than by a file this
-        // would try to create beside nothing. Held by the `Serving` this
-        // returns, for as long as it serves: the lock is the open file
-        // description's, and dropping it would hand the Library to the next
-        // server while this one is still serving it.
-        let hold = directory
-            .is_present()
-            .then(|| ServerLock::take(&directory))
-            .transpose()?;
+        // The Library is on this device by now: one that is not, or a name more
+        // than one Library here carries, was refused by `find` above in the
+        // device layer's own words rather than by a file this would try to
+        // create beside nothing. Held by the `Serving` this returns, for as
+        // long as it serves: the lock is the open file description's, and
+        // dropping it would hand the Library to the next server while this one
+        // is still serving it.
+        let hold = ServerLock::take(&directory)?;
 
         // Before the socket, deliberately. Every refusal opening a Library owes
         // — it is not on this device, the Passphrase does not open it, the
         // grant has run out — is one a person acts on, and a server that had
         // already bound a port would state it once per request instead of once.
         let library = open_library(&self.library, enter_passphrase).await?;
-        let state = ServerState::new(self.library.clone(), library);
+        // The Library's own name, as its catalog holds it (spec: FM-15), and
+        // its ID where nothing has named it yet.
+        let name = library
+            .name
+            .as_ref()
+            .map(|name| name.as_str().to_owned())
+            .unwrap_or_else(|| library.library_id.to_hex());
+        let state = ServerState::new(name, library);
         let state = Arc::new(match self.unlock_prompt.clone() {
             Some(prompt) => state.prompting_through(prompt),
             None => state,

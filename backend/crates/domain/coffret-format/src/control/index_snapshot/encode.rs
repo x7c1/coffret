@@ -6,7 +6,7 @@ use coffret_model::{ContainerId, EntryLocation};
 use super::{
     IndexSnapshotPayload, ACTIVATION_SLOT, BASE_HEAD_GENERATION, CONTAINER, CONTAINERS, ENTRIES,
     ENTRY, HEAD_GENERATION, JOURNAL_GENERATION, KEYRING_GENERATION, KEYRING_REPLICA_COUNT,
-    KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
+    KEYRING_SET_DIGEST, LIBRARY_NAME, NEXT_COMMIT_SLOT, SCHEMA,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -69,6 +69,12 @@ pub fn encode(payload: &IndexSnapshotPayload) -> Result<ControlPayload> {
                     .map(|(index, location)| entry_value(index, location, &positions))
                     .collect::<Result<Vec<_>>>()?,
             ),
+        )
+        // Where the records it checkpoints named the Library, so that pruning
+        // them does not lose the name (spec: FM-16).
+        .optional_text(
+            LIBRARY_NAME,
+            content.library_name().map(|name| name.as_str()),
         );
 
     if let Some(activation) = &payload.activation {

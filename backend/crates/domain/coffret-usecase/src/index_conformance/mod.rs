@@ -104,6 +104,7 @@ pub use replay::{
     a_restore_replaces_the_whole_catalog, a_restore_round_trips_through_a_checkpoint,
     an_entry_number_survives_a_replay_and_a_restore,
     removing_a_container_removes_the_entries_it_held,
+    the_library_name_is_the_latest_one_a_record_carried,
 };
 
 mod stored_form;
@@ -135,6 +136,7 @@ macro_rules! index_conformance {
             an_entry_number_survives_a_replay_and_a_restore,
             a_deposit_time_survives_a_replay_a_rename_and_a_restore,
             removing_a_container_removes_the_entries_it_held,
+            the_library_name_is_the_latest_one_a_record_carried,
             a_refresh_lands_where_a_replay_of_its_record_does,
             a_refresh_another_process_got_to_first_is_completed,
             a_refresh_marks_its_files_present_and_clears_its_spools,

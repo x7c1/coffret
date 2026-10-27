@@ -26,4 +26,9 @@ export interface SnapshotContent {
    * (spec: EP-3).
    */
   entries: EntryLocation[];
+  /**
+   * The Library's name at the checkpoint, absent where no record up to it
+   * carried one (spec: FM-16).
+   */
+  libraryName?: string;
 }

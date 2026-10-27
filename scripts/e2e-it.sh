@@ -119,8 +119,10 @@ PAGES="${COFFRET_E2E_PAGES:-4}"
 # while costing a few seconds rather than a few minutes.
 IMPORT_PAGES="${COFFRET_E2E_IMPORT_PAGES:-3}"
 
-# The two names the two devices know the one Library by, and the top-level part
-# of it each maps.
+# The two devices — each has a state directory and a folder of its own under
+# its name — and the top-level part of the one Library each maps. The Library
+# is called $UPLOADER on both: the name is the Library's own, and the joining
+# device reads it from the Library rather than being told one (spec: FM-15).
 readonly UPLOADER="main"
 readonly JOINER="second"
 readonly PREFIX="runs"
@@ -404,16 +406,8 @@ generated="$(find "$UPLOADER_ROOT" -type f | wc -l | tr -d ' ')"
 echo "$generated files under $PREFIX."
 
 echo
-echo "--- carrying $PREFIX into the Library from $UPLOADER ---"
-run_cli "$UPLOADER_STATE" map --library "$UPLOADER" --prefix "$PREFIX" "$UPLOADER_ROOT"
-run_cli "$UPLOADER_STATE" sync --library "$UPLOADER" --passphrase-stdin ||
-  fail "sync on $UPLOADER failed."
-answered '.answer.committed_head' >/dev/null || fail "sync on $UPLOADER committed nothing."
-
-echo
-echo "--- taking the same Library up as $JOINER ---"
+echo "--- taking the same Library up as $JOINER, before anything is synced into it ---"
 run_cli "$JOINER_STATE" join \
-  --name "$JOINER" \
   --recovery-code-stdin \
   --s3 \
   --bucket "$BUCKET" \
@@ -423,12 +417,23 @@ run_cli "$JOINER_STATE" join \
   --passphrase-stdin ||
   fail "$JOINER did not join."
 unset recovery_code
+# shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+answered --arg name "$UPLOADER" '.answer.library == $name' >/dev/null ||
+  fail "$JOINER did not read the Library's name, $UPLOADER, from the Library."
 
-run_cli "$JOINER_STATE" map --library "$JOINER" --prefix "$PREFIX" "$JOINER_ROOT"
+echo
+echo "--- carrying $PREFIX into the Library from $UPLOADER ---"
+run_cli "$UPLOADER_STATE" map --library "$UPLOADER" --prefix "$PREFIX" "$UPLOADER_ROOT"
+run_cli "$UPLOADER_STATE" sync --library "$UPLOADER" --passphrase-stdin ||
+  fail "sync on $UPLOADER failed."
+answered '.answer.committed_head' >/dev/null || fail "sync on $UPLOADER committed nothing."
 
-# And no sync here, deliberately. $JOINER's Index holds nothing at all at this
-# point — joining reads a Recovery Code and writes a directory, and touches
-# Storage for nothing but the folder's name — so every folder the two stages
+run_cli "$JOINER_STATE" map --library "$UPLOADER" --prefix "$PREFIX" "$JOINER_ROOT"
+
+# And no sync here, deliberately. $JOINER joined before $UPLOADER synced
+# anything, so its catalog holds the Library's first head and nothing else —
+# joining replays what the Library holds at that moment, which is where the
+# Library's name comes from (spec: FM-15) — and every folder the two stages
 # below walk was put in its catalog by the server catching up as it started
 # (spec: CK-9). A `coffret sync` run here would do the same thing on its way to
 # committing, and would hide the entry point this target exists to exercise.
@@ -450,7 +455,16 @@ readonly API="http://127.0.0.1:${SERVER_PORT}/api"
 # it writes that key into the Library's own directory, readable by this account
 # and no other. This stage reads it off the disk exactly as the explorer's host
 # does.
-readonly SERVER_KEY_FILE="$JOINER_STATE/libraries/$JOINER/server-key"
+# The Library's directory is named after its ID; the settings in it keep a copy
+# of its name, which is what finds it here, as `--library` finds it.
+joined_dir=""
+for settings in "$JOINER_STATE"/libraries/*/settings.json; do
+  if jq --exit-status --arg name "$UPLOADER" '.name == $name' "$settings" >/dev/null; then
+    joined_dir="$(dirname "$settings")"
+  fi
+done
+[ -n "$joined_dir" ] || fail "no Library called $UPLOADER is under $JOINER_STATE."
+readonly SERVER_KEY_FILE="$joined_dir/server-key"
 
 # The key of whichever server is running now. Read per call rather than once:
 # every start draws a new one, and this stage starts more than one server.
@@ -499,7 +513,7 @@ start_server() {
 from a run that was killed, stop it; or set COFFRET_E2E_SERVER_PORT to a free port."
 
   COFFRET_STATE_DIR="$JOINER_STATE" COFFRET_LOG_DIR="$LOG_DIR" \
-    "$SERVER" --library "$JOINER" --passphrase-stdin --port "$SERVER_PORT" \
+    "$SERVER" --library "$UPLOADER" --passphrase-stdin --port "$SERVER_PORT" \
     <<<"$PASSPHRASE" >>"$LOG_DIR/coffret-server.log" 2>&1 &
   server_pid=$!
 
@@ -526,14 +540,15 @@ echo "--- stage 1: the routes, over $JOINER, on port $SERVER_PORT ---"
 start_server
 
 # Which Library the browser would be looking at.
-api library | jq --exit-status --arg name "$JOINER" \
+api library | jq --exit-status --arg name "$UPLOADER" \
   '.name == $name and .provider == "s3"' >/dev/null ||
-  fail "/api/library did not answer for $JOINER: $(api library)"
+  fail "/api/library did not answer for $UPLOADER on $JOINER: $(api library)"
 
 # Every folder in it, flat — every path a separator implies. This is also the
 # whole of the startup catch-up as a test: $JOINER has run no sync and no fetch,
-# so its catalog held nothing at all a moment ago, and every folder named here
-# reached it because the server replayed the Journal as it opened the Library.
+# and joined before anything was synced, so its catalog held no folder at all a
+# moment ago, and every folder named here reached it because the server
+# replayed the Journal as it opened the Library.
 api folders | jq --exit-status --arg album "$ALBUM" --arg book "$BOOK" \
   '(.folders | index($album)) != null and (.folders | index($book)) != null' >/dev/null ||
   fail "/api/folders did not name the generated folders, so the catch-up the server
@@ -625,7 +640,7 @@ echo "served $CHECKED/served.jpg as $content_type, $(wc -c <"$served" | tr -d ' 
 # maps hold nothing the Library does not, so this sync commits nothing; what the
 # step shows is that it goes through beside the server, and that the listing
 # still answers afterwards.
-run_cli "$JOINER_STATE" sync --library "$JOINER" --passphrase-stdin ||
+run_cli "$JOINER_STATE" sync --library "$UPLOADER" --passphrase-stdin ||
   fail "a sync beside the running server failed."
 listing "$CHECKED" >/dev/null || fail "the listing stopped answering after a sync ran beside it."
 echo "a sync ran beside the server, and the listing still answers."
@@ -749,7 +764,7 @@ COFFRET_E2E_SERVER_BIN="$SERVER" \
   COFFRET_E2E_HOST_BIN="$HOST" \
   COFFRET_E2E_LAUNCH_DIR="$WORK/launch" \
   COFFRET_E2E_STATE_DIR="$JOINER_STATE" \
-  COFFRET_E2E_LIBRARY="$JOINER" \
+  COFFRET_E2E_LIBRARY="$UPLOADER" \
   COFFRET_E2E_LOG_DIR="$LOG_DIR" \
   COFFRET_E2E_PASSPHRASE="$PASSPHRASE" \
   COFFRET_E2E_SERVER_PORT="$SERVER_PORT" \

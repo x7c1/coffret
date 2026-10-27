@@ -54,6 +54,7 @@ pub static JOURNAL_RECORD: MapFields = MapFields {
         field("removals", 9),
         holding("renames", 10, &RENAME),
         field("required_schema", 11),
+        field("library_name", 12),
     ],
 };
 
@@ -110,6 +111,7 @@ pub static INDEX_SNAPSHOT: MapFields = MapFields {
         holding("entries", 9, &SNAPSHOT_ENTRY),
         field("base_head_generation", 10),
         field("activation_slot", 11),
+        field("library_name", 12),
     ],
 };
 

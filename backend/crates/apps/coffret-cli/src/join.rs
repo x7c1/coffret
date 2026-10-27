@@ -18,14 +18,12 @@ use coffret_shell::{passphrase, recovery_code};
 /// joining means: the flags name the Library's *own* folder rather than
 /// somewhere to make one. `--folder-id` is the app folder itself, and
 /// `--prefix` is the whole prefix ending in `coffret-<library id>/` — which is
-/// what `init` printed and what the provider's own interface shows.
+/// what `init` printed and what the provider's own interface shows. And no
+/// name: the Library's name is its own, and the join reads it from the
+/// Library once the Recovery Code has opened it.
 #[derive(Args)]
 #[command(group(ArgGroup::new("provider").required(true).args(["drive", "s3"])))]
 pub struct JoinArgs {
-    /// What this device is to call the Library
-    #[arg(long)]
-    name: String,
-
     /// The Library is in Google Drive
     #[arg(long, requires = "folder_id", requires = "client_id")]
     drive: bool,
@@ -46,7 +44,7 @@ pub struct JoinArgs {
     /// history keeping a copy of it:
     ///
     ///   read -rs COFFRET_DRIVE_CLIENT_SECRET && export COFFRET_DRIVE_CLIENT_SECRET
-    ///   coffret join --name NAME --drive --folder-id FOLDER_ID --client-id CLIENT_ID
+    ///   coffret join --drive --folder-id FOLDER_ID --client-id CLIENT_ID
     ///   unset COFFRET_DRIVE_CLIENT_SECRET
     #[arg(long, conflicts_with = "s3", verbatim_doc_comment)]
     client_id: Option<String>,
@@ -99,7 +97,6 @@ pub struct JoinArgs {
 
 pub async fn run(args: JoinArgs) -> anyhow::Result<Ran> {
     let provider = provider(&args)?;
-    let name = args.name.clone();
     let asked = Asked::default();
 
     // Chosen twice rather than entered once: the Passphrase is this device's
@@ -108,7 +105,6 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Ran> {
     // device's alone (spec: KD-9).
     let joined = join_library(
         JoinLibraryRequest {
-            name: args.name,
             provider,
             referencing_passphrase: passphrase::referencing(args.passphrase_stdin),
         },
@@ -122,7 +118,6 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Ran> {
     // Everything it says is on standard error, so it is said in either form.
     report(&joined);
     Ok(Ran::clean(Answer::Joined(Joined::new(
-        name,
         &joined,
         asked.get(),
     ))))
@@ -168,13 +163,25 @@ fn provider(args: &JoinArgs) -> anyhow::Result<JoinedProvider> {
 
 /// Says what this device now holds, and what it does not.
 ///
-/// No Recovery Code: the one that went in is the one that exists, and printing
-/// it back would put a second copy of the Master Key on a terminal that did not
-/// ask for one. The catalog is empty until the first run, which is worth saying
-/// so that nobody reads `mappings` or a first `fetch` as a Library that turned
-/// out to be empty.
+/// The Library's name first, as the join read it from the Library, since it is
+/// what every later command names the Library by. No Recovery Code: the one
+/// that went in is the one that exists, and printing it back would put a second
+/// copy of the Master Key on a terminal that did not ask for one. Nothing of
+/// the Library is on this device's disk until the first fetch, which is worth
+/// saying so that nobody reads an empty folder as a Library that turned out to
+/// be empty.
 fn report(joined: &JoinedLibrary) {
-    eprintln!("\nThe Library is at {}.", joined.path.display());
+    match &joined.settings.name {
+        Some(name) => eprintln!("\nJoined the Library {name:?}."),
+        // Nothing on this device carries a name for it yet, so `--library`
+        // finds nothing until an open has read one: the ID is what names it.
+        None => eprintln!(
+            "\nJoined the Library. Its name is read from it the first time it is opened; \
+             until then, name it with --library-id {}.",
+            joined.settings.library_id
+        ),
+    }
+    eprintln!("The Library is at {}.", joined.path.display());
     eprintln!("Library ID: {}", joined.settings.library_id);
     eprintln!("On Storage: {}", storage(&joined.settings.provider));
     if let Some(account) = account(&joined.settings.provider) {

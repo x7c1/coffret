@@ -3,7 +3,7 @@
 //! [`stdin_flags`](crate::stdin_flags) catches a secret written after a flag
 //! that names one, and it can do that before parsing because the flag in front
 //! of the value says what the value is. A secret written as a bare argument —
-//! `coffret sync --library alpha <passphrase>`, `coffret join --name second
+//! `coffret sync --library alpha <passphrase>`, `coffret join --drive
 //! <recovery code>`, `coffret <recovery code>` — has nothing in front of it to
 //! recognise, so nothing short of the parser can tell it from a mistyped
 //! command. It is caught here instead, in what the parser answered: clap

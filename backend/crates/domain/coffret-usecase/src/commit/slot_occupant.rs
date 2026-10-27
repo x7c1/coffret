@@ -114,7 +114,7 @@ pub(crate) async fn own_record(
         read_back(store, retry, keys, &listing, slot).await
     };
     match read.await {
-        Ok(ReadBack::Journal(record)) if added(&record) == *additions => Some(record),
+        Ok(ReadBack::Journal(record)) if added(&record) == *additions => Some(*record),
         Ok(_) => None,
         Err(error) => {
             warn!(
@@ -148,8 +148,9 @@ async fn occupant(
 enum ReadBack {
     /// Nothing that proves anything (see [`SlotOccupant::Unproven`]).
     Unproven,
-    /// An authenticated Journal record.
-    Journal(JournalRecord),
+    /// An authenticated Journal record, boxed for the size it is beside the
+    /// other two.
+    Journal(Box<JournalRecord>),
     /// An authenticated Index Snapshot that activated an epoch.
     Activation,
 }
@@ -179,9 +180,10 @@ async fn read_back(
         Err(error) => return Err(error),
     };
     Ok(match decoded.kind {
-        ControlObjectKind::Journal => {
-            ReadBack::Journal(decode_journal_record(&decoded.payload, slot.generation())?)
-        }
+        ControlObjectKind::Journal => ReadBack::Journal(Box::new(decode_journal_record(
+            &decoded.payload,
+            slot.generation(),
+        )?)),
         ControlObjectKind::ActivationSnapshot => ReadBack::Activation,
         // The framing admits neither under a head's name (spec: FM-12), so the
         // read above has already refused them; nothing here proves anything.

@@ -142,11 +142,14 @@ permission it asks for names no account (spec: SA-3).
     one is gone the account's cache can no longer be opened, and the device
     discards it (spec: SA-8).
 - The **device-local account name** is chosen by the person, never written to
-  Storage, and never in a diagnostic event, like the device-local Library name
-  it stands beside. It is optional while the device holds one account — an
-  account left unnamed is called `default` — and required once a second is
-  added, since from then on it is the only thing that says which grant a new
-  Library should use (spec: SA-8, EL-1).
+  Storage, and never in a diagnostic event. Unlike the
+  [Library name](../library/), which belongs to the Library and is kept on
+  Storage for every device that holds it, the account name is this device's
+  alone: another device may call the same account something else. It is
+  optional while the device holds one account — an account left unnamed is
+  called `default` — and required once a second is added, since from then on
+  it is the only thing that says which grant a new Library should use
+  (spec: SA-8, EL-1).
   - Joining a Library tries each grant the device already holds through the
     OAuth client the join names and takes the account whose Storage has the
     named app folder, so the person consents only for an account this device

@@ -75,6 +75,35 @@ impl Device {
         self.state.path().join("libraries")
     }
 
+    /// The directory of the Library on this device whose settings name it
+    /// `name`, where there is one.
+    ///
+    /// A Library is kept under its ID, and its settings keep a copy of its
+    /// name; that copy is what a case finds it by, as `--library` does.
+    pub fn library_named(&self, name: &str) -> Option<PathBuf> {
+        let listing = std::fs::read_dir(self.libraries()).ok()?;
+        listing
+            .filter_map(|entry| Some(entry.ok()?.path()))
+            .filter(|path| {
+                !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with(".partial"))
+            })
+            .find(|path| {
+                std::fs::read(path.join("settings.json"))
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+                    .is_some_and(|settings| settings["name"] == name)
+            })
+    }
+
+    /// The same, for a Library a case has put on this device.
+    pub fn library(&self, name: &str) -> PathBuf {
+        self.library_named(name)
+            .unwrap_or_else(|| panic!("the Library {name:?} must be on this device"))
+    }
+
     /// The folder at `name`, created.
     pub fn folder(&self, name: &str) -> PathBuf {
         let path = self.folders.path().join(name);

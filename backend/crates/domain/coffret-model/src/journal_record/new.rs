@@ -6,6 +6,7 @@ use crate::entry_rename::EntryRename;
 use crate::error::{Error, Result};
 use crate::generation::Generation;
 use crate::keyring_commitment::KeyringCommitment;
+use crate::library_name::LibraryName;
 use crate::master_key_epoch::MasterKeyEpoch;
 
 impl JournalRecord {
@@ -57,7 +58,20 @@ impl JournalRecord {
             additions,
             removals,
             renames: Vec::new(),
+            library_name: None,
         })
+    }
+
+    /// The same record, giving the Library the name `name` as well, or
+    /// carrying no name where it is `None` (spec: FM-15).
+    ///
+    /// Infallible, because a name is held to its own rules as it is parsed and
+    /// a record holds to no rule about one: any record may carry a name, and
+    /// one without this call carries none.
+    #[must_use]
+    pub fn with_library_name(mut self, name: Option<LibraryName>) -> Self {
+        self.library_name = name;
+        self
     }
 
     /// The same record, renaming `renames` as well.

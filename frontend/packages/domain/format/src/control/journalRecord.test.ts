@@ -6,6 +6,7 @@ import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
 import {
   JOURNAL_RECORD_LOWEST_READ_SCHEMA,
+  JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN,
   JOURNAL_RECORD_SCHEMA,
   decodeJournalRecord,
   encodeJournalRecord,
@@ -94,14 +95,42 @@ describe('Journal record payload (spec: FM-15)', () => {
   });
 
   // FM-9, FM-15: `deposited_at` is must-understand, so every record names the
-  // schema that carries it in `required_schema`, whatever else it carries.
+  // schema that carries it, 4, in `required_schema`, whatever else it carries —
+  // a name included, which is not must-understand.
   it('names the schema deposit times need on every record', () => {
-    for (const source of [record(), renamedRecord(), firstRecord()]) {
+    for (const source of [
+      record(),
+      renamedRecord(),
+      firstRecord(),
+      { ...firstRecord(), libraryName: 'books' },
+    ]) {
       const payload = encodeJournalRecord(source);
       expect(BigInt(bodyMap(payload, JOURNAL_RECORD).get('required_schema') as number)).toBe(
-        JOURNAL_RECORD_SCHEMA,
+        JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN,
       );
     }
+    expect(JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN).toBe(4n);
+  });
+
+  // FM-15: a record that names the Library carries the name under
+  // `library_name` and reads back with it; one naming nothing writes no such
+  // field; one of schema 4, written before records could carry a name, reads as
+  // one naming nothing; and an empty name is refused.
+  it('carries the Library name where the record gives one', () => {
+    const named: JournalRecord = { ...firstRecord(), libraryName: 'Photos 写真' };
+    const payload = encodeJournalRecord(named);
+    expect(decodeJournalRecord(payload, Generation.FIRST)).toEqual(canonical(named));
+
+    const unnamed = encodeJournalRecord(firstRecord());
+    expect([...bodyMap(unnamed, JOURNAL_RECORD).keys()]).not.toContain('library_name');
+
+    const older = tampered((map) => map.set('schema', 4n), firstRecord());
+    expect(decodeJournalRecord(older, Generation.FIRST).libraryName).toBeUndefined();
+
+    const emptied = tampered((map) => map.set('library_name', ''), named);
+    expect(errorCode(() => decodeJournalRecord(emptied, Generation.FIRST))).toBe(
+      'malformed_journal_record',
+    );
   });
 
   // FM-15: every Entry an addition carries has its own deposit time, written

@@ -14,6 +14,8 @@
 
 use std::time::Duration;
 
+use coffret_device::LibraryRef;
+
 use crate::UnlockPrompt;
 
 mod open;
@@ -24,8 +26,8 @@ pub use serving::Serving;
 /// What a server is started with.
 #[derive(Debug, Clone)]
 pub struct Launch {
-    /// The Library on this device to serve, by the name it was created under.
-    pub library: String,
+    /// The Library on this device to serve, by its name or by its ID.
+    pub library: LibraryRef,
     /// The loopback port to listen on; `0` asks the operating system for any
     /// free one, and [`Serving::address`] says which it chose.
     pub port: u16,

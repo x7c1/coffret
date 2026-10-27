@@ -40,9 +40,9 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   - `prune` is the formal operation name in documentation and code.
 - **CK-7.** An Index Snapshot carries the Catalog of the whole Library — every
   current Entry and its Container, including Entries under subtrees the
-  uploading device does not map (EP-9) — and carries no device state: no
-  local root mappings, local paths, which Entries the device has materialized
-  (EP-10), spool locations, or upload progress. Two
+  uploading device does not map (EP-9), and the Library's name (FM-16) — and
+  carries no device state: no local root mappings, local paths, which Entries
+  the device has materialized (EP-10), spool locations, or upload progress. Two
   devices that map different parts of one Library restore identical Catalogs
   from the same Snapshot. *(Form: test)*
 - **CK-8.** An Index Snapshot is written at three moments, by the device

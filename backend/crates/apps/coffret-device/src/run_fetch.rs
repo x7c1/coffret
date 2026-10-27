@@ -5,6 +5,7 @@ use tracing::info;
 
 use crate::device_time::now;
 use crate::error::Result;
+use crate::library_ref::LibraryRef;
 use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
@@ -69,14 +70,14 @@ impl OpenLibrary {
     }
 }
 
-/// Puts the Library called `name` into the folders this device maps, under
+/// Puts the Library `library` names into the folders this device maps, under
 /// `prefix`.
 ///
 /// One unlock and one run, which is what a command line does (spec: DK-9). A
 /// process that opens a Library once and runs many things over it calls
 /// [`OpenLibrary::fetch`] and reaches the same body.
 pub async fn run_fetch<P>(
-    name: &str,
+    library: &LibraryRef,
     enter_passphrase: P,
     prefix: Option<EntryPath>,
     progress: &dyn Progress,
@@ -84,7 +85,7 @@ pub async fn run_fetch<P>(
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    open_library(name, enter_passphrase)
+    open_library(library, enter_passphrase)
         .await?
         .fetch(prefix, progress)
         .await

@@ -4,10 +4,10 @@
 //! are here; what each variant says is in [`display`], what it says underneath
 //! in [`source`], what a diagnostic event may be told in [`redacted`], and
 //! what a lower layer's failure becomes in [`from`]. The values a variant
-//! carries to say which name was refused, which step failed, which two OAuth
-//! clients differ and why a promotion was refused are [`NameDefect`],
-//! [`CreationStep`], [`ClientMismatch`] and [`PromotionObstacle`], each in a
-//! module of its own.
+//! carries to say which step failed, which two OAuth clients differ and why a
+//! promotion was refused are [`CreationStep`], [`ClientMismatch`] and
+//! [`PromotionObstacle`], each in a module of its own; what is wrong with a
+//! Library's name is the model's own [`LibraryNameDefect`].
 //!
 //! Whether one is a code exchange refused to a client that sent no secret is
 //! asked in [`exchange_without_client_secret`].
@@ -16,7 +16,7 @@ use std::error;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::EntryPath;
+use coffret_model::{EntryPath, LibraryId, LibraryNameDefect};
 use coffret_usecase::commit::CommitError;
 use coffret_usecase::delete::DeleteError;
 use coffret_usecase::fetch::{BelowRootError, DescentError, FetchError};
@@ -37,9 +37,6 @@ mod display;
 mod exchange_without_client_secret;
 
 mod from;
-
-mod name_defect;
-pub use name_defect::NameDefect;
 
 mod promotion_obstacle;
 pub use promotion_obstacle::PromotionObstacle;
@@ -85,34 +82,44 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// only the fetch's own verdicts.
 #[derive(Debug)]
 pub enum Error {
-    /// The name given for a Library is not one a directory can be called.
+    /// The name given for a Library is not one a Library can have
+    /// (spec: FM-15).
     InvalidLibraryName {
         /// The name that was asked for.
         name: String,
         /// What is wrong with it.
-        defect: NameDefect,
+        defect: LibraryNameDefect,
     },
     /// There is nowhere to keep Libraries: neither the state directory nor a
     /// home directory is named in the environment.
     NoStateDirectory,
-    /// A Library of this name is already on this device.
+    /// The Library is already on this device.
     ///
-    /// Creating one is refused rather than merged into: the directory holds a
-    /// Master Key and a catalog, and a second `init` over them would draw a
-    /// second Master Key and a second Library ID, stranding everything the
-    /// first one named on Storage (spec: FM-18).
+    /// Joining it a second time is refused rather than merged into: its
+    /// directory holds a Master Key and a catalog this device is already using.
     LibraryExists {
         /// The Library that is already here.
         name: String,
         /// The directory it occupies.
         path: PathBuf,
     },
-    /// No Library of this name is on this device.
+    /// No Library on this device answers to what was asked for.
     NoSuchLibrary {
-        /// The Library that was asked for.
+        /// The Library that was asked for: a name, or an ID in hex.
         name: String,
-        /// Where one of that name would be.
+        /// Where the Libraries on this device are kept.
         path: PathBuf,
+    },
+    /// More than one Library on this device carries the name asked for.
+    ///
+    /// A name is anything a person chose, and two Libraries may share one, so
+    /// neither is chosen for the caller: the refusal names both IDs, and the
+    /// ID is what says which one is meant.
+    AmbiguousLibraryName {
+        /// The name that was asked for.
+        name: String,
+        /// The Libraries carrying it (spec: FM-18).
+        libraries: Vec<LibraryId>,
     },
     /// A file or directory on this device could not be read or written: one of
     /// the Library's own, or one in a folder it maps.
@@ -503,7 +510,7 @@ pub enum Error {
     },
     /// Whoever was asked for the Recovery Code did not give one.
     ///
-    /// The code reaches this crate through a callback so local name and
+    /// The code reaches this crate through a callback so account-name and
     /// provider-location refusals happen before a terminal or pipe is read.
     RecoveryCodeNotGiven {
         /// What the caller that was asked reported.

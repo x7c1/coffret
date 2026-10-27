@@ -183,9 +183,11 @@ pub(super) fn snapshot_name(number: u64) -> ControlObjectName {
 /// between a device that replayed records and one that took a later Snapshot,
 /// so a comparison of Library-wide content leaves it out (spec: CK-7).
 pub(super) fn library_state(content: SnapshotContent) -> SnapshotContent {
+    let name = content.library_name().cloned();
     let (checkpoint, _, containers, entries) = content.into_parts();
     SnapshotContent::new(checkpoint, None, containers, entries)
         .expect("content that held together still holds without its provenance")
+        .with_library_name(name)
 }
 
 /// The Entry at `position` in the table of the Container `addition` lays down

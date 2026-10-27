@@ -3,7 +3,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
+use coffret_model::{
+    ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, LibraryName,
+};
 use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
     PendingRow, Reservation, ReservationId,
@@ -278,6 +280,11 @@ impl Index for SqliteIndex {
 
     async fn checkpoint(&self) -> IndexResult<Option<IndexCheckpoint>> {
         self.read("reading the checkpoint", library_state::checkpoint)
+            .await
+    }
+
+    async fn library_name(&self) -> IndexResult<Option<LibraryName>> {
+        self.read("reading the Library's name", library_state::library_name)
             .await
     }
 

@@ -192,8 +192,8 @@ async fn a_second_unlock_finds_the_library_already_open() {
     assert_eq!(status, 200);
 }
 
-// The Passphrase reopens whatever the name on this device points at now, and
-// that may no longer be the Library the server was started for. It is refused,
+// The Passphrase reopens whatever the shell names now, and that may no longer
+// be the Library the server was started for. It is refused,
 // and the server stays locked rather than serving one Library under another's
 // identity.
 #[tokio::test]

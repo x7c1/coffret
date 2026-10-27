@@ -3,7 +3,7 @@ use napi_derive::napi;
 /// The Library served, as the shell is told of it.
 #[napi(object)]
 pub struct ServedLibrary {
-    /// The name it has on this device.
+    /// Its name, or its ID where nothing has named it yet.
     pub name: String,
     /// Whether it is unlocked, or has locked itself and waits for the
     /// Passphrase again.

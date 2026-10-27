@@ -2,15 +2,25 @@
 //! rather than in either of them.
 
 use clap::Args;
+use coffret_device::LibraryRef;
+
+mod which_library;
+pub use which_library::{library_id, WhichLibrary};
 
 /// What a command acting on one Library this device already has is told.
 #[derive(Args)]
 pub struct LibraryArgs {
-    /// The Library on this device to act on
-    #[arg(long)]
-    pub library: String,
+    #[command(flatten)]
+    pub which: WhichLibrary,
     /// Read the Passphrase from one line of standard input instead of asking
     /// for it, which is what a script does
     #[arg(long)]
     pub passphrase_stdin: bool,
+}
+
+impl LibraryArgs {
+    /// The Library the flags name.
+    pub fn library(&self) -> LibraryRef {
+        self.which.library()
+    }
 }

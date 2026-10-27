@@ -12,17 +12,20 @@
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
 //!
-//! In *this* build that line falls at layout 20 itself: layout 20 changed the
-//! device group — each reservation says whether its drop finished receiving —
-//! so every older layout is brought forward rather than read as it is. A
-//! layout-19 file keeps everything it holds, catalog included, and its
-//! reservations gain the mark unset, each read as a drop cut off part way. A
-//! layout-18 file takes the same step and loses its catalog, whose Entries
-//! carry no deposit time, which the next catch-up rebuilds from Storage. Every
-//! older layout loses its catalog too, after its device group is brought
-//! forward. Layout 18 had changed the device group: it
-//! keeps the reservations a drop's choice of a Pack is recorded in, so a
-//! layout-17 file keeps every row it holds and gains the reservations, empty.
+//! In *this* build that line falls at layout 20: layout 21 changed only the
+//! catalog — its checkpoint row holds the Library's name — so a layout-20 file
+//! keeps everything it holds, catalog included, and its checkpoint row gains
+//! the name, unset. Layout 20 had changed the device group — each reservation
+//! says whether its drop finished receiving — so every older layout is brought
+//! forward rather than read as it is. A layout-19 file keeps everything it
+//! holds too, its checkpoint row gains the name, and its reservations gain the
+//! mark unset, each read as a drop cut off part way. A layout-18 file takes the
+//! same step and loses its catalog, whose Entries carry no deposit time, which
+//! the next catch-up rebuilds from Storage. Every older layout loses its
+//! catalog too, after its device group is brought forward. Layout 18 had
+//! changed the device group: it keeps the reservations a drop's choice of a
+//! Pack is recorded in, so a layout-17 file keeps every row it holds and gains
+//! the reservations, empty.
 //! Layout 17 had changed it before: a materialized file's row names the Entry
 //! it is a copy of by its Container and entry number. A layout-16 file has
 //! each row tied to the Entry its catalog holds where the row stands, a row it
@@ -62,7 +65,7 @@ use support::{
 /// [`DEVICE_SCHEMA_VERSION`] or above is read as it is, one from
 /// [`OLDEST_UPGRADED_SCHEMA_VERSION`] up to the layout before that takes an
 /// upgrade, and one older than that is refused.
-const SCHEMA_VERSION: i64 = 20;
+const SCHEMA_VERSION: i64 = 21;
 const DEVICE_SCHEMA_VERSION: i64 = 20;
 const OLDEST_UPGRADED_SCHEMA_VERSION: i64 = 7;
 
@@ -149,12 +152,18 @@ async fn a_file_stamped(scratch: &Scratch, version: i64) {
 
 /// Stamps a layout version into a file, behind the adapter's back.
 ///
-/// An older layout's file loses the reservations' received mark layout 20
-/// added, the catalog's deposit times layout 19 added, the device-local tables
-/// and columns layouts 16 to 18 added, and one before 15 the entry numbers of
+/// An older layout's file loses the Library's name layout 21 added to the
+/// checkpoint row, the reservations' received mark layout 20 added, the
+/// catalog's deposit times layout 19 added, the device-local tables and
+/// columns layouts 16 to 18 added, and one before 15 the entry numbers of
 /// its catalog, so the upgrade meets the shape a build before it left behind.
 fn restamp(file: &Path, version: i64) {
     let connection = rusqlite::Connection::open(file).expect("the Index file must open");
+    if version < 21 {
+        connection
+            .execute_batch("ALTER TABLE checkpoint DROP COLUMN library_name;")
+            .expect("dropping a column must succeed");
+    }
     if version < 20 {
         connection
             .execute_batch("ALTER TABLE reservations DROP COLUMN received;")
@@ -245,14 +254,15 @@ async fn reads_its_reservation_as_cut_off(index: &SqliteIndex) {
 }
 
 /// The layout before this one keeps every row it holds, its catalog included —
-/// layout 20 changed only the device group — and its reservations gain the
-/// mark of a finished drop, unset (spec: PK-17, LA-12). Nothing is discarded,
-/// so nothing is reported.
+/// layout 21 changed only the catalog's checkpoint row — and that row gains
+/// the Library's name, unset: the next open reads the name from Storage
+/// (spec: FM-15). Nothing is discarded, so nothing is reported.
 #[tokio::test]
-async fn the_layout_before_this_one_keeps_its_catalog_and_reads_its_reservations_as_cut_off() {
+async fn the_layout_before_this_one_keeps_its_catalog_and_names_nothing_yet() {
     assert_eq!(
-        DEVICE_SCHEMA_VERSION, SCHEMA_VERSION,
-        "the device-local floor is this layout itself"
+        DEVICE_SCHEMA_VERSION,
+        SCHEMA_VERSION - 1,
+        "the device-local floor is the layout before this one"
     );
     let scratch = Scratch::new();
     a_file_stamped(&scratch, SCHEMA_VERSION).await;
@@ -260,7 +270,46 @@ async fn the_layout_before_this_one_keeps_its_catalog_and_reads_its_reservations
     restamp(&scratch.file(), SCHEMA_VERSION - 1);
 
     let logs = CapturedLogs::capture();
+    let index = SqliteIndex::open(scratch.file()).expect("layout 20 must open");
+    keeps_everything(&index).await;
+    assert_eq!(
+        index
+            .library_name()
+            .await
+            .expect("reading the name must succeed"),
+        None,
+        "and names nothing yet"
+    );
+    let reservations = index
+        .reservations()
+        .await
+        .expect("reading the reservations must succeed");
+    assert_eq!(reservations.len(), 1, "the reservation is kept");
+    assert_eq!(logs.at(Level::WARN).len(), 0, "{}", logs.text());
+    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
+}
+
+/// The layout two before this one keeps every row it holds, its catalog
+/// included, its checkpoint row gains the Library's name as the layout after it
+/// does, and its reservations gain the mark of a finished drop, unset
+/// (spec: PK-17, LA-12, FM-15). Nothing is discarded, so nothing is reported.
+#[tokio::test]
+async fn the_layout_two_before_this_one_keeps_its_catalog_and_reads_its_reservations_as_cut_off() {
+    let scratch = Scratch::new();
+    a_file_stamped(&scratch, SCHEMA_VERSION).await;
+    a_reservation_in(&scratch).await;
+    restamp(&scratch.file(), SCHEMA_VERSION - 2);
+
+    let logs = CapturedLogs::capture();
     let index = SqliteIndex::open(scratch.file()).expect("layout 19 must open");
+    keeps_everything(&index).await;
+    reads_its_reservation_as_cut_off(&index).await;
+    assert_eq!(logs.at(Level::WARN).len(), 0, "{}", logs.text());
+    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
+}
+
+/// What [`a_file_stamped`] put in, read back from a file that kept it all.
+async fn keeps_everything(index: &SqliteIndex) {
     assert!(
         index
             .checkpoint()
@@ -282,27 +331,25 @@ async fn the_layout_before_this_one_keeps_its_catalog_and_reads_its_reservations
         .await
         .expect("reading a local file's row must succeed")
         .is_some());
-    reads_its_reservation_as_cut_off(&index).await;
-    assert_eq!(logs.at(Level::WARN).len(), 0, "{}", logs.text());
-    assert_eq!(stamp_of(&scratch.file()), SCHEMA_VERSION);
 }
 
-/// The layout two before this one takes the same step and then loses its
-/// catalog, whose Entries carry no deposit time, keeping every row of its
-/// device-local group (spec: RV-5, FM-15, PK-17).
+/// The layout three before this one takes the same step for its reservations
+/// and then loses its catalog, whose Entries carry no deposit time, keeping
+/// every row of its device-local group (spec: RV-5, FM-15, PK-17).
 #[tokio::test]
-async fn the_layout_two_before_this_one_reads_its_reservations_as_cut_off_and_loses_its_catalog() {
-    loses_its_catalog(SCHEMA_VERSION - 2, Kept::Records).await;
+async fn the_layout_three_before_this_one_reads_its_reservations_as_cut_off_and_loses_its_catalog()
+{
+    loses_its_catalog(SCHEMA_VERSION - 3, Kept::Records).await;
 
     let scratch = Scratch::new();
     a_file_stamped(&scratch, SCHEMA_VERSION).await;
     a_reservation_in(&scratch).await;
-    restamp(&scratch.file(), SCHEMA_VERSION - 2);
+    restamp(&scratch.file(), SCHEMA_VERSION - 3);
     let index = SqliteIndex::open(scratch.file()).expect("layout 18 must open");
     reads_its_reservation_as_cut_off(&index).await;
 }
 
-/// The layout three before this one keeps every row of its device-local group,
+/// The layout four before this one keeps every row of its device-local group,
 /// gains the reservations, holding none — no build before it recorded a drop's
 /// choice of a Pack (spec: PK-17) — and loses its catalog as the layout after
 /// it does (spec: RV-5, FM-15).
@@ -310,11 +357,11 @@ async fn the_layout_two_before_this_one_reads_its_reservations_as_cut_off_and_lo
 /// The reservations it gains are ones the port reads and writes like a fresh
 /// file's.
 #[tokio::test]
-async fn the_layout_three_before_this_one_gains_no_reservation_and_loses_its_catalog() {
-    loses_its_catalog(SCHEMA_VERSION - 3, Kept::Records).await;
+async fn the_layout_four_before_this_one_gains_no_reservation_and_loses_its_catalog() {
+    loses_its_catalog(SCHEMA_VERSION - 4, Kept::Records).await;
 
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, SCHEMA_VERSION - 3).await;
+    a_file_stamped(&scratch, SCHEMA_VERSION - 4).await;
     let index = SqliteIndex::open(scratch.file()).expect("layout 17 must open");
     assert_eq!(
         index
@@ -341,14 +388,14 @@ async fn the_layout_three_before_this_one_gains_no_reservation_and_loses_its_cat
     );
 }
 
-/// The layout four before this one has each materialization record tied to
+/// The layout five before this one has each materialization record tied to
 /// the Entry its catalog holds where it stands (spec: EP-10), and then loses
 /// that catalog as every older layout does (spec: RV-5, FM-15).
 ///
 /// Nothing is dropped, so the discard is the one thing reported.
 #[tokio::test]
-async fn the_layout_four_before_this_one_names_each_records_entry_and_loses_its_catalog() {
-    loses_its_catalog(SCHEMA_VERSION - 4, Kept::Records).await;
+async fn the_layout_five_before_this_one_names_each_records_entry_and_loses_its_catalog() {
+    loses_its_catalog(SCHEMA_VERSION - 5, Kept::Records).await;
 }
 
 /// A layout-16 record the catalog holds no Entry for — the file of an Entry
@@ -387,7 +434,7 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
                 .expect("recording a materialized file must succeed");
         }
     }
-    restamp(&scratch.file(), SCHEMA_VERSION - 4);
+    restamp(&scratch.file(), SCHEMA_VERSION - 5);
 
     let logs = CapturedLogs::capture();
     let index = SqliteIndex::open(scratch.file()).expect("layout 16 must open");
@@ -424,7 +471,7 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
     assert!(!logs.text().contains("departed"), "{}", logs.text());
 }
 
-/// The layout five below this one has its device-local group upgraded and its
+/// The layout six below this one has its device-local group upgraded and its
 /// catalog discarded rather than migrated (spec: RV-5, EP-9, EP-10, OC-2).
 ///
 /// Its device group lacks the columns that say which files wait to follow a
@@ -435,17 +482,17 @@ async fn a_record_the_catalog_names_no_entry_for_is_dropped_and_reported() {
 /// current layout with an empty catalog, which the next catch-up rebuilds from
 /// Storage, and a warning says so.
 #[tokio::test]
-async fn the_layout_five_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
-    loses_its_catalog(SCHEMA_VERSION - 5, Kept::Records).await;
+async fn the_layout_six_before_this_one_loses_its_catalog_and_keeps_its_device_state() {
+    loses_its_catalog(SCHEMA_VERSION - 6, Kept::Records).await;
 }
 
-/// The layout six below this one takes the same upgrade (spec: RV-5, EP-9,
+/// The layout seven below this one takes the same upgrade (spec: RV-5, EP-9,
 /// EP-10, OC-2), and its catalog holds no entry numbers, so it cannot say
 /// which Entry any record is a copy of: every record is dropped, and that is
 /// reported beside the discard (spec: FM-16).
 #[tokio::test]
-async fn the_layout_six_before_this_one_loses_its_catalog_and_its_records() {
-    loses_its_catalog(SCHEMA_VERSION - 6, Kept::NoRecords).await;
+async fn the_layout_seven_before_this_one_loses_its_catalog_and_its_records() {
+    loses_its_catalog(SCHEMA_VERSION - 7, Kept::NoRecords).await;
 }
 
 /// Whether an upgrade keeps the materialization records.

@@ -178,7 +178,7 @@ impl Accounts {
         Err(unread)
     }
 
-    /// The first Library that references `account`, by its device-local name:
+    /// The first Library that references `account`, by what this device calls it:
     /// the one a person is asked the Passphrase of, and the one a refusal names.
     pub(crate) fn first_referencing(&self, account: &AccountName) -> Option<&LibraryDir> {
         self.references

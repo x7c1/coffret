@@ -1,7 +1,7 @@
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ControlObjectName,
     DepositedAt, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryPath,
-    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    Generation, IndexCheckpoint, KeyringCommitment, LibraryName, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
@@ -118,6 +118,19 @@ pub(crate) fn checkpoint(
         .map_err(unreadable_model(OPERATION))?;
 
     Ok((checkpoint, adopted_from))
+}
+
+/// The `library_name` column of the checkpoint row (spec: FM-15, FM-16).
+///
+/// A value that is no Library name is a row this build cannot read, refused
+/// through the model's own refusal, which renders its length and never the
+/// name (spec: EL-1).
+pub(crate) fn library_name(row: &Row<'_>) -> IndexResult<Option<LibraryName>> {
+    const OPERATION: &str = "reading the Library's name";
+    optional_text(row, "library_name", OPERATION)?
+        .map(LibraryName::parse)
+        .transpose()
+        .map_err(unreadable_model(OPERATION))
 }
 
 /// Where one row places its Entry in its Container's plaintext stream

@@ -27,6 +27,9 @@ pub use drop_answer::DropAnswer;
 mod dropped_file_row;
 pub use dropped_file_row::DroppedFileRow;
 
+mod listed_library;
+pub use listed_library::ListedLibrary;
+
 mod not_taken_row;
 pub use not_taken_row::NotTakenRow;
 
@@ -62,10 +65,18 @@ pub fn start(identifier: String, idle_minutes: Option<String>) -> Result<()> {
         .map_err(failed)
 }
 
-/// The names of the Libraries on this device.
+/// The Libraries on this device: each one's ID, and the name it is listed
+/// under.
 #[napi(catch_unwind)]
-pub fn libraries() -> Result<Vec<String>> {
-    core::libraries().map_err(failed)
+pub fn libraries() -> Result<Vec<ListedLibrary>> {
+    Ok(core::libraries()
+        .map_err(failed)?
+        .into_iter()
+        .map(|listed| ListedLibrary {
+            id: listed.id,
+            name: listed.name,
+        })
+        .collect())
 }
 
 /// A fresh token for one Passphrase window opened in `mode`, as the URL to

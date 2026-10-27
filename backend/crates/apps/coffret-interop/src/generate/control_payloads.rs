@@ -5,7 +5,9 @@
 //! naming Entries by Container and entry number (spec: FM-15), a Snapshot whose
 //! Entries interleave across several Containers so that the two canonical
 //! orders are both exercised and each carries its entry number, the activation
-//! Snapshot's two extra fields (spec: FM-16, MR-2), and a Keyring's key table
+//! Snapshot's two extra fields (spec: FM-16, MR-2), the Library's name a record
+//! and a Snapshot carry where they carry one (spec: FM-15, FM-16), and a
+//! Keyring's key table
 //! holding both of the things a Keyring holds for a Container (spec: FM-17).
 //! Every array is handed over out of the canonical order on purpose and put in
 //! it by the aggregate that carries it, so a set whose writer left the order
@@ -20,7 +22,7 @@ use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
     ContentHash, DepositedAt, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber,
     EntryRename, IndexCheckpoint, JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment,
-    KeyringElement, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    KeyringElement, LibraryName, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
@@ -73,7 +75,8 @@ fn envelope(seed: u8) -> KeyEnvelope {
 ///
 /// It renames three Entries of Containers an earlier record added — two in one
 /// Pack, so the order by entry number travels beside the order by Container —
-/// and one new path is not ASCII, so both sides carry the same NFC bytes.
+/// and one new path is not ASCII, so both sides carry the same NFC bytes. It
+/// names the Library too, with a name that is not ASCII either.
 pub(super) fn journal_record() -> JournalRecord {
     JournalRecord::canonical(
         generation(JOURNAL_GENERATION),
@@ -97,7 +100,14 @@ pub(super) fn journal_record() -> JournalRecord {
             rename(0x30, 1, "notes/kept.txt"),
         ])
     })
+    .map(|record| record.with_library_name(Some(library_name())))
     .expect("the generator's own record is one a commit could have written")
+}
+
+/// The name the `journal` and `index-snapshot` fixtures give the Library
+/// (spec: FM-15, FM-16).
+fn library_name() -> LibraryName {
+    LibraryName::parse("Photos 写真").expect("the generator's own name is one")
 }
 
 /// The rename of entry `number` of the Container `seed` names to `path`.
@@ -110,9 +120,13 @@ fn entry_number(number: u32) -> EntryNumber {
     EntryNumber::new(u64::from(number)).expect("every u32 is an entry number")
 }
 
-/// The Snapshot the `index-snapshot` fixture carries (spec: FM-16).
+/// The Snapshot the `index-snapshot` fixture carries (spec: FM-16), naming the
+/// Library; the activation one below names nothing, so both spellings of the
+/// optional field travel.
 pub(super) fn ordinary_snapshot() -> IndexSnapshotPayload {
-    IndexSnapshotPayload::ordinary(library(SNAPSHOT_GENERATION))
+    IndexSnapshotPayload::ordinary(
+        library(SNAPSHOT_GENERATION).with_library_name(Some(library_name())),
+    )
 }
 
 /// The Snapshot the `activation-snapshot` fixture carries (spec: FM-16, MR-2).

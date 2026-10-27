@@ -122,8 +122,9 @@ pub(crate) fn passphrase() -> Result<Passphrase> {
 ///
 /// One for the whole binary rather than one per case, because the directory is
 /// named by an environment variable and a variable is one value for a process.
-/// Cases are told apart by device-local Library name instead, which is what
-/// they would be told apart by on a real device anyway.
+/// Each case's Library has an ID of its own, which is what tells them apart
+/// on a real device too, and a name of its own, which is what the cases find
+/// them by.
 pub(crate) fn state_dir() -> &'static Path {
     static ROOT: OnceLock<PathBuf> = OnceLock::new();
     ROOT.get_or_init(|| {
@@ -166,6 +167,20 @@ pub(crate) async fn create_s3(name: &str) -> CreatedLibrary {
     })
     .await
     .expect("an S3 Library needs nothing but this device and a bucket that answers")
+}
+
+/// Creates an S3 Library called `name` the way another device would: on
+/// Storage, and not on this one.
+///
+/// A Library is kept on a device under its ID, so a case that joins one has to
+/// start from a device that does not hold it yet. Created here and then taken
+/// off this device again, which leaves Storage holding exactly what the
+/// creation wrote.
+pub(crate) async fn create_elsewhere(name: &str) -> CreatedLibrary {
+    let created = create_s3(name).await;
+    std::fs::remove_dir_all(&created.path)
+        .expect("a case's own Library directory must be removable");
+    created
 }
 
 /// What every case here asks for.

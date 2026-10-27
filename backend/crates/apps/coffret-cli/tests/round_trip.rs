@@ -139,16 +139,19 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     );
 
     // 3. A second device, from the Recovery Code and the prefix `init` printed,
-    //    and a fetch that fills a folder that has never held any of this.
-    let elsewhere = device.folder("elsewhere");
-    join(&device, "b", &recovery_code, &prefix, &minio);
-    map(&device, "b", &elsewhere);
+    //    and a fetch that fills a folder that has never held any of this. The
+    //    join is told no name: the Library is called `a` there too, the name
+    //    it was created with (spec: FM-15).
+    let joiner = Device::new();
+    let elsewhere = joiner.folder("elsewhere");
+    join(&joiner, &recovery_code, &prefix, &minio);
+    map(&joiner, "a", &elsewhere);
 
-    let fetched = device.run_with(
+    let fetched = joiner.run_with(
         &[
             "fetch",
             "--library",
-            "b",
+            "a",
             "--under",
             PREFIX,
             "--passphrase-stdin",
@@ -172,17 +175,18 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     // the one Pack holding every file the folder has, small enough to be one
     // parcel, so the other two files come along and are placed alongside the
     // one asked for (spec: PK-16, PK-19).
-    let one = device.folder("one-entry");
-    join(&device, "c", &recovery_code, &prefix, &minio);
-    map(&device, "c", &one);
+    let third = Device::new();
+    let one = third.folder("one-entry");
+    join(&third, &recovery_code, &prefix, &minio);
+    map(&third, "a", &one);
 
     let (wanted, _) = files.iter().next().expect("the folder is not empty");
-    let placed = device.run_with(
+    let placed = third.run_with(
         &[
             "--json",
             "fetch",
             "--library",
-            "c",
+            "a",
             "--entry",
             &format!("{PREFIX}/{wanted}"),
             "--passphrase-stdin",
@@ -305,11 +309,11 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         "the renaming device's files follow the renames at once"
     );
 
-    let refetched = device.run_with(
+    let refetched = joiner.run_with(
         &[
             "fetch",
             "--library",
-            "b",
+            "a",
             "--under",
             PREFIX,
             "--passphrase-stdin",
@@ -393,7 +397,7 @@ async fn a_bucket_the_implementation_does_not_hold_creates_nothing() {
     // The one thing worse than the refusal would be a code for a Library that
     // does not exist anywhere.
     assert!(!stdout(&output).contains(RECOVERY_CODE_PREFIX));
-    assert!(!device.libraries().join("nowhere").exists());
+    assert!(device.library_named("nowhere").is_none());
 }
 
 /// Creates the Library `name` in the bucket.
@@ -421,15 +425,13 @@ fn init(device: &Device, name: &str, minio: &Minio) -> Output {
     output
 }
 
-/// Takes the same Library up under `name`, from the code and prefix `init`
+/// Takes the same Library up on `device`, from the code and prefix `init`
 /// printed.
-fn join(device: &Device, name: &str, recovery_code: &str, prefix: &str, minio: &Minio) {
+fn join(device: &Device, recovery_code: &str, prefix: &str, minio: &Minio) {
     let input = format!("{recovery_code}\n{OWN_PASSPHRASE}");
     let output = device.run_with(
         &[
             "join",
-            "--name",
-            name,
             "--recovery-code-stdin",
             "--s3",
             "--bucket",

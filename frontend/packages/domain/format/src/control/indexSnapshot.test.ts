@@ -71,6 +71,20 @@ describe('Index Snapshot payload (spec: FM-16)', () => {
     );
   });
 
+  // FM-16: a checkpoint carries the Library's name the records it checkpoints
+  // left, and a Snapshot of schema 4, written before one could, reads as one
+  // naming nothing.
+  it('carries the Library name', () => {
+    const named = { content: { ...content(), libraryName: 'books' } };
+    expect(readOrdinary(encodeIndexSnapshot(named)).content.libraryName).toBe('books');
+
+    const older = tampered((map) => map.set('schema', 4n));
+    expect([...bodyMap(encodeIndexSnapshot(ordinary()), INDEX_SNAPSHOT).keys()]).not.toContain(
+      'library_name',
+    );
+    expect(readOrdinary(older).content.libraryName).toBeUndefined();
+  });
+
   // MR-2: an activation Snapshot carries the same content and, beyond it, which
   // head it fenced and the slot it won.
   it('round-trips an activation Snapshot', () => {

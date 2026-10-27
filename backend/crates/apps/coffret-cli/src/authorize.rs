@@ -1,7 +1,7 @@
 //! Renewing the grant of an account this device holds.
 
 use clap::{ArgGroup, Args};
-use coffret_device::AuthorizeRequest;
+use coffret_device::{AuthorizeRequest, LibraryRef};
 
 use crate::answer::{Answer, Authorized, Ran};
 use crate::consent::Asked;
@@ -10,12 +10,16 @@ use coffret_shell::passphrase;
 /// Which grant to renew: an account's, named by itself or by a Library that
 /// references it.
 #[derive(Args)]
-#[command(group(ArgGroup::new("grant").required(true).multiple(true).args(["library", "account"])))]
+#[command(group(ArgGroup::new("grant").required(true).multiple(true).args(["library", "library_id", "account"])))]
 pub struct AuthorizeArgs {
     /// A Library on this device: the grant of the account it references is
     /// renewed, for every Library that references that account
-    #[arg(long)]
+    #[arg(long, conflicts_with = "library_id")]
     library: Option<String>,
+    /// The same Library by its ID: the 16 lowercase hex characters `init` and
+    /// `join` print, for a name more than one Library on this device carries
+    #[arg(long, value_parser = crate::library_args::library_id)]
+    library_id: Option<coffret_device::LibraryId>,
     /// An account on this device, by the name it was given: its grant is
     /// renewed for every Library that references it. With --library, the
     /// account to bring a Library that references none onto: 1 to 64 ASCII
@@ -34,10 +38,15 @@ pub struct AuthorizeArgs {
 
 pub async fn run(args: AuthorizeArgs) -> anyhow::Result<Ran> {
     let asked = Asked::default();
-    let request = match (args.library, args.account) {
-        (Some(name), account) => AuthorizeRequest::Library { name, account },
+    let library = match (args.library, args.library_id) {
+        (Some(name), _) => Some(LibraryRef::named(name)),
+        (None, Some(id)) => Some(LibraryRef::Id(id)),
+        (None, None) => None,
+    };
+    let request = match (library, args.account) {
+        (Some(library), account) => AuthorizeRequest::Library { library, account },
         (None, Some(name)) => AuthorizeRequest::Account { name },
-        (None, None) => unreachable!("clap requires --library or --account"),
+        (None, None) => unreachable!("clap requires --library, --library-id or --account"),
     };
     coffret_device::authorize(
         request,

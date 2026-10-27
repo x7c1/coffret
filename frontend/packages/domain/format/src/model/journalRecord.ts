@@ -86,4 +86,13 @@ export interface JournalRecord {
    * Empty on a record that renames nothing.
    */
   renames: EntryRename[];
+  /**
+   * The Library's name as this record gives it, absent on a record that
+   * carries none (spec: FM-15).
+   *
+   * The record at generation 0 carries the name the Library was created with,
+   * and a later one carries a name only where it gives the Library a new one:
+   * the Library's name is the one the latest record carrying a name gives.
+   */
+  libraryName?: string;
 }

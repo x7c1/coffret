@@ -107,6 +107,7 @@ export {
 } from './control/payload.js';
 export {
   JOURNAL_RECORD_LOWEST_READ_SCHEMA,
+  JOURNAL_RECORD_REQUIRED_SCHEMA_WRITTEN,
   JOURNAL_RECORD_SCHEMA,
   decodeJournalRecord,
   encodeJournalRecord,

@@ -4,9 +4,10 @@
 
 **Catalog** is the committed, Library-wide description of the current
 [Containers](../container/) and [Entries](../container/entry/), including where
-they stand in the [Entry Path](../entry-path/) namespace. It separates what the
-Library currently contains from the objects Storage happens to list and the
-files any one device happens to hold.
+they stand in the [Entry Path](../entry-path/) namespace, and of the Library's
+name ([Library](../library/)). It separates what the Library currently
+contains from the objects Storage happens to list and the files any one
+device happens to hold.
 
 The [Journal](../journal/) records changes to the Catalog, and an
 [Index Snapshot](../index-snapshot/) checkpoints it. Each device's
@@ -16,7 +17,7 @@ The [Journal](../journal/) records changes to the Catalog, and an
 
 | Information | Authority | Recovered from Storage |
 | --- | --- | --- |
-| Current Containers, Entries, and the committed checkpoint | Authenticated Journal and Index Snapshots | Yes, while the required control state survives |
+| Current Containers, Entries, the Library name, and the committed checkpoint | Authenticated Journal and Index Snapshots | Yes, while the required control state survives |
 | Mapped folders and materialization records | This device | No |
 | Spools and pending rows | The creating device | No |
 
@@ -81,6 +82,12 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
   its name: the pair names one Entry whatever path it currently stands at,
   which is what lets a change of name be recorded without the name it
   replaces (spec: FM-9, FM-15, FM-16).
+- The Catalog keeps the **Library name**: the one the latest Journal record
+  carrying a name gave. The record that creates the Library carries the name it
+  is created with, a later record carries one only where it gives the Library a
+  new one, and a checkpoint carries the name the records before it left, so
+  pruning them does not lose it. A reader that does not know the name loses
+  only the name: it is not must-understand (spec: FM-15, FM-16).
 - Reconstructing the Catalog proves the state described by the available
   authenticated history; Storage can withhold newer history, so cleanup needs
   separate proof before deleting a suspected orphan (spec: RV-6, OC-1, OC-3).

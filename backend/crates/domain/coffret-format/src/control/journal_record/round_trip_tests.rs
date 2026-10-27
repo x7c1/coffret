@@ -57,14 +57,16 @@ fn a_record_without_renames_writes_no_renames_field() {
 }
 
 // FM-9, FM-15: `deposited_at` is must-understand, so every record names the
-// schema that carries it in `required_schema` — one renaming nothing and one
-// adding nothing included — and reads back as it went in.
+// schema that carries it, 4, in `required_schema` — one renaming nothing, one
+// adding nothing and one naming the Library included — and reads back as it
+// went in.
 #[test]
 fn every_record_names_the_schema_deposit_times_need() {
     for (record, generation_of) in [
         (record(), GENERATION),
         (renamed_record(), GENERATION),
         (first_record(), 0),
+        (named(first_record()), 0),
     ] {
         let payload = encode(&record).expect("encoding succeeds");
         let fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
@@ -73,7 +75,7 @@ fn every_record_names_the_schema_deposit_times_need() {
             .find(|(key, _)| key.as_text() == Some("required_schema"))
             .and_then(|(_, value)| value.as_integer())
             .map(|value| u64::try_from(value).expect("a schema is a u64"));
-        assert_eq!(required, Some(super::SCHEMA));
+        assert_eq!(required, Some(4));
         let decoded = decode(&payload, generation(generation_of)).expect("the record reads");
         assert_eq!(decoded, record);
     }
@@ -357,4 +359,70 @@ fn every_key_on_the_wire_is_an_integer() {
     let payload = encode(&record()).expect("encoding succeeds");
     let body: Value = ciborium::from_reader(payload.body.as_slice()).expect("the body is CBOR");
     assert!(integer_keyed(&body), "{body:?}");
+}
+
+/// `record`, naming the Library `books`.
+fn named(record: coffret_model::JournalRecord) -> coffret_model::JournalRecord {
+    record.with_library_name(Some(
+        coffret_model::LibraryName::parse("books").expect("a fixture's name is one"),
+    ))
+}
+
+// FM-15: a record that names the Library carries the name under
+// `library_name` and reads back with it, and one that names nothing writes no
+// such field and reads back with none.
+#[test]
+fn a_record_carries_the_library_name_where_it_gives_one() {
+    let record = named(first_record());
+    let payload = encode(&record).expect("encoding succeeds");
+    let decoded = decode(&payload, Generation::FIRST).expect("the payload reads back");
+    assert_eq!(decoded, record);
+    assert_eq!(
+        decoded.library_name().map(|name| name.as_str()),
+        Some("books")
+    );
+
+    let unnamed = encode(&first_record()).expect("encoding succeeds");
+    assert!(
+        !body_keys(&unnamed, &field_numbers::JOURNAL_RECORD).contains(&"library_name".to_owned())
+    );
+    let decoded = decode(&unnamed, Generation::FIRST).expect("the payload reads back");
+    assert_eq!(decoded.library_name(), None);
+}
+
+// FM-15: the name raises `schema` and not `required_schema`, so a record of
+// schema 4 — written before a record could carry one — still reads, as a
+// record that names nothing.
+#[test]
+fn a_record_of_the_schema_before_names_reads_as_one_naming_nothing() {
+    let payload = encode(&first_record()).expect("encoding succeeds");
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    *field(&mut fields, "schema") = Value::from(4u64);
+    let older = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    );
+    let decoded = decode(&older, Generation::FIRST).expect("a schema-4 record reads");
+    assert_eq!(decoded, first_record());
+}
+
+// FM-15: a name a record carries is held to a name's own rules, so a record
+// naming the Library with nothing is refused rather than read.
+#[test]
+fn a_record_naming_the_library_with_nothing_is_refused() {
+    let payload = encode(&named(first_record())).expect("encoding succeeds");
+    let mut fields = body_map(&payload, &field_numbers::JOURNAL_RECORD);
+    *field(&mut fields, "library_name") = Value::Text(String::new());
+    let emptied = with_body_map(
+        payload.master_key_epoch,
+        fields,
+        &field_numbers::JOURNAL_RECORD,
+    );
+    assert!(matches!(
+        decode(&emptied, Generation::FIRST),
+        Err(crate::Error::Model(
+            coffret_model::Error::InvalidLibraryName { .. }
+        ))
+    ));
 }

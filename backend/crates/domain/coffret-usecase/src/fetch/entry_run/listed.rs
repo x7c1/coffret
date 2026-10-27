@@ -103,7 +103,7 @@ mod tests {
         );
         let store = InMemoryStore::new(8);
         let policy = CommitPolicy::default();
-        write_first_head(&store, keys.control(), &policy)
+        write_first_head(&store, keys.control(), &policy, None)
             .await
             .expect("creating a Library in an empty store must succeed")
             .expect("an empty store holds no head to find instead");

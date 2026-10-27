@@ -47,7 +47,7 @@ async fn heads(store: &dyn ObjectStore) -> Vec<String> {
 
 /// Writes the first head into an empty store, which has to write one.
 async fn created(store: &dyn ObjectStore) -> JournalRecord {
-    write_first_head(store, &control_keys(), &CommitPolicy::default())
+    write_first_head(store, &control_keys(), &CommitPolicy::default(), None)
         .await
         .expect("writing the first head into an empty store must succeed")
         .expect("an empty store holds no head to find instead")
@@ -100,7 +100,7 @@ async fn a_library_with_a_head_is_given_no_second_one() {
     let store = InMemoryMintingStore::new(PAGE_SIZE);
     created(&store).await;
 
-    let again = write_first_head(&store, &control_keys(), &CommitPolicy::default())
+    let again = write_first_head(&store, &control_keys(), &CommitPolicy::default(), None)
         .await
         .expect("asking a Library that has a head must succeed");
 
@@ -160,4 +160,57 @@ async fn a_library_just_created_recovers_to_nothing() {
     assert_eq!(adopted.checkpoint(), standing.checkpoint());
     assert!(adopted.containers().is_empty());
     assert!(adopted.entries().is_empty());
+}
+
+// FM-15: creating a Library writes the name it is created with into its first
+// head, and a device catching up from nothing reads it out of the catalog that
+// replay leaves — the way a device joining the Library does.
+#[tokio::test]
+async fn the_first_head_carries_the_name_the_library_is_created_with() {
+    let store = InMemoryStore::new(PAGE_SIZE);
+    let keys = control_keys();
+    let name = coffret_model::LibraryName::parse("books").expect("a fixture's name is one");
+
+    let record = write_first_head(&store, &keys, &CommitPolicy::default(), Some(name.clone()))
+        .await
+        .expect("writing the first head into an empty store must succeed")
+        .expect("an empty store holds no head to find instead");
+    assert_empty_first_head(&record);
+    assert_eq!(record.library_name(), Some(&name));
+
+    let joining = InMemoryIndex::new();
+    catch_up(&store, &joining, &keys, &once())
+        .await
+        .expect("a Library just created is one to catch up with");
+    assert_eq!(
+        joining.library_name().await.expect("the catalog answers"),
+        Some(name)
+    );
+}
+
+// FM-15: a batch that carries nothing but a name is still a change, and its
+// record names the Library without adding, removing or renaming anything.
+#[tokio::test]
+async fn a_batch_that_only_names_the_library_commits_a_record_naming_it() {
+    let store = InMemoryStore::new(PAGE_SIZE);
+    let keys = control_keys();
+    created(&store).await;
+    let index = InMemoryIndex::new();
+    let name = coffret_model::LibraryName::parse("old").expect("a fixture's name is one");
+
+    let batch = super::PreparedBatch::default().naming(name.clone());
+    assert!(!batch.is_empty());
+    let outcome = super::commit_batch(super::CommitRequest::new(&store, &index, &keys, batch))
+        .await
+        .expect("a naming batch commits");
+
+    assert_eq!(outcome.record.generation(), Generation::new(1).unwrap());
+    assert!(outcome.record.additions().is_empty());
+    assert!(outcome.record.removals().is_empty());
+    assert!(outcome.record.renames().is_empty());
+    assert_eq!(outcome.record.library_name(), Some(&name));
+    assert_eq!(
+        index.library_name().await.expect("the catalog answers"),
+        Some(name)
+    );
 }

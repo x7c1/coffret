@@ -10,6 +10,7 @@ use coffret_usecase::{Index, IndexError};
 
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::library_ref::LibraryRef;
 use crate::mapping_listing::MappingListing;
 
 // The one place the marker a mapped root carries is written, adopted, or
@@ -32,8 +33,8 @@ pub use set_mapping::set_mapping;
 /// [`MappingListing::FromRefusedFile`] instead of failing outright — the
 /// mappings read straight out of the file, carried with the refusal that says
 /// why the catalog itself would not open.
-pub async fn mappings(name: &str) -> Result<MappingListing> {
-    let dir = open(name)?;
+pub async fn mappings(library: &LibraryRef) -> Result<MappingListing> {
+    let dir = open(library)?;
     match index(&dir) {
         Ok(index) => {
             let mut recorded = index.mappings().await?;
@@ -61,16 +62,9 @@ pub async fn mappings(name: &str) -> Result<MappingListing> {
 ///
 /// Asked before the catalog is opened, because opening a catalog creates one:
 /// a name with a typo in it would otherwise leave an empty Library behind
-/// instead of being refused.
-fn open(name: &str) -> Result<LibraryDir> {
-    let dir = LibraryDir::resolve(name)?;
-    if !dir.is_present() {
-        return Err(Error::NoSuchLibrary {
-            name: dir.name().to_owned(),
-            path: dir.path().to_path_buf(),
-        });
-    }
-    Ok(dir)
+/// instead of being refused. Only a whole Library is found at all.
+fn open(library: &LibraryRef) -> Result<LibraryDir> {
+    LibraryDir::find(library)
 }
 
 /// The Library's catalog.

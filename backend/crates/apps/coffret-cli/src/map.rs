@@ -1,5 +1,6 @@
 //! Recording that a folder on this device holds part of the Library.
 
+use crate::library_args::WhichLibrary;
 use std::path::PathBuf;
 
 use clap::Args;
@@ -9,9 +10,9 @@ use crate::answer::{Answer, Mapped, Ran};
 
 #[derive(Args)]
 pub struct MapArgs {
-    /// The Library on this device to record the mapping in
-    #[arg(long)]
-    library: String,
+    // The Library on this device to record the mapping in, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
     /// The top-level part of the Library this folder holds; the Library root
     /// when it is not given
     #[arg(long)]
@@ -45,7 +46,7 @@ pub async fn run(args: MapArgs) -> anyhow::Result<Ran> {
         false => MarkerRequest::AdoptWhatIsThere,
     };
     let recorded = coffret_device::set_mapping(
-        &args.library,
+        &args.which.library(),
         args.prefix.as_deref(),
         &args.local_root,
         marker,

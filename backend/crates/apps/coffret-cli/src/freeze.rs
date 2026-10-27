@@ -5,6 +5,7 @@
 //! Pack is never among them, because a freeze neither reads existing Packs as
 //! input nor rewrites them (spec: PK-1, PK-2).
 
+use crate::library_args::WhichLibrary;
 use clap::Args;
 use coffret_device::{
     run_freeze, EntryPath, Findings, FreezeOutcome, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET,
@@ -17,9 +18,9 @@ use coffret_shell::passphrase;
 
 #[derive(Args)]
 pub struct FreezeArgs {
-    /// The Library on this device to freeze
-    #[arg(long)]
-    library: String,
+    // The Library on this device to freeze, by its name or by its ID.
+    #[command(flatten)]
+    which: WhichLibrary,
     /// The top-level part of the Library to freeze; everything the mappings
     /// cover when it is not given
     #[arg(long)]
@@ -83,7 +84,7 @@ pub async fn run(args: FreezeArgs, form: Form) -> anyhow::Result<Ran> {
     // this is what says which one it is on while it happens.
     let watching = Reporting::to_stderr(Units::Freezing);
     let outcome = run_freeze(
-        &args.library,
+        &args.which.library(),
         passphrase::entering(args.passphrase_stdin),
         under,
         args.target,

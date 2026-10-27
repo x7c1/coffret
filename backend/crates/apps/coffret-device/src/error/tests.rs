@@ -279,11 +279,11 @@ fn a_local_refusal_names_the_file_for_a_person_and_never_for_the_log() {
 }
 
 // EL-1, EL-2: every coffret error in a nested cause chain contributes its
-// log-safe rendering. The device-local Library name, the path derived from
+// log-safe rendering. The Library name, a path an earlier build derived from
 // it, and the foreign I/O message remain available to a person and absent
 // from the diagnostic form.
 #[test]
-fn a_nested_creation_failure_keeps_no_device_local_library_name() {
+fn a_nested_creation_failure_keeps_no_library_name() {
     const LIBRARY: &str = "Family Tax Records";
     const PRIVATE_PATH: &str =
         "/Users/alice/Library/Application Support/coffret/libraries/Family Tax Records.partial";

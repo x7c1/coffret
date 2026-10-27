@@ -7,6 +7,7 @@ use coffret_usecase::Index;
 
 use super::{index, open, root_marker};
 use crate::error::{Error, Result};
+use crate::library_ref::LibraryRef;
 use crate::marker_request::MarkerRequest;
 use crate::open_library::OpenLibrary;
 use crate::recorded_mapping::RecordedMapping;
@@ -38,12 +39,12 @@ use crate::recorded_mapping::RecordedMapping;
 /// root, and the catalog are all decided first, so a refusal any of them makes
 /// leaves nothing behind in somebody's folder.
 pub async fn set_mapping(
-    name: &str,
+    library: &LibraryRef,
     prefix: Option<&str>,
     local_root: &Path,
     marker: MarkerRequest,
 ) -> Result<RecordedMapping> {
-    let dir = open(name)?;
+    let dir = open(library)?;
     let mapping = unstamped(prefix, local_root)?;
     record(&index(&dir)?, mapping, marker).await
 }

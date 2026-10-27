@@ -400,7 +400,7 @@ fields until a coordinated implementation changes the format.
   to unwrap, so envelopes cannot be swapped between Containers.
   *(Form: test)*
 - **FM-15.** A Journal record's payload (kind `0x01`) is a CBOR map with:
-  `schema` (= 4); `prev`, the generation of the control head this record
+  `schema` (= 5); `prev`, the generation of the control head this record
   succeeds, omitted at generation 0 where there is none; `next_commit_slot`
   and `snapshot_slot`, each the Storage's own opaque token for the slot the
   record reserves — the successor's slot (CP-2) and this head's ordinary
@@ -413,11 +413,13 @@ fields until a coordinated implementation changes the format.
   it travels; `additions`, an array of the Containers the batch added;
   `removals`, an array of 16-byte Container IDs the batch removed (CP-14);
   `renames`, an array of the Entries the batch gave a new current Entry Path,
-  absent where it renames nothing; and `required_schema`, the lowest schema a
+  absent where it renames nothing; `required_schema`, the lowest schema a
   reader has to implement to apply the record faithfully (FM-9), which every
-  record of this schema carries (below). Beside the Keyring commitment and
-  `required_schema`, which says how the rest is to be read, those are the
-  record's four vocabularies.
+  record of this schema carries (below); and `library_name`, the name the
+  record gives the Library, absent where it gives none (below). Beside the
+  Keyring commitment, `required_schema`, which says how the rest is to be
+  read, and `library_name`, which is the Library's own, those are the record's
+  four vocabularies.
   The header carries the record's own generation and the payload carries
   `master_key_epoch` (FM-11, FM-13), so neither is repeated here. Every
   field, at every level, is carried under the field number the registry gives
@@ -432,7 +434,29 @@ fields until a coordinated implementation changes the format.
     generation 0.
   - `additions` and `removals` may both be empty and `renames` absent. The
     record at generation 0 always is such a record: written when the Library
-    is created, it commits nothing but the slot it carries (CP-2).
+    is created, it commits nothing but the slot it carries (CP-2) and the name
+    the Library is created with. A record that gives the Library a name and
+    nothing else is such a record too.
+  - `library_name` is the **Library name**: what a person calls the Library,
+    the same on every device that holds it, as a text string that is not empty
+    and holds no control character. A reader refuses a record whose
+    `library_name` is anything else. The record at generation 0 carries the
+    name the Library is created with, and a later record carries one only where
+    it gives the Library a new one; the Library's name is the one carried by the
+    latest record that carries one, and a Library none of whose records carries
+    one has no name yet. A Library created before records carried a name is
+    given one by a record carrying the name and nothing else; two devices doing
+    so at once may write two names, and the later record wins, as it does for
+    any name. FM-16 carries the name in a checkpoint, so pruning the records
+    before it does not lose it. The name is the Library's and no device's: it is
+    kept here, under the Master Key; a device's settings hold at most a copy of
+    it, which the device writes again from the catalog whenever it creates,
+    joins, or unlocks the Library, and which never decides the name. Beside
+    that copy, the settings of a Library that has no name yet may keep the
+    name of the directory a build before names kept it in, which is what such
+    a Library is given by the record above where its records give it none, and
+    which the unlock that finds the Library named drops. And no diagnostic
+    event carries the name (EL-1).
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte string),
@@ -551,7 +575,8 @@ fields until a coordinated implementation changes the format.
     accepts any `schema` of 4 or above and rejects anything lower. A record of
     an earlier schema carries Entries without a deposit time, which no reader
     may make up, so a Library holding such records is refused rather than read
-    and is recreated rather than migrated.
+    and is recreated rather than migrated. Schema 5 adds `library_name`; a
+    record of schema 4 carries none and reads as a record that names nothing.
   - `renames` and `deposited_at` are must-understand on FM-9's terms. A reader
     that ignored `renames` would take the record's removals and additions and
     keep the renamed Entries at their old paths; one that ignored
@@ -566,22 +591,28 @@ fields until a coordinated implementation changes the format.
     stops there, with every record before it applied and none of it. A reader
     also refuses, as malformed, a record of schema 4 or above whose
     `required_schema` is absent or below 4.
-- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 4); the
+  - `library_name` is not must-understand: a reader that ignored it would apply
+    every record faithfully and lose only the Library's name. So it raises
+    `schema` and not `required_schema`, which stays 4 on every record, the ones
+    carrying a name included.
+- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 5); the
   checkpoint the Snapshot stands at — `head_generation`, `journal_generation`,
   `next_commit_slot` (the same opaque token FM-15 spells, absent where the name
   is the slot), `keyring_generation`, `keyring_replica_count`, and
   `keyring_set_digest`, spelled as FM-15 spells them (CK-1, CK-2, CK-3);
   `containers`, an array of the current Containers, each element `id`, `kind`,
   `ciphertext_hash`, `ciphertext_len`, and optional `object_ref`, as FM-15's
-  additions spell those fields; and `entries`, an array of every current Entry,
+  additions spell those fields; `entries`, an array of every current Entry,
   each element the entry map an addition carries — `path`, `mtime`, optional
   `btime`, FM-9's optional `captured_path`, `offset`, `size`, `hash`, optional
   `mime`, optional `derived_from`, and `deposited_at` — plus `container`, the
   0-based index of the owning element of `containers`, and `entry`, the Entry's
-  entry number in that Container (FM-9). A Snapshot is a checkpoint of the
-  catalog, so it spells those three the catalog's way, carries `captured_path`
-  where it differs from `path`, and carries each Entry's deposit time as the
-  records left it, for the reasons FM-15 gives. The fourth member of the Keyring
+  entry number in that Container (FM-9); and `library_name`, the Library name
+  the records the checkpoint stands on left (FM-15), absent where none of them
+  carried one. A Snapshot is a checkpoint of the catalog, so it spells those
+  three the catalog's way, carries `captured_path` where it differs from
+  `path`, and carries each Entry's deposit time as the records left it, for
+  the reasons FM-15 gives. The fourth member of the Keyring
   tuple the checkpoint names, `master_key_epoch` (CK-3), is the field FM-13
   gives every payload, so it is not repeated inside. The ordinary kind (`0x03`)
   and the activation kind (`0x04`) share this schema. Every field, at every
@@ -629,12 +660,17 @@ fields until a coordinated implementation changes the format.
     encoded and a decoded Snapshot reports none.
   - `captured_path` is present if and only if it differs from `path`, and a
     reader rejects one present and equal, as FM-15 has it for a record.
+  - `library_name` is spelled and held to the rules FM-15 gives it. A device
+    that adopts the Snapshot takes the name it carries — and none, where it
+    carries none — so a device that catches up from a checkpoint alone, the
+    records before it pruned, still reads the Library's name.
   - The maps are forward-open on FM-9's terms, as FM-15's are, and a reader
     adopts a Snapshot of `schema` 4 or above and rejects anything lower. A
     Snapshot of an earlier schema lacks the deposit time of every Entry it
     lists, and so do the records it checkpoints, so nothing could supply one:
     the Library holding it is refused, as one holding such records is
-    (FM-15).
+    (FM-15). Schema 5 adds `library_name`; a Snapshot of schema 4 carries none
+    and reads as one naming nothing.
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
   `schema` (= 1); and `mapping`, the generation's complete **key table** from
   every current Container to the key status the committed control state records

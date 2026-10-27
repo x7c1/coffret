@@ -48,3 +48,4 @@ pub mod parser_refusal;
 pub mod passphrase;
 pub mod recovery_code;
 pub mod stdin_flags;
+pub mod which_library;

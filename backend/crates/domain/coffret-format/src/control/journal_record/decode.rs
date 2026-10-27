@@ -1,14 +1,14 @@
 use ciborium::Value;
 use coffret_model::{
     ContainerAddition, ContainerId, DepositedAt, EntryMetadata, Generation, JournalRecord,
-    KeyringCommitment,
+    KeyringCommitment, LibraryName,
 };
 
 use super::rename;
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
-    LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA, SCHEMA,
-    SNAPSHOT_SLOT,
+    LIBRARY_NAME, LOWEST_READ_SCHEMA, NEXT_COMMIT_SLOT, PREV, REMOVALS, RENAMES, REQUIRED_SCHEMA,
+    SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
@@ -81,6 +81,13 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
             .collect::<Result<Vec<_>>>()?,
     };
 
+    // Absent on a record that gives the Library no name, which every record of
+    // schema 4 is; held to a name's own rules where present (spec: FM-15).
+    let library_name = fields
+        .optional_text(LIBRARY_NAME)?
+        .map(LibraryName::parse)
+        .transpose()?;
+
     JournalRecord::new(
         generation,
         fields.optional_generation(PREV)?,
@@ -96,6 +103,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         removals,
     )
     .and_then(|record| record.with_renames(renames))
+    .map(|record| record.with_library_name(library_name))
     .map_err(refused_record)
 }
 

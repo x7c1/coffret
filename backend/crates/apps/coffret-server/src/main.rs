@@ -9,6 +9,7 @@
 use std::process::ExitCode;
 
 use clap::Parser;
+use coffret_device::LibraryId;
 use coffret_server::{Launch, SERVER_KEY_HEADER};
 
 #[derive(Parser)]
@@ -17,10 +18,17 @@ use coffret_server::{Launch, SERVER_KEY_HEADER};
     version,
     about = "Serve a Library on this device to the explorer in your browser"
 )]
+#[command(group(clap::ArgGroup::new("which_library").required(true).args(["library", "library_id"])))]
 struct Args {
-    /// The Library on this device to serve
+    /// The Library on this device to serve, by its name. Where more than one
+    /// Library on this device carries the name, the start is refused with
+    /// their IDs, and --library-id says which one
     #[arg(long)]
-    library: String,
+    library: Option<String>,
+    /// The Library on this device to serve, by its ID: the 16 lowercase hex
+    /// characters `coffret init` and `coffret join` print
+    #[arg(long, value_parser = coffret_shell::which_library::library_id)]
+    library_id: Option<LibraryId>,
     /// Read the Passphrase from one line of standard input instead of asking
     /// for it, which is what a script does
     #[arg(long)]
@@ -110,8 +118,9 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     coffret_shell::logging::start()?;
 
+    let library = coffret_shell::which_library::library(args.library, args.library_id);
     let launch = Launch {
-        library: args.library,
+        library,
         port: args.port,
         idle_minutes: args.idle_minutes,
         // The terminal is read once, as the server starts, and nothing reads it

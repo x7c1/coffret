@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use coffret_device::open_library as reopen;
-use coffret_device::Passphrase;
+use coffret_device::{LibraryId, LibraryRef, Passphrase};
 use coffret_server::Unlocked;
 
 use crate::door::DoorMode;
@@ -75,7 +75,7 @@ impl AttemptRefused {
     }
 }
 
-/// Opens the Library called `library`, or unlocks the one served, with
+/// Opens the Library whose ID `library` spells, or unlocks the one served, with
 /// `passphrase`, as `mode` says: the one thing the door does with what a
 /// window submits.
 ///
@@ -94,17 +94,20 @@ pub(crate) async fn attempt(
     }
     match mode {
         DoorMode::Open => {
-            let name = library
-                .filter(|name| !name.is_empty())
+            // By its ID, which is what the window lists each Library under:
+            // two Libraries on a device may carry one name (spec: FM-15).
+            let library_id = library
+                .as_deref()
+                .and_then(|id| LibraryId::from_hex(id).ok())
                 .ok_or(AttemptRefused::NoLibraryNamed)?;
             if let Some(opened) = shared.served() {
-                return if opened.state.name == name {
+                return if opened.state.library_id() == library_id.to_hex() {
                     Ok(Attempted::AlreadyOpen)
                 } else {
                     Err(AttemptRefused::AnotherLibraryOpen)
                 };
             }
-            open_library(&shared, name, passphrase)
+            open_library(&shared, library_id, passphrase)
                 .await
                 .map_err(AttemptRefused::Library)?;
             shared.events.send(Event::LibraryOpened);
@@ -123,8 +126,9 @@ pub(crate) async fn attempt(
             // closure — and what that produced is handed to the running
             // server, which holds it until the next lock and arms that lock
             // afresh (spec: DK-1).
-            let name = state.name.clone();
-            let reopened = reopen(&name, move || Ok(passphrase))
+            let library_id = LibraryId::from_hex(state.library_id())
+                .expect("a server spells the ID of the Library it serves in hex");
+            let reopened = reopen(&LibraryRef::Id(library_id), move || Ok(passphrase))
                 .await
                 .map_err(|refused| AttemptRefused::Library(Error::Device(refused)))?;
             match state

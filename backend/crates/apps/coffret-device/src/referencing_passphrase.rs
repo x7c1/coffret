@@ -10,7 +10,7 @@ use crate::error::Result;
 
 /// What a flow putting a Library on an account this device holds asks for the
 /// Passphrase of one Library that already references the account, named by its
-/// device-local name (spec: SA-9).
+/// name — or its ID, where nothing has named it yet (spec: SA-9).
 ///
 /// An account's key is kept only in the envelopes of the Libraries that
 /// reference it, each under its own Master Key. The new Library's own
@@ -26,7 +26,7 @@ use crate::error::Result;
 #[derive(Clone, Default)]
 pub struct ReferencingPassphrase(Option<Arc<Ask>>);
 
-/// The question itself: a Library's device-local name in, its Passphrase out.
+/// The question itself: what a Library is called in, its Passphrase out.
 type Ask = dyn Fn(&str) -> Result<Passphrase> + Send + Sync;
 
 impl ReferencingPassphrase {
@@ -35,7 +35,8 @@ impl ReferencingPassphrase {
         Self(None)
     }
 
-    /// A caller that asks `ask`, handing it the Library's device-local name.
+    /// A caller that asks `ask`, handing it the Library's name, or its ID
+    /// where nothing has named it yet.
     pub fn asking(ask: impl Fn(&str) -> Result<Passphrase> + Send + Sync + 'static) -> Self {
         Self(Some(Arc::new(ask)))
     }

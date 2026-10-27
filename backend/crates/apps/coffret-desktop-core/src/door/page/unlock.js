@@ -6,7 +6,9 @@
 // The page then asks the door what this window is for (`GET /window`), in one
 // of two modes:
 //
-// *Open*, as the app starts: which Library to open, and its Passphrase.
+// *Open*, as the app starts: which Library to open, and its Passphrase. Each
+// Library is listed under its name and chosen by its ID, since two Libraries
+// on one device may carry the same name.
 //
 // *Unlock*, once the Library being served has locked itself: the list holds
 // that one Library alone and cannot be changed, and the Library is unlocked in
@@ -41,10 +43,10 @@ function end(sentence) {
   open.disabled = true;
 }
 
-function offer(name) {
+function offer(value, label) {
   const option = document.createElement("option");
-  option.value = name;
-  option.textContent = name;
+  option.value = value;
+  option.textContent = label;
   library.append(option);
 }
 
@@ -94,13 +96,13 @@ async function load() {
       end("No Library is open in this app to unlock.");
       return;
     }
-    offer(described.library);
+    offer(described.library, described.library);
     library.disabled = true;
     open.textContent = "Unlock";
   } else {
     const libraries = described.libraries || [];
-    for (const name of libraries) {
-      offer(name);
+    for (const listed of libraries) {
+      offer(listed.id, listed.name);
     }
     if (libraries.length === 0) {
       end("There is no Library on this device.");

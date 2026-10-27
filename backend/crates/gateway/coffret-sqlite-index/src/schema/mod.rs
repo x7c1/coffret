@@ -10,6 +10,11 @@ mod reservations;
 // which every older layout takes on its way to this one (spec: EP-10).
 mod entry_identities;
 
+// The upgrade that gives the checkpoint row the Library's name, which a
+// layout-20 file takes in place and a layout-19 one beside its own upgrade
+// (spec: FM-15, FM-16).
+mod library_name;
+
 use std::ops::Range;
 
 use coffret_usecase::{IndexError, IndexResult};
@@ -34,22 +39,28 @@ use crate::error::classify;
 /// Pack is kept in until a freeze has decided its files (spec: PK-17),
 /// version 19 each Entry's deposit time (spec: FM-15, FM-16), and version 20
 /// the mark saying whether a reservation's drop finished receiving
-/// (spec: PK-17, LA-12).
-pub(crate) const SCHEMA_VERSION: i64 = 20;
+/// (spec: PK-17, LA-12), and version 21 the Library's name on the checkpoint
+/// row (spec: FM-15, FM-16).
+pub(crate) const SCHEMA_VERSION: i64 = 21;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
-/// Layout 20 changed the device-local group, so the floor is this layout and
-/// no older one is read as it is: each takes an upgrade. A layout-19 file keeps
-/// every row it holds, catalog included, and its reservations gain the mark
-/// unset — a build before it never said a drop had finished receiving, so each
+/// Layout 20 last changed the device-local group, so the floor is layout 20,
+/// and layout 21 changed the catalog alone: a layout-20 file keeps every row it
+/// holds, catalog included, and its checkpoint row gains the Library's name,
+/// unset — the next open reads the name from Storage before giving the Library
+/// one (spec: FM-15). No older layout is read as it is: each takes an upgrade.
+/// A layout-19 file keeps every row it holds, catalog included, its checkpoint
+/// row gains the name the same way, and its reservations gain the mark unset —
+/// a build before it never said a drop had finished receiving, so each
 /// reservation it left is read as a drop cut off part way, which waits for its
 /// folder to be dropped again rather than being packed as it stands
-/// (spec: PK-17, LA-12). A layout-18 file takes the same step and then loses
-/// its catalog, whose Entries carry no deposit time and were filled from
-/// objects in a format this build no longer reads, so the rebuild from Storage
-/// refills it (spec: RV-5, FM-15). A layout-17 file keeps every row of its
+/// (spec: PK-17, LA-12). A layout-18 file takes the same step for its
+/// reservations and loses its catalog, whose Entries carry no deposit time and
+/// were filled from objects in a format this build no longer reads, so the
+/// rebuild from Storage refills it (spec: RV-5, FM-15). A layout-17 file keeps
+/// every row of its
 /// device group, gains the tables of reservations, empty — no build before it
 /// recorded a drop's choice of a Pack, so no file it wrote waits for one
 /// (spec: PK-17) — and loses its catalog for the same reason. A layout-16 file
@@ -155,7 +166,11 @@ CREATE TABLE checkpoint (
     keyring_set_digest    TEXT NOT NULL,
     -- The checkpoint object this content was adopted from, NULL on a catalog
     -- that has only ever replayed records (spec: CK-9).
-    adopted_snapshot      TEXT
+    adopted_snapshot      TEXT,
+    -- The Library's name as the latest record or adopted Snapshot carrying one
+    -- gave it; NULL where none did (spec: FM-16). No comma in this comment:
+    -- dropping the last column of a table cuts back to the last comma before it.
+    library_name          TEXT
 ) STRICT;
 
 CREATE TABLE containers (
@@ -339,10 +354,12 @@ CREATE TABLE reserved_paths (
 /// A file with no layout at all gets one; a file already at this version is left
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
-/// the catalog alone is discarded and the next catch-up rebuilds it from Storage
-/// (spec: RV-5); in this build that window is empty, the floor being this
-/// layout. Below the floor, layouts 19 and 18 gain the mark of a finished drop
-/// on their reservations, the older of the two losing its catalog as well,
+/// the catalog alone would be discarded and the next catch-up rebuild it from
+/// Storage (spec: RV-5); in this build that window holds layout 20 alone, which
+/// is met first by an upgrade of its own that keeps its catalog and gives the
+/// checkpoint row the Library's name. Below the floor, layouts 19 and 18 gain
+/// the mark of a finished drop on their reservations, the newer of the two
+/// gaining the name as layout 20 does and the older losing its catalog,
 /// layout 17 gains the tables of reservations and layout 16 has its
 /// materialization records tied to the Entries its catalog holds, and those two
 /// then lose their catalog the same way; layouts 7 to 15 have their device-local
@@ -360,6 +377,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        20 => library_name::add(connection),
         18 | 19 => reservations::add_the_received_mark(connection),
         17 => reservations::upgrade(connection),
         16 => entry_identities::upgrade(connection),
@@ -532,15 +550,22 @@ mod tests {
         );
     }
 
-    /// This build's own window holds no layout: layout 20 changed the
-    /// device-local group, so every layout from 7 to 19 takes an upgrade
-    /// instead of being read as it is (spec: OC-2, EP-10, PK-17, FM-15).
+    /// This build's own window holds layout 20 alone: layout 21 changed the
+    /// Library-wide group and nothing else, so a layout-20 file's device group
+    /// is this build's — and `prepare` meets it first with the upgrade that
+    /// keeps its catalog too and gives the checkpoint row the Library's name,
+    /// while every layout from 7 to 19 takes an upgrade of its own
+    /// (spec: OC-2, EP-10, PK-17, FM-15).
     #[test]
-    fn this_builds_window_holds_no_layout_since_the_received_mark() {
+    fn this_builds_window_holds_the_layout_before_the_library_name() {
         assert_eq!(DEVICE_SCHEMA_VERSION, 20);
-        assert_eq!(SCHEMA_VERSION, 20);
+        assert_eq!(SCHEMA_VERSION, 21);
         for found in 0..=SCHEMA_VERSION + 1 {
-            assert!(!carries_a_readable_device_group(found), "layout {found}");
+            assert_eq!(
+                carries_a_readable_device_group(found),
+                found == 20,
+                "layout {found}"
+            );
         }
     }
 }

@@ -18,7 +18,11 @@ use coffret_shell::passphrase;
 #[derive(Args)]
 #[command(group(ArgGroup::new("provider").required(true).args(["drive", "s3"])))]
 pub struct InitArgs {
-    /// What this device is to call the Library
+    /// The Library's name: what every device that joins it calls it too, kept
+    /// with the Library on Storage under its Master Key. Anything a person can
+    /// read — not empty, and no control character. It names no directory, and
+    /// another Library may carry the same name, which `--library-id` then tells
+    /// apart
     #[arg(long)]
     name: String,
 
@@ -92,9 +96,9 @@ pub async fn run(args: InitArgs, form: Form) -> anyhow::Result<Ran> {
     let asked = Asked::default();
 
     // The Passphrase is asked for through the callback rather than before the
-    // call, so that a name already taken, a prefix that runs into the Library's
-    // own folder name, or a bucket that does not answer is heard before anybody
-    // has chosen one twice.
+    // call, so that a name nobody can read, a prefix that runs into the
+    // Library's own folder name, or a bucket that does not answer is heard
+    // before anybody has chosen one twice.
     let created = create_library(
         CreateLibraryRequest {
             name: args.name,

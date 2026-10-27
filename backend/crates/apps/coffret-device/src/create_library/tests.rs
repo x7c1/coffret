@@ -13,7 +13,7 @@ use coffret_usecase::{
 
 use super::{create_library, create_library_through, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{CreationStep, Error, NameDefect};
+use crate::error::{CreationStep, Error};
 use crate::library_dir::{isolated, LibraryDir};
 use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
@@ -21,6 +21,7 @@ use crate::testing::{
     consent, create_s3, local_fs, passphrase, request, state_dir, unopenable_catalog, DriveStub,
     CLIENT_ID, CREATED_FOLDER_ID, PASSPHRASE, REGION,
 };
+use crate::{LibraryNameDefect, LibraryRef};
 
 /// A callback that fails the case if a Passphrase is ever asked for.
 ///
@@ -32,13 +33,23 @@ fn unasked() -> crate::error::Result<Passphrase> {
 
 // DK-1: a device keeps one directory per Library, and everything it needs is
 // in it. FM-18: the Library's place on Storage is its ID under the base the
-// user chose.
+// user chose. FM-15: its name is its own, in its first head. On the device the
+// directory is named after the Library's ID, and the settings keep a copy of
+// the name.
 #[tokio::test]
 async fn a_created_library_holds_the_five_things_a_device_keeps() {
     let created = create_s3("five-things").await;
-    let dir = LibraryDir::resolve("five-things").expect("the name is one component");
+    let dir = LibraryDir::named_here("five-things");
 
     assert_eq!(created.path, dir.path());
+    assert_eq!(
+        created.path,
+        state_dir()
+            .join("libraries")
+            .join(created.settings.library_id.to_hex()),
+        "the directory is the Library's ID",
+    );
+    assert_eq!(created.settings.name.as_deref(), Some("five-things"));
     for path in [dir.settings_file(), dir.master_key_file(), dir.index_file()] {
         assert!(path.is_file(), "{} must be a file", path.display());
     }
@@ -70,7 +81,7 @@ async fn what_a_device_keeps_is_readable_by_nobody_else() {
     use crate::testing::mode_of;
 
     create_s3("owner-only").await;
-    let dir = LibraryDir::resolve("owner-only").expect("the name is one component");
+    let dir = LibraryDir::named_here("owner-only");
 
     assert_eq!(mode_of(&dir.settings_file()), 0o600);
     assert_eq!(mode_of(&dir.master_key_file()), 0o600);
@@ -85,7 +96,7 @@ async fn what_a_device_keeps_is_readable_by_nobody_else() {
 #[tokio::test]
 async fn the_recovery_code_carries_the_key_the_stored_form_opens_to() {
     let created = create_s3("recovery").await;
-    let dir = LibraryDir::resolve("recovery").expect("the name is one component");
+    let dir = LibraryDir::named_here("recovery");
 
     let parsed = RecoveryCode::parse(created.recovery_code.as_str())
         .expect("a code this build wrote must parse back");
@@ -108,75 +119,117 @@ async fn the_recovery_code_carries_the_key_the_stored_form_opens_to() {
     );
 }
 
-// A second `init` over a Library would strand whatever the first one put on
-// Storage, so it is refused — and refused without touching what is there.
+// A name is the Library's and not a directory's, so a second Library of one
+// name is a Library of its own, under its own ID — and neither is chosen for a
+// caller naming them: the name finds both, and the refusal names both IDs.
 #[tokio::test]
-async fn a_second_library_of_one_name_is_refused_and_changes_nothing() {
-    let created = create_s3("only-once").await;
-    let dir = LibraryDir::resolve("only-once").expect("the name is one component");
-    let key_before = fs::read(dir.master_key_file()).expect("the key file must be readable");
+async fn a_second_library_of_one_name_is_a_library_of_its_own() {
+    let first = create_s3("one-name-twice").await;
+    let key_before = fs::read(
+        LibraryDir::of(first.settings.library_id)
+            .unwrap()
+            .master_key_file(),
+    )
+    .expect("the key file must be readable");
 
-    let result = create_library(request("only-once"), passphrase, |_| ()).await;
-    assert!(
-        matches!(&result, Err(Error::LibraryExists { name, .. }) if name == "only-once"),
-        "expected a second creation to be refused, got {result:?}"
+    let second = create_s3("one-name-twice").await;
+    assert_ne!(first.settings.library_id, second.settings.library_id);
+    assert_ne!(first.path, second.path);
+    assert_eq!(
+        fs::read(
+            LibraryDir::of(first.settings.library_id)
+                .unwrap()
+                .master_key_file()
+        )
+        .expect("the key file must still be readable"),
+        key_before,
+        "the first Library is left as it was",
     );
 
+    match LibraryDir::find(&LibraryRef::named("one-name-twice")) {
+        Err(Error::AmbiguousLibraryName { name, libraries }) => {
+            assert_eq!(name, "one-name-twice");
+            assert!(libraries.contains(&first.settings.library_id));
+            assert!(libraries.contains(&second.settings.library_id));
+        }
+        other => panic!("a name two Libraries carry must be refused, got {other:?}"),
+    }
+    for created in [&first, &second] {
+        assert_eq!(
+            LibraryDir::find(&LibraryRef::Id(created.settings.library_id))
+                .expect("each is found by its ID")
+                .path(),
+            created.path
+        );
+    }
+}
+
+// A directory an interrupted creation left is under the staging suffix, and is
+// never taken for a Library: nothing lists it, nothing finds it, and a creation
+// beside it succeeds.
+#[tokio::test]
+async fn a_directory_an_interrupted_creation_left_is_never_a_library() {
+    state_dir();
+    let leftover = state_dir()
+        .join("libraries")
+        .join("00000000000000aa.partial");
+    fs::create_dir_all(&leftover).expect("the staging directory must be creatable");
+    fs::write(leftover.join("settings.json"), b"{}").expect("the leftover must be writable");
+
+    let created = create_s3("beside-a-leftover").await;
+
+    assert!(LibraryDir::on_this_device()
+        .expect("the Libraries list")
+        .iter()
+        .all(|dir| !dir.path().ends_with("00000000000000aa.partial")));
     assert_eq!(
-        DeviceSettings::read(&dir).expect("the settings must still read"),
+        DeviceSettings::read(&LibraryDir::named_here("beside-a-leftover"))
+            .expect("the settings must read"),
         created.settings
-    );
-    assert_eq!(
-        fs::read(dir.master_key_file()).expect("the key file must still be readable"),
-        key_before
     );
 }
 
-// Nothing in a directory an interrupted creation left ever reached Storage
-// under a key anything kept, so it is discarded rather than resumed — and the
-// creation that finds it succeeds.
+// FM-15: a name is held to what a person can read — not empty, and no control
+// character — and refused before any directory is made, the staging one
+// included. Nothing else is asked of it: it names no directory, so a separator
+// or a dot is an ordinary character in one.
 #[tokio::test]
-async fn a_directory_an_interrupted_creation_left_is_discarded() {
-    state_dir();
-    let dir = LibraryDir::resolve("leftover").expect("the name is one component");
-    let staging = dir.staging();
-    fs::create_dir_all(staging.path()).expect("the staging directory must be creatable");
-    fs::write(staging.master_key_file(), b"half a Master Key")
-        .expect("the leftover must be writable");
+async fn a_name_nobody_can_read_creates_nothing_and_a_separator_is_a_character() {
+    let device = isolated::device();
+    for (name, defect) in [
+        ("", LibraryNameDefect::Empty),
+        ("line\nbreak", LibraryNameDefect::Control),
+    ] {
+        let mut asked = request("unreadable");
+        asked.name = name.to_owned();
+        let result = create_library(asked, unasked, |_| ()).await;
+        assert!(
+            matches!(&result, Err(Error::InvalidLibraryName { defect: found, .. }) if *found == defect),
+            "expected {name:?} to be refused, got {result:?}"
+        );
+    }
+    assert!(staged(&device).is_empty(), "nothing was staged");
 
-    let created = create_s3("leftover").await;
-
-    assert!(!staging.path().exists());
+    let created = create_s3("albums/../2026").await;
+    assert_eq!(created.settings.name.as_deref(), Some("albums/../2026"));
     assert_eq!(
-        DeviceSettings::read(&dir).expect("the settings must read"),
-        created.settings
+        LibraryDir::named_here("albums/../2026").path(),
+        created.path
     );
-    // The half-written key is gone rather than kept: what unlocks now is what
-    // this creation wrote.
-    StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
-        .expect("the new Passphrase must open the key");
 }
 
-// The name becomes a directory name, so it is refused before any directory is
-// made — including the staging one.
-#[tokio::test]
-async fn a_name_that_is_not_one_component_creates_nothing() {
-    state_dir();
-    let mut request = request("escape");
-    request.name = "../escape".to_owned();
-
-    let result = create_library(request, passphrase, |_| ()).await;
-    assert!(
-        matches!(
-            &result,
-            Err(Error::InvalidLibraryName {
-                defect: NameDefect::Separator,
-                ..
-            })
-        ),
-        "expected a name with a separator to be refused, got {result:?}"
-    );
-    assert!(!state_dir().join("libraries").join("escape").exists());
+/// The directories being staged among the Libraries of `device`.
+fn staged(device: &isolated::Device) -> Vec<String> {
+    let mut staged: Vec<String> = fs::read_dir(device.path().join("libraries"))
+        .map(|listing| {
+            listing
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .filter(|name| name.ends_with(".partial"))
+                .collect()
+        })
+        .unwrap_or_default();
+    staged.sort();
+    staged
 }
 
 // FM-18: on S3 a prefix exists by being written under, so a bucket that is not
@@ -213,7 +266,7 @@ async fn a_bucket_that_does_not_answer_creates_nothing() {
         "expected a bucket nothing answered for to be named and said to be unreachable, \
          got {result:?}"
     );
-    assert!(!state_dir().join("libraries").join("nowhere").exists());
+    assert!(LibraryDir::find(&LibraryRef::named("nowhere")).is_err());
 }
 
 // The Passphrase arrives through a callback, so the caller that was asked is
@@ -224,8 +277,7 @@ async fn a_bucket_that_does_not_answer_creates_nothing() {
 // removed on the way out, and the name it would have taken is still free.
 #[tokio::test]
 async fn a_passphrase_that_is_refused_creates_nothing() {
-    state_dir();
-    let dir = LibraryDir::resolve("unasked-for").expect("the name is one component");
+    let device = isolated::device();
 
     let result = create_library(
         request("unasked-for"),
@@ -242,8 +294,8 @@ async fn a_passphrase_that_is_refused_creates_nothing() {
         matches!(&result, Err(Error::PassphraseNotGiven { .. })),
         "expected the caller's own refusal to travel whole, got {result:?}"
     );
-    assert!(!dir.staging().path().exists());
-    assert!(!dir.path().exists());
+    assert!(staged(&device).is_empty(), "nothing is left staged");
+    assert!(LibraryDir::find(&LibraryRef::named("unasked-for")).is_err());
 }
 
 /// What creating a Drive Library called `name` asks for.
@@ -267,8 +319,7 @@ fn drive_request(name: &str) -> super::CreateLibraryRequest {
 // nothing half made can be mistaken for a Library by the next command.
 #[tokio::test]
 async fn a_catalog_that_will_not_open_leaves_no_library_behind() {
-    state_dir();
-    let dir = LibraryDir::resolve("no-catalog").expect("the name is one component");
+    let device = isolated::device();
 
     let result = create_library_through(
         &Reach::this_device().opening_index_with(unopenable_catalog),
@@ -296,8 +347,8 @@ async fn a_catalog_that_will_not_open_leaves_no_library_behind() {
         *orphan_folder, None,
         "an S3 Library has put nothing on Storage before its first head"
     );
-    assert!(!dir.staging().path().exists());
-    assert!(!dir.path().exists());
+    assert!(staged(&device).is_empty(), "nothing is left staged");
+    assert!(LibraryDir::find(&LibraryRef::named("no-catalog")).is_err());
 }
 
 // A Drive Library, created end to end below the terminal: the consent a person
@@ -317,7 +368,7 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
     )
     .await
     .expect("a consent and a Drive that answers are all a Drive Library needs");
-    let dir = LibraryDir::resolve("on-drive").expect("the name is one component");
+    let dir = LibraryDir::named_here("on-drive");
 
     assert_eq!(
         created.settings.provider,
@@ -367,7 +418,6 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
 #[tokio::test]
 async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
     let device = isolated::device();
-    let dir = LibraryDir::resolve("drive-no-catalog").expect("the name is one component");
 
     let result = create_library_through(
         &Reach::this_device()
@@ -390,8 +440,13 @@ async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
         ),
         "expected the folder left on Drive to be named, got {result:?}",
     );
-    assert!(!dir.staging().path().exists());
-    assert!(!dir.path().exists());
+    assert_eq!(
+        fs::read_dir(device.path().join("libraries"))
+            .map(|listing| listing.count())
+            .unwrap_or(0),
+        0,
+        "nothing is left among the Libraries, staged or whole"
+    );
     // And the account consented to for it goes with it: no Library references
     // it, and nothing of it is left behind.
     assert!(
@@ -404,7 +459,7 @@ async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
 /// reads it: the listing's control-object names, and a catalog caught up from
 /// nothing (spec: RV-1, CK-9).
 async fn recovered(store: &dyn ObjectStore, name: &str) -> (Vec<String>, InMemoryIndex) {
-    let dir = LibraryDir::resolve(name).expect("the name is one component");
+    let dir = LibraryDir::named_here(name);
     let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
         .expect("the Passphrase must open the key");
     let keys = LibraryKeys::derive(&unlocked.master_key, unlocked.epoch);
@@ -470,6 +525,15 @@ async fn a_created_library_holds_its_first_head() {
 
     let (heads, index) = recovered(store.as_ref(), "first-head").await;
     assert_eq!(heads, ["head-0.cfrt"], "the one head is the first one");
+    assert_eq!(
+        index
+            .library_name()
+            .await
+            .expect("the catalog answers")
+            .map(|name| name.into_string()),
+        Some("first-head".to_owned()),
+        "the first head names the Library (spec: FM-15)",
+    );
     let standing = index
         .checkpoint()
         .await
@@ -586,8 +650,7 @@ impl ObjectStore for Refusing {
 // Library ID nothing references.
 #[tokio::test]
 async fn a_first_head_storage_refuses_leaves_no_library_behind() {
-    state_dir();
-    let dir = LibraryDir::resolve("no-first-head").expect("the name is one component");
+    let device = isolated::device();
 
     let result = create_library_through(
         &Reach::this_device().storing_into(Arc::new(Refusing)),
@@ -608,6 +671,6 @@ async fn a_first_head_storage_refuses_leaves_no_library_behind() {
         ),
         "expected the creation to stop at the first head, got {result:?}",
     );
-    assert!(!dir.staging().path().exists());
-    assert!(!dir.path().exists());
+    assert!(staged(&device).is_empty(), "nothing is left staged");
+    assert!(LibraryDir::find(&LibraryRef::named("no-first-head")).is_err());
 }
