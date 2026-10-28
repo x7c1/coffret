@@ -49,7 +49,7 @@ already in `ci.yml`. No other workflow changes.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On this pull request, pushing a second commit while the first commit's
+- [x] On this pull request, pushing a second commit while the first commit's
       CI run is still in progress cancels that run, and the second run
       completes
 - [x] The `concurrency` group for a `push` event to `main` is unique per
