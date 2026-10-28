@@ -107,7 +107,7 @@ that should be asked for by naming the folder, the top level included
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the local Library (`make local`, MinIO): rename a volume of the
+- [x] On the local Library (`make local`, MinIO): rename a volume of the
       twelve-volume series out to another folder and back, or rename a book
       into the series' folder; `coffret repack --under` that folder reports
       Packs removed and added, the explorer then lists the folder's books and
