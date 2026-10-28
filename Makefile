@@ -44,6 +44,13 @@ PORT ?= 8787
 # one of its own.
 WEB_PORT ?= 5173
 
+# The three loopback ports `local` binds: the server's, the explorer's and
+# MinIO's. Apart from `dev`'s (PORT, WEB_PORT) and `e2e-it`'s, so that all
+# three can run side by side.
+LOCAL_PORT ?= 8797
+LOCAL_WEB_PORT ?= 5183
+LOCAL_MINIO_PORT ?= 19030
+
 # Parameters for the fixture generator below. The sizes are the camera-sized
 # ones the reader benchmark wants; a caller that only needs files, not decode
 # cost, asks for smaller ones.
@@ -658,6 +665,32 @@ napi-addon: web-dist
 .PHONY: down
 down:
 	./scripts/dev.sh down $(LIBRARY)
+
+## local: serve a seeded Library on a local MinIO (Docker) — seeded on the first start, kept across restarts — with the explorer's build in watch mode and the development host, all in the background
+#
+# A Library to work on the explorer against without a cloud account: MinIO in a
+# container, its data under .tmp/local/minio/, and a Library on it created and
+# filled with a varied set of books and albums the first time this runs
+# (`coffret-fixtures --scenario seed`), then the three processes `dev` starts,
+# over that Library. Later runs find it and go straight to the three. The
+# Passphrase is fixed, written in scripts/local.sh and printed by this target,
+# and the server is handed it rather than asking; the script says why that is
+# acceptable for this Library and no other. Everything is under .tmp/local/;
+# the development state directory is never touched. LOCAL_PORT, LOCAL_WEB_PORT
+# and LOCAL_MINIO_PORT move the three ports; `local-down local` is the restart.
+.PHONY: local
+local:
+	./scripts/local.sh up $(LOCAL_PORT) $(LOCAL_WEB_PORT) $(LOCAL_MINIO_PORT)
+
+## local-down: stop what `local` started — the three processes and the MinIO container — keeping everything under .tmp/local/
+.PHONY: local-down
+local-down:
+	./scripts/local.sh down
+
+## local-reset: local-down, then remove .tmp/local/, so that the next `local` seeds a fresh Library
+.PHONY: local-reset
+local-reset:
+	./scripts/local.sh reset
 
 ## cli: run the command line with ARGS="…" against the development state directory, e.g. make cli ARGS="--help"
 #

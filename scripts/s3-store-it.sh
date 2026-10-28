@@ -20,15 +20,10 @@ readonly ROOT
 # collide with the first.
 CONTAINER="${COFFRET_MINIO_CONTAINER:-coffret-minio-it}"
 PORT="${COFFRET_MINIO_PORT:-19000}"
-# MinIO itself no longer publishes an image: its Docker Hub repository is gone,
-# its quay.io one answers every pull with `unauthorized`, and dl.min.io returns
-# 410 for the release binaries. What is pinned here is the last upstream release
-# (RELEASE.2025-10-15T17-29-55Z) as built from that source by the alpine-docker
-# project, by digest rather than by tag so that a retagged or retracted image
-# fails loudly instead of silently changing what these suites run against. The
-# image runs MinIO as an unprivileged user, so the data directory it is handed
-# below is under that user's home rather than at the root of the filesystem.
-IMAGE="${COFFRET_MINIO_IMAGE:-docker.io/alpine/minio@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4}"
+# The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,
+# with the way the container is started and the bucket made.
+# shellcheck source=scripts/lib/minio.sh
+source "$ROOT/scripts/lib/minio.sh"
 
 # MinIO refuses a root password shorter than eight characters. These credentials
 # only ever reach a container this script starts and stops.
@@ -61,30 +56,15 @@ trap teardown EXIT
 teardown
 
 echo "starting MinIO in $CONTAINER on port $PORT"
-docker run --detach \
-  --name "$CONTAINER" \
-  --publish "127.0.0.1:${PORT}:9000" \
-  --env "MINIO_ROOT_USER=${ACCESS_KEY}" \
-  --env "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
-  "$IMAGE" server /home/minio/data >/dev/null ||
+minio_run "$CONTAINER" "$PORT" "$ACCESS_KEY" "$SECRET_KEY" ||
   fail "MinIO could not be started, and the line above is docker's own account of why.
 None of the suites ran: they are here for what a real implementation decides about a
 conditional create, a continuation token and an ETag, so a run without one is a
 failure and never a pass."
 
-for _ in $(seq "$STARTUP_TIMEOUT_SECONDS"); do
-  if curl --fail --silent --show-error "http://127.0.0.1:${PORT}/minio/health/live" >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-
-if [ "${ready:-}" != 1 ]; then
-  docker logs "$CONTAINER" >&2 || true
+minio_await "$CONTAINER" "$PORT" "$STARTUP_TIMEOUT_SECONDS" ||
   fail "MinIO did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s, and its own output
 is above. None of the suites ran."
-fi
 
 # The COFFRET_S3_IT_* variables are what a test harness builds its own client
 # from. The AWS_* ones are for what is under test: a Library's settings say

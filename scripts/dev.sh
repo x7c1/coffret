@@ -11,9 +11,21 @@
 # the installed desktop app serves the production Library
 # (docs/guides/environments.md).
 #
-#   scripts/dev.sh up <library> <port> <web-port>
+#   scripts/dev.sh up <library> <port> <web-port> [options]
 #   scripts/dev.sh web <library> <port> <web-port>
-#   scripts/dev.sh down <library>
+#   scripts/dev.sh down <library> [options]
+#
+# The options are for another target that serves a Library the way `make dev`
+# does, which today is `make local` (scripts/local.sh), and `make dev` passes
+# none of them:
+#
+#   --run-dir <dir>       where the pid files and the logs go, in place of
+#                         .tmp/dev/<library>/ (`up` and `down`)
+#   --passphrase-stdin    the Passphrase is the first line of this script's
+#                         standard input, and is handed to the server on its
+#                         own, rather than asked for on the terminal (`up`)
+#   --down <command>      what to tell a person stops the three, in place of
+#                         `make down` (`up` and `down`)
 #
 # The development host (`coffret-explorer-dev`) is the one browser entrance,
 # as the desktop app's host is: it serves the build on disk, admits a browser
@@ -23,17 +35,24 @@
 # saying so. A change to the frontend is picked up by reloading the tab once
 # the build in watch mode has written it.
 #
-# What a run leaves behind lives under .tmp/dev/<library>/: a pid file and a
-# log per process. The pid files are what `down` reads. The logs are where
-# the three processes' own words go — the server's startup lines, the build's,
-# the host's address and its launch file, and whatever each said as it
-# stopped — since none of them has a terminal to say them in.
+# What a run leaves behind lives under .tmp/dev/<library>/, or the --run-dir
+# given: a pid file and a log per process. The pid files are what `down`
+# reads. The logs are where the three processes' own words go — the server's
+# startup lines, the build's, the host's address and its launch file, and
+# whatever each said as it stopped — since none of them has a terminal to say
+# them in.
 #
 # The Passphrase never passes through here. The server asks for it itself, on
 # the terminal this was started from: it opens the terminal device directly,
 # so it is asked even though the server's output goes to its log. `up` waits
 # for the server to answer before it starts anything else, so that the prompt
 # is the only thing on the screen while it is being answered.
+#
+# The one exception is --passphrase-stdin, and it is not for a Library anybody
+# keeps anything in: scripts/local.sh says why it is acceptable there, for a
+# Library of generated files under a Passphrase written in the script itself.
+# Even then it reaches the server on its standard input, never as an argument
+# or in the environment, where another process could read it.
 
 set -euo pipefail
 
@@ -42,7 +61,9 @@ readonly ROOT
 cd "$ROOT"
 
 usage() {
-  echo "usage: scripts/dev.sh up|web <library> <port> <web-port> | scripts/dev.sh down <library>" >&2
+  echo "usage: scripts/dev.sh up <library> <port> <web-port> [--run-dir <dir>] [--passphrase-stdin] [--down <command>]
+       scripts/dev.sh web <library> <port> <web-port>
+       scripts/dev.sh down <library> [--run-dir <dir>] [--down <command>]" >&2
   exit 2
 }
 
@@ -54,22 +75,48 @@ fail() {
 [ $# -ge 2 ] || usage
 readonly COMMAND="$1"
 readonly LIBRARY="$2"
+shift 2
 PORT=""
 WEB_PORT=""
 case "$COMMAND" in
   up | web)
-    [ $# -eq 4 ] || usage
-    PORT="$3"
-    WEB_PORT="$4"
+    [ $# -ge 2 ] || usage
+    PORT="$1"
+    WEB_PORT="$2"
+    shift 2
     ;;
-  down)
-    [ $# -eq 2 ] || usage
-    ;;
+  down) ;;
   *)
     usage
     ;;
 esac
 readonly PORT WEB_PORT
+
+RUN_DIR=""
+PASSPHRASE_STDIN=false
+DOWN="make down"
+while [ $# -gt 0 ]; do
+  case "$COMMAND/$1" in
+    up/--run-dir | down/--run-dir)
+      [ $# -ge 2 ] || usage
+      RUN_DIR="$2"
+      shift 2
+      ;;
+    up/--passphrase-stdin)
+      PASSPHRASE_STDIN=true
+      shift
+      ;;
+    up/--down | down/--down)
+      [ $# -ge 2 ] || usage
+      DOWN="$2"
+      shift 2
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+readonly PASSPHRASE_STDIN DOWN
 
 # The name is also a directory name below, so the two things a directory name
 # cannot be are refused here; everything else about it is for the server to
@@ -91,7 +138,12 @@ if [ -n "${COFFRET_STATE_DIR:-}" ]; then
   esac
 fi
 
-readonly RUN_DIR="$ROOT/.tmp/dev/$LIBRARY"
+case "$RUN_DIR" in
+  '') RUN_DIR="$ROOT/.tmp/dev/$LIBRARY" ;;
+  /*) ;;
+  *) RUN_DIR="$ROOT/$RUN_DIR" ;;
+esac
+readonly RUN_DIR
 readonly SERVER_PID="$RUN_DIR/server.pid"
 readonly SERVER_LOG="$RUN_DIR/server.log"
 readonly BUILD_PID="$RUN_DIR/build.pid"
@@ -169,26 +221,35 @@ start_server() {
   # port; the one started below would stop on the bind, and `up` would then be
   # waiting on a server that is not the one it started.
   ! something_answers ||
-    fail "something is already answering at http://127.0.0.1:$PORT, and it was not started by \`make dev\` for the Library \"$LIBRARY\".
-If it is a coffret-server from \`make server\`, stop it; or pass another PORT."
+    fail "something is already answering at http://127.0.0.1:$PORT, and it was not started here for the Library \"$LIBRARY\".
+If it is a coffret-server from \`make server\`, stop it; or pass another port."
 
   # Built before it is started rather than by `cargo run`, so that the
   # compiler's output is over before the server asks for the Passphrase.
   cargo build --release --manifest-path backend/Cargo.toml -p coffret-server
 
-  echo "Starting the server for the Library \"$LIBRARY\" at http://127.0.0.1:$PORT. It asks for the Passphrase:"
   : >"$SERVER_LOG"
   # Hangups ignored, so that closing the terminal this was started from does
   # not take the server with it: `down` is what stops it. Not detached from
   # the terminal the way the build and the host below are, because the server
   # has to open it once, for the Passphrase. Standard input from nowhere, because the
   # server reads the Passphrase from the terminal device itself and must not
-  # be left holding this shell's.
+  # be left holding this shell's — unless the Passphrase was handed in, in
+  # which case it is all the server's standard input holds.
   trap abandon INT TERM
-  (
-    trap '' HUP
-    exec "$SERVER" --library "$LIBRARY" --port "$PORT"
-  ) </dev/null >>"$SERVER_LOG" 2>&1 &
+  if $PASSPHRASE_STDIN; then
+    echo "Starting the server for the Library \"$LIBRARY\" at http://127.0.0.1:$PORT, with the Passphrase it was handed."
+    (
+      trap '' HUP
+      exec "$SERVER" --library "$LIBRARY" --port "$PORT" --passphrase-stdin
+    ) <<<"$PASSPHRASE" >>"$SERVER_LOG" 2>&1 &
+  else
+    echo "Starting the server for the Library \"$LIBRARY\" at http://127.0.0.1:$PORT. It asks for the Passphrase:"
+    (
+      trap '' HUP
+      exec "$SERVER" --library "$LIBRARY" --port "$PORT"
+    ) </dev/null >>"$SERVER_LOG" 2>&1 &
+  fi
   STARTED=$!
   echo "$STARTED" >"$SERVER_PID"
 
@@ -280,11 +341,18 @@ say_where() {
   opening="$(grep 'Open the explorer by opening\|Open .* in the browser again' "$HOST_LOG" 2>/dev/null | tail -n 1 || true)"
   echo "The explorer is at http://127.0.0.1:$WEB_PORT/, over the server at http://127.0.0.1:$PORT."
   echo "${opening:-The launch file to open is named in $HOST_LOG.}"
-  echo "Logs are under $RUN_DIR. \`make down\` stops all three."
+  echo "Logs are under $RUN_DIR. \`$DOWN\` stops all three."
 }
 
 up() {
   local server build host
+  # Read before anything else is, so that nothing started below can take the
+  # line from standard input first.
+  PASSPHRASE=""
+  if $PASSPHRASE_STDIN; then
+    IFS= read -r PASSPHRASE || [ -n "$PASSPHRASE" ] ||
+      fail "--passphrase-stdin was given and standard input held no Passphrase."
+  fi
   # Everything that can be refused is refused here, before the server is built
   # and somebody is asked for a Passphrase to no purpose.
   for tool in curl cargo node; do
@@ -302,7 +370,7 @@ up() {
   # cut short, would otherwise be reported as serving where nothing is.
   if [ -n "$server" ] && ! something_answers; then
     fail "a server for the Library \"$LIBRARY\" is running (pid $server) but nothing answers at http://127.0.0.1:$PORT.
-\`make down\` stops it; or pass the PORT it was started with."
+\`$DOWN\` stops it; or pass the port it was started with."
   fi
   if [ -n "$server" ] && [ -n "$build" ] && [ -n "$host" ]; then
     echo "Already up for the Library \"$LIBRARY\": the server (pid $server), the build (pid $build) and the host (pid $host)."
@@ -360,7 +428,7 @@ down() {
   stop "$BUILD_PID" "$BUILD_STARTED_AS" "the explorer's build"
   stop "$SERVER_PID" "$SERVER_STARTED_AS" "the server for the Library \"$LIBRARY\""
   if [ "$STOPPED" -eq 0 ]; then
-    echo "Nothing that \`make dev\` started for the Library \"$LIBRARY\" is running."
+    echo "Nothing started for the Library \"$LIBRARY\" is running under $RUN_DIR."
   fi
 }
 
