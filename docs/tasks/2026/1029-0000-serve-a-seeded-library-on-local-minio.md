@@ -118,12 +118,12 @@ and `make help` lists them.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On a machine with Docker and no `.tmp/local/`, `make local` creates and
+- [x] On a machine with Docker and no `.tmp/local/`, `make local` creates and
       seeds the Library, starts all three processes, and prints a launch file;
       opening it shows the seeded folders in the explorer, and a book opens in
       the reader
-- [ ] `make local-down`, then `make local`, comes back up without re-seeding
+- [x] `make local-down`, then `make local`, comes back up without re-seeding
       and still shows what was there, including a change made in the explorer
       before the restart
-- [ ] `make local-reset`, then `make local`, seeds a fresh Library
+- [x] `make local-reset`, then `make local`, seeds a fresh Library
 - [ ] `make dev` serving another Library and `make local` run side by side
