@@ -3,7 +3,8 @@ use coffret_format::{
     IndexSnapshotPayload,
 };
 use coffret_model::{
-    ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord, Redacted,
+    ContainerId, ControlObjectKind, ControlObjectName, Generation, IndexCheckpoint, JournalRecord,
+    ObjectRef, Redacted,
 };
 use tracing::{debug, info, warn};
 
@@ -16,7 +17,6 @@ use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
 use crate::commit::untrashed_removal::UntrashedRemoval;
-use crate::commit_slot::CommitSlot;
 use crate::control_head::ControlHead;
 use crate::error::Error;
 use crate::index::Index;
@@ -123,9 +123,13 @@ pub(super) async fn write_checkpoint(
         return CheckpointOutcome::NotDue;
     }
 
-    let slot = ControlHead::at(record.generation()).snapshot_slot(record.snapshot_slot());
-    match checkpoint(store, index, keys, policy, record, &slot).await {
-        Ok(outcome) => outcome,
+    match checkpoint(store, index, keys, policy, record).await {
+        Ok(Checkpointed {
+            object,
+            written: true,
+            ..
+        }) => CheckpointOutcome::Written { object },
+        Ok(Checkpointed { object, .. }) => CheckpointOutcome::Existing { object },
         Err(cause) => {
             warn!(
                 generation = record.generation().get(),
@@ -139,6 +143,60 @@ pub(super) async fn write_checkpoint(
     }
 }
 
+/// The ordinary Index Snapshot of one head as it stands on Storage, and the
+/// checkpoint it records.
+pub(crate) struct Checkpointed {
+    /// The name it stands under, `idx-<generation>` (spec: CK-10).
+    pub(crate) object: ControlObjectName,
+    /// Whether this device wrote it, rather than finding the one another device
+    /// had already put in the slot (spec: CK-11).
+    pub(crate) written: bool,
+    /// What it records: the head it represents, the last Journal generation it
+    /// applies, and the Keyring tuple it depends on (spec: CK-1, CK-3).
+    pub(crate) checkpoint: IndexCheckpoint,
+}
+
+/// Makes sure the ordinary Snapshot of the head `record` names stands on Storage,
+/// and answers with it: the one already in the head's snapshot slot where the
+/// listing names one, and otherwise the Index written there (spec: CK-8, CK-10,
+/// CK-11).
+///
+/// What `prune` rests on, and why it reads before it writes: a Snapshot is the
+/// whole Library's Index, multi-megabyte, and a conditional create that loses
+/// has still sent it — so where the listing already says the checkpoint
+/// exists, it is read rather than uploaded again to be refused. A listed
+/// Snapshot gone by the time it is read is written afresh, as a slot holding
+/// nothing is after a refusal (spec: CK-11). Anything else at the name is
+/// reported, never overwritten, for the reason the commit's checkpoint gives.
+///
+/// The Index has to stand at `record`'s head, which the catch-up a caller ran
+/// first is what ensures: the Snapshot written is that Index (spec: CK-7).
+pub(crate) async fn checkpoint_head(
+    store: &dyn ObjectStore,
+    index: &dyn Index,
+    keys: &ControlKeys,
+    policy: &CommitPolicy,
+    listing: &ControlListing,
+    record: &JournalRecord,
+) -> CommitResult<Checkpointed> {
+    let name = ControlObjectName::index_snapshot(record.generation());
+    if let Some(object) = listing.handle(&name.to_string()) {
+        if let Some(checkpoint) = existing(store, keys, policy, record, &name, object).await? {
+            debug!(
+                object = %name,
+                generation = record.generation().get(),
+                "this head is already checkpointed",
+            );
+            return Ok(Checkpointed {
+                object: name,
+                written: false,
+                checkpoint,
+            });
+        }
+    }
+    checkpoint(store, index, keys, policy, record).await
+}
+
 /// Encodes the Index and puts it in the record's snapshot slot.
 async fn checkpoint(
     store: &dyn ObjectStore,
@@ -146,10 +204,11 @@ async fn checkpoint(
     keys: &ControlKeys,
     policy: &CommitPolicy,
     record: &JournalRecord,
-    slot: &CommitSlot,
-) -> CommitResult<CheckpointOutcome> {
+) -> CommitResult<Checkpointed> {
+    let slot = ControlHead::at(record.generation()).snapshot_slot(record.snapshot_slot());
     let name = ControlObjectName::index_snapshot(record.generation());
     let content = index.snapshot().await?;
+    let recorded = content.checkpoint().clone();
     let payload = encode_index_snapshot(&IndexSnapshotPayload::ordinary(content))?;
     let object = encode_control_object(&ControlEncodeRequest::new(
         &name,
@@ -162,7 +221,7 @@ async fn checkpoint(
         match policy
             .retry
             .run("put_if_absent", || {
-                store.put_if_absent(slot, ByteStream::from(object.bytes().to_vec()))
+                store.put_if_absent(&slot, ByteStream::from(object.bytes().to_vec()))
             })
             .await
         {
@@ -170,13 +229,29 @@ async fn checkpoint(
                 info!(
                     object = %name,
                     generation = record.generation().get(),
-                    "wrote the checkpoint of the head this commit became",
+                    "wrote the checkpoint of this head",
                 );
-                return Ok(CheckpointOutcome::Written { object: name });
+                return Ok(Checkpointed {
+                    object: name,
+                    written: true,
+                    checkpoint: recorded,
+                });
             }
             Err(Error::AlreadyExists { .. }) => {
-                if let Some(outcome) = sibling(store, keys, policy, record, slot, &name).await? {
-                    return Ok(outcome);
+                let object = store.object_at(&slot)?;
+                if let Some(checkpoint) =
+                    existing(store, keys, policy, record, &name, &object).await?
+                {
+                    debug!(
+                        object = %name,
+                        generation = record.generation().get(),
+                        "another device had already checkpointed this head",
+                    );
+                    return Ok(Checkpointed {
+                        object: name,
+                        written: false,
+                        checkpoint,
+                    });
                 }
                 // The slot holds nothing, so the refusal decided nothing
                 // (spec: CP-3, CK-11): try again rather than report.
@@ -193,20 +268,21 @@ async fn checkpoint(
     }))
 }
 
-/// What is at the snapshot slot after a refusal, if anything (spec: CK-11).
+/// The checkpoint the Snapshot standing at `object` records, if anything stands
+/// there (spec: CK-11).
 ///
-/// `None` says the slot holds nothing, which is not "anything else": the
+/// Read after a refusal of the snapshot slot, and by `prune` before it writes
+/// one. `None` says the slot holds nothing, which is not "anything else": the
 /// refusal decided nothing and the upload is worth attempting again.
-async fn sibling(
+async fn existing(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
     policy: &CommitPolicy,
     record: &JournalRecord,
-    slot: &CommitSlot,
     name: &ControlObjectName,
-) -> CommitResult<Option<CheckpointOutcome>> {
-    let object = store.object_at(slot)?;
-    let decoded = match control_object::read(store, &policy.retry, keys, name, &object).await {
+    object: &ObjectRef,
+) -> CommitResult<Option<IndexCheckpoint>> {
+    let decoded = match control_object::read(store, &policy.retry, keys, name, object).await {
         Ok(decoded) => decoded,
         Err(CommitError::Storage(Error::NotFound { .. })) => return Ok(None),
         // A length this build cannot address is this build's limit and never a
@@ -230,18 +306,10 @@ async fn sibling(
     // CK-10). A sibling that checkpoints another head is refused there, and
     // arrives here as the object being unopenable at this position — the same
     // answer this flow gave when it made the comparison itself.
-    decode_index_snapshot(&decoded.payload, decoded.kind, record.generation()).map_err(
-        |error| CommitError::CorruptControlObject {
+    let payload = decode_index_snapshot(&decoded.payload, decoded.kind, record.generation())
+        .map_err(|error| CommitError::CorruptControlObject {
             object: name.clone(),
             fault: ControlObjectFault::Unopenable(error),
-        },
-    )?;
-    debug!(
-        object = %name,
-        generation = record.generation().get(),
-        "another device had already checkpointed this head",
-    );
-    Ok(Some(CheckpointOutcome::Existing {
-        object: name.clone(),
-    }))
+        })?;
+    Ok(Some(payload.content.checkpoint().clone()))
 }

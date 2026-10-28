@@ -5,8 +5,8 @@ use std::error;
 use serde::Serialize;
 
 use coffret_device::{
-    CommitError, CommitFailure, Error, FormatError, IndexError, ModelError, RenameError,
-    RenameRefusal, StorageError,
+    CommitError, CommitFailure, Error, FormatError, IndexError, ModelError, PruneError,
+    PruneRefusal, RenameError, RenameRefusal, StorageError,
 };
 
 use crate::fetch::UnmappedEntry;
@@ -162,6 +162,12 @@ fn classified<'a>(
         if let Some(RenameError::Refused(refusal)) = link.downcast_ref() {
             return Classified::kind(rename_refusal_kind(refusal));
         }
+        // And a prune refused before it removed anything, for the same reason:
+        // a Library with no head, a checkpoint naming another Keyring, and a
+        // Keyring short of replicas are three different states to look into.
+        if let Some(PruneError::Refused(refusal)) = link.downcast_ref() {
+            return Classified::kind(prune_refusal_kind(refusal));
+        }
         if let Some(Error::NotAuthorized { .. }) = link.downcast_ref() {
             return Classified::kind("not_authorized");
         }
@@ -242,6 +248,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Freeze { .. } if storage_below => "storage",
         Error::Delete { .. } if storage_below => "storage",
         Error::Rename { .. } if storage_below => "storage",
+        Error::Prune { .. } if storage_below => "storage",
         Error::Fetch { .. } if storage_below => "storage",
         Error::CatchUp { .. } if storage_below => "storage",
         Error::RemoteHeadNotRead { .. } if storage_below => "storage",
@@ -250,6 +257,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Freeze { .. } => "freeze",
         Error::Delete { .. } => "delete",
         Error::Rename { .. } => "rename",
+        Error::Prune { .. } => "prune",
         Error::Fetch { .. } => "fetch",
         Error::CatchUp { .. } => "catch_up",
         Error::RemoteHeadNotRead { .. } => "remote_head_not_read",
@@ -320,6 +328,16 @@ fn rename_refusal_kind(refusal: &RenameRefusal) -> &'static str {
         RenameRefusal::DestinationTaken { .. } => "destination_taken",
         RenameRefusal::FileAndFolder { .. } => "file_and_folder",
         RenameRefusal::Rule(_) => "rename_rule",
+    }
+}
+
+/// A prune's refusal by its variant, snake-cased, for the reason
+/// [`device_kind`] lists every variant.
+fn prune_refusal_kind(refusal: &PruneRefusal) -> &'static str {
+    match refusal {
+        PruneRefusal::NothingCommitted => "nothing_committed",
+        PruneRefusal::KeyringNotCommitted { .. } => "keyring_not_committed",
+        PruneRefusal::KeyringIncomplete { .. } => "keyring_incomplete",
     }
 }
 

@@ -29,15 +29,32 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   exact committed Keyring tuple it depends on: `master_key_epoch`,
   generation, replica count, and `set_digest` (KL-3). *(Form: test)*
 - **CK-4.** Journal records at or before the Snapshot's last applied Journal
-  generation become eligible for `prune`. *(Form: test; unimplemented)*
+  generation become eligible for `prune`. *(Form: test)*
 - **CK-5.** `prune` may run only when the Snapshot preserves the exact
   committed Keyring tuple and that Keyring replica set is complete (KL-2) —
   otherwise deleting the records could destroy the only evidence or envelopes
-  a recovery still needs. *(Form: test; unimplemented)*
+  a recovery still needs. *(Form: test)*
 - **CK-6.** `prune` deletes only eligible Journal records; it never deletes
   Containers or the Entries inside them. Its purpose is to bound
-  retained Journal history and recovery replay. *(Form: test; unimplemented)*
+  retained Journal history and recovery replay. *(Form: test)*
   - `prune` is the formal operation name in documentation and code.
+  - Eligible does not oblige deletion, and this implementation keeps the
+    record that is the current head. CK-2 lets the Snapshot carry the next
+    commit slot, so the Library could stand on the Snapshot alone; keeping
+    the head costs one object and spares every writer — including one on
+    another device that read the head a moment ago and is about to consume
+    its slot — from depending on a head chain whose newest link is a
+    Snapshot, which no ordinary commit exercises.
+  - `prune` runs when it is asked for, and at no other moment: nothing runs
+    it after a commit or a checkpoint. Whether and when a device prunes
+    without being asked is a policy choice, like CK-8's threshold, and this
+    implementation makes none.
+  - A device that reads the Journal while another device prunes it can find
+    a record gone that its listing named: a catch-up replaying from a
+    starting point older than the Snapshot, or a commit reading the records
+    committed since its batch was prepared (CP-4). That run fails on the
+    missing head and commits nothing; run again, its catch-up starts from the
+    Snapshot `prune` rested on (CK-9) and goes through.
 - **CK-7.** An Index Snapshot carries the Catalog of the whole Library — every
   current Entry and its Container, including Entries under subtrees the
   uploading device does not map (EP-9), and the Library's name (FM-16) — and
@@ -61,7 +78,7 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   covered remain replayable — and the next qualifying moment writes one.
   *(Form: test for the moments and the failure behaviour; the threshold's value
   is a design decision recorded outside this register; not yet implemented: the
-  Snapshots written before `prune` and at epoch activation)*
+  Snapshot written at epoch activation)*
   - A device that has only caught up (CK-9) and finds the Journal since the
     newest checkpoint past the threshold MAY write the current head's
     Snapshot into that head's `snapshot_slot` (CK-10); it is not obliged to.

@@ -111,7 +111,9 @@ mod counting_store;
 // the one refuses the other.
 pub(crate) mod faulty_store;
 
-mod fixtures;
+// Visible to the prune's own cases, which build their Library out of the same
+// Containers and commit it under the same keys.
+pub(crate) mod fixtures;
 
 mod gathering_store;
 

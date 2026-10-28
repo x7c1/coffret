@@ -14,8 +14,9 @@ use serde_json::{json, Value};
 use coffret_device::{
     CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryNumber, EntryPath, EntryRef,
     Error, FetchError, FetchOutcome, Finding, FindingReason, Findings, FormatError, IndexError,
-    LocalIoError, LocalOperation, PendingChange, ProviderSettings, RebaseRule, RenameError,
-    RenameRefusal, RenamedPath, StorageError, SyncError, SyncOutcome,
+    LocalIoError, LocalOperation, PendingChange, ProviderSettings, PruneError, PruneRefusal,
+    RebaseRule, RenameError, RenameRefusal, RenamedPath, ShortKeyring, StorageError, SyncError,
+    SyncOutcome,
 };
 
 use super::*;
@@ -542,6 +543,93 @@ fn a_rename_answers_what_it_renamed_and_the_head() {
     );
     assert_eq!(answered["findings"][0]["kind"], "surfaced", "{answered}");
     assert_eq!(answered["error"], Value::Null);
+}
+
+// A prune that removed a stretch of records and could not remove one: the
+// head kept, the checkpoint it rested on, the range — and the record left in
+// place, which is work for a later run and turns the exit status.
+#[test]
+fn a_prune_answers_what_it_removed_and_what_it_left() {
+    let ran = Ran {
+        report: crate::report::Report::Findings,
+        answer: Answer::Pruned(Pruned::assembled(9, true, 0..=7, vec![8])),
+        findings: Vec::new(),
+    };
+
+    let answered = succeeded("prune", &ran);
+    assert_eq!(answered["command"], "prune");
+    assert_eq!(answered["exit_status"], 2);
+    assert_eq!(
+        answered["answer"],
+        json!({
+            "head": 9,
+            "snapshot": "idx-9.cfrt",
+            "wrote_snapshot": true,
+            "removed": 8,
+            "oldest_removed": 0,
+            "newest_removed": 7,
+            "unremoved": [8],
+        }),
+    );
+    assert_eq!(answered["error"], Value::Null);
+}
+
+// Each refusal of a prune is named by its own kind, with the sentence the text
+// form prints, and none of them is mistaken for the flow failing.
+#[test]
+fn each_prune_refusal_answers_its_own_kind() {
+    let snapshot = coffret_device::ControlObjectName::index_snapshot(
+        coffret_device::Generation::new(5).expect("a small generation is one"),
+    );
+    let generation = coffret_device::Generation::new(3).expect("a small generation is one");
+    for (refusal, kind, said) in [
+        (
+            PruneRefusal::NothingCommitted,
+            "nothing_committed",
+            "the Library has committed nothing",
+        ),
+        (
+            PruneRefusal::KeyringIncomplete {
+                snapshot: snapshot.clone(),
+                short: ShortKeyring::new(generation, 3, 1, 0),
+            },
+            "keyring_incomplete",
+            "is missing 1 of its 3 replicas",
+        ),
+        (
+            PruneRefusal::KeyringIncomplete {
+                snapshot: snapshot.clone(),
+                short: ShortKeyring::new(generation, 3, 0, 2),
+            },
+            "keyring_incomplete",
+            "Storage did not hand over 2 of the 3 replicas",
+        ),
+    ] {
+        let answered = failed("prune", Error::from(PruneError::from(refusal)));
+        assert_eq!(answered["error"]["kind"], kind, "{answered}");
+        assert_eq!(answered["exit_status"], 1);
+        let message = answered["error"]["message"]
+            .as_str()
+            .expect("a message is a string");
+        assert!(
+            message.starts_with("the prune did not finish: the prune was refused: "),
+            "{message}"
+        );
+        assert!(message.contains(said), "{message}");
+    }
+}
+
+// A prune that met Storage not answering is `storage`, as every flow's is.
+#[test]
+fn a_prune_storage_failed_answers_storage() {
+    let error = Error::from(PruneError::Commit(CommitError::Storage(
+        StorageError::Rejected {
+            status: 503,
+            detail: "unavailable".to_owned(),
+            source: None,
+        },
+    )));
+    assert_eq!(failed("prune", error)["error"]["kind"], "storage");
 }
 
 // Each refusal of a rename is named by its own kind, with the sentence the

@@ -408,6 +408,7 @@ impl fmt::Display for Error {
             Self::Freeze { .. } => f.write_str("the freeze did not finish"),
             Self::Delete { .. } => f.write_str("the deletion did not finish"),
             Self::Rename { .. } => f.write_str("the rename did not finish"),
+            Self::Prune { .. } => f.write_str("the prune did not finish"),
             Self::Fetch { .. } => f.write_str("the fetch did not finish"),
             // What this device would do with the file is not in it, because
             // nothing here was going to do anything with one: the question was

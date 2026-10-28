@@ -137,7 +137,7 @@ impl<'a> FaultyStore<'a> {
     }
 
     /// Refuses to hand over one object, however often it is asked for.
-    pub(super) fn hiding(inner: &'a dyn ObjectStore, object: &ObjectRef) -> Self {
+    pub(crate) fn hiding(inner: &'a dyn ObjectStore, object: &ObjectRef) -> Self {
         Self {
             inner,
             fault: Fault::HideObject(object.clone()),

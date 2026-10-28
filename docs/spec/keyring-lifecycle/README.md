@@ -26,8 +26,7 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-4.** An ordinary Index Snapshot records a tuple that was already
   committed; after covered Journal records are pruned, the Snapshot preserves
   the evidence of that earlier selection. Placing a reference to a candidate
-  set in a Snapshot leaves the candidate uncommitted. *(Form: test; not yet
-  implemented: preserving the evidence once covered records are pruned)*
+  set in a Snapshot leaves the candidate uncommitted. *(Form: test)*
 - **KL-5.** A committed replica set with at least one valid replica but fewer
   than the count its commitment selected is **degraded**. Zero committed valid
   replicas is **Keyring loss** (RV-7), not degraded. An incomplete uncommitted

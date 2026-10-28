@@ -117,6 +117,11 @@
 //! what the Journal holds and stop there — for the caller that wants to know
 //! what the Library has become without bringing any of it over.
 //!
+//! [`prune`] touches no file either, and is the one flow that only takes away:
+//! once the Snapshot of the head stands and the committed Keyring set is
+//! complete, it moves the Journal records that Snapshot covers to the trash,
+//! all but the head itself (spec: CK-4, CK-5, CK-6).
+//!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
 //! `spool_conformance`, `mapped_roots_conformance`, `destinations_conformance`,
 //! `commit_conformance`, `sync_conformance`, `freeze_conformance`,
@@ -225,6 +230,11 @@ pub use relocate::{Relocation, RelocationRefused};
 pub mod delete_conformance;
 
 pub mod rename;
+
+// Removing the Journal records an Index Snapshot covers, once the Snapshot of
+// the head stands and the committed Keyring set is complete (spec: CK-4, CK-5,
+// CK-6).
+pub mod prune;
 
 mod error;
 pub use error::{Error, Result};

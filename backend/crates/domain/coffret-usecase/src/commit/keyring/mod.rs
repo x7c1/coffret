@@ -27,6 +27,11 @@ use crate::retry::RetryPolicy;
 mod examined;
 pub(super) use examined::{examine, Examined};
 
+// Whether the committed set is complete, for a flow that needs it to be
+// before it deletes anything (spec: KL-2, CK-5).
+mod completeness;
+pub(crate) use completeness::shortfall;
+
 // The read of the committed set for a flow that needs its key table
 // (spec: KL-6).
 mod read_keyring;

@@ -24,7 +24,7 @@ use crate::object_store::ObjectStore;
 ///
 /// Fixed rather than generated, so that the two devices in a case are two
 /// devices of one Library. Every purpose key in a case comes from this one.
-pub(super) fn master_key() -> MasterKey {
+pub(crate) fn master_key() -> MasterKey {
     MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN])
 }
 
@@ -42,7 +42,7 @@ pub(super) fn purpose_key(purpose: Purpose) -> PurposeKey {
 }
 
 /// A Container ID whose sixteen bytes are all `seed`.
-pub(super) fn container_id(seed: u8) -> ContainerId {
+pub(crate) fn container_id(seed: u8) -> ContainerId {
     ContainerId::from_bytes([seed; ContainerId::BYTE_LEN])
 }
 
@@ -70,7 +70,7 @@ pub(super) fn envelope(seed: u8) -> KeyEnvelope {
 /// The Entries are laid end to end in the order given, which is what a
 /// Container's plaintext stream does (spec: FM-4), so each gets a distinct
 /// offset without a case spelling one out.
-pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> PreparedAddition {
+pub(crate) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> PreparedAddition {
     let mut entries = Vec::with_capacity(paths.len());
     let mut offset = 0;
     for (position, text) in paths.iter().enumerate() {

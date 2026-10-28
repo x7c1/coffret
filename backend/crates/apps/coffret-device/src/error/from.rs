@@ -5,6 +5,7 @@ use coffret_usecase::commit::CommitError;
 use coffret_usecase::delete::DeleteError;
 use coffret_usecase::fetch::FetchError;
 use coffret_usecase::freeze::FreezeError;
+use coffret_usecase::prune::PruneError;
 use coffret_usecase::rename::RenameError;
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::LocalIoError;
@@ -61,6 +62,14 @@ impl From<DeleteError> for Error {
 impl From<RenameError> for Error {
     fn from(cause: RenameError) -> Self {
         Self::Rename {
+            cause: Box::new(cause),
+        }
+    }
+}
+
+impl From<PruneError> for Error {
+    fn from(cause: PruneError) -> Self {
+        Self::Prune {
             cause: Box::new(cause),
         }
     }
