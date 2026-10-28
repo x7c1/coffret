@@ -105,11 +105,11 @@ note, not as a TODO. The explorer gets no button.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the local Library (`make local`, MinIO), after several commits
+- [x] On the local Library (`make local`, MinIO), after several commits
       (a rename or a drop in the explorer), `coffret prune` against the
       local state directory removes the older `head-*` objects from the
       bucket and keeps the current head, every `idx-*` and every `key-*`;
       the explorer still lists and opens books after a restart, and a
       further commit succeeds
-- [ ] Running `coffret prune` a second time right away removes nothing and
+- [x] Running `coffret prune` a second time right away removes nothing and
       succeeds
