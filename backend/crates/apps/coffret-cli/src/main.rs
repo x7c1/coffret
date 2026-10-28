@@ -88,6 +88,8 @@ mod recovery_code;
 
 mod rename;
 
+mod repack;
+
 // What this binary refuses itself, before any flow is called.
 mod refusal;
 
@@ -165,6 +167,25 @@ enum Command {
     /// It runs only when asked: nothing prunes after a sync, freeze, rename
     /// or checkpoint.
     Prune(LibraryArgs),
+    /// Rewrite the Packs holding a folder's files into Packs in path order
+    ///
+    /// Every Pack holding a file under the folder takes part whole, its files
+    /// outside the folder included; files not yet in a Pack are left to
+    /// `freeze`. The files are sorted by path and cut into Packs as `freeze`
+    /// cuts them, and a Pack that already is one of those cuts is kept as it
+    /// is, so running it again straight away commits nothing. Every other Pack
+    /// is read, verified and replaced in one change to the Library, each file
+    /// keeping its times, its content and when it was added; the replaced
+    /// Packs go to the provider's trash. If any of them cannot be read,
+    /// nothing is changed.
+    ///
+    /// Before anything is uploaded, the Packs it rewrites take about twice
+    /// their size on this device's disk: a verified copy of each, and the new
+    /// Packs written beside them.
+    ///
+    /// It runs only when asked: nothing repacks after a rename, a deletion or
+    /// a freeze.
+    Repack(repack::RepackArgs),
 }
 
 impl Command {
@@ -184,6 +205,7 @@ impl Command {
             Self::Fetch(_) => "fetch",
             Self::Rename(_) => "rename",
             Self::Prune(_) => "prune",
+            Self::Repack(_) => "repack",
         }
     }
 
@@ -201,7 +223,7 @@ impl Command {
     fn interruptible(&self) -> bool {
         matches!(
             self,
-            Self::Sync(_) | Self::Freeze(_) | Self::Fetch(_) | Self::Rename(_)
+            Self::Sync(_) | Self::Freeze(_) | Self::Fetch(_) | Self::Rename(_) | Self::Repack(_)
         )
     }
 }
@@ -313,6 +335,7 @@ async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
         Command::Fetch(args) => fetch::run(args, form).await,
         Command::Rename(args) => rename::run(args, form).await,
         Command::Prune(args) => prune::run(args, form).await,
+        Command::Repack(args) => repack::run(args, form).await,
     }
 }
 

@@ -78,6 +78,9 @@ pub use recovery_code::RecoveryCode;
 mod renamed;
 pub use renamed::Renamed;
 
+mod repacked;
+pub use repacked::Repacked;
+
 mod storage;
 use storage::Storage;
 
@@ -132,7 +135,9 @@ rename refused before anything was written is \"nothing_to_rename\",
 \"same_path\", \"reserved_namespace\", \"into_itself\",
 \"destination_taken\", \"file_and_folder\" or \"rename_rule\". A
 prune refused before it removed anything is \"nothing_committed\",
-\"keyring_not_committed\" or \"keyring_incomplete\".
+\"keyring_not_committed\" or \"keyring_incomplete\". A repack refused
+before it committed anything, because a Pack it had to rewrite could not
+be read, is \"pack_key_lost\" or \"pack_unverified\".
 A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
@@ -141,7 +146,7 @@ Passphrase or a Recovery Code refused as it was read is named after the
 refusal, e.g. \"empty_passphrase\", \"passphrases_differ\" or
 \"empty_recovery_code\". What was typed wrongly and refused before the
 command ran is \"usage\", with command and log null. A sync, freeze,
-fetch or rename stopped with Ctrl-C is \"interrupted\", and exits 130:
+fetch, rename or repack stopped with Ctrl-C is \"interrupted\", and exits 130:
 the next sync settles what it left. Refused once it has started: flags
 that leave a provider short are \"flags_missing\", and a client secret
 variable that is empty or not Unicode is \"empty_client_secret\" or
@@ -181,6 +186,8 @@ answer, per command:
                  (how many Journal records), oldest_removed and
                  newest_removed (generations, or null where none was),
                  unremoved (generations left in place, which exit 2)
+  repack         selected, kept, removed and added (how many Packs),
+                 uploaded (bytes), committed_head
 
 storage is {\"provider\": \"s3\", \"bucket\", \"prefix\"} or {\"provider\":
 \"drive\", \"folder_id\"}. committed_head is the generation committed, or
@@ -229,6 +236,8 @@ pub enum Answer {
     Renamed(Renamed),
     /// `prune`.
     Pruned(Pruned),
+    /// `repack`.
+    Repacked(Repacked),
 }
 
 /// The generation a run committed, or `None` where it committed nothing.

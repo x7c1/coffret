@@ -97,6 +97,8 @@ pub enum Units {
     Fetching,
     /// A rename, which packs nothing either and uploads nothing.
     Renaming,
+    /// A repack, which reads and writes one Pack at a time.
+    Repacking,
 }
 
 impl Units {
@@ -104,7 +106,7 @@ impl Units {
     fn packed(self) -> &'static str {
         match self {
             Self::Syncing => "files",
-            Self::Freezing => "packs",
+            Self::Freezing | Self::Repacking => "packs",
             // Never reached: a fetch reports no packing phase, and a word it
             // could not mislead anybody with is better than a panic in a
             // progress line.

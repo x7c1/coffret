@@ -10,6 +10,7 @@ use crate::freeze::freeze_request::FreezeRequest;
 use crate::freeze::frozen_pack::FrozenPack;
 use crate::freeze::scan::{Reserved, Scope};
 use crate::freeze::segment::Segment;
+use crate::freeze::selected::Selected;
 use crate::freeze::survey::Closing;
 use crate::freeze::{scan, segment, spool};
 use crate::index::Index;
@@ -394,7 +395,7 @@ fn lost(key_table: &KeyTable) -> BTreeSet<ContainerId> {
 }
 
 /// What one Pack came out as.
-fn built(segment: &Segment, container: &SpooledContainer, target: u64) -> FrozenPack {
+fn built(segment: &Segment<Selected>, container: &SpooledContainer, target: u64) -> FrozenPack {
     FrozenPack {
         container_id: container.container_id,
         entries: container.entries.len(),

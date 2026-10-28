@@ -5,6 +5,7 @@ use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, Lapsed, NotFrozen};
 use coffret_usecase::rename::{RenameOutcome, RenamedPath};
+use coffret_usecase::repack::RepackOutcome;
 use coffret_usecase::sync::{RetainedKeyringReplicas, Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, Relocation, UnavailableRoot};
 
@@ -179,6 +180,25 @@ impl From<&RenameOutcome> for Findings {
                 .map(relocation)
                 .chain(committed(Some(&outcome.commit)))
                 .chain(repaired(Some(&outcome.commit)))
+                .collect(),
+        )
+    }
+}
+
+/// What a repack still has to say beside what it rewrote: what its commit left
+/// for later — a replaced Pack Storage would not trash among them
+/// (spec: OC-6) — the Keyring repairs it performed, and a Keyring set it
+/// found short (spec: KL-15).
+///
+/// A Pack it could not read is not among these: that refused the run, and is
+/// its error rather than a finding.
+impl From<&RepackOutcome> for Findings {
+    fn from(outcome: &RepackOutcome) -> Self {
+        Self(
+            committed(outcome.commit.as_ref())
+                .into_iter()
+                .chain(repaired(outcome.commit.as_ref()))
+                .chain(short(outcome.short.as_ref()))
                 .collect(),
         )
     }

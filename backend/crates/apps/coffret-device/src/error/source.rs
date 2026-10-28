@@ -77,6 +77,7 @@ impl error::Error for Error {
             Self::Delete { cause } => Some(cause.as_ref()),
             Self::Rename { cause } => Some(cause.as_ref()),
             Self::Prune { cause } => Some(cause.as_ref()),
+            Self::Repack { cause } => Some(cause.as_ref()),
             Self::Fetch { cause } => Some(cause.as_ref()),
             Self::LocalPathNotResolved { cause }
             | Self::FileNotAdded { cause }

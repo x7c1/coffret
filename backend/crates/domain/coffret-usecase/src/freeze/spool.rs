@@ -1,42 +1,30 @@
 use std::path::Path;
 
-use coffret_format::{
-    generate_container_id, generate_container_key, wrap_container_key, ContainerWriter, EncodePlan,
-    EntryPlan,
-};
+use coffret_format::EntryPlan;
 use coffret_model::{CiphertextLenClaim, ContainerKind, EntryNumber, EntryPath};
 use tracing::debug;
 
 use crate::commit::EntryRef;
-use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
+use crate::device_state::{BatchId, DeviceTime};
 use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
+use crate::freeze::selected::Selected;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::mapped_roots::MappedRoots;
+use crate::pack_spool::{PackSpool, PackSpoolError};
 use crate::spool::Spool;
-use crate::spool_file::{SpoolFile, WRITE_CHUNK};
+use crate::spool_file::WRITE_CHUNK;
 use crate::spooled_container::SpooledContainer;
 
 /// Encodes one segment into a Pack and writes it to the spool, streaming.
 ///
-/// The order is the sync's, and for the same reason: the pending row is recorded
-/// before the spool file is created, so a run that dies anywhere in the write —
-/// or is killed without an error path at all — leaves a row naming what it may
-/// have put on disk, the positive local provenance that makes cleaning it up
-/// possible at all (spec: OC-2, OC-3). The row is flipped to
-/// [`Spooled`](crate::device_state::SpoolState::Spooled) once the Pack is
-/// flushed, and the Container Key is wrapped after that, so a wrap failure
-/// leaves a complete spool a row already calls `Spooled`.
-///
-/// What is not the sync's is the shape of the encode. A Pack is around a
-/// gigabyte and an oversized singleton is whatever one indivisible Entry happens
-/// to be (spec: PK-3, PK-5), so nothing here holds a Pack, or even an Entry: the
-/// scan fixed the entry table, so [`ContainerWriter`] writes the header and
-/// the table at once and then takes each member file a buffer at a time,
-/// handing back ciphertext that goes straight to the spool. The two digests are
-/// folded in as those bytes hit disk. What the run holds is one read buffer and
-/// one sink buffer, whatever the Pack weighs.
+/// The Pack is written by [`PackSpool`], which is where the order every spool
+/// step keeps lives — the pending row before the file, `Spooled` once it is
+/// flushed, the key wrapped after that (spec: OC-2, OC-3) — and where nothing
+/// holds a Pack, or an Entry (spec: PK-5, PK-18). What is this step's own is
+/// where the bytes come from: each member file, read a buffer at a time through
+/// the mapped roots and handed straight on.
 ///
 /// Every member's bytes are checked against the plan the scan drew as they pass
 /// — a Pack whose entry table does not describe its own content is not something
@@ -57,47 +45,17 @@ pub(super) async fn spool(
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,
-    segment: &Segment,
+    segment: &Segment<Selected>,
 ) -> FreezeResult<SpooledContainer> {
-    let container_id = generate_container_id()?;
-    let container_key = generate_container_key()?;
     let plans: Vec<EntryPlan> = segment
         .members
         .iter()
         .map(|member| member.plan.clone())
         .collect();
-
-    let spool_path = spool_dir.join(format!("{container_id}.spool"));
-    index
-        .record_pending_row(PendingRow {
-            commit_attempted: false,
-            // Built out of files on this device's own disk (spec: OC-7).
-            materializes: true,
-            container_id,
-            spool_path: spool_path.clone(),
-            batch: batch.clone(),
-            created_at: now,
-            state: SpoolState::Spooling,
-        })
-        .await?;
-
-    let mut file = SpoolFile::create(local, &spool_path).await?;
-
-    // Drained into the spool after every step, so what the run holds is one
-    // chunk of ciphertext rather than a Pack of it.
-    let mut sink = Vec::with_capacity(WRITE_CHUNK);
-    let mut writer = ContainerWriter::begin(
-        &EncodePlan {
-            container_id,
-            kind: ContainerKind::Pack,
-            key: &container_key,
-            chunk_size: coffret_format::ChunkSize::DEFAULT,
-            entries: &plans,
-        },
-        &mut sink,
-    )?;
-    file.write(&sink).await?;
-    sink.clear();
+    // Built out of files on this device's own disk (spec: OC-7).
+    let mut pack = PackSpool::begin(index, local, spool_dir, batch, now, &plans, true)
+        .await
+        .map_err(FreezeError::from)?;
 
     let mut buffer = vec![0u8; WRITE_CHUNK];
     for member in &segment.members {
@@ -109,13 +67,12 @@ pub(super) async fn spool(
                 break;
             }
             read += filled as u64;
-            writer
-                .write(&buffer[..filled], &mut sink)
-                .map_err(|error| moved(error, &member.plan.path))?;
-            // Drained here rather than after the file, so what the run holds
-            // stays one buffer whatever one Entry weighs.
-            file.write(&sink).await?;
-            sink.clear();
+            pack.write(&buffer[..filled])
+                .await
+                .map_err(|error| match error {
+                    PackSpoolError::Format(error) => moved(error, &member.plan.path),
+                    other => other.into(),
+                })?;
         }
         if read != member.plan.size {
             // The one detection site with no format error in hand: the encoder
@@ -131,21 +88,17 @@ pub(super) async fn spool(
         }
     }
 
-    // The entry table the encoder wrote, taken from the writer rather than
-    // walked out of the plans a second time: what the Journal record says the
-    // Pack holds is then the same table the meta section beside it carries,
-    // extents included (spec: CP-11, FM-9).
-    let entries = writer
-        .finish(&mut sink)
-        .map_err(|error| closing(error, &plans))?;
-    file.write(&sink).await?;
-    let digests = file.finish().await?;
-    index.mark_spooled(container_id).await?;
-
-    let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
+    let written = pack
+        .finish(index, keys)
+        .await
+        .map_err(|error| match error {
+            PackSpoolError::Format(error) => closing(error, &plans),
+            other => other.into(),
+        })?;
+    let digests = written.digests;
 
     debug!(
-        container = %container_id,
+        container = %written.container_id,
         entries = plans.len(),
         footprint = segment.footprint.bytes(),
         bytes = digests.len,
@@ -157,12 +110,12 @@ pub(super) async fn spool(
         "encoded a Pack and spooled it",
     );
     Ok(SpooledContainer {
-        container_id,
+        container_id: written.container_id,
         materializes: true,
         kind: ContainerKind::Pack,
-        spool_path,
-        entries,
-        envelope,
+        spool_path: written.spool_path,
+        entries: written.entries,
+        envelope: written.envelope,
         ciphertext_hash: digests.blake3,
         // The length measured off the object this device just wrote, held to
         // the bound the format puts on the number it will be written down as
@@ -203,6 +156,16 @@ pub(super) async fn spool(
             .collect::<coffret_model::Result<_>>()
             .map_err(coffret_format::Error::from)?,
     })
+}
+
+impl From<PackSpoolError> for FreezeError {
+    fn from(error: PackSpoolError) -> Self {
+        match error {
+            PackSpoolError::Index(error) => error.into(),
+            PackSpoolError::Local(error) => error.into(),
+            PackSpoolError::Format(error) => error.into(),
+        }
+    }
 }
 
 /// What a refused encode of one member means.
@@ -265,7 +228,6 @@ mod tests {
 
     use super::*;
     use crate::entry_paths::entry_path;
-    use crate::freeze::selected::Selected;
     use crate::in_memory_fs::InMemoryFs;
     use crate::in_memory_index::InMemoryIndex;
     use crate::local_scan::SourceFile;

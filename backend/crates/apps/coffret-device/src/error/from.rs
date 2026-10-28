@@ -7,6 +7,7 @@ use coffret_usecase::fetch::FetchError;
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::prune::PruneError;
 use coffret_usecase::rename::RenameError;
+use coffret_usecase::repack::RepackError;
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::LocalIoError;
 
@@ -70,6 +71,14 @@ impl From<RenameError> for Error {
 impl From<PruneError> for Error {
     fn from(cause: PruneError) -> Self {
         Self::Prune {
+            cause: Box::new(cause),
+        }
+    }
+}
+
+impl From<RepackError> for Error {
+    fn from(cause: RepackError) -> Self {
+        Self::Repack {
             cause: Box::new(cause),
         }
     }

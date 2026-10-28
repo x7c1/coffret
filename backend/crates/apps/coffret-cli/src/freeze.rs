@@ -57,7 +57,7 @@ const _: () = assert!(DEFAULT_PACK_TARGET >= MINIMUM_PACK_TARGET);
 /// thinking in gigabytes has to read the word "bytes" to understand what
 /// happened, so the refusal says it, and says what the smallest Pack worth
 /// cutting is.
-fn target_in_bytes(typed: &str) -> Result<u64, String> {
+pub(crate) fn target_in_bytes(typed: &str) -> Result<u64, String> {
     let bytes: u64 = typed
         .parse()
         .map_err(|_| format!("{typed:?} is not a number of bytes"))?;
