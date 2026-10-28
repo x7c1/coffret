@@ -126,4 +126,4 @@ and `make help` lists them.
       and still shows what was there, including a change made in the explorer
       before the restart
 - [x] `make local-reset`, then `make local`, seeds a fresh Library
-- [ ] `make dev` serving another Library and `make local` run side by side
+- [x] `make dev` serving another Library and `make local` run side by side
