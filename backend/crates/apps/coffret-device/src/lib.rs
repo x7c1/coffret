@@ -80,7 +80,7 @@
 //! on Storage it is, and the copy of its name — and no credential a device
 //! could not obtain again for itself.
 //!
-//! # Two ways a Library appears here, and five things a device does with one
+//! # Two ways a Library appears here, and what a device does with one
 //!
 //! [`create_library`] draws a Master Key, stores it under the Passphrase, and
 //! hands back the [`RecoveryCode`] — the one copy of that key which exists off
@@ -110,16 +110,22 @@
 //! committed Keyring set is complete (spec: CK-4, CK-5, CK-6). It runs only
 //! when somebody asks for it.
 //!
+//! [`run_repack`] neither brings anything over nor takes anything away: it
+//! rewrites the Packs holding one folder's Entries into Packs cut in Entry Path
+//! order, carrying every Entry as it was (spec: PK-8, PK-23). It too runs only
+//! when somebody asks for it.
+//!
 //! # One unlock, or one process
 //!
-//! Each of those five is one unlock and one run, which is what a command does.
+//! Each of those is one unlock and one run, which is what a command does.
 //! A process that stays up — the explorer's server — opens the Library once and
 //! runs many things over it, so every flow also exists as a method on
 //! [`OpenLibrary`]: [`sync`](OpenLibrary::sync), [`freeze`](OpenLibrary::freeze),
-//! [`fetch`](OpenLibrary::fetch), [`fetch_entry`](OpenLibrary::fetch_entry) and
-//! [`catch_up`](OpenLibrary::catch_up) are the bodies, and the five `run_` calls
-//! are `open_library` followed by one of them. There is one body per flow, so
-//! neither shell can drift from the other.
+//! [`fetch`](OpenLibrary::fetch), [`fetch_entry`](OpenLibrary::fetch_entry),
+//! [`catch_up`](OpenLibrary::catch_up), [`rename`](OpenLibrary::rename),
+//! [`prune`](OpenLibrary::prune) and [`repack`](OpenLibrary::repack) are the
+//! bodies, and each `run_` call is `open_library` followed by one of them.
+//! There is one body per flow, so neither shell can drift from the other.
 //!
 //! An open Library also answers what a person browsing one asks, out of the
 //! catalog and without touching Storage: [`folders`](OpenLibrary::folders) and
@@ -344,6 +350,9 @@ pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 mod run_prune;
 pub use run_prune::run_prune;
 
+mod run_repack;
+pub use run_repack::run_repack;
+
 mod run_rename;
 pub use run_rename::run_rename;
 
@@ -474,6 +483,7 @@ pub use coffret_usecase::freeze::{
 };
 pub use coffret_usecase::prune::{PruneError, PruneOutcome, PruneRefusal, UnremovedRecord};
 pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
+pub use coffret_usecase::repack::{RepackError, RepackOutcome, RepackRefusal, RepackedPack};
 pub use coffret_usecase::sync::{
     Disposal, RetainedKeyringReplicas, Settled, SyncError, SyncOutcome,
 };

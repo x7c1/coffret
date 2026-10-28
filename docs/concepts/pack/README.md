@@ -78,7 +78,9 @@ the Entry count — decides `freeze` eligibility.
 - update (modified files by replacing their Containers without changing kind)
 - delete (Entries of a Pack: the Pack is removed when none is left, and
   otherwise rebuilt by read-modify-replace around the ones it keeps)
-- repack (Packs after a deletion or a policy change)
+- repack (the Packs holding a folder's Entries, into Packs cut in Entry Path
+  order, after renames, deletions or a policy change have spread them
+  (spec: PK-23))
 - open (a folder by reading, from the distinct Packs containing its current
   Entries, the parcels those Entries overlap; an Entry somebody asked for
   reachable by reading only the parcels it overlaps, ahead of the rest)
@@ -136,8 +138,9 @@ the Entry count — decides `freeze` eligibility.
   rebuilt with part of its Entries invented or dropped: the deletion is
   refused for that Pack and reported (spec: PK-10, KL-17).
 - Each operation keeps one job — `freeze` packs new files and one-file
-  Containers, `update` propagates content changes, repack regroups after a
-  deletion or policy change, and compaction regroups across invocations — so
+  Containers, `update` propagates content changes, repack regroups a folder's
+  Packs in path order after renames, deletions or a policy change, and
+  compaction regroups across invocations — so
   no operation silently does another's work.
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be

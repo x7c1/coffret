@@ -23,6 +23,7 @@ use coffret_usecase::fetch::{BelowRootError, DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::prune::PruneError;
 use coffret_usecase::rename::RenameError;
+use coffret_usecase::repack::RepackError;
 use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::{LocalIoError, LocalOperation, RefusedRoot};
@@ -643,6 +644,13 @@ pub enum Error {
         ///
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<PruneError>,
+    },
+    /// A repack did not finish, or was refused before it committed anything.
+    Repack {
+        /// What the flow reported.
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<RepackError>,
     },
     /// A fetch did not finish.
     ///

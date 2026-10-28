@@ -619,6 +619,70 @@ fn each_prune_refusal_answers_its_own_kind() {
     }
 }
 
+// A repack that rewrote some Packs and kept one: the counts, the bytes sent
+// and the head it committed.
+#[test]
+fn a_repack_answers_its_counts_and_the_bytes_it_sent() {
+    let ran = Ran {
+        report: crate::report::Report::Clean,
+        answer: Answer::Repacked(Repacked::assembled(3, 1, 2, 2, 4_096, Some(12))),
+        findings: Vec::new(),
+    };
+
+    let answered = succeeded("repack", &ran);
+    assert_eq!(answered["command"], "repack");
+    assert_eq!(answered["exit_status"], 0);
+    assert_eq!(
+        answered["answer"],
+        json!({
+            "selected": 3,
+            "kept": 1,
+            "removed": 2,
+            "added": 2,
+            "uploaded": 4096,
+            "committed_head": 12,
+        }),
+    );
+    assert_eq!(answered["error"], Value::Null);
+}
+
+// A repack refused because a Pack it had to rewrite could not be read is named
+// by why, and says which Pack and that nothing was repacked (spec: PK-23).
+#[test]
+fn each_repack_refusal_answers_its_own_kind() {
+    for (reason, kind, said) in [
+        (
+            coffret_device::PackRefusal::KeyLost,
+            "pack_key_lost",
+            "records its key as lost",
+        ),
+        (
+            coffret_device::PackRefusal::Unverified(coffret_device::Unverified::Disagrees),
+            "pack_unverified",
+            "could not be read and verified",
+        ),
+    ] {
+        let error = Error::from(coffret_device::RepackError::from(
+            coffret_device::RepackRefusal {
+                container_id: container(7),
+                reason,
+            },
+        ));
+        let answered = failed("repack", error);
+        assert_eq!(answered["error"]["kind"], kind, "{answered}");
+        assert_eq!(answered["exit_status"], 1);
+        let message = answered["error"]["message"]
+            .as_str()
+            .expect("a message is a string");
+        assert!(
+            message.starts_with("the repack did not finish: Pack "),
+            "{message}"
+        );
+        assert!(message.contains(said), "{message}");
+        assert!(message.contains("nothing was repacked"), "{message}");
+    }
+}
+
 // A prune that met Storage not answering is `storage`, as every flow's is.
 #[test]
 fn a_prune_storage_failed_answers_storage() {

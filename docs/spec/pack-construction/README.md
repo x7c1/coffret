@@ -3,8 +3,8 @@
 Rule prefix: `PK`. What makes a Container a Pack, which files `freeze`
 selects, how it cuts them into Packs, what its Journal batch contains, how
 `update` propagates modified files, how Packs are replaced or removed
-when Entries change or are deleted, and how a Container is read back by the
-parcel.
+when Entries change or are deleted, how `repack` regroups them in path
+order, and how a Container is read back by the parcel.
 
 Concept background: [Pack](../../concepts/pack/),
 [Library](../../concepts/library/), [Entry](../../concepts/container/entry/).
@@ -59,7 +59,7 @@ Concept background: [Pack](../../concepts/pack/),
   non-overlapping partition of the Library's Entry Path order, and path
   ranges of Packs from different invocations may overlap or interleave.
   Producing that grouping across invocations is the job of the separate
-  repack or compaction operation. *(Form: test)*
+  repack (PK-23) or compaction operation. *(Form: test)*
 - **PK-9.** Deleting Entries — named individually by Entry Path, or as a
   folder and everything under it — examines every current Container holding a
   deleted Entry: a Container whose Entries are all deleted is removed, and a
@@ -351,3 +351,36 @@ Concept background: [Pack](../../concepts/pack/),
   - For such an Entry, chunk authentication and the catalog's hash stand in
     for the ciphertext hash: each chunk's tag under the Container Key is bound
     to the chunk's position and to the header (FM-7, FM-8).
+- **PK-23.** `repack` regroups the Entries under one folder — an Entry Path
+  prefix, or the Library root named as such — into Packs cut in Entry Path
+  order, and runs only when asked. *(Form: test)*
+  - It selects every current Pack holding at least one Entry under the folder.
+    A selected Pack takes part whole, its Entries outside the folder included,
+    because it is replaced whole and they have to go somewhere. One-file
+    Containers are not inputs: absorbing them is `freeze`'s (PK-1, PK-7).
+  - It sorts the selected Entries by current Entry Path and cuts them by the
+    segmentation `freeze` uses (PK-3, PK-4, PK-6), under the same kind of size
+    target (PK-5).
+  - A cut segment holding exactly one selected Pack's Entries, in the order
+    that Pack holds them, each with its captured path equal to its current
+    path, is that Pack: it is kept, neither rewritten nor removed. So a folder
+    already in order commits nothing, and a second `repack` straight after a
+    first commits nothing.
+  - Every other selected Pack is replaced. Each is read and every Entry of it
+    verified, and its Entries are carried into the new Packs by PK-10's rules:
+    under the current Entry Path, which becomes the captured path, keeping
+    `captured_mtime`, `captured_btime`, hash and deposit time. Every new
+    Container is a Pack (PK-15), encrypted under a new Container Key (KD-2).
+  - One Journal batch commits it: the replaced Packs in removals, the new Packs
+    in additions (CP-1, CP-14). If any Pack to be replaced cannot be read and
+    verified — a Pack mapped to a key-lost marker included (KL-7, KL-17) —
+    nothing at all is committed and the refusal names the Pack: a partial
+    repack would leave the order half made while looking done, and a run after
+    the cause is fixed does the whole job. The replaced Packs go to the
+    provider's trash as every removed Container does (OC-6).
+  - Another writer's commit landing meanwhile is met as any batch meets it
+    (CP-4, CP-18): a rename of a carried Entry is followed by the rebase
+    (EP-7), and a replaced Pack another writer has removed or replaced since
+    — by a deletion, an `update` or another repack — makes the batch a
+    conflict that commits nothing, and the next run plans again from the new
+    state.

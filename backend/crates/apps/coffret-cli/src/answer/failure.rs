@@ -5,8 +5,8 @@ use std::error;
 use serde::Serialize;
 
 use coffret_device::{
-    CommitError, CommitFailure, Error, FormatError, IndexError, ModelError, PruneError,
-    PruneRefusal, RenameError, RenameRefusal, StorageError,
+    CommitError, CommitFailure, Error, FormatError, IndexError, ModelError, PackRefusal,
+    PruneError, PruneRefusal, RenameError, RenameRefusal, RepackError, StorageError,
 };
 
 use crate::fetch::UnmappedEntry;
@@ -168,6 +168,15 @@ fn classified<'a>(
         if let Some(PruneError::Refused(refusal)) = link.downcast_ref() {
             return Classified::kind(prune_refusal_kind(refusal));
         }
+        // And a repack refused before it committed anything: a Pack whose key
+        // is lost and one that would not verify are put right differently
+        // (spec: PK-23).
+        if let Some(RepackError::Refused(refusal)) = link.downcast_ref() {
+            return Classified::kind(match refusal.reason {
+                PackRefusal::KeyLost => "pack_key_lost",
+                PackRefusal::Unverified(_) => "pack_unverified",
+            });
+        }
         if let Some(Error::NotAuthorized { .. }) = link.downcast_ref() {
             return Classified::kind("not_authorized");
         }
@@ -249,6 +258,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Delete { .. } if storage_below => "storage",
         Error::Rename { .. } if storage_below => "storage",
         Error::Prune { .. } if storage_below => "storage",
+        Error::Repack { .. } if storage_below => "storage",
         Error::Fetch { .. } if storage_below => "storage",
         Error::CatchUp { .. } if storage_below => "storage",
         Error::RemoteHeadNotRead { .. } if storage_below => "storage",
@@ -258,6 +268,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::Delete { .. } => "delete",
         Error::Rename { .. } => "rename",
         Error::Prune { .. } => "prune",
+        Error::Repack { .. } => "repack",
         Error::Fetch { .. } => "fetch",
         Error::CatchUp { .. } => "catch_up",
         Error::RemoteHeadNotRead { .. } => "remote_head_not_read",

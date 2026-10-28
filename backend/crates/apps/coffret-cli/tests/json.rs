@@ -714,6 +714,113 @@ fn prune_help_says_what_it_removes_and_that_it_runs_only_when_asked() {
     }
 }
 
+// A Library just created holds no Pack, so a repack of any folder — the whole
+// Library named as `/` included — selects nothing and commits nothing. And a
+// second run is the same answer: there is nothing out of order to rewrite.
+#[test]
+fn repack_answers_its_counts() {
+    let device = Device::new();
+    created(&device, "repacked");
+    for under in ["books/series", "/"] {
+        let output = device.run_with(
+            &[
+                "--json",
+                "repack",
+                "--library",
+                "repacked",
+                "--under",
+                under,
+                "--passphrase-stdin",
+            ],
+            Some(PASSPHRASE),
+        );
+        succeeded(&output, "repack");
+        assert_eq!(
+            answer_logged(&output),
+            json!({
+                "version": 1,
+                "command": "repack",
+                "exit_status": 0,
+                "log": VARIES,
+                "answer": {
+                    "selected": 0,
+                    "kept": 0,
+                    "removed": 0,
+                    "added": 0,
+                    "uploaded": 0,
+                    "committed_head": null,
+                },
+                "error": null,
+                "findings": [],
+            }),
+        );
+    }
+
+    let output = device.run_with(
+        &[
+            "repack",
+            "--library",
+            "repacked",
+            "--under",
+            "books",
+            "--passphrase-stdin",
+        ],
+        Some(PASSPHRASE),
+    );
+    succeeded(&output, "repack");
+    assert_eq!(
+        stdout(&output),
+        "selected 0 packs, kept 0, removed 0, added 0, uploaded 0 bytes, committed nothing\n",
+    );
+}
+
+// The folder is never assumed: a repack without `--under` is refused as what
+// was typed, before any Passphrase is asked for.
+#[test]
+fn a_repack_without_a_folder_answers_usage() {
+    let device = Device::new();
+    let output = device.run(&["--json", "repack", "--library", "anything"]);
+    assert_eq!(code(&output), 1, "{}", stderr(&output));
+    let answered = answer(&output);
+    assert_eq!(answered["command"], Value::Null);
+    assert_eq!(answered["error"]["kind"], "usage", "{answered}");
+    assert_eq!(
+        answered["error"]["message"],
+        "the following required arguments were not provided:",
+    );
+    assert!(stderr(&output).contains("--under"), "{}", stderr(&output));
+}
+
+// The command is listed, and its help says what it rewrites, how to name the
+// whole Library, that a second run commits nothing, and that nothing runs it
+// without being asked.
+#[test]
+fn repack_help_says_what_it_rewrites_and_that_it_runs_only_when_asked() {
+    let device = Device::new();
+    let listed = device.run(&["--help"]);
+    succeeded(&listed, "--help");
+    assert!(stdout(&listed).contains("repack"), "{}", stdout(&listed));
+
+    let help = device.run(&["repack", "--help"]);
+    succeeded(&help, "repack --help");
+    let help = stdout(&help)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for said in [
+        "Rewrite the Packs holding a folder's files into Packs in path order",
+        "`/` names the whole Library",
+        "running it again straight away commits nothing",
+        "If any of them cannot be read, nothing is changed",
+        "take about twice their size on this device's disk",
+        "It runs only when asked",
+        "--target",
+        "--passphrase-stdin",
+    ] {
+        assert!(help.contains(said), "{said:?} is not in: {help}");
+    }
+}
+
 // What was typed wrongly is refused before any command runs, and a script that
 // asked for JSON still gets its one object.
 #[test]

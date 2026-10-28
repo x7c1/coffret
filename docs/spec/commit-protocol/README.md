@@ -191,11 +191,11 @@ Concept background: [Journal](../../concepts/journal/),
   absorbing a one-file Container another writer removed, or a Pack rebuilt by
   read-modify-replace (PK-10) bringing back Entries another writer deleted with
   the whole Pack (CP-7). *(Form: test)*
-  - `sync`, `freeze`, and `delete` end the run with the refusal, as with any
-    other refused commit, and never offer the same batch again: the next run
-    re-plans from the new state. What the refused batch uploaded is settled
-    like any upload whose batch did not commit (OC-2, OC-3): a batch refused on
-    its first attempt has recorded no commit attempt and is disposed of by the
-    next `sync`, and one refused on a rebase after losing the slot has, and is
-    retained until every slot it recorded is proven taken by another record,
-    then disposed of (OC-3).
+  - `sync`, `freeze`, `delete`, and `repack` end the run with the refusal, as
+    with any other refused commit, and never offer the same batch again: the
+    next run re-plans from the new state. What the refused batch uploaded is
+    settled like any upload whose batch did not commit (OC-2, OC-3): a batch
+    refused on its first attempt has recorded no commit attempt and is disposed
+    of by the next `sync`, and one refused on a rebase after losing the slot
+    has, and is retained until every slot it recorded is proven taken by another
+    record, then disposed of (OC-3).

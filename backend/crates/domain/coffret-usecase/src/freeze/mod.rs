@@ -142,7 +142,9 @@ pub use run::freeze_folder;
 
 mod scan;
 
-mod segment;
+// The cut is a repack's as well as a freeze's (spec: PK-8), so the one
+// written here is the one both make.
+pub(crate) mod segment;
 
 mod selected;
 

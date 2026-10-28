@@ -1,8 +1,7 @@
-use coffret_format::{ContainerFootprint, Header};
+use coffret_format::{ContainerFootprint, EntryPlan, Header};
 use coffret_model::ContainerKind;
 use tracing::debug;
 
-use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::selected::Selected;
 
 /// The meta section a Pack is closed at, whatever the size target says.
@@ -25,18 +24,35 @@ use crate::freeze::selected::Selected;
 /// are more of them, which is the outcome PK-4 already admits for large Entries.
 const MAX_SEGMENT_META_LEN: u64 = Header::MAX_META_LEN as u64 / 2;
 
-/// One Pack's worth of selected Entries.
-pub(super) struct Segment {
-    /// Its members, in Entry Path order.
-    pub(super) members: Vec<Selected>,
-    /// What the Pack will measure before padding (spec: PK-6).
-    pub(super) footprint: ContainerFootprint,
+/// One Entry segmentation can cut: whatever it is, it knows what the Pack's
+/// entry table will say about it.
+///
+/// A freeze cuts local files and a repack cuts Entries already in Packs
+/// (spec: PK-8), and the cut is the same one for both — what it measures is the
+/// plan and nothing else (spec: PK-3, PK-6) — so it is written once over this.
+pub(crate) trait Planned {
+    /// What the Pack's entry table will say about this Entry.
+    fn plan(&self) -> &EntryPlan;
 }
 
-impl Segment {
+impl Planned for Selected {
+    fn plan(&self) -> &EntryPlan {
+        &self.plan
+    }
+}
+
+/// One Pack's worth of selected Entries.
+pub(crate) struct Segment<T> {
+    /// Its members, in Entry Path order.
+    pub(crate) members: Vec<T>,
+    /// What the Pack will measure before padding (spec: PK-6).
+    pub(crate) footprint: ContainerFootprint,
+}
+
+impl<T> Segment<T> {
     /// Whether this is an oversized singleton: one Entry that exceeds the target
     /// on its own (spec: PK-3).
-    pub(super) fn oversized(&self, target: u64) -> bool {
+    pub(crate) fn oversized(&self, target: u64) -> bool {
         self.footprint.bytes() > target
     }
 }
@@ -63,13 +79,19 @@ impl Segment {
 ///
 /// No empty Pack is produced, because a segment is only closed when it has a
 /// member and only opened by one.
-pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<Segment>> {
-    let mut segments: Vec<Segment> = Vec::new();
-    let mut members: Vec<Selected> = Vec::new();
+///
+/// A repack cuts with this same function and the same target, which is what
+/// lets it recognize a Pack that is already the cut it would make (spec: PK-23).
+pub(crate) fn segment<T: Planned>(
+    selected: Vec<T>,
+    target: u64,
+) -> Result<Vec<Segment<T>>, coffret_format::Error> {
+    let mut segments: Vec<Segment<T>> = Vec::new();
+    let mut members: Vec<T> = Vec::new();
     let mut footprint = ContainerFootprint::empty(ContainerKind::Pack)?;
 
     for item in selected {
-        let extended = footprint.extended(&item.plan)?;
+        let extended = footprint.extended(item.plan())?;
         // One Entry never fills a table on its own — a row is a couple of
         // hundred bytes — so the meta rule only ever closes a Pack that already
         // has members, and the `is_empty` guard that keeps an Entry indivisible
@@ -80,7 +102,7 @@ pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<
                 members: std::mem::take(&mut members),
                 footprint,
             });
-            footprint = ContainerFootprint::empty(ContainerKind::Pack)?.extended(&item.plan)?;
+            footprint = ContainerFootprint::empty(ContainerKind::Pack)?.extended(item.plan())?;
         } else {
             footprint = extended;
         }
@@ -106,7 +128,6 @@ pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<
 mod tests {
     use std::path::PathBuf;
 
-    use coffret_format::EntryPlan;
     use coffret_model::{ContentHash, Mtime};
 
     use super::*;
@@ -136,7 +157,7 @@ mod tests {
         }
     }
 
-    fn cut(sizes: &[u64], target: u64) -> Vec<Segment> {
+    fn cut(sizes: &[u64], target: u64) -> Vec<Segment<Selected>> {
         let selected = sizes
             .iter()
             .enumerate()

@@ -236,6 +236,10 @@ pub mod rename;
 // CK-6).
 pub mod prune;
 
+// Rewriting the Packs that hold a folder's Entries into Packs cut in Entry Path
+// order, by read-modify-replace's carrying rules (spec: PK-8, PK-23).
+pub mod repack;
+
 mod error;
 pub use error::{Error, Result};
 
@@ -530,6 +534,10 @@ pub use spool::Spool;
 // spool with its digests folded in, hand it to the upload, and put it in the
 // batch a commit takes.
 mod spool_file;
+
+// And the one writer a new Pack is spooled through, whether a freeze feeds it
+// local files or a repack feeds it Entries other Packs held (spec: PK-18).
+mod pack_spool;
 
 mod spool_writer;
 pub use spool_writer::SpoolWriter;
