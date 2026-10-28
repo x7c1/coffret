@@ -52,7 +52,7 @@ already in `ci.yml`. No other workflow changes.
 - [ ] On this pull request, pushing a second commit while the first commit's
       CI run is still in progress cancels that run, and the second run
       completes
-- [ ] The `concurrency` group for a `push` event to `main` is unique per
+- [x] The `concurrency` group for a `push` event to `main` is unique per
       commit, so neither a running nor a pending `main` run can be cancelled
       by a later push (verified by reading the expression against the
       `push` event's context)
