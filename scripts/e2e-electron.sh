@@ -45,12 +45,10 @@ readonly APP_DIR="$ROOT/frontend/packages/apps/desktop"
 # other's container in its way.
 CONTAINER="${COFFRET_E2E_ELECTRON_MINIO_CONTAINER:-coffret-minio-e2e-electron}"
 MINIO_PORT="${COFFRET_E2E_ELECTRON_MINIO_PORT:-19011}"
-# The image scripts/e2e-it.sh and scripts/s3-store-it.sh pin, for the reason
-# given there: MinIO no longer publishes one, and this is its last release as
-# the alpine-docker project builds it, by digest.
-IMAGE="${COFFRET_E2E_MINIO_IMAGE:-docker.io/alpine/minio@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4}"
-# The AWS CLI the bucket is made with, pinned by digest as in scripts/e2e-it.sh.
-AWS_CLI_IMAGE="${COFFRET_E2E_AWS_CLI_IMAGE:-docker.io/amazon/aws-cli@sha256:83f8ffe939569070c5b66d22231862ab78718766d9d8e4c44ca84dd0be5569a5}"
+# The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,
+# with the way the container is started and the bucket made.
+# shellcheck source=scripts/lib/minio.sh
+source "$ROOT/scripts/lib/minio.sh"
 
 # Credentials that only ever reach a container this script starts and stops.
 readonly ACCESS_KEY="coffret-e2e"
@@ -140,32 +138,13 @@ readonly ELECTRON_SWITCHES
 
 echo
 echo "--- starting MinIO in $CONTAINER on port $MINIO_PORT ---"
-docker run --detach \
-  --name "$CONTAINER" \
-  --publish "127.0.0.1:${MINIO_PORT}:9000" \
-  --env "MINIO_ROOT_USER=${ACCESS_KEY}" \
-  --env "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
-  "$IMAGE" server /home/minio/data >/dev/null ||
+minio_run "$CONTAINER" "$MINIO_PORT" "$ACCESS_KEY" "$SECRET_KEY" ||
   fail "MinIO could not be started, and the line above is docker's own account of why."
 
-for _ in $(seq "$STARTUP_TIMEOUT_SECONDS"); do
-  if curl --fail --silent --show-error "http://127.0.0.1:${MINIO_PORT}/minio/health/live" >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-[ "${ready:-}" = 1 ] || {
-  docker logs "$CONTAINER" >&2 || true
+minio_await "$CONTAINER" "$MINIO_PORT" "$STARTUP_TIMEOUT_SECONDS" ||
   fail "MinIO did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s"
-}
 
-docker run --rm \
-  --network "container:${CONTAINER}" \
-  --env "AWS_ACCESS_KEY_ID=${ACCESS_KEY}" \
-  --env "AWS_SECRET_ACCESS_KEY=${SECRET_KEY}" \
-  --env "AWS_REGION=us-east-1" \
-  "$AWS_CLI_IMAGE" s3api create-bucket --bucket "$BUCKET" --endpoint-url "http://127.0.0.1:9000" >/dev/null ||
+minio_create_bucket "$CONTAINER" "$ACCESS_KEY" "$SECRET_KEY" "$BUCKET" ||
   fail "the bucket ${BUCKET} could not be created in MinIO."
 
 # What the Library signs with, the command line's and the app's alike: the

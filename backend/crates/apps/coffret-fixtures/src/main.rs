@@ -1,14 +1,25 @@
-//! Generates a synthetic library of JPEGs: photo albums plus one scanned-book
-//! folder, so a run has files to work on without touching personal data.
+//! Generates a synthetic library of JPEGs, so a run has files to work on
+//! without touching personal data.
 //!
+//! Two scenarios. The default, `benchmark`, is photo albums plus one
+//! scanned-book folder, in the numbers and at the sizes the arguments give.
 //! The image sizes are arguments, because what a caller needs out of them
 //! differs: the reader benchmark wants camera-sized images, since realistic
 //! decode cost is the thing it measures, while a round trip against a real
 //! Storage only needs files that differ from one another. The defaults are the
 //! camera-sized ones.
+//!
+//! The other, `seed`, is a Library to look at rather than to measure: a
+//! little of every shape of book, name and folder the explorer has to show,
+//! laid out in `seed.rs`. It takes no counts or sizes, and prints the folders
+//! to freeze, one per line, on standard output.
+
+mod digits;
+mod seed;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::parser::ValueSource;
+use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use image::RgbImage;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
@@ -19,6 +30,12 @@ struct Args {
     /// Output directory for the generated library
     #[arg(long)]
     out: PathBuf,
+
+    /// What to generate: `benchmark`, the albums and the book the counts and
+    /// sizes below describe; or `seed`, the varied Library `make local`
+    /// serves, which takes none of them and refuses them where they are given
+    #[arg(long, value_enum, default_value_t = Scenario::Benchmark)]
+    scenario: Scenario,
 
     /// Number of photos (split into albums of 100)
     #[arg(long, default_value_t = 3000)]
@@ -37,6 +54,12 @@ struct Args {
     page_size: Size,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Scenario {
+    Benchmark,
+    Seed,
+}
+
 const PHOTOS_PER_ALBUM: usize = 100;
 const JPEG_QUALITY: u8 = 85;
 
@@ -48,7 +71,7 @@ struct Size {
 }
 
 impl Size {
-    fn new(width: u32, height: u32) -> Self {
+    const fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
 
@@ -84,9 +107,62 @@ impl FromStr for Size {
     }
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+/// The arguments that describe the benchmark and nothing else.
+const BENCHMARK_ONLY: [&str; 4] = ["photos", "pages", "photo_size", "page_size"];
 
+/// The arguments as typed, the binary's name first, or what is wrong with them.
+///
+/// A count or a size given to the seed is refused rather than ignored, since
+/// it would otherwise look as though it had been honoured.
+fn arguments<I, T>(typed: I) -> Result<Args, clap::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let matches = Args::command().try_get_matches_from(typed)?;
+    let args = Args::from_arg_matches(&matches)?;
+    if args.scenario == Scenario::Seed {
+        if let Some(given) = BENCHMARK_ONLY
+            .iter()
+            .find(|id| matches.value_source(id) == Some(ValueSource::CommandLine))
+        {
+            return Err(Args::command().error(
+                clap::error::ErrorKind::ArgumentConflict,
+                format!(
+                    "--{} describes the benchmark; the seed's counts and sizes are its own",
+                    given.replace('_', "-")
+                ),
+            ));
+        }
+    }
+    Ok(args)
+}
+
+fn main() -> Result<()> {
+    let args = arguments(std::env::args_os()).unwrap_or_else(|error| error.exit());
+    match args.scenario {
+        Scenario::Benchmark => benchmark(&args),
+        Scenario::Seed => {
+            let seed = seed::generate(&args.out, seed::Sizes::SMALL)?;
+            for unit in &seed.freeze_units {
+                println!("{unit}");
+            }
+            let pages: usize = seed.books.iter().map(|book| book.pages.len()).sum();
+            let photos: usize = seed.albums.iter().map(|album| album.photos).sum();
+            eprintln!(
+                "generated the seed: {} books of {pages} pages, {} albums of {photos} photos, under {}",
+                seed.books.len(),
+                seed.albums.len(),
+                args.out.display()
+            );
+            Ok(())
+        }
+    }
+}
+
+/// The default scenario: `args.photos` photos in albums of a hundred, and one
+/// book of `args.pages` pages.
+fn benchmark(args: &Args) -> Result<()> {
     let photo_jobs: Vec<(PathBuf, usize)> = (0..args.photos)
         .map(|i| {
             let album = i / PHOTOS_PER_ALBUM;
@@ -312,6 +388,74 @@ mod tests {
         let size = Size::new(60, 90);
         assert_eq!(page(3, size), page(3, size));
         assert_ne!(page(3, size), page(4, size));
+    }
+
+    /// The arguments as typed after the binary's name.
+    fn parsed(typed: &[&str]) -> Result<Args, clap::Error> {
+        arguments(std::iter::once("coffret-fixtures").chain(typed.iter().copied()))
+    }
+
+    #[test]
+    fn the_benchmark_is_the_default_and_writes_what_it_always_has() {
+        let dir = tempfile::tempdir().expect("a scratch directory");
+        let out = dir.path().to_str().expect("a UTF-8 scratch path");
+        let args = parsed(&[
+            "--out",
+            out,
+            "--photos",
+            "101",
+            "--pages",
+            "2",
+            "--photo-size",
+            "16x12",
+            "--page-size",
+            "12x18",
+        ])
+        .expect("the arguments parse");
+        assert_eq!(args.scenario, Scenario::Benchmark);
+        benchmark(&args).expect("the benchmark is written");
+
+        let mut top: Vec<_> = std::fs::read_dir(dir.path())
+            .expect("the output is listed")
+            .map(|entry| entry.expect("an entry").file_name())
+            .collect();
+        top.sort();
+        assert_eq!(top, ["album-000", "album-001", "book-000"]);
+        let album = dir.path().join("album-000");
+        assert_eq!(std::fs::read_dir(&album).expect("album-000").count(), 100);
+        assert!(album.join("img-00000.jpg").is_file());
+        assert!(dir.path().join("album-001/img-00100.jpg").is_file());
+        assert!(dir.path().join("book-000/page-0000.jpg").is_file());
+        assert!(dir.path().join("book-000/page-0001.jpg").is_file());
+        let page_image = image::open(dir.path().join("book-000/page-0000.jpg"))
+            .expect("a JPEG")
+            .to_rgb8();
+        assert_eq!(page_image.dimensions(), (12, 18));
+    }
+
+    #[test]
+    fn the_seed_is_asked_for_by_name() {
+        let args = parsed(&["--out", "x", "--scenario", "seed"]).expect("the seed parses");
+        assert_eq!(args.scenario, Scenario::Seed);
+    }
+
+    #[test]
+    fn the_seed_refuses_the_benchmarks_counts_and_sizes() {
+        for flag in [
+            "--photos=5",
+            "--pages=5",
+            "--photo-size=8x8",
+            "--page-size=8x8",
+        ] {
+            let error = parsed(&["--out", "x", "--scenario", "seed", flag])
+                .err()
+                .unwrap_or_else(|| panic!("{flag} is refused with the seed"));
+            assert_eq!(
+                error.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{flag}"
+            );
+        }
     }
 
     #[test]

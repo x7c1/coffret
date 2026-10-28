@@ -11,3 +11,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 image = { workspace = true }
 rayon = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
