@@ -6,6 +6,21 @@ on:
   push:
     branches: [main]
 
+# A new push to a pull request cancels the run still going for that pull
+# request: its verdict is about a commit nobody will merge, and it holds runners
+# the newer run waits for. The group is keyed on the pull request's number, not
+# its head branch, so pull requests from same-named branches (one from a fork)
+# never cancel each other.
+#
+# A push to main is never cancelled. release.yml tags a release only when CI's
+# run on main concludes `success`, so a cancelled run on the release commit
+# would skip the release without a word. `cancel-in-progress: false` alone is not
+# enough: a group still drops its pending run when a newer one queues. So each
+# push to main gets a group of its own, keyed on its commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
     runs-on: ubuntu-latest
