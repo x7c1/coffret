@@ -54,7 +54,8 @@
 //!
 //! What is deliberately not here: producing the batch (scanning, packing,
 //! encrypting, uploading Containers, and a deletion's rebuilds — see
-//! [`delete`](crate::delete)), `prune`, and Master Key epoch activation. An
+//! [`delete`](crate::delete)); `prune`, which [`prune`](crate::prune) makes
+//! over the checkpoint this module writes; and Master Key epoch activation. An
 //! activation met while replaying is reported as
 //! [`CommitError::EpochActivated`] rather than handled (spec: CP-5).
 
@@ -62,11 +63,14 @@
 mod adversarial_store_tests;
 
 mod after_commit;
+// The checkpoint of one head, for `prune` to rest on: the Snapshot already in
+// the head's slot, or the Index written there (spec: CK-8, CK-10, CK-11).
+pub(crate) use after_commit::{checkpoint_head, Checkpointed};
 
 mod candidate;
 
 mod catch_up;
-pub(crate) use catch_up::{catch_up, CaughtUp};
+pub(crate) use catch_up::{catch_up, read_records, CaughtUp};
 
 #[cfg(test)]
 mod catch_up_tests;
@@ -113,6 +117,10 @@ mod control_listing;
 pub(crate) use control_listing::ControlListing;
 
 mod control_object;
+// What kind of control object stands at a name, read off its plaintext header
+// alone: one name form covers a Journal record and an activation Snapshot
+// alike, and `prune` removes only the first (spec: CK-6, FM-12).
+pub(crate) use control_object::fetch_header;
 
 // The name a rename leaves an Entry, which a batch's pending changes act on.
 // It is the crate's rather than the commit's, because a materialization record
@@ -142,7 +150,7 @@ mod keyring;
 // exit or the commit's examination says it, so that one run says one word about
 // one set (spec: KL-5, KL-15).
 pub use keyring::ShortKeyring;
-pub(crate) use keyring::{read_committed, ShortReport};
+pub(crate) use keyring::{read_committed, shortfall, ShortReport};
 
 mod keyring_repair;
 pub use keyring_repair::KeyringRepair;

@@ -105,6 +105,11 @@
 //! asks for one (spec: EP-10), save the files of a batch this device committed
 //! and never finished recording, which the catch-up completes (spec: OC-7).
 //!
+//! [`run_prune`] takes away rather than brings over: it removes the Journal
+//! records the Snapshot of the head covers, once that Snapshot stands and the
+//! committed Keyring set is complete (spec: CK-4, CK-5, CK-6). It runs only
+//! when somebody asks for it.
+//!
 //! # One unlock, or one process
 //!
 //! Each of those five is one unlock and one run, which is what a command does.
@@ -336,6 +341,9 @@ pub use read_fronts::FRONTS_PER_LISTING;
 mod run_freeze;
 pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 
+mod run_prune;
+pub use run_prune::run_prune;
+
 mod run_rename;
 pub use run_rename::run_rename;
 
@@ -464,6 +472,7 @@ pub use coffret_usecase::fetch::{
 pub use coffret_usecase::freeze::{
     FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
 };
+pub use coffret_usecase::prune::{PruneError, PruneOutcome, PruneRefusal, UnremovedRecord};
 pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
 pub use coffret_usecase::sync::{
     Disposal, RetainedKeyringReplicas, Settled, SyncError, SyncOutcome,

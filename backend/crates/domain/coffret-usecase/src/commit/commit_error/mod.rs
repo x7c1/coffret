@@ -228,7 +228,10 @@ pub enum CommitError {
     ///
     /// Catching up replays the Journal after its starting point, so a gap in
     /// the chain is a Library that cannot be caught up with rather than a
-    /// commit that can proceed without it (spec: CK-9).
+    /// commit that can proceed without it (spec: CK-9). A `prune` on another
+    /// device between this run's listing and its read leaves such a gap too;
+    /// running again starts from the Snapshot that `prune` rested on
+    /// (spec: CK-6).
     MissingHead {
         /// The generation whose head object is gone.
         generation: Generation,

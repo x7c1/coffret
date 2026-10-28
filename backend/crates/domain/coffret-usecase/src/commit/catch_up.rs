@@ -471,7 +471,7 @@ async fn replay(
 /// Every generation has to hold a Journal record: a gap is the
 /// [`CommitError::MissingHead`] a replay meets, and an activation is the
 /// [`CommitError::EpochActivated`] it stops at (spec: CP-5).
-pub(super) async fn read_records(
+pub(crate) async fn read_records(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
     retry: &RetryPolicy,

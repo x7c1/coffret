@@ -82,6 +82,8 @@ mod mappings;
 // is neither an answer nor a failure.
 mod progress;
 
+mod prune;
+
 mod recovery_code;
 
 mod rename;
@@ -151,6 +153,18 @@ enum Command {
     /// under the folder meanwhile stay where they are. This device's own files
     /// follow at once; other devices' follow on their next sync or fetch.
     Rename(rename::RenameArgs),
+    /// Remove the Journal records the checkpoint of the Library's head covers
+    ///
+    /// Makes sure a checkpoint of the head is on Storage, writing one if none
+    /// is there, then moves every older Journal record to the provider's
+    /// trash; the head itself stays. Nothing is removed unless that checkpoint
+    /// names the Keyring the head committed and every replica of it is on
+    /// Storage. No checkpoint, Keyring replica or file's content is ever
+    /// removed.
+    ///
+    /// It runs only when asked: nothing prunes after a sync, freeze, rename
+    /// or checkpoint.
+    Prune(LibraryArgs),
 }
 
 impl Command {
@@ -169,6 +183,7 @@ impl Command {
             Self::Freeze(_) => "freeze",
             Self::Fetch(_) => "fetch",
             Self::Rename(_) => "rename",
+            Self::Prune(_) => "prune",
         }
     }
 
@@ -297,6 +312,7 @@ async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
         Command::Freeze(args) => freeze::run(args, form).await,
         Command::Fetch(args) => fetch::run(args, form).await,
         Command::Rename(args) => rename::run(args, form).await,
+        Command::Prune(args) => prune::run(args, form).await,
     }
 }
 

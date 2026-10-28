@@ -186,6 +186,7 @@ impl Redacted for Error {
             Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
             Self::Delete { cause } => format!("Device::Delete: {}", cause.redacted()),
             Self::Rename { cause } => format!("Device::Rename: {}", cause.redacted()),
+            Self::Prune { cause } => format!("Device::Prune: {}", cause.redacted()),
             Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
             Self::LocalPathNotResolved { cause } => {
                 format!("Device::LocalPathNotResolved: {}", cause.redacted())

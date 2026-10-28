@@ -632,6 +632,88 @@ fn a_rename_refused_in_text_says_why_on_standard_error() {
     assert_eq!(answer_logged(&output)["error"]["kind"], "bad_path");
 }
 
+// A Library just created holds its first head and nothing older, so a prune
+// writes the head's checkpoint and removes nothing; run again straight away,
+// it finds that checkpoint there and still removes nothing. Both succeed.
+#[test]
+fn prune_answers_the_checkpoint_it_rested_on_and_what_it_removed() {
+    let device = Device::new();
+    created(&device, "pruned");
+    let prune = || {
+        device.run_with(
+            &[
+                "--json",
+                "prune",
+                "--library",
+                "pruned",
+                "--passphrase-stdin",
+            ],
+            Some(PASSPHRASE),
+        )
+    };
+
+    for wrote_snapshot in [true, false] {
+        let output = prune();
+        succeeded(&output, "prune");
+        assert_eq!(
+            answer_logged(&output),
+            json!({
+                "version": 1,
+                "command": "prune",
+                "exit_status": 0,
+                "log": VARIES,
+                "answer": {
+                    "head": 0,
+                    "snapshot": "idx-0.cfrt",
+                    "wrote_snapshot": wrote_snapshot,
+                    "removed": 0,
+                    "oldest_removed": null,
+                    "newest_removed": null,
+                    "unremoved": [],
+                },
+                "error": null,
+                "findings": [],
+            }),
+        );
+    }
+
+    let output = device.run_with(
+        &["prune", "--library", "pruned", "--passphrase-stdin"],
+        Some(PASSPHRASE),
+    );
+    succeeded(&output, "prune");
+    assert_eq!(
+        stdout(&output),
+        "checkpoint idx-0.cfrt was already there, removed no Journal record, kept head 0\n",
+    );
+}
+
+// The command is listed, and its help says what it removes, what it never
+// removes, and that nothing runs it without being asked.
+#[test]
+fn prune_help_says_what_it_removes_and_that_it_runs_only_when_asked() {
+    let device = Device::new();
+    let listed = device.run(&["--help"]);
+    succeeded(&listed, "--help");
+    assert!(stdout(&listed).contains("prune"), "{}", stdout(&listed));
+
+    let help = device.run(&["prune", "--help"]);
+    succeeded(&help, "prune --help");
+    let help = stdout(&help)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for said in [
+        "Remove the Journal records the checkpoint of the Library's head covers",
+        "the head itself stays",
+        "No checkpoint, Keyring replica or file's content is ever removed",
+        "It runs only when asked",
+        "--passphrase-stdin",
+    ] {
+        assert!(help.contains(said), "{said:?} is not in: {help}");
+    }
+}
+
 // What was typed wrongly is refused before any command runs, and a script that
 // asked for JSON still gets its one object.
 #[test]

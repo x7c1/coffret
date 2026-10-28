@@ -89,7 +89,7 @@ pub(super) async fn fetch(
 /// here, and is *kept* harmless: the header is parsed off the front either way,
 /// and only the front is ever taken in, so ignoring the range costs this device
 /// 44 bytes rather than the Snapshot.
-pub(super) async fn fetch_header(
+pub(crate) async fn fetch_header(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
     object: &ObjectRef,

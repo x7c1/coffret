@@ -188,6 +188,15 @@ impl ControlListing {
         self.snapshots.contains(&generation)
     }
 
+    /// Every link of the head chain the walk saw, oldest first.
+    ///
+    /// By name alone, so a link may be a Journal record or an activation
+    /// Snapshot standing in a head position: only its header says which
+    /// (spec: FM-12).
+    pub(crate) fn heads(&self) -> impl Iterator<Item = Generation> + '_ {
+        self.heads.iter().copied()
+    }
+
     /// Whether the head chain has a link at this generation.
     pub(super) fn has_head(&self, generation: Generation) -> bool {
         self.heads.contains(&generation)

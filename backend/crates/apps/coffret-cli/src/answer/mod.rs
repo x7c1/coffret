@@ -69,6 +69,9 @@ pub use mappings::Mappings;
 mod ran;
 pub use ran::Ran;
 
+mod pruned;
+pub use pruned::Pruned;
+
 mod recovery_code;
 pub use recovery_code::RecoveryCode;
 
@@ -127,7 +130,9 @@ A Journal record this build is too old to apply is
 is \"library_predates_format\": the Library is to be made again. A
 rename refused before anything was written is \"nothing_to_rename\",
 \"same_path\", \"reserved_namespace\", \"into_itself\",
-\"destination_taken\", \"file_and_folder\" or \"rename_rule\".
+\"destination_taken\", \"file_and_folder\" or \"rename_rule\". A
+prune refused before it removed anything is \"nothing_committed\",
+\"keyring_not_committed\" or \"keyring_incomplete\".
 A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
@@ -171,6 +176,11 @@ answer, per command:
                  parcels read placed)
   rename         renamed (how many Entries), folder (whether a folder was
                  renamed), committed_head
+  prune          head (the generation kept), snapshot (the checkpoint
+                 rested on, e.g. \"idx-7.cfrt\"), wrote_snapshot, removed
+                 (how many Journal records), oldest_removed and
+                 newest_removed (generations, or null where none was),
+                 unremoved (generations left in place, which exit 2)
 
 storage is {\"provider\": \"s3\", \"bucket\", \"prefix\"} or {\"provider\":
 \"drive\", \"folder_id\"}. committed_head is the generation committed, or
@@ -217,6 +227,8 @@ pub enum Answer {
     FetchedEntry(FetchedEntry),
     /// `rename`.
     Renamed(Renamed),
+    /// `prune`.
+    Pruned(Pruned),
 }
 
 /// The generation a run committed, or `None` where it committed nothing.
