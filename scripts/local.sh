@@ -63,7 +63,10 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Physical, as in dev.sh, which recognises its processes by this path, and
+# for the same reason here: the MinIO container is recognised by the path its
+# data is mounted from.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly ROOT
 
 # The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,

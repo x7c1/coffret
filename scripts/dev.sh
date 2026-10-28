@@ -56,7 +56,12 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The checkout's physical path, with symlinks resolved: the processes started
+# here are recognised later by the full path they were started from, so a
+# checkout reached through a symlink must name itself the same way whichever
+# path the command was typed under, or a run from the other path would take
+# our own server for a stranger's and drop its pid files without stopping it.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly ROOT
 cd "$ROOT"
 
