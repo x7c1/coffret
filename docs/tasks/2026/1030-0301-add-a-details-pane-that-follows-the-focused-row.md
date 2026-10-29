@@ -70,5 +70,5 @@ The end-to-end journeys (`frontend/packages/apps/e2e/`, run by `make e2e-it` and
 
 ### Before merge (verified outside the check command)
 
-- [ ] On `make local`, the agent moves the focus through folders, images and a
+- [x] On `make local`, the agent moves the focus through folders, images and a
   non-image file and records in the PR what the pane showed for each.
