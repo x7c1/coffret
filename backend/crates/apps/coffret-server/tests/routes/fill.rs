@@ -589,6 +589,45 @@ async fn opening_a_present_page_of_a_folder_not_wholly_here_brings_the_rest_over
     assert!(served.holds("scans/b/001.jpg"), "the rest came over");
 }
 
+// A peek at a page this device has, in a folder it does not wholly have, is
+// served from disk like any page and arms nothing: the explorer peeks to draw
+// the focused row's preview, and walking the focus down a list of books is not
+// opening one of them.
+#[tokio::test]
+async fn a_peek_at_a_present_page_of_a_folder_not_wholly_here_arms_nothing() {
+    let served = Served::library().await;
+    for (index, (path, len)) in [
+        ("scans/a/000.jpg", 100 * 1024),
+        ("scans/b/000.jpg", 100 * 1024),
+        ("scans/b/001.jpg", 1536 * 1024),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        served
+            .commit_elsewhere(path, &vec![0x40 + index as u8; len])
+            .await;
+    }
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+    served.arm_fill("scans/a");
+    served.fill_idle().await;
+    assert!(served.holds("scans/b/000.jpg"));
+    assert!(!served.holds("scans/b/001.jpg"));
+
+    assert_eq!(
+        served
+            .get("/api/file?path=scans/b/000.jpg&peek=true")
+            .await
+            .status(),
+        200
+    );
+    served.fill_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&work)["folder"], "scans/a", "nothing armed: {work}");
+    assert!(!served.holds("scans/b/001.jpg"), "nothing came over");
+}
+
 // A folder this device has whole has nothing to bring over, and opening a page
 // of it arms nothing: a drop placed every file of it here, and no fill has run.
 #[tokio::test]

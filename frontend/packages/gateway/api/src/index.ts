@@ -81,7 +81,7 @@ export {
 export type { Ending, EndingListener } from './credential';
 export { browseFolders } from './browse';
 export type { Browsed, BrowsedFolder } from './browse';
-export { getFile } from './file';
+export { getFile, peekFile } from './file';
 export { getFolders } from './folders';
 export type { Folders } from './folders';
 export { getLibrary } from './library';

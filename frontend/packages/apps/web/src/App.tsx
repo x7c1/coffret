@@ -17,6 +17,7 @@ import {
   type CatalogState,
   type DeleteTarget,
   type LibraryState,
+  type ListedFile,
   type Listing,
   type Mapped,
   type ReconnectState,
@@ -30,6 +31,8 @@ import {
   prospectiveFolders,
 } from './prospective';
 import { DeleteConfirm } from './DeleteConfirm';
+import { uploadStopped } from './details';
+import { DetailsPane } from './DetailsPane';
 import {
   askToDelete,
   deletedLine,
@@ -44,7 +47,7 @@ import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { mappedAt } from './dropTarget';
 import { isPutAway, shownRuns } from './dismissed';
-import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
+import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
@@ -81,11 +84,13 @@ import {
   folderKey,
   shownFolders,
   treeRows,
+  type FileRow,
+  type FolderRow,
   type TreeState,
 } from './tree';
-import { TreeTable } from './TreeTable';
+import { opened, TreeTable } from './TreeTable';
 import { heldBy } from './turns';
-import { unmappedLine } from './unmapped';
+import { unmappedLine, type Tried } from './unmapped';
 import { useListings } from './useListings';
 import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
@@ -202,12 +207,19 @@ export function App() {
   const library = useAsked((signal) => getLibrary(signal), 'library');
   const folders = useAsked((signal) => getFolders(signal), 'folders');
   // The listing of every folder the tree shows — the root's, each open
-  // folder's — and of the folder the URL names, which is one of them once the
-  // tree has opened down to it (see [`useListings`](./useListings)).
+  // folder's — of the folder the URL names, which is one of them once the
+  // tree has opened down to it (see [`useListings`](./useListings)), and of
+  // the focused folder, open or not: the details pane draws its first image
+  // and counts its items out of it.
+  const focusedFolder =
+    tree.focus !== null && tree.focus.startsWith(folderKey(''))
+      ? tree.focus.slice(folderKey('').length)
+      : null;
   const shown = useMemo(() => {
     const open = shownFolders(tree.expanded);
-    return open.includes(view.folder) ? open : [...open, view.folder];
-  }, [tree.expanded, view.folder]);
+    const named = open.includes(view.folder) ? open : [...open, view.folder];
+    return focusedFolder === null || named.includes(focusedFolder) ? named : [...named, focusedFolder];
+  }, [tree.expanded, view.folder, focusedFolder]);
   const listings = useListings(shown);
   const reloadListings = listings.reload;
   const heldListing = listings.listing;
@@ -1295,6 +1307,51 @@ export function App() {
     [listingOf, go],
   );
 
+  // The openers (see `opened`) shared by the tree's own gestures and the
+  // details pane's Open, so that the two are one gesture.
+  const openFile = useCallback((path: string) => go({ folder: parentOf(path), open: path }), [go]);
+  const unsupported = useCallback(
+    (file: ListedFile) => setNotice(`${file.name} — preview of this format is not supported yet`),
+    [],
+  );
+  // The sentence the server would have answered with, said here because
+  // neither gesture becomes a request: what each says is
+  // [`unmappedLine`](./unmapped), and `held` is which of the two reasons it
+  // gives — the mapping that is missing (spec: EP-9), or the folder the Library
+  // does not have. The folders it may name are the listing's own where the
+  // gesture was made.
+  const unmapped = useCallback(
+    (tried: Tried, held: boolean, where: Listing) =>
+      setNotice(
+        unmappedLine(
+          tried,
+          held,
+          where.folders.filter((one) => one.mapped).map((one) => one.name),
+        ),
+      ),
+    [],
+  );
+
+  // What the details pane describes: the rows selected, which is the focused
+  // row until several can be selected at once.
+  const selected = useMemo(
+    () => rows.filter((row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === tree.focus),
+    [rows, tree.focus],
+  );
+  const shownOf = useCallback(
+    (row: FileRow) => rowFill(row.file, row.in.path, fillOf(row.in.path)),
+    [fillOf],
+  );
+  const uploadStoppedOf = useCallback(
+    (file: ListedFile) => uploadStopped(file, sync, freeze),
+    [sync, freeze],
+  );
+  const openFromPane = useCallback(
+    (row: FolderRow | FileRow) =>
+      opened(row, { onOpenFolder: openFolder, onOpenFile: openFile, onUnsupported: unsupported, onUnmapped: unmapped }),
+    [openFolder, openFile, unsupported, unmapped],
+  );
+
   // A hash naming a file this folder does not offer — the Entry is gone, or the
   // URL was written by hand and names a row a browser draws nothing from. The
   // list is the answer, and the URL is put back in step with it.
@@ -1404,52 +1461,47 @@ export function App() {
           )}
           <Region state={rootState} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
             {() => (
-              <TreeTable
-                rows={rows}
-                state={tree}
-                onChange={changeTree}
-                context={listed}
-                prospectiveHere={prospective.includes(view.folder)}
-                prepared={prepared}
-                fillOf={fillOf}
-                freeze={freeze}
-                stranded={strandedHere}
-                // The stranded folders are read off the Library's folders, and
-                // `stranded` is false until that answer lands whether or not
-                // this folder is one of them.
-                strandedKnown={known !== null}
-                mappedAt={(folder) => mappedAt(folder, rootKnown)}
-                onOpenFolder={openFolder}
-                onOpenFile={(path) => go({ folder: parentOf(path), open: path })}
-                onUnsupported={(file) =>
-                  setNotice(`${file.name} — preview of this format is not supported yet`)
-                }
-                onAdd={add}
-                onCollecting={collecting}
-                onUnreadable={unreadable}
-                // The sentence the server would have answered with, said here
-                // because neither gesture becomes a request: what each says is
-                // [`unmappedLine`](./unmapped), and `held` is which of the two
-                // reasons it gives — the mapping that is missing (spec: EP-9),
-                // or the folder the Library does not have. The folders it may
-                // name are the listing's own where the gesture was made.
-                onUnmapped={(tried, held, where) =>
-                  setNotice(
-                    unmappedLine(
-                      tried,
-                      held,
-                      where.folders.filter((one) => one.mapped).map((one) => one.name),
-                    ),
-                  )
-                }
-                onUnmappedDrop={unmappedDrop}
-                onMap={(prefix) => setMapping({ prefix })}
-                onPack={packFolder}
-                onDelete={deleteEntries}
-                onNewFolder={openNaming}
-                onForget={forget}
-                onAskAgain={(folder) => reloadListings([folder])}
-              />
+              // The tree, and the details pane on its right following the
+              // focused row.
+              <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+                <TreeTable
+                  rows={rows}
+                  state={tree}
+                  onChange={changeTree}
+                  context={listed}
+                  prospectiveHere={prospective.includes(view.folder)}
+                  prepared={prepared}
+                  fillOf={fillOf}
+                  freeze={freeze}
+                  stranded={strandedHere}
+                  // The stranded folders are read off the Library's folders, and
+                  // `stranded` is false until that answer lands whether or not
+                  // this folder is one of them.
+                  strandedKnown={known !== null}
+                  mappedAt={(folder) => mappedAt(folder, rootKnown)}
+                  onOpenFolder={openFolder}
+                  onOpenFile={openFile}
+                  onUnsupported={unsupported}
+                  onAdd={add}
+                  onCollecting={collecting}
+                  onUnreadable={unreadable}
+                  onUnmapped={unmapped}
+                  onUnmappedDrop={unmappedDrop}
+                  onMap={(prefix) => setMapping({ prefix })}
+                  onPack={packFolder}
+                  onDelete={deleteEntries}
+                  onNewFolder={openNaming}
+                  onForget={forget}
+                  onAskAgain={(folder) => reloadListings([folder])}
+                />
+                <DetailsPane
+                  selected={selected}
+                  listingOf={heldListing}
+                  shownOf={shownOf}
+                  uploadStoppedOf={uploadStoppedOf}
+                  onOpen={openFromPane}
+                />
+              </div>
             )}
           </Region>
         </main>

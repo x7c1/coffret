@@ -17,7 +17,17 @@ import {
 import type { Asked } from './useAsked';
 
 function folder(path: string, over: Partial<ListedFolder> = {}): ListedFolder {
-  return { name: path.slice(path.lastIndexOf('/') + 1), path, mapped: true, present_throughout: false, ...over };
+  return {
+    name: path.slice(path.lastIndexOf('/') + 1),
+    path,
+    mapped: true,
+    present_throughout: false,
+    files_total: 1,
+    files_present: 0,
+    size: 0,
+    mtime: null,
+    ...over,
+  };
 }
 
 function file(path: string): ListedFile {

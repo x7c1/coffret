@@ -32,6 +32,15 @@
         background: #222;
       }
 
+      /* The details pane gives its width back to the tree on a narrow
+         window: the tree is the screen, and the pane only says more about a
+         row of it. A width and nothing to hold, so here rather than inline. */
+      @media (max-width: 760px) {
+        aside.details {
+          display: none;
+        }
+      }
+
       code {
         font-family: ui-monospace, monospace;
       }

@@ -223,6 +223,11 @@ function foldersIn(
       path,
       mapped: listing.mapped,
       present_throughout: false,
+      // Its Entries are not committed, so the Library counts none under it.
+      files_total: 0,
+      files_present: 0,
+      size: 0,
+      mtime: null,
     }));
   const extra = [...notHeld, ...waiting];
   if (extra.length === 0) {
@@ -354,9 +359,11 @@ function collapsed(state: TreeState, folder: string): TreeState {
  * through: the focused folder where it is open, and otherwise the folder the
  * focused row stands in; the Library root where nothing is focused.
  *
- * An open folder or the folder a row stands in, never a closed one, because
- * either one's listing is on hand already: walking onto a closed folder asks
- * nothing of the server.
+ * An open folder or the folder a row stands in, never a closed one: what the
+ * screen's actions act on is the folder whose rows are on show, and a closed
+ * folder's are not. (The details pane asks for a focused closed folder's
+ * listing all the same, to describe it; that is the pane's, not the
+ * context's.)
  */
 export function contextOf(state: TreeState): string {
   if (state.focus === null) {

@@ -602,12 +602,25 @@ function work(value: unknown, where: string): Work {
 }
 
 function listedFolder(value: unknown, where: string): ListedFolder {
-  const fields = object(value, where, ['name', 'path', 'mapped', 'present_throughout']);
+  const fields = object(value, where, [
+    'name',
+    'path',
+    'mapped',
+    'present_throughout',
+    'files_total',
+    'files_present',
+    'size',
+    'mtime',
+  ]);
   return {
     name: string(fields.name, `${where}.name`),
     path: string(fields.path, `${where}.path`),
     mapped: boolean(fields.mapped, `${where}.mapped`),
     present_throughout: boolean(fields.present_throughout, `${where}.present_throughout`),
+    files_total: number(fields.files_total, `${where}.files_total`),
+    files_present: number(fields.files_present, `${where}.files_present`),
+    size: number(fields.size, `${where}.size`),
+    mtime: nullable(fields.mtime, (mtime) => string(mtime, `${where}.mtime`)),
   };
 }
 
