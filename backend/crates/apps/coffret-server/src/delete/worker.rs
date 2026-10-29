@@ -53,7 +53,7 @@ mod tests {
 
     fn albums() -> Target {
         Target {
-            folder: Some(entry_path("albums")),
+            folders: BTreeSet::from([entry_path("albums")]),
             paths: BTreeSet::new(),
         }
     }

@@ -497,7 +497,7 @@ function refusedPack(value: unknown, where: string): RefusedPack {
 function deletion(value: unknown, where: string): Delete {
   const fields = object(value, where, [
     'run',
-    'folder',
+    'folders',
     'paths',
     'status',
     'entries',
@@ -516,7 +516,7 @@ function deletion(value: unknown, where: string): Delete {
   ]);
   return {
     run: number(fields.run, `${where}.run`),
-    folder: nullable(fields.folder, (folder) => string(folder, `${where}.folder`)),
+    folders: folders(fields.folders, `${where}.folders`),
     paths: folders(fields.paths, `${where}.paths`),
     entries: number(fields.entries, `${where}.entries`),
     bytes: number(fields.bytes, `${where}.bytes`),
@@ -938,7 +938,7 @@ it('reads every other answer the server sends through its type', () => {
   })();
   const deletePreview: DeletePreview = (() => {
     const fields = object(answers.delete_preview, 'delete_preview', [
-      'folder',
+      'folders',
       'paths',
       'entries',
       'bytes',
@@ -951,7 +951,7 @@ it('reads every other answer the server sends through its type', () => {
       'after_current',
     ]);
     return {
-      folder: nullable(fields.folder, (value) => string(value, 'delete_preview.folder')),
+      folders: folders(fields.folders, 'delete_preview.folders'),
       paths: folders(fields.paths, 'delete_preview.paths'),
       entries: number(fields.entries, 'delete_preview.entries'),
       bytes: number(fields.bytes, 'delete_preview.bytes'),

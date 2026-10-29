@@ -46,7 +46,7 @@ impl OpenLibrary {
             library = %self.library_id,
             batch = %batch,
             paths = selection.paths.len(),
-            folder = selection.folder.is_some(),
+            folders = selection.folders.len(),
             "deleting Entries from the Library"
         );
         let request = DeleteRequest::new(

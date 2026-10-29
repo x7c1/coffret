@@ -1,7 +1,9 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { peekFile, type ListedFile, type Listing } from '@coffret/api';
+import { peekFile, type DeleteTarget, type ListedFile, type Listing } from '@coffret/api';
 
+import { deleteTargetOf } from './actions';
+import { deleteItems } from './deleteEntries';
 import {
   counted,
   extensionOf,
@@ -29,9 +31,11 @@ import type { Asked } from './useAsked';
  * The details pane, on the right of the tree: what the selected row is, said
  * in full where the tree has a line for it.
  *
- * It follows the selection, which is the focused row until several rows can be
- * selected at once; with several, it says what they come to together (see
- * [`summaryOf`](./details)). For one row, from the top:
+ * It follows the selection — the focused row, or the rows selected together
+ * with modifier keys (see [`selection`](./selection)). With several, it says
+ * what they come to together (see [`summaryOf`](./details)) and offers
+ * `Delete <n> items…`, the same deletion as the actions menu's. For one row,
+ * from the top:
  *
  * - a preview: an image file's picture; for a folder holding images, its first
  *   one — for a scanned book, nearly always the cover; and otherwise a plain
@@ -56,8 +60,9 @@ export function DetailsPane({
   shownOf,
   uploadStoppedOf,
   onOpen,
+  onDelete,
 }: {
-  /** The rows selected, top to bottom; the focused row alone until several can be. */
+  /** The rows selected, top to bottom; the focused row alone where nothing else is. */
   selected: readonly Described[];
   /** A folder's own listing as far as it has been asked; `undefined` where it has not. */
   listingOf: (folder: string) => Asked<Listing> | undefined;
@@ -67,6 +72,8 @@ export function DetailsPane({
   uploadStoppedOf: (file: ListedFile) => boolean;
   /** Open: what `Enter` does on the row. */
   onOpen: (row: Described) => void;
+  /** `Delete <n> items…` over several rows: the deletion the actions menu asks for. */
+  onDelete: (target: DeleteTarget) => void;
 }) {
   return (
     <aside className="details" aria-label="Details" style={PANE}>
@@ -81,7 +88,7 @@ export function DetailsPane({
           onOpen={onOpen}
         />
       ) : (
-        <Several rows={selected} />
+        <Several rows={selected} onDelete={onDelete} />
       )}
     </aside>
   );
@@ -163,9 +170,14 @@ function One({
   );
 }
 
-/** Several rows, as what they come to together. */
-function Several({ rows }: { rows: readonly Described[] }) {
+/**
+ * Several rows, as what they come to together, and the one deletion of them
+ * all — of the ones the Library holds, which is where the count on the button
+ * can be smaller than the heading's (see [`deleteTargetOf`](./actions)).
+ */
+function Several({ rows, onDelete }: { rows: readonly Described[]; onDelete: (target: DeleteTarget) => void }) {
   const summary = summaryOf(rows);
+  const target = deleteTargetOf(rows);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
       <div style={PREVIEW}>
@@ -179,6 +191,11 @@ function Several({ rows }: { rows: readonly Described[] }) {
           ['Size', size(summary.bytes)],
         ]}
       />
+      {target !== null && (
+        <button type="button" onClick={() => onDelete(target)} style={DELETE_BUTTON}>
+          {deleteItems(target)}
+        </button>
+      )}
     </div>
   );
 }
@@ -323,6 +340,19 @@ const PREVIEW: CSSProperties = {
   border: `1px solid ${COLOR.border}`,
   borderRadius: 4,
   overflow: 'hidden',
+};
+
+/** Drawn in light red, as the actions menu draws a deletion. */
+const DELETE_BUTTON: CSSProperties = {
+  alignSelf: 'flex-start',
+  border: `1px solid ${COLOR.refused}`,
+  background: 'transparent',
+  color: COLOR.refused,
+  font: 'inherit',
+  fontSize: 13,
+  padding: '4px 16px',
+  borderRadius: 4,
+  cursor: 'pointer',
 };
 
 const OPEN: CSSProperties = {

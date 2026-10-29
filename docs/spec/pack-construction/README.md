@@ -60,8 +60,8 @@ Concept background: [Pack](../../concepts/pack/),
   ranges of Packs from different invocations may overlap or interleave.
   Producing that grouping across invocations is the job of the separate
   repack (PK-23) or compaction operation. *(Form: test)*
-- **PK-9.** Deleting Entries — named individually by Entry Path, or as a
-  folder and everything under it — examines every current Container holding a
+- **PK-9.** Deleting Entries — named individually by Entry Path, or as
+  folders and everything under them — examines every current Container holding a
   deleted Entry: a Container whose Entries are all deleted is removed, and a
   Pack that also contains kept Entries is replaced by read-modify-replace
   (PK-10). One deletion commits as one Journal batch: the removed Containers

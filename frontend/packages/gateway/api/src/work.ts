@@ -501,8 +501,8 @@ export type Delete = DeleteOfItsOwn & Standing<DeleteStatus>;
 interface DeleteOfItsOwn {
   /** Which run of the deletion this is, counted from the start of the server. */
   run: number;
-  /** The folder it deletes, and `null` where it names files only. */
-  folder: string | null;
+  /** The folders it deletes, in Entry Path order; empty where it names files only. */
+  folders: string[];
   /** The files it names, in Entry Path order. */
   paths: string[];
   /** How many files left the Library, and `0` until it is over. */
@@ -858,21 +858,22 @@ export function previewFreeze(folder: string, signal?: AbortSignal): Promise<Fre
 }
 
 /**
- * What a deletion names: a folder with everything under it, individual files,
- * or both. The Library root as a whole is never one — the server refuses it.
+ * What a deletion names: folders with everything under them, individual files,
+ * or both — several in one deletion, so that the Packs they share are rebuilt
+ * once. The Library root as a whole is never one — the server refuses it.
  */
 export interface DeleteTarget {
-  /** A folder, or `null` for none. */
-  folder: string | null;
+  /** Folders, each with everything under it; empty for none. */
+  folders: readonly string[];
   /** Individual files, by Entry Path. */
   paths: readonly string[];
 }
 
-/** The query a deletion is named by: `path` for the folder, `entry` per file. */
+/** The query a deletion is named by: `path` per folder, `entry` per file. */
 function deleteUrl(target: DeleteTarget): string {
   const params: [string, string][] = [];
-  if (target.folder !== null) {
-    params.push(['path', target.folder]);
+  for (const folder of target.folders) {
+    params.push(['path', folder]);
   }
   for (const path of target.paths) {
     params.push(['entry', path]);
@@ -881,7 +882,7 @@ function deleteUrl(target: DeleteTarget): string {
 }
 
 /**
- * What deleting a folder or some files would do, counted before it is asked
+ * What deleting folders or files would do, counted before it is asked
  * for — `GET /api/delete`.
  *
  * The run's own plan over the Library as it now stands, so what it counts is
@@ -890,8 +891,8 @@ function deleteUrl(target: DeleteTarget): string {
  * back.
  */
 export interface DeletePreview {
-  /** The folder it would delete, and `null` where it names files only. */
-  folder: string | null;
+  /** The folders it would delete, in Entry Path order; empty where it names files only. */
+  folders: string[];
   /** The files it names, in Entry Path order. */
   paths: string[];
   /** How many files would leave the Library. */
@@ -1105,7 +1106,7 @@ function refusedPackOf(sent: RefusedPack): RefusedPack {
 function deleteOf(run: DeleteSent): Delete {
   return {
     run: run.run,
-    folder: run.folder,
+    folders: run.folders,
     paths: run.paths,
     entries: run.entries,
     bytes: run.bytes,

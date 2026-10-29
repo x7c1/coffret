@@ -18,8 +18,14 @@ export const COLOR = {
   /** The row of the tree focused by a click or the arrow keys. */
   selected: '#2b3d52',
   /**
-   * The focused row while files are picked out, where the fill is the box's:
-   * a ring in a brighter shade of `selected`.
+   * A row selected beside the focused one: a light tint of `selected`, so the
+   * focused row still stands out among them.
+   */
+  picked: '#1d2733',
+  /**
+   * The focused row where others are selected and it is not, after a
+   * ⌘/Ctrl+click took it out: a ring in a brighter shade of `selected`, so the
+   * keys still show where they stand without the row reading as selected.
    */
   focusRing: '#4f6f94',
   border: '#333',

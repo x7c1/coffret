@@ -150,7 +150,7 @@ function displacedFreeze(over: Partial<Omit<DisplacedFreeze, 'status'>> = {}): D
 function deleting(over: Over<Delete> = { status: 'done', stopped: null }): Delete {
   return {
     run: 1,
-    folder: null,
+    folders: [],
     paths: ['albums/a.jpg'],
     entries: 1,
     bytes: 2_000_000,

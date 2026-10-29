@@ -14,11 +14,11 @@ use crate::state::ServerState;
 
 use super::work::WorkDto;
 
-/// `POST /api/delete?path=<folder>` or `POST /api/delete?entry=<path>&entry=…`
+/// `POST /api/delete?path=<folder>&path=…&entry=<path>&entry=…`
 ///
-/// Takes a folder with everything under it, or individual files, out of the
-/// Library (spec: PK-9). It is what the explorer's "Delete…" arms once the
-/// person has been shown what [`GET /api/delete`](preview) counted and has
+/// Takes folders with everything under them, individual files, or both, out
+/// of the Library (spec: PK-9). It is what the explorer's "Delete…" arms once
+/// the person has been shown what [`GET /api/delete`](preview) counted and has
 /// said yes. One-file Containers and Packs whose every Entry is named are
 /// removed; Packs that keep other files are rebuilt around them (spec: PK-10);
 /// a Pack that keeps other files and whose key is lost, or that does not
@@ -26,10 +26,10 @@ use super::work::WorkDto;
 /// KL-17). No file on this device is touched.
 ///
 /// What it deletes is named in the query, the same way the preview names it:
-/// `?path=` for a folder, the spelling every route here names a folder with,
-/// and `?entry=` once per file. A preview is a `GET`, which a browser sends
-/// without a body, so the two read one shape and cannot come to name different
-/// things.
+/// `?path=` once per folder, the spelling every route here names a folder
+/// with, and `?entry=` once per file. A preview is a `GET`, which a browser
+/// sends without a body, so the two read one shape and cannot come to name
+/// different things.
 ///
 /// It answers with the work answer as it stands the moment the deletion is
 /// armed, `202`, rather than waiting for it: rebuilding a Pack reads it whole
@@ -50,7 +50,7 @@ pub async fn delete(
     Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }
 
-/// `GET /api/delete?path=<folder>` or `GET /api/delete?entry=<path>&entry=…`
+/// `GET /api/delete?path=<folder>&path=…&entry=<path>&entry=…`
 ///
 /// What [`POST /api/delete`](delete) of the same selection would do, counted
 /// before it is asked for: how many files and bytes leave the Library, how
@@ -107,28 +107,35 @@ async fn armable(state: &ServerState, query: &[(String, String)]) -> Result<Targ
     Ok(target)
 }
 
-/// What a query names: `?path=` once, for a folder, and `?entry=` once per
+/// What a query names: `?path=` once per folder, and `?entry=` once per
 /// file. Anything else in it is not read.
 fn target_of(query: &[(String, String)]) -> Result<Target, ApiError> {
-    let mut folder = None;
+    let mut folders = BTreeSet::new();
     let mut paths = BTreeSet::new();
     for (name, value) in query {
         match name.as_str() {
-            "path" => folder = folder_named(Some(value))?,
+            "path" => {
+                // An empty `?path=` names the Library root, which is no folder
+                // a deletion takes; one beside others adds nothing to them.
+                if let Some(folder) = folder_named(Some(value))? {
+                    folders.insert(folder);
+                }
+            }
             "entry" => {
                 paths.insert(shaped(value)?);
             }
             _ => {}
         }
     }
-    Ok(Target { folder, paths })
+    Ok(Target { folders, paths })
 }
 
 /// What a deletion would do, as the explorer shows it before it offers Delete.
 #[derive(Debug, Serialize)]
 pub struct PreviewDto {
-    /// The folder it would delete, and `null` where it names files only.
-    folder: Option<String>,
+    /// The folders it would delete, in Entry Path order; empty where it names
+    /// files only.
+    folders: Vec<String>,
     /// The files it names, in Entry Path order.
     paths: Vec<String>,
     /// How many files would leave the Library.
@@ -154,7 +161,7 @@ pub struct PreviewDto {
 impl PreviewDto {
     fn of(target: &Target, preview: &DeletePreview, after_current: bool) -> Self {
         Self {
-            folder: target.folder_named(),
+            folders: target.folders_named(),
             paths: target.paths_named(),
             entries: preview.entries,
             bytes: preview.bytes,

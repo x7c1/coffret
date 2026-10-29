@@ -166,7 +166,9 @@
       "bytes": 0,
       "entries": 0,
       "findings": [],
-      "folder": "albums",
+      "folders": [
+        "albums"
+      ],
       "missing": [],
       "paths": [],
       "rebuild_read": 0,
@@ -213,7 +215,7 @@
           "reason": "keyring_repaired"
         }
       ],
-      "folder": null,
+      "folders": [],
       "missing": [
         "albums/gone.jpg"
       ],
@@ -271,7 +273,9 @@
       "bytes": 0,
       "entries": 0,
       "findings": [],
-      "folder": "albums",
+      "folders": [
+        "albums"
+      ],
       "missing": [],
       "paths": [],
       "rebuild_read": 0,
@@ -310,7 +314,9 @@
       "bytes": 0,
       "entries": 0,
       "findings": [],
-      "folder": "albums",
+      "folders": [
+        "albums"
+      ],
       "missing": [],
       "paths": [],
       "rebuild_read": 0,

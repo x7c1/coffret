@@ -8,8 +8,9 @@ import { TAKEN } from './dropTarget';
 import { size, time } from './humanize';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
+import { NOTHING_SELECTED, type Selection } from './selection';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
-import { EMPTY_MAPPED_ROOT, END_SELECT, ON_THIS_DEVICE, SELECT, TreeTable } from './TreeTable';
+import { EMPTY_MAPPED_ROOT, ON_THIS_DEVICE, TreeTable } from './TreeTable';
 
 afterEach(cleanup);
 
@@ -94,6 +95,7 @@ function mount(shown: Listing, options: Options = {}) {
   }
   const calls = {
     onChange: vi.fn(),
+    onSelect: vi.fn(),
     onOpenFolder: vi.fn(),
     onOpenFile: vi.fn(),
     onUnsupported: vi.fn(),
@@ -114,6 +116,7 @@ function mount(shown: Listing, options: Options = {}) {
   };
   function Harness() {
     const [state, setState] = useState(start);
+    const [selection, setSelection] = useState<Selection>(NOTHING_SELECTED);
     const rows = treeRows({
       listing: (path) => {
         const refusal = options.refused?.[path];
@@ -135,6 +138,12 @@ function mount(shown: Listing, options: Options = {}) {
           calls.onChange(next);
           setState(next);
         }}
+        selection={selection}
+        onSelect={(next) => {
+          calls.onSelect(next);
+          setSelection(next);
+        }}
+        listingOf={(at) => held.get(at) ?? null}
         context={shown}
         prospectiveHere={options.prospectiveHere ?? false}
         prepared={options.prepared ?? []}
@@ -178,8 +187,13 @@ function menuOf(name: string): string[] {
   }
   fireEvent.click(mark);
   const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
-  fireEvent.click(mark);
+  fireEvent.keyDown(document, { key: 'Escape' });
   return items;
+}
+
+/** The names of the rows drawn as selected — tinted or focused — top to bottom. */
+function selectedNames(): string[] {
+  return [...document.querySelectorAll('tbody tr[aria-selected="true"]')].map((row) => row.getAttribute('title') ?? '');
 }
 
 /** The names of the rows on show, top to bottom. */
@@ -439,23 +453,70 @@ describe('the block over the rows', () => {
   });
 });
 
-describe('row menus', () => {
-  it('offers to delete a file and a folder, and hands over which', () => {
+describe('the actions menu', () => {
+  it('opens from a row’s "⋮" and from a right-click, and hands over what was chosen', () => {
     const { onDelete, onOpenFile } = mount(listing({ folders: [folder('2026')], files: [file('cover.png')] }));
-    for (const name of ['cover.png', '2026']) {
-      fireEvent.click(screen.getByLabelText(`actions for ${name}`));
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
-    }
+    fireEvent.click(screen.getByLabelText('actions for cover.png'));
+    expect(screen.getByRole('menu', { name: 'actions for cover.png' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    fireEvent.contextMenu(screen.getByTitle('2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
     expect(onDelete.mock.calls).toEqual([
-      [{ folder: null, paths: ['albums/cover.png'] }],
-      [{ folder: 'albums/2026', paths: [] }],
+      [{ folders: [], paths: ['albums/cover.png'] }],
+      [{ folders: ['albums/2026'], paths: [] }],
     ]);
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 
-  it('offers no deletion of a file only added here', () => {
-    mount(listing({ files: [file('new.png', { state: 'added', container: null })] }));
-    expect(menuOf('new.png')).toEqual([]);
+  it('opens a row in the reader, and packs and prepares in a folder, from the menu', () => {
+    const { onOpenFile, onPack, onNewFolder } = mount(listing({ folders: [folder('2026')], files: [file('cover.png')] }));
+    fireEvent.contextMenu(screen.getByTitle('cover.png'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open' }));
+    expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
+    fireEvent.contextMenu(screen.getByTitle('2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pack this folder…' }));
+    expect(onPack).toHaveBeenCalledWith('albums/2026');
+    fireEvent.contextMenu(screen.getByTitle('2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+    expect(onNewFolder).toHaveBeenCalledWith('albums/2026');
+  });
+
+  it('closes on Escape and on a press outside it', () => {
+    mount(listing({ files: [file('cover.png')] }));
+    fireEvent.contextMenu(screen.getByTitle('cover.png'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.contextMenu(screen.getByTitle('cover.png'));
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('walks its items with the arrows and chooses on Enter', () => {
+    const { onOpenFile } = mount(listing({ files: [file('cover.png')] }));
+    fireEvent.contextMenu(screen.getByTitle('cover.png'));
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    fireEvent.keyDown(menu, { key: 'Enter' });
+    expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
+  });
+
+  it('closes from the "⋮" it was opened by, and shades the first item when opened from the keys', () => {
+    const { onOpenFile } = mount(listing({ files: [file('cover.png')] }));
+    const mark = screen.getByLabelText('actions for cover.png');
+    fireEvent.click(mark, { detail: 1 });
+    fireEvent.click(mark, { detail: 1 });
+    expect(screen.queryByRole('menu')).toBeNull();
+    // `Enter` on the "⋮" is a click with no pointer behind it.
+    fireEvent.click(mark, { detail: 0 });
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Enter' });
+    expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
+  });
+
+  it('draws no "⋮" on a row with nothing to offer', () => {
+    mount(listing({ files: [file('new.pdf', { state: 'added', container: null, openable: false })] }));
+    expect(menuOf('new.pdf')).toEqual([]);
   });
 
   it('marks a folder the Library does not hold yet, and offers to forget only a prepared one', () => {
@@ -473,28 +534,58 @@ describe('row menus', () => {
   });
 });
 
-describe('picking files out', () => {
-  it('does not draw the row focused before "Select" as picked', () => {
-    mount(listing({ files: [file('a.png'), file('b.png')] }), { focus: fileKey('albums/a.png') });
-    expect(screen.getByTitle('a.png').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByText(SELECT));
-    expect(screen.getByTitle('a.png').getAttribute('aria-selected')).toBe('false');
-    fireEvent.click(screen.getByLabelText('select a.png'));
-    expect(screen.getByTitle('a.png').getAttribute('aria-selected')).toBe('true');
+describe('selecting rows with modifier keys', () => {
+  const four = () => listing({ files: [file('a.png'), file('b.png'), file('c.png'), file('d.png')] });
+
+  it('selects a range with Shift+click and one row more with ⌘/Ctrl+click, and drops them on a plain click', () => {
+    mount(four(), { focus: fileKey('albums/a.png') });
+    fireEvent.click(screen.getByTitle('c.png'), { shiftKey: true });
+    expect(selectedNames()).toEqual(['a.png', 'b.png', 'c.png']);
+    // The focused row keeps its strong highlight; the others are tinted.
+    expect(screen.getByTitle('c.png').style.background).not.toBe(screen.getByTitle('a.png').style.background);
+    fireEvent.click(screen.getByTitle('b.png'), { metaKey: true });
+    // Taken out, the focused row is drawn as not selected: the details pane
+    // and the menu act on the rows selected, which it no longer is.
+    expect(selectedNames()).toEqual(['a.png', 'c.png']);
+    fireEvent.click(screen.getByTitle('d.png'), { ctrlKey: true });
+    expect(selectedNames()).toEqual(['a.png', 'c.png', 'd.png']);
+    fireEvent.click(screen.getByTitle('b.png'), { ctrlKey: true });
+    expect(selectedNames()).toEqual(['a.png', 'b.png', 'c.png', 'd.png']);
+    fireEvent.click(screen.getByTitle('a.png'));
+    expect(selectedNames()).toEqual(['a.png']);
   });
 
-  it('shows no box until "Select" is pressed, and deletes the files picked together', () => {
-    const { onDelete } = mount(listing({ folders: [folder('2026')], files: [file('a.png'), file('b.png')] }));
-    expect(screen.queryByLabelText('select a.png')).toBeNull();
-    fireEvent.click(screen.getByText(SELECT));
-    // No box on a folder row: a folder is deleted from its own menu.
-    expect(screen.queryByLabelText('select 2026')).toBeNull();
-    fireEvent.click(screen.getByLabelText('select b.png'));
-    fireEvent.click(screen.getByTitle('a.png'));
-    expect(said()).toContain('2 selected');
-    fireEvent.click(within(document.querySelector('thead') as HTMLElement).getByText('Delete…'));
-    expect(onDelete).toHaveBeenCalledWith({ folder: null, paths: ['albums/a.png', 'albums/b.png'] });
-    expect(screen.queryByText(END_SELECT)).toBeNull();
+  it('grows the range with Shift+↓ and drops it on a plain arrow', () => {
+    const { tree } = mount(four(), { focus: fileKey('albums/a.png') });
+    fireEvent.keyDown(tree, { key: 'ArrowDown', shiftKey: true });
+    fireEvent.keyDown(tree, { key: 'ArrowDown', shiftKey: true });
+    expect(selectedNames()).toEqual(['a.png', 'b.png', 'c.png']);
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    expect(selectedNames()).toEqual(['d.png']);
+  });
+
+  it('acts on the whole selection from a row inside it, and on a row outside it alone', () => {
+    const { onDelete } = mount(four(), { focus: fileKey('albums/a.png') });
+    fireEvent.click(screen.getByTitle('c.png'), { shiftKey: true });
+    fireEvent.contextMenu(screen.getByTitle('b.png'));
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Delete 3 items…']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete 3 items…' }));
+    expect(onDelete).toHaveBeenLastCalledWith({
+      folders: [],
+      paths: ['albums/a.png', 'albums/b.png', 'albums/c.png'],
+    });
+    expect(selectedNames()).toEqual(['a.png', 'b.png', 'c.png']);
+
+    fireEvent.contextMenu(screen.getByTitle('d.png'));
+    expect(selectedNames()).toEqual(['d.png']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
+    expect(onDelete).toHaveBeenLastCalledWith({ folders: [], paths: ['albums/d.png'] });
+  });
+
+  it('draws no "Select" mode and no boxes', () => {
+    mount(four());
+    expect(screen.queryByText('Select')).toBeNull();
+    expect(screen.queryAllByRole('checkbox')).toEqual([]);
   });
 });
 

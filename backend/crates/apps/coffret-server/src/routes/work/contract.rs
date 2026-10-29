@@ -10,6 +10,7 @@
 //! last a tick on a live server. The serialization is the route's own: these
 //! are the same DTOs, built by the same `of` functions the route calls.
 
+use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
@@ -293,12 +294,12 @@ fn deleting(answer: WorkDto, run: DeleteRun, waiting: usize) -> WorkDto {
 fn deletion(run: u64, folder: bool, status: DeleteStatus) -> DeleteRun {
     let target = if folder {
         Target {
-            folder: Some(entry_path("albums")),
+            folders: BTreeSet::from([entry_path("albums")]),
             paths: Default::default(),
         }
     } else {
         Target {
-            folder: None,
+            folders: Default::default(),
             paths: [
                 entry_path("books/vol-1/page-002.jpg"),
                 entry_path("albums/a.jpg"),

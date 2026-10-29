@@ -66,6 +66,7 @@ import { askToPack, type PackQuestion } from './packFolder';
 import { PackFolderConfirm } from './PackFolderConfirm';
 import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
+import { NOTHING_SELECTED, selectedRows, type Selection } from './selection';
 import { askToReconnect, grantRenewed } from './reconnect';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Edits, Numbering } from './renumber';
@@ -121,6 +122,10 @@ export function App() {
   const [tree, setTree] = useState<TreeState>(() =>
     restored({ focus: null, expanded: new Set() }, view),
   );
+  // The rows selected besides the focused one, with modifier keys (see
+  // [`selection`](./selection)). Read against the rows on show, so a row that
+  // left the tree leaves it too.
+  const [selection, setSelection] = useState<Selection>(NOTHING_SELECTED);
   const [fetching, setFetching] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   // A deletion's notice may carry the target a *try again* beside it asks about
@@ -758,6 +763,9 @@ export function App() {
   // judged before anything is drawn (see [`prepare`](./prospective)). `null`
   // while nothing is being asked.
   const [namingIn, setNamingIn] = useState<string | null>(null);
+  // The folder just created there, which the focus moves to once its row is
+  // drawn (below), so that the next drop or "New folder…" is about it.
+  const [focusPrepared, setFocusPrepared] = useState<string | null>(null);
   // Counts each time the dialog is opened or closed, so that a name still being
   // judged when the dialog was let go of — Cancel or Escape while the parent's
   // listing is out — prepares nothing, as the dialog says it will not.
@@ -789,6 +797,7 @@ export function App() {
         return answer.refused;
       }
       setPrepared((held) => (held.includes(answer.path) ? held : [...held, answer.path]));
+      setFocusPrepared(answer.path);
       closeNaming();
       return null;
     },
@@ -966,6 +975,9 @@ export function App() {
         start: async (asked) => {
           await startDelete(asked);
           deletedHere.current = true;
+          // The rows it named are leaving; a selection left standing on them
+          // would offer them a second time.
+          setSelection(NOTHING_SELECTED);
           follow();
         },
         refuse: (cause) => showNotice(refusedNotice(target, cause, said(cause))),
@@ -1010,7 +1022,7 @@ export function App() {
     if (on !== '') {
       reloadRoot();
     }
-    if (ended.folder !== null && (on === ended.folder || on.startsWith(`${ended.folder}/`))) {
+    if (ended.folders.some((folder) => on === folder || on.startsWith(`${folder}/`))) {
       leaving.current = true;
     }
     if (deletedHere.current && announced.current !== ended.run) {
@@ -1352,11 +1364,20 @@ export function App() {
     [],
   );
 
-  // What the details pane describes: the rows selected, which is the focused
-  // row until several can be selected at once.
+  // What the details pane describes: the rows selected — the focused row
+  // alone where nothing else is (see [`selectedRows`](./selection)).
   const selected = useMemo(
-    () => rows.filter((row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === tree.focus),
-    [rows, tree.focus],
+    () => selectedRows(rows, { focus: tree.focus, selection }),
+    [rows, tree.focus, selection],
+  );
+  // The listing of a folder where it is on hand, which says whether the reader
+  // can show the folder: the actions menu offers Open only there.
+  const readyListing = useCallback(
+    (folder: string) => {
+      const held = heldListing(folder);
+      return held?.status === 'ready' ? held.value : null;
+    },
+    [heldListing],
   );
   const shownOf = useCallback(
     (row: FileRow) => rowFill(row.file, row.in.path, fillOf(row.in.path)),
@@ -1382,6 +1403,22 @@ export function App() {
     },
     [openFolder, openFile, unsupported, unmapped],
   );
+  // A folder created with "New folder…" is focused once its row is drawn: the
+  // rows above it open first (see where `prospective` is followed), and the
+  // listings they ask for may still be out when the dialog closes.
+  useEffect(() => {
+    if (focusPrepared === null) {
+      return;
+    }
+    const key = folderKey(focusPrepared);
+    if (!rows.some((row) => row.key === key)) {
+      return;
+    }
+    setFocusPrepared(null);
+    changeTree({ ...tree, focus: key });
+    setSelection({ keys: new Set(), anchor: key });
+    treeArea.current?.focus();
+  }, [focusPrepared, rows, tree, changeTree]);
 
   // Closing the sheet leaves the focus and the folder where they are.
   const closeSheet = useCallback(() => go({ folder: view.folder, open: null }), [go, view.folder]);
@@ -1531,6 +1568,9 @@ export function App() {
                   rows={rows}
                   state={tree}
                   onChange={changeTree}
+                  selection={selection}
+                  onSelect={setSelection}
+                  listingOf={readyListing}
                   context={listed}
                   prospectiveHere={prospective.includes(view.folder)}
                   prepared={prepared}
@@ -1564,6 +1604,7 @@ export function App() {
                   shownOf={shownOf}
                   uploadStoppedOf={uploadStoppedOf}
                   onOpen={openFromPane}
+                  onDelete={deleteEntries}
                 />
                 {sheetRow !== undefined && (
                   <ReaderView

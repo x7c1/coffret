@@ -65,7 +65,7 @@ fn finish(state: &ServerState, run: DeleteRun, started: Instant) {
     info!(
         operation = "delete",
         outcome = run.status.as_str(),
-        folder = run.target.folder.is_some(),
+        folders = run.target.folders.len(),
         paths = run.target.paths.len(),
         entries = run.entries,
         removed = run.removed,

@@ -32,6 +32,20 @@
         background: #222;
       }
 
+      /* A row's "⋮" shows on the row under the pointer and on the focused
+         row, and stays while the menu it opened is open. */
+      tr.row .row-actions {
+        visibility: hidden;
+      }
+      tr.row:hover .row-actions,
+      tr.row[data-focused] .row-actions,
+      tr.row .row-actions[aria-expanded='true'] {
+        visibility: visible;
+      }
+      tr.row .row-actions:hover {
+        background: #2a2a2a;
+      }
+
       /* The details pane gives its width back to the tree on a narrow
          window: the tree is the screen, and the pane only says more about a
          row of it. A width and nothing to hold, so here rather than inline. */
