@@ -73,6 +73,6 @@ The end-to-end journeys (`frontend/packages/apps/e2e/`, run by `make e2e-it` and
 
 ### Before merge (verified outside the check command)
 
-- [ ] On `make local`, the agent opens the sheet on a book, walks its pages
+- [x] On `make local`, the agent opens the sheet on a book, walks its pages
   with ↑/↓, steps onto the book folder and a sibling, and records in the PR
   what the sheet showed, including that the tree strip stays visible.
