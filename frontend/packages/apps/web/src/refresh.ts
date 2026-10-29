@@ -26,7 +26,7 @@ export interface Refreshing {
   line: (line: string | null) => void;
   /** Says what refused it, and `null` clears what refused the last one. */
   trouble: (line: string | null) => void;
-  /** Asks the folder tree and the open folder what they hold now. */
+  /** Asks the Library's folders and every listing the tree shows what they hold now. */
   reload: () => void;
   /**
    * Says the catalog has reached the Library's head, so nothing is waiting any

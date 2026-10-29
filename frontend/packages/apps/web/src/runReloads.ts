@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import type { Freeze, Sync } from '@coffret/api';
 
 /**
- * Asks for the open folder's listing and for the folder tree again as the sync
+ * Asks for the listings the tree shows and for the Library's folders again as the sync
  * and the freeze move.
  *
  * The rows an added file has are the folder's own answer about it, and the

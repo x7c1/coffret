@@ -16,7 +16,16 @@
 // started, so every folder the earlier journeys walked was on the screen because
 // of a startup catch-up.
 
-import { chip, expect, libraryName, openExplorer, row, setting, shot, test } from './journey';
+import {
+  expect,
+  expectRemote,
+  libraryName,
+  openExplorer,
+  row,
+  setting,
+  shot,
+  test,
+} from './journey';
 import { commitElsewhere } from './uploader';
 
 /** What the other device commits while nothing here is listening. */
@@ -40,7 +49,7 @@ test('come back to a Library another device has moved on', async ({ page, coffre
   // No button pressed and nothing polled: the server caught the catalog up as it
   // opened the Library, so the first listing it answers is the Library as it is.
   await expect(row(page, ADDED)).toHaveCount(1);
-  await expect(chip(page, ADDED)).toHaveText('remote');
+  await expectRemote(page, ADDED);
   await expect(libraryName(page)).toBeVisible();
   await shot(page, '02-the-row-was-there-on-the-first-listing');
 });

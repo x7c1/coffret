@@ -602,11 +602,12 @@ function work(value: unknown, where: string): Work {
 }
 
 function listedFolder(value: unknown, where: string): ListedFolder {
-  const fields = object(value, where, ['name', 'path', 'mapped']);
+  const fields = object(value, where, ['name', 'path', 'mapped', 'present_throughout']);
   return {
     name: string(fields.name, `${where}.name`),
     path: string(fields.path, `${where}.path`),
     mapped: boolean(fields.mapped, `${where}.mapped`),
+    present_throughout: boolean(fields.present_throughout, `${where}.present_throughout`),
   };
 }
 

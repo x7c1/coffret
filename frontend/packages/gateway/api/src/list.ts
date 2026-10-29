@@ -29,6 +29,14 @@ export interface ListedFolder {
    * parent's answer.
    */
   mapped: boolean;
+  /**
+   * Whether this device has every file at every depth below it (spec: EP-10):
+   * the promise that the whole folder reads offline.
+   *
+   * The server's answer rather than this client's, because a page holds the
+   * listings it asked for and not every descendant.
+   */
+  present_throughout: boolean;
 }
 
 /** One Entry as a row in a listing. */

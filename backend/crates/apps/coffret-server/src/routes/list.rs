@@ -90,6 +90,14 @@ struct FolderDto {
     /// it. In the row because mappings are made at the top level, so the
     /// children of the Library root are where two siblings can differ.
     mapped: bool,
+    /// Whether this device has every file at every depth below it
+    /// (spec: EP-10), which the explorer marks as the whole folder reading
+    /// offline.
+    ///
+    /// Here rather than worked out by the browser, which holds the listings it
+    /// has asked for and not every descendant; the catalog answers it out of
+    /// the same read as the rest of this listing.
+    present_throughout: bool,
 }
 
 #[derive(Serialize)]
@@ -253,6 +261,7 @@ fn folder_dto(folder: &ChildFolder) -> FolderDto {
         name: folder.name.clone(),
         path: folder.path.as_str().to_owned(),
         mapped: folder.mapped,
+        present_throughout: folder.present_throughout,
     }
 }
 

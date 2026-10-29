@@ -35,8 +35,8 @@ export function Banner({
 }
 
 /**
- * Said while files are dragged over a drop target — the file list, or a row of
- * the folder tree: what letting go of them there will do, as `dropLine` words
+ * Said while files are dragged over the tree — over a folder's row, or over the
+ * rest of it for the folder the focus is in: what letting go of them there will do, as `dropLine` words
  * it. A folder that takes no drop says so in the refused colour the outline
  * around it is drawn in, and one not known yet either way in a neutral one.
  */

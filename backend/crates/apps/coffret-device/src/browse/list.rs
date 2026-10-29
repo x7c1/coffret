@@ -19,6 +19,11 @@ impl OpenLibrary {
     /// EP-10) — the mappings answer the separate question of whether anything
     /// here could be fetched, which is [`mapped`](FolderListing::mapped).
     ///
+    /// The same present records answer for each child folder whether every
+    /// Entry at every depth below it is here
+    /// ([`present_throughout`](ChildFolder::present_throughout)): the scan already
+    /// covers the whole subtree, so that answer reads nothing more.
+    ///
     /// An Entry standing at exactly the folder's own path is not in the listing.
     /// The Library admits one — nothing stops a file and a folder sharing a
     /// path, since neither is a thing the Library has — and it is not a child of
@@ -56,8 +61,9 @@ impl OpenLibrary {
         };
         let reach = Reach::of(mappings);
 
-        let mut folders = Vec::new();
-        let mut named: BTreeSet<EntryPath> = BTreeSet::new();
+        let mut folders: Vec<ChildFolder> = Vec::new();
+        // Each child folder named so far, and where it stands in `folders`.
+        let mut named: BTreeMap<EntryPath, usize> = BTreeMap::new();
         let mut files = Vec::new();
         for location in &entries {
             let path = location.path();
@@ -88,12 +94,20 @@ impl OpenLibrary {
                 // this folder at all.
                 continue;
             };
-            if named.insert(child.clone()) {
-                folders.push(ChildFolder {
-                    name: child.name().to_owned(),
-                    mapped: reach.reaches(Some(&child)),
-                    path: child,
-                });
+            // Whether this device has the Entry decides, with every other
+            // Entry under the same child, whether that child is here whole.
+            let here = present.contains(path);
+            match named.get(&child) {
+                Some(&at) => folders[at].present_throughout &= here,
+                None => {
+                    named.insert(child.clone(), folders.len());
+                    folders.push(ChildFolder {
+                        name: child.name().to_owned(),
+                        mapped: reach.reaches(Some(&child)),
+                        path: child,
+                        present_throughout: here,
+                    });
+                }
             }
         }
 
@@ -102,7 +116,7 @@ impl OpenLibrary {
         // one: the explorer offers it as a place to drop into.
         let empty_mapped_prefixes: Vec<EntryPath> = prefixes
             .into_iter()
-            .filter(|prefix| !named.contains(prefix))
+            .filter(|prefix| !named.contains_key(prefix))
             .collect();
 
         debug!(
