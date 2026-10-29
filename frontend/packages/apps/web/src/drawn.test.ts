@@ -262,3 +262,89 @@ it('keeps what it fetches once the reader is here again', async () => {
   expect(revoked).toEqual([]);
   expect(drawn.held('albums/1.png')).toBe(url);
 });
+
+/** A device without the file: every peek refused, as the server refuses one. */
+function refusingPeeks(): Fetching & { asked: string[] } {
+  const asked: string[] = [];
+  const peeking = (path: string) => {
+    asked.push(path);
+    return Promise.reject(new Refusal('no_such_entry', 404, 'this device holds no file at that path'));
+  };
+  return Object.assign(peeking, { asked });
+}
+
+// A folder's cover is peeked, and is often its first page too. The refusal it
+// earns says the file is not here yet; the person stepping into the book reads
+// it, and that read must reach the server rather than be handed the refusal.
+it('reads a page whose peek was refused, rather than answering with the refusal', async () => {
+  const reading = answers();
+  const peeking = refusingPeeks();
+  const drawn = drawnPages(reading, peeking);
+
+  await expect(drawn.load('albums/1.png', true)).rejects.toThrow('this device holds no file');
+  const url = await drawn.load('albums/1.png');
+
+  expect(peeking.asked).toEqual(['albums/1.png']);
+  expect(reading.asked).toEqual(['albums/1.png']);
+  expect(drawn.held('albums/1.png')).toBe(url);
+});
+
+// The same while the peek is still out: the read does not wait on it.
+it('does not make a read wait on a peek still in flight', async () => {
+  const reading = answers();
+  let refuse = () => undefined as void;
+  const drawn = drawnPages(
+    reading,
+    () =>
+      new Promise<Blob>((_, reject) => {
+        refuse = () => reject(new Refusal('no_such_entry', 404, 'this device holds no file at that path'));
+      }),
+  );
+
+  const peeked = drawn.load('albums/1.png', true);
+  const read = drawn.load('albums/1.png');
+  refuse();
+
+  await expect(peeked).rejects.toThrow('this device holds no file');
+  const url = await read;
+  expect(url).toBeDefined();
+  expect(reading.asked).toEqual(['albums/1.png']);
+  expect(drawn.held('albums/1.png')).toBe(url);
+});
+
+// Whereas a peek may wait on a read, whose bytes answer it as well; and a cover
+// a peek brought back is the first page already drawn.
+it('answers a peek out of a read, and a read out of a peek that was answered', async () => {
+  const reading = answers();
+  const peeking = answers();
+  const drawn = drawnPages(reading, peeking);
+
+  const [read, peeked] = await Promise.all([drawn.load('albums/1.png'), drawn.load('albums/1.png', true)]);
+  expect(peeked).toBe(read);
+  expect(peeking.asked).toEqual([]);
+
+  const cover = await drawn.load('albums/2.png', true);
+  expect(await drawn.load('albums/2.png')).toBe(cover);
+  expect(reading.asked).toEqual(['albums/1.png']);
+});
+
+// A peek and the read that overtook it can both land: one URL is held and the
+// other revoked, never two over the same page with one of them kept nowhere.
+it('holds one page where a peek and a read of it both land', async () => {
+  let answerPeek = () => undefined as void;
+  const drawn = drawnPages(
+    () => Promise.resolve(bytes()),
+    () =>
+      new Promise<Blob>((resolve) => {
+        answerPeek = () => resolve(bytes());
+      }),
+  );
+
+  const peeked = drawn.load('albums/1.png', true);
+  const read = await drawn.load('albums/1.png');
+  answerPeek();
+
+  expect(await peeked).toBe(read);
+  expect(revoked).toEqual(['blob:2']);
+  expect(drawn.held('albums/1.png')).toBe(read);
+});

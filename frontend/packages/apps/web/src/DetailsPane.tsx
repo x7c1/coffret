@@ -40,8 +40,9 @@ import type { Asked } from './useAsked';
  *   for as a peek (see [`peekFile`](../../../gateway/api/src/file.ts)): moving
  *   the focus down a list is not opening anything, so it fetches nothing from
  *   Storage and sets no folder coming;
- * - where the row stands, its name, and Open where the reader can show it —
- *   what `Enter` does;
+ * - where the row stands, its name, and Open where the reader can show the row
+ *   ([`opensInReader`](./details)) — what `Enter` does there: the reader's
+ *   sheet on the row;
  * - the facts, in words that fit any kind of file: Kind, Items (a folder's),
  *   Size (a folder's being everything below it), Modified (a folder's being
  *   the newest file's anywhere below it), and whether it is on this device.

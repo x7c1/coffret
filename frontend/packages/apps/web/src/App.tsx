@@ -31,7 +31,7 @@ import {
   prospectiveFolders,
 } from './prospective';
 import { DeleteConfirm } from './DeleteConfirm';
-import { uploadStopped } from './details';
+import { firstImage, uploadStopped } from './details';
 import { DetailsPane } from './DetailsPane';
 import {
   askToDelete,
@@ -48,7 +48,7 @@ import { DropConfirm } from './DropConfirm';
 import { mappedAt } from './dropTarget';
 import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
-import { parseHash, toHash, type ViewState } from './hash';
+import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
 import { NewFolderDialog } from './NewFolderDialog';
@@ -64,7 +64,6 @@ import {
 } from './packChoice';
 import { askToPack, type PackQuestion } from './packFolder';
 import { PackFolderConfirm } from './PackFolderConfirm';
-import { pageAt, pagesOf } from './pages';
 import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
 import { askToReconnect, grantRenewed } from './reconnect';
@@ -72,6 +71,7 @@ import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Edits, Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
+import { counterOf, sheetKey, sheetOn } from './sheet';
 import { Region, TRY_AGAIN } from './Region';
 import { StatusBar } from './StatusBar';
 import { heldAfter, strandedFolders } from './stranded';
@@ -80,8 +80,8 @@ import { useRunReloads } from './runReloads';
 import {
   ancestry,
   contextOf,
-  fileKey,
   folderKey,
+  keyed,
   shownFolders,
   treeRows,
   type FileRow,
@@ -97,11 +97,12 @@ import { said, useAsked, type Asked } from './useAsked';
 
 /**
  * The explorer's one screen: the Library as one tree of folders and files (see
- * [`TreeTable`](./TreeTable)) and a status bar — with the reader over the tree
- * when a file is open.
+ * [`TreeTable`](./TreeTable)) and a status bar — with the reader's sheet over
+ * the right of the tree while it is open, following the focused row (see
+ * [`ReaderView`](./ReaderView)).
  *
  * Where the screen is standing lives in the URL — the folder the focus is in,
- * and the file the reader is open at — so a reload and the back button both
+ * and the row the reader's sheet is open on — so a reload and the back button both
  * come back to it rather than to the top of the Library. Walking the tree moves
  * the URL without adding to the history: the back button steps between the
  * places a person opened, not between the rows the arrow keys passed.
@@ -161,19 +162,20 @@ export function App() {
       setNotice(null);
     }
     const current = parseHash(window.location.hash);
-    if (current.folder === next.folder && current.open === next.open) {
+    if (toHash(current) === toHash(next)) {
       return;
     }
     // A page turn replaces the entry it came from; everything else — a folder,
     // opening the reader, closing it — adds one. Otherwise reading fifty pages
     // would leave fifty entries between a reader and the folder they were in,
-    // and the back button would walk them one at a time.
+    // and the back button would walk them one at a time. A turn is the sheet
+    // following the focus, which `changeTree` asks to replace anyway; this
+    // catches the one made by any other road.
     //
     // `replace` is for a move nobody asked for. An entry for one of those is an
     // entry the back button lands on and is sent straight out of again, which
     // from the outside is a back button that does nothing.
-    const turning =
-      current.folder === next.folder && current.open !== null && next.open !== null;
+    const turning = current.folder === next.folder && sheetOpen(current) && sheetOpen(next);
     const how = replace || turning ? 'replaceState' : 'pushState';
     window.history[how](null, '', toHash(next));
   }, []);
@@ -196,7 +198,7 @@ export function App() {
   //
   // Above the three regions below because the screen's one try-again reaches it
   // too, and a callback cannot be named before it exists.
-  const work = useWork(view.open !== null);
+  const work = useWork(sheetOpen(view));
   const fill = work.fill;
   const sync = work.sync;
   const freeze = work.freeze;
@@ -224,7 +226,7 @@ export function App() {
   const reloadListings = listings.reload;
   const heldListing = listings.listing;
   const rootState: Asked<Listing> = heldListing('') ?? LOADING;
-  // The folder the screen's actions are about, which the reader turns through.
+  // The folder the screen's actions are about.
   const listing = {
     state: heldListing(view.folder) ?? LOADING,
   };
@@ -288,9 +290,10 @@ export function App() {
   // showing whatever its next request earns.
   //
   // What it ends is the holding and not the reading. The refused listing ends
-  // that, a moment later and by itself: `pages` below comes out of the listing's
-  // answer, so a folder that cannot be listed has no page open in it and the
-  // reader comes off the screen, leaving the refusal standing over the list.
+  // that, a moment later and by itself: the row the sheet stands on (`sheetRow`
+  // below) is a row of the tree, drawn out of the listings' answers, so a
+  // folder that cannot be listed has no row open in it and the reader comes
+  // off the screen, leaving the refusal standing over the list.
   // The discard does not wait for that answer — plaintext held for the width of
   // a round trip is plaintext held past the key.
   //
@@ -307,8 +310,8 @@ export function App() {
   // back to unlocked. Which answers are that news is
   // [`unlockLanded`](./lock); what it does is ask the three questions again,
   // so the tree and the listing come back without anybody pressing *try
-  // again* — and with the listing, the page the reader was on, since the reader
-  // is drawn from it and the URL still names the page. What the last press of
+  // again* — and with the listing, the row the reader was on, since the reader
+  // is drawn from it and the URL still names the row. What the last press of
   // *unlock* came to goes too: it was about a locked Library.
   const [discarded, setDiscarded] = useState(0);
   const [unlockSaid, setUnlockSaid] = useState<string | null>(null);
@@ -1239,15 +1242,16 @@ export function App() {
     work.catalog?.state === 'behind' &&
     ranOut(work.catalog.stopped);
 
-  const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
-  const openAt = view.open === null ? null : pageAt(pages, view.open);
+  // The row the reader's sheet is open on, by its key, or `null` while it is
+  // closed.
+  const openKey = sheetKey(view);
 
-  // The reader follows into the tree: the row it is open at is the focused one,
-  // with every folder above it open, so closing the reader comes back to the
-  // row the reading stopped at — and the tree scrolls to it — rather than to
-  // the top of a folder of two hundred names.
+  // The reader and the tree agree: the row the sheet is open on is the focused
+  // one, with every folder above it open — so a sheet restored from the URL
+  // stands on a row of the tree, and closing it leaves the focus where the
+  // reading stopped, the tree scrolled to it.
   useEffect(() => {
-    if (view.open !== null) {
+    if (sheetOpen(view)) {
       setTree((held) => restored(held, view));
     }
   }, [view]);
@@ -1265,20 +1269,31 @@ export function App() {
   );
 
   // The focus moved or a folder opened or closed: the URL follows the folder
-  // the focus is in, without a history entry of its own (see `contextOf`).
+  // the focus is in, without a history entry of its own (see `contextOf`) —
+  // and, while the reader's sheet is open, the row it is on, which is the
+  // sheet following the focus: walking the page rows of a book is paging.
+  const sheeted = sheetOpen(view);
   const changeTree = useCallback(
     (next: TreeState) => {
       setTree(next);
       const folder = contextOf(next);
-      if (folder !== view.folder) {
+      if (sheeted && next.focus !== null) {
+        go(sheetOn(folder, keyed(next.focus)), true);
+      } else if (folder !== view.folder || sheeted) {
         go({ folder, open: null }, true);
       }
     },
-    [view.folder, go],
+    [view.folder, sheeted, go],
   );
 
-  // A folder row opened: the reader, at the folder's first page — and where it
-  // has none, or is not on this device, the sentence saying why nothing opened.
+  // A folder row opened: the reader's sheet, on the folder's cover, with the
+  // focus left on the folder's row and the folder left open or closed as it
+  // was — and where it has no image directly in it, or is not on this device,
+  // the sentence saying why nothing opened. The same test as the details
+  // pane's Open ([`opensInReader`](./details)), asked of the folder's own
+  // listing: the sheet opens only where it has a picture to start on. Once
+  // open, it follows the focus onto such a folder all the same, and says there
+  // that it holds none.
   const openFolder = useCallback(
     (path: string) => {
       const name = path.slice(path.lastIndexOf('/') + 1);
@@ -1293,23 +1308,28 @@ export function App() {
           );
           return;
         }
-        const first = pagesOf(where.files)[0];
-        if (first === undefined) {
+        if (firstImage(where) === null) {
           setNotice(`${name} holds nothing the reader can show — open a folder of pages, or a file`);
           return;
         }
-        go({ folder: path, open: first.path });
+        // The folder the screen's actions are about stays the one it was:
+        // the folder itself where it is open, the one it stands in where not.
+        const folder = tree.expanded.has(path) ? path : parentOf(path);
+        go(sheetOn(folder, { kind: 'folder', path }));
       };
       listingOf(path).then(show, (refused: unknown) =>
         setNotice(`${name} was not opened — ${said(refused)}`),
       );
     },
-    [listingOf, go],
+    [listingOf, go, tree.expanded],
   );
 
   // The openers (see `opened`) shared by the tree's own gestures and the
   // details pane's Open, so that the two are one gesture.
-  const openFile = useCallback((path: string) => go({ folder: parentOf(path), open: path }), [go]);
+  const openFile = useCallback(
+    (path: string) => go(sheetOn(parentOf(path), { kind: 'file', path })),
+    [go],
+  );
   const unsupported = useCallback(
     (file: ListedFile) => setNotice(`${file.name} — preview of this format is not supported yet`),
     [],
@@ -1346,24 +1366,66 @@ export function App() {
     (file: ListedFile) => uploadStopped(file, sync, freeze),
     [sync, freeze],
   );
+  // The tree's element, which Open from the details pane hands the focus back
+  // to: the sheet follows the tree's focus, and the arrows that move it are
+  // the tree's keys.
+  const treeArea = useRef<HTMLDivElement>(null);
   const openFromPane = useCallback(
-    (row: FolderRow | FileRow) =>
-      opened(row, { onOpenFolder: openFolder, onOpenFile: openFile, onUnsupported: unsupported, onUnmapped: unmapped }),
+    (row: FolderRow | FileRow) => {
+      opened(row, {
+        onOpenFolder: openFolder,
+        onOpenFile: openFile,
+        onUnsupported: unsupported,
+        onUnmapped: unmapped,
+      });
+      treeArea.current?.focus();
+    },
     [openFolder, openFile, unsupported, unmapped],
   );
 
-  // A hash naming a file this folder does not offer — the Entry is gone, or the
-  // URL was written by hand and names a row a browser draws nothing from. The
-  // list is the answer, and the URL is put back in step with it.
+  // Closing the sheet leaves the focus and the folder where they are.
+  const closeSheet = useCallback(() => go({ folder: view.folder, open: null }), [go, view.folder]);
+  // A picture the sheet fetched is on this device now: the listing it stands
+  // in, and the ones above it, which answer for whether it is here whole.
+  const fetchedInto = useCallback((path: string) => reloadAbove(parentOf(path)), [reloadAbove]);
+
+  // What the reader's sheet stands on: the row the URL has it open on, once
+  // that row is drawn — a sheet restored from the URL waits for the listings
+  // above it — and where it stands among the rows beside it.
+  const sheetRow = useMemo(
+    () =>
+      openKey === null
+        ? undefined
+        : rows.find((row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === openKey),
+    [rows, openKey],
+  );
+  const counter = useMemo(() => (openKey === null ? null : counterOf(rows, openKey)), [rows, openKey]);
+  // Whether a dialog stands over the screen, whose `Escape` is its own and not
+  // the sheet's.
+  const dialogUp =
+    mapping !== null || namingIn !== null || asking !== null || packAsking !== null || deleteAsking !== null;
+
+  // A hash naming a row the folder it stands in does not hold — the Entry is
+  // gone, or the URL was written by hand. The tree is the answer, and the URL
+  // is put back in step with it.
   //
-  // Against this folder's own listing and no other. The back button, the
+  // Against that folder's own listing and no other. The back button, the
   // forward button, and a hash typed into the address bar can move the folder
-  // and the open file in one step, and until the listing for the new one lands
-  // the rows on hand are still the folder the screen just left — which offers
-  // no such file for the plain reason that the file is not in it. Judged
+  // and the open row in one step, and until the listing for the new one lands
+  // the rows on hand are still the folder the screen just left — which holds
+  // no such row for the plain reason that the row is not in it. Judged
   // against those, every such move would close the reader on the way into it
   // and write the correction over the very history entry it arrived by.
-  const stale = view.open !== null && openAt === null && listed?.path === view.folder;
+  const sheetPath = view.open ?? view.cover;
+  const parentAsked = sheetPath === undefined ? undefined : heldListing(parentOf(sheetPath));
+  const stale =
+    parentAsked?.status === 'ready' &&
+    (view.open !== null
+      ? !parentAsked.value.files.some((file) => file.path === view.open)
+      : view.cover !== undefined &&
+        !parentAsked.value.folders.some((one) => one.path === view.cover) &&
+        !prospective.includes(view.cover) &&
+        !stranded.includes(view.cover));
   const folder = view.folder;
   useEffect(() => {
     if (stale) {
@@ -1373,9 +1435,7 @@ export function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* The reader covers the tree and stops at the status bar, which is
-          where it says what it is fetching. */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Why the rows below may not be the Library. Every listing comes out
               of this device's catalog, and the catalog holds what this device
@@ -1462,8 +1522,11 @@ export function App() {
           <Region state={rootState} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
             {() => (
               // The tree, and the details pane on its right following the
-              // focused row.
-              <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+              // focused row — and the reader's sheet over both but a strip of
+              // the tree on the left, covering the tree's height and no more:
+              // the notices above it and the status bar below, which says what
+              // the sheet is fetching, stay uncovered.
+              <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
                 <TreeTable
                   rows={rows}
                   state={tree}
@@ -1493,6 +1556,7 @@ export function App() {
                   onNewFolder={openNaming}
                   onForget={forget}
                   onAskAgain={(folder) => reloadListings([folder])}
+                  areaRef={treeArea}
                 />
                 <DetailsPane
                   selected={selected}
@@ -1501,22 +1565,23 @@ export function App() {
                   uploadStoppedOf={uploadStoppedOf}
                   onOpen={openFromPane}
                 />
+                {sheetRow !== undefined && (
+                  <ReaderView
+                    row={sheetRow}
+                    asked={sheetRow.kind === 'folder' ? heldListing(sheetRow.path) : undefined}
+                    counter={counter}
+                    discarded={discarded}
+                    escapable={!dialogUp}
+                    onClose={closeSheet}
+                    onFetching={setFetching}
+                    onFetched={fetchedInto}
+                    reconnect={offer}
+                  />
+                )}
               </div>
             )}
           </Region>
         </main>
-        {openAt !== null && (
-          <ReaderView
-            pages={pages}
-            at={openAt}
-            discarded={discarded}
-            onNavigate={(next) => go({ folder: view.folder, open: pages[next].path })}
-            onClose={() => go({ folder: view.folder, open: null })}
-            onFetching={setFetching}
-            onFetched={() => reloadAbove(view.folder)}
-            reconnect={offer}
-          />
-        )}
       </div>
       {mapping !== null && (
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
@@ -1584,13 +1649,16 @@ const LOADING: Asked<Listing> = { status: 'loading' };
 
 /**
  * The tree opened down to where `view` says the screen is: every folder above
- * the folder open, the folder itself too, and the focus on the file the reader
- * is open at — or on the folder, or on nothing at the Library root. `held`
- * comes back as it was where it shows that already.
+ * the folder open, the folder itself too, and the focus on the row the
+ * reader's sheet is open on — or on the folder, or on nothing at the Library
+ * root. `held` comes back as it was where it shows that already.
+ *
+ * A folder the sheet is open on is not opened by it: the folder the screen's
+ * actions are about is the one it stands in unless it was open already, and
+ * only that folder and the ones above it are opened.
  */
 function restored(held: TreeState, view: ViewState): TreeState {
-  const focus =
-    view.open !== null ? fileKey(view.open) : view.folder === '' ? null : folderKey(view.folder);
+  const focus = sheetKey(view) ?? (view.folder === '' ? null : folderKey(view.folder));
   const above = ancestry(view.folder);
   if (focus === held.focus && above.every((folder) => held.expanded.has(folder))) {
     return held;
