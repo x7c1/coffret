@@ -109,7 +109,7 @@ Activity panel. Out of scope altogether: user-resizable columns.
 
 ### Before merge (verified outside the check command)
 
-- [ ] On `make local`, the agent walks the seeded Library in a browser with the
+- [x] On `make local`, the agent walks the seeded Library in a browser with the
   keyboard (↑ ↓ → ← Enter) and the mouse (disclosure button, double-click) and
   records in the PR what it did and saw, including the scroll-ahead on a
   folder with more rows than fit.
