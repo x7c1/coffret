@@ -140,7 +140,7 @@ Implementation:
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the local Library (`make local`, MinIO): make a few commits (e.g. a
+- [x] On the local Library (`make local`, MinIO): make a few commits (e.g. a
       rename and back), run `coffret prune`; the `key-*` objects left are only
       the head's generation's replicas, the rest are in `trash/`; the explorer
       lists books and the reader opens a page after a restart; a further
