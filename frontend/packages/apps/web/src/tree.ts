@@ -48,6 +48,11 @@ export function fileKey(path: string): string {
   return `file:${path}`;
 }
 
+/** Which row a key names: its kind, and its Entry Path. */
+export function keyed(key: string): { kind: 'folder' | 'file'; path: string } {
+  return { kind: isFolderKey(key) ? 'folder' : 'file', path: pathOf(key) };
+}
+
 /** The Entry Path a row's key names. */
 function pathOf(key: string): string {
   return key.slice(key.indexOf(':') + 1);
@@ -275,7 +280,9 @@ export type Arrow = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
  * - `←` on an open folder closes it; anywhere else, moves to the folder the
  *   row stands in.
  *
- * Neither `←` nor `→` turns a page: that is the reader's, over the tree.
+ * Neither `←` nor `→` turns a page, and nothing else does either: the
+ * reader's sheet follows the focus, so `↑`/`↓` down the page rows of an open
+ * book is paging (see [`ReaderView`](./ReaderView)).
  *
  * With no row focused, any of them focuses the first row — or, for `↑`, the
  * last — so that the keys have somewhere to start.
@@ -355,9 +362,9 @@ function collapsed(state: TreeState, folder: string): TreeState {
 /**
  * The folder the screen's own actions are about — what a drop on the list's
  * empty space lands in, what "Pack this folder…" and "New folder…" over the
- * rows act on, what "Select" picks files from, and what the reader turns
- * through: the focused folder where it is open, and otherwise the folder the
- * focused row stands in; the Library root where nothing is focused.
+ * rows act on, and what "Select" picks files from: the focused folder where
+ * it is open, and otherwise the folder the focused row stands in; the Library
+ * root where nothing is focused.
  *
  * An open folder or the folder a row stands in, never a closed one: what the
  * screen's actions act on is the folder whose rows are on show, and a closed

@@ -53,6 +53,9 @@ export function RowMenu({ name, items }: { name: string; items: readonly MenuIte
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // Taken: the reader's sheet, open behind the menu, closes on an
+        // `Escape` nothing else took, and this one was the menu's.
+        event.preventDefault();
         setOpen(false);
       }
     };

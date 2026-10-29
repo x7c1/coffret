@@ -8,6 +8,7 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type RefObject,
 } from 'react';
 
 import type { DeleteTarget, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
@@ -65,8 +66,9 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * The keys walk the rows the way a file manager's tree does (see
  * [`arrowed`](./tree)): `↑`/`↓` move the focus, `→` opens a folder and then
  * enters it, `←` closes one and then climbs to the folder above, and `Enter`
- * opens the focused row — the reader, for a file it can show or a folder
- * holding pages. The list scrolls ahead of the focus (see
+ * opens the focused row in the reader's sheet — for an image, or a folder
+ * holding images — which then follows the focus (see
+ * [`ReaderView`](./ReaderView)). The list scrolls ahead of the focus (see
  * [`scrollAhead`](./scrollAhead)). A click focuses a row, a double-click opens
  * it, and a press on the disclosure button opens or closes the folder without
  * moving the focus — except out of a folder being closed over it. On a touch
@@ -132,6 +134,7 @@ export function TreeTable({
   onForget,
   onAskAgain,
   measure,
+  areaRef,
 }: {
   /** Every row on show, top to bottom (see [`treeRows`](./tree)). */
   rows: readonly TreeRow[];
@@ -175,9 +178,12 @@ export function TreeTable({
    * drop asks the folder's own listing before anything is sent.
    */
   mappedAt: (folder: string) => boolean | null;
-  /** A folder row opened: the reader, at the first page of the folder. */
+  /**
+   * A folder row opened: the reader's sheet, on the folder's cover — where it
+   * holds images, which only its listing can say.
+   */
   onOpenFolder: (path: string) => void;
-  /** A file row opened that the reader can show. */
+  /** A file row opened that the reader can show: the reader's sheet, on the file. */
   onOpenFile: (path: string) => void;
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
@@ -214,8 +220,15 @@ export function TreeTable({
   onAskAgain: (folder: string) => void;
   /** How wide a string renders; the page's own canvas where not given. */
   measure?: (text: string, measured: Measured) => number;
+  /**
+   * The tree's own element, the one holding the keyboard's focus, for a screen
+   * that hands the focus back to it: the details pane's Open leaves it on the
+   * tree, so that the arrows walk the rows the reader's sheet follows.
+   */
+  areaRef?: RefObject<HTMLDivElement>;
 }) {
-  const scroller = useRef<HTMLDivElement>(null);
+  const own = useRef<HTMLDivElement>(null);
+  const scroller = areaRef ?? own;
   const block = useRef<HTMLDivElement>(null);
   const drawn = useRef(new Map<string, HTMLTableRowElement>());
   const contextPath = contextOf(state);
@@ -670,9 +683,12 @@ export function TreeTable({
 
 /** What opening a row can come to, as [`opened`](#opened) hands it on. */
 export interface Openers {
-  /** A folder row opened: the reader, at the first page of the folder. */
+  /**
+   * A folder row opened: the reader's sheet, on the folder's cover — where it
+   * holds images, which only its listing can say.
+   */
   onOpenFolder: (path: string) => void;
-  /** A file row opened that the reader can show. */
+  /** A file row opened that the reader can show: the reader's sheet, on the file. */
   onOpenFile: (path: string) => void;
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
@@ -684,7 +700,15 @@ export interface Openers {
  * What opening a row does: what a double-click, a tap, `Enter`, and the
  * details pane's Open all reach, so that the four are one gesture. A folder no
  * mapping reaches has nowhere on this device to put a file, so a file there is
- * not opened and the sentence says why instead.
+ * not opened and the sentence says why instead. The sheet opens only on a row
+ * the reader can show — an image, or a folder holding images (the details
+ * pane's [`opensInReader`](./details), which is why the pane offers Open only
+ * there); a file it cannot show is not opened and the sentence says so. Once
+ * the sheet is open it follows the focus onto any row, and says there what it
+ * cannot draw.
+ *
+ * Opening never opens or closes a folder: a folder opened is shown in the
+ * sheet, its cover, with the focus left on its row.
  */
 export function opened(row: FolderRow | FileRow, openers: Openers): void {
   if (row.kind === 'folder') {

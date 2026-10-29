@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { AT_ROOT, parseHash, toHash, type ViewState } from './hash';
+import { AT_ROOT, parseHash, sheetOpen, toHash, type ViewState } from './hash';
 
 const ROUND_TRIPPED: ViewState[] = [
   AT_ROOT,
@@ -20,6 +20,10 @@ const ROUND_TRIPPED: ViewState[] = [
   // A `+` means a plus in a path and a space in a form encoding, so it goes
   // through as `%2B` rather than being left for the parser to read either way.
   { folder: 'a+b', open: 'a+b/c+d.jpg' },
+  // The sheet open on a folder, showing its cover: a closed one, listed in
+  // the folder it stands in, and an open one, which is its own context.
+  { folder: 'books', open: null, cover: 'books/vol-1' },
+  { folder: 'books/vol-1', open: null, cover: 'books/vol-1' },
 ];
 
 it('carries a state through the hash and back', () => {
@@ -61,4 +65,20 @@ it('reads a hash spelled in NFD as the NFC paths the Library holds', () => {
   expect(parsed).toEqual({ folder: 'café', open: 'café/résumé.jpg' });
 
   expect(parseHash(`#path=${folder}`)).toEqual({ folder: 'café', open: null });
+});
+
+// The Library admits a file and a folder at one path, so the URL says which
+// the sheet is open on — and one row at a time, the file where both are named.
+it('tells a sheet open on a folder from one open on a file', () => {
+  expect(toHash({ folder: 'books', open: null, cover: 'books/vol-1' })).toBe(
+    '#path=books&cover=books/vol-1',
+  );
+  expect(parseHash('#path=books&open=books/a.jpg&cover=books/vol-1')).toEqual({
+    folder: 'books',
+    open: 'books/a.jpg',
+  });
+  expect(parseHash('#cover=')).toEqual(AT_ROOT);
+  expect(sheetOpen(parseHash('#path=books&cover=books/vol-1'))).toBe(true);
+  expect(sheetOpen(parseHash('#path=books&open=books/a.jpg'))).toBe(true);
+  expect(sheetOpen(parseHash('#path=books'))).toBe(false);
 });

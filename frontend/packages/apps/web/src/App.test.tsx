@@ -332,9 +332,9 @@ it('moves the screen out of a prepared path forgotten under it', async () => {
 });
 
 // Walking the tree moves the URL to the folder the focus is in, without a
-// history entry for each row the keys pass; opening a folder adds one, at its
-// first page.
-it('follows the focus in the URL, and opens a folder at its first page', async () => {
+// history entry for each row the keys pass; opening a folder adds one, and
+// shows its cover with the focus left on it and the folder left closed.
+it('follows the focus in the URL, and opens a folder on its cover without opening it', async () => {
   answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg', '002.jpg'] });
   vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Series'] });
   render(<App />);
@@ -355,11 +355,70 @@ it('follows the focus in the URL, and opens a folder at its first page', async (
   fireEvent.keyDown(area, { key: 'Enter' });
   await waitFor(() =>
     expect(parseHash(window.location.hash)).toEqual({
-      folder: 'comics/Series',
-      open: 'comics/Series/001.jpg',
+      folder: 'comics',
+      open: null,
+      cover: 'comics/Series',
     }),
   );
   expect(window.history.length).toBe(before + 1);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('cover of Series')).toBeTruthy();
+  expect(reader.getByText(`Folder · 2 items · ${size(0)}`)).toBeTruthy();
+  // The focus stays on the folder, and the folder stays closed: opening it
+  // was showing it, not walking into it.
+  expect(tree().getByTitle('Series').getAttribute('aria-selected')).toBe('true');
+  expect(tree().getByLabelText('expand Series')).toBeTruthy();
+  expect(tree().queryByTitle('001.jpg')).toBeNull();
+});
+
+// The sheet follows the tree's focus: walking the page rows of an open book
+// is paging, and the history keeps one entry for the whole of it.
+it('shows what the focus moves to while the sheet is open', async () => {
+  const base = library({ '': ['comics/'], comics: ['Series/', 'notes.txt'], 'comics/Series': ['001.jpg', '002.jpg'] });
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      files: one.files.map((file) => (file.name === 'notes.txt' ? { ...file, openable: false } : file)),
+    };
+  };
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Series'] });
+  window.history.replaceState(null, '', '#path=comics&cover=comics/Series');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('cover of Series')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('1 / 2');
+  const area = screen.getByRole('tree');
+  area.focus();
+  const before = window.history.length;
+
+  // `→` is the tree's: it opens the folder, and the sheet stays on it.
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('001.jpg');
+  expect(reader.getByAltText('cover of Series')).toBeTruthy();
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByAltText('001.jpg')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('1 / 2');
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'comics/Series', open: 'comics/Series/001.jpg' });
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByAltText('002.jpg')).toBeTruthy();
+  expect(reader.queryByAltText('001.jpg')).toBeNull();
+  expect(reader.getByLabelText('position').textContent).toBe('2 / 2');
+
+  // Off the end of the book, onto a file of the folder above that the reader
+  // cannot draw: the sheet says so, and counts it among its own siblings.
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('2 / 2');
+  expect(window.history.length).toBe(before);
+
+  // Escape closes it, and the focus stays where the reading stopped.
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'comics', open: null });
+  expect(tree().getByTitle('notes.txt').getAttribute('aria-selected')).toBe('true');
 });
 
 // The details pane follows the focused row, says what it is in words that fit
@@ -398,6 +457,12 @@ it('describes the focused row in the details pane, and opens it from there', asy
   expect(definition(pane, 'Modified')).toBe(time(modified));
   expect(definition(pane, 'On this device')).toBe('No');
   expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+  // And `Enter` on it opens no sheet, and says why.
+  fireEvent.keyDown(area, { key: 'Enter' });
+  expect(
+    await screen.findByText('comics holds nothing the reader can show — open a folder of pages, or a file'),
+  ).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
 
   // A folder of pages, closed: its cover, peeked and never fetched, and Open.
   fireEvent.keyDown(area, { key: 'ArrowRight' });
@@ -409,10 +474,61 @@ it('describes the focused row in the details pane, and opens it from there', asy
   fireEvent.click(await pane.findByRole('button', { name: 'Open' }));
   await waitFor(() =>
     expect(parseHash(window.location.hash)).toEqual({
-      folder: 'comics/Series',
-      open: 'comics/Series/001.jpg',
+      folder: 'comics',
+      open: null,
+      cover: 'comics/Series',
     }),
   );
+  // And hands the focus to the tree, whose keys the sheet follows.
+  expect(document.activeElement).toBe(area);
+});
+
+// The sheet opens only on a row the reader can show: on a file it cannot,
+// the pane offers no Open, and `Enter` leaves the sheet shut and says why.
+it('opens no sheet on a file the reader cannot show, and says why', async () => {
+  const base = library({ '': ['papers/'], papers: ['manual.pdf'] });
+  answers = (path) => {
+    const one = base(path);
+    return { ...one, files: one.files.map((file) => ({ ...file, openable: false })) };
+  };
+  render(<App />);
+  await tree().findByTitle('papers');
+  const area = screen.getByRole('tree');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('manual.pdf');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'manual.pdf' })).toBeTruthy();
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+
+  fireEvent.keyDown(area, { key: 'Enter' });
+  expect(await screen.findByText('manual.pdf — preview of this format is not supported yet')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'papers', open: null });
+});
+
+// With the sheet already open, it follows the focus onto a file it cannot
+// draw, and says so in itself rather than closing.
+it('follows the focus onto a file it cannot draw while the sheet is open', async () => {
+  const base = library({ '': ['papers/'], papers: ['001.jpg', 'manual.pdf'] });
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      files: one.files.map((file) => (file.name === 'manual.pdf' ? { ...file, openable: false } : file)),
+    };
+  };
+  window.history.replaceState(null, '', '#path=papers&open=papers/001.jpg');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('001.jpg')).toBeTruthy();
+  const area = screen.getByRole('tree');
+  area.focus();
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'papers', open: 'papers/manual.pdf' });
+  expect(screen.queryByText('manual.pdf — preview of this format is not supported yet')).toBeNull();
 });
 
 // A focused folder whose listing was refused does not count its items as

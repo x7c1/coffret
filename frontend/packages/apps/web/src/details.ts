@@ -84,8 +84,9 @@ export function kindOf(name: string): string {
  * cover — or `null` where it holds none.
  *
  * The first in the listing's order, the byte order of the paths, which is the
- * order the reader turns through, so the picture the pane shows is the page
- * Open starts at. An image is a file the reader can show (`openable`).
+ * order the folder's rows stand in, so the picture the pane shows is the cover
+ * the reader's sheet shows for the folder (see [`sheetShows`](./sheet)). An
+ * image is a file the reader can show (`openable`).
  */
 export function firstImage(listing: Listing): ListedFile | null {
   return listing.files.find((file) => file.openable) ?? null;
@@ -93,7 +94,10 @@ export function firstImage(listing: Listing): ListedFile | null {
 
 /**
  * Whether the pane offers Open for one row: an image, or a folder holding
- * images directly — the two things `Enter` opens in the reader.
+ * images directly — the two things `Enter` and a double-click open the
+ * reader's sheet on (see [`opened`](./TreeTable)). Elsewhere opening says why
+ * nothing opened instead; the sheet reaches such a row only by following the
+ * focus once it is open.
  *
  * A folder's answer needs its own listing, `null` while it is not on hand, and
  * a folder not known to hold an image offers nothing yet rather than a button

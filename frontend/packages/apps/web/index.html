@@ -41,6 +41,23 @@
         }
       }
 
+      /* The reader's sheet slides in from the right as it opens. An
+         entrance and nothing to hold, so here rather than inline. */
+      section.sheet {
+        animation: sheet-in 160ms ease-out;
+      }
+      @keyframes sheet-in {
+        from {
+          transform: translateX(32px);
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        section.sheet {
+          animation: none;
+        }
+      }
+
       code {
         font-family: ui-monospace, monospace;
       }
