@@ -223,12 +223,13 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // thing the explorer asks is refused as locked, and the Passphrase window
     // comes back to take the Passphrase: asked for by the page itself, or by
     // *unlock* where the page did not have the focus to ask.
-    // The mapped folder closed, focused and opened again is the folder the
-    // screen is about, asked for afresh: the next thing the explorer asks.
+    // The mapped folder closed and then focused is the folder the details pane
+    // describes, its listing asked for afresh: the next thing the explorer
+    // asks. The refusal is the lock heard, and the tree gives way to the
+    // refusal at once, so nothing more is pressed in it until the unlock.
     await expect.poll(lockedForIdling, { timeout: LOCK_MS, intervals: [5_000] }).toBe(true);
     await explorer.getByRole('button', { name: `collapse ${setting.mapped}`, exact: true }).click();
     await row(explorer, setting.mapped).click();
-    await expand(explorer, setting.mapped);
     try {
       await expect.poll(() => shown(doorWindow), { timeout: OWN_ASK_MS }).toBe(true);
     } catch {
@@ -240,10 +241,12 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     await shot(door, '04-unlock');
 
     // Unlocked in place: the window goes, and the explorer that was open is
-    // the one that answers again, without being loaded afresh.
+    // the one that answers again, without being loaded afresh — the mapped
+    // folder still closed, as it was left.
     await door.locator('#passphrase').fill(setting.passphrase);
     await door.locator('#open').click();
     await expect.poll(() => shown(doorWindow)).toBe(false);
+    await expand(explorer, setting.mapped);
     await expect(row(explorer, leaf(setting.album))).toBeVisible();
     await expand(explorer, leaf(setting.album));
     await expect(stateIcon(explorer, dropped)).toHaveAccessibleName(ON_THIS_DEVICE);
