@@ -87,7 +87,7 @@ The end-to-end journeys (`frontend/packages/apps/e2e/`, run by `make e2e-it` and
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's own development Library, the agent opens the menu by
+- [x] On the agent's own development Library, the agent opens the menu by
   right-click and by ⋮, selects several rows with Shift and ⌘/Ctrl, opens each
   dialog, and records in the PR what it saw. It does not confirm a deletion on
   a Library the user owns.
