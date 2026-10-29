@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -8,14 +9,17 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type RefObject,
 } from 'react';
 
 import type { DeleteTarget, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
+import { actionsFor, type ActionItem } from './actions';
+import { ActionsMenu, type MenuAt } from './ActionsMenu';
 import { Banner, DropBanner, dropOutline } from './Banner';
 import { canvasMeasure, columnWidth, type Measured } from './columns';
-import { deleteOffered, DELETE } from './deleteEntries';
+import { counted, type Described } from './details';
 import { useDragOver } from './dragOver';
 import { droppedFiles, type Drop } from './drop';
 import { dropOutcome } from './dropTarget';
@@ -23,17 +27,18 @@ import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
 import { packOffered, PACK_THIS_FOLDER } from './packFolder';
-import { FORGET_FOLDER, NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
+import { NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
-import { RowMenu, type MenuItem } from './RowMenu';
 import { ROWS_AHEAD, scrollAhead } from './scrollAhead';
 import {
-  chosen,
-  everyToggled,
-  kept,
-  selectable,
-  selectedLine,
-  toggled as pickToggled,
+  clicked,
+  clickOf,
+  isSelected,
+  rightClicked,
+  selectedRows,
+  stepped,
+  type Click,
+  type Picked,
   type Selection,
 } from './selection';
 import { COLOR } from './theme';
@@ -75,10 +80,23 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * screen a tap opens, since a double tap is not a gesture a touch screen
  * reliably hands over.
  *
+ * Rows are selected together with modifier keys, as in a desktop file manager
+ * (see [`selection`](./selection)): Shift+click selects a range from the
+ * anchor, ⌘/Ctrl+click adds or removes one row, Shift+`↑`/`↓` grows the
+ * range, and a plain click or arrow drops it. The selected rows are tinted,
+ * and the focused row keeps its strong highlight.
+ *
+ * What a row offers is in one actions menu (see [`actionsFor`](./actions)),
+ * opened by a right-click on the row or by the "⋮" at its right end — shown
+ * on the focused row and the row under the pointer only. A right-click inside
+ * a selection of several acts on all of them; on any other row it first makes
+ * that row the only focus.
+ *
  * What the screen's own actions are about is the folder the focus is in (see
  * [`contextOf`](./tree)), and the block over the rows speaks for it: whether
- * it is on this device, whether it is being packed, "Select", "New folder…"
- * and "Pack this folder…".
+ * it is on this device, whether it is being packed, "New folder…" and "Pack
+ * this folder…" — the Library root's way to them, which has no row of its own
+ * to open a menu on.
  *
  * Each row's state is the listing's answer, with what the server is doing
  * about it over the top: `present`, `remote` and `added` are the listing's to
@@ -99,10 +117,6 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * Every drop is confirmed before anything is sent, and that confirmation is
  * the screen's, after the tree has handed the files over.
  *
- * Files of the focused folder are picked out for one deletion together only
- * after "Select" is pressed: a box on every row, always, is a column of
- * controls for a gesture made now and then.
- *
  * The folders the Library does not hold yet (see [`prospective`](./prospective))
  * are rows too, marked as such, and so are the folders of books whose freeze
  * has not committed, dimmed. A prepared path's row offers "Forget this folder".
@@ -111,6 +125,9 @@ export function TreeTable({
   rows,
   state,
   onChange,
+  selection,
+  onSelect,
+  listingOf,
   context,
   prospectiveHere,
   prepared,
@@ -142,6 +159,12 @@ export function TreeTable({
   state: TreeState;
   /** The focus moved, or a folder opened or closed. */
   onChange: (next: TreeState) => void;
+  /** The rows selected besides the focus (see [`selection`](./selection)). */
+  selection: Selection;
+  /** The selection changed: always beside an `onChange` for the focus it goes with. */
+  onSelect: (next: Selection) => void;
+  /** A folder's own listing where it is on hand, which says whether the reader can show it. */
+  listingOf: (folder: string) => Listing | null;
   /**
    * The listing of the folder the focus is in, which the block over the rows
    * speaks for; `null` while it is not on hand.
@@ -207,7 +230,7 @@ export function TreeTable({
   onMap: (prefix: string | null) => void;
   /** "Pack this folder…" on the folder the focus is in. */
   onPack: (folder: string) => void;
-  /** "Delete…" from a row's menu, or over the files picked out. */
+  /** "Delete…" from the actions menu, for one row or the rows selected. */
   onDelete: (target: DeleteTarget) => void;
   /** "New folder…": prepare a path inside `parent`. */
   onNewFolder: (parent: string) => void;
@@ -234,32 +257,65 @@ export function TreeTable({
   const contextPath = contextOf(state);
   const listing = context !== null && context.path === contextPath ? context : null;
 
-  // The files picked out for one deletion together, in the focused folder
-  // (see [`selection`](./selection)), and whether the boxes are out.
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [picking, setPicking] = useState(false);
-  const picked = picking && listing !== null ? chosen(selection, listing) : [];
-  const pickable = listing === null ? [] : selectable(listing);
-  useEffect(() => {
-    if (listing !== null) {
-      setSelection((held) => kept(held, listing));
-    }
-  }, [listing]);
-  // Another folder leaves the mode: the boxes were put out for the files of the
-  // folder they were put out in.
-  useEffect(() => {
-    setPicking(false);
-    setSelection(null);
-  }, [contextPath]);
-  const leavePicking = () => {
-    setPicking(false);
-    setSelection(null);
+  // The focus and the selection, which the pointer and the keys move together.
+  const picked: Picked = { focus: state.focus, selection };
+  const pick = (next: Picked) => {
+    onChange({ ...state, focus: next.focus });
+    onSelect(next.selection);
   };
-  // Whatever is picked goes the moment a deletion is asked for: the rows it
-  // named are leaving, and a box left ticked would offer them a second time.
-  const askToDelete = (target: DeleteTarget) => {
-    leavePicking();
-    onDelete(target);
+
+  // The actions menu, while it is open: where, and for which rows.
+  const [menu, setMenu] = useState<{ at: MenuAt; rows: Described[] } | null>(null);
+  const closeMenu = useCallback(
+    (how: 'escape' | 'away' = 'away') => {
+      setMenu(null);
+      // Out by `Escape`, the keys go back to the tree they came from.
+      if (how === 'escape') {
+        scroller.current?.focus();
+      }
+    },
+    [scroller],
+  );
+  const menuItems = (target: readonly Described[]) => actionsFor(target, { listingOf, prepared });
+  // A right-click, or the "⋮", on the row `key`: the selection where the row is
+  // in one of several, and the row alone otherwise.
+  const openMenu = (key: string, at: MenuAt) => {
+    // The "⋮" of a row the menu is open on closes it, as a button that says
+    // it has opened something does when pressed again.
+    if (at.side === 'end' && menu !== null && menu.rows.some((one) => one.key === key)) {
+      closeMenu('escape');
+      return;
+    }
+    const { picked: next, target } = rightClicked(rows, picked, key);
+    if (next !== picked) {
+      pick(next);
+    }
+    if (menuItems(target).length > 0) {
+      setMenu({ at, rows: target });
+    }
+  };
+  const choose = (item: ActionItem) => {
+    setMenu(null);
+    // The keys go back to the tree, so that the arrows walk the rows again.
+    scroller.current?.focus();
+    const action = item.action;
+    switch (action.kind) {
+      case 'open':
+        openRow(action.row);
+        break;
+      case 'newFolder':
+        onNewFolder(action.folder);
+        break;
+      case 'pack':
+        onPack(action.folder);
+        break;
+      case 'delete':
+        onDelete(action.target);
+        break;
+      case 'forget':
+        onForget(action.folder);
+        break;
+    }
   };
 
   // What the block over the rows says about the folder the focus is in.
@@ -300,7 +356,6 @@ export function TreeTable({
     listing.folders_on_disk.length === 0;
   const offersPack = listing !== null && packOffered(listing) && !unheld && !nothingToPack;
   const offersNewFolder = listing !== null && listing.mapped && !unheld;
-  const offersSelect = pickable.length > 0 || picking;
   const emptyHere =
     listing !== null && listing.files.length === 0 && childFolders === 0;
 
@@ -352,7 +407,11 @@ export function TreeTable({
 
   // The keys the tree answers while it has the focus itself — which a click on
   // a row gives it — and not while a control inside it does: `Enter` on a
-  // menu's button or a box is that control's.
+  // row's "⋮" or in the menu is that control's.
+  //
+  // Shift with `↑`/`↓` grows the selection to the row arrived at; any other
+  // arrow drops it (see [`stepped`](./selection)). No key deletes: which key
+  // means delete differs between systems, and invites mistakes.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) {
       return;
@@ -369,8 +428,15 @@ export function TreeTable({
     }
     event.preventDefault();
     const next = arrowed(rows, state, event.key as Arrow);
+    const extend = event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
+    const kept = stepped(rows, picked, next.focus, extend);
     if (next !== state) {
       onChange(next);
+    }
+    // A plain arrow that moved nothing still drops the selection, as one
+    // that moved would.
+    if (next !== state || extend || selection.keys.size > 0) {
+      onSelect(kept);
     }
   };
   // Whether the focus the tree is about to take comes from a press on it, which
@@ -381,7 +447,7 @@ export function TreeTable({
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     const byPress = pressed.current;
     pressed.current = false;
-    if (event.target !== event.currentTarget || byPress || picking || state.focus !== null) {
+    if (event.target !== event.currentTarget || byPress || state.focus !== null) {
       return;
     }
     const first = rows.find((row) => row.kind !== 'note');
@@ -443,35 +509,18 @@ export function TreeTable({
       2 * CELL_PAD,
     ),
   };
-  const columns = <Columns picking={picking} widths={widths} />;
+  const columns = <Columns widths={widths} />;
 
-  const menuOf = (row: FolderRow | FileRow): MenuItem[] => {
-    if (row.kind === 'file') {
-      return deleteOffered(row.file)
-        ? [{ label: DELETE, onPress: () => askToDelete({ folder: null, paths: [row.path] }) }]
-        : [];
-    }
-    return [
-      // Where a drop into it would be taken, and nowhere else.
-      ...(row.folder.mapped ? [{ label: NEW_FOLDER, onPress: () => onNewFolder(row.path) }] : []),
-      // Not on a folder the Library does not hold: there is nothing of it to
-      // take out.
-      ...(row.prospective || row.stranded
-        ? []
-        : [{ label: DELETE, onPress: () => askToDelete({ folder: row.path, paths: [] }) }]),
-      // Only on a path this page prepared, which is the page's to let go of;
-      // an empty mapped prefix is the mapping's.
-      ...(row.prospective && prepared.includes(row.path)
-        ? [{ label: FORGET_FOLDER, onPress: () => onForget(row.path) }]
-        : []),
-    ];
-  };
+  // What the "⋮" of a row would open on: the selection where the row is in
+  // one of several, and the row alone otherwise — the same rows a right-click
+  // there acts on. A row with nothing to offer draws no "⋮".
+  const selected = selectedRows(rows, picked);
+  const offersOf = (row: FolderRow | FileRow): boolean =>
+    menuItems(selected.length > 1 && selected.some((one) => one.key === row.key) ? selected : [row]).length > 0;
 
   return (
     <div
       ref={scroller}
-      // What a row's menu measures the room below it against (see `RowMenu`).
-      data-scroll-area=""
       role="tree"
       aria-label="Library"
       tabIndex={0}
@@ -489,6 +538,12 @@ export function TreeTable({
       onDragOver={drag.onDragOver}
       onDragLeave={drag.onDragLeave}
       onDrop={onDrop}
+      // The menu is fixed to the window and the rows it was opened on would
+      // move from under it as the list is scrolled, so it goes rather than
+      // float over others. The wheel and not every scroll: opening it can move
+      // the focus, and the list scrolling ahead of the focus is not somebody
+      // scrolling away.
+      onWheel={menu === null ? undefined : () => closeMenu()}
       style={{
         flex: 1,
         overflow: 'auto',
@@ -504,7 +559,7 @@ export function TreeTable({
           together: every one of them is true of the whole folder rather than
           of whichever rows happen to be in view. */}
       <div ref={block} style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-        {(offersPack || offersSelect || offersNewFolder) && listing !== null && (
+        {(offersPack || offersNewFolder) && listing !== null && (
           <div style={BAR}>
             <span style={{ flex: 1, color: COLOR.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {root ? 'Library' : contextPath}
@@ -512,16 +567,6 @@ export function TreeTable({
             {offersNewFolder && (
               <button type="button" onClick={() => onNewFolder(contextPath)} style={BAR_BUTTON}>
                 {NEW_FOLDER}
-              </button>
-            )}
-            {offersSelect && (
-              <button
-                type="button"
-                aria-pressed={picking}
-                onClick={picking ? leavePicking : () => setPicking(true)}
-                style={BAR_BUTTON}
-              >
-                {picking ? END_SELECT : SELECT}
               </button>
             )}
             {offersPack && (
@@ -552,51 +597,15 @@ export function TreeTable({
         <table style={{ ...TABLE, font: HEAD_FONT }}>
           {columns}
           <thead>
-            {picked.length > 0 && listing !== null ? (
-              // While files are picked out, what they come to and the one
-              // deletion of them all — in the headings' own row and at its
-              // height, so that no row moves under the pointer.
-              <tr style={HEAD_ROW}>
-                <th style={{ ...HEAD, ...PICK }}>
-                  <EveryBox
-                    picked={picked.length}
-                    of={pickable.length}
-                    onToggle={() => setSelection((held) => everyToggled(held, listing))}
-                  />
-                </th>
-                <th colSpan={5} style={SELECTED_LINE}>
-                  <span>{selectedLine(picked.length)}</span>
-                  <button
-                    type="button"
-                    onClick={() => askToDelete({ folder: null, paths: picked })}
-                    style={{ ...BAR_BUTTON, marginLeft: 10 }}
-                  >
-                    {DELETE}
-                  </button>
-                </th>
-              </tr>
-            ) : (
-              <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
-                {picking && (
-                  <th style={{ ...HEAD, ...PICK }}>
-                    {pickable.length > 0 && listing !== null && (
-                      <EveryBox
-                        picked={picked.length}
-                        of={pickable.length}
-                        onToggle={() => setSelection((held) => everyToggled(held, listing))}
-                      />
-                    )}
-                  </th>
-                )}
-                <th style={HEAD}>Name</th>
-                <th style={HEAD}>Size</th>
-                <th style={HEAD}>
-                  <span style={HIDDEN}>On this device</span>
-                </th>
-                <th style={HEAD}>Modified</th>
-                <th style={HEAD} />
-              </tr>
-            )}
+            <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
+              <th style={HEAD}>Name</th>
+              <th style={HEAD}>Size</th>
+              <th style={HEAD}>
+                <span style={HIDDEN}>On this device</span>
+              </th>
+              <th style={HEAD}>Modified</th>
+              <th style={HEAD} />
+            </tr>
           </thead>
         </table>
       </div>
@@ -607,11 +616,12 @@ export function TreeTable({
       ) : (
         <table style={{ ...TABLE, font: ROW_FONT }}>
           {columns}
-          <tbody>
+          {/* No text selection across rows: Shift+click selects rows here, as
+              in a file manager, and would otherwise also select their text. */}
+          <tbody style={{ userSelect: 'none' }}>
             {rows.map((row) =>
               row.kind === 'note' ? (
                 <tr key={row.key}>
-                  {picking && <td style={CELL} />}
                   <td
                     colSpan={5}
                     style={{
@@ -647,24 +657,20 @@ export function TreeTable({
                     }
                   }}
                   focused={state.focus === row.key}
+                  selected={isSelected(selection, row.key)}
+                  // Taken out of the selection with ⌘/Ctrl+click, the focus
+                  // is left on a row that is not selected.
+                  focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
                   dropOutline={
                     row.kind === 'folder' && over === row.path && over !== contextPath
                       ? dropOutline(drag.dragged, outcome)
                       : 'none'
                   }
                   shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
-                  pick={
-                    !picking
-                      ? undefined
-                      : row.kind === 'file' && listing !== null && row.in.path === listing.path && deleteOffered(row.file)
-                        ? {
-                            picked: picked.includes(row.path),
-                            onToggle: () => setSelection((held) => pickToggled(held, listing, row.path)),
-                          }
-                        : null
-                  }
-                  menu={menuOf(row)}
-                  onFocus={() => onChange({ ...state, focus: row.key })}
+                  offers={offersOf(row)}
+                  menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
+                  onPress={(how) => pick(clicked(rows, picked, row.key, how))}
+                  onMenu={(at) => openMenu(row.key, at)}
                   onToggle={() => {
                     scroller.current?.focus();
                     onChange(toggled(state, row.path));
@@ -676,6 +682,15 @@ export function TreeTable({
             )}
           </tbody>
         </table>
+      )}
+      {menu !== null && (
+        <ActionsMenu
+          label={`actions for ${menu.rows.length === 1 ? menu.rows[0].name : counted(menu.rows.length, 'item', 'items')}`}
+          at={menu.at}
+          items={menuItems(menu.rows)}
+          onChoose={choose}
+          onClose={closeMenu}
+        />
       )}
     </div>
   );
@@ -727,10 +742,6 @@ export function opened(row: FolderRow | FileRow, openers: Openers): void {
 /** The keys that move the focus. */
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
-/** What puts the boxes out, and what takes them away again. */
-export const SELECT = 'Select';
-export const END_SELECT = 'Done';
-
 /**
  * What the Library root says when it holds nothing and a mapping of this
  * device reaches it: the two ways to put the first files in, since nothing
@@ -762,11 +773,14 @@ function Row({
   row,
   rowRef,
   focused,
+  selected,
+  focusOutside,
   dropOutline: outline,
   shown,
-  pick,
-  menu,
-  onFocus,
+  offers,
+  menuOpen,
+  onPress,
+  onMenu,
   onToggle,
   onOpen,
   onDragOverRow,
@@ -774,18 +788,27 @@ function Row({
   row: FolderRow | FileRow;
   rowRef: (element: HTMLTableRowElement | null) => void;
   focused: boolean;
+  /** Selected beside the focus: tinted, where the focused row is highlighted. */
+  selected: boolean;
+  /**
+   * Whether others are selected and this row is not, so that where the focus
+   * is on it, it is drawn by a ring rather than the strong highlight: the
+   * highlight would read as selected, and the details pane and the menu act on
+   * the rows selected.
+   */
+  focusOutside: boolean;
   /** The outline a drag brings up where the drop lands in this row's folder. */
   dropOutline: string;
   /** What a file row's state is, the listing's and the fill's together; `null` for a folder. */
   shown: RowFill | null;
-  /**
-   * The row's box for picking it out, `null` on a row that cannot be while
-   * files are being picked out, and `undefined` while they are not — when the
-   * box column is not drawn at all.
-   */
-  pick: { picked: boolean; onToggle: () => void } | null | undefined;
-  menu: readonly MenuItem[];
-  onFocus: () => void;
+  /** Whether the actions menu has anything for this row, which is whether it draws a "⋮". */
+  offers: boolean;
+  /** Whether the actions menu is open on this row, which keeps its "⋮" on show. */
+  menuOpen: boolean;
+  /** A click on the row, with what the keys held with it ask for (see [`clickOf`](./selection)). */
+  onPress: (how: Click) => void;
+  /** The actions menu asked for: by a right-click at the pointer, or by the "⋮". */
+  onMenu: (at: MenuAt) => void;
   onToggle: () => void;
   onOpen: () => void;
   onDragOverRow: () => void;
@@ -797,65 +820,42 @@ function Row({
   const folder = row.kind === 'folder' ? row : null;
   const values = valuesOf(row);
   const offered = row.kind === 'folder' || row.in.mapped;
-  // While files are picked out, the highlight on a row that has a box is the
-  // box's alone: the row a click focused before "Select" was pressed, drawn
-  // the way a picked one is, would read as picked with its box empty. The
-  // focus on such a row is drawn by a ring instead, so the keys still show
-  // where they stand.
-  const pickable = pick !== null && pick !== undefined;
-  const selected = pickable ? pick.picked : focused;
-  const ring = pickable && focused && outline === 'none' ? `1px solid ${COLOR.focusRing}` : outline;
+  const highlighted = focused && !focusOutside;
+  const ring = focused && focusOutside && outline === 'none' ? `1px solid ${COLOR.focusRing}` : outline;
   return (
     <tr
       ref={rowRef}
       className={offered ? 'row activatable' : 'row'}
-      aria-selected={selected}
+      aria-selected={highlighted || selected}
+      // What shows the row's "⋮" beside the pointer's hover (see `index.html`).
+      data-focused={focused ? '' : undefined}
       title={row.name}
       onPointerDown={(event) => {
         pointer.current = event.pointerType;
       }}
-      onClick={() => {
-        // While files are picked out, a click on one that can be picked toggles
-        // it, as its box does.
-        if (pickable) {
-          pick.onToggle();
-          return;
-        }
-        onFocus();
-        if (pointer.current === 'touch') {
+      onClick={(event) => {
+        const how = clickOf(event);
+        onPress(how);
+        if (how === 'plain' && pointer.current === 'touch') {
           onOpen();
         }
       }}
-      onDoubleClick={() => {
-        if (pointer.current !== 'touch') {
+      onDoubleClick={(event) => {
+        if (pointer.current !== 'touch' && clickOf(event) === 'plain') {
           onOpen();
         }
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onMenu({ x: event.clientX, y: event.clientY, side: 'start' });
       }}
       onDragOver={onDragOverRow}
       style={{
-        background: selected ? COLOR.selected : undefined,
+        background: highlighted ? COLOR.selected : selected ? COLOR.picked : undefined,
         outline: ring,
         outlineOffset: -2,
       }}
     >
-      {pick !== undefined && (
-        <td
-          style={{ ...CELL, ...PICK }}
-          onClick={pick !== null ? (event) => event.stopPropagation() : undefined}
-        >
-          {pick !== null && (
-            <label style={{ display: 'block', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                aria-label={`select ${row.name}`}
-                checked={pick.picked}
-                onChange={pick.onToggle}
-                style={{ margin: 0, cursor: 'pointer' }}
-              />
-            </label>
-          )}
-        </td>
-      )}
       <td style={{ ...CELL, paddingLeft: indent(row.depth) }}>
         <span style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
           {folder !== null && folder.expandable ? (
@@ -919,7 +919,7 @@ function Row({
         ) : null}
       </td>
       <td style={{ ...CELL, color: COLOR.dim }}>{values.modified}</td>
-      <MenuCell name={row.name} items={menu} />
+      <MenuCell name={row.name} offers={offers} open={menuOpen} onMenu={onMenu} />
     </tr>
   );
 }
@@ -1030,18 +1030,52 @@ function FolderIcon() {
 }
 
 /**
- * The cell a row's menu stands in. A click anywhere in it stops there: the row
- * under it focuses and opens, and a press meant for the menu must not also
- * reach the row.
+ * The cell a row's "⋮" stands in, which opens the actions menu under it. A
+ * click anywhere in the cell stops there: the row under it focuses and opens,
+ * and a press meant for the menu must not also reach the row.
+ *
+ * The mark is drawn on the focused row and the row under the pointer only (see
+ * `index.html`): one quiet mark on every row is twenty marks down a list of
+ * twenty rows, for something pressed now and then.
  */
-function MenuCell({ name, items }: { name: string; items: readonly MenuItem[] }) {
+function MenuCell({
+  name,
+  offers,
+  open,
+  onMenu,
+}: {
+  name: string;
+  offers: boolean;
+  open: boolean;
+  onMenu: (at: MenuAt) => void;
+}) {
+  const stop = offers ? (event: MouseEvent) => event.stopPropagation() : undefined;
   return (
     <td
       style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 4px' }}
-      onClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
-      onDoubleClick={items.length > 0 ? (event) => event.stopPropagation() : undefined}
+      onClick={stop}
+      onDoubleClick={stop}
     >
-      <RowMenu name={name} items={items} />
+      {offers && (
+        <button
+          type="button"
+          className="row-actions"
+          aria-label={`actions for ${name}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          // The menu closes on a press outside it, which this is; the click
+          // below is what opens it, or closes it where it is open on this row.
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            // A click with no pointer behind it is `Enter` or Space on the "⋮".
+            onMenu({ x: box.right, y: box.bottom, side: 'end', byKeys: event.detail === 0 });
+          }}
+          style={MENU_BUTTON}
+        >
+          ⋮
+        </button>
+      )}
     </td>
   );
 }
@@ -1112,36 +1146,14 @@ function Unmapped({
   );
 }
 
-/** The header's box: ticked where every file is, part-ticked where some are. */
-function EveryBox({ picked, of, onToggle }: { picked: number; of: number; onToggle: () => void }) {
-  const box = useRef<HTMLInputElement>(null);
-  const some = picked > 0 && picked < of;
-  useEffect(() => {
-    if (box.current !== null) {
-      box.current.indeterminate = some;
-    }
-  }, [some]);
-  return (
-    <input
-      ref={box}
-      type="checkbox"
-      aria-label="select every file"
-      checked={picked === of}
-      onChange={onToggle}
-      style={{ margin: 0, cursor: 'pointer' }}
-    />
-  );
-}
-
 /**
- * The widths of the columns, given to both tables so the two line up: the box
- * (only while files are picked out), the name (the rest of the width), the
- * size, whether the row is on this device, the time, and the menu.
+ * The widths of the columns, given to both tables so the two line up: the name
+ * (the rest of the width), the size, whether the row is on this device, the
+ * time, and the "⋮".
  */
-function Columns({ picking, widths }: { picking: boolean; widths: { size: number; modified: number } }) {
+function Columns({ widths }: { widths: { size: number; modified: number } }) {
   return (
     <colgroup>
-      {picking && <col style={{ width: 32 }} />}
       <col />
       <col style={{ width: widths.size }} />
       <col style={{ width: ICON + 2 * DEVICE_PAD }} />
@@ -1217,21 +1229,20 @@ const MARK: CSSProperties = { flex: '0 0 auto', width: ICON, marginRight: 6, col
 /** What a row says after its name. */
 const NOTE: CSSProperties = { marginLeft: 10, color: COLOR.added, fontSize: 11, flex: '0 0 auto' };
 
-/** The column the boxes stand in. */
-const PICK: CSSProperties = { width: 32, textAlign: 'center' };
-
-/** The headings' row, at one height whether it holds the headings or a selection's line. */
+/** The headings' row. */
 const HEAD_ROW: CSSProperties = { height: 30, fontSize: 12, background: COLOR.ground };
 
-const SELECTED_LINE: CSSProperties = {
-  padding: `0 ${CELL_PAD}px`,
-  background: COLOR.panel,
-  borderBottom: `1px solid ${COLOR.border}`,
-  color: COLOR.text,
-  fontSize: 12,
-  fontWeight: 'normal',
-  textAlign: 'left',
-  whiteSpace: 'nowrap',
+/** A row's "⋮". */
+const MENU_BUTTON: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: COLOR.dim,
+  font: 'inherit',
+  fontSize: 14,
+  lineHeight: 1,
+  padding: '0 6px',
+  borderRadius: 4,
+  cursor: 'pointer',
 };
 
 const BAR: CSSProperties = {

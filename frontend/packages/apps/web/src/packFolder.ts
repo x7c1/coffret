@@ -2,10 +2,10 @@
 //
 // A book added one page at a time — dropped and added one by one, or synced
 // from the mapped folder — sits in the Library as a Container per page, and a
-// freeze is what puts those pages into Packs (spec: PK-1, PK-2). The folder
-// offers it as "Pack this folder…": the server is asked what a freeze of the
-// folder would pack, the answer is shown the way a drop's question shows a
-// dropped folder, and only a yes arms the freeze. Where nothing would be
+// freeze is what puts those pages into Packs (spec: PK-1, PK-2). A folder's
+// actions menu offers it as "Pack this folder…": the server is asked what a
+// freeze of the folder would pack, the answer is shown, and only a yes arms
+// the freeze. Where nothing would be
 // packed, the question says why instead of offering Pack — and so it does
 // where the folder is being packed already, since Pack would arm nothing.
 //
@@ -36,27 +36,39 @@ export function packOffered(listing: { path: string; mapped: boolean }): boolean
   return listing.mapped && listing.path !== '';
 }
 
+/**
+ * What a Pack is, said once in the question: the reason to pack a folder at
+ * all, in the terms a person reads a book or an album in.
+ */
+export const PACK_EXPLAINED =
+  'A Pack keeps a folder’s files together, so a book or an album is fetched in one go.';
+
 /** What the confirmation shows, worded for one folder's preview. */
 export interface PackQuestion {
   /** The folder the freeze would be armed for. */
   folder: string;
+  /** `Pack “BookX”?` */
+  title: string;
   /**
-   * `📁 BookX — 80 files, 58.0 MB will be packed into Packs`, or where nothing
-   * would be, the sentence saying so and why — the folder being packed
-   * already among the reasons.
+   * `80 files, 58.0 MB will be packed`, or where nothing would be, the
+   * sentence saying so and why — the folder being packed already among the
+   * reasons.
    */
   line: string;
   /** Whether there is anything to pack, which is whether Pack is offered. */
   packs: boolean;
-  /** What would be left out and why, where anything would be. */
-  leftOut: string | null;
+  /**
+   * What would be left as it is, one group a line with why — `2 files already
+   * in a Pack`, `3 files not on this device` — and empty where nothing would.
+   */
+  leftOut: string[];
   /** Said where a freeze is already running and this one would wait for it. */
   waits: string | null;
 }
 
 /** The question for one folder's preview. */
 export function questionOf(preview: FreezePreview): PackQuestion {
-  const name = `📁 ${preview.folder.split('/').at(-1) ?? preview.folder}`;
+  const title = `Pack “${preview.folder.split('/').at(-1) ?? preview.folder}”?`;
   // Ahead of the count: a freeze already running or waiting for this folder
   // is the run Pack would ask for, so the press would arm nothing, and
   // promising a run after the current one would be promising one that never
@@ -64,9 +76,10 @@ export function questionOf(preview: FreezePreview): PackQuestion {
   if (preview.already_packing) {
     return {
       folder: preview.folder,
-      line: `${name} — this folder is being packed already`,
+      title,
+      line: 'This folder is being packed already.',
       packs: false,
-      leftOut: null,
+      leftOut: [],
       waits: null,
     };
   }
@@ -74,17 +87,19 @@ export function questionOf(preview: FreezePreview): PackQuestion {
   if (preview.files === 0) {
     return {
       folder: preview.folder,
-      line: `${name} — nothing to pack: ${nothingBecause(preview, reasons)}`,
+      title,
+      line: `Nothing to pack: ${nothingBecause(preview, reasons)}.`,
       packs: false,
-      leftOut: null,
+      leftOut: [],
       waits: null,
     };
   }
   return {
     folder: preview.folder,
-    line: `${name} — ${count(preview.files)}, ${size(preview.bytes)} will be packed into Packs`,
+    title,
+    line: `${count(preview.files)}, ${size(preview.bytes)} will be packed`,
     packs: true,
-    leftOut: reasons.length === 0 ? null : `left as they are: ${reasons.join(', ')}`,
+    leftOut: reasons,
     // Worded as the drop's line for the same wait is (`PACKED_AFTER`), so the
     // two ways into a freeze say the queue alike.
     waits: preview.after_current
@@ -108,7 +123,18 @@ function nothingBecause(preview: FreezePreview, reasons: string[]): string {
   return reasons.join(', ');
 }
 
-/** The broad groups of what a freeze would leave out, where there are any. */
+/**
+ * The broad groups of what a freeze would leave as they are, each with why,
+ * where there are any: already in a Pack, in a Pack and changed here (which is
+ * `update`'s to carry), not on this device, and what the system keeps.
+ *
+ * There is no group for files not in the Library yet, though a freeze does
+ * leave some: the files of a drop still landing, or of one cut off part way,
+ * which no freeze selects until that drop has finished receiving (spec: PK-17).
+ * The preview leaves them out without counting them, so the question cannot
+ * name them. Files added here outside such a drop, or whose upload failed,
+ * are not among those left: a freeze packs them, and `files` counts them.
+ */
 function leftOutParts(preview: FreezePreview): string[] {
   const parts: string[] = [];
   if (preview.in_pack > 0) {

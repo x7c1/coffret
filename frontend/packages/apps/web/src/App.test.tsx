@@ -136,7 +136,7 @@ function tree() {
   return within(main as HTMLElement);
 }
 
-/** Chooses "New folder…" from a row's menu, names it, and presses Prepare. */
+/** Chooses "New folder…" from a row's menu, names it, and presses Create. */
 async function newFolder(row: string, name: string) {
   fireEvent.click(await tree().findByLabelText(`actions for ${row}`));
   fireEvent.click(tree().getByRole('menuitem', { name: 'New folder…' }));
@@ -149,12 +149,12 @@ async function newFolderHere(name: string) {
   await nameIt(name);
 }
 
-/** Types `name` into the open dialog and presses Prepare. */
+/** Types `name` into the open dialog and presses Create. */
 async function nameIt(name: string) {
-  const dialog = await screen.findByRole('dialog', { name: 'new folder' });
+  const dialog = await screen.findByRole('dialog', { name: /^New folder in / });
   fireEvent.change(within(dialog).getByLabelText('folder name'), { target: { value: name } });
   await act(async () => {
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Prepare' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
   });
 }
 
@@ -198,18 +198,21 @@ describe('starting a Library from the explorer', () => {
   });
 
   it('prepares nothing when the dialog is let go of while the name is still being judged', async () => {
+    // Every listing of `comics` — the one asked for to judge the name inside
+    // it, and the one the details pane asks for once the new folder takes the
+    // focus — is held back until after Cancel.
+    const held: (() => void)[] = [];
+    vi.mocked(getListing).mockImplementation((path: string) =>
+      path === 'comics'
+        ? new Promise<Listing>((resolve) => held.push(() => resolve(listing('comics'))))
+        : Promise.resolve(answers(path)),
+    );
     render(<App />);
     await newFolderHere('comics');
-    // The listing asked for to judge the name inside `comics` is held back
-    // until after Cancel.
-    let answer: (listed: Listing) => void = () => undefined;
-    vi.mocked(getListing).mockImplementationOnce(
-      () => new Promise<Listing>((resolve) => (answer = resolve)),
-    );
     await newFolder('comics', 'Series');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await act(async () => {
-      answer(listing('comics'));
+      held.forEach((answer) => answer());
     });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(tree().queryByTitle('Series')).toBeNull();
@@ -289,9 +292,12 @@ describe('starting a Library from the explorer', () => {
 it('forgets a prepared path and the ones under it, and asks nothing', async () => {
   answers = (path) => listing(path);
   render(<App />);
+  // Each folder created takes the focus, and "New folder…" over the rows is
+  // for the folder the focus is in: `books` is made beside `comics` before
+  // `Series` is made inside it.
   await newFolderHere('comics');
-  await newFolder('comics', 'Series');
   await newFolderHere('books');
+  await newFolder('comics', 'Series');
   expect(await tree().findByTitle('Series')).toBeTruthy();
 
   const asked = [
@@ -483,6 +489,55 @@ it('describes the focused row in the details pane, and opens it from there', asy
   expect(document.activeElement).toBe(area);
 });
 
+// Rows selected together with modifier keys are what the details pane
+// describes — the same rows the tree tints — and its `Delete <n> items…` asks
+// the same question the actions menu does, for all of them in one deletion.
+it('describes the rows selected together, and deletes them from the details pane', async () => {
+  answers = library({ '': ['comics/', 'papers/', 'cover.jpg'], comics: ['1.jpg'], papers: ['manual.pdf'] });
+  vi.mocked(previewDelete).mockResolvedValue({
+    folders: ['comics', 'papers'],
+    paths: ['cover.jpg'],
+    entries: 3,
+    bytes: 30,
+    removed: 2,
+    rebuilt: 1,
+    rebuild_read: 2_000_000,
+    rebuild_written: 1_000_000,
+    refused: [],
+    missing: [],
+    after_current: false,
+  });
+  render(<App />);
+  fireEvent.click(await tree().findByTitle('comics'));
+  fireEvent.click(tree().getByTitle('cover.jpg'), { shiftKey: true });
+
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  expect(await pane.findByRole('heading', { name: '3 items selected' })).toBeTruthy();
+  fireEvent.click(pane.getByRole('button', { name: 'Delete 3 items…' }));
+  const asked = await screen.findByRole('dialog', { name: 'Delete 3 items?' });
+  expect(vi.mocked(previewDelete)).toHaveBeenCalledWith({ folders: ['comics', 'papers'], paths: ['cover.jpg'] });
+  expect(asked.textContent).toContain('1 Pack holding other files will be rebuilt');
+  expect(document.activeElement?.textContent).toBe('Cancel');
+  fireEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
+  expect(startDelete).not.toHaveBeenCalled();
+
+  // A plain click drops the selection, and the pane describes one row again.
+  fireEvent.click(tree().getByTitle('papers'));
+  expect(await pane.findByRole('heading', { name: 'papers' })).toBeTruthy();
+});
+
+// A folder created with "New folder…" takes the focus, so the next drop or
+// "New folder…" is about it.
+it('focuses the folder "New folder…" creates', async () => {
+  answers = (path) => listing(path);
+  render(<App />);
+  await newFolderHere('comics');
+  await waitFor(() => expect(tree().getByTitle('comics').getAttribute('aria-selected')).toBe('true'));
+  await newFolder('comics', 'Series');
+  await waitFor(() => expect(tree().getByTitle('Series').getAttribute('aria-selected')).toBe('true'));
+  expect(tree().getByTitle('comics').getAttribute('aria-selected')).toBe('false');
+});
+
 // The sheet opens only on a row the reader can show: on a file it cannot,
 // the pane offers no Open, and `Enter` leaves the sheet shut and says why.
 it('opens no sheet on a file the reader cannot show, and says why', async () => {
@@ -557,7 +612,7 @@ function definition(pane: ReturnType<typeof within>, name: string): string | nul
 function deletionOf(folder: string): Delete {
   return {
     run: 1,
-    folder,
+    folders: [folder],
     paths: [],
     entries: 3,
     bytes: 30,
@@ -580,10 +635,14 @@ function deletionOf(folder: string): Delete {
  * Deletes the folder `name` from its row of the tree. The Library becomes `after`
  * — the tree's answer and the listings — once the deletion is armed, and the
  * next work answer says it ended.
+ *
+ * Answers with the folder the screen was on as Delete was pressed: the menu
+ * focuses the row it was opened on, which moves the screen to the folder that
+ * row stands in.
  */
-async function deleteFromTree(name: string, folder: string, after: () => void) {
+async function deleteFromTree(name: string, folder: string, after: () => void): Promise<string> {
   vi.mocked(previewDelete).mockResolvedValue({
-    folder,
+    folders: [folder],
     paths: [],
     entries: 3,
     bytes: 30,
@@ -603,9 +662,11 @@ async function deleteFromTree(name: string, folder: string, after: () => void) {
   fireEvent.click(await tree().findByLabelText(`actions for ${name}`));
   fireEvent.click(tree().getByRole('menuitem', { name: 'Delete…' }));
   const asked = await screen.findByRole('dialog');
+  const on = shownFolder();
   await act(async () => {
     fireEvent.click(within(asked).getByRole('button', { name: 'Delete' }));
   });
+  return on;
 }
 
 /** The notice over the list, and the empty string where none stands. */
@@ -649,7 +710,7 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(tree().getByTitle('comics')).toBeTruthy());
     await waitFor(() => expect(rootAsked()).toBe(1));
 
-    await deleteFromTree('comics', 'comics', () => {
+    const on = await deleteFromTree('comics', 'comics', () => {
       deleted = true;
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
     });
@@ -659,7 +720,7 @@ describe('the end of a deletion', () => {
     });
     await waitFor(() => expect(rootAsked()).toBe(2));
     await waitFor(() => expect(tree().getByTitle('comics').textContent).toContain('not in Library'));
-    expect(shownFolder()).toBe('albums');
+    expect(shownFolder()).toBe(on);
   });
 
   // At the root the listing asked again is the root's own, and nothing else is
@@ -743,7 +804,7 @@ describe('the end of a deletion', () => {
     render(<App />);
     await waitFor(() => expect(tree().getAllByTitle('1.jpg').length).toBeGreaterThan(0));
 
-    await deleteFromTree('comics', 'comics', () => {
+    const on = await deleteFromTree('comics', 'comics', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
       answers = library({ '': ['albums/'], albums: ['1.jpg'] });
     });
@@ -751,7 +812,7 @@ describe('the end of a deletion', () => {
       timeout: 3000,
     });
     await waitFor(() => expect(tree().queryByTitle('comics')).toBeNull());
-    expect(shownFolder()).toBe('albums');
+    expect(shownFolder()).toBe(on);
   });
 });
 

@@ -1,14 +1,21 @@
-import { useEffect, type CSSProperties } from 'react';
+import { useCallback } from 'react';
 
 import { NOT_UNDOABLE, startsAfterLine, type DeleteQuestion } from './deleteEntries';
+import { BUTTON, DANGER, Dialog, LINE, Note } from './Dialog';
 import { COLOR } from './theme';
 import type { WaitsFor } from './turns';
 
 /**
- * The question "Delete…" asks before anything is armed: what leaves the
- * Library, what rebuilding the Packs that keep other files costs, anything the
- * deletion would be refused for and why, and that it cannot be undone from the
- * explorer — with two answers, Delete or Cancel.
+ * The question "Delete…" asks before anything is armed: `Delete “albums”?`
+ * (or `Delete 3 items?`), what leaves the Library, and that it cannot be
+ * undone from the explorer — with two answers, Cancel or Delete.
+ *
+ * Where Packs that keep other files must be rebuilt, how many and what that
+ * reads and writes stand out in a box of their own: rebuilding reads each such
+ * Pack whole and uploads its replacement, the one part of a deletion that
+ * costs time and transfer (spec: PK-10). The lines for Packs the deletion
+ * would be refused for, named files the Library does not hold, and a deletion
+ * that waits for another are each drawn only where they apply.
  *
  * Where nothing would be removed it says so and offers only Close. Where a
  * sync or a freeze is under way it says the deletion starts after it, since
@@ -32,96 +39,46 @@ export function DeleteConfirm({
   startsAfter?: WaitsFor;
   onChoose: (remove: boolean) => void;
 }) {
-  useEffect(() => {
-    const closing = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onChoose(false);
-      }
-    };
-    window.addEventListener('keydown', closing);
-    return () => window.removeEventListener('keydown', closing);
-  }, [onChoose]);
-
+  const cancel = useCallback(() => onChoose(false), [onChoose]);
   return (
-    <div
-      role="presentation"
-      onClick={() => onChoose(false)}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10,
-        background: 'rgba(0, 0, 0, 0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={question.title}
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: 'min(520px, calc(100vw - 32px))',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          padding: 16,
-          background: COLOR.panel,
-          border: `1px solid ${COLOR.border}`,
-          borderRadius: 6,
-          color: COLOR.text,
-          fontSize: 13,
-        }}
-      >
-        <p style={{ margin: 0 }}>{question.title}</p>
-        <p style={{ margin: 0 }}>{question.removes}</p>
-        {question.rebuilds !== null && (
-          <p style={{ margin: 0, color: COLOR.dim }}>{question.rebuilds}</p>
-        )}
-        {question.refused.map((line) => (
-          <p key={line} style={{ margin: 0, color: COLOR.warn }}>
-            {line}
-          </p>
-        ))}
-        {question.missing !== null && (
-          <p style={{ margin: 0, color: COLOR.dim }}>{question.missing}</p>
-        )}
-        {question.waits !== null && (
-          <p style={{ margin: 0, color: COLOR.warn }}>{question.waits}</p>
-        )}
-        {question.deletes && startsAfter !== null && (
-          <p style={{ margin: 0, color: COLOR.warn }}>{startsAfterLine(startsAfter)}</p>
-        )}
-        {question.deletes && <p style={{ margin: 0, color: COLOR.refused }}>{NOT_UNDOABLE}</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {question.deletes ? (
-            <>
-              <button type="button" onClick={() => onChoose(true)} style={CHOICE}>
-                Delete
-              </button>
-              <button type="button" autoFocus onClick={() => onChoose(false)} style={CHOICE}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button type="button" autoFocus onClick={() => onChoose(false)} style={CHOICE}>
-              Close
+    <Dialog
+      title={question.title}
+      onCancel={cancel}
+      actions={
+        question.deletes ? (
+          <>
+            <button type="button" autoFocus onClick={cancel} style={BUTTON}>
+              Cancel
             </button>
-          )}
-        </div>
-      </div>
-    </div>
+            <button type="button" onClick={() => onChoose(true)} style={DANGER}>
+              Delete
+            </button>
+          </>
+        ) : (
+          <button type="button" autoFocus onClick={cancel} style={BUTTON}>
+            Close
+          </button>
+        )
+      }
+    >
+      <p style={LINE}>{question.removes}</p>
+      {question.rebuilds !== null && (
+        <Note tone="warn">
+          <span>{question.rebuilds.line}</span>
+          <span style={{ fontSize: 12 }}>{question.rebuilds.cost}</span>
+        </Note>
+      )}
+      {question.refused.map((line) => (
+        <p key={line} style={{ ...LINE, color: COLOR.warn }}>
+          {line}
+        </p>
+      ))}
+      {question.missing !== null && <p style={{ ...LINE, color: COLOR.dim }}>{question.missing}</p>}
+      {question.waits !== null && <p style={{ ...LINE, color: COLOR.warn }}>{question.waits}</p>}
+      {question.deletes && startsAfter !== null && (
+        <p style={{ ...LINE, color: COLOR.warn }}>{startsAfterLine(startsAfter)}</p>
+      )}
+      {question.deletes && <p style={{ ...LINE, color: COLOR.dim }}>{NOT_UNDOABLE}</p>}
+    </Dialog>
   );
 }
-
-const CHOICE: CSSProperties = {
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
-  color: COLOR.text,
-  font: 'inherit',
-  padding: '5px 10px',
-  borderRadius: 4,
-  textAlign: 'left',
-  cursor: 'pointer',
-};

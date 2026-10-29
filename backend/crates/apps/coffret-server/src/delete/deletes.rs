@@ -221,7 +221,7 @@ mod tests {
 
     fn folder(path: &str) -> Target {
         Target {
-            folder: Some(entry_path(path)),
+            folders: BTreeSet::from([entry_path(path)]),
             paths: BTreeSet::new(),
         }
     }

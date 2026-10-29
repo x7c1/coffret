@@ -122,7 +122,7 @@ pub(super) async fn plan(
             None => missing.push(path.clone()),
         }
     }
-    if let Some(folder) = &selection.folder {
+    for folder in &selection.folders {
         for location in index.entries_under(Some(folder)).await? {
             touched.insert(location.container_id);
             named.insert(location.entry.path);

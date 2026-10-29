@@ -319,10 +319,10 @@ it('reads a deletion, its refused Packs and what stopped it', () => {
   expect(read.delete?.refused.map((refused) => refused.reason)).toEqual(['key_lost', null]);
 });
 
-// What a deletion names goes on the query: the folder as `path`, each file as
-// an `entry` of its own — the same for the preview and for the run, so the two
-// cannot name different things.
-it('names a deletion by its folder and its files, the same way both times', async () => {
+// What a deletion names goes on the query: each folder as a `path` and each
+// file as an `entry` of its own — the same for the preview and for the run, so
+// the two cannot name different things.
+it('names a deletion by its folders and its files, the same way both times', async () => {
   const asked: { url: string; method: string }[] = [];
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     asked.push({ url, method: init?.method ?? 'GET' });
@@ -346,14 +346,14 @@ it('names a deletion by its folder and its files, the same way both times', asyn
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
   });
 
-  const target = { folder: 'albums', paths: ['books/a b.jpg'] };
+  const target = { folders: ['albums', 'books/vol 2'], paths: ['books/a b.jpg'] };
   await previewDelete(target);
   await startDelete(target);
 
   expect(asked.map((request) => request.method)).toEqual(['GET', 'POST']);
   for (const { url } of asked) {
     const query = new URL(url, 'http://127.0.0.1').searchParams;
-    expect(query.getAll('path')).toEqual(['albums']);
+    expect(query.getAll('path')).toEqual(['albums', 'books/vol 2']);
     expect(query.getAll('entry')).toEqual(['books/a b.jpg']);
   }
 });

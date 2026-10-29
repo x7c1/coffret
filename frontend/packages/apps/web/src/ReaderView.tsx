@@ -209,7 +209,7 @@ export function ReaderView({
 
   // `Escape` closes the sheet, and nothing else here is a key: the rest go to
   // the tree, whose focus the sheet follows. One something else took first —
-  // a row's menu closing over the sheet — is not the sheet's.
+  // the actions menu closing over the sheet — is not the sheet's.
   useEffect(() => {
     if (!escapable) {
       return;
