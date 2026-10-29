@@ -37,6 +37,34 @@ export interface ListedFolder {
    * listings it asked for and not every descendant.
    */
   present_throughout: boolean;
+  /**
+   * How many files the Library holds at every depth below it — the whole
+   * subtree, not the rows one level down — and how many of those this device
+   * has (spec: EP-10).
+   *
+   * The server's count for the reason `present_throughout` is the server's;
+   * `present_throughout` is `files_present === files_total` said once. Both
+   * are `0` for a folder the Library does not hold yet.
+   */
+  files_total: number;
+  files_present: number;
+  /**
+   * The bytes those `files_total` files come to, whether this device has them
+   * or not: the folder's size in the Library, counted by the server for the
+   * same reason. `0` for a folder the Library does not hold yet.
+   */
+  size: number;
+  /**
+   * When the newest of those `files_total` files was modified, at any depth
+   * below it: ISO 8601 in UTC as a file's `mtime` is, and `null` for a count of
+   * seconds no calendar reaches.
+   *
+   * A folder of the Library is implied by the paths under it and has no time
+   * of its own, so its Modified is defined as the latest time of anything
+   * inside it, found by the server in the same read as the counts. `null` for
+   * a folder the Library does not hold yet, which has no file to take it from.
+   */
+  mtime: string | null;
 }
 
 /** One Entry as a row in a listing. */

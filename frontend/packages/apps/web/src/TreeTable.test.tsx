@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Fill, ListedFile, ListedFolder, Listing } from '@coffret/api';
 
 import { TAKEN } from './dropTarget';
+import { size, time } from './humanize';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
@@ -34,6 +35,10 @@ function folder(name: string, over: Partial<ListedFolder> = {}, parent = 'albums
     path: parent === '' ? name : `${parent}/${name}`,
     mapped: true,
     present_throughout: false,
+    files_total: 1,
+    files_present: 0,
+    size: 0,
+    mtime: null,
     ...over,
   };
 }
@@ -215,6 +220,26 @@ describe('one tree', () => {
     // `999.9 MB` is 8 characters at 8 a character, and 20 of padding; `—` is
     // narrower than `Modified`, which is 8 at 6.
     expect(widths).toEqual(['', '84px', '28px', '68px', '36px']);
+  });
+
+  // A folder's Size and Modified are the Library's about everything below it,
+  // formatted as a file's are; a folder the Library does not hold yet has
+  // nothing to measure, and its row already says so.
+  it('fills a folder row with the size and newest time below it, and leaves a prospective one empty', () => {
+    const modified = '2026-03-04T05:06:00Z';
+    mount(listing({ folders: [folder('2026', { size: 999_900_000, mtime: modified })] }), {
+      prospective: ['albums/new'],
+    });
+    const cells = (title: string) =>
+      [...screen.getByTitle(title).querySelectorAll('td')].map((cell) => cell.textContent);
+    expect(cells('2026').slice(1, 4)).toEqual([size(999_900_000), '', time(modified)]);
+    expect(cells('new').slice(1, 4)).toEqual(['', '', '']);
+    // The folder's values count toward the widths: `999.9 MB` is 8 characters
+    // at 8 a character, and 20 of padding, and so is the time's 16.
+    const widths = [...document.querySelector('table')!.querySelectorAll('col')].map(
+      (col) => (col as HTMLElement).style.width,
+    );
+    expect(widths.slice(1, 4)).toEqual(['84px', '28px', '148px']);
   });
 });
 

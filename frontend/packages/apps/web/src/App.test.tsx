@@ -9,6 +9,7 @@ import {
   getListing,
   getRemoteHead,
   getWork,
+  peekFile,
   previewDelete,
   startDelete,
   Refusal,
@@ -20,6 +21,7 @@ import {
 
 import { App } from './App';
 import { parseHash, toHash } from './hash';
+import { size, time } from './humanize';
 import { ADD } from './packChoice';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 
@@ -34,6 +36,7 @@ vi.mock('@coffret/api', async (actual) => ({
   getListing: vi.fn(),
   getRemoteHead: vi.fn(),
   getWork: vi.fn(),
+  peekFile: vi.fn(),
   previewDelete: vi.fn(),
   startDelete: vi.fn(),
 }));
@@ -91,7 +94,7 @@ function library(tree: Record<string, string[]>): (path: string) => Listing {
       held: path === '' || path in tree,
       folders: children
         .filter((name) => name.endsWith('/'))
-        .map((name) => ({ name: name.slice(0, -1), path: under(name.slice(0, -1)), mapped: true, present_throughout: false })),
+        .map((name) => ({ name: name.slice(0, -1), path: under(name.slice(0, -1)), mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null })),
       files: children.filter((name) => !name.endsWith('/')).map((name) => page(under(name))),
     });
   };
@@ -114,6 +117,7 @@ beforeEach(() => {
   // The reader's pages: jsdom has no object URLs, and the reader only needs
   // one to put on the image.
   vi.mocked(getFile).mockResolvedValue(new Blob(['page']));
+  vi.mocked(peekFile).mockResolvedValue(new Blob(['page']));
   URL.createObjectURL = () => 'blob:page';
   URL.revokeObjectURL = () => undefined;
 });
@@ -262,7 +266,7 @@ describe('starting a Library from the explorer', () => {
       path === ''
         ? listing('', {
             mapped: false,
-            folders: [{ name: 'albums', path: 'albums', mapped: false, present_throughout: false }],
+            folders: [{ name: 'albums', path: 'albums', mapped: false, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
             empty_mapped_prefixes: ['comics'],
           })
         : listing(path);
@@ -343,8 +347,8 @@ it('follows the focus in the URL, and opens a folder at its first page', async (
   await waitFor(() => expect(shownFolder()).toBe('comics'));
   await tree().findByTitle('Series');
   fireEvent.keyDown(area, { key: 'ArrowDown' });
-  // A closed folder's listing is not on hand, so the folder it stands in is
-  // the one the URL names.
+  // A closed folder's rows are not on show, so the folder it stands in is the
+  // one the URL names.
   expect(shownFolder()).toBe('comics');
   expect(window.history.length).toBe(before);
 
@@ -357,6 +361,81 @@ it('follows the focus in the URL, and opens a folder at its first page', async (
   );
   expect(window.history.length).toBe(before + 1);
 });
+
+// The details pane follows the focused row, says what it is in words that fit
+// any file, and opens what `Enter` opens.
+it('describes the focused row in the details pane, and opens it from there', async () => {
+  const base = library({
+    '': ['comics/', 'papers/'],
+    comics: ['Series/'],
+    'comics/Series': ['001.jpg', '002.jpg'],
+    papers: ['manual.pdf'],
+  });
+  // What the Library says of everything below `comics`: its bytes, and when
+  // the newest file anywhere in it was modified.
+  const modified = '2026-03-04T05:06:00Z';
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      folders: one.folders.map((folder) =>
+        folder.path === 'comics' ? { ...folder, size: 5_000_000, mtime: modified } : folder,
+      ),
+    };
+  };
+  render(<App />);
+  await tree().findByTitle('comics');
+  const area = screen.getByRole('tree');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  expect(pane.getByText('Nothing selected')).toBeTruthy();
+
+  // A folder holding a folder and no images: its items, and no Open.
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'comics' })).toBeTruthy();
+  await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
+  expect(definition(pane, 'Kind')).toBe('Folder');
+  expect(definition(pane, 'Size')).toBe(size(5_000_000));
+  expect(definition(pane, 'Modified')).toBe(time(modified));
+  expect(definition(pane, 'On this device')).toBe('No');
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+
+  // A folder of pages, closed: its cover, peeked and never fetched, and Open.
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'Series' })).toBeTruthy();
+  await waitFor(() => expect(peekFile).toHaveBeenCalledWith('comics/Series/001.jpg', expect.anything()));
+  expect(getFile).not.toHaveBeenCalled();
+  fireEvent.click(await pane.findByRole('button', { name: 'Open' }));
+  await waitFor(() =>
+    expect(parseHash(window.location.hash)).toEqual({
+      folder: 'comics/Series',
+      open: 'comics/Series/001.jpg',
+    }),
+  );
+});
+
+// A focused folder whose listing was refused does not count its items as
+// still coming.
+it('says no item count for a focused folder whose listing was refused', async () => {
+  answers = library({ '': ['comics/'], comics: ['001.jpg'] });
+  vi.mocked(getListing).mockImplementation((path: string) =>
+    path === 'comics' ? Promise.reject(new Error('refused')) : Promise.resolve(answers(path)),
+  );
+  render(<App />);
+  await tree().findByTitle('comics');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  fireEvent.keyDown(screen.getByRole('tree'), { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'comics' })).toBeTruthy();
+  await waitFor(() => expect(definition(pane, 'Items')).toBe('—'));
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+});
+
+/** What the details pane says against one fact's name. */
+function definition(pane: ReturnType<typeof within>, name: string): string | null {
+  const term = pane.getByText(name, { selector: 'dt' });
+  return term.nextElementSibling?.textContent ?? null;
+}
 
 /** A deletion of `folder` that ended, every file of it removed. */
 function deletionOf(folder: string): Delete {
@@ -438,13 +517,13 @@ describe('the end of a deletion', () => {
       path === ''
         ? deleted
           ? listing('', {
-              folders: [{ name: 'albums', path: 'albums', mapped: true, present_throughout: false }],
+              folders: [{ name: 'albums', path: 'albums', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
               empty_mapped_prefixes: ['comics'],
             })
           : listing('', {
               folders: [
-                { name: 'albums', path: 'albums', mapped: true, present_throughout: false },
-                { name: 'comics', path: 'comics', mapped: true, present_throughout: false },
+                { name: 'albums', path: 'albums', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null },
+                { name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null },
               ],
             })
         : listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
@@ -473,7 +552,7 @@ describe('the end of a deletion', () => {
     answers = (path) =>
       path === ''
         ? listing('', {
-            folders: [{ name: 'comics', path: 'comics', mapped: true, present_throughout: false }],
+            folders: [{ name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
           })
         : listing(path, { held: true });
     vi.mocked(getFolders).mockResolvedValue({ folders: ['comics'] });

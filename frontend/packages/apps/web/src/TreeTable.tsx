@@ -54,7 +54,8 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * desktop file manager.
  *
  * Columns, in order: Name, Size, whether the row is on this device, and
- * Modified. A folder row opens and closes from the disclosure button at its
+ * Modified, a folder's Size and Modified being those of everything below it
+ * (see `valuesOf`). A folder row opens and closes from the disclosure button at its
  * start; a file and an empty folder keep that room, so that every name at one
  * depth starts at one place. Every file is a row, each page of a scanned book
  * included. Each value column is as wide as the widest of its heading and the
@@ -330,22 +331,8 @@ export function TreeTable({
     void droppedFiles(event.dataTransfer).then((drop) => onAdd(target, drop), onUnreadable);
   };
 
-  // What opening a row does: what a double-click, a tap and `Enter` reach. A
-  // folder no mapping reaches has nowhere on this device to put a file, so a
-  // file there is not opened and the sentence says why instead.
-  const openRow = (row: FolderRow | FileRow) => {
-    if (row.kind === 'folder') {
-      onOpenFolder(row.path);
-      return;
-    }
-    if (!row.in.mapped) {
-      onUnmapped('open', row.in.held || row.in.path === '', row.in);
-    } else if (row.file.openable) {
-      onOpenFile(row.path);
-    } else {
-      onUnsupported(row.file);
-    }
-  };
+  const openRow = (row: FolderRow | FileRow) =>
+    opened(row, { onOpenFolder, onOpenFile, onUnsupported, onUnmapped });
   const focused = rows.find(
     (row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === state.focus,
   );
@@ -428,12 +415,20 @@ export function TreeTable({
       ((text: string) => text.length * 8),
     [measure],
   );
-  const files = rows.filter((row): row is FileRow => row.kind === 'file');
-  const sizes = files.map((row) => size(row.file.size));
-  const times = files.map((row) => time(row.file.mtime));
+  const values = rows.flatMap((row) => (row.kind === 'note' ? [] : [valuesOf(row)]));
   const widths = {
-    size: columnWidth('Size', sizes, measured, 2 * CELL_PAD),
-    modified: columnWidth('Modified', times, measured, 2 * CELL_PAD),
+    size: columnWidth(
+      'Size',
+      values.map((value) => value.size),
+      measured,
+      2 * CELL_PAD,
+    ),
+    modified: columnWidth(
+      'Modified',
+      values.map((value) => value.modified),
+      measured,
+      2 * CELL_PAD,
+    ),
   };
   const columns = <Columns picking={picking} widths={widths} />;
 
@@ -673,6 +668,38 @@ export function TreeTable({
   );
 }
 
+/** What opening a row can come to, as [`opened`](#opened) hands it on. */
+export interface Openers {
+  /** A folder row opened: the reader, at the first page of the folder. */
+  onOpenFolder: (path: string) => void;
+  /** A file row opened that the reader can show. */
+  onOpenFile: (path: string) => void;
+  /** A file row opened that the reader cannot show. */
+  onUnsupported: (file: ListedFile) => void;
+  /** A file row opened in a folder with nowhere on this device to put it. */
+  onUnmapped: (tried: Tried, held: boolean, where: Listing) => void;
+}
+
+/**
+ * What opening a row does: what a double-click, a tap, `Enter`, and the
+ * details pane's Open all reach, so that the four are one gesture. A folder no
+ * mapping reaches has nowhere on this device to put a file, so a file there is
+ * not opened and the sentence says why instead.
+ */
+export function opened(row: FolderRow | FileRow, openers: Openers): void {
+  if (row.kind === 'folder') {
+    openers.onOpenFolder(row.path);
+    return;
+  }
+  if (!row.in.mapped) {
+    openers.onUnmapped('open', row.in.held || row.in.path === '', row.in);
+  } else if (row.file.openable) {
+    openers.onOpenFile(row.path);
+  } else {
+    openers.onUnsupported(row.file);
+  }
+}
+
 /** The keys that move the focus. */
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
@@ -744,6 +771,7 @@ function Row({
   // makes of two taps comes after the second tap's click.
   const pointer = useRef<string | null>(null);
   const folder = row.kind === 'folder' ? row : null;
+  const values = valuesOf(row);
   const offered = row.kind === 'folder' || row.in.mapped;
   // While files are picked out, the highlight on a row that has a box is the
   // box's alone: the row a click focused before "Select" was pressed, drawn
@@ -857,7 +885,7 @@ function Row({
         </span>
       </td>
       <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
-        {row.kind === 'file' ? size(row.file.size) : ''}
+        {values.size}
       </td>
       <td style={{ ...CELL, textAlign: 'center', textOverflow: 'clip', padding: `0 ${DEVICE_PAD}px` }}>
         {folder !== null ? (
@@ -866,10 +894,34 @@ function Row({
           <Device state={shown.state} message={shown.message} />
         ) : null}
       </td>
-      <td style={{ ...CELL, color: COLOR.dim }}>{row.kind === 'file' ? time(row.file.mtime) : ''}</td>
+      <td style={{ ...CELL, color: COLOR.dim }}>{values.modified}</td>
       <MenuCell name={row.name} items={menu} />
     </tr>
   );
+}
+
+/**
+ * What one row shows in the Size and Modified columns, as the strings drawn.
+ *
+ * A file's are its own. A folder's are the Library's answers about everything
+ * below it — the bytes of every file at every depth, and when the newest of
+ * them was modified (see [`ListedFolder`](../../../gateway/api/src/list.ts)) —
+ * formatted the same way, so a book reads beside its pages in one column. A
+ * prepared folder and one waiting to be packed have nothing in the Library to
+ * measure, and their row already says so, so their cells stay empty rather
+ * than stating a zero that is not the folder's.
+ *
+ * One function for the cells and for the column widths, so that a column is
+ * always as wide as the widest value it actually draws.
+ */
+function valuesOf(row: FolderRow | FileRow): { size: string; modified: string } {
+  if (row.kind === 'file') {
+    return { size: size(row.file.size), modified: time(row.file.mtime) };
+  }
+  if (row.prospective || row.stranded) {
+    return { size: '', modified: '' };
+  }
+  return { size: size(row.folder.size), modified: time(row.folder.mtime) };
 }
 
 /**

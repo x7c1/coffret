@@ -49,6 +49,7 @@ fn every_refusal() -> Vec<ApiError> {
         ApiError::whole_drop_too_large(),
         ApiError::unauthorized("this server answers only the explorer it was started for"),
         ApiError::no_such_entry(),
+        ApiError::not_on_this_device(),
         ApiError::no_such_route(),
         ApiError::no_such_method(),
         // `declined`, a fetch's verdict on one Entry: each reason it gives with

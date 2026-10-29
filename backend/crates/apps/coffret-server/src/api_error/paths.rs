@@ -31,4 +31,19 @@ impl ApiError {
             "the Library holds nothing at that path".to_owned(),
         )
     }
+
+    /// This device holds no file at the path, and the caller asked to be
+    /// answered from this device alone: the file route's peek (spec: EP-10).
+    ///
+    /// The same kind and status as [`no_such_entry`](Self::no_such_entry),
+    /// because to whoever peeked it is the same answer — there is nothing here
+    /// to show — and a caller that peeks has already decided not to fetch.
+    /// The sentence says which "here" it was about.
+    pub fn not_on_this_device() -> Self {
+        Self::plain(
+            StatusCode::NOT_FOUND,
+            "no_such_entry",
+            "this device holds no file at that path".to_owned(),
+        )
+    }
 }
