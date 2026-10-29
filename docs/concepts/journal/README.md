@@ -56,7 +56,7 @@ A batch and its Journal record move through one lifecycle:
 | preparing | additions exist only as uncommitted candidates | none yet — the batch can still be abandoned |
 | committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot, plus the snapshot slot where its own [Index Snapshot](../index-snapshot/) goes |
 | checkpointed | unchanged | an [Index Snapshot](../index-snapshot/) has applied it |
-| pruned | unchanged | deleted; the Snapshot has recorded its Keyring commitment and its commit slot (spec: CK-2, CK-3) |
+| pruned | unchanged | deleted; the Snapshot has recorded its Keyring commitment and its commit slot (spec: CK-2, CK-3), and an older Keyring generation it selected goes after it (spec: KL-18) |
 
 The single slot is what serializes writers: every commit consumes the slot
 of the head it started from, so of the writers starting from the same head
@@ -141,14 +141,18 @@ would fence nobody (spec: FM-12).
     Container was written (spec: RV-4, FM-9).
 - `prune` never leaves a Library that has committed anything with neither a
   head nor an [Index Snapshot](../index-snapshot/): it deletes only the
-  records a checkpoint has applied, and never the Snapshot that applied them,
-  which stays the source of the next commit slot once the last of those heads
-  is gone (spec: CK-2, CK-4, CK-6).
+  records a checkpoint has applied, never the current head, and never the
+  Snapshot that applied them, which carries the next commit slot too
+  (spec: CK-2, CK-4, CK-6).
   - No particular head is certain to survive — the first head is among the
-    first records to become eligible for `prune`, and every head is eligible
-    once a Snapshot covers the latest — so whoever asks whether a place holds
-    a Library asks for any head or Snapshot, never for one by name
-    (spec: CK-4, CK-6).
+    first records to become eligible for `prune`, and every head but the
+    current one is eligible once a Snapshot covers the latest, while the
+    current head is replaced by the next commit — so whoever asks whether a
+    place holds a Library asks for any head or Snapshot, never for one by
+    name (spec: CK-4, CK-6).
+  - Once those records are gone, `prune` also disposes of the superseded
+    [Keyring](../keyring/) generations they selected, every one older than
+    the Snapshot's (spec: KL-18).
 
 ## Technical Constraints
 

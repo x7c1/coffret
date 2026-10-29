@@ -1,15 +1,20 @@
 use coffret_model::{ControlObjectName, Generation};
 
 use crate::prune::unremoved_record::UnremovedRecord;
+use crate::prune::unremoved_replica::UnremovedReplica;
 
 /// What a prune did.
 ///
-/// What it rested on, and what it removed. A run that removed nothing — the
-/// Library's Journal holds only its head, or a prune a moment earlier took
-/// the rest — is an ordinary success, and [`removed`](Self::removed) is empty.
+/// What it rested on, and what it removed: Journal records, and the replicas
+/// of the Keyring generations older than the one the Snapshot records. A run
+/// that removed nothing — the Library's Journal holds only its head, or a
+/// prune a moment earlier took the rest — is an ordinary success, and
+/// [`removed`](Self::removed) and [`removed_replicas`](Self::removed_replicas)
+/// are empty.
 #[derive(Debug)]
 pub struct PruneOutcome {
-    /// The head the run caught up to, which it kept (spec: CK-4).
+    /// The head the run caught up to, which it kept: the current head is never
+    /// eligible (spec: CK-4).
     pub head: Generation,
     /// The ordinary Index Snapshot of that head the run rested on: `idx-<head>`
     /// (spec: CK-10).
@@ -33,6 +38,18 @@ pub struct PruneOutcome {
     ///
     /// Those it did remove stay removed, and the next prune takes these.
     pub unremoved: Vec<UnremovedRecord>,
+    /// The replicas of superseded Keyring generations this run moved to the
+    /// trash, in name order: every one older than the generation the Snapshot
+    /// records (spec: KL-18).
+    ///
+    /// Empty where any eligible record was left in place, since a generation
+    /// goes only after the records that selected it.
+    pub removed_replicas: Vec<ControlObjectName>,
+    /// The replicas of superseded generations it could not trash, each with its
+    /// reason.
+    ///
+    /// Those it did trash stay trashed, and the next prune takes these.
+    pub unremoved_replicas: Vec<UnremovedReplica>,
 }
 
 impl PruneOutcome {

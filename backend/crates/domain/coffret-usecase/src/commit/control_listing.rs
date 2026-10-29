@@ -25,7 +25,9 @@ use crate::retry::RetryPolicy;
 /// the generation and the set digest each states and every object listed under
 /// it. The generation and the digest are for a commit interrupted after it put
 /// its candidate's replicas, which leaves objects no head names: suspected
-/// orphans a run may report and never removes (spec: OC-4). Every object is
+/// orphans a run may report and never removes (spec: OC-4), until `prune`
+/// takes every set under a superseded generation's number (spec: KL-18). The
+/// generations are also what `prune` reads to find those. Every object is
 /// kept because on a Storage whose names are not unique one replica name can
 /// carry several, and any one of them that reads back valid is the replica
 /// (spec: KL-14) — which one that is, only a read can say.
@@ -40,8 +42,8 @@ pub(crate) struct ControlListing {
 /// One Keyring replica name as the listing gave it.
 #[derive(Debug)]
 struct ListedReplica {
-    generation: Generation,
-    set_digest: String,
+    /// The name, as parsed: its generation, set digest and position.
+    name: ControlObjectName,
     /// Every object listed under the name, in listing order.
     copies: Vec<ObjectRef>,
 }
@@ -108,12 +110,7 @@ impl ControlListing {
     /// find the position lost and repair it again.
     fn record(&mut self, name: String, object_ref: ObjectRef) -> CommitResult<()> {
         let parsed = ControlObjectName::parse(&name);
-        if let Ok(ControlObjectName::KeyringReplica {
-            generation,
-            set_digest,
-            ..
-        }) = parsed
-        {
+        if let Ok(replica @ ControlObjectName::KeyringReplica { .. }) = parsed {
             let listed = match self.keyring_replicas.entry(name) {
                 Entry::Occupied(listed) => {
                     debug!(
@@ -124,8 +121,7 @@ impl ControlListing {
                     listed.into_mut()
                 }
                 Entry::Vacant(unlisted) => unlisted.insert(ListedReplica {
-                    generation,
-                    set_digest,
+                    name: replica,
                     copies: Vec::new(),
                 }),
             };
@@ -241,6 +237,20 @@ impl ControlListing {
             .map_or(&[], |listed| listed.copies.as_slice())
     }
 
+    /// Every Keyring replica name the walk saw, with every object listed under
+    /// it, in name order (spec: KL-14).
+    ///
+    /// For a flow that disposes of whole generations by name rather than
+    /// reading a committed one position by position: `prune`, which trashes
+    /// the replicas of the generations a later one superseded (spec: KL-18).
+    pub(crate) fn keyring_replicas(
+        &self,
+    ) -> impl Iterator<Item = (&ControlObjectName, &[ObjectRef])> + '_ {
+        self.keyring_replicas
+            .values()
+            .map(|listed| (&listed.name, listed.copies.as_slice()))
+    }
+
     /// How many listed Keyring replica objects no head names, by generation
     /// (spec: OC-4), where `committed` is the Keyring the head this listing
     /// was caught up to names.
@@ -267,11 +277,11 @@ impl ControlListing {
     ) -> BTreeMap<Generation, usize> {
         let mut unnamed = BTreeMap::new();
         for listed in self.keyring_replicas.values() {
-            let generation = listed.generation;
+            let generation = listed.name.generation();
             let named = committed.is_some_and(|committed| {
                 generation < committed.generation()
                     || (generation == committed.generation()
-                        && listed.set_digest == committed.set_digest())
+                        && listed.name.set_digest() == Some(committed.set_digest()))
             });
             if !named {
                 *unnamed.entry(generation).or_insert(0) += listed.copies.len();

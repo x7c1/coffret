@@ -670,6 +670,8 @@ fn prune_answers_the_checkpoint_it_rested_on_and_what_it_removed() {
                     "oldest_removed": null,
                     "newest_removed": null,
                     "unremoved": [],
+                    "removed_replicas": 0,
+                    "unremoved_replicas": [],
                 },
                 "error": null,
                 "findings": [],
@@ -684,7 +686,8 @@ fn prune_answers_the_checkpoint_it_rested_on_and_what_it_removed() {
     succeeded(&output, "prune");
     assert_eq!(
         stdout(&output),
-        "checkpoint idx-0.cfrt was already there, removed no Journal record, kept head 0\n",
+        "checkpoint idx-0.cfrt was already there, removed no Journal record, kept head 0, \
+         trashed no superseded Keyring replica\n",
     );
 }
 
@@ -706,7 +709,8 @@ fn prune_help_says_what_it_removes_and_that_it_runs_only_when_asked() {
     for said in [
         "Remove the Journal records the checkpoint of the Library's head covers",
         "the head itself stays",
-        "No checkpoint, Keyring replica or file's content is ever removed",
+        "every replica of an older Keyring generation",
+        "Checkpoints, the head's Keyring and files' content are never removed",
         "It runs only when asked",
         "--passphrase-stdin",
     ] {

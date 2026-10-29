@@ -545,14 +545,23 @@ fn a_rename_answers_what_it_renamed_and_the_head() {
     assert_eq!(answered["error"], Value::Null);
 }
 
-// A prune that removed a stretch of records and could not remove one: the
-// head kept, the checkpoint it rested on, the range — and the record left in
-// place, which is work for a later run and turns the exit status.
+// A prune that removed a stretch of records and could not remove one, and
+// trashed superseded Keyring replicas but one: the head kept, the checkpoint
+// it rested on, the range, the replicas trashed — and the record and the
+// replica left in place, which are work for a later run and turn the exit
+// status.
 #[test]
 fn a_prune_answers_what_it_removed_and_what_it_left() {
     let ran = Ran {
         report: crate::report::Report::Findings,
-        answer: Answer::Pruned(Pruned::assembled(9, true, 0..=7, vec![8])),
+        answer: Answer::Pruned(Pruned::assembled(
+            9,
+            true,
+            0..=7,
+            vec![8],
+            5,
+            vec!["key-8-ab12-r2-of-3.cfrt".to_owned()],
+        )),
         findings: Vec::new(),
     };
 
@@ -569,6 +578,8 @@ fn a_prune_answers_what_it_removed_and_what_it_left() {
             "oldest_removed": 0,
             "newest_removed": 7,
             "unremoved": [8],
+            "removed_replicas": 5,
+            "unremoved_replicas": ["key-8-ab12-r2-of-3.cfrt"],
         }),
     );
     assert_eq!(answered["error"], Value::Null);

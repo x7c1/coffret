@@ -107,8 +107,9 @@
 //!
 //! [`run_prune`] takes away rather than brings over: it removes the Journal
 //! records the Snapshot of the head covers, once that Snapshot stands and the
-//! committed Keyring set is complete (spec: CK-4, CK-5, CK-6). It runs only
-//! when somebody asks for it.
+//! committed Keyring set is complete, and then the Keyring generations older
+//! than the one that Snapshot records (spec: CK-4, CK-5, CK-6, KL-18). It runs
+//! only when somebody asks for it.
 //!
 //! [`run_repack`] neither brings anything over nor takes anything away: it
 //! rewrites the Packs holding one folder's Entries into Packs cut in Entry Path
@@ -481,7 +482,9 @@ pub use coffret_usecase::fetch::{
 pub use coffret_usecase::freeze::{
     FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
 };
-pub use coffret_usecase::prune::{PruneError, PruneOutcome, PruneRefusal, UnremovedRecord};
+pub use coffret_usecase::prune::{
+    PruneError, PruneOutcome, PruneRefusal, UnremovedRecord, UnremovedReplica,
+};
 pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
 pub use coffret_usecase::repack::{RepackError, RepackOutcome, RepackRefusal, RepackedPack};
 pub use coffret_usecase::sync::{

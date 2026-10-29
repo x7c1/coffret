@@ -45,7 +45,8 @@ Concept background: [Keyring](../../concepts/keyring/),
   policy, whose initial value is three. *(Form: test)*
 - **KL-9.** Replication is effective only within one generation: envelopes
   introduced by a newer generation are protected only by that generation's
-  replicas, never by retained older generations. *(Form: test)*
+  replicas, never by older generations still on Storage, which `prune`
+  disposes of once superseded (KL-18). *(Form: test)*
 - **KL-10.** Every Keyring generation belongs to one `master_key_epoch`; the
   generation numbers the successive envelope sets across the Library's whole
   life and never restarts at a rotation, so a generation number is never
@@ -58,13 +59,18 @@ Concept background: [Keyring](../../concepts/keyring/),
   repair before a `prune` or a Master Key rotation)*
 - **KL-12.** A valid replica set with no reachable committed Journal record
   or Index Snapshot is treated as a suspected orphan; its disposal follows the
-  orphan-cleanup rules (OC-2, OC-3, OC-4). *(Form: test; not yet implemented:
-  disposing of an orphan set OC-3 proves)*
+  orphan-cleanup rules (OC-2, OC-3, OC-4). A superseded generation (KL-18)
+  is not an orphan: it was committed, and `prune` disposes of it under KL-18
+  instead. *(Form: test; not yet implemented: disposing of an orphan set OC-3
+  proves)*
 - **KL-13.** Repair is automatic: whichever device finds the committed
   replica set degraded (KL-5) rewrites the missing replicas from any
   committed valid replica, restoring the full committed count. Repair only
   re-materializes the committed generation — it never invents state and
-  never deletes anything. *(Form: test)*
+  never deletes anything. Repair rewrites only the generation the device's
+  head selects after it has caught up (CK-9); a device that finds replicas
+  missing from an older generation catches up first and repairs nothing if
+  that generation has been superseded (KL-18). *(Form: test)*
 - **KL-14.** Replica objects are identified by generation and replica
   position — a generation belongs to exactly one epoch (KL-10) — and a replica
   at `(generation, set_digest, position)` has exactly one valid content: the
@@ -121,3 +127,31 @@ Concept background: [Keyring](../../concepts/keyring/),
     whose `hash` is the key-lost Entry's keeps that Entry's deposit time,
     whether `update` or `freeze` (PK-13) builds it, and only a replacement
     whose content differs is stamped with a new one.
+- **KL-18.** A Keyring generation is **superseded** once a later generation
+  of the same epoch is committed and complete (KL-2, KL-3). `prune` disposes
+  of every replica of each superseded generation older than the generation
+  its Snapshot records (CK-3, CK-5), after it has deleted the Journal records
+  that Snapshot covers (CK-4, CK-6), and never of the generation the Snapshot
+  records or the generation the current head selects. Disposal is a
+  recoverable `trash`, the same removal `prune` applies to Journal records;
+  only a Master Key rotation deletes Keyring replicas irreversibly (MR-3).
+  *(Form: test; not yet implemented: disposal in a Library past its first
+  epoch, which keeps every generation until rotation is implemented)*
+  - Nothing left on Storage after `prune` reaches such a generation: every
+    current Container is mapped by the Snapshot's generation or a later one
+    (KL-7), the Journal records that selected the older generations are gone,
+    and an older Index Snapshot that records one can no longer be replayed to
+    the head, so it is not a starting point a recovery could use (CK-9, RV-1).
+  - A replica of a superseded generation that is missing is not a degraded
+    set (KL-5) and is never repaired (KL-13).
+  - A device that read an older head a moment ago has already read its key
+    table; a generation disposed of under it does not stop the fetch it is
+    making, and `trash` keeps the rest recoverable.
+  - Replica names carry a generation and not a commitment (KL-14), so every
+    set listed under a superseded generation's number goes with it, a
+    candidate that lost its commit slot at that number included, which
+    KL-12 would otherwise leave to orphan cleanup: no current Container
+    depends on it (KL-7), and `trash` keeps it recoverable.
+  - A Journal record `prune` left in place still selects the generation it
+    committed, so where one is left no generation is disposed of in that run;
+    the next `prune` takes both.

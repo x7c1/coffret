@@ -1,11 +1,12 @@
-//! The prune's contract, as tests (spec: CK-4, CK-5, CK-6, CK-8).
+//! The prune's contract, as tests (spec: CK-4, CK-5, CK-6, CK-8, KL-18).
 //!
 //! A Library is built by real commits — its first head and a record per batch,
 //! each with its Keyring set — so the replica set the gate reads is the one a
 //! commit wrote, and the records a prune removes are the ones a catch-up would
 //! otherwise replay. What a case asserts about Storage is read off its listing
 //! afterwards, by name, because what `prune` promises is which objects are
-//! still there: every one but the eligible Journal records.
+//! still there: every one but the eligible Journal records and the replicas of
+//! the Keyring generations older than the one the Snapshot records.
 
 use std::collections::BTreeSet;
 use std::ops::Range;
@@ -131,6 +132,46 @@ fn generations(range: Range<u64>) -> Vec<Generation> {
     range.map(generation).collect()
 }
 
+/// The names in `names` of the Keyring replicas whose generation is below
+/// `bound`.
+fn replicas_below(names: &BTreeSet<String>, bound: Generation) -> BTreeSet<String> {
+    replicas_where(names, |generation| generation < bound)
+}
+
+/// The names in `names` of the Keyring replicas of `generation`.
+fn replicas_of(names: &BTreeSet<String>, generation: Generation) -> BTreeSet<String> {
+    replicas_where(names, |found| found == generation)
+}
+
+/// The names in `names` of the Keyring replicas whose generation `keep` says
+/// yes to.
+fn replicas_where(names: &BTreeSet<String>, keep: impl Fn(Generation) -> bool) -> BTreeSet<String> {
+    names
+        .iter()
+        .filter(|name| {
+            matches!(
+                ControlObjectName::parse(name),
+                Ok(ControlObjectName::KeyringReplica { generation, .. }) if keep(generation)
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+/// The names of the replicas an outcome says it trashed.
+fn trashed(outcome: &PruneOutcome) -> BTreeSet<String> {
+    outcome
+        .removed_replicas
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// The Keyring generation the head a catalog stands at selects.
+async fn keyring_generation(index: &dyn Index) -> Generation {
+    checkpoint(index).await.keyring().generation()
+}
+
 /// The checkpoint a catalog stands at.
 async fn checkpoint(index: &dyn Index) -> IndexCheckpoint {
     index
@@ -183,11 +224,12 @@ async fn store_snapshot(
     put(store, &name.to_string(), object.bytes()).await;
 }
 
-// CK-4, CK-6, CK-8: every record at or before what the Snapshot applies goes,
-// but the head; the Snapshot of the head is written first, since none was
-// there; and nothing else on Storage moves — no Keyring replica, no Container.
-// The records are trashed rather than purged, so a person can still get them
-// back.
+// CK-4, CK-6, CK-8, KL-18: every record at or before what the Snapshot applies
+// goes, but the head; the Snapshot of the head is written first, since none was
+// there; then every replica of every Keyring generation older than the one the
+// Snapshot records goes too. Nothing else on Storage moves — not the
+// generation the head selects, no Container. The records and the replicas are
+// trashed rather than purged, so a person can still get them back.
 #[tokio::test]
 async fn every_record_the_snapshot_covers_goes_but_the_head() {
     let keys = keys();
@@ -214,15 +256,32 @@ async fn every_record_the_snapshot_covers_goes_but_the_head() {
     assert!(outcome.already_gone.is_empty(), "{outcome:?}");
     assert!(outcome.kept.is_empty(), "{outcome:?}");
     assert!(outcome.unremoved.is_empty(), "{outcome:?}");
+    let selected = keyring_generation(&index).await;
+    let superseded = replicas_below(&before, selected);
+    assert!(!superseded.is_empty(), "every commit wrote a generation");
+    assert_eq!(trashed(&outcome), superseded);
+    assert!(outcome.unremoved_replicas.is_empty(), "{outcome:?}");
 
-    let mut expected: BTreeSet<String> = before.difference(&heads(0..3)).cloned().collect();
+    let mut expected: BTreeSet<String> = before
+        .difference(&heads(0..3))
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .difference(&superseded)
+        .cloned()
+        .collect();
     expected.insert("idx-3.cfrt".to_owned());
+    let after = names(&store).await;
     assert_eq!(
-        names(&store).await,
-        expected,
-        "the records before the head left, the Snapshot arrived, and nothing else changed",
+        after, expected,
+        "the records before the head and the older generations left, the Snapshot arrived, \
+         and nothing else changed",
     );
-    for removed in heads(0..3) {
+    assert_eq!(
+        replicas_where(&after, |_| true),
+        replicas_of(&before, selected),
+        "the generation the Snapshot records and the head selects is all of the Keyring left",
+    );
+    for removed in heads(0..3).into_iter().chain(superseded) {
         store
             .get(&ObjectRef::new(&removed), None)
             .await
@@ -255,10 +314,19 @@ async fn a_snapshot_already_written_is_the_one_rested_on() {
     assert_eq!(outcome.snapshot.to_string(), "idx-3.cfrt");
     assert!(!outcome.wrote_snapshot, "the Snapshot was already there");
     assert_eq!(outcome.removed, generations(0..3));
+    let superseded = replicas_below(&written, keyring_generation(&index).await);
+    assert_eq!(trashed(&outcome), superseded);
     assert_eq!(
         names(&store).await,
-        written.difference(&heads(0..3)).cloned().collect(),
-        "no second Snapshot of the head, and nothing but the records removed",
+        written
+            .difference(&heads(0..3))
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .difference(&superseded)
+            .cloned()
+            .collect(),
+        "no second Snapshot of the head, and nothing but the records and the older generations \
+         removed",
     );
 }
 
@@ -321,9 +389,10 @@ async fn an_activation_snapshot_in_a_head_position_stays() {
     assert!(names(&store).await.contains("head-1.cfrt"));
 }
 
-// CK-5, CK-3: a Snapshot of the head that records another Keyring tuple than
-// the head committed would, once the records were gone, prove the wrong replica
-// set selected. Nothing is removed.
+// CK-5, CK-3, KL-18: a Snapshot of the head that records another Keyring tuple
+// than the head committed would, once the records were gone, prove the wrong
+// replica set selected. Nothing is removed — no record, and no older Keyring
+// generation either.
 #[tokio::test]
 async fn a_snapshot_recording_another_keyring_tuple_is_refused() {
     let keys = keys();
@@ -374,9 +443,10 @@ async fn a_snapshot_recording_another_keyring_tuple_is_refused() {
     assert_eq!(names(&store).await, before, "nothing was removed");
 }
 
-// CK-5, KL-2: a committed set missing a replica is not complete, and once the
-// records were gone its replicas would be the envelopes' only carriers. Nothing
-// is removed — but the Snapshot was written first, and stands (spec: CK-8).
+// CK-5, KL-2, KL-18: a committed set missing a replica is not complete, and
+// once the records were gone its replicas would be the envelopes' only
+// carriers. Nothing is removed — no record and no older Keyring generation —
+// but the Snapshot was written first, and stands (spec: CK-8).
 #[tokio::test]
 async fn an_incomplete_keyring_set_is_refused() {
     let keys = keys();
@@ -456,8 +526,9 @@ async fn a_library_with_no_head_has_nothing_to_prune() {
     assert!(names(&store).await.is_empty());
 }
 
-// CK-4: a prune straight after another removes nothing and succeeds — the
-// head is all that is left of the Journal, and it stays.
+// CK-4, KL-18: a prune straight after another removes nothing and succeeds —
+// the head is all that is left of the Journal, and it stays, and the
+// generation it selects is all that is left of the Keyring.
 #[tokio::test]
 async fn a_second_prune_removes_nothing() {
     let keys = keys();
@@ -473,17 +544,23 @@ async fn a_second_prune_removes_nothing() {
     assert!(again.removed.is_empty(), "{again:?}");
     assert_eq!(again.removed_range(), None);
     assert!(again.already_gone.is_empty(), "{again:?}");
+    assert!(again.removed_replicas.is_empty(), "{again:?}");
+    assert!(again.unremoved_replicas.is_empty(), "{again:?}");
     assert_eq!(names(&store).await, before);
 }
 
-// CK-6: a record Storage will not trash is reported and the run goes on; what
-// it removed stays removed, and the next prune finishes the job.
+// CK-6, KL-18: a record Storage will not trash is reported and the run goes
+// on; what it removed stays removed, and the next prune finishes the job. While
+// a record is left in place no Keyring generation goes, since that record
+// still selects the one it committed; the prune that removes it takes them.
 #[tokio::test]
 async fn a_record_storage_will_not_trash_is_reported_and_left_for_the_next_prune() {
     let keys = keys();
     let inner = InMemoryStore::new(8);
     let index = InMemoryIndex::new();
     library(&inner, &index, &keys, 3).await;
+    let before = names(&inner).await;
+    let superseded = replicas_below(&before, keyring_generation(&index).await);
 
     let refusing = FaultyStore::refusing_to_trash(&inner);
     let outcome = pruned(&refusing, &index, &keys).await;
@@ -503,10 +580,15 @@ async fn a_record_storage_will_not_trash_is_reported_and_left_for_the_next_prune
     assert_eq!(outcome.removed, vec![generation(0), generation(2)]);
     assert_eq!(outcome.unremoved.len(), 1, "{outcome:?}");
     assert_eq!(outcome.unremoved[0].generation, generation(1));
+    assert!(outcome.removed_replicas.is_empty(), "{outcome:?}");
+    assert!(names(&inner).await.is_superset(&superseded));
 
     let outcome = pruned(&inner, &index, &keys).await;
     assert_eq!(outcome.removed, vec![generation(1)]);
-    assert!(names(&inner).await.is_disjoint(&heads(0..3)));
+    assert_eq!(trashed(&outcome), superseded);
+    let after = names(&inner).await;
+    assert!(after.is_disjoint(&heads(0..3)));
+    assert!(after.is_disjoint(&superseded));
 }
 
 /// A store over another, on which one object is gone by the time it is read:
@@ -638,7 +720,7 @@ async fn a_device_behind_the_snapshot_catches_up_from_it() {
     assert_eq!(entries(&behind).await, 4);
 }
 
-// CK-4, CK-6, KL-4, RV-1: the first head is gone, and a device joining asks for
+// CK-4, CK-6, KL-4, KL-18, RV-1: the first head is gone, and a device joining asks for
 // any head or Snapshot rather than for it by name — there are both — and
 // catches up from nothing to the head the Library stands at. With the records
 // that selected it gone, the Snapshot is what still says which Keyring set the
@@ -672,4 +754,266 @@ async fn a_device_joining_after_a_prune_finds_the_library() {
         checkpoint(&index).await.keyring(),
         "the committed tuple outlives the records that selected it",
     );
+}
+
+/// A store over another that will not trash one object, and trashes every
+/// other: credentials that may not delete it, or a provider that keeps failing
+/// on it.
+struct RefusingOne<'a> {
+    inner: &'a dyn ObjectStore,
+    refused: String,
+}
+
+#[async_trait]
+impl ObjectStore for RefusingOne<'_> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
+        self.inner.put(name, body).await
+    }
+
+    async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
+        self.inner.reserve_create(name).await
+    }
+
+    async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
+        self.inner.put_if_absent(slot, body).await
+    }
+
+    fn object_at(&self, slot: &CommitSlot) -> Result<ObjectRef> {
+        self.inner.object_at(slot)
+    }
+
+    async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {
+        self.inner.get(object, range).await
+    }
+
+    async fn list(&self, page: Option<&PageToken>) -> Result<ObjectPage> {
+        self.inner.list(page).await
+    }
+
+    async fn trash(&self, object: &ObjectRef) -> Result<()> {
+        if object.as_str() == self.refused {
+            return Err(FaultyStore::trash_refusal());
+        }
+        self.inner.trash(object).await
+    }
+
+    async fn purge(&self, object: &ObjectRef) -> Result<()> {
+        self.inner.purge(object).await
+    }
+}
+
+// KL-18: a superseded replica Storage will not trash is reported and the run
+// goes on to the rest; what it trashed stays trashed, and the next prune takes
+// the one left.
+#[tokio::test]
+async fn a_replica_storage_will_not_trash_is_reported_and_left_for_the_next_prune() {
+    let keys = keys();
+    let inner = InMemoryStore::new(8);
+    let index = InMemoryIndex::new();
+    library(&inner, &index, &keys, 3).await;
+    let superseded = replicas_below(&names(&inner).await, keyring_generation(&index).await);
+    let refused = superseded
+        .first()
+        .expect("every commit wrote a generation")
+        .clone();
+    let store = RefusingOne {
+        inner: &inner,
+        refused: refused.clone(),
+    };
+
+    let outcome = pruned(&store, &index, &keys).await;
+
+    assert_eq!(outcome.removed, generations(0..3), "the records went first");
+    assert_eq!(outcome.unremoved_replicas.len(), 1, "{outcome:?}");
+    assert_eq!(outcome.unremoved_replicas[0].replica.to_string(), refused);
+    let rest: BTreeSet<String> = superseded
+        .iter()
+        .filter(|name| **name != refused)
+        .cloned()
+        .collect();
+    assert_eq!(trashed(&outcome), rest);
+    let after = names(&inner).await;
+    assert!(after.contains(&refused), "{after:?}");
+    assert!(after.is_disjoint(&rest), "{after:?}");
+
+    let again = pruned(&inner, &index, &keys).await;
+    assert_eq!(trashed(&again), BTreeSet::from([refused]));
+    assert!(again.unremoved_replicas.is_empty(), "{again:?}");
+}
+
+// KL-12, KL-14, KL-18: a name carries a generation and not a commitment, so a
+// candidate that lost its commit slot at a superseded generation's number goes
+// with the committed set beside it, to the trash. One at the number the head
+// selects stays, as that generation does.
+#[tokio::test]
+async fn a_lost_candidate_goes_with_its_superseded_generation() {
+    let keys = keys();
+    let store = InMemoryStore::new(8);
+    let index = InMemoryIndex::new();
+    library(&store, &index, &keys, 3).await;
+    let selected = keyring_generation(&index).await;
+    let older = replicas_below(&names(&store).await, selected)
+        .first()
+        .map(|name| {
+            ControlObjectName::parse(name)
+                .expect("a listed replica's name parses")
+                .generation()
+        })
+        .expect("every commit wrote a generation");
+    let lost_at = |at: Generation| -> BTreeSet<String> {
+        (0..2)
+            .map(|position| {
+                ControlObjectName::keyring_replica(
+                    at,
+                    "ab12",
+                    ReplicaPosition::new(position, 2).expect("a position of two"),
+                )
+                .expect("a hex digest names a replica")
+                .to_string()
+            })
+            .collect()
+    };
+    let superseded = lost_at(older);
+    let current = lost_at(selected);
+    for name in superseded.iter().chain(&current) {
+        put(&store, name, b"a candidate that lost its commit slot").await;
+    }
+
+    let outcome = pruned(&store, &index, &keys).await;
+
+    assert!(trashed(&outcome).is_superset(&superseded), "{outcome:?}");
+    assert!(trashed(&outcome).is_disjoint(&current), "{outcome:?}");
+    let after = names(&store).await;
+    assert!(after.is_disjoint(&superseded), "{after:?}");
+    assert!(after.is_superset(&current), "{after:?}");
+    for removed in superseded {
+        store
+            .get(&ObjectRef::new(&removed), None)
+            .await
+            .unwrap_or_else(|error| panic!("{removed} is in the trash, not purged: {error}"));
+    }
+}
+
+// KL-18: only generations older than the Snapshot's go. A set named past the
+// head — a candidate a commit is writing right now, or one a prepared Master
+// Key epoch wrote ahead of its activation — is no superseded generation of
+// this epoch, and stays.
+#[tokio::test]
+async fn a_set_past_the_head_stays() {
+    let keys = keys();
+    let store = InMemoryStore::new(8);
+    let index = InMemoryIndex::new();
+    library(&store, &index, &keys, 3).await;
+    let committed = checkpoint(&index).await.keyring().clone();
+    let own = replicas_of(&names(&store).await, committed.generation());
+    let ahead = committed
+        .generation()
+        .next()
+        .expect("a small generation has a successor");
+    let candidate: BTreeSet<String> = (0..2)
+        .map(|position| {
+            ControlObjectName::keyring_replica(
+                ahead,
+                committed.set_digest(),
+                ReplicaPosition::new(position, 2).expect("a position of two"),
+            )
+            .expect("a real digest names a replica")
+            .to_string()
+        })
+        .collect();
+    for name in &candidate {
+        put(&store, name, b"sealed under the epoch it was prepared for").await;
+    }
+
+    let outcome = pruned(&store, &index, &keys).await;
+
+    assert!(trashed(&outcome).is_disjoint(&candidate), "{outcome:?}");
+    let after = names(&store).await;
+    assert!(after.is_superset(&candidate), "{after:?}");
+    assert!(
+        !own.is_empty() && after.is_superset(&own),
+        "and the head's own generation stays"
+    );
+}
+
+// KL-10, KL-18: past a Master Key rotation the older generation numbers
+// include the previous epochs' generations, which no name tells apart from the
+// current epoch's. Rotation is not implemented, and a Library standing in a
+// later epoch keeps every Keyring generation: another epoch's is never
+// trashed, at the price of the current epoch's waiting.
+#[tokio::test]
+async fn a_library_past_its_first_epoch_keeps_every_generation() {
+    let later = MasterKeyEpoch::FIRST
+        .next()
+        .expect("the first epoch has a successor");
+    let keys = LibraryKeys::derive(&master_key(), later);
+    let store = InMemoryStore::new(8);
+    let index = InMemoryIndex::new();
+    library(&store, &index, &keys, 3).await;
+    assert_eq!(checkpoint(&index).await.master_key_epoch(), later);
+    let before = names(&store).await;
+
+    let outcome = pruned(&store, &index, &keys).await;
+
+    assert_eq!(outcome.removed, generations(0..3), "the records still go");
+    assert!(outcome.removed_replicas.is_empty(), "{outcome:?}");
+    assert!(
+        names(&store)
+            .await
+            .is_superset(&replicas_where(&before, |_| true)),
+        "every Keyring replica stays",
+    );
+}
+
+// KL-13, KL-18: repair rewrites only the generation the device's caught-up
+// head selects. A replica missing from a superseded generation — one lost
+// before any prune, or every one a prune trashed — is not a degraded set, and
+// the next commit writes none of it back.
+#[tokio::test]
+async fn repair_never_rewrites_a_superseded_generation() {
+    let keys = keys();
+    let store = InMemoryStore::new(8);
+    let index = InMemoryIndex::new();
+    library(&store, &index, &keys, 3).await;
+    let before = names(&store).await;
+    let selected = keyring_generation(&index).await;
+    let lost = replicas_below(&before, selected)
+        .first()
+        .expect("every commit wrote a generation")
+        .clone();
+    store
+        .purge(&ObjectRef::new(&lost))
+        .await
+        .expect("purging must succeed");
+
+    put(&store, &container_id(4).object_name(), b"ciphertext").await;
+    let outcome = commit_batch(
+        CommitRequest::new(
+            &store,
+            &index,
+            keys.control(),
+            PreparedBatch::adding(vec![prepared(4, ContainerKind::OneFile, &["albums/4.jpg"])]),
+        )
+        .with_policy(policy()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("committing over a superseded loss must succeed: {error}"));
+    assert!(outcome.repairs.is_empty(), "{:?}", outcome.repairs);
+    assert!(
+        !names(&store).await.contains(&lost),
+        "nothing wrote it back"
+    );
+
+    let pruning = pruned(&store, &index, &keys).await;
+    let disposed = trashed(&pruning);
+    assert!(!disposed.is_empty(), "{pruning:?}");
+
+    let landed = commit(&store, &index, &keys, 5, policy()).await;
+    assert_eq!(landed, generation(5));
+    let after = names(&store).await;
+    assert!(
+        after.is_disjoint(&disposed),
+        "nothing wrote a disposed replica back"
+    );
+    assert!(!after.contains(&lost), "{after:?}");
 }
