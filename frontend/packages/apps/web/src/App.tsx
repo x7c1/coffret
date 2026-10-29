@@ -28,7 +28,6 @@ import {
   prepare,
   preparedAfter,
   prospectiveFolders,
-  prospectiveIn,
 } from './prospective';
 import { DeleteConfirm } from './DeleteConfirm';
 import {
@@ -44,10 +43,8 @@ import { systemFilesLine, type SystemFile } from './systemFiles';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { mappedAt } from './dropTarget';
-import { FileList } from './FileList';
 import { isPutAway, shownRuns } from './dismissed';
-import { addingLine, collectingLine, fillOfFolder, isFreezing, paced } from './fill';
-import { FolderTree, type TreeDrops } from './FolderTree';
+import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
@@ -74,21 +71,35 @@ import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
 import { Region, TRY_AGAIN } from './Region';
 import { StatusBar } from './StatusBar';
-import { foldersWith, heldAfter, strandedFolders } from './stranded';
+import { heldAfter, strandedFolders } from './stranded';
 import { COLOR } from './theme';
 import { useRunReloads } from './runReloads';
+import {
+  ancestry,
+  contextOf,
+  fileKey,
+  folderKey,
+  shownFolders,
+  treeRows,
+  type TreeState,
+} from './tree';
+import { TreeTable } from './TreeTable';
 import { heldBy } from './turns';
 import { unmappedLine } from './unmapped';
+import { useListings } from './useListings';
 import { useWork } from './useWork';
-import { said, useAsked } from './useAsked';
+import { said, useAsked, type Asked } from './useAsked';
 
 /**
- * The explorer's one screen: a folder tree, the current folder's children, and
- * a status bar — with the reader over the list when a file is open.
+ * The explorer's one screen: the Library as one tree of folders and files (see
+ * [`TreeTable`](./TreeTable)) and a status bar — with the reader over the tree
+ * when a file is open.
  *
- * Where the screen is standing lives in the URL, so a reload and the back button
- * both come back to the folder that was open rather than to the top of the
- * Library.
+ * Where the screen is standing lives in the URL — the folder the focus is in,
+ * and the file the reader is open at — so a reload and the back button both
+ * come back to it rather than to the top of the Library. Walking the tree moves
+ * the URL without adding to the history: the back button steps between the
+ * places a person opened, not between the rows the arrow keys passed.
  *
  * A Library has no folders to make — a folder is the separators in the Entry
  * Paths under it (spec: EP-2) — so a folder comes to be by a drop: onto the
@@ -99,6 +110,11 @@ import { said, useAsked } from './useAsked';
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
+  // Which row of the tree has the focus and which folders are open, opened at
+  // first to wherever the URL says the screen is.
+  const [tree, setTree] = useState<TreeState>(() =>
+    restored({ focus: null, expanded: new Set() }, view),
+  );
   const [fetching, setFetching] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   // A deletion's notice may carry the target a *try again* beside it asks about
@@ -114,7 +130,9 @@ export function App() {
   // honour them: wherever the URL says the screen is, is where it is.
   useEffect(() => {
     const restore = () => {
-      setView(parseHash(window.location.hash));
+      const next = parseHash(window.location.hash);
+      setView(next);
+      setTree((held) => restored(held, next));
       // The notice answers one gesture on one row, and a move away from that row
       // is the end of it. `go` clears it for the moves it makes; these are the
       // moves it never sees, and a notice left standing would name a file the
@@ -155,6 +173,17 @@ export function App() {
     window.history[how](null, '', toHash(next));
   }, []);
 
+  // A move the screen makes on its own — out of a folder a deletion took away,
+  // or a prepared path forgotten — which the tree follows: opened down to the
+  // folder, and the focus on it.
+  const moveTo = useCallback(
+    (next: ViewState, replace = false, keepNotice = false) => {
+      go(next, replace, keepNotice);
+      setTree((held) => restored(held, next));
+    },
+    [go],
+  );
+
   // What the server is bringing over behind the screen. Followed while the
   // reader is open — a page it fetches is what arms a fill — and for as long
   // after that as the fill runs, so closing the reader does not stop the folder
@@ -172,7 +201,21 @@ export function App() {
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
   const folders = useAsked((signal) => getFolders(signal), 'folders');
-  const listing = useAsked((signal) => getListing(view.folder, signal), `list:${view.folder}`);
+  // The listing of every folder the tree shows — the root's, each open
+  // folder's — and of the folder the URL names, which is one of them once the
+  // tree has opened down to it (see [`useListings`](./useListings)).
+  const shown = useMemo(() => {
+    const open = shownFolders(tree.expanded);
+    return open.includes(view.folder) ? open : [...open, view.folder];
+  }, [tree.expanded, view.folder]);
+  const listings = useListings(shown);
+  const reloadListings = listings.reload;
+  const heldListing = listings.listing;
+  const rootState: Asked<Listing> = heldListing('') ?? LOADING;
+  // The folder the screen's actions are about, which the reader turns through.
+  const listing = {
+    state: heldListing(view.folder) ?? LOADING,
+  };
 
   // Each region's own "ask again", pulled out so that the things below built out
   // of them can be built once. Every one of them is stable — see
@@ -180,7 +223,16 @@ export function App() {
   // the screen.
   const reloadLibrary = library.reload;
   const reloadFolders = folders.reload;
-  const reloadListing = listing.reload;
+  // Every listing the tree holds, since what changed one row's state can
+  // change the folders above it too: a folder is on this device whole only
+  // while every file below it is.
+  const reloadListing = useCallback(() => reloadListings(), [reloadListings]);
+  // One folder's listing and the ones above it, which answer for whether it is
+  // here whole.
+  const reloadAbove = useCallback(
+    (folder: string) => reloadListings(['', ...ancestry(folder)]),
+    [reloadListings],
+  );
 
   // One try-again for the screen, wherever it is pressed: the three requests
   // fail together far more often than apart, because what they fail at is the
@@ -272,8 +324,8 @@ export function App() {
   // above lands as news. When is [`lockUnheard`](./lock). Read against the
   // ref, not `custody`, so that an unlock landing while the refusals still
   // stand does not ask again.
-  const refusedLocked = [library, folders, listing].some(
-    ({ state }) => state.status === 'failed' && state.locked === true,
+  const refusedLocked = [library.state, folders.state, rootState, listing.state].some(
+    (state) => state.status === 'failed' && state.locked === true,
   );
   useEffect(() => {
     if (lockUnheard(held.current, refusedLocked)) {
@@ -534,12 +586,13 @@ export function App() {
   // Walking into a folder a fill has been working on asks once for the same
   // reason, which is not waste: what the listing arrived with may already be
   // behind what the fill has placed since.
-  const progress = fill?.folder === view.folder ? `${fill.done}:${fill.status}` : null;
+  const fillFolder = fill?.folder ?? null;
+  const progress = fill === null ? null : `${fill.folder}:${fill.done}:${fill.status}`;
   useEffect(() => {
-    if (progress !== null) {
-      reloadListing();
+    if (progress !== null && fillFolder !== null) {
+      reloadAbove(fillFolder);
     }
-  }, [progress, reloadListing]);
+  }, [progress, fillFolder, reloadAbove]);
 
   // And the sync and the freeze, whose commits change the rows and can make a
   // folder — see [`useRunReloads`](./runReloads).
@@ -601,23 +654,19 @@ export function App() {
   }, [naming, known]);
 
   // Which folders a mapping of this device reaches, for the tree's rows — what
-  // a drag over one is told, and whether its menu offers "New folder…" — and
-  // which top-level folders it maps with nothing under them yet: the root's
-  // listing says both (see [`mappedAt`](./dropTarget)). The list's own listing
-  // where the screen is at the root, and asked for on its own everywhere else,
-  // since the tree is on the screen wherever the list is.
-  const atRoot = view.folder === '';
-  const rootListing = useAsked<Listing | null>(
-    (signal) => (atRoot ? Promise.resolve(null) : getListing('', signal)),
-    atRoot ? 'root-mapping:listed' : 'root-mapping',
+  // a drag over one is told — and which top-level folders it maps with nothing
+  // under them yet: the root's listing says both (see
+  // [`mappedAt`](./dropTarget)), and the tree always holds it.
+  const reloadRoot = useCallback(() => reloadListings(['']), [reloadListings]);
+  const rootKnown: Listing | null = rootState.status === 'ready' ? rootState.value : null;
+  // A folder's listing as the tree holds it, or asked for where it holds none.
+  const listingOf = useCallback(
+    (path: string): Promise<Listing> => {
+      const held = heldListing(path);
+      return held?.status === 'ready' ? Promise.resolve(held.value) : getListing(path);
+    },
+    [heldListing],
   );
-  const reloadRoot = rootListing.reload;
-  const rootKnown: Listing | null =
-    atRoot && listing.state.status === 'ready'
-      ? listing.state.value
-      : rootListing.state.status === 'ready'
-        ? rootListing.state.value
-        : null;
 
   // The paths prepared with "New folder…" (see [`prospective`](./prospective)), each
   // let go of the moment the Library names it — the tree's answer, or a
@@ -630,18 +679,24 @@ export function App() {
   }, [known]);
   // The folder on the screen, as its listing last answered.
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
+  // And every listing the tree holds, any of which may be the first to name a
+  // prepared path.
   useEffect(() => {
-    if (listed !== null) {
-      setPrepared((held) =>
-        preparedAfter(
-          held,
-          (path) =>
-            listed.folders.some((folder) => folder.path === path) ||
-            (listed.held && listed.path === path),
+    const held = shown
+      .map(heldListing)
+      .flatMap((asked) => (asked?.status === 'ready' ? [asked.value] : []));
+    if (held.length > 0) {
+      setPrepared((before) =>
+        preparedAfter(before, (path) =>
+          held.some(
+            (one) =>
+              one.folders.some((folder) => folder.path === path) ||
+              (one.held && one.path === path),
+          ),
         ),
       );
     }
-  }, [listed]);
+  }, [shown, heldListing]);
   // "Forget this folder" on a prepared path's row: that path and the ones
   // prepared under it are let go of, and nothing is sent (see
   // [`forgotten`](./prospective)). Where the screen is on one of them — the
@@ -652,10 +707,10 @@ export function App() {
     (path: string) => {
       setPrepared((held) => forgotten(held, path));
       if (view.folder === path || view.folder.startsWith(`${path}/`)) {
-        go({ folder: parentOf(path), open: null }, true);
+        moveTo({ folder: parentOf(path), open: null }, true);
       }
     },
-    [view.folder, go],
+    [view.folder, moveTo],
   );
   // Every folder drawn as not in the Library yet (see
   // [`prospectiveFolders`](./prospective)).
@@ -664,10 +719,25 @@ export function App() {
     [prepared, rootKnown, known],
   );
 
-  const drawn = useMemo(
-    () => (known === null ? [] : foldersWith(known, [...new Set([...stranded, ...prospective])])),
-    [known, stranded, prospective],
-  );
+  // A folder just prepared is brought into view, wherever it was prepared
+  // from: "New folder…" on the row of a closed folder would otherwise prepare
+  // a folder nobody can see. Only the ones not drawn before, so that a branch
+  // somebody closed stays closed.
+  const seen = useRef<ReadonlySet<string>>(new Set(prospective));
+  useEffect(() => {
+    const fresh = prospective.filter((path) => !seen.current.has(path));
+    seen.current = new Set(prospective);
+    if (fresh.length === 0) {
+      return;
+    }
+    setTree((held) => {
+      const above = fresh.flatMap((path) => ancestry(parentOf(path)));
+      if (above.every((folder) => held.expanded.has(folder))) {
+        return held;
+      }
+      return { ...held, expanded: new Set([...held.expanded, ...above]) };
+    });
+  }, [prospective]);
 
   // "New folder…": the name asked for in a dialog over the folder chosen, and
   // judged before anything is drawn (see [`prepare`](./prospective)). `null`
@@ -695,10 +765,7 @@ export function App() {
         parent: namingIn,
         typed,
         prospective,
-        list: (path) =>
-          listed !== null && listed.path === path
-            ? Promise.resolve(listed)
-            : getListing(path),
+        list: listingOf,
       });
       if (namings.current !== asked) {
         return null;
@@ -710,7 +777,7 @@ export function App() {
       closeNaming();
       return null;
     },
-    [namingIn, prospective, listed, closeNaming],
+    [namingIn, prospective, listingOf, closeNaming],
   );
 
   // Mapping one: the banner over a folder this device does not have opens the
@@ -951,9 +1018,9 @@ export function App() {
       above = parentOf(above);
     }
     if (above !== shownFolder.current) {
-      go({ folder: above, open: null }, true, true);
+      moveTo({ folder: above, open: null }, true, true);
     }
-  }, [known, go]);
+  }, [known, moveTo]);
 
   // The Library, which a drop too large for this route names in the command
   // that can carry it in instead.
@@ -1068,13 +1135,12 @@ export function App() {
           refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, knownLibrary)),
         });
       };
-      const where =
-        listed !== null && listed.path === target ? Promise.resolve(listed) : getListing(target);
+      const where = listingOf(target);
       const unread = (refused: unknown) =>
         notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
       void where.then(confirm, unread).finally(() => setAdding(null));
     },
-    [listed, known, stranded, prospective, askAboutDrop, work, reloadListing, knownLibrary],
+    [listingOf, known, stranded, prospective, askAboutDrop, work, reloadListing, knownLibrary],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -1096,30 +1162,20 @@ export function App() {
     setNotice(nothingAddedLine(cause));
   }, []);
 
-  // A row of the tree takes a drop for its own folder, through the same
-  // confirmation the list's goes through. Whether a mapping reaches the folder
-  // is read off the root's listing while the drag is over the row, and a drop
-  // the row already knows is refused is answered as the list answers one.
-  const freezingNow = isFreezing(freeze);
-  const treeDrops = useMemo<TreeDrops>(
-    () => ({
-      mapped: (folder) => mappedAt(folder, rootKnown),
-      freezing: freezingNow,
-      onAdd: add,
-      onCollecting: collecting,
-      onUnreadable: unreadable,
-      onUnmapped: (folder) =>
-        setNotice(
-          unmappedLine(
-            'add',
-            true,
-            folder === '' && rootKnown !== null
-              ? rootKnown.folders.filter((one) => one.mapped).map((one) => one.name)
-              : [],
-          ),
+  // A drop onto a folder row the root's listing says no mapping reaches,
+  // answered as the drop on the focused folder is.
+  const unmappedDrop = useCallback(
+    (folder: string) =>
+      setNotice(
+        unmappedLine(
+          'add',
+          true,
+          folder === '' && rootKnown !== null
+            ? rootKnown.folders.filter((one) => one.mapped).map((one) => one.name)
+            : [],
         ),
-    }),
-    [rootKnown, freezingNow, add, collecting, unreadable],
+      ),
+    [rootKnown],
   );
 
   // The fill as the rows are allowed to read it. A person who put the fill's
@@ -1137,14 +1193,10 @@ export function App() {
   // that line says — so they are owed for as long as it is. Which of those runs
   // the bar is still showing is read the way the bar reads it: by name, since a
   // run the record was taken from is never the one a dismissal's number names.
-  const rowsFill = useMemo(
-    () =>
-      fillOfFolder(
-        shownFill,
-        shownRuns(work.dismissed, 'fill', fill?.displaced ?? []),
-        view.folder,
-      ),
-    [shownFill, work.dismissed, fill, view.folder],
+  const fillOf = useCallback(
+    (folder: string) =>
+      fillOfFolder(shownFill, shownRuns(work.dismissed, 'fill', fill?.displaced ?? []), folder),
+    [shownFill, work.dismissed, fill],
   );
 
   // Everywhere that is not the list or a row of the tree. A browser's own answer
@@ -1178,18 +1230,70 @@ export function App() {
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
   const openAt = view.open === null ? null : pageAt(pages, view.open);
 
-  // The last place the reader stood. Closing it comes back to the list with
-  // that row marked, so a folder of two hundred names does not have to be read
-  // through again to find where the reading stopped — and a reload that came
-  // back straight into the reader leaves the list scrolled to it, not to the
-  // top of a folder the reader was never at the top of.
-  const [wasOpen, setWasOpen] = useState<ViewState>(view);
+  // The reader follows into the tree: the row it is open at is the focused one,
+  // with every folder above it open, so closing the reader comes back to the
+  // row the reading stopped at — and the tree scrolls to it — rather than to
+  // the top of a folder of two hundred names.
   useEffect(() => {
     if (view.open !== null) {
-      setWasOpen(view);
+      setTree((held) => restored(held, view));
     }
   }, [view]);
-  const selected = wasOpen.folder === view.folder ? wasOpen.open : null;
+
+  // The rows of the tree, top to bottom.
+  const rows = useMemo(
+    () =>
+      treeRows({
+        listing: heldListing,
+        expanded: tree.expanded,
+        prospective,
+        stranded,
+      }),
+    [heldListing, tree.expanded, prospective, stranded],
+  );
+
+  // The focus moved or a folder opened or closed: the URL follows the folder
+  // the focus is in, without a history entry of its own (see `contextOf`).
+  const changeTree = useCallback(
+    (next: TreeState) => {
+      setTree(next);
+      const folder = contextOf(next);
+      if (folder !== view.folder) {
+        go({ folder, open: null }, true);
+      }
+    },
+    [view.folder, go],
+  );
+
+  // A folder row opened: the reader, at the folder's first page — and where it
+  // has none, or is not on this device, the sentence saying why nothing opened.
+  const openFolder = useCallback(
+    (path: string) => {
+      const name = path.slice(path.lastIndexOf('/') + 1);
+      const show = (where: Listing) => {
+        if (!where.mapped) {
+          setNotice(
+            unmappedLine(
+              'open',
+              true,
+              where.folders.filter((one) => one.mapped).map((one) => one.name),
+            ),
+          );
+          return;
+        }
+        const first = pagesOf(where.files)[0];
+        if (first === undefined) {
+          setNotice(`${name} holds nothing the reader can show — open a folder of pages, or a file`);
+          return;
+        }
+        go({ folder: path, open: first.path });
+      };
+      listingOf(path).then(show, (refused: unknown) =>
+        setNotice(`${name} was not opened — ${said(refused)}`),
+      );
+    },
+    [listingOf, go],
+  );
 
   // A hash naming a file this folder does not offer — the Entry is gone, or the
   // URL was written by hand and names a row a browser draws nothing from. The
@@ -1212,46 +1316,14 @@ export function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* The reader covers the tree and the list and stops at the status bar,
-          which is where it says what it is fetching. */}
+      {/* The reader covers the tree and stops at the status bar, which is
+          where it says what it is fetching. */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-        {/* The tree's column, drawn whether or not the tree is in it yet: a
-            loading line and a refusal stand where the tree will stand, rather
-            than shouldering the list across the screen and handing the width
-            back when the folders arrive. */}
-        <aside
-          // What a book's menu in the tree measures the room below it against.
-          data-scroll-area=""
-          style={{
-            width: 260,
-            flex: '0 0 auto',
-            overflow: 'auto',
-            background: COLOR.panel,
-            borderRight: `1px solid ${COLOR.border}`,
-          }}
-        >
-          <Region state={folders.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
-            {() => (
-              <FolderTree
-                folders={drawn}
-                stranded={stranded}
-                prospective={prospective}
-                prepared={prepared}
-                current={view.folder}
-                onOpen={(chosen) => go({ folder: chosen, open: null })}
-                onDelete={deleteEntries}
-                onNewFolder={openNaming}
-                onForget={forget}
-                drops={treeDrops}
-              />
-            )}
-          </Region>
-        </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Why the rows below may not be the Library. Every listing comes out
               of this device's catalog, and the catalog holds what this device
               has replayed — so a device fresh from `join` whose catch-up did
-              not land shows an empty folder tree, and shows it in exactly the
+              not land shows an empty tree, and shows it in exactly the
               way a Library with nothing in it does. It stands above the notice
               because it is the older and larger fact: a gesture that came to
               nothing is about one click, and this is about everything on the
@@ -1311,60 +1383,72 @@ export function App() {
               )}
             </p>
           )}
-          <Region state={listing.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
-            {(shown) => (
-              <FileList
-                listing={shown}
-                prospective={prospectiveIn(shown, prospective)}
-                prospectiveHere={prospective.includes(shown.path)}
+          {/* The folder the focus is in, where its own listing was refused
+              and the root's was not: the tree stands, and the refusal over it
+              is about the one folder. */}
+          {view.folder !== '' && listing.state.status === 'failed' && rootState.status === 'ready' && (
+            <Region state={listing.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
+              {() => null}
+            </Region>
+          )}
+          {/* The Library's folders, where they were refused and the root's
+              listing was not. The tree draws without them, but the stranded
+              folders, the prepared paths the Library has come to name, and
+              the way out of a folder a deletion took away are all read off
+              that answer, so its refusal is said and offered again rather
+              than left to look like a Library with none of those. */}
+          {folders.state.status === 'failed' && rootState.status === 'ready' && (
+            <Region state={folders.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
+              {() => null}
+            </Region>
+          )}
+          <Region state={rootState} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
+            {() => (
+              <TreeTable
+                rows={rows}
+                state={tree}
+                onChange={changeTree}
+                context={listed}
+                prospectiveHere={prospective.includes(view.folder)}
                 prepared={prepared}
-                fill={rowsFill}
+                fillOf={fillOf}
                 freeze={freeze}
                 stranded={strandedHere}
-                // The stranded folders are read off the tree's answer, and
-                // `stranded` is false until it lands whether or not this folder
-                // is one of them. The list is told which of those two a false
-                // is, because one of the sentences it draws is a statement
-                // about the Library that the tree can still overturn.
+                // The stranded folders are read off the Library's folders, and
+                // `stranded` is false until that answer lands whether or not
+                // this folder is one of them.
                 strandedKnown={known !== null}
-                selected={selected}
-                onOpenFolder={(chosen) => go({ folder: chosen, open: null })}
-                onOpenFile={(path) => go({ folder: view.folder, open: path })}
+                mappedAt={(folder) => mappedAt(folder, rootKnown)}
+                onOpenFolder={openFolder}
+                onOpenFile={(path) => go({ folder: parentOf(path), open: path })}
                 onUnsupported={(file) =>
                   setNotice(`${file.name} — preview of this format is not supported yet`)
                 }
-                onAdd={(drop) => add(view.folder, drop)}
+                onAdd={add}
                 onCollecting={collecting}
                 onUnreadable={unreadable}
                 // The sentence the server would have answered with, said here
-                // because neither gesture becomes a request: there is nowhere
-                // to put a single one of the folder's files and nowhere to put
-                // one fetched back. What each of them says is
+                // because neither gesture becomes a request: what each says is
                 // [`unmappedLine`](./unmapped), and `held` is which of the two
                 // reasons it gives — the mapping that is missing (spec: EP-9),
-                // or the folder the Library does not have. The list decides
-                // that one, because it is the same answer it draws over the
-                // rows and one path is owed one explanation.
-                //
-                // The folders it may name are this listing's own, which is
-                // where the answer to "then what would you take" is: mappings
-                // are made at the top level, so a Library root is the one
-                // folder whose children can differ, and its rows are already
-                // carrying the answer for the `not here` chips.
-                onUnmapped={(tried, held) =>
+                // or the folder the Library does not have. The folders it may
+                // name are the listing's own where the gesture was made.
+                onUnmapped={(tried, held, where) =>
                   setNotice(
                     unmappedLine(
                       tried,
                       held,
-                      shown.folders.filter((folder) => folder.mapped).map((folder) => folder.name),
+                      where.folders.filter((one) => one.mapped).map((one) => one.name),
                     ),
                   )
                 }
+                onUnmappedDrop={unmappedDrop}
                 onMap={(prefix) => setMapping({ prefix })}
                 onPack={packFolder}
                 onDelete={deleteEntries}
                 onNewFolder={openNaming}
                 onForget={forget}
+                onAskAgain={(folder) => reloadListings([folder])}
               />
             )}
           </Region>
@@ -1377,7 +1461,7 @@ export function App() {
             onNavigate={(next) => go({ folder: view.folder, open: pages[next].path })}
             onClose={() => go({ folder: view.folder, open: null })}
             onFetching={setFetching}
-            onFetched={listing.reload}
+            onFetched={() => reloadAbove(view.folder)}
             reconnect={offer}
           />
         )}
@@ -1441,6 +1525,25 @@ export function App() {
       />
     </div>
   );
+}
+
+/** A listing not asked for yet, which is a listing on its way. */
+const LOADING: Asked<Listing> = { status: 'loading' };
+
+/**
+ * The tree opened down to where `view` says the screen is: every folder above
+ * the folder open, the folder itself too, and the focus on the file the reader
+ * is open at — or on the folder, or on nothing at the Library root. `held`
+ * comes back as it was where it shows that already.
+ */
+function restored(held: TreeState, view: ViewState): TreeState {
+  const focus =
+    view.open !== null ? fileKey(view.open) : view.folder === '' ? null : folderKey(view.folder);
+  const above = ancestry(view.folder);
+  if (focus === held.focus && above.every((folder) => held.expanded.has(folder))) {
+    return held;
+  }
+  return { focus, expanded: new Set([...held.expanded, ...above]) };
 }
 
 /**

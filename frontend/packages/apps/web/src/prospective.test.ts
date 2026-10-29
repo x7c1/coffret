@@ -151,11 +151,13 @@ it('gives the rows that stand directly in a folder', () => {
   const root = listing({
     mapped: false,
     empty_mapped_prefixes: ['comics'],
-    folders: [{ name: 'books', path: 'books', mapped: true }],
+    folders: [{ name: 'books', path: 'books', mapped: true, present_throughout: false }],
   });
-  expect(prospectiveIn(root, prospective)).toEqual([{ name: 'comics', path: 'comics', mapped: true }]);
+  expect(prospectiveIn(root, prospective)).toEqual([
+    { name: 'comics', path: 'comics', mapped: true, present_throughout: false },
+  ]);
   expect(prospectiveIn(listing({ path: 'comics', held: false }), prospective)).toEqual([
-    { name: 'Series', path: 'comics/Series', mapped: true },
+    { name: 'Series', path: 'comics/Series', mapped: true, present_throughout: false },
   ]);
 });
 

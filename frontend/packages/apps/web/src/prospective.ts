@@ -248,6 +248,8 @@ export function prospectiveIn(listing: Listing, prospective: readonly string[]):
         name,
         path,
         mapped: listing.mapped || (listing.path === '' && listing.empty_mapped_prefixes.includes(name)),
+        // The Library holds nothing under it, so nothing of it is here to read.
+        present_throughout: false,
       };
     });
 }

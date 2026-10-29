@@ -299,6 +299,90 @@ async fn a_row_is_present_only_where_this_device_materialized_it() {
     );
 }
 
+/// Whether each child folder of `folder` is present throughout, by name.
+async fn throughout(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String, bool)> {
+    library
+        .list(folder.map(entry_path).as_ref())
+        .await
+        .expect("the catalog answers")
+        .folders
+        .into_iter()
+        .map(|child| (child.name, child.present_throughout))
+        .collect()
+}
+
+// EP-10: a folder is here whole only where every Entry at every depth below it
+// has a present record — the promise that the whole book, or the whole series,
+// reads without Storage. One file anywhere below that this device does not
+// have, however deep, takes the promise back.
+#[tokio::test]
+async fn a_folder_is_present_throughout_only_where_every_file_below_it_is() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &[
+            // Every file here, one level down and two.
+            "books/all/page-1.png",
+            "books/all/vol-2/page-1.png",
+            // One file missing two levels down.
+            "books/deep/page-1.png",
+            "books/deep/vol-2/page-1.png",
+            // A file whose fetch failed: it left no present record.
+            "books/failed/page-1.png",
+            "books/failed/page-2.png",
+            // A file that was here and that this device witnessed go.
+            "books/gone/page-1.png",
+            // No file of its own, only a folder below it, which is here whole.
+            "books/nested/vol-1/page-1.png",
+        ],
+    )])
+    .await;
+    for path in [
+        "books/all/page-1.png",
+        "books/all/vol-2/page-1.png",
+        "books/deep/page-1.png",
+        "books/failed/page-1.png",
+        "books/gone/page-1.png",
+        "books/nested/vol-1/page-1.png",
+    ] {
+        hold(&library, path).await;
+    }
+    library
+        .index
+        .mark_absent(
+            &entry_path("books/gone/page-1.png"),
+            DeviceTime::from_unix_seconds(1_700_000_200),
+        )
+        .await
+        .expect("an absent observation is recorded");
+
+    assert_eq!(
+        throughout(&library, Some("books")).await,
+        vec![
+            ("all".to_owned(), true),
+            ("deep".to_owned(), false),
+            ("failed".to_owned(), false),
+            ("gone".to_owned(), false),
+            ("nested".to_owned(), true),
+        ],
+    );
+    // The root answers for `books` from the same subtree: not whole, since
+    // some of it is not here.
+    assert_eq!(
+        throughout(&library, None).await,
+        vec![("books".to_owned(), false)]
+    );
+    // And one level further down, each folder answers for its own subtree.
+    assert_eq!(
+        throughout(&library, Some("books/deep")).await,
+        vec![("vol-2".to_owned(), false)],
+    );
+    assert_eq!(
+        throughout(&library, Some("books/all")).await,
+        vec![("vol-2".to_owned(), true)],
+    );
+}
+
 // PK-15: the kind is what says whether an Entry can be replaced one file at a
 // time, so it travels in the row rather than being asked for afterwards.
 #[tokio::test]

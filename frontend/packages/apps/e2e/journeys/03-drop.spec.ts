@@ -9,14 +9,26 @@
 // this journey is that. How much of the middle is ever on the screen is
 // the machine's speed, not the product's behavior: the sync is armed the
 // moment the file lands, and on a slow enough runner it has committed before
-// the browser draws the row at all, so the first chip it ever shows is
-// `present`. The journey therefore asserts the row and where it ends up, and
-// the staged state — the "not in Library" chip, the backing-up line — is
+// the browser draws the row at all, so the first state it ever shows is
+// on this device. The journey therefore asserts the row and where it ends up, and
+// the staged state — the ring that says it is being added, the backing-up line — is
 // photographed where it is caught and never waited into existence.
 
 import path from 'node:path';
 
-import { chip, dropFileOnto, expect, glimpse, photo, row, setting, shot, test } from './journey';
+import {
+  BEING_ADDED,
+  dropFileOnto,
+  expect,
+  glimpse,
+  ON_THIS_DEVICE,
+  photo,
+  row,
+  setting,
+  shot,
+  stateIcon,
+  test,
+} from './journey';
 
 /** How long the staged state is waited for before the first picture. */
 const GLIMPSE_MS = 4_000;
@@ -45,19 +57,19 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   await expect(row(page, dropped)).toHaveCount(0);
   await question.getByRole('button', { name: 'Add', exact: true }).click();
 
-  // In the folder from that moment. Which word the chip has for it is the
-  // race described above — "not in Library" until the armed sync commits,
-  // `present` where the sync outran the first frame — so the row and the sanity
-  // of its chip are asserted, and the "not in Library" moment is photographed
-  // where it is caught: see `glimpse`.
+  // In the folder from that moment. Which state its icon says is the race
+  // described above — being added until the armed sync commits, on this device
+  // where the sync outran the first frame — so the row and the sanity of its
+  // state are asserted, and the moment it is being added is photographed where
+  // it is caught: see `glimpse`.
   await expect(row(page, dropped)).toHaveCount(1);
-  await expect(chip(page, dropped)).toHaveText(/^(not in Library|present)$/);
-  await glimpse(chip(page, dropped).filter({ hasText: 'not in Library' }), GLIMPSE_MS);
+  await expect(stateIcon(page, dropped)).toHaveAccessibleName(/^On this device/);
+  await glimpse(row(page, dropped).getByRole('img', { name: BEING_ADDED }), GLIMPSE_MS);
   await shot(page, '01-landed');
 
   // And once it is committed the row is an ordinary one: the Library holds the
   // Entry, and this device has the file it was made from.
-  await expect(chip(page, dropped)).toHaveText('present', { timeout: SYNC_MS });
+  await expect(stateIcon(page, dropped)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: SYNC_MS });
   await expect(page.getByText(/backing up what was added/)).toHaveCount(0);
   await shot(page, '02-in-the-library');
 });

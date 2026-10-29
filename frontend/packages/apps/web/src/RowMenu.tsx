@@ -17,12 +17,12 @@ export interface MenuItem {
  * read. The items are a list so that what a row offers can grow without the
  * row changing shape. A row with nothing to offer draws no mark at all.
  *
- * The same menu stands on the file list's rows and on the folder tree's, so
- * that a folder deleted from either is asked about the same way.
+ * The same menu stands on every row of the tree, a folder's and a file's, so
+ * that whatever is deleted from one is asked about the same way.
  *
  * The menu closes on a click anywhere outside it, on `Escape`, and on choosing
  * an item. Whatever the row under it does with a click is the row's to keep
- * away from the menu: the file list stops the click at the menu's cell.
+ * away from the menu: the tree stops the click at the menu's cell.
  *
  * It hangs below the mark, and above it where the scroll area it is in has no
  * room below for it and more above — the last rows of a list scrolled to its

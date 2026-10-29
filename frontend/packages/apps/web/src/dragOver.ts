@@ -1,5 +1,5 @@
-// Whether files are being dragged over one drop target, shared by the file
-// list and the rows of the folder tree so that both answer a drag the same way.
+// Whether files are being dragged over a drop target: the tree, which answers
+// for each folder row under the pointer and for the rest of it alike.
 
 import { useState, type DragEvent } from 'react';
 

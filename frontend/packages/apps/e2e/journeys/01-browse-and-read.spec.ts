@@ -10,12 +10,13 @@
 
 import {
   bookPage,
-  chip,
   expect,
-  inTree,
+  expectRemote,
   leaf,
   libraryName,
+  openInTree,
   row,
+  rowsNamed,
   setting,
   shot,
   test,
@@ -32,17 +33,18 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await expect(row(page, mapped)).toBeVisible();
   await shot(page, '01-library-root');
 
-  // Down the tree rather than through the rows: the tree is the one part of the
-  // screen that draws the whole Library, and a folder two components deep is
-  // only reachable with the one above it open.
-  await inTree(page, mapped).click();
-  await inTree(page, leaf(setting.book)).click();
+  // Down the tree, one folder at a time: a folder two components deep is only
+  // on the screen with the one above it open.
+  await openInTree(page, mapped);
+  await openInTree(page, leaf(setting.book));
   await expect(page).toHaveURL(new RegExp(`#path=${setting.book}$`));
 
   // Every page of the book is in the Library and none of them is on this device
   // yet: this device joined and caught its Index up, and has fetched nothing.
-  await expect(chip(page, bookPage(0))).toHaveText('remote');
-  await expect(page.locator('tbody tr')).toHaveCount(setting.pages);
+  // Every page is a row of its own, under the book's.
+  await expectRemote(page, bookPage(0));
+  const pages = Array.from({ length: setting.pages }, (_, index) => bookPage(index));
+  await expect(rowsNamed(page, pages)).toHaveCount(setting.pages);
   await shot(page, '02-book-folder');
 
   // A click selects a row and opens nothing.

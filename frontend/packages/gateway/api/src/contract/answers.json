@@ -127,7 +127,8 @@
         {
           "mapped": true,
           "name": "2026",
-          "path": "albums/2026"
+          "path": "albums/2026",
+          "present_throughout": false
         }
       ],
       "folders_on_disk": [
@@ -175,12 +176,14 @@
         {
           "mapped": true,
           "name": "albums",
-          "path": "albums"
+          "path": "albums",
+          "present_throughout": false
         },
         {
           "mapped": true,
           "name": "books",
-          "path": "books"
+          "path": "books",
+          "present_throughout": false
         }
       ],
       "folders_on_disk": [],
@@ -195,12 +198,14 @@
         {
           "mapped": true,
           "name": "albums",
-          "path": "albums"
+          "path": "albums",
+          "present_throughout": false
         },
         {
           "mapped": false,
           "name": "books",
-          "path": "books"
+          "path": "books",
+          "present_throughout": false
         }
       ],
       "folders_on_disk": [],

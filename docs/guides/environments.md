@@ -76,10 +76,10 @@ them is moved out.
 
 A Library just made can then be started from the explorer, with no `map` or
 `sync` at the command line: the empty root offers to map a folder of this
-device to it, "New folder…" on a folder's "⋮" (the tree's "Library" row among
-them) prepares the path a drop is to land under — held by the page alone until
-something is dropped there, and forgotten on a reload — and a drop starts the
-sync that carries the files in. A top-level folder mapped with `map --prefix`
+device to it, "New folder…" on a folder's "⋮", or over the rows for the
+Library root, prepares the path a drop is to land under — held by the page
+alone until something is dropped there, and forgotten on a reload — and a drop
+starts the sync that carries the files in. A top-level folder mapped with `map --prefix`
 and nothing in it yet is listed at the root, marked as not in the Library yet,
 to drop into the same way.
 

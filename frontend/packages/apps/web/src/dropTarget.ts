@@ -9,7 +9,7 @@
 // one batch (spec: PK-7), or as its files one by one. That is the
 // confirmation's to say, with the drop read and counted in front of it, so the
 // line while the drag is in the air says only that both are asked before
-// anything goes — short enough to sit under a row of the narrow folder tree.
+// anything goes — short enough to read at a glance over the rows.
 // It says the refusal there too, where a folder no mapping of this device
 // reaches has nowhere to put any of them (spec: EP-9), and says nothing it
 // cannot stand behind where whether a mapping reaches the folder is not known

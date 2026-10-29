@@ -9,16 +9,21 @@
 export const COLOR = {
   /**
    * The ground, as `index.html` paints the page: named here for what is drawn
-   * over rows scrolling under it — the file list's column headings — which has
+   * over rows scrolling under it — the tree's column headings — which has
    * to be filled with it rather than left clear.
    */
   ground: '#111',
-  /** The tree and the status bar, a shade off the ground. */
+  /** The bar over the tree and the status bar, a shade off the ground. */
   panel: '#181818',
-  /** The folder being listed, and the list row selected by a click or the arrow keys. */
+  /** The row of the tree focused by a click or the arrow keys. */
   selected: '#2b3d52',
+  /**
+   * The focused row while files are picked out, where the fill is the box's:
+   * a ring in a brighter shade of `selected`.
+   */
+  focusRing: '#4f6f94',
   border: '#333',
-  /** The line between one row of the file list and the next, fainter than a border. */
+  /** The line between one row of the tree and the next, fainter than a border. */
   rowRule: '#202020',
   text: '#eee',
   /** Sizes, times, and everything else that is not the name. */

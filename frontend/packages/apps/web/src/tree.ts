@@ -1,68 +1,22 @@
-// Nesting the Library's flat folder list, kept free of DOM so it is unit
-// testable.
+// The explorer's one tree: the Library's folders and files as rows of one
+// table, indented by depth, and the keys that walk it. Kept free of DOM and of
+// React so it is unit testable.
+//
+// A Library has no folders to nest — a folder is the separators in the Entry
+// Paths under it (spec: EP-2) — so the tree is this screen's arrangement of the
+// listings it asked for, one folder at a time: the Library root's always, and
+// each expanded folder's as it is expanded. A folder row that has not been
+// expanded costs nothing beyond the listing it came from.
 
-/** One folder of the Library, with the folders directly inside it. */
-export interface FolderNode {
-  /** Its last path component, which is what it is called. */
-  name: string;
-  /** Where in the Library it stands. */
-  path: string;
-  children: FolderNode[];
-}
+import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
-/**
- * The folders of the Library, nested.
- *
- * `GET /api/folders` answers flat and sorted — every path a separator implies,
- * each named in full — because the Library has no folders to nest: they are an
- * implication of the Entry Paths rather than something anything recorded. The
- * tree is this screen's arrangement of them, which is why it is built here.
- *
- * The order the server answered in is kept, at every level: it is the byte
- * order of the canonical paths, and re-sorting it would be this screen
- * disagreeing with every other device about what order a Library is in.
- *
- * A folder whose parent is not in the list still gets one. The server sends
- * every ancestor, so this never happens against a Library — but a tree missing
- * its own root is a worse answer than a tree with a folder in it that was
- * inferred, and the alternative is dropping the folder on the floor.
- */
-export function nest(folders: readonly string[]): FolderNode[] {
-  const roots: FolderNode[] = [];
-  const byPath = new Map<string, FolderNode>();
-  for (const path of folders) {
-    ensure(path, byPath, roots);
-  }
-  return roots;
-}
-
-/** The node for one path, making it and everything above it if need be. */
-function ensure(
-  path: string,
-  byPath: Map<string, FolderNode>,
-  roots: FolderNode[],
-): FolderNode {
-  const held = byPath.get(path);
-  if (held !== undefined) {
-    return held;
-  }
-  const cut = path.lastIndexOf('/');
-  const node: FolderNode = {
-    name: cut === -1 ? path : path.slice(cut + 1),
-    path,
-    children: [],
-  };
-  byPath.set(path, node);
-  if (cut === -1) {
-    roots.push(node);
-  } else {
-    ensure(path.slice(0, cut), byPath, roots).children.push(node);
-  }
-  return node;
-}
+import { parentOf, prospectiveIn } from './prospective';
+import { inLibraryOrder } from './stranded';
+import type { Asked } from './useAsked';
 
 /**
- * Every folder on the way down to one, the outermost first.
+ * Every folder on the way down to one, the outermost first, the folder itself
+ * last.
  *
  * What the tree opens to when the screen is restored from the URL: a folder
  * several components deep is only reachable with each of its ancestors
@@ -80,4 +34,342 @@ export function ancestry(path: string): string[] {
   }
   folders.push(path);
   return folders;
+}
+
+/**
+ * What a row is called by, a folder's told from a file's: the Library admits a
+ * file and a folder at one path, since neither is a thing it has.
+ */
+export function folderKey(path: string): string {
+  return `folder:${path}`;
+}
+
+export function fileKey(path: string): string {
+  return `file:${path}`;
+}
+
+/** The Entry Path a row's key names. */
+function pathOf(key: string): string {
+  return key.slice(key.indexOf(':') + 1);
+}
+
+/** Whether a row's key names a folder. */
+function isFolderKey(key: string): boolean {
+  return key.startsWith('folder:');
+}
+
+/** A folder as a row of the tree. */
+export interface FolderRow {
+  kind: 'folder';
+  key: string;
+  path: string;
+  name: string;
+  /** How many folders it stands below the Library root; the root's own rows are 0. */
+  depth: number;
+  folder: ListedFolder;
+  /** The listing this row came from: the folder it stands in. */
+  in: Listing;
+  /** Whether it is drawn open, its rows below it. */
+  expanded: boolean;
+  /**
+   * Whether it has a disclosure button: anything to open. A folder of the
+   * Library always does (spec: EP-2); a folder it does not hold yet only where
+   * something is known to stand under it.
+   */
+  expandable: boolean;
+  /** A folder the Library does not hold yet, to drop into (see [`prospective`](./prospective)). */
+  prospective: boolean;
+  /** The folder of a book whose freeze has not committed (see [`stranded`](./stranded)). */
+  stranded: boolean;
+}
+
+/** A file as a row of the tree. */
+export interface FileRow {
+  kind: 'file';
+  key: string;
+  path: string;
+  name: string;
+  depth: number;
+  file: ListedFile;
+  /** The listing this row came from: the folder it stands in. */
+  in: Listing;
+}
+
+/**
+ * Where an expanded folder's listing is still out or was refused: a line in
+ * place of its rows, which the keys walk past.
+ */
+export interface NoteRow {
+  kind: 'note';
+  key: string;
+  /** The folder whose rows this stands for. */
+  path: string;
+  depth: number;
+  /** `null` while the listing is out, and the refusal's sentence once it was refused. */
+  refused: string | null;
+}
+
+export type TreeRow = FolderRow | FileRow | NoteRow;
+
+/** A row the keys can stand on: a folder or a file, never a note. */
+type Walkable = FolderRow | FileRow;
+
+/** What the tree is drawn from. */
+export interface TreeSource {
+  /** The listing of one folder as far as it has been asked; `undefined` where it has not. */
+  listing: (folder: string) => Asked<Listing> | undefined;
+  expanded: ReadonlySet<string>;
+  /** The folders drawn that the Library does not hold yet (see [`prospectiveFolders`](./prospective)). */
+  prospective: readonly string[];
+  /** The folders of books whose freeze has not committed. */
+  stranded: readonly string[];
+}
+
+/**
+ * Every row on show, top to bottom: the root's folders then its files, each
+ * expanded folder's rows straight under it, one level further in.
+ *
+ * Folders first and then files within each folder, both in the order the
+ * server answered in — the byte order of the canonical paths, which is the
+ * one order every device agrees on. The folders the Library does not hold yet
+ * and the stranded ones are merged into that order rather than appended, so a
+ * folder stays where it is drawn when its first Entry commits.
+ *
+ * Nothing for the root itself while its listing is out or refused: that is the
+ * whole tree, and the screen says so in its place.
+ */
+export function treeRows(source: TreeSource): TreeRow[] {
+  const rows: TreeRow[] = [];
+  const prospective = new Set(source.prospective);
+  // Every folder a stranded one implies, which no listing names: a book whose
+  // freeze has not committed may stand in a folder the Library does not hold
+  // either.
+  const strandedAbove = new Set(source.stranded.flatMap(ancestry));
+  const walk = (folder: string, depth: number) => {
+    const asked = source.listing(folder);
+    if (asked === undefined || asked.status !== 'ready') {
+      if (folder !== '') {
+        rows.push({
+          kind: 'note',
+          key: `note:${folder}`,
+          path: folder,
+          depth,
+          refused: asked?.status === 'failed' ? asked.message : null,
+        });
+      }
+      return;
+    }
+    const listing = asked.value;
+    for (const child of foldersIn(listing, source.prospective, strandedAbove)) {
+      const named = listing.folders.some((one) => one.path === child.path);
+      // Not where the Library names it already: its first Entry committed, and
+      // it is an ordinary folder from here on.
+      const notHeld = prospective.has(child.path) && !named;
+      const waiting = strandedAbove.has(child.path) && !named;
+      const expandable = !notHeld || knownUnder(child.path, source);
+      const expanded = expandable && source.expanded.has(child.path);
+      rows.push({
+        kind: 'folder',
+        key: folderKey(child.path),
+        path: child.path,
+        name: child.name,
+        depth,
+        folder: child,
+        in: listing,
+        expanded,
+        expandable,
+        prospective: notHeld,
+        stranded: waiting,
+      });
+      if (expanded) {
+        walk(child.path, depth + 1);
+      }
+    }
+    for (const file of listing.files) {
+      rows.push({
+        kind: 'file',
+        key: fileKey(file.path),
+        path: file.path,
+        name: file.name,
+        depth,
+        file,
+        in: listing,
+      });
+    }
+  };
+  walk('', 0);
+  return rows;
+}
+
+/**
+ * The folders standing directly in the folder `listing` lists: the Library's,
+ * the ones it does not hold yet, and the stranded ones, in the Library's order
+ * and each once.
+ */
+function foldersIn(
+  listing: Listing,
+  prospective: readonly string[],
+  stranded: ReadonlySet<string>,
+): ListedFolder[] {
+  const named = new Set(listing.folders.map((folder) => folder.path));
+  const notHeld = prospectiveIn(listing, prospective);
+  for (const folder of notHeld) {
+    named.add(folder.path);
+  }
+  const waiting: ListedFolder[] = [...stranded]
+    .filter((path) => parentOf(path) === listing.path && !named.has(path))
+    .map((path) => ({
+      name: path.slice(path.lastIndexOf('/') + 1),
+      path,
+      mapped: listing.mapped,
+      present_throughout: false,
+    }));
+  const extra = [...notHeld, ...waiting];
+  if (extra.length === 0) {
+    return listing.folders;
+  }
+  return [...listing.folders, ...extra].sort((left, right) => inLibraryOrder(left.path, right.path));
+}
+
+/**
+ * Whether anything is known to stand under a folder the Library does not hold
+ * yet: its own listing has rows, or another such folder is prepared inside it.
+ * Where neither, it is an empty folder and has no disclosure button.
+ */
+function knownUnder(path: string, source: TreeSource): boolean {
+  const asked = source.listing(path);
+  if (asked?.status === 'ready') {
+    const listing = asked.value;
+    if (listing.files.length > 0 || listing.folders.length > 0) {
+      return true;
+    }
+  }
+  const prefix = `${path}/`;
+  return (
+    source.prospective.some((other) => other.startsWith(prefix)) ||
+    source.stranded.some((other) => other.startsWith(prefix))
+  );
+}
+
+/** Which row has the focus, and which folders are open. */
+export interface TreeState {
+  /** The key of the focused row, or `null` where none is. */
+  focus: string | null;
+  expanded: ReadonlySet<string>;
+}
+
+/** The arrow keys the tree answers. */
+export type Arrow = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
+/**
+ * What an arrow key does to the tree.
+ *
+ * - `↑`/`↓` move the focus to the previous or next row on show, and no
+ *   further than the first or the last.
+ * - `→` on a closed folder opens it; on an open one, moves to its first row.
+ * - `←` on an open folder closes it; anywhere else, moves to the folder the
+ *   row stands in.
+ *
+ * Neither `←` nor `→` turns a page: that is the reader's, over the tree.
+ *
+ * With no row focused, any of them focuses the first row — or, for `↑`, the
+ * last — so that the keys have somewhere to start.
+ *
+ * The state comes back as it was where the key does nothing, so a caller can
+ * tell a key that moved nothing.
+ */
+export function arrowed(rows: readonly TreeRow[], state: TreeState, arrow: Arrow): TreeState {
+  const walkable = rows.filter((row): row is Walkable => row.kind !== 'note');
+  if (walkable.length === 0) {
+    return state;
+  }
+  const at = walkable.findIndex((row) => row.key === state.focus);
+  if (at === -1) {
+    const start = arrow === 'ArrowUp' ? walkable[walkable.length - 1] : walkable[0];
+    return { ...state, focus: start.key };
+  }
+  const row = walkable[at];
+  const open = row.kind === 'folder' && row.expandable && state.expanded.has(row.path);
+  switch (arrow) {
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      const next = at + (arrow === 'ArrowDown' ? 1 : -1);
+      if (next < 0 || next >= walkable.length) {
+        return state;
+      }
+      return { ...state, focus: walkable[next].key };
+    }
+    case 'ArrowRight': {
+      if (row.kind !== 'folder' || !row.expandable) {
+        return state;
+      }
+      if (!open) {
+        return { ...state, expanded: new Set([...state.expanded, row.path]) };
+      }
+      const first = walkable[at + 1];
+      return first !== undefined && first.depth === row.depth + 1 && parentOf(first.path) === row.path
+        ? { ...state, focus: first.key }
+        : state;
+    }
+    case 'ArrowLeft': {
+      if (open) {
+        return collapsed(state, row.path);
+      }
+      const parent = parentOf(row.path);
+      if (parent === '') {
+        return state;
+      }
+      const holder = walkable.find((one) => one.key === folderKey(parent));
+      return holder === undefined ? state : { ...state, focus: holder.key };
+    }
+  }
+}
+
+/**
+ * What a press on a folder's disclosure button does: opens it, or closes it.
+ *
+ * The focus stays where it is — except that closing a folder the focused row
+ * stands in moves the focus to that folder, so the focus is never on a row
+ * that is not on show.
+ */
+export function toggled(state: TreeState, folder: string): TreeState {
+  if (state.expanded.has(folder)) {
+    return collapsed(state, folder);
+  }
+  return { ...state, expanded: new Set([...state.expanded, folder]) };
+}
+
+/** `folder` closed, and the focus brought out of it where it was inside. */
+function collapsed(state: TreeState, folder: string): TreeState {
+  const expanded = new Set(state.expanded);
+  expanded.delete(folder);
+  const inside = state.focus !== null && pathOf(state.focus).startsWith(`${folder}/`);
+  return { focus: inside ? folderKey(folder) : state.focus, expanded };
+}
+
+/**
+ * The folder the screen's own actions are about — what a drop on the list's
+ * empty space lands in, what "Pack this folder…" and "New folder…" over the
+ * rows act on, what "Select" picks files from, and what the reader turns
+ * through: the focused folder where it is open, and otherwise the folder the
+ * focused row stands in; the Library root where nothing is focused.
+ *
+ * An open folder or the folder a row stands in, never a closed one, because
+ * either one's listing is on hand already: walking onto a closed folder asks
+ * nothing of the server.
+ */
+export function contextOf(state: TreeState): string {
+  if (state.focus === null) {
+    return '';
+  }
+  const path = pathOf(state.focus);
+  return isFolderKey(state.focus) && state.expanded.has(path) ? path : parentOf(path);
+}
+
+/** The folders a tree with `expanded` open shows rows of, the root first. */
+export function shownFolders(expanded: ReadonlySet<string>): string[] {
+  return [
+    '',
+    ...[...expanded].filter((path) => ancestry(path).every((folder) => expanded.has(folder))),
+  ];
 }

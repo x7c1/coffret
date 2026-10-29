@@ -33,19 +33,19 @@ function shownIn(tz: string, iso: string): string {
   return time(iso);
 }
 
-// RFC 3339 to the second, the wall clock the reader's own, and the offset
-// beside it saying which zone that is — the offset in force at that moment,
-// daylight saving and half-hour zones included.
-it('shows a time as RFC 3339 in the reader’s own zone', () => {
-  expect(shownIn('Asia/Tokyo', '2023-11-14T22:13:20Z')).toBe('2023-11-15T07:13:20+09:00');
-  expect(shownIn('America/New_York', '2015-10-04T23:06:40Z')).toBe('2015-10-04T19:06:40-04:00');
-  expect(shownIn('America/New_York', '2015-12-04T23:06:40Z')).toBe('2015-12-04T18:06:40-05:00');
-  expect(shownIn('Asia/Kolkata', '2023-11-14T22:13:20Z')).toBe('2023-11-15T03:43:20+05:30');
-  expect(shownIn('UTC', '2023-11-14T22:13:20Z')).toBe('2023-11-14T22:13:20+00:00');
+// To the minute, the wall clock the reader's own — the offset in force at that
+// moment, daylight saving and half-hour zones included, decides the clock and
+// is not spelled out.
+it('shows a time to the minute in the reader’s own zone', () => {
+  expect(shownIn('Asia/Tokyo', '2023-11-14T22:13:20Z')).toBe('2023-11-15 07:13');
+  expect(shownIn('America/New_York', '2015-10-04T23:06:40Z')).toBe('2015-10-04 19:06');
+  expect(shownIn('America/New_York', '2015-12-04T23:06:40Z')).toBe('2015-12-04 18:06');
+  expect(shownIn('Asia/Kolkata', '2023-11-14T22:13:20Z')).toBe('2023-11-15 03:43');
+  expect(shownIn('UTC', '2016-04-11T20:12:59Z')).toBe('2016-04-11 20:12');
 });
 
 // FM-9: a time before 1970 is a time like any other.
 it('shows a time before 1970', () => {
-  expect(shownIn('UTC', '1969-12-31T23:59:58Z')).toBe('1969-12-31T23:59:58+00:00');
-  expect(shownIn('America/New_York', '1969-07-20T20:17:40Z')).toBe('1969-07-20T16:17:40-04:00');
+  expect(shownIn('UTC', '1969-12-31T23:59:58Z')).toBe('1969-12-31 23:59');
+  expect(shownIn('America/New_York', '1969-07-20T20:17:40Z')).toBe('1969-07-20 16:17');
 });
