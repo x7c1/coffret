@@ -120,7 +120,8 @@
 //! [`prune`] touches no file either, and is the one flow that only takes away:
 //! once the Snapshot of the head stands and the committed Keyring set is
 //! complete, it moves the Journal records that Snapshot covers to the trash,
-//! all but the head itself (spec: CK-4, CK-5, CK-6).
+//! all but the head itself, and then every replica of the Keyring generations
+//! older than the one the Snapshot records (spec: CK-4, CK-5, CK-6, KL-18).
 //!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
 //! `spool_conformance`, `mapped_roots_conformance`, `destinations_conformance`,
@@ -232,8 +233,9 @@ pub mod delete_conformance;
 pub mod rename;
 
 // Removing the Journal records an Index Snapshot covers, once the Snapshot of
-// the head stands and the committed Keyring set is complete (spec: CK-4, CK-5,
-// CK-6).
+// the head stands and the committed Keyring set is complete, and then the
+// superseded Keyring generations older than its own (spec: CK-4, CK-5, CK-6,
+// KL-18).
 pub mod prune;
 
 // Rewriting the Packs that hold a folder's Entries into Packs cut in Entry Path

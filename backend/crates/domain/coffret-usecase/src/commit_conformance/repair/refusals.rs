@@ -297,7 +297,8 @@ pub async fn a_keyring_no_replica_answers_stays_unreadable(fixture: &CommitUnder
 
 /// KL-9: replication is effective only within one generation: envelopes
 /// introduced by a newer generation are protected only by that generation's
-/// replicas, never by retained older generations.
+/// replicas, never by older generations still on Storage, which `prune`
+/// disposes of once superseded (spec: KL-18).
 ///
 /// Two generations are committed and every replica of the newer one is
 /// damaged, while the older one is intact on Storage. The commit reads the

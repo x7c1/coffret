@@ -100,7 +100,9 @@ use crate::object_store::ObjectStore;
 /// The Keyring replicas of an attempt that then lost the race stay on Storage as
 /// an uncommitted candidate. That is what they are meant to be: a candidate set
 /// selects nothing until a commit names its exact tuple (spec: KL-3), and
-/// disposing of one is orphan cleanup's business (spec: KL-12, OC-2).
+/// disposing of one is orphan cleanup's business (spec: KL-12, OC-2) — until a
+/// later generation supersedes its number, when `prune` takes it with the
+/// committed set beside it (spec: KL-18).
 pub async fn commit_batch(request: CommitRequest<'_>) -> Result<CommitOutcome, CommitFailure> {
     // Kept here rather than read off the last attempt, because an attempt that
     // repaired the set and then lost the slot is the one that did the work: the

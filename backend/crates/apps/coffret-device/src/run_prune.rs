@@ -8,16 +8,19 @@ use crate::open_library::{open_library, OpenLibrary};
 
 impl OpenLibrary {
     /// Removes the Journal records the Snapshot of the Library's head covers,
-    /// all but the head itself (spec: CK-4, CK-5, CK-6).
+    /// all but the head itself, and then the Keyring generations older than the
+    /// one that Snapshot records (spec: CK-4, CK-5, CK-6, KL-18).
     ///
     /// The Snapshot is made sure of first — the one another device wrote, or
     /// this device's catalog written into the head's slot (spec: CK-8) — and
     /// nothing is removed unless it records the Keyring tuple the head
     /// committed and that set is complete on Storage; a refusal says which
     /// (spec: CK-5). The records go to the provider's trash, recoverable, and
-    /// nothing else on Storage is touched: no Snapshot, no Keyring replica, no
-    /// Container (spec: CK-6). One the provider would not trash is reported in
-    /// the outcome, and the next prune takes it.
+    /// once they are gone so do the replicas of every superseded Keyring
+    /// generation older than the Snapshot's (spec: KL-18). Nothing else on
+    /// Storage is touched: no Snapshot, not the Keyring generation the head
+    /// selects, no Container (spec: CK-6). A record or a replica the provider
+    /// would not trash is reported in the outcome, and the next prune takes it.
     ///
     /// Nothing calls this but a person asking for it: no flow prunes after a
     /// commit or a checkpoint.

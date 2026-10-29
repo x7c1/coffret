@@ -159,10 +159,11 @@ enum Command {
     ///
     /// Makes sure a checkpoint of the head is on Storage, writing one if none
     /// is there, then moves every older Journal record to the provider's
-    /// trash; the head itself stays. Nothing is removed unless that checkpoint
-    /// names the Keyring the head committed and every replica of it is on
-    /// Storage. No checkpoint, Keyring replica or file's content is ever
-    /// removed.
+    /// trash; the head itself stays. Once they are gone, every replica of an
+    /// older Keyring generation follows them to the trash. Nothing is removed
+    /// unless that checkpoint names the Keyring the head committed and every
+    /// replica of it is on Storage. Checkpoints, the head's Keyring and files'
+    /// content are never removed.
     ///
     /// It runs only when asked: nothing prunes after a sync, freeze, rename
     /// or checkpoint.

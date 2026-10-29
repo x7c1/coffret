@@ -330,8 +330,10 @@ mod tests {
         );
     }
 
-    // The case heads alone would miss: a Library pruned past its last head
-    // still holds the Snapshot that applied it (spec: CK-2, CK-4).
+    // The case heads alone would miss: a Library whose every head is gone still
+    // holds the Snapshot that applied them. `prune` never takes the current
+    // head (spec: CK-4), but the Snapshot carries its slot too, so a place
+    // that lost the head some other way still holds the Library (spec: CK-2).
     #[tokio::test]
     async fn a_prefix_holding_a_snapshot_and_no_head_holds_the_library() {
         let snapshot = snapshot_key(3);

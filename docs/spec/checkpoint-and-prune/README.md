@@ -29,22 +29,26 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   exact committed Keyring tuple it depends on: `master_key_epoch`,
   generation, replica count, and `set_digest` (KL-3). *(Form: test)*
 - **CK-4.** Journal records at or before the Snapshot's last applied Journal
-  generation become eligible for `prune`. *(Form: test)*
+  generation and older than the current head become eligible for `prune`;
+  the record that is the current head never does (CK-6). *(Form: test)*
 - **CK-5.** `prune` may run only when the Snapshot preserves the exact
   committed Keyring tuple and that Keyring replica set is complete (KL-2) —
   otherwise deleting the records could destroy the only evidence or envelopes
   a recovery still needs. *(Form: test)*
-- **CK-6.** `prune` deletes only eligible Journal records; it never deletes
-  Containers or the Entries inside them. Its purpose is to bound
-  retained Journal history and recovery replay. *(Form: test)*
+- **CK-6.** `prune` deletes only eligible Journal records, and the
+  superseded Keyring generations KL-18 disposes of after them; it never
+  deletes Containers or the Entries inside them. Its purpose is to bound
+  retained Journal history, the Keyring generations kept beside it, and
+  recovery replay. *(Form: test)*
   - `prune` is the formal operation name in documentation and code.
-  - Eligible does not oblige deletion, and this implementation keeps the
-    record that is the current head. CK-2 lets the Snapshot carry the next
-    commit slot, so the Library could stand on the Snapshot alone; keeping
-    the head costs one object and spares every writer — including one on
-    another device that read the head a moment ago and is about to consume
-    its slot — from depending on a head chain whose newest link is a
-    Snapshot, which no ordinary commit exercises.
+  - The current head is excluded from eligibility (CK-4) so that every
+    device and every implementation can rely on the head record existing.
+    CK-2 lets the Snapshot carry the next commit slot, so the Library could
+    stand on the Snapshot alone; keeping the head costs one object and
+    spares every writer — including one on another device that read the
+    head a moment ago and is about to consume its slot — from depending on a
+    head chain whose newest link is a Snapshot, which no ordinary commit
+    exercises.
   - `prune` runs when it is asked for, and at no other moment: nothing runs
     it after a commit or a checkpoint. Whether and when a device prunes
     without being asked is a policy choice, like CK-8's threshold, and this

@@ -26,6 +26,18 @@ without restarting. A Library's first generation is written when the Library
 is created, with an empty key table, and is the one its first head selects
 (spec: CP-2, FM-13).
 
+Every commit writes a whole new generation, so older ones pile up beside the
+one the head selects. A generation is **superseded** once a later one of the
+same epoch is committed and complete. Nothing current needs it any more —
+every current Container is mapped by the newest committed generation
+(spec: KL-7) — but the Journal records that selected it still name it, so it
+stays until those records go. `prune` removes them and then moves every
+replica of each superseded generation older than its checkpoint's to the
+provider's trash; there is no number of older generations kept back and no
+grace period (spec: KL-18). A superseded generation is never repaired: a
+device repairs only the generation its head selects once it has caught up
+(spec: KL-13).
+
 ### Keyring commitment
 
 Four values identify one replica set exactly. Together they are its
@@ -154,6 +166,10 @@ candidate rather than a degraded Keyring.
   positions a valid replica no longer stands at)
 - repair (a degraded committed replica set, before the commit that would
   otherwise write past it)
+- supersede (an older generation, once a later one of the same epoch is
+  committed and complete)
+- dispose of (the superseded generations, during `prune`, to the provider's
+  trash)
 - fetch (the Keyring first, when recovering)
 
 ## Domain Rules

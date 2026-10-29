@@ -538,11 +538,12 @@ async fn a_library_whose_first_head_was_pruned_is_still_found() {
     assert_eq!(found, FoundOnStorage::TheLibrary);
 }
 
-// A Library pruned past its last head holds no head at all, and still holds
-// the Snapshot that applied it — the source of its next commit slot (spec:
-// CK-2, CK-4). The join finds it by that Snapshot.
+// A Library that lost every head holds the Snapshot that applied them — a
+// source of its next commit slot (spec: CK-2). `prune` never takes the current
+// head (spec: CK-4), but a head can go some other way, and the join still
+// finds the Library by that Snapshot.
 #[tokio::test]
-async fn a_library_pruned_of_every_head_is_found_by_its_snapshot() {
+async fn a_library_that_lost_every_head_is_found_by_its_snapshot() {
     let snapshot =
         ControlObjectName::index_snapshot(Generation::new(9).expect("9 is a generation"))
             .to_string();

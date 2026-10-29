@@ -1,4 +1,6 @@
-use coffret_model::{ControlObjectKind, ControlObjectName, Generation, Redacted};
+use coffret_model::{
+    ControlObjectKind, ControlObjectName, Generation, MasterKeyEpoch, ObjectRef, Redacted,
+};
 use tracing::{debug, info, warn};
 
 use crate::commit::{
@@ -12,9 +14,11 @@ use crate::prune::prune_outcome::PruneOutcome;
 use crate::prune::prune_refusal::PruneRefusal;
 use crate::prune::prune_request::PruneRequest;
 use crate::prune::unremoved_record::UnremovedRecord;
+use crate::prune::unremoved_replica::UnremovedReplica;
 
 /// Removes the Journal records the Snapshot of the current head covers, all
-/// but the head itself (spec: CK-4, CK-5, CK-6, CK-8).
+/// but the head itself, and then the Keyring generations that head superseded
+/// (spec: CK-4, CK-5, CK-6, CK-8, KL-18).
 ///
 /// The steps, and the rule each answers to, are listed in the
 /// [module documentation](crate::prune).
@@ -22,7 +26,8 @@ use crate::prune::unremoved_record::UnremovedRecord;
 /// A refusal is [`PruneError::Refused`](super::PruneError::Refused), and comes
 /// before anything is removed; the Snapshot the run made sure of stands either
 /// way. Once removing has begun nothing stops it: a record that will not go is
-/// reported in [`PruneOutcome::unremoved`] and the run goes on to the next.
+/// reported in [`PruneOutcome::unremoved`], a replica that will not go in
+/// [`PruneOutcome::unremoved_replicas`], and the run goes on to the next.
 pub async fn prune_journal(request: PruneRequest<'_>) -> PruneResult<PruneOutcome> {
     let PruneRequest {
         store,
@@ -89,11 +94,13 @@ pub async fn prune_journal(request: PruneRequest<'_>) -> PruneResult<PruneOutcom
         already_gone: Vec::new(),
         kept: Vec::new(),
         unremoved: Vec::new(),
+        removed_replicas: Vec::new(),
+        unremoved_replicas: Vec::new(),
     };
-    // At or before what the Snapshot applies, and never the head itself, which
-    // CK-4 makes eligible and this implementation keeps (see the module
-    // documentation). Only names in the head chain are looked at, so no
-    // Snapshot, Keyring replica or Container is ever a candidate (spec: CK-6).
+    // At or before what the Snapshot applies, and older than the head, which is
+    // never eligible (spec: CK-4). Only names in the head chain are looked at,
+    // so no Snapshot, Keyring replica or Container is ever a candidate
+    // (spec: CK-6).
     let eligible: Vec<Generation> = listing
         .heads()
         .filter(|generation| *generation <= covered_through && *generation < head)
@@ -116,8 +123,126 @@ pub async fn prune_journal(request: PruneRequest<'_>) -> PruneResult<PruneOutcom
         }
     }
 
+    // Last, and only once every record the Snapshot covers is gone: a record
+    // left in place still selects the generation it committed, and the
+    // generation goes after it (spec: KL-18). The next prune takes both.
+    match outcome.unremoved.is_empty() {
+        true => {
+            let recorded = checkpoint.keyring().generation();
+            let selected = committed.keyring().generation();
+            match superseded_below(checkpoint.master_key_epoch(), recorded, selected) {
+                Some(bound) => dispose_of_superseded(store, &policy, &listing, bound, &mut outcome).await,
+                None => info!(
+                    epoch = checkpoint.master_key_epoch().get(),
+                    "the Library is past its first Master Key epoch; no Keyring generation is disposed of",
+                ),
+            }
+        }
+        false => info!(
+            unremoved = outcome.unremoved.len(),
+            "Journal records were left in place; the superseded Keyring generations wait for the next prune",
+        ),
+    }
+
     finished(&outcome);
     Ok(outcome)
+}
+
+/// The generation below which every listed Keyring replica belongs to a
+/// generation of the current epoch that a later one superseded, or `None`
+/// where the run cannot tell which older generations are the epoch's own
+/// (spec: KL-10, KL-18).
+///
+/// Below both the generation the Snapshot records and the one the head selects
+/// — one and the same, since the gate has just shown the Snapshot records the
+/// head's tuple (spec: CK-5), but each is a generation KL-18 never disposes of,
+/// so both bound it. Every generation below is superseded: a later one, the
+/// head's, is committed and complete (spec: KL-2, KL-3).
+///
+/// Only in the first epoch. A generation's number determines its epoch and
+/// never restarts (spec: KL-10), so in the first epoch every older generation
+/// is the epoch's own; past a rotation the older numbers include the previous
+/// epochs' generations, whose replicas no name tells apart from the current
+/// epoch's, and rotation — which deletes those outright (spec: MR-3) — is not
+/// implemented. A Library past its first epoch keeps every generation.
+///
+/// Every set listed under an older number goes, whatever its digest: a
+/// candidate that lost its commit slot at that number is no more reachable
+/// than the committed set beside it, and which digest the records committed is
+/// nothing the names say (spec: KL-14).
+fn superseded_below(
+    epoch: MasterKeyEpoch,
+    recorded: Generation,
+    selected: Generation,
+) -> Option<Generation> {
+    (epoch == MasterKeyEpoch::FIRST).then_some(recorded.min(selected))
+}
+
+/// Trashes every replica of every Keyring generation below `bound`
+/// (spec: KL-18).
+///
+/// Trash and not purge, for the reason a record is trashed: only a Master Key
+/// rotation deletes Keyring replicas irreversibly (spec: MR-3). A replica that
+/// will not go is reported and the run goes on to the next.
+async fn dispose_of_superseded(
+    store: &dyn ObjectStore,
+    policy: &CommitPolicy,
+    listing: &ControlListing,
+    bound: Generation,
+    outcome: &mut PruneOutcome,
+) {
+    for (replica, copies) in listing.keyring_replicas() {
+        if replica.generation() >= bound {
+            continue;
+        }
+        match trash_copies(store, policy, copies).await {
+            Ok(true) => outcome.removed_replicas.push(replica.clone()),
+            Ok(false) => debug!(
+                object = %replica,
+                "a superseded Keyring replica was already gone",
+            ),
+            Err(cause) => {
+                warn!(
+                    object = %replica,
+                    reason = %cause.redacted(),
+                    "a superseded Keyring replica was not trashed; the next prune takes it",
+                );
+                outcome.unremoved_replicas.push(UnremovedReplica {
+                    replica: replica.clone(),
+                    cause,
+                });
+            }
+        }
+    }
+}
+
+/// Trashes every object listed under one replica name, and says whether any
+/// was there to trash.
+///
+/// Every copy, because on a Storage whose names are not unique a name can
+/// carry several (spec: KL-14), and a copy left behind is a replica left
+/// behind. One already gone is where the run was taking it; the first failure
+/// is what the replica is reported with, after the rest have been tried.
+async fn trash_copies(
+    store: &dyn ObjectStore,
+    policy: &CommitPolicy,
+    copies: &[ObjectRef],
+) -> Result<bool, CommitError> {
+    let mut trashed = false;
+    let mut failed = None;
+    for object in copies {
+        match policy.retry.run("trash", || store.trash(object)).await {
+            Ok(()) => trashed = true,
+            Err(Error::NotFound { .. }) => {}
+            Err(error) => {
+                failed.get_or_insert(CommitError::from(error));
+            }
+        }
+    }
+    match failed {
+        Some(cause) => Err(cause),
+        None => Ok(trashed),
+    }
 }
 
 /// What became of one eligible head position.
@@ -187,6 +312,8 @@ fn finished(outcome: &PruneOutcome) {
         already_gone = outcome.already_gone.len(),
         kept = outcome.kept.len(),
         unremoved = outcome.unremoved.len(),
-        "pruned the Journal records the checkpoint covers",
+        removed_replicas = outcome.removed_replicas.len(),
+        unremoved_replicas = outcome.unremoved_replicas.len(),
+        "pruned the Journal records the checkpoint covers and the Keyring generations it superseded",
     );
 }
