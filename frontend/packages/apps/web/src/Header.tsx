@@ -128,10 +128,23 @@ export function Header({
         }}
         style={ADD_BUTTON}
       >
-        +
+        <svg
+          aria-hidden
+          width={20}
+          height={20}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          style={{ display: 'block' }}
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
       </button>
       {adding !== null && (
         <ActionsMenu
+          title={`Add files to ${placeOf(adding.into)}`}
           label={`add files to ${placeOf(adding.into)}`}
           at={adding.at}
           items={ADD_ITEMS}
@@ -200,7 +213,7 @@ const HEADER: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 12,
-  padding: '6px 12px',
+  padding: '10px 16px',
   background: COLOR.panel,
   borderBottom: `1px solid ${COLOR.border}`,
   minWidth: 0,
@@ -219,16 +232,25 @@ const WHERE: CSSProperties = {
   gap: '6px 12px',
 };
 
-/** Drawn like a button, since switching Libraries is to live here. */
+/**
+ * Drawn like a button, since switching Libraries is to live here: a box 44px
+ * high, the name on one line in the middle of it — by its line height rather
+ * than a flex box, so that a name too long for the row is still cut short with
+ * an ellipsis.
+ */
 const LIBRARY: CSSProperties = {
   flex: '0 1 auto',
   minWidth: 0,
   maxWidth: '100%',
-  padding: '2px 10px',
+  boxSizing: 'border-box',
+  minHeight: 44,
+  lineHeight: '42px',
+  padding: '0 12px',
   border: `1px solid ${COLOR.border}`,
-  borderRadius: 4,
+  borderRadius: 8,
   color: COLOR.text,
-  fontSize: 13,
+  fontSize: 14,
+  fontWeight: 600,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -249,18 +271,18 @@ const LOCATION: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-/** The **+**, square and a little larger than the words beside it. */
+/** The **+**: a square as high as the Library's box, filled with the accent, a white plus in it. */
 const ADD_BUTTON: CSSProperties = {
   flex: '0 0 auto',
-  width: 26,
-  height: 24,
-  border: `1px solid ${COLOR.border}`,
-  background: 'transparent',
-  color: COLOR.text,
-  font: 'inherit',
-  fontSize: 16,
-  lineHeight: 1,
+  width: 44,
+  height: 44,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: 'none',
+  background: COLOR.accent,
+  color: COLOR.onAccent,
   padding: 0,
-  borderRadius: 4,
+  borderRadius: 8,
   cursor: 'pointer',
 };

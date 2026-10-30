@@ -38,7 +38,7 @@ export function SyncIcon({
       aria-label={label}
       style={{
         ...BUTTON,
-        color: waiting && !running ? COLOR.newer : 'inherit',
+        color: waiting && !running ? COLOR.accent : 'inherit',
         cursor: running ? 'default' : 'pointer',
       }}
     >

@@ -1611,6 +1611,7 @@ export function App() {
                 margin: 0,
                 padding: '8px 12px',
                 borderBottom: `1px solid ${COLOR.border}`,
+                background: COLOR.warnGround,
                 color: COLOR.warn,
                 fontSize: 13,
               }}

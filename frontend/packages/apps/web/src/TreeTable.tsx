@@ -17,13 +17,13 @@ import type { DeleteTarget, DisplacedFill, Fill, Freeze, ListedFile, Listing } f
 
 import { actionsFor, type ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
-import { Banner, DropPill, dropOutline } from './Banner';
+import { Banner, dropGround, DropPill, dropOutline } from './Banner';
 import { canvasMeasure, columnWidth, type Measured } from './columns';
 import { counted, type Described } from './details';
 import { useDragOver } from './dragOver';
 import { landingOf, placeOf } from './destination';
 import { droppedFiles, type Drop } from './drop';
-import { dropOutcome } from './dropTarget';
+import { dropOutcome, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
 import { CHOOSE_A_FOLDER, noFolderChosenLine } from './mapping';
@@ -41,7 +41,8 @@ import {
   type Picked,
   type Selection,
 } from './selection';
-import { COLOR } from './theme';
+import { rowIconOf, type RowIcon } from './rowIcon';
+import { COLOR, FONT } from './theme';
 import {
   arrowed,
   contextOf,
@@ -649,9 +650,7 @@ export function TreeTable({
                     // Taken out of the selection with ⌘/Ctrl+click, the focus
                     // is left on a row that is not selected.
                     focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
-                    dropOutline={
-                      row.kind === 'folder' && row.path === target ? dropOutline(drag.dragged, outcome) : 'none'
-                    }
+                    drop={row.kind === 'folder' && row.path === target && drag.dragged ? outcome : null}
                     shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
                     offers={offersOf(row)}
                     menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
@@ -671,7 +670,8 @@ export function TreeTable({
         )}
         {menu !== null && (
           <ActionsMenu
-            label={`actions for ${menu.rows.length === 1 ? menu.rows[0].name : counted(menu.rows.length, 'item', 'items')}`}
+            title={menuTitle(menu.rows)}
+            label={`actions for ${menuTitle(menu.rows)}`}
             at={menu.at}
             items={menuItems(menu.rows)}
             onChoose={choose}
@@ -682,6 +682,11 @@ export function TreeTable({
       {drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
     </div>
   );
+}
+
+/** What the actions menu over `rows` acts on: the one row's name, or how many rows there are. */
+function menuTitle(rows: readonly Described[]): string {
+  return rows.length === 1 ? rows[0].name : counted(rows.length, 'item', 'items');
 }
 
 /** What opening a row can come to, as [`opened`](#opened) hands it on. */
@@ -767,7 +772,7 @@ function Row({
   focused,
   selected,
   focusOutside,
-  dropOutline: outline,
+  drop,
   shown,
   offers,
   menuOpen,
@@ -789,8 +794,8 @@ function Row({
    * the rows selected.
    */
   focusOutside: boolean;
-  /** The outline a drag brings up where the drop lands in this row's folder. */
-  dropOutline: string;
+  /** What a drop would come to where the drag over the tree lands in this row's folder; `null` where it does not. */
+  drop: DropOutcome | null;
   /** What a file row's state is, the listing's and the fill's together; `null` for a folder. */
   shown: RowFill | null;
   /** Whether the actions menu has anything for this row, which is whether it draws a "⋮". */
@@ -813,7 +818,15 @@ function Row({
   const values = valuesOf(row);
   const offered = row.kind === 'folder' || row.in.mapped;
   const highlighted = focused && !focusOutside;
-  const ring = focused && focusOutside && outline === 'none' ? `1px solid ${COLOR.focusRing}` : outline;
+  const ring = drop !== null ? dropOutline(true, drop) : focused && focusOutside ? `1px solid ${COLOR.accent}` : 'none';
+  // Whether the row is drawn on the accent: the focused row, unless a drag over
+  // it has it tinted as the drop target instead — white words would vanish on
+  // the light tint.
+  const onAccent = highlighted && drop === null;
+  // What is drawn on the accent of the focused row is drawn in white, the
+  // name, the values and the icons alike; elsewhere each keeps its own colour.
+  const ink = (own: string) => (onAccent ? COLOR.onAccent : own);
+  const icon = rowIconOf(row);
   return (
     <tr
       ref={rowRef}
@@ -843,7 +856,8 @@ function Row({
       }}
       onDragOver={onDragOverRow}
       style={{
-        background: highlighted ? COLOR.selected : selected ? COLOR.picked : undefined,
+        background:
+          drop !== null ? dropGround(drop) : onAccent ? COLOR.accent : selected ? COLOR.picked : undefined,
         outline: ring,
         outlineOffset: -2,
       }}
@@ -865,56 +879,59 @@ function Row({
                 onToggle();
               }}
               onDoubleClick={(event) => event.stopPropagation()}
-              style={DISCLOSURE_BUTTON}
+              style={{ ...DISCLOSURE_BUTTON, color: ink(COLOR.dim) }}
             >
-              {folder.expanded ? '▾' : '▸'}
+              <Chevron open={folder.expanded} />
             </button>
           ) : (
             <span aria-hidden style={{ flex: '0 0 auto', width: DISCLOSURE }} />
           )}
-          <span style={MARK}>{folder !== null && <FolderIcon />}</span>
+          <span style={{ ...MARK, color: ink(icon === 'folder' ? COLOR.dim : COLOR.accent) }}>
+            <RowIconMark icon={icon} />
+          </span>
           <span
             style={{
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              color:
+              color: ink(
                 folder !== null
                   ? folder.prospective || folder.stranded
-                    ? COLOR.added
+                    ? COLOR.accentDeep
                     : COLOR.text
                   : row.kind === 'file' && !row.file.openable
                     ? COLOR.dim
                     : COLOR.text,
+              ),
             }}
           >
             {row.name}
           </span>
           {folder !== null && folder.prospective && (
-            <span title={PROSPECTIVE} style={NOTE}>
+            <span title={PROSPECTIVE} style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>
               not in Library
             </span>
           )}
           {folder !== null && !folder.folder.mapped && !folder.prospective && (
-            <span title={NO_FOLDER_CHOSEN_TITLE} style={{ ...NOTE, color: COLOR.warn }}>
+            <span title={NO_FOLDER_CHOSEN_TITLE} style={{ ...NOTE, color: ink(COLOR.warn) }}>
               no folder chosen
             </span>
           )}
-          {folder?.incoming === true && <span style={NOTE}>adding…</span>}
+          {folder?.incoming === true && <span style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>adding…</span>}
         </span>
       </td>
-      <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
+      <td style={{ ...CELL, textAlign: 'right', color: ink(COLOR.dim) }}>
         {values.size}
       </td>
       <td style={{ ...CELL, textAlign: 'center', textOverflow: 'clip', padding: `0 ${DEVICE_PAD}px` }}>
         {folder !== null ? (
-          folder.folder.present_throughout && !folder.prospective ? <Device state="present" /> : null
+          folder.folder.present_throughout && !folder.prospective ? <Device state="present" onAccent={onAccent} /> : null
         ) : shown !== null ? (
-          <Device state={shown.state} message={shown.message} />
+          <Device state={shown.state} message={shown.message} onAccent={onAccent} />
         ) : null}
       </td>
-      <td style={{ ...CELL, color: COLOR.dim }}>{values.modified}</td>
-      <MenuCell name={row.name} offers={offers} open={menuOpen} onMenu={onMenu} />
+      <td style={{ ...CELL, color: ink(COLOR.dim) }}>{values.modified}</td>
+      <MenuCell name={row.name} offers={offers} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
 }
@@ -948,24 +965,36 @@ function valuesOf(row: FolderRow | FileRow): { size: string; modified: string } 
  * for a row in the Library only, a laptop for one on this device, a small ring
  * while it is being fetched or uploaded, and a warning triangle where that
  * failed. The words are its label, and the sentence behind the state its
- * title.
+ * title. On the focused row's accent every one of them is drawn in white, as
+ * the rest of the row is.
  */
-function Device({ state, message = null }: { state: RowFill['state']; message?: string | null }) {
+function Device({
+  state,
+  message = null,
+  onAccent,
+}: {
+  state: RowFill['state'];
+  message?: string | null;
+  onAccent: boolean;
+}) {
+  const ink = (own: string) => (onAccent ? COLOR.onAccent : own);
   switch (state) {
     case 'remote':
       return null;
     case 'present':
-      return <Laptop label={ON_THIS_DEVICE} />;
+      return <Laptop color={ink(COLOR.present)} label={ON_THIS_DEVICE} />;
     case 'fetching':
-      return <Ring label="Being fetched to this device" />;
+      return <Ring color={ink(COLOR.accent)} label="Being fetched to this device" />;
     case 'added':
-      return <Ring label={said('On this device, being added to the Library', message)} />;
+      return <Ring color={ink(COLOR.accent)} label={said('On this device, being added to the Library', message)} />;
     case 'reserved':
-      return <Ring label={said('On this device, waiting to be packed into the Library', message)} />;
+      return (
+        <Ring color={ink(COLOR.accent)} label={said('On this device, waiting to be packed into the Library', message)} />
+      );
     case 'failed':
-      return <Warning color={COLOR.refused} label={said('Fetching failed', message)} />;
+      return <Warning color={ink(COLOR.refused)} label={said('Fetching failed', message)} />;
     case 'declined':
-      return <Warning color={COLOR.warn} label={said('Not fetched', message)} />;
+      return <Warning color={ink(COLOR.warn)} label={said('Not fetched', message)} />;
   }
 }
 
@@ -977,22 +1006,22 @@ function said(state: string, message: string | null): string {
 /** What the laptop says: a file fetched here and one added from here alike. */
 export const ON_THIS_DEVICE = 'On this device';
 
-function Laptop({ label }: { label: string }) {
+function Laptop({ color, label }: { color: string; label: string }) {
   return (
     <svg role="img" aria-label={label} width={ICON} height={ICON} viewBox="0 0 16 16" style={ICON_STYLE}>
       <title>{label}</title>
-      <rect x="3" y="3.5" width="10" height="7" rx="1" fill="none" stroke={COLOR.present} strokeWidth={1.2} />
-      <path d="M1.5 12.5h13" stroke={COLOR.present} strokeWidth={1.4} strokeLinecap="round" />
+      <rect x="3" y="3.5" width="10" height="7" rx="1" fill="none" stroke={color} strokeWidth={1.2} />
+      <path d="M1.5 12.5h13" stroke={color} strokeWidth={1.4} strokeLinecap="round" />
     </svg>
   );
 }
 
-function Ring({ label }: { label: string }) {
+function Ring({ color, label }: { color: string; label: string }) {
   return (
     <svg role="img" aria-label={label} width={ICON} height={ICON} viewBox="0 0 16 16" style={ICON_STYLE}>
       <title>{label}</title>
       <circle cx="8" cy="8" r="5.5" fill="none" stroke={COLOR.border} strokeWidth={2} />
-      <path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" fill="none" stroke={COLOR.fetching} strokeWidth={2} strokeLinecap="round">
+      <path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
         <animateTransform attributeName="transform" type="rotate" from="0 8 8" to="360 8 8" dur="1.2s" repeatCount="indefinite" />
       </path>
     </svg>
@@ -1009,17 +1038,69 @@ function Warning({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** A folder, drawn as one, in the text's own colour. */
-function FolderIcon() {
+/**
+ * The icon in front of a row's name (see [`rowIconOf`](./rowIcon)), in the
+ * colour of the mark it stands in.
+ *
+ * The folder's is read out as `folder`, which is how a row is told for a
+ * folder's from the outside; a file's is left unread, its name being all it
+ * says — and the one image a file row holds stays the state icon in its narrow
+ * column.
+ */
+function RowIconMark({ icon }: { icon: RowIcon }) {
+  const shared = {
+    width: ICON,
+    height: ICON,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    style: ICON_STYLE,
+    'data-icon': icon,
+  } as const;
+  switch (icon) {
+    case 'folder':
+      return (
+        <svg role="img" aria-label="folder" {...shared}>
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        </svg>
+      );
+    case 'image':
+      return (
+        <svg aria-hidden {...shared}>
+          <rect x={4} y={3} width={16} height={18} rx={2} />
+          <circle cx={9.5} cy={9} r={1.5} />
+          <path d="m20 16-4.5-4.5L7 20" />
+        </svg>
+      );
+    case 'file':
+      return (
+        <svg aria-hidden {...shared}>
+          <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+          <path d="M14 3v6h6" />
+        </svg>
+      );
+  }
+}
+
+/** A folder's disclosure: a chevron pointing at the name, turned down a quarter while the folder is open. */
+function Chevron({ open }: { open: boolean }) {
   return (
-    <svg role="img" aria-label="folder" width={ICON} height={ICON} viewBox="0 0 16 16" style={ICON_STYLE}>
-      <path
-        d="M1.5 3.5h4.2l1.5 1.5h7.3v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.2}
-        strokeLinejoin="round"
-      />
+    <svg
+      aria-hidden
+      width={12}
+      height={12}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ display: 'block', transform: open ? 'rotate(90deg)' : undefined }}
+    >
+      <path d="m9 6 6 6-6 6" />
     </svg>
   );
 }
@@ -1037,11 +1118,14 @@ function MenuCell({
   name,
   offers,
   open,
+  ink,
   onMenu,
 }: {
   name: string;
   offers: boolean;
   open: boolean;
+  /** The colour the mark is drawn in: the row's dim, or white on the focused row. */
+  ink: string;
   onMenu: (at: MenuAt) => void;
 }) {
   const stop = offers ? (event: MouseEvent) => event.stopPropagation() : undefined;
@@ -1066,7 +1150,7 @@ function MenuCell({
             // A click with no pointer behind it is `Enter` or Space on the "⋮".
             onMenu({ x: box.right, y: box.bottom, side: 'end', byKeys: event.detail === 0 });
           }}
-          style={MENU_BUTTON}
+          style={{ ...MENU_BUTTON, color: ink }}
         >
           ⋮
         </button>
@@ -1078,7 +1162,7 @@ function MenuCell({
 /** Said while the book in the focused folder is being packed. */
 function Packing() {
   return (
-    <Banner tone={COLOR.added} background={COLOR.addedGround}>
+    <Banner tone={COLOR.accentDeep} background={COLOR.accentTint}>
       packing this folder into the Library — the pages go up together, as Packs,
       and become ordinary rows when the batch commits
     </Banner>
@@ -1155,14 +1239,14 @@ function Columns({ widths }: { widths: { size: number; modified: number } }) {
       <col style={{ width: widths.size }} />
       <col style={{ width: ICON + 2 * DEVICE_PAD }} />
       <col style={{ width: widths.modified }} />
-      <col style={{ width: 36 }} />
+      <col style={{ width: MENU_BUTTON_SIZE + 8 }} />
     </colgroup>
   );
 }
 
 /** The fonts the headings and the rows are drawn in, which their widths are measured in. */
-const HEAD_FONT = '12px system-ui, sans-serif';
-const ROW_FONT = '14px system-ui, sans-serif';
+const HEAD_FONT = `500 12px ${FONT}`;
+const ROW_FONT = `13px ${FONT}`;
 
 /** The padding either side of a value. */
 const CELL_PAD = 10;
@@ -1174,23 +1258,32 @@ const DEVICE_PAD = 6;
 /** The room a disclosure button takes, kept on a row without one. */
 const DISCLOSURE = 18;
 
-/** How far in a row at `depth` starts. */
+/** How far in a row at `depth` starts: 20px a level. */
 function indent(depth: number): number {
-  return 6 + depth * 16;
+  return 6 + depth * 20;
 }
+
+/** The least height of a row. */
+const ROW_HEIGHT = 32;
+
+/** The side of a row's "⋮", square. */
+const MENU_BUTTON_SIZE = 28;
 
 const TABLE: CSSProperties = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' };
 
 const HEAD: CSSProperties = {
-  padding: `6px ${CELL_PAD}px`,
+  padding: `8px ${CELL_PAD}px`,
   borderBottom: `1px solid ${COLOR.border}`,
-  fontWeight: 'normal',
+  fontWeight: 500,
   whiteSpace: 'nowrap',
   overflow: 'hidden',
 };
 
 const CELL: CSSProperties = {
-  padding: `4px ${CELL_PAD}px`,
+  // A table cell's height is the least it is drawn at, as a row's is.
+  height: ROW_HEIGHT,
+  boxSizing: 'border-box',
+  padding: `0 ${CELL_PAD}px`,
   borderBottom: `1px solid ${COLOR.rowRule}`,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -1212,33 +1305,37 @@ const ICON_STYLE: CSSProperties = { display: 'block', margin: '0 auto', flex: '0
 const DISCLOSURE_BUTTON: CSSProperties = {
   flex: '0 0 auto',
   width: DISCLOSURE,
+  height: DISCLOSURE,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
   border: 'none',
   background: 'none',
-  color: COLOR.dim,
   cursor: 'pointer',
-  font: 'inherit',
   padding: 0,
 };
 
-/** The room the folder icon takes, kept on a file's row so the names line up. */
-const MARK: CSSProperties = { flex: '0 0 auto', width: ICON, marginRight: 6, color: COLOR.dim };
+/** The room the row's icon takes, and the 6px between it and the name. */
+const MARK: CSSProperties = { flex: '0 0 auto', width: ICON, marginRight: 6 };
 
 /** What a row says after its name. */
-const NOTE: CSSProperties = { marginLeft: 10, color: COLOR.added, fontSize: 11, flex: '0 0 auto' };
+const NOTE: CSSProperties = { marginLeft: 10, fontSize: 11, flex: '0 0 auto' };
 
 /** The headings' row. */
-const HEAD_ROW: CSSProperties = { height: 30, fontSize: 12, background: COLOR.ground };
+const HEAD_ROW: CSSProperties = { background: COLOR.ground };
 
 /** A row's "⋮". */
 const MENU_BUTTON: CSSProperties = {
+  width: MENU_BUTTON_SIZE,
+  height: MENU_BUTTON_SIZE,
+  verticalAlign: 'middle',
   border: 'none',
   background: 'transparent',
-  color: COLOR.dim,
   font: 'inherit',
-  fontSize: 14,
+  fontSize: 16,
   lineHeight: 1,
-  padding: '0 6px',
-  borderRadius: 4,
+  padding: 0,
+  borderRadius: 6,
   cursor: 'pointer',
 };
 

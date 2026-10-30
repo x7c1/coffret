@@ -9,6 +9,7 @@ import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { NOTHING_SELECTED, type Selection } from './selection';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
+import { COLOR } from './theme';
 import { EMPTY_MAPPED_ROOT, ON_THIS_DEVICE, TreeTable } from './TreeTable';
 
 afterEach(cleanup);
@@ -210,6 +211,27 @@ describe('one tree', () => {
     expect(said()).not.toContain('Items');
   });
 
+  // The icon in front of each name says what the row is: a folder, a page
+  // the reader can show, or a file it cannot (see `rowIconOf`); on the
+  // focused row's accent it is drawn in white, as the name is.
+  it('draws an icon in front of each name, white on the focused row', () => {
+    mount(
+      listing({
+        folders: [folder('2026')],
+        files: [file('cover.png'), file('notes.pdf', { openable: false, content_type: 'application/pdf' })],
+      }),
+      { focus: fileKey('albums/cover.png') },
+    );
+    const icon = (title: string) => screen.getByTitle(title).querySelector('svg[data-icon]') as SVGElement;
+    expect(icon('2026').dataset.icon).toBe('folder');
+    expect(icon('cover.png').dataset.icon).toBe('image');
+    expect(icon('notes.pdf').dataset.icon).toBe('file');
+    const ink = (title: string) => (icon(title).parentElement as HTMLElement).style.color;
+    expect(ink('cover.png')).toBe(resolved(COLOR.onAccent));
+    expect(ink('notes.pdf')).toBe(resolved(COLOR.accent));
+    expect(ink('2026')).toBe(resolved(COLOR.dim));
+  });
+
   it('indents a row by its depth, a file keeping the room of a disclosure button', () => {
     mount(listing({ folders: [folder('2026')], files: [file('cover.png')] }));
     expect(screen.getByLabelText('collapse albums')).toBeTruthy();
@@ -217,8 +239,8 @@ describe('one tree', () => {
     const nameCell = (title: string) =>
       screen.getByTitle(title).querySelector('td') as HTMLTableCellElement;
     expect(nameCell('albums').style.paddingLeft).toBe('6px');
-    expect(nameCell('2026').style.paddingLeft).toBe('22px');
-    expect(nameCell('cover.png').style.paddingLeft).toBe('22px');
+    expect(nameCell('2026').style.paddingLeft).toBe('26px');
+    expect(nameCell('cover.png').style.paddingLeft).toBe('26px');
   });
 
   // Each value column is as wide as the widest of its heading and its values.
@@ -638,12 +660,13 @@ describe('a drop on the tree', () => {
     fireEvent.dragEnter(tree, carryingFiles);
     fireEvent.dragOver(screen.getByTitle('cover.png'), carryingFiles);
     expect(screen.getByRole('status').textContent).toBe('Drop to add to albums');
-    expect(screen.getByTitle('albums').style.outline).toContain('dashed');
+    expect(screen.getByTitle('albums').style.outline).toContain('solid');
+    expect(screen.getByTitle('albums').style.background).toBe(resolved(COLOR.accentTint));
     expect(tree.style.outline).toBe('none');
     fireEvent.dragOver(screen.getByTitle('loose.png'), carryingFiles);
     expect(screen.getByRole('status').textContent).toBe('Drop to add to the Library');
     expect(screen.getByTitle('albums').style.outline).toBe('none');
-    expect(tree.style.outline).toContain('dashed');
+    expect(tree.style.outline).toContain('solid');
   });
 
   // A folder no folder of this device is chosen for takes the drop — the
@@ -691,3 +714,10 @@ describe('a drop on the tree', () => {
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 });
+
+/** The colour the browser resolves `hex` to, as an inline style reads back. */
+function resolved(hex: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = hex;
+  return probe.style.color;
+}

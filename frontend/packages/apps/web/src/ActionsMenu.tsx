@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import type { ActionItem } from './actions';
-import { COLOR } from './theme';
+import { COLOR, SHADOW } from './theme';
 
 /** Where the menu opens: a point on the screen, and which side of it the menu hangs from. */
 export interface MenuAt {
@@ -32,9 +32,11 @@ export interface MenuAt {
  * menu may well hang over the sheet.
  *
  * It closes on a click anywhere outside it, on `Escape`, and on choosing an
- * item. The item under the pointer or the keyboard's focus is shaded; `↑`/`↓`
+ * item. Its title — what it acts on — heads it, and is not one of its items.
+ * The item under the pointer or the keyboard's focus is shaded; `↑`/`↓`
  * move that focus and `Enter` chooses, so the menu works from the keyboard
- * as a menu does. A destructive item is drawn in light red.
+ * as a menu does. A destructive item is drawn in red, and shaded in a tint of
+ * it.
  *
  * Kept on the screen: where it would run past the bottom of the window it opens
  * upward from the point instead, and where past the right edge, leftward.
@@ -42,12 +44,18 @@ export interface MenuAt {
  * measured.
  */
 export function ActionsMenu({
+  title,
   label,
   at,
   items,
   onChoose,
   onClose,
 }: {
+  /**
+   * The line heading the menu: what it acts on — `cover.png`, `3 items`, `Add
+   * to albums`. Drawn and not read out: `label` says it, with what the menu is.
+   */
+  title: string;
   /** What the menu is read out as: `actions for cover.png`, `actions for 3 items`. */
   label: string;
   at: MenuAt;
@@ -138,6 +146,9 @@ export function ActionsMenu({
         visibility: place === null ? 'hidden' : 'visible',
       }}
     >
+      <div aria-hidden style={TITLE}>
+        {title}
+      </div>
       {items.map((item, index) => {
         const shaded = index === active;
         return (
@@ -153,7 +164,7 @@ export function ActionsMenu({
               style={{
                 ...ITEM,
                 color: item.destructive ? COLOR.refused : COLOR.text,
-                background: shaded ? (item.destructive ? COLOR.refusedGround : COLOR.selected) : 'transparent',
+                background: shaded ? (item.destructive ? COLOR.refusedGround : COLOR.hover) : 'transparent',
               }}
             >
               {item.label}
@@ -193,25 +204,37 @@ const EDGE = 4;
 const MENU: CSSProperties = {
   position: 'fixed',
   zIndex: 20,
-  minWidth: 168,
-  padding: '4px 0',
+  boxSizing: 'border-box',
+  width: 232,
+  padding: 6,
   background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,
-  borderRadius: 6,
-  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.45)',
+  borderRadius: 8,
+  boxShadow: SHADOW.menu,
   outline: 'none',
   textAlign: 'left',
 };
 
+/** What the menu acts on, over its items: cut short where it runs past the menu's width. */
+const TITLE: CSSProperties = {
+  padding: '4px 10px 6px',
+  fontSize: 12,
+  color: COLOR.dim,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
 const ITEM: CSSProperties = {
-  display: 'block',
-  width: 'calc(100% - 8px)',
-  margin: '0 4px',
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  minHeight: 34,
   border: 'none',
-  borderRadius: 4,
+  borderRadius: 6,
   font: 'inherit',
   fontSize: 13,
-  padding: '5px 10px',
+  padding: '0 10px',
   textAlign: 'left',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
@@ -219,6 +242,6 @@ const ITEM: CSSProperties = {
 
 const SEPARATOR: CSSProperties = {
   height: 1,
-  margin: '4px 0',
-  background: COLOR.border,
+  margin: '6px 4px',
+  background: COLOR.rowRule,
 };
