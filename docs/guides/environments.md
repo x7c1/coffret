@@ -80,8 +80,8 @@ device for it ("Choose a folder…"), and adding files where none is chosen yet
 asks for one first. "New folder…" in a folder's actions menu, or over the rows
 for the Library root, prepares the path an add is to land under — held by the
 page alone until files are added there, and forgotten on a reload — and files
-picked with the **+** over the tree, or dropped onto it, start the sync (or the
-freeze) that carries them in. A top-level folder mapped with `map --prefix` and
+picked with the **+** in the header, or dropped onto the tree, start the sync
+(or the freeze) that carries them in. A top-level folder mapped with `map --prefix` and
 nothing in it yet is listed at the root, marked as not in the Library yet, to
 add into the same way.
 

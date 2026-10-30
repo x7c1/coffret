@@ -163,21 +163,6 @@ export function destinationsOf(
   return into;
 }
 
-/** What the Library root is called where it is the place a drop lands. */
-export const LIBRARY_ROOT = 'the top of the Library';
-
-/**
- * The place as the Library will hold it: the folder's Entry Path with a
- * trailing separator, since what lands is under it — `comics/Foo/Vol 3/` — and
- * the root, which has no path, by name.
- */
-export function pathLine(levels: readonly Level[]): string {
-  if (levels.length === 0) {
-    return LIBRARY_ROOT;
-  }
-  return `${levels.map((level) => level.name).join('/')}/`;
-}
-
 /**
  * What the confirmation says of the levels the Library does not name yet, or
  * `null` where every one of them is there already.

@@ -196,7 +196,7 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // URL it was loaded from, which the page takes out of the address; and the
     // Passphrase window goes.
     const explorer = await opened;
-    await expect(explorer.locator('footer').getByText(setting.library, { exact: true })).toBeVisible();
+    await expect(explorer.getByRole('banner').getByText(setting.library, { exact: true })).toBeVisible();
     expect(new URL(explorer.url()).hash).toBe('');
     await expect.poll(() => shown(doorWindow)).toBe(false);
 

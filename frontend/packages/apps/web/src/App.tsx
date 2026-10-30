@@ -35,6 +35,7 @@ import { earlier, inProgress, offeredNow, type Entry, type PageNotice } from './
 import { DeleteConfirm } from './DeleteConfirm';
 import { firstImage, uploadStopped } from './details';
 import { DetailsPane } from './DetailsPane';
+import { Header } from './Header';
 import {
   askToDelete,
   refusedNotice,
@@ -97,8 +98,10 @@ import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
 
 /**
- * The explorer's one screen: the Library as one tree of folders and files (see
- * [`TreeTable`](./TreeTable)) and the Activity panel along the bottom (see
+ * The explorer's one screen: a header naming the Library, where the focus
+ * stands, and Add files (see [`Header`](./Header)), the Library as one tree of
+ * folders and files under it (see [`TreeTable`](./TreeTable)) with the details
+ * pane beside it, and the Activity panel along the bottom (see
  * [`ActivityPanel`](./ActivityPanel)) — with the reader's sheet over the right
  * of the tree while it is open, following the focused row (see
  * [`ReaderView`](./ReaderView)).
@@ -111,7 +114,7 @@ import { said, useAsked, type Asked } from './useAsked';
  *
  * A Library has no folders to make — a folder is the separators in the Entry
  * Paths under it (spec: EP-2) — so a folder comes to be by adding files to it:
- * picked with the **+** over the tree or dropped onto it, and confirmed with
+ * picked with the header's **+** or dropped onto the tree, and confirmed with
  * the path it lands under before anything is sent. "New folder…" prepares the
  * path an add is to land under, held by this page alone and drawn as not in
  * the Library yet until one does (see [`prospective`](./prospective)).
@@ -309,7 +312,7 @@ export function App() {
   // ask the three questions again, and that is the whole of the reporting: the
   // listing and the tree come back refused with the server's own sentence about
   // the Passphrase, in the same place every other refusal is shown, and the
-  // Activity panel keeps the Library's name because that is not a thing the Master
+  // header keeps the Library's name because that is not a thing the Master
   // Key kept. Nothing here invents a locked state of its own — the server is
   // the one that knows, and it is asked.
   //
@@ -1104,8 +1107,8 @@ export function App() {
   // that can carry it in instead.
   const knownLibrary = library.state.status === 'ready' ? library.state.value : null;
 
-  // Files picked with the **+** or dropped are added to the folder the tree
-  // handed them over for: the focused folder or the one a focused file stands
+  // Files picked with the header's **+** or dropped onto the tree are added to
+  // the folder they were handed over for: the focused folder or the one a focused file stands
   // in, or the row the drop was let go over (see [`landingOf`](./destination)).
   // They are drawn on the tree at Add, in the uploading state, and the listing
   // is asked for again as soon as they land: they are in the folder from that
@@ -1471,6 +1474,10 @@ export function App() {
     treeArea.current?.focus();
   }, [focusPrepared, rows, tree, changeTree]);
 
+  // The header's Add files menu let go of by `Escape`: the keys go back to the
+  // tree, as they do out of any menu opened over it.
+  const keysBack = useCallback(() => treeArea.current?.focus(), []);
+
   // Closing the sheet leaves the focus and the folder where they are.
   const closeSheet = useCallback(() => go({ folder: view.folder, open: null }), [go, view.folder]);
   // A picture the sheet fetched is on this device now: the listing it stands
@@ -1580,6 +1587,14 @@ export function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Header
+        library={library.state}
+        focus={tree.focus}
+        onAdd={add}
+        onCollecting={collecting}
+        onUnreadable={unreadable}
+        onKeysBack={keysBack}
+      />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Why the rows below may not be the Library. Every listing comes out
@@ -1727,7 +1742,6 @@ export function App() {
         />
       )}
       <ActivityPanel
-        library={library.state}
         kept={work.kept}
         running={running}
         entries={entries}

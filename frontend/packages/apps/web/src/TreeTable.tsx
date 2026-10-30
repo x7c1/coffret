@@ -22,12 +22,11 @@ import { canvasMeasure, columnWidth, type Measured } from './columns';
 import { counted, type Described } from './details';
 import { useDragOver } from './dragOver';
 import { landingOf, placeOf } from './destination';
-import { droppedFiles, pickedFiles, type Drop } from './drop';
+import { droppedFiles, type Drop } from './drop';
 import { dropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
 import { CHOOSE_A_FOLDER, noFolderChosenLine } from './mapping';
-import { packOffered, PACK_THIS_FOLDER } from './packFolder';
 import { NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { ROWS_AHEAD, scrollAhead } from './scrollAhead';
@@ -95,9 +94,15 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  *
  * What the screen's own actions are about is the folder the focus is in (see
  * [`contextOf`](./tree)), and the block over the rows speaks for it: whether a
- * folder of this device is chosen for it, whether it is being packed, "New
- * folder…" and "Pack this folder…" — the Library root's way to them, which has
- * no row of its own to open a menu on.
+ * folder of this device is chosen for it, and whether it is being packed. A
+ * folder's own actions are in its row's menu; the Library root has no row to
+ * open a menu on, so while a mapping reaches the root a bar over the rows
+ * offers its one, "New folder…", which always makes the folder at the root
+ * ("Pack this folder…" is never the root's, see
+ * [`packOffered`](./packFolder)). The bar stands whatever the focus is on, so
+ * that opening or closing a top-level folder does not slide every row below it
+ * by the bar's height, out from under the pointer that just clicked. Where no
+ * mapping reaches the root there is no bar.
  *
  * Each row's state is the listing's answer, with what the server is doing
  * about it over the top: `present`, `remote` and `added` are the listing's to
@@ -111,15 +116,12 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * server's answer, `present_throughout`): the promise that the whole book reads
  * offline.
  *
- * The tree is also where files are added, two ways. The **+** in the bar over
- * the rows ("Add files") opens the operating system's picker — for files, or
- * for a folder, since no browser's picker takes both at once — and adds to the
- * focused folder, or the folder the focused file stands in (see
- * [`landingOf`](./destination)). And a drop on a folder row adds to that
- * folder, on a file row to the folder it stands in, and anywhere else on the
- * list to the folder the focus is in. While files are dragged, the row of the
+ * The tree is also where files are dropped to add them (the header's **+** is
+ * the other way in, see [`Header`](./Header)): a drop on a folder row adds to
+ * that folder, on a file row to the folder it stands in, and anywhere else on
+ * the list to the folder the focus is in. While files are dragged, the row of the
  * folder they would land in is outlined and a pill at the bottom of the tree
- * says `Drop to add to <path>`. Both ways hand the files to the screen, which
+ * says `Drop to add to <path>`. The files are handed to the screen, which
  * asks for a folder on this device where none is chosen yet and confirms
  * every add before anything is sent.
  *
@@ -209,11 +211,11 @@ export function TreeTable({
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
   /**
-   * Files picked with **+** or dropped, for `folder`: each with its path
-   * relative to it, and what the desktop app did not take.
+   * Files dropped, for `folder`: each with its path relative to it, and what
+   * the desktop app did not take.
    */
   onAdd: (folder: string, drop: Drop) => void;
-  /** Files were picked or dropped and are being read, which can take seconds. */
+  /** Files were dropped and are being read, which can take seconds. */
   onCollecting: () => void;
   /** They came to no files: the walk could not be finished, or the desktop app took nothing of them. */
   onUnreadable: (cause: unknown) => void;
@@ -228,7 +230,7 @@ export function TreeTable({
    * folder named, or for the whole Library.
    */
   onMap: (prefix: string | null) => void;
-  /** "Pack this folder…" on the folder the focus is in. */
+  /** "Pack this folder…" from a folder row's actions menu. */
   onPack: (folder: string) => void;
   /** "Delete…" from the actions menu, for one row or the rows selected. */
   onDelete: (target: DeleteTarget) => void;
@@ -346,16 +348,11 @@ export function TreeTable({
   // What is happening to this folder, said over the rows because it is true of
   // every one of them: the pages go up together, as Packs.
   const packing = listing !== null && freezingHere(freeze, listing.path);
-  // The folder's own action, packing what it holds one file at a time into
-  // Packs: not over a path the Library holds nothing at, nor over a folder it
-  // does not hold yet with nothing standing in it on disk.
-  const nothingToPack =
-    listing !== null &&
-    !listing.held &&
-    listing.files.length === 0 &&
-    listing.folders_on_disk.length === 0;
-  const offersPack = listing !== null && packOffered(listing) && !unheld && !nothingToPack;
-  const offersNewFolder = listing !== null && listing.mapped && !unheld;
+  // The bar's "New folder…": the root's only, and only where a mapping reaches
+  // the root. Read off the root's own listing rather than the folder the focus
+  // is in, so the bar does not come and go as the focus moves.
+  const rootListing = listingOf('');
+  const offersNewFolder = rootListing !== null && rootListing.mapped;
   const emptyHere =
     listing !== null && listing.files.length === 0 && childFolders === 0;
 
@@ -393,34 +390,6 @@ export function TreeTable({
     // first, because the walk itself is a wait a person is owed a word about.
     onCollecting();
     void droppedFiles(event.dataTransfer).then((drop) => onAdd(target, drop), onUnreadable);
-  };
-
-  // The header's **+**: a small menu of the two pickers, since no browser's
-  // picker takes files and a folder at once, and the picker chosen opens over
-  // the focused folder — or the folder of the focused file — which is read as
-  // the menu opens and kept for the answer.
-  const filesPicker = useRef<HTMLInputElement>(null);
-  const folderPicker = useRef<HTMLInputElement | null>(null);
-  const [adding, setAdding] = useState<{ at: MenuAt; into: string } | null>(null);
-  const addInto = landingOf(state.focus);
-  const picking = useRef('');
-  const openPicker = (item: ActionItem) => {
-    const into = adding?.into ?? addInto;
-    setAdding(null);
-    picking.current = into;
-    (item.action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
-  };
-  const pickedFrom = (input: HTMLInputElement) => {
-    const files = Array.from(input.files ?? []);
-    // Emptied, so that the same files picked again are a change the input
-    // reports rather than one it swallows.
-    input.value = '';
-    if (files.length === 0) {
-      return;
-    }
-    const into = picking.current;
-    onCollecting();
-    void pickedFiles(files).then((drop) => onAdd(into, drop), onUnreadable);
   };
 
   const openRow = (row: FolderRow | FileRow) =>
@@ -586,45 +555,18 @@ export function TreeTable({
             together: every one of them is true of the whole folder rather than
             of whichever rows happen to be in view. */}
         <div ref={block} style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-          <div style={BAR}>
-            <button
-              type="button"
-              aria-label="Add files"
-              title={`Add files to ${placeOf(addInto)}`}
-              aria-haspopup="menu"
-              aria-expanded={adding !== null}
-              // The menu closes on a press outside it, which this is; the click
-              // below opens it, or closes it where it is open.
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                if (adding !== null) {
-                  setAdding(null);
-                  return;
-                }
-                const box = event.currentTarget.getBoundingClientRect();
-                setAdding({
-                  at: { x: box.left, y: box.bottom, side: 'start', byKeys: event.detail === 0 },
-                  into: addInto,
-                });
-              }}
-              style={ADD_BUTTON}
-            >
-              +
-            </button>
-            <span style={{ flex: 1, color: COLOR.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {root ? 'Library' : contextPath}
-            </span>
-            {offersNewFolder && (
-              <button type="button" onClick={() => onNewFolder(contextPath)} style={BAR_BUTTON}>
+          {offersNewFolder && (
+            <div style={BAR}>
+              <button
+                type="button"
+                title={`New folder in ${placeOf('')}`}
+                onClick={() => onNewFolder('')}
+                style={BAR_BUTTON}
+              >
                 {NEW_FOLDER}
               </button>
-            )}
-            {offersPack && listing !== null && (
-              <button type="button" onClick={() => onPack(listing.path)} style={BAR_BUTTON}>
-                {PACK_THIS_FOLDER}
-              </button>
-            )}
-          </div>
+            </div>
+          )}
           {sayUnmapped && listing !== null && (
             <Unmapped
               root={root}
@@ -736,51 +678,11 @@ export function TreeTable({
             onClose={closeMenu}
           />
         )}
-        {adding !== null && (
-          <ActionsMenu
-            label={`add files to ${placeOf(adding.into)}`}
-            at={adding.at}
-            items={ADD_ITEMS}
-            onChoose={openPicker}
-            onClose={(how) => {
-              setAdding(null);
-              if (how === 'escape') {
-                scroller.current?.focus();
-              }
-            }}
-          />
-        )}
-        <input
-          ref={filesPicker}
-          type="file"
-          multiple
-          hidden
-          data-testid="pick-files"
-          onChange={(event) => pickedFrom(event.currentTarget)}
-        />
-        <input
-          ref={(input) => {
-            folderPicker.current = input;
-            // Not in React's own attributes: what makes the picker take a
-            // folder whole, in every browser the explorer runs in.
-            input?.setAttribute('webkitdirectory', '');
-          }}
-          type="file"
-          hidden
-          data-testid="pick-folder"
-          onChange={(event) => pickedFrom(event.currentTarget)}
-        />
       </div>
       {drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
     </div>
   );
 }
-
-/** What the **+** offers: the operating system's picker for files, or for one folder. */
-const ADD_ITEMS: readonly ActionItem[] = [
-  { label: 'Files…', action: { kind: 'addFiles' }, destructive: false, separated: false },
-  { label: 'A folder…', action: { kind: 'addFolder' }, destructive: false, separated: false },
-];
 
 /** What opening a row can come to, as [`opened`](#opened) hands it on. */
 export interface Openers {
@@ -1340,29 +1242,14 @@ const MENU_BUTTON: CSSProperties = {
   cursor: 'pointer',
 };
 
+/** The Library root's way to "New folder…", over the rows. */
 const BAR: CSSProperties = {
   display: 'flex',
+  justifyContent: 'flex-end',
   alignItems: 'center',
-  gap: 8,
   padding: '4px 12px',
   background: COLOR.panel,
   borderBottom: `1px solid ${COLOR.border}`,
-};
-
-/** The bar's **+**, square and a little larger than its words. */
-const ADD_BUTTON: CSSProperties = {
-  flex: '0 0 auto',
-  width: 24,
-  height: 22,
-  border: `1px solid ${COLOR.border}`,
-  background: 'transparent',
-  color: COLOR.text,
-  font: 'inherit',
-  fontSize: 16,
-  lineHeight: 1,
-  padding: 0,
-  borderRadius: 4,
-  cursor: 'pointer',
 };
 
 const BAR_BUTTON: CSSProperties = {

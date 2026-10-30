@@ -1,8 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { Library } from '@coffret/api';
-
 import {
   ActivityPanel,
   LOCKED,
@@ -13,17 +11,11 @@ import {
 } from './ActivityPanel';
 import { ANSWER_HOLDS, type Entry, type Running } from './activity';
 import type { Trouble } from './retry';
-import type { Asked } from './useAsked';
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
 });
-
-const LIBRARY: Asked<Library> = {
-  status: 'ready',
-  value: { name: 'books', library_id: 'abc', provider: 'drive' },
-};
 
 const QUIET = { running: false, waiting: false, said: null, refused: null, ask: () => undefined };
 
@@ -67,7 +59,6 @@ function panel({
 } = {}) {
   return render(
     <ActivityPanel
-      library={LIBRARY}
       kept={null}
       running={running}
       entries={entries}
@@ -85,7 +76,7 @@ function toggle(): HTMLElement {
 }
 
 // Collapsed by default: one row, saying what is running and how far the first
-// of it has got, with the Library's name at its end and no list.
+// of it has got, and no list. The Library's name is the header's, not the row's.
 it('starts collapsed, as one row saying what is running', () => {
   panel({
     running: [
@@ -96,7 +87,7 @@ it('starts collapsed, as one row saying what is running', () => {
   expect(toggle().getAttribute('aria-expanded')).toBe('false');
   expect(screen.getByText('sending 188 files to Vol. 06 · 1 more')).toBeTruthy();
   expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('60');
-  expect(screen.getByText('books')).toBeTruthy();
+  expect(screen.queryByText('books')).toBeNull();
   expect(screen.queryByRole('heading', { name: 'In progress' })).toBeNull();
 });
 

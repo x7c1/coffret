@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
 
+import { placeOf } from './destination';
 import { BUTTON, Dialog, LINE, PRIMARY } from './Dialog';
 import { COLOR } from './theme';
 
@@ -48,7 +49,7 @@ export function NewFolderDialog({
 
   return (
     <Dialog
-      title={`New folder in ${parent === '' ? 'Library' : parent}`}
+      title={`New folder in ${placeOf(parent)}`}
       onCancel={onClose}
       onSubmit={submit}
       actions={

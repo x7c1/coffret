@@ -148,7 +148,7 @@ async function newFolder(row: string, name: string) {
   await nameIt(name);
 }
 
-/** Presses "New folder…" over the rows, for the folder the focus is in, and names it. */
+/** Presses "New folder…" over the rows, for the Library root, and names it. */
 async function newFolderHere(name: string) {
   fireEvent.click(await tree().findByRole('button', { name: 'New folder…' }));
   await nameIt(name);
@@ -392,9 +392,8 @@ it('draws the files being added as rows at once', async () => {
 it('forgets a prepared path and the ones under it, and asks nothing', async () => {
   answers = (path) => listing(path);
   render(<App />);
-  // Each folder created takes the focus, and "New folder…" over the rows is
-  // for the folder the focus is in: `books` is made beside `comics` before
-  // `Series` is made inside it.
+  // "New folder…" over the rows makes `books` beside `comics` at the root
+  // before `Series` is made inside `comics` from its row.
   await newFolderHere('comics');
   await newFolderHere('books');
   await newFolder('comics', 'Series');
@@ -525,6 +524,57 @@ it('shows what the focus moves to while the sheet is open', async () => {
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
   expect(parseHash(window.location.hash)).toEqual({ folder: 'comics', open: null });
   expect(tree().getByTitle('notes.txt').getAttribute('aria-selected')).toBe('true');
+});
+
+// The header over the tree: the Library's name, and where the focus stands,
+// moving with the tree's focus as the details pane does; and its + opens over
+// the folder the focus is in.
+it('names the Library in the header, and the location follows the focus', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
+  render(<App />);
+  await tree().findByTitle('comics');
+  const header = within(screen.getByRole('banner'));
+  await waitFor(() => expect(header.getByTestId('library').textContent).toBe('main'));
+  const location = () => header.getByTestId('location').textContent;
+  expect(location()).toBe('Library');
+  const area = screen.getByRole('tree');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(location()).toBe('comics');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('001.jpg');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  expect(location()).toBe('comics / Series / 001.jpg');
+  expect(header.getByRole('button', { name: 'Add files' }).getAttribute('title')).toBe(
+    'Add files to comics/Series',
+  );
+  // Nothing of the Library's name is left in the Activity panel's row.
+  expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
+});
+
+// The bar over the tree stays while a top-level folder is opened and focused,
+// so the rows below do not slide by its height, and its "New folder…" still
+// makes the folder at the Library root rather than in the focused folder.
+it('keeps the root\'s "New folder…" over the tree with a top-level folder open', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
+  render(<App />);
+  await tree().findByTitle('comics');
+  const area = screen.getByRole('tree');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
+  expect(location()).toBe('comics / Series');
+  const bar = tree().getByRole('button', { name: 'New folder…' });
+  expect(bar.getAttribute('title')).toBe('New folder in the Library');
+  fireEvent.click(bar);
+  expect(await screen.findByRole('dialog', { name: 'New folder in the Library' })).toBeTruthy();
+  await nameIt('books');
+  // The new folder takes the focus where it was made: at the root.
+  await waitFor(() => expect(location()).toBe('books'));
 });
 
 // The details pane follows the focused row, says what it is in words that fit

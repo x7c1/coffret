@@ -108,11 +108,11 @@ export async function openActivity(page: Page): Promise<void> {
 }
 
 /**
- * The Library's name, where the Activity panel says it along the bottom: the name
+ * The Library's name, where the header says it at the top left: the name
  * alone, without the Storage it is kept on.
  */
 export function libraryName(page: Page): Locator {
-  return page.locator('footer').getByText(setting.library, { exact: true });
+  return page.getByRole('banner').getByText(setting.library, { exact: true });
 }
 
 /** The tree, in the middle of the screen: the Library's folders and files as rows of one table. */

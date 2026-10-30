@@ -22,6 +22,7 @@ import {
 } from './details';
 import type { RowFill } from './fill';
 import { size, time } from './humanize';
+import { LIBRARY_ROOT } from './location';
 import { parentOf } from './prospective';
 import { COLOR } from './theme';
 import type { FileRow } from './tree';
@@ -151,7 +152,7 @@ function One({
       </div>
       <div>
         <p style={{ margin: 0, color: COLOR.dim, fontSize: 12, overflowWrap: 'anywhere' }}>
-          {where === '' ? 'Library' : where}
+          {where === '' ? LIBRARY_ROOT : where}
         </p>
         <h2 style={{ margin: '2px 0 0', fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' }}>{row.name}</h2>
       </div>
