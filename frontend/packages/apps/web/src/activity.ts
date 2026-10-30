@@ -471,7 +471,10 @@ function broughtOver(run: Fill): string {
  * The first thing in progress speaks for the rest, with a count of them after
  * it. Where nothing is, the newest finished entry stands there instead — the
  * answer to whatever just ended, or to the gesture just made — so the row is
- * never blank while there is something to have read.
+ * never blank while there is something to have read. Where nothing is running
+ * and nothing has ended it says nothing (an empty `text`): being idle is the
+ * usual state, and words for it on show would only stand in the way of the
+ * words that matter when they come.
  *
  * An `answer` to the gesture just made (see [`answering`](#answering)) goes
  * ahead of both: it is said in place of the summary, while the bar for what is
@@ -499,7 +502,7 @@ export function collapsed(
     };
   }
   const newest = entries[0];
-  return { text: newest?.text ?? NOTHING_RUNNING, progress: null, failed, said: newest ?? null };
+  return { text: newest?.text ?? '', progress: null, failed, said: newest ?? null };
 }
 
 /** What the collapsed row shows. */
@@ -557,9 +560,6 @@ export function answering(
 export function firstStanding(entries: readonly Entry[]): Entry | null {
   return entries.find((entry) => entry.standing) ?? null;
 }
-
-/** What the collapsed row says where nothing is in progress and nothing has ended. */
-export const NOTHING_RUNNING = 'nothing running';
 
 /** The badge for the failures standing, and `null` where none does. */
 export function failedBadge(failed: number): string | null {

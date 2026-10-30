@@ -195,7 +195,7 @@ export function ActivityPanel({
               <path d="M12 7v5l4 2" />
             </svg>
           </button>
-          {locked === null && !open && (
+          {locked === null && !open && row.text !== '' && (
             <span style={{ ...SUMMARY, color: summaryColour(row, running.length > 0) }} title={row.text}>
               {row.text}
             </span>
