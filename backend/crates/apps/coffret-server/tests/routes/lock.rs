@@ -14,6 +14,9 @@
 
 use std::time::Duration;
 
+use coffret_logging::testing::CapturedLogs;
+use tracing::Level;
+
 use crate::support::{bytes, json as body_of, route, Served};
 
 /// Every route that cannot answer without the Master Key, as a caller reaches
@@ -352,6 +355,45 @@ async fn nothing_asked_for_the_idle_interval_locks_the_library() {
     assert_eq!(refusal["error"], "locked");
     let (status, _) = body_of(served.get("/api/library").await).await;
     assert_eq!(status, 200, "the identity route answers either way");
+}
+
+// DK-4, read afterwards: a lock put off says so, and says why — how long ago
+// the Library was last wanted, or that a piece of work still holds it — so a
+// Library that stayed unlocked can be read out of the log rather than guessed
+// at. Logged where the watcher wakes, so once an interval at the most.
+#[tokio::test(start_paused = true)]
+async fn a_lock_put_off_says_how_long_ago_the_library_was_wanted() {
+    let logs = CapturedLogs::capture();
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+
+    tokio::time::advance(QUIET / 3).await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200);
+
+    tokio::time::advance(QUIET - QUIET / 3 + Duration::from_millis(1)).await;
+    tokio::task::yield_now().await;
+
+    let put_off: Vec<_> = logs
+        .at(Level::DEBUG)
+        .into_iter()
+        .filter(|event| event.message().contains("the lock was put off"))
+        .collect();
+    assert_eq!(put_off.len(), 1, "{}", logs.text());
+    assert_eq!(put_off[0].field("operation"), "lock");
+    assert_eq!(put_off[0].field("how"), "put_off");
+    assert_eq!(
+        put_off[0].number("holds"),
+        0,
+        "nothing was still holding it"
+    );
+    assert_eq!(
+        u128::try_from(put_off[0].number("idle_ms")).expect("a duration"),
+        (QUIET - QUIET / 3).as_millis() + 1,
+        "the Library was last wanted a third of the way in",
+    );
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "and it is still open");
 }
 
 // DK-4 from the other direction, and the case that makes the interval mean

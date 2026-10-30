@@ -25,6 +25,7 @@ import {
   type JSHandle,
   type Locator,
   type Page,
+  type Request,
 } from '@playwright/test';
 
 import { fromEnvironment, leaf } from './environment';
@@ -118,20 +119,84 @@ async function dropFilesOnto(page: Page, target: Locator, files: string[]): Prom
 }
 
 /**
- * Whether the app's log says the server locked the Library for being idle.
- *
- * The lock is the server's own doing, on its own clock, and nothing on the
- * screen changes when it lands: the explorer learns of it from the next thing
- * it asks. So the journey reads the event the server records as it locks, and
- * only then asks.
+ * What the explorer asks on its own that is not use (spec: DK-4): what the
+ * server is doing, the remote head, the Library's name and the host's session.
+ * Everything else under `/api/` needs the Library's keys, and so puts the idle
+ * lock off.
  */
-async function lockedForIdling(): Promise<boolean> {
+const UNATTENDED = new Set(['/api/work', '/api/remote-head', '/api/library', '/auth/session']);
+
+/**
+ * How long the explorer has to have asked nothing before the quiet begins:
+ * several of the work route's poll intervals (700 ms), so that the poll
+ * following the drop's sync has heard it end, and the reloads that ending
+ * asks for have been asked.
+ */
+const SETTLE_MS = 3_000;
+
+/** The explorer's requests, counted while out and, once watched, kept where they are use. */
+interface Asking {
+  /** Resolves once nothing the explorer asked is still out, and it has asked nothing for {@link SETTLE_MS}. */
+  settled(): Promise<void>;
+  /** Starts keeping every request from here on that is use. */
+  watch(): void;
+  /** What was asked since {@link watch} that is use, as `<ISO time> METHOD path?query`. */
+  used(): string[];
+  /** Stops listening. */
+  stop(): void;
+}
+
+function asking(page: Page): Asking {
+  const out = new Set<Request>();
+  const used: string[] = [];
+  let last = Date.now();
+  let watching = false;
+  const sent = (request: Request) => {
+    out.add(request);
+    last = Date.now();
+    const { pathname, search } = new URL(request.url());
+    const own = pathname.startsWith('/api/') || pathname.startsWith('/auth/');
+    if (watching && own && !UNATTENDED.has(pathname)) {
+      used.push(`${new Date().toISOString()} ${request.method()} ${pathname}${search}`);
+    }
+  };
+  const ended = (request: Request) => {
+    out.delete(request);
+    last = Date.now();
+  };
+  page.on('request', sent);
+  page.on('requestfinished', ended);
+  page.on('requestfailed', ended);
+  return {
+    settled: () =>
+      expect.poll(() => out.size === 0 && Date.now() - last >= SETTLE_MS, { intervals: [250] }).toBe(true),
+    watch: () => {
+      watching = true;
+    },
+    used: () => [...used],
+    stop: () => {
+      page.off('request', sent);
+      page.off('requestfinished', ended);
+      page.off('requestfailed', ended);
+    },
+  };
+}
+
+/** One event from the app's log, as much of it as the idle wait reads. */
+interface Logged {
+  timestamp: string;
+  fields: { operation?: string; how?: string; holds?: number; idle_ms?: number };
+}
+
+/** Every event the app has logged so far. */
+async function logged(): Promise<Logged[]> {
   let names: string[];
   try {
     names = await readdir(setting.logDir);
   } catch {
-    return false;
+    return [];
   }
+  const events: Logged[] = [];
   for (const name of names) {
     let text: string;
     try {
@@ -139,11 +204,62 @@ async function lockedForIdling(): Promise<boolean> {
     } catch {
       continue;
     }
-    if (text.split('\n').some((line) => line.includes('"operation":"lock"') && line.includes('"how":"idle"'))) {
-      return true;
+    for (const line of text.split('\n')) {
+      try {
+        events.push(JSON.parse(line) as Logged);
+      } catch {
+        // A line still being written, or the empty one after the last.
+      }
     }
   }
-  return false;
+  return events;
+}
+
+/**
+ * Waits for the server to lock the Library for being idle, the quiet having
+ * begun at `quietFrom` (milliseconds since the epoch), and fails at once where
+ * something broke that quiet.
+ *
+ * The lock is the server's own doing, on its own clock, and nothing on the
+ * screen changes when it lands: the explorer learns of it from the next thing
+ * it asks. So the journey reads the event the server records as it locks, and
+ * only then asks.
+ *
+ * Nothing the journey or the page does may put it off, so whatever did is the
+ * failure, said when it happens rather than waited out: a request of the
+ * explorer's that is use, or the watcher waking at the end of the interval to
+ * find the Library wanted since the quiet began — still held by a piece of
+ * work, or let go of later — which it logs (at `debug`) as it puts the lock
+ * off.
+ */
+async function lockedForIdling(asked: Asking, quietFrom: number): Promise<void> {
+  const deadline = Date.now() + LOCK_MS;
+  for (;;) {
+    const events = (await logged()).filter(
+      (event) => event.fields.operation === 'lock' && Date.parse(event.timestamp) >= quietFrom,
+    );
+    if (events.some((event) => event.fields.how === 'idle')) {
+      return;
+    }
+    const used = asked.used();
+    const putOff = events.filter((event) => {
+      if (event.fields.how !== 'put_off') {
+        return false;
+      }
+      const lastUse = Date.parse(event.timestamp) - (event.fields.idle_ms ?? 0);
+      return (event.fields.holds ?? 0) > 0 || lastUse > quietFrom;
+    });
+    if (used.length > 0 || putOff.length > 0) {
+      throw new Error(
+        'the idle lock was put off during the quiet the journey waits it out in: ' +
+          JSON.stringify({ explorerAsked: used, serverPutOff: putOff }),
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`the Library was not locked within ${LOCK_MS}ms of being left alone, and nothing said why`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
 }
 
 /**
@@ -171,6 +287,9 @@ function appEnvironment(): Record<string, string> {
     COFFRET_STATE_DIR: setting.stateDir,
     COFFRET_LOG_DIR: setting.logDir,
     COFFRET_IDLE_MINUTES: String(setting.idleMinutes),
+    // Where the idle lock is put off is logged at debug, and it is what says
+    // why a wait for the lock did not end.
+    COFFRET_LOG: 'debug',
   };
 }
 
@@ -196,6 +315,7 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // URL it was loaded from, which the page takes out of the address; and the
     // Passphrase window goes.
     const explorer = await opened;
+    const asked = asking(explorer);
     await expect(explorer.getByRole('banner').getByText(setting.library, { exact: true })).toBeVisible();
     expect(new URL(explorer.url()).hash).toBe('');
     await expect.poll(() => shown(doorWindow)).toBe(false);
@@ -227,7 +347,14 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // describes, its listing asked for afresh: the next thing the explorer
     // asks. The refusal is the lock heard, and the tree gives way to the
     // refusal at once, so nothing more is pressed in it until the unlock.
-    await expect.poll(lockedForIdling, { timeout: LOCK_MS, intervals: [5_000] }).toBe(true);
+    // The quiet begins once the explorer has had every answer it asked for
+    // after the drop committed, and has stopped asking; from there nothing
+    // may put the lock off, and whatever does is said as it happens.
+    await asked.settled();
+    const quietFrom = Date.now();
+    asked.watch();
+    await lockedForIdling(asked, quietFrom);
+    asked.stop();
     await explorer.getByRole('button', { name: `collapse ${setting.mapped}`, exact: true }).click();
     await row(explorer, setting.mapped).click();
     try {
