@@ -232,12 +232,35 @@ describe('the folders kept open', () => {
       gone[path] === undefined ? undefined : { status: 'ready', value: gone[path] };
     const expanded = new Set(['albums', 'albums/2026', 'albums/2026/08', 'books']);
     const rows = treeRows({ listing: ask, expanded, prospective: [], stranded: [] });
-    expect([...standing(expanded, rows, ask)]).toEqual(['albums', 'books']);
+    expect([...standing(expanded, rows, ask, rowsOf(expanded))]).toEqual(['albums', 'books']);
+  });
+
+  // A stranded book's folder, which the Library never named: once its freeze
+  // commits and the Library's folders name it, it is no longer drawn as
+  // stranded, and until the listing it stands in is answered again no row
+  // stands for it. Nothing is gone there, so it stays open and its listing
+  // goes on being asked for, which is what brings its rows up to date.
+  it('keeps a folder the Library never named open while no row stands for it', () => {
+    const book = 'albums/book';
+    const pages = listing(book, [], [`${book}/page-0000.jpg`], { held: false });
+    const ask = (path: string): Asked<Listing> | undefined =>
+      path === book ? { status: 'ready', value: pages } : asked(path);
+    const expanded = new Set(['albums', book]);
+    const stranded = treeRows({ listing: ask, expanded, prospective: [], stranded: [book] });
+    expect(stranded.some((row) => row.kind === 'folder' && row.path === book && row.stranded)).toBe(true);
+    const committed = treeRows({ listing: ask, expanded, prospective: [], stranded: [] });
+    expect(committed.some((row) => row.path === book)).toBe(false);
+    const kept = standing(expanded, committed, ask, stranded);
+    expect(kept).toBe(expanded);
+    expect(shownFolders(kept)).toContain(book);
+    // Nor is a prepared path, drawn from this page alone, taken for gone.
+    const prepared = treeRows({ listing: ask, expanded, prospective: [book], stranded: [] });
+    expect(standing(expanded, committed, ask, prepared)).toBe(expanded);
   });
 
   it('keeps the set as it is where nothing is gone', () => {
     const expanded = new Set(['albums', 'albums/2026']);
-    expect(standing(expanded, rowsOf(expanded), asked)).toBe(expanded);
+    expect(standing(expanded, rowsOf(expanded), asked, rowsOf(expanded))).toBe(expanded);
   });
 
   // A listing still out, or refused — as every one is while the Library is
@@ -247,7 +270,7 @@ describe('the folders kept open', () => {
     for (const held of [{ status: 'loading' }, { status: 'failed', message: 'locked' }] as Asked<Listing>[]) {
       const ask = (path: string) => (path === 'albums' ? held : asked(path));
       const rows = treeRows({ listing: ask, expanded, prospective: [], stranded: [] });
-      expect(standing(expanded, rows, ask)).toBe(expanded);
+      expect(standing(expanded, rows, ask, rowsOf(expanded))).toBe(expanded);
     }
   });
 
@@ -255,7 +278,7 @@ describe('the folders kept open', () => {
   // being on hand says nothing about it.
   it('keeps a folder under a closed one', () => {
     const expanded = new Set(['albums/2026']);
-    expect(standing(expanded, rowsOf(expanded), asked)).toBe(expanded);
+    expect(standing(expanded, rowsOf(expanded), asked, rowsOf(expanded))).toBe(expanded);
   });
 });
 

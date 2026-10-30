@@ -90,6 +90,7 @@ import {
   type FileRow,
   type FolderRow,
   type IncomingFile,
+  type TreeRow,
   type TreeState,
 } from './tree';
 import { opened, TreeTable } from './TreeTable';
@@ -1354,10 +1355,15 @@ export function App() {
     [heldListing, tree.expanded, prospective, stranded, incomingFiles],
   );
 
-  // A folder a listing shows is gone — a deletion took it away — is no longer
-  // open (see [`standing`](./tree)), so it is not asked for again.
+  // A folder the Library held that a listing shows is gone — a deletion took it
+  // away — is no longer open (see [`standing`](./tree)), so it is not asked for
+  // again. Read against the rows drawn before, which say which folders the
+  // Library held: one it never named, such as a stranded book's, stays open.
+  const rowsBefore = useRef<readonly TreeRow[]>([]);
   useEffect(() => {
-    const kept = standing(tree.expanded, rows, heldListing);
+    const before = rowsBefore.current;
+    rowsBefore.current = rows;
+    const kept = standing(tree.expanded, rows, heldListing, before);
     if (kept !== tree.expanded) {
       setTree((held) => (held.expanded === tree.expanded ? { ...held, expanded: kept } : held));
     }
