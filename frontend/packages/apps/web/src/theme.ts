@@ -23,8 +23,6 @@ export const COLOR = {
   border: '#e3e6ea',
   /** The line between one row and the next, and between a menu's groups: fainter than a border. */
   rowRule: '#eef0f3',
-  /** The frame of a round control that stands alone: the **?**. A shade firmer than a border. */
-  control: '#d5d9df',
   text: '#16181d',
   /** Sizes, times, the location, headings: everything that is not the name. */
   dim: '#5b616e',

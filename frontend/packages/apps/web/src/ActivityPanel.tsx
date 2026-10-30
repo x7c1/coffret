@@ -461,9 +461,26 @@ function Shortcuts() {
         onMouseLeave={() => setShown(false)}
         onFocus={() => setShown(true)}
         onBlur={() => setShown(false)}
-        style={{ ...ICON_BUTTON, borderRadius: '50%', border: `1px solid ${COLOR.control}` }}
+        // Drawn as the sync icon beside it is: a 16px stroke icon on no frame,
+        // in a square as wide as the row's other icon buttons.
+        style={{ ...ICON_BUTTON, border: 'none', background: 'none', color: 'inherit', cursor: 'help' }}
       >
-        ?
+        <svg
+          aria-hidden="true"
+          width={16}
+          height={16}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ display: 'block' }}
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <path d="M12 17h.01" />
+        </svg>
       </button>
       {shown && (
         <div role="tooltip" id={id} style={TOOLTIP}>
