@@ -446,46 +446,37 @@ function Bar({ progress, width }: { progress: number; width: number }) {
 }
 
 /**
- * The **?** at the panel's right end, and the tree's keyboard shortcuts while
- * it is hovered or focused — the ones the tree binds, and no others.
+ * The tree's keyboard shortcuts — the ones the tree binds, and no others —
+ * shown over the panel's right end while `?` is pressed and gone again at the
+ * next key or press. Nothing on the screen stands for them: they are learned
+ * once, and a mark kept on show for them would outstay that.
+ *
+ * Not while typing (a `?` in a name field is a character) or while a dialog
+ * stands over the screen, whose keys are its own.
  */
 function Shortcuts() {
   const [shown, setShown] = useState(false);
-  const id = useId();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '?' && !typing(event.target) && document.querySelector('[role="dialog"]') === null) {
+        event.preventDefault();
+        setShown((was) => !was);
+        return;
+      }
+      setShown(false);
+    };
+    const onPointerDown = () => setShown(false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, []);
   return (
-    <span style={{ position: 'relative' }}>
-      <button
-        aria-label="Keyboard shortcuts"
-        aria-describedby={shown ? id : undefined}
-        onMouseEnter={() => setShown(true)}
-        onMouseLeave={() => setShown(false)}
-        onFocus={() => setShown(true)}
-        onBlur={() => setShown(false)}
-        // Drawn as the sync icon beside it is: a stroke icon on no frame, in a
-        // square as wide as the row's other icon buttons.
-        style={{ ...ICON_BUTTON, border: 'none', background: 'none', color: 'inherit', cursor: 'help' }}
-      >
-        {/* 18px rather than the sync icon's 16: a mark inside a circle reads
-            smaller than an open stroke drawn the same size. */}
-        <svg
-          aria-hidden="true"
-          width={18}
-          height={18}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ display: 'block' }}
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <path d="M12 17h.01" />
-        </svg>
-      </button>
+    <span style={{ position: 'relative', alignSelf: 'stretch' }}>
       {shown && (
-        <div role="tooltip" id={id} style={TOOLTIP}>
+        <div role="tooltip" aria-label="Keyboard shortcuts" style={TOOLTIP}>
           <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px' }}>
             {SHORTCUTS.map(([keys, what]) => (
               <div key={keys} style={{ display: 'contents' }}>
@@ -500,18 +491,27 @@ function Shortcuts() {
   );
 }
 
+/** Whether a key pressed on `target` goes into text: a field, or anything editable. */
+function typing(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  );
+}
+
 /**
- * The tree's keyboard shortcuts, as the **?** lists them: what the tree and
- * the reader bind (see `TreeTable` and `ReaderView`), written here once.
+ * The tree's keyboard shortcuts, as `?` lists them: what the tree and the
+ * reader bind (see `TreeTable` and `ReaderView`), written here once.
  */
 export const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['↑ ↓', 'move'],
   ['→', 'expand, or go in'],
   ['←', 'collapse, or go to the parent'],
   ['Enter', 'open in the reader'],
-  ['Esc', 'close the reader'],
+  ['Esc', 'close the reader, or go to the parent'],
   ['Shift ↑ ↓, Shift / ⌘ (Ctrl) click', 'select several'],
   ['Right-click', 'actions'],
+  ['?', 'show these keys'],
 ];
 
 /**
