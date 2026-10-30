@@ -148,10 +148,16 @@ async function newFolder(row: string, name: string) {
   await nameIt(name);
 }
 
-/** Presses "New folder…" over the rows, for the Library root, and names it. */
+/** Chooses "New folder…" from the header's **+**, for the folder it adds to, and names it. */
 async function newFolderHere(name: string) {
-  fireEvent.click(await tree().findByRole('button', { name: 'New folder…' }));
+  await openNewFolderFromAdd();
   await nameIt(name);
+}
+
+/** Opens the header's **+** menu and chooses "New folder…" in it. */
+async function openNewFolderFromAdd() {
+  fireEvent.click(await within(screen.getByRole('banner')).findByRole('button', { name: 'Add files' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'New folder…' }));
 }
 
 /** Types `name` into the open dialog and presses Create. */
@@ -186,7 +192,7 @@ describe('starting a Library from the explorer', () => {
   it('refuses a name the Library would refuse, and prepares nothing', async () => {
     answers = (path) => listing(path, path === '' ? { folders_on_disk: ['scans'] } : {});
     render(<App />);
-    fireEvent.click(await tree().findByRole('button', { name: 'New folder…' }));
+    await openNewFolderFromAdd();
 
     for (const [typed, said] of [
       ['', 'a folder needs a name'],
@@ -235,7 +241,7 @@ describe('starting a Library from the explorer', () => {
     });
     render(<App />);
 
-    // An empty Library has no row; "New folder…" over the rows prepares one
+    // An empty Library has no row; the header's + "New folder…" prepares one
     // under the root.
     await newFolderHere('comics');
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -392,9 +398,11 @@ it('draws the files being added as rows at once', async () => {
 it('forgets a prepared path and the ones under it, and asks nothing', async () => {
   answers = (path) => listing(path);
   render(<App />);
-  // "New folder…" over the rows makes `books` beside `comics` at the root
-  // before `Series` is made inside `comics` from its row.
+  // The + makes `books` beside `comics` at the root before `Series` is made
+  // inside `comics` from its row.
   await newFolderHere('comics');
+  // The new folder takes the focus; letting go of it brings the + back to the root.
+  fireEvent.keyDown(screen.getByRole('tree'), { key: 'Escape' });
   await newFolderHere('books');
   await newFolder('comics', 'Series');
   expect(await tree().findByTitle('Series')).toBeTruthy();
@@ -439,7 +447,7 @@ it('moves the screen out of a prepared path forgotten under it', async () => {
 // Walking the tree moves the URL to the folder the focus is in, without a
 // history entry for each row the keys pass; opening a folder adds one, and
 // shows its cover with the focus left on it and the folder left closed.
-it('follows the focus in the URL, and opens a folder on its cover without opening it', async () => {
+it('follows the focus in the URL, and opens a folder on its cover and in the tree', async () => {
   answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg', '002.jpg'] });
   vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Series'] });
   render(<App />);
@@ -458,22 +466,18 @@ it('follows the focus in the URL, and opens a folder on its cover without openin
   expect(window.history.length).toBe(before);
 
   fireEvent.keyDown(area, { key: 'Enter' });
-  await waitFor(() =>
-    expect(parseHash(window.location.hash)).toEqual({
-      folder: 'comics',
-      open: null,
-      cover: 'comics/Series',
-    }),
-  );
-  expect(window.history.length).toBe(before + 1);
+  await waitFor(() => expect(parseHash(window.location.hash).cover).toBe('comics/Series'));
   const reader = within(await screen.findByRole('region', { name: 'Reader' }));
   expect(await reader.findByAltText('cover of Series')).toBeTruthy();
   expect(reader.getByText(`Folder · 2 items · ${size(0)}`)).toBeTruthy();
-  // The focus stays on the folder, and the folder stays closed: opening it
-  // was showing it, not walking into it.
+  // The focus stays on the folder, and the folder is open too, so `↓` goes on
+  // into its pages with the sheet following.
   expect(tree().getByTitle('Series').getAttribute('aria-selected')).toBe('true');
-  expect(tree().getByLabelText('expand Series')).toBeTruthy();
-  expect(tree().queryByTitle('001.jpg')).toBeNull();
+  expect(tree().getByLabelText('collapse Series')).toBeTruthy();
+  await tree().findByTitle('001.jpg');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('comics/Series/001.jpg'));
+  expect(tree().getByTitle('001.jpg').getAttribute('aria-selected')).toBe('true');
 });
 
 // The sheet follows the tree's focus: walking the page rows of an open book
@@ -554,10 +558,9 @@ it('names the Library in the header, and the location follows the focus', async 
   expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
 });
 
-// The bar over the tree stays while a top-level folder is opened and focused,
-// so the rows below do not slide by its height, and its "New folder…" still
-// makes the folder at the Library root rather than in the focused folder.
-it('keeps the root\'s "New folder…" over the tree with a top-level folder open', async () => {
+// `Escape` lets go of the focus, and with nothing focused the header's **+** is
+// about the Library root: its "New folder…" makes the folder there.
+it('makes a folder at the Library root from the + once the focus is let go of', async () => {
   answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
   render(<App />);
   await tree().findByTitle('comics');
@@ -568,13 +571,24 @@ it('keeps the root\'s "New folder…" over the tree with a top-level folder open
   fireEvent.keyDown(area, { key: 'ArrowDown' });
   const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
   expect(location()).toBe('comics / Series');
-  const bar = tree().getByRole('button', { name: 'New folder…' });
-  expect(bar.getAttribute('title')).toBe('New folder in the Library');
-  fireEvent.click(bar);
+  fireEvent.keyDown(area, { key: 'Escape' });
+  expect(location()).toBe('Library');
+  await openNewFolderFromAdd();
   expect(await screen.findByRole('dialog', { name: 'New folder in the Library' })).toBeTruthy();
   await nameIt('books');
   // The new folder takes the focus where it was made: at the root.
   await waitFor(() => expect(location()).toBe('books'));
+});
+
+// A click on the empty space below the rows lets go of the focus too.
+it('lets go of the focus on a click below the rows', async () => {
+  answers = library({ '': ['comics/'], comics: ['1.jpg'] });
+  render(<App />);
+  fireEvent.click(await tree().findByTitle('comics'));
+  const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
+  expect(location()).toBe('comics');
+  fireEvent.click(screen.getByRole('tree'));
+  expect(location()).toBe('Library');
 });
 
 // The details pane follows the focused row, says what it is in words that fit
@@ -620,8 +634,8 @@ it('describes the focused row in the details pane, and opens it from there', asy
   ).toBeTruthy();
   expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
 
-  // A folder of pages, closed: its cover, peeked and never fetched, and Open.
-  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  // `Enter` opened it in the tree, though: a folder of pages inside, closed —
+  // its cover, peeked and never fetched, and Open.
   await tree().findByTitle('Series');
   fireEvent.keyDown(area, { key: 'ArrowDown' });
   expect(await pane.findByRole('heading', { name: 'Series' })).toBeTruthy();

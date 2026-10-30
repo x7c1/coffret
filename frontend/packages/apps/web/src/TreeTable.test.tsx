@@ -239,8 +239,8 @@ describe('one tree', () => {
     const nameCell = (title: string) =>
       screen.getByTitle(title).querySelector('td') as HTMLTableCellElement;
     expect(nameCell('albums').style.paddingLeft).toBe('6px');
-    expect(nameCell('2026').style.paddingLeft).toBe('26px');
-    expect(nameCell('cover.png').style.paddingLeft).toBe('26px');
+    expect(nameCell('2026').style.paddingLeft).toBe('20px');
+    expect(nameCell('cover.png').style.paddingLeft).toBe('20px');
   });
 
   // Each value column is as wide as the widest of its heading and its values.
@@ -332,10 +332,13 @@ describe('the mouse on the tree', () => {
 
     fireEvent.doubleClick(screen.getByTitle('cover.png'));
     expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
-    // A double-click on a folder opens it in the reader, and does not expand it.
+    // A double-click on a folder opens it in the reader and in the tree, with
+    // the focus on it, so the arrows go on into its files.
     fireEvent.doubleClick(screen.getByTitle('2026'));
     expect(onOpenFolder).toHaveBeenCalledWith('albums/2026');
-    expect(screen.getByLabelText('expand 2026')).toBeTruthy();
+    const last = onChange.mock.calls.at(-1)?.[0];
+    expect(last.focus).toBe(folderKey('albums/2026'));
+    expect([...last.expanded]).toContain('albums/2026');
   });
 
   it('opens and closes a folder from its disclosure button without moving the focus', () => {
@@ -457,36 +460,14 @@ describe('the block over the rows', () => {
     expect(said()).toContain('this folder is empty');
   });
 
-  // "New folder…" over the rows is how a path is prepared under the Library
-  // root, which has no row of its own; a folder that has a row offers it, and
-  // "Pack this folder…", from the row's menu instead.
-  it('offers the root\'s "New folder…" over the rows while the Library root is mapped', () => {
-    const { onNewFolder } = mount(listing({ path: '' }));
-    const bar = screen.getByRole('button', { name: 'New folder…' });
-    expect(bar.getAttribute('title')).toBe('New folder in the Library');
-    fireEvent.click(bar);
-    expect(onNewFolder).toHaveBeenCalledWith('');
-    cleanup();
-    mount(listing({ path: '', mapped: false }));
+  // The Library root's "New folder…" is the header's **+** menu's; nothing over
+  // the rows offers it, and a folder's own actions are in its row's menu.
+  it('offers no "New folder…" or "Pack this folder…" over the rows', () => {
+    mount(listing({ path: '' }));
     expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
     cleanup();
-    // Nor where the focus is deeper but the root is still not mapped.
-    mount(listing({ path: 'books/vol-1', mapped: false, files: [file('page.jpg', {}, 'books/vol-1')] }), {
-      more: [listing({ path: '', mapped: false, folders: [folder('books', { mapped: false }, '')] })],
-    });
+    mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
     expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
-  });
-
-  // The bar stays put as the focus moves below the root, so opening a
-  // top-level folder does not slide the rows under the pointer; and it still
-  // makes the folder at the root, never in the folder the focus is in.
-  it('keeps the root\'s "New folder…" over the rows with the focus in a folder below it', () => {
-    const { onNewFolder } = mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
-    const bar = screen.getByRole('button', { name: 'New folder…' });
-    expect(bar.getAttribute('title')).toBe('New folder in the Library');
-    fireEvent.click(bar);
-    expect(onNewFolder).toHaveBeenCalledWith('');
-    // A folder's own actions stay in its row's menu.
     expect(screen.queryByRole('button', { name: 'Pack this folder…' })).toBeNull();
   });
 });

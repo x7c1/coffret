@@ -1594,6 +1594,11 @@ export function App() {
         onCollecting={collecting}
         onUnreadable={unreadable}
         onKeysBack={keysBack}
+        makesFolderIn={(folder) => {
+          const held = heldListing(folder);
+          return held?.status === 'ready' && held.value.mapped;
+        }}
+        onNewFolder={openNaming}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -1684,6 +1689,7 @@ export function App() {
                   onForget={forget}
                   onAskAgain={(folder) => reloadListings([folder])}
                   areaRef={treeArea}
+                  escapeLetsGo={!sheeted}
                 />
                 <DetailsPane
                   selected={selected}
