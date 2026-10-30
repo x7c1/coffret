@@ -6,16 +6,17 @@ use crate::device_state::RootMarkerId;
 use crate::in_memory_fs::state::{under, State};
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
+use crate::mapped_name::MappedName;
 use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::relocate_error::RelocateError;
 
 impl State {
-    /// Relocates one regular file below a vouched root to another name below it,
-    /// making the folders the new name needs and replacing nothing
-    /// (spec: EP-8, EP-10, EP-13).
+    /// Relocates one regular file below a vouched root to a name below the same
+    /// root or another vouched one, making the folders the new name needs and
+    /// replacing nothing (spec: EP-8, EP-10, EP-13).
     ///
     /// The real one's order: the scripted refusal first, so a refused relocation
-    /// leaves the file where it was; then the root and its marker; then every
+    /// leaves the file where it was; then each root and its marker; then every
     /// folder on the way to the file, each of which has to be a folder, and
     /// the file itself; then the folders on the way to the new name, made where
     /// they are missing; and last the name itself, which has to be free and on
@@ -24,21 +25,22 @@ impl State {
     /// are removed again.
     pub(in crate::in_memory_fs) fn relocate(
         &mut self,
-        root: &Path,
-        expected: Option<&RootMarkerId>,
-        from: &MappedRelativeLocation,
-        to: &MappedRelativeLocation,
+        from: MappedName<'_>,
+        to: MappedName<'_>,
     ) -> Result<(), RelocateError> {
-        let source = root.join(from.to_path_buf());
-        let target = root.join(to.to_path_buf());
+        let source = from.root.join(from.relative.to_path_buf());
+        let target = to.root.join(to.relative.to_path_buf());
         self.attempt(LocalOperation::Relocating, &source)
             .map_err(DescentError::Io)?;
-        self.vouched_root(root, expected)?;
-        self.regular_file(root, from)?;
+        self.vouched_root(from.root, from.expected)?;
+        if !from.same_root(&to) {
+            self.vouched_root(to.root, to.expected)?;
+        }
+        self.regular_file(from.root, from.relative)?;
 
         let mut made = Vec::new();
-        let mut folder = root.to_path_buf();
-        let components: Vec<_> = to.components().collect();
+        let mut folder = to.root.to_path_buf();
+        let components: Vec<_> = to.relative.components().collect();
         let (_, folders) = components
             .split_last()
             .expect("a file below a mapped root names at least itself");
@@ -77,22 +79,23 @@ impl State {
         Ok(())
     }
 
-    /// Exchanges two regular files below a vouched root, each taking the
+    /// Exchanges two regular files below vouched roots, each taking the
     /// other's name (spec: EP-10).
     pub(in crate::in_memory_fs) fn exchange(
         &mut self,
-        root: &Path,
-        expected: Option<&RootMarkerId>,
-        one: &MappedRelativeLocation,
-        other: &MappedRelativeLocation,
+        one: MappedName<'_>,
+        other: MappedName<'_>,
     ) -> Result<(), RelocateError> {
-        let first = root.join(one.to_path_buf());
-        let second = root.join(other.to_path_buf());
+        let first = one.root.join(one.relative.to_path_buf());
+        let second = other.root.join(other.relative.to_path_buf());
         self.attempt(LocalOperation::Relocating, &first)
             .map_err(DescentError::Io)?;
-        self.vouched_root(root, expected)?;
-        self.regular_file(root, one)?;
-        self.regular_file(root, other)?;
+        self.vouched_root(one.root, one.expected)?;
+        if !one.same_root(&other) {
+            self.vouched_root(other.root, other.expected)?;
+        }
+        self.regular_file(one.root, one.relative)?;
+        self.regular_file(other.root, other.relative)?;
         if self.filesystem_of(&first) != self.filesystem_of(&second) {
             return Err(RelocateError::AnotherFilesystem {
                 from: first,

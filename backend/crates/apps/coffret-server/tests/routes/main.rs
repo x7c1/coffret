@@ -23,6 +23,7 @@ mod listing;
 mod lock;
 mod map;
 mod mapping;
+mod moves;
 mod reconnect;
 mod redaction;
 mod refresh;

@@ -6,9 +6,7 @@ use crate::sync_conformance::fixtures::another_filesystem;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 use crate::unavailable_root::RootUnavailable;
 
-use super::{
-    at, carry_in, content, map_registered, refused, relocated, rename, row, sync, uploaded_nothing,
-};
+use super::{at, carry_in, content, refused, relocated, rename, row, sync, uploaded_nothing};
 use crate::sync_conformance::fixtures::write;
 
 /// The bytes of the one file most cases carry in.
@@ -120,70 +118,6 @@ pub async fn something_standing_at_the_new_path_is_never_overwritten(fixture: &S
     let next = sync(fixture, 3).await;
     assert_eq!(relocated(&next), [("a.jpg".to_owned(), "b.jpg".to_owned())]);
     assert_eq!(content(fixture, "b.jpg").as_deref(), Some(BYTES));
-}
-
-/// A rename that carries an Entry from under one mapped root to under another
-/// is not followed: no rename crosses two roots, and nothing is copied. A
-/// later rename back under the file's own root is (spec: EP-9, EP-10).
-pub async fn a_relocation_across_mapped_roots_is_refused(fixture: &SyncUnderTest) {
-    let albums = fixture.folder().join("albums-root");
-    let books = fixture.folder().join("books-root");
-    fixture.fs().create_dir(&albums);
-    fixture.fs().create_dir(&books);
-    map_registered(fixture, Some("albums"), &albums).await;
-    map_registered(fixture, Some("books"), &books).await;
-    let file = write(fixture.fs(), &albums, "a.jpg", BYTES);
-    assert_eq!(sync(fixture, 1).await.added.len(), 1);
-    rename(fixture, &[("albums/a.jpg", "books/a.jpg")]).await;
-
-    let outcome = sync(fixture, 2).await;
-
-    uploaded_nothing(&outcome);
-    let (_, _, reason) = refused(&outcome);
-    assert!(
-        matches!(reason, RelocationRefused::OutsideOneRoot),
-        "{reason:?}"
-    );
-    assert!(fixture.fs().holds(&file));
-    assert!(!fixture.fs().holds(&books.join("a.jpg")));
-
-    rename(fixture, &[("books/a.jpg", "albums/c.jpg")]).await;
-    let next = sync(fixture, 3).await;
-    assert_eq!(
-        relocated(&next),
-        [("albums/a.jpg".to_owned(), "albums/c.jpg".to_owned())]
-    );
-    assert_eq!(
-        fixture.fs().content(&albums.join("c.jpg")).as_deref(),
-        Some(BYTES)
-    );
-}
-
-/// A new path on another filesystem than the file — a disk mounted below the
-/// mapped root — is refused rather than reached by copying and deleting, and
-/// followed once both stand on one (spec: EP-10).
-pub async fn a_relocation_onto_another_filesystem_is_refused(fixture: &SyncUnderTest) {
-    carry_in(fixture, &[("a.jpg", BYTES)]).await;
-    let mounted = at(fixture, "mounted");
-    fixture.fs().mount(&mounted);
-    rename(fixture, &[("a.jpg", "mounted/a.jpg")]).await;
-
-    let outcome = sync(fixture, 2).await;
-
-    uploaded_nothing(&outcome);
-    let (_, _, reason) = refused(&outcome);
-    assert!(
-        matches!(reason, RelocationRefused::AnotherFilesystem),
-        "{reason:?}"
-    );
-    left_waiting(fixture, "a.jpg", "mounted/a.jpg").await;
-
-    fixture.fs().unmount(&mounted);
-    let next = sync(fixture, 3).await;
-    assert_eq!(
-        relocated(&next),
-        [("a.jpg".to_owned(), "mounted/a.jpg".to_owned())]
-    );
 }
 
 /// A file on a filesystem that offers no rename replacing nothing — a FAT

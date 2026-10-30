@@ -9,7 +9,7 @@ use crate::delete::DeleteReport;
 use crate::latest::Latest;
 use crate::routes::RefusalDto;
 
-use super::{DeleteDto, FillDto, FreezeDto, SyncDto};
+use super::{DeleteDto, FillDto, FreezeDto, MoveDto, SyncDto};
 
 /// One entry of the server's log of finished work, as a page is told it.
 #[derive(Serialize)]
@@ -39,6 +39,7 @@ enum EndedDto {
     Sync { run: SyncDto },
     Freeze { run: FreezeDto },
     Delete { run: DeleteDto },
+    Move { run: MoveDto },
     Discarded { queue: &'static str, folder: String },
     Fetch { path: String, refused: RefusalDto },
 }
@@ -76,6 +77,9 @@ impl EndedDto {
                     },
                     None,
                 ),
+            },
+            Ended::Move(run) => Self::Move {
+                run: MoveDto::of(run),
             },
             Ended::Discarded { queue, folder } => Self::Discarded {
                 queue: queue.as_str(),

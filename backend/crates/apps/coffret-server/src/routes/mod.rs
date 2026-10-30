@@ -1,4 +1,4 @@
-//! The seventeen things a browser may ask of a Library.
+//! The eighteen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -49,6 +49,13 @@
 //! it is how the explorer shows somebody what "Pack this folder…" will do
 //! before they say yes.
 //!
+//! And one moves things inside the Library: the move, which renames files and
+//! folders in one Journal record and uploads nothing (spec: FM-15), then has
+//! this device's files of them follow — or leave this device where they cannot
+//! (spec: EP-10). It is read before it is asked for, as the freeze and the
+//! deletion are: a `GET` of it says what it would rename and what it would do
+//! to this device's files, and which refusals it would meet.
+//!
 //! And one is about how this device reaches Storage at all: the reconnect,
 //! which renews a grant Storage has stopped taking by running the consent flow
 //! inside the server and handing the page the consent page to open. It needs
@@ -74,7 +81,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the seventeen go on answering once the Library is locked — which
+//! Three of the eighteen go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -91,7 +98,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the seventeen are two answers that are not routes at all: one for a path
+//! Beside the eighteen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -122,6 +129,9 @@ pub use list::list;
 
 mod map;
 pub use map::map;
+
+mod moves;
+pub use moves::{move_entries, preview as preview_move};
 
 mod nowhere;
 pub use nowhere::{no_such_method, no_such_route};

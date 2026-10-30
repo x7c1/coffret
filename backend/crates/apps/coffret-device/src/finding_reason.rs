@@ -138,6 +138,18 @@ pub enum FindingReason {
         /// Where the Entry, and the copy that stands, are now.
         to: EntryPath,
     },
+    /// A rename gave the Entry here this path, which this device's file of it
+    /// could not follow — no folder this device maps reaches the path, or the
+    /// one that does stands on another filesystem — so the file, unedited, was
+    /// discarded into the desktop's trash from where it stood, and the Entry is
+    /// in the Library and not on this device (spec: EP-10, EP-15).
+    ///
+    /// Work done rather than work left, as a discard always is: opening the
+    /// Entry fetches it again.
+    RelocationLeft {
+        /// Where the discarded file stood.
+        from: EntryPath,
+    },
     /// The file here is this device's copy of an Entry a rename gave another
     /// path, and it was not relocated to follow it (spec: EP-10).
     ///
@@ -244,6 +256,15 @@ impl fmt::Display for FindingReason {
                     "its Entry was renamed to {}, where this device already had it, so this \
                      unedited copy was discarded into the trash",
                     to.as_str(),
+                );
+            }
+            Self::RelocationLeft { from } => {
+                return write!(
+                    f,
+                    "its Entry was renamed here from {}, where this device's file could not \
+                     follow it, so the unedited file was discarded into the trash; the Entry is \
+                     in the Library and not on this device",
+                    from.as_str(),
                 );
             }
             // What stands in the way is said in full, chain and all, for the

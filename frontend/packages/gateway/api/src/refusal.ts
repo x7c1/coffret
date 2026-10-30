@@ -3,7 +3,7 @@ import surfacedFindings from './surfaced-findings.json';
 /**
  * Which kind of refusal an answer is.
  *
- * The first thirteen are the server's own, and the whole set is named here for the
+ * The first fourteen are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -57,6 +57,16 @@ export type RefusalKind =
    * mapped folder whose filesystem gives no file lock (`no_file_lock`).
    */
   | 'refused_placement'
+  /**
+   * A move of files and folders refused before anything was written, and the
+   * reason says why: the set the Library does not admit (`nothing_to_move`,
+   * `overlapping`, `same_path`, `reserved_namespace`, `into_itself`,
+   * `destination_taken`, `file_and_folder`, `rename_rule`), a file of this
+   * device's in it that changed since it was placed (`edited`), or a file under
+   * it the Library does not hold yet (`uploading`). The message names the
+   * paths, so a screen shows it as it is.
+   */
+  | 'refused_move'
   /**
    * This device has to be enrolled in the Library again: a Master Key epoch was
    * activated, and the device holds only the key it replaced. Nothing a retry
@@ -221,6 +231,36 @@ export type PlacementReason =
   | 'key_lost'
   | 'pack_resident'
   /**
+   * A move's reasons, under `refused_move`: the Library holds nothing at a
+   * source, or the request named none.
+   */
+  | 'nothing_to_move'
+  /**
+   * Two pairs of one move overlap: one source sent two places, two sources sent
+   * to one place, or one destination inside another's.
+   */
+  | 'overlapping'
+  /** A file or folder moved to where it already is. */
+  | 'same_path'
+  /** A side of the move lies in the namespace coffret keeps for derived Entries. */
+  | 'reserved_namespace'
+  /** A folder moved to a path under itself. */
+  | 'into_itself'
+  /** Another file of the Library already stands where one would go. */
+  | 'destination_taken'
+  /** The move would make one path both a file and a folder. */
+  | 'file_and_folder'
+  /** The move breaks a rule the Library holds every rename to. */
+  | 'rename_rule'
+  /**
+   * A file of this device's in the move changed since it was placed: a file
+   * that cannot follow its Entry leaves this device, and the Library does not
+   * hold what changed.
+   */
+  | 'edited'
+  /** A file under the move this device has and the Library does not hold yet. */
+  | 'uploading'
+  /**
    * Not a placement's reason at all, and the one reason a `storage` refusal
    * carries: Storage no longer takes this device's grant — on Google Drive, a
    * permission that ran out (every seven days, for a consent screen in testing)
@@ -295,6 +335,14 @@ export type SurfacedFinding =
    * discarded into the desktop's trash. Work done: nobody has to act on it.
    */
   | 'RelocationDiscarded'
+  /**
+   * This device's file of an Entry a rename gave this path could not follow it
+   * here — no folder this device maps reaches the path, or the one that does is
+   * on another filesystem — so the unedited file was discarded into the
+   * desktop's trash, and the Entry is in the Library and not on this device.
+   * Work done: opening it fetches it again.
+   */
+  | 'RelocationLeft'
   /**
    * This device's file of an Entry another device renamed could not be relocated
    * to follow it — its mapped folder is not there, the file changed, or
@@ -556,6 +604,7 @@ const KINDS: readonly string[] = [
   'no_such_route',
   'declined',
   'refused_placement',
+  'refused_move',
   'epoch',
   'library_predates_format',
   'conflict',
@@ -582,6 +631,16 @@ const REASONS: readonly string[] = [
   'surfaced',
   'key_lost',
   'pack_resident',
+  'nothing_to_move',
+  'overlapping',
+  'same_path',
+  'reserved_namespace',
+  'into_itself',
+  'destination_taken',
+  'file_and_folder',
+  'rename_rule',
+  'edited',
+  'uploading',
   'unauthenticated',
 ];
 

@@ -255,7 +255,8 @@ impl Finding {
                     }
                     | FindingReason::Relocated { .. }
                     | FindingReason::Renamed { .. }
-                    | FindingReason::RelocationDiscarded { .. },
+                    | FindingReason::RelocationDiscarded { .. }
+                    | FindingReason::RelocationLeft { .. },
                 ..
             } | Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::RetainedKeyring { .. }
@@ -412,7 +413,9 @@ impl fmt::Display for Finding {
             } => write!(f, "relocated {path}: {reason}"),
             Self::Surfaced {
                 path,
-                reason: reason @ FindingReason::RelocationDiscarded { .. },
+                reason:
+                    reason @ (FindingReason::RelocationDiscarded { .. }
+                    | FindingReason::RelocationLeft { .. }),
             } => write!(f, "discarded {path}: {reason}"),
             // A file renamed on disk and carried in as a rename of its Entry is
             // said as the rename it became, from the old path to the new one

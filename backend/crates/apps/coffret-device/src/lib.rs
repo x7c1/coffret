@@ -357,6 +357,10 @@ pub use run_repack::run_repack;
 mod run_rename;
 pub use run_rename::run_rename;
 
+// What a move of files and folders would do, before it is asked for.
+mod move_preview;
+pub use move_preview::MovePreview;
+
 mod run_sync;
 pub use run_sync::run_sync;
 
@@ -485,7 +489,9 @@ pub use coffret_usecase::freeze::{
 pub use coffret_usecase::prune::{
     PruneError, PruneOutcome, PruneRefusal, UnremovedRecord, UnremovedReplica,
 };
-pub use coffret_usecase::rename::{RenameError, RenameOutcome, RenameRefusal, RenamedPath};
+pub use coffret_usecase::rename::{
+    RenameError, RenameOutcome, RenamePair, RenamePreview, RenameRefusal, RenamedPath,
+};
 pub use coffret_usecase::repack::{RepackError, RepackOutcome, RepackRefusal, RepackedPack};
 pub use coffret_usecase::sync::{
     Disposal, RetainedKeyringReplicas, Settled, SyncError, SyncOutcome,
@@ -526,7 +532,7 @@ pub use coffret_usecase::GatewayFailure;
 /// Re-exported for the same reason the outcomes are: every flow here takes one,
 /// so a shell calling one has to be able to name the type — and the terminal
 /// renderer that implements it belongs to the shell, not to this crate.
-pub use coffret_usecase::{ByteCount, Phase, Progress, Step, Unwatched};
+pub use coffret_usecase::{ByteCount, Phase, Progress, Step, Unwatched, UNWATCHED};
 
 /// The buffer a Recovery Code travels in, re-exported because
 /// [`join_library`]'s callback returns one: a shell writing that callback has

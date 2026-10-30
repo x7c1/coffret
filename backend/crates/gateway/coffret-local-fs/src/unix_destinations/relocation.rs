@@ -1,8 +1,9 @@
-//! Relocating a file inside a mapped folder to follow its Entry (spec: EP-10).
+//! Relocating a file in the mapped folders to follow its Entry (spec: EP-10).
 //!
-//! The same descent a placement makes, asked for a rename: the root is opened
-//! as the person named it and held against its mapping's marker from that open
-//! handle (spec: EP-13), every folder on the way to either name is entered
+//! The same descent a placement makes, asked for a rename: each side's root —
+//! one root, or two roots on one mounted filesystem — is opened as the person
+//! named it and held against its mapping's marker from that open handle
+//! (spec: EP-13), every folder on the way to either name is entered
 //! without following a link (spec: EP-8), and the file's own name is stated
 //! without following one and has to be a regular file. The rename itself is
 //! made between the two open folders, so nothing is resolved by path again.
@@ -15,8 +16,9 @@
 //! network shares can — refuses the relocation rather than asking whether the
 //! name is free and renaming onto it, a window a file arriving in it would
 //! lose: the file waits where it stands, and the refusal names the filesystem
-//! as the reason. A rename across two filesystems is refused, and never made
-//! by copying and deleting.
+//! as the reason. A rename across two filesystems is refused with `EXDEV`, and
+//! never made by copying and deleting: the caller decides what that means for
+//! the file.
 
 use std::ffi::OsStr;
 use std::io;
@@ -26,7 +28,8 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use coffret_usecase::device_state::RootMarkerId;
 use coffret_usecase::{
-    DescentError, LocalIoError, LocalOperation, MappedRelativeLocation, RelocateError, Relocations,
+    DescentError, LocalIoError, LocalOperation, MappedName, MappedRelativeLocation, RelocateError,
+    Relocations,
 };
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, RenameFlags};
 use rustix::io::Errno;
@@ -38,50 +41,68 @@ use crate::unix_fs::UnixFs;
 impl Relocations for UnixFs {
     async fn relocate(
         &self,
-        root: &Path,
-        expected: Option<&RootMarkerId>,
-        from: &MappedRelativeLocation,
-        to: &MappedRelativeLocation,
+        from: MappedName<'_>,
+        to: MappedName<'_>,
     ) -> Result<(), RelocateError> {
-        let owned = root.to_path_buf();
-        let expected = expected.copied();
-        let from = from.clone();
-        let to = to.clone();
-        blocking(LocalOperation::Relocating, root, move || {
-            relocate(&owned, expected.as_ref(), &from, &to)
+        let from_side = Side::of(from);
+        let to_side = Side::of(to);
+        blocking(LocalOperation::Relocating, from.root, move || {
+            relocate(&from_side, &to_side)
         })
         .await
     }
 
     async fn exchange(
         &self,
-        root: &Path,
-        expected: Option<&RootMarkerId>,
-        one: &MappedRelativeLocation,
-        other: &MappedRelativeLocation,
+        one: MappedName<'_>,
+        other: MappedName<'_>,
     ) -> Result<(), RelocateError> {
-        let owned = root.to_path_buf();
-        let expected = expected.copied();
-        let one = one.clone();
-        let other = other.clone();
-        blocking(LocalOperation::Relocating, root, move || {
-            exchange(&owned, expected.as_ref(), &one, &other)
+        let one_side = Side::of(one);
+        let other_side = Side::of(other);
+        blocking(LocalOperation::Relocating, one.root, move || {
+            exchange(&one_side, &other_side)
         })
         .await
     }
 }
 
+/// One side of a relocation, owned for the blocking call.
+struct Side {
+    root: PathBuf,
+    expected: Option<RootMarkerId>,
+    relative: MappedRelativeLocation,
+}
+
+impl Side {
+    fn of(name: MappedName<'_>) -> Self {
+        Self {
+            root: name.root.to_path_buf(),
+            expected: name.expected.copied(),
+            relative: name.relative.clone(),
+        }
+    }
+}
+
+/// Opens the roots of both sides and holds each against its mapping's marker:
+/// once where both sides stand under one root.
+fn vouched_roots(one: &Side, other: &Side) -> Result<(OwnedFd, OwnedFd), DescentError> {
+    let first = vouched_root(&one.root, one.expected.as_ref())?;
+    let second = if one.root == other.root {
+        first
+            .try_clone()
+            .map_err(|cause| LocalIoError::new(LocalOperation::Stating, &one.root, cause))?
+    } else {
+        vouched_root(&other.root, other.expected.as_ref())?
+    };
+    Ok((first, second))
+}
+
 /// Renames the file at `from` to `to`, making the folders `to` needs and
 /// removing them again where the rename is refused.
-fn relocate(
-    root: &Path,
-    expected: Option<&RootMarkerId>,
-    from: &MappedRelativeLocation,
-    to: &MappedRelativeLocation,
-) -> Result<(), RelocateError> {
-    let directory = vouched_root(root, expected)?;
-    let source = regular_file(&directory, root, from)?;
-    let (target, made) = folder_for(&directory, root, to)?;
+fn relocate(from: &Side, to: &Side) -> Result<(), RelocateError> {
+    let (source_root, target_root) = vouched_roots(from, to)?;
+    let source = regular_file(&source_root, &from.root, &from.relative)?;
+    let (target, made) = folder_for(&target_root, &to.root, &to.relative)?;
 
     let renamed = rustix::fs::renameat_with(
         &source.folder,
@@ -111,15 +132,10 @@ fn relocate(
 }
 
 /// Exchanges the files at `one` and `other` with one rename.
-fn exchange(
-    root: &Path,
-    expected: Option<&RootMarkerId>,
-    one: &MappedRelativeLocation,
-    other: &MappedRelativeLocation,
-) -> Result<(), RelocateError> {
-    let directory = vouched_root(root, expected)?;
-    let first = regular_file(&directory, root, one)?;
-    let second = regular_file(&directory, root, other)?;
+fn exchange(one: &Side, other: &Side) -> Result<(), RelocateError> {
+    let (one_root, other_root) = vouched_roots(one, other)?;
+    let first = regular_file(&one_root, &one.root, &one.relative)?;
+    let second = regular_file(&other_root, &other.root, &other.relative)?;
     match rustix::fs::renameat_with(
         &first.folder,
         &first.name,

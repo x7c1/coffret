@@ -37,12 +37,12 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // A look at which heads the Library has, by name, and nothing more:
         // a `GET` because it moves nothing, the catalog included.
         .route("/api/remote-head", get(routes::remote_head))
-        // The ten that are not a `GET`, because they are the ones that ask the
-        // server to go and do something rather than to say what it knows. Four
-        // of them arm background work and answer at once — the fill, the sync,
-        // the freeze and the deletion; the refresh does its work while the
-        // request is open, because what it answers with is what that work
-        // found; the reconnect starts a consent flow and answers with the page
+        // The eleven that are not a `GET`, because they are the ones that ask
+        // the server to go and do something rather than to say what it knows.
+        // Four of them arm background work and answer at once — the fill, the
+        // sync, the freeze and the deletion; the refresh and the move do their
+        // work while the request is open, because what each answers with is
+        // what that work found; the reconnect starts a consent flow and answers with the page
         // to open; the unlock asks the app's own window for the Passphrase and
         // carries none; the map records which folder on this device holds part
         // of the Library; and the upload and the import are the two routes that
@@ -62,6 +62,13 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route(
             "/api/delete",
             post(routes::delete).get(routes::preview_delete),
+        )
+        // And so is the move: a `GET` of it says what the `POST` would rename,
+        // and what it would do to this device's files, which the explorer
+        // shows before it offers to move.
+        .route(
+            "/api/move",
+            post(routes::move_entries).get(routes::preview_move),
         )
         .route("/api/refresh", post(routes::refresh))
         .route("/api/reconnect", post(routes::reconnect))

@@ -338,6 +338,11 @@ fn said(reason: &FindingReason) -> &'static str {
             "this file's Entry was renamed to where this device already had it, so this \
              unedited copy was discarded into the trash"
         }
+        FindingReason::RelocationLeft { .. } => {
+            "this file's Entry was renamed here, where this device's file could not follow it, so \
+             the unedited file was discarded into the trash; the Entry is in the Library and not \
+             on this device"
+        }
         FindingReason::RelocationRefused { reason, .. } => relocation_refused(reason),
         FindingReason::Renamed { .. } => {
             "this device's file was renamed here, and its Entry was renamed to follow it without \
@@ -384,8 +389,8 @@ fn relocation_refused(reason: &RelocationRefused) -> &'static str {
         RelocationRefused::Unavailable(_) => {
             left!("the mapped folder it stands in is not available")
         }
-        RelocationRefused::OutsideOneRoot => {
-            left!("its new path is not under the mapped folder it stands in")
+        RelocationRefused::Unmapped => {
+            left!("the path it stands at is under no folder this device maps any more")
         }
         RelocationRefused::ReservedName => {
             left!(
@@ -394,7 +399,7 @@ fn relocation_refused(reason: &RelocationRefused) -> &'static str {
             )
         }
         RelocationRefused::AnotherFilesystem => {
-            left!("its new path is on another filesystem")
+            left!("it trades places with a file on another filesystem, which no rename exchanges")
         }
         RelocationRefused::SymbolicLink { .. } => {
             left!("a folder on the way is not a folder of this device's mapped folder")
@@ -444,11 +449,12 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         FindingReason::Discarded => ("surfaced", "Discarded"),
         FindingReason::KeptEdited => ("surfaced", "KeptEdited"),
         FindingReason::DiscardRefused { .. } => ("surfaced", "DiscardRefused"),
-        // The three a sync or a folder fetch reports about a file that waited
-        // to follow a rename of its Entry. No declined fetch names them, so
-        // they too reach a page only on a finding.
+        // The four a sync, a folder fetch or a move reports about a file that
+        // waited to follow a rename of its Entry. No declined fetch names them,
+        // so they too reach a page only on a finding.
         FindingReason::Relocated { .. } => ("surfaced", "Relocated"),
         FindingReason::RelocationDiscarded { .. } => ("surfaced", "RelocationDiscarded"),
+        FindingReason::RelocationLeft { .. } => ("surfaced", "RelocationLeft"),
         FindingReason::RelocationRefused { .. } => ("surfaced", "RelocationRefused"),
         // The two a sync reports about a file renamed on disk, which no
         // declined fetch names either.
@@ -782,6 +788,11 @@ mod tests {
                     to: entry_path("albums/b.jpg"),
                 }),
                 FindingReason::RelocationDiscarded { .. } => {
+                    surfaced(FindingReason::RelocationLeft {
+                        from: entry_path("inbox/a.jpg"),
+                    })
+                }
+                FindingReason::RelocationLeft { .. } => {
                     surfaced(FindingReason::RelocationRefused {
                         to: entry_path("albums/b.jpg"),
                         reason: coffret_device::RelocationRefused::Edited,

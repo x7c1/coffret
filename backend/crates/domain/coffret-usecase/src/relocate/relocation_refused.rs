@@ -21,18 +21,20 @@ pub enum RelocationRefused {
     /// The mapped root the file stands under is not there to be read from or
     /// written to (spec: EP-12).
     Unavailable(RootUnavailable),
-    /// The file and its Entry's new path do not lie under one mapped root: two
-    /// different mappings, or a path no mapping of this device reaches. A
-    /// rename does not cross from one root to another (spec: EP-9).
-    OutsideOneRoot,
+    /// The path the file stands at is under no mapped folder of this device
+    /// any more, so there is no root to hold it against (spec: EP-9, EP-13).
+    Unmapped,
     /// The new path passes through a name a mapped folder keeps for something
     /// other than content — the device's own management area, a fetch's
     /// scratch, a desktop's trash folder at the root's top, or a name an
     /// operating system keeps — and no file is placed there (spec: EP-11,
     /// EP-14, EP-16, EP-17).
     ReservedName,
-    /// The file and where it is to go stand on two filesystems, and nothing is
-    /// copied across in place of a rename.
+    /// Files that stand in each other's places and stand on two filesystems,
+    /// which no exchange joins, and nothing is copied across in place of one.
+    ///
+    /// Only an exchange: one file that cannot be renamed onto another
+    /// filesystem leaves this device instead (spec: EP-10).
     AnotherFilesystem,
     /// A name on the way to the file or to where it is to go is not a folder of
     /// the mapped root — a symbolic link among them — and nothing is relocated
@@ -76,15 +78,15 @@ impl fmt::Display for RelocationRefused {
             Self::Unavailable(RootUnavailable::AnotherFilesystem) => f.write_str(
                 "the mapped folder it stands in is not on the filesystem this device recorded",
             ),
-            Self::OutsideOneRoot => {
-                f.write_str("its new path is not under the mapped folder the file stands in")
+            Self::Unmapped => {
+                f.write_str("the path it stands at is under no mapped folder of this device")
             }
             Self::ReservedName => f.write_str(
                 "its new path passes through a name coffret, the desktop or the operating system keeps for itself",
             ),
-            Self::AnotherFilesystem => {
-                f.write_str("its new path is on another filesystem than the file")
-            }
+            Self::AnotherFilesystem => f.write_str(
+                "it trades places with a file on another filesystem, which no exchange joins",
+            ),
             Self::SymbolicLink { stopped_at } => write!(
                 f,
                 "a name on the way is not a folder of the mapped folder — {}",

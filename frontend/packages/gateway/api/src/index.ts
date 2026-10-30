@@ -1,7 +1,7 @@
 /**
  * What the explorer reads a Library through.
  *
- * The eighteen routes `coffret-server` answers, as typed calls: which Library
+ * The twenty routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
  * looked and whether it has anything newer than that, what the server is doing
@@ -9,7 +9,8 @@
  * three calls that ask it to take that work up
  * again, the freeze among them also packing a folder somebody chose, the
  * question of what that freeze would pack, the deletion of files or a folder
- * and the question of what it would take out, the one that renews the grant
+ * and the question of what it would take out, the move of files and folders
+ * and the question of what it would do to this device's files, the one that renews the grant
  * Storage stopped taking, the one that asks for a locked Library to be
  * unlocked, and the two that choose a folder on this device and map part of
  * the Library to it. The types are this package's word
@@ -40,6 +41,9 @@ export type {
   Work,
   Logged,
   LoggedKind,
+  Move,
+  MovePair,
+  MoveStatus,
   LoggedWork,
   QueueFlow,
   ByteCount,
@@ -93,6 +97,8 @@ export type { Library } from './library';
 export { getListing } from './list';
 export type { ContainerKind, EntryState, Listing, ListedFile, ListedFolder } from './list';
 export { mapFolder } from './map';
+export { moveEntries, previewMove } from './move';
+export type { MovePreview } from './move';
 export { componentDefect, reservedName } from './names';
 export type { ComponentDefect, ReservedName } from './names';
 export type { Mapped, MappedMarker } from './map';

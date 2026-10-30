@@ -3,7 +3,7 @@ use std::sync::Mutex as Slot;
 
 use tokio::sync::{Mutex, MutexGuard};
 
-/// One of the three flows that take turns at the pending rows.
+/// One of the four flows that take turns at the pending rows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TurnTaker {
     /// A sync, carrying the mapped folders into the Library.
@@ -12,6 +12,8 @@ pub enum TurnTaker {
     Freeze,
     /// A deletion, taking Entries out of the Library.
     Delete,
+    /// A move, renaming Entries and relocating this device's files of them.
+    Move,
 }
 
 impl TurnTaker {
@@ -21,12 +23,13 @@ impl TurnTaker {
             Self::Sync => "sync",
             Self::Freeze => "freeze",
             Self::Delete => "delete",
+            Self::Move => "move",
         }
     }
 }
 
-/// This device's pending rows, as the server's own three flows take turns at
-/// them.
+/// This device's pending rows, as the server's own three background flows,
+/// and a move, take turns at them.
 ///
 /// A sync, a freeze and a deletion each own those rows for the whole of a run,
 /// and the use case refuses a second owner at once rather than making it wait
@@ -36,6 +39,10 @@ impl TurnTaker {
 /// against itself: a file dropped while a book is packed would start a sync
 /// that stops on its first line, and the person would be offered a retry for
 /// something that never had a chance.
+///
+/// A move owns none of the rows — it uploads nothing — but it takes the same
+/// turn, because the files its rename relocates are the ones a sync's scan
+/// reads, and two moves at once would race each other into the commit.
 ///
 /// So each run takes its turn here before it asks for the Library, and holds it
 /// across the whole of its use-case call. One fair lock, so the turns go in the

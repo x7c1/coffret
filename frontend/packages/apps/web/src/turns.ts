@@ -17,7 +17,7 @@ import type { Delete, Freeze, Sync, TurnTaker } from '@coffret/api';
  * What a run is waiting for, in the word its line says it in, or `null` where
  * it waits for nothing.
  */
-export type WaitsFor = 'packing' | 'backup' | 'deletion' | null;
+export type WaitsFor = 'packing' | 'backup' | 'deletion' | 'move' | null;
 
 /** What each of the three flows is doing, as the work answer says it. */
 export interface Turns {
@@ -33,6 +33,7 @@ const WORD: Record<TurnTaker, Exclude<WaitsFor, null>> = {
   freeze: 'packing',
   sync: 'backup',
   delete: 'deletion',
+  move: 'move',
 };
 
 /** The run of `flow` on record, whichever of the three it is. */
@@ -44,6 +45,10 @@ export function runOf(flow: TurnTaker, turns: Turns): Freeze | Sync | Delete | n
       return turns.sync;
     case 'delete':
       return turns.deletion;
+    // A move answers the request that asked for it, so no run of it is ever
+    // on record as running.
+    case 'move':
+      return null;
   }
 }
 

@@ -6,8 +6,8 @@ use crate::departure::{self, MappedFile};
 use crate::device_state::LocalEntryState;
 use crate::index_error::IndexResult;
 
-use super::look::{Look, Looked};
-use super::{agrees, disk, Pending, RelocationRefused, Run};
+use super::look::{Leaving, Look, Looked};
+use super::{agrees, disk, Pending, Relocation, RelocationRefused, Run};
 
 /// What deciding each record leaves to do on disk.
 pub(super) struct Decided {
@@ -26,6 +26,10 @@ impl Run<'_> {
         for look in looked {
             let one = match look {
                 Look::Looked(one) => *one,
+                Look::Leaving(one) => {
+                    self.decide_leaving(*one).await?;
+                    continue;
+                }
                 // A record with no file has nothing to report about.
                 Look::Refused { local, .. } if local.state == LocalEntryState::Absent => continue,
                 Look::Refused { local, reason } => {
@@ -86,7 +90,12 @@ impl Run<'_> {
                                 && placed.observation.entry == one.local.observation.entry
                                 && agrees(&placed, there) =>
                         {
-                            self.discard(one, source).await?;
+                            let done = Relocation::Discarded {
+                                from: one.from().clone(),
+                                to: one.to().clone(),
+                            };
+                            self.discard(&one.local, &one.mapping, &source, done)
+                                .await?;
                         }
                         // Another file of this device's, waiting to be relocated
                         // itself: this one is relocated once it has.
@@ -108,5 +117,39 @@ impl Run<'_> {
             }
         }
         Ok(Decided { pending, gone })
+    }
+
+    /// Decides a record whose file cannot follow its Entry on this device: an
+    /// unedited file is discarded into the trash, an edited one is kept where it
+    /// stands and refused for its edit, and a record with no file standing for
+    /// it is forgotten, since the Entry's current path holds nothing of this
+    /// device's (spec: EP-10, EP-15).
+    async fn decide_leaving(&mut self, one: Leaving) -> IndexResult<()> {
+        let Leaving {
+            local,
+            mapping,
+            source,
+        } = one;
+        let source = match source {
+            MappedFile::File(source) => source,
+            MappedFile::Fenced { stopped_at } => {
+                self.refuse(&local, RelocationRefused::SymbolicLink { stopped_at });
+                return Ok(());
+            }
+            MappedFile::Nothing | MappedFile::Folder => {
+                return self.index.forget_local_entry(&local.observation.path).await;
+            }
+        };
+        match departure::unedited(self.disk.roots, &source, &local).await {
+            Ok(true) => self.leave(&local, &mapping, &source).await,
+            Ok(false) => {
+                self.refuse(&local, RelocationRefused::Edited);
+                Ok(())
+            }
+            Err(refused_io) => {
+                self.refuse(&local, disk(refused_io.into()));
+                Ok(())
+            }
+        }
     }
 }

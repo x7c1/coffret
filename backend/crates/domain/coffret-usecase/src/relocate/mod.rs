@@ -16,11 +16,20 @@
 //! its record left exactly as they were, and asked about again by the next
 //! run):
 //!
-//! - whether both paths lie under one mapped root, and the new one through no
-//!   name a mapped folder keeps for itself;
-//! - whether that root is there to be read from (spec: EP-12) — a root whose
-//!   filesystem moved is not taken for one, whatever it holds: a scan that
-//!   finds it holding files re-stamps it, and the next run relocates then;
+//! - whether the file's own path is under a mapped root, and the new one, where
+//!   a root reaches it, through no name a mapped folder keeps for itself;
+//! - whether the file's root, and the new path's where it is another, is there
+//!   to be read from (spec: EP-12) — a root whose filesystem moved is not taken
+//!   for one, whatever it holds: a scan that finds it holding files re-stamps
+//!   it, and the next run relocates then;
+//! - whether the file can follow its Entry at all: a root reaches the new
+//!   path, and it is the file's own root or one that stands on the same
+//!   filesystem, as the filesystem identities the scans stamped say (spec:
+//!   EP-12). One that cannot follow **leaves** this device unless it was
+//!   edited: still as this device placed it, it is discarded into the
+//!   desktop's trash and its record forgotten ([`Relocation::Left`]), so the
+//!   Entry is in the Library and not on this device at its new path; an
+//!   edited one is kept and refused for its edit;
 //! - whether a symbolic link stands on the way to either path (spec: EP-8);
 //! - whether the file is still what this device placed: its length and
 //!   modification time as recorded, or its content the recorded hash
@@ -32,6 +41,10 @@
 //!   this device's, about to be relocated itself, is waited for, and two or more
 //!   waiting files that stand in each other's places are exchanged. Anything
 //!   else is a file this device did not place there, and nothing overwrites it.
+//!
+//! A rename the filesystems refuse as crossing from one to another — a bind
+//! mount or a subvolume below one root, or two roots no scan had told apart —
+//! is a file that cannot follow, and it leaves this device the same way.
 //!
 //! The file is relocated first and the record follows it: one rename on disk, then
 //! the record re-keyed to the new path. An interruption between the two leaves
@@ -97,9 +110,13 @@ mod discard;
 
 mod follow_gone;
 
+// Whether a file can follow its Entry, as the mappings tell it.
+mod follows;
+pub(crate) use follows::follows;
+
 /// The three capabilities over this device's disk a relocation is made
 /// through: the mapped folders as a walk reads them, the rename, and the trash
-/// a redundant copy goes to.
+/// a redundant copy, or one that cannot follow, goes to.
 #[derive(Clone, Copy)]
 pub(crate) struct LocalDisk<'a> {
     pub(crate) roots: &'a dyn MappedRoots,

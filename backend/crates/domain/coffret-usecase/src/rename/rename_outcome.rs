@@ -12,7 +12,7 @@ pub struct RenameOutcome {
     /// Entry that replaced the one planned (spec: EP-7); the record in
     /// [`commit`](Self::commit) is what the Library holds.
     pub renamed: Vec<RenamedPath>,
-    /// Whether the source named a folder — Entries under it — rather than one
+    /// Whether a source named a folder — Entries under it — rather than one
     /// Entry alone.
     pub folder: bool,
     /// The commit the renames landed in (spec: CP-1).

@@ -108,6 +108,43 @@ fn every_refusal() -> Vec<ApiError> {
             std::io::Error::from(std::io::ErrorKind::Unsupported),
         ))),
     ]);
+    // `refused_move`: every reason a move is refused for before anything is
+    // written — the set the Library does not admit, an edited file of this
+    // device's, and a file still on its way into the Library.
+    {
+        use coffret_device::{RenamePair, RenameRefusal};
+        let pair = |from: &str, to: &str| RenamePair::new(entry_path(from), entry_path(to));
+        refusals.extend(
+            [
+                RenameRefusal::NothingAt {
+                    path: entry_path("albums/gone"),
+                },
+                RenameRefusal::Overlapping {
+                    one: pair("albums/a.jpg", "kept/2026/a.jpg"),
+                    other: pair("albums/2026", "kept/2026"),
+                },
+                RenameRefusal::SamePath,
+                RenameRefusal::ReservedNamespace {
+                    path: entry_path(".coffret-derived/a.jpg"),
+                },
+                RenameRefusal::IntoItself,
+                RenameRefusal::DestinationTaken {
+                    path: entry_path("books/a.jpg"),
+                },
+                RenameRefusal::FileAndFolder {
+                    path: entry_path("books"),
+                },
+                RenameRefusal::Rule(coffret_usecase::RenameRule::PathTaken),
+            ]
+            .iter()
+            .map(ApiError::move_refused_by),
+        );
+        refusals.push(ApiError::move_of_edited(&[path()]));
+        refusals.push(ApiError::move_of_uploading(&[
+            path(),
+            entry_path("albums/autumn.jpg"),
+        ]));
+    }
     refusals.extend([
         ApiError::from(Error::Fetch {
             cause: Box::new(FetchError::Commit(CommitError::EpochActivated {

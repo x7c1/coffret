@@ -14,7 +14,7 @@
 // work up again: at a fill, a sync or a freeze that stopped, at a folder a
 // queue lost, and at a deletion another device's commit got in front of.
 
-import type { DeleteTarget, Fill, Logged, Refused, Step, TurnTaker } from '@coffret/api';
+import type { DeleteTarget, Fill, Logged, Move, Refused, Step, TurnTaker } from '@coffret/api';
 
 import { deletedLine, deletingLine } from './deleteEntries';
 import { discardedBooksLine, discardedLine, fillLine, freezeLine, syncLine } from './fill';
@@ -163,6 +163,9 @@ function runningLine(flow: TurnTaker, turns: Turns): Running | null {
       }
       return { key: 'delete', text: deletingLine(run, waits), progress: stepped(run.step) };
     }
+    // A move is never on record as running: its request answers it.
+    case 'move':
+      return null;
   }
 }
 
@@ -267,6 +270,8 @@ export function retryOf(logged: Logged, locked: boolean): Retry | null {
     }
     case 'discarded':
       return { flow: logged.queue, folder: logged.folder };
+    // A move is asked for again where it was made, not from the panel.
+    case 'move':
     case 'fetch':
       return null;
   }
@@ -408,6 +413,18 @@ function outcomeOf(logged: Logged): Outcome {
           ? 'notice'
           : 'success';
     }
+    case 'move': {
+      // A file that followed, or left this device, is what the person asked for.
+      const run = logged.run;
+      const found = run.findings.filter(
+        (finding) => finding.surfaced !== 'Relocated' && finding.surfaced !== 'RelocationLeft',
+      );
+      return run.status === 'stopped'
+        ? 'failure'
+        : found.length > 0 || run.unrelocated !== null
+          ? 'notice'
+          : 'success';
+    }
     case 'discarded':
     case 'fetch':
       return 'failure';
@@ -421,6 +438,7 @@ function refusalOf(logged: Logged): Refused | null {
     case 'sync':
     case 'freeze':
     case 'delete':
+    case 'move':
       return logged.run.stopped;
     case 'fetch':
       return logged.refused;
@@ -443,6 +461,8 @@ function textOf(logged: Logged): string {
       return freezeLine(logged.run) ?? '';
     case 'delete':
       return deletedLine(logged.run)?.text ?? '';
+    case 'move':
+      return movedLine(logged.run);
     case 'discarded':
       return (
         (logged.queue === 'fill'
@@ -452,6 +472,26 @@ function textOf(logged: Logged): string {
     case 'fetch':
       return `could not fetch ${logged.path} — ${logged.refused.message}`;
   }
+}
+
+/**
+ * What a move that ended says: what it moved, and what kept this device's
+ * files from following where something did; or what stopped it.
+ */
+function movedLine(run: Move): string {
+  const named =
+    run.pairs.length === 1
+      ? `${run.pairs[0].from} → ${run.pairs[0].to}`
+      : `${run.pairs.length} items`;
+  if (run.status === 'stopped') {
+    return `could not move ${named} — ${run.stopped.message}`;
+  }
+  const left = run.left === 0 ? '' : `; ${run.left} no longer on this device`;
+  const unrelocated =
+    run.unrelocated === null
+      ? ''
+      : `; this device's files did not follow yet — ${run.unrelocated.message}`;
+  return `moved ${named}${left}${unrelocated}`;
 }
 
 /**

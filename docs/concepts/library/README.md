@@ -93,7 +93,7 @@ refuses the run. Findings have two lifetimes:
 | Kind | Examples | Reported again |
 | --- | --- | --- |
 | Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused, a file awaiting relocation that could not be relocated | While a later run still observes the condition |
-| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash, a file relocated, a redundant waiting copy discarded | As the result of that attempt; later attempts report their own results |
+| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash, a file relocated, a file that could not follow a rename discarded into the desktop's trash as it left this device, a redundant waiting copy discarded | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
 leaving the reported conditions for attention (spec: PK-14, EP-10, EP-12,
@@ -188,9 +188,17 @@ control for a sync, since a drop starts one.
   person has seen its preview
 - rename (an Entry, or a folder — every Entry under it, each keeping the rest
   of its path — to a new Entry Path, in one [Journal](../journal/) record that
-  names each Entry it renames; no Container is written and no file's content is
-  read or uploaded) — from the command line, or by a sync that carries a local
-  rename into the Library
+  names each Entry it renames; one record may carry several such pairs of a
+  path and its new one; no Container is written and no file's content is
+  read or uploaded) — from the command line, by a sync that carries a local
+  rename into the Library, or by a move
+- move (a selection of files and folders to another folder, as a person asks
+  for it — the explorer's "Move to…", or a drag onto a folder — once they have
+  seen its preview: carried out as one rename, in one Journal record, of every
+  Entry under them, and then the relocation of this device's files of them,
+  each one following its Entry or leaving this device; refused whole where it
+  would lose an edited file or one the Library does not hold yet) — the
+  request, not an act on one Entry or one file (spec: FM-15, LA-30, LA-31)
 - carry (a local rename into the Library, as a sync does when a file this device
   placed is gone and the one file that appeared in its place under the same
   mapped root holds exactly its Entry's content: the sync's batch renames the
@@ -202,14 +210,18 @@ control for a sync, since a drop starts one.
 - discard (a departed file into the desktop's trash, during a sync, or right
   after the commit of the deletion this device made) — never *trash*, which is
   Storage's verb: a [Storage Object](../storage-object/) is trashed; and never
-  *move*: no act on an Entry or a file is called that — a rename changes an
+  *move*: no act on one Entry or one file is called that — a rename changes an
   Entry's path, including its folder, and the device holding its file
   relocates it
+- discard (a file awaiting relocation into the desktop's trash, as it leaves
+  this device because it cannot follow its Entry — unedited, and where no
+  mapping reaches the new path or the rename would cross filesystems)
 - relocate (a file awaiting relocation to its Entry's current path, during a
   sync or a fetch and before either scans or places anything, or right after
   the commit of the rename this device made) — one rename on
-  this device's disk, under the mapped root it stands in, and its
-  materialization record after it; never *move*, for the reason above
+  this device's disk, within the mapped root it stands in or across two mapped
+  roots on one filesystem, and its materialization record after it; never
+  *move*, for the reason above
 - remove (a folder below a mapped root that a run's discards or relocations
   emptied, once every one is made) — never *delete*, which is the Library's
   verb for Entries
@@ -365,12 +377,19 @@ control for a sync, since a drop starts one.
     the record notes where its Entry stands now. A sync or a fetch relocates it
     before it scans or places anything, and the device that made the rename
     relocates its own right after the commit: one rename to the Entry's current
-    path, under the same mapped root, and then the record follows, which ends
-    the wait. A file that cannot be relocated — its root unavailable; the file
+    path — within the mapped root it stands in, or across two mapped roots on
+    the same filesystem, as the filesystem identity a scan stamps for each root
+    says — and then the record follows, which ends the wait. A file that
+    cannot follow at all — no mapping of this device reaches the new path, the
+    root that does stands on another filesystem, or the rename is refused as
+    crossing filesystems — leaves this device unless it was edited: an
+    unedited one is discarded into the desktop's trash and its record
+    forgotten, so the Entry is in the Library and not on this device at its
+    new path, and an edited one stays where it is, waiting, and is reported.
+    A file that cannot be relocated this run — its root unavailable; the file
     edited since it was placed; the new path taken by something this device
     did not place, or by its own file of another Entry still waiting there;
-    the new path under another mapped root or on another filesystem; a
-    symbolic link on the way; a filesystem that offers no rename that never
+    a symbolic link on the way; a filesystem that offers no rename that never
     replaces — keeps waiting, is reported, and is tried again by the next run;
     nothing is overwritten, copied, or uploaded. Where this device already has
     its own copy of the Entry at the new path, the waiting one is redundant

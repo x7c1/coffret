@@ -24,6 +24,8 @@ import type {
   Work,
   Logged,
   LoggedKind,
+  Move,
+  MoveStatus,
   QueueFlow,
   ByteCount,
   Catalog,
@@ -54,7 +56,8 @@ import type {
   SyncStatus,
   TurnTaker,
 } from './work';
-import { workOf } from './work';
+import { moveOf, workOf } from './work';
+import type { MovePreview } from './move';
 import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
@@ -90,6 +93,7 @@ const KINDS: Record<RefusalKind, 'server' | 'host' | 'client'> = {
   no_such_route: 'server',
   declined: 'server',
   refused_placement: 'server',
+  refused_move: 'server',
   epoch: 'server',
   library_predates_format: 'server',
   conflict: 'server',
@@ -119,6 +123,16 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   surfaced: true,
   key_lost: true,
   pack_resident: true,
+  nothing_to_move: true,
+  overlapping: true,
+  same_path: true,
+  reserved_namespace: true,
+  into_itself: true,
+  destination_taken: true,
+  file_and_folder: true,
+  rename_rule: true,
+  edited: true,
+  uploading: true,
   unauthenticated: true,
 };
 
@@ -142,6 +156,7 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   DiscardRefused: 'finding',
   Relocated: 'finding',
   RelocationDiscarded: 'finding',
+  RelocationLeft: 'finding',
   RelocationRefused: 'finding',
   Renamed: 'finding',
   RenameRefused: 'finding',
@@ -168,12 +183,14 @@ const FILL_STATUSES: Literals<FillStatus> = {
 const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped: true };
 const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
 const DELETE_STATUSES: Literals<DeleteStatus> = { deleting: true, done: true, stopped: true };
-const TURN_TAKERS: Literals<TurnTaker> = { sync: true, freeze: true, delete: true };
+const MOVE_STATUSES: Literals<MoveStatus> = { done: true, stopped: true };
+const TURN_TAKERS: Literals<TurnTaker> = { sync: true, freeze: true, delete: true, move: true };
 const LOGGED_KINDS: Literals<LoggedKind> = {
   fill: true,
   sync: true,
   freeze: true,
   delete: true,
+  move: true,
   discarded: true,
   fetch: true,
 };
@@ -546,6 +563,39 @@ function deletion(value: unknown, where: string): Delete {
   };
 }
 
+function movePairs(value: unknown, where: string): { from: string; to: string }[] {
+  return list(value, where, (pair, at) => {
+    const fields = object(pair, at, ['from', 'to']);
+    return { from: string(fields.from, `${at}.from`), to: string(fields.to, `${at}.to`) };
+  });
+}
+
+function moved(value: unknown, where: string): Move {
+  const fields = object(value, where, [
+    'pairs',
+    'status',
+    'entries',
+    'relocated',
+    'left',
+    'unrelocated',
+    'findings',
+    'stopped',
+  ]);
+  const status = one(MOVE_STATUSES, fields.status, `${where}.status`);
+  if (status !== 'done' && fields.unrelocated !== null) {
+    throw new Error(`${where}: only a move that is done says what kept its files from following`);
+  }
+  return {
+    pairs: movePairs(fields.pairs, `${where}.pairs`),
+    entries: number(fields.entries, `${where}.entries`),
+    relocated: number(fields.relocated, `${where}.relocated`),
+    left: number(fields.left, `${where}.left`),
+    unrelocated: nullable(fields.unrelocated, (value) => refused(value, `${where}.unrelocated`)),
+    findings: list(fields.findings, `${where}.findings`, finding),
+    ...standing(MOVE_STATUSES, fields, where),
+  };
+}
+
 /** How the catalog stands: a refusal exactly where it is behind, and none elsewhere. */
 function catalog(value: unknown, where: string): Catalog {
   const fields = object(value, where, ['state', 'stopped']);
@@ -637,6 +687,8 @@ function logged(value: unknown, where: string): Logged {
       return { id, at, settled, kind, run: freeze(only('run').run, `${where}.run`) };
     case 'delete':
       return { id, at, settled, kind, run: deletion(only('run').run, `${where}.run`) };
+    case 'move':
+      return { id, at, settled, kind, run: moved(only('run').run, `${where}.run`) };
     case 'discarded': {
       const fields = only('queue', 'folder');
       return {
@@ -882,6 +934,7 @@ it('reads every work answer the server sends through the Work type', () => {
     SYNC_STATUSES,
     FREEZE_STATUSES,
     DELETE_STATUSES,
+    MOVE_STATUSES,
     TURN_TAKERS,
     LOGGED_KINDS,
     QUEUE_FLOWS,
@@ -1027,6 +1080,30 @@ it('reads every other answer the server sends through its type', () => {
       after_current: boolean(fields.after_current, 'delete_preview.after_current'),
     };
   })();
+  const movePreview: MovePreview = (() => {
+    const fields = object(answers.move_preview, 'move_preview', [
+      'pairs',
+      'entries',
+      'following',
+      'leaving',
+      'leaving_bytes',
+      'edited',
+      'uploading',
+      'refused',
+    ]);
+    return {
+      pairs: movePairs(fields.pairs, 'move_preview.pairs'),
+      entries: number(fields.entries, 'move_preview.entries'),
+      following: number(fields.following, 'move_preview.following'),
+      leaving: number(fields.leaving, 'move_preview.leaving'),
+      leaving_bytes: number(fields.leaving_bytes, 'move_preview.leaving_bytes'),
+      edited: folders(fields.edited, 'move_preview.edited'),
+      uploading: folders(fields.uploading, 'move_preview.uploading'),
+      refused: list(fields.refused, 'move_preview.refused', refused),
+    };
+  })();
+  const moveDone = moved(answers.moved, 'moved');
+  expect(moveOf(answers.moved as Parameters<typeof moveOf>[0])).toEqual(moveDone);
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -1054,6 +1131,10 @@ it('reads every other answer the server sends through its type', () => {
   expect(preview.files).toBeGreaterThan(0);
   expect(deletePreview.entries).toBeGreaterThan(0);
   expect(deletePreview.missing.length).toBeGreaterThan(0);
+  expect(movePreview.entries).toBeGreaterThan(0);
+  expect(movePreview.following).toBeGreaterThan(0);
+  expect(moveDone.status).toBe('done');
+  expect(moveDone.entries).toBe(movePreview.entries);
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

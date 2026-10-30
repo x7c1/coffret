@@ -10,14 +10,16 @@ use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
 use crate::relocate::LocalDisk;
 use crate::relocations::Relocations;
+use crate::rename::rename_pair::RenamePair;
 use crate::spool::Spool;
 
 /// Everything one run of [`rename_entries`](super::rename_entries) works from.
 ///
-/// The two ports, the epoch's keys, and the two Entry Paths: the one renamed
-/// — one Entry, or the folder of every Entry under it — and the one it is
-/// renamed to. No batch id: a rename writes no Container, and the
-/// [`spool`](Self::spool) it takes is only ever discarded from.
+/// The two ports, the epoch's keys, and the pairs of Entry Paths renamed: in
+/// each, the one renamed — one Entry, or the folder of every Entry under it —
+/// and the one it is renamed to, all of them committed in one Journal record.
+/// No batch id: a rename writes no Container, and the [`spool`](Self::spool) it
+/// takes is only ever discarded from.
 ///
 /// And, where the device hands them over with
 /// [`with_local_disk`](Self::with_local_disk), its mapped folders, the rename a
@@ -41,11 +43,9 @@ pub struct RenameRequest<'a> {
     /// their Entries would leave them where they are rather than relocate them
     /// (spec: EP-10).
     pub spool: &'a dyn Spool,
-    /// The Entry Path renamed: an Entry, a folder of Entries, or both where
-    /// the Library holds an Entry at a path it also holds Entries under.
-    pub from: EntryPath,
-    /// The Entry Path it is renamed to.
-    pub to: EntryPath,
+    /// What is renamed to what, committed together or refused together
+    /// (spec: FM-15).
+    pub pairs: Vec<RenamePair>,
     /// Where the run says which phase it is in, and how far through the
     /// commit it is.
     pub progress: &'a dyn Progress,
@@ -72,13 +72,32 @@ impl<'a> RenameRequest<'a> {
         to: EntryPath,
         now: DeviceTime,
     ) -> Self {
+        Self::of_pairs(
+            store,
+            index,
+            keys,
+            spool,
+            vec![RenamePair::new(from, to)],
+            now,
+        )
+    }
+
+    /// A run renaming every pair of `pairs` in one Journal record, refused as
+    /// a whole where any of them is (spec: FM-15).
+    pub fn of_pairs(
+        store: &'a dyn ObjectStore,
+        index: &'a dyn Index,
+        keys: &'a LibraryKeys,
+        spool: &'a dyn Spool,
+        pairs: Vec<RenamePair>,
+        now: DeviceTime,
+    ) -> Self {
         Self {
             store,
             index,
             keys,
             spool,
-            from,
-            to,
+            pairs,
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
             now,

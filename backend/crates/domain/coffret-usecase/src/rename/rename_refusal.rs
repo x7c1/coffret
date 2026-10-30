@@ -4,6 +4,7 @@ use std::fmt;
 use coffret_model::{EntryPath, Redacted};
 
 use crate::index_error::RenameRule;
+use crate::rename::rename_pair::RenamePair;
 
 /// Why a rename was refused before anything was written (spec: FM-15, EP-5).
 ///
@@ -17,6 +18,20 @@ use crate::index_error::RenameRule;
 /// (spec: EL-1).
 #[derive(Debug, Clone)]
 pub enum RenameRefusal {
+    /// The request named no `(from, to)` at all.
+    Nothing,
+    /// Two of the pairs one request names overlap: one source named with two
+    /// destinations, two pairs with one destination, or a destination under
+    /// another pair's destination. A source under another pair's source is
+    /// not among them: it is one move of the folder (spec: FM-15, EP-18).
+    Overlapping {
+        /// One of the two pairs: where a destination is under another's, the
+        /// one whose destination is under.
+        one: RenamePair,
+        /// The other: where a destination is under another's, the one whose
+        /// destination it is under.
+        other: RenamePair,
+    },
     /// The Library holds no current Entry at the source path or under it.
     NothingAt {
         /// The source path.
@@ -54,6 +69,22 @@ pub enum RenameRefusal {
 impl fmt::Display for RenameRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Nothing => f.write_str("nothing was named to rename"),
+            Self::Overlapping { one, other } if one.from == other.from => write!(
+                f,
+                "\"{}\" is named to be renamed to both \"{}\" and \"{}\"",
+                one.from, one.to, other.to
+            ),
+            Self::Overlapping { one, other } if one.to == other.to => write!(
+                f,
+                "\"{}\" and \"{}\" are both named to be renamed to \"{}\"",
+                one.from, other.from, one.to
+            ),
+            Self::Overlapping { one, other } => write!(
+                f,
+                "\"{}\" would be renamed to \"{}\", inside \"{}\", which \"{}\" is renamed to",
+                one.from, one.to, other.to, other.from
+            ),
             Self::NothingAt { path } => {
                 write!(f, "the Library holds no Entry at or under \"{path}\"")
             }
@@ -84,6 +115,12 @@ impl Redacted for RenameRefusal {
     /// The variant and the length of the path it names, never the path.
     fn redacted(&self) -> String {
         match self {
+            Self::Nothing => "Nothing".to_owned(),
+            Self::Overlapping { one, other } => format!(
+                "Overlapping(one={}, other={})",
+                one.redacted(),
+                other.redacted()
+            ),
             Self::NothingAt { path } => format!("NothingAt(path_len={})", path.as_str().len()),
             Self::SamePath => "SamePath".to_owned(),
             Self::ReservedNamespace { path } => {
