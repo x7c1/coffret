@@ -21,19 +21,20 @@ import { Banner, dropGround, DropPill, dropOutline } from './Banner';
 import { canvasMeasure, columnWidth, type Measured } from './columns';
 import { counted, type Described } from './details';
 import { useDragOver } from './dragOver';
-import { landingOf, placeOf } from './destination';
+import { landingOf } from './destination';
 import { droppedFiles, type Drop } from './drop';
 import { dropOutcome, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
 import { CHOOSE_A_FOLDER, noFolderChosenLine } from './mapping';
-import { NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
+import { parentOf, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { ROWS_AHEAD, scrollAhead } from './scrollAhead';
 import {
   clicked,
   clickOf,
   isSelected,
+  NOTHING_SELECTED,
   rightClicked,
   selectedRows,
   stepped,
@@ -41,11 +42,13 @@ import {
   type Picked,
   type Selection,
 } from './selection';
-import { rowIconOf, type RowIcon } from './rowIcon';
+import { FOLDER_ICON_PATH, rowIconOf, type RowIcon } from './rowIcon';
 import { COLOR, FONT } from './theme';
 import {
   arrowed,
   contextOf,
+  folderKey,
+  keyed,
   toggled,
   type Arrow,
   type FileRow,
@@ -74,12 +77,16 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * enters it, `←` closes one and then climbs to the folder above, and `Enter`
  * opens the focused row in the reader's sheet — for an image, or a folder
  * holding images — which then follows the focus (see
- * [`ReaderView`](./ReaderView)). The list scrolls ahead of the focus (see
- * [`scrollAhead`](./scrollAhead)). A click focuses a row, a double-click opens
- * it, and a press on the disclosure button opens or closes the folder without
- * moving the focus — except out of a folder being closed over it. On a touch
- * screen a tap opens, since a double tap is not a gesture a touch screen
- * reliably hands over.
+ * [`ReaderView`](./ReaderView)); on a folder it also opens the folder, so
+ * `↓` goes on into its files with the sheet following. The list scrolls ahead
+ * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
+ * double-click opens it as `Enter` does, and a press on the disclosure button
+ * opens or closes the folder without moving the focus — except out of a folder
+ * being closed over it. On a touch screen a tap opens, since a double tap is
+ * not a gesture a touch screen reliably hands over. `Escape` while the sheet is
+ * closed climbs to the folder the focused row stands in, and from a top-level
+ * row lets go of the focus; so does a click on the empty space below the rows.
+ * With nothing focused the header's **+** is about the Library root again.
  *
  * Rows are selected together with modifier keys, as in a desktop file manager
  * (see [`selection`](./selection)): Shift+click selects a range from the
@@ -97,13 +104,8 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * [`contextOf`](./tree)), and the block over the rows speaks for it: whether a
  * folder of this device is chosen for it, and whether it is being packed. A
  * folder's own actions are in its row's menu; the Library root has no row to
- * open a menu on, so while a mapping reaches the root a bar over the rows
- * offers its one, "New folder…", which always makes the folder at the root
- * ("Pack this folder…" is never the root's, see
- * [`packOffered`](./packFolder)). The bar stands whatever the focus is on, so
- * that opening or closing a top-level folder does not slide every row below it
- * by the bar's height, out from under the pointer that just clicked. Where no
- * mapping reaches the root there is no bar.
+ * open a menu on, and its one, "New folder…", is in the header's **+** menu
+ * ("Pack this folder…" is never the root's, see [`packOffered`](./packFolder)).
  *
  * Each row's state is the listing's answer, with what the server is doing
  * about it over the top: `present`, `remote` and `added` are the listing's to
@@ -159,6 +161,7 @@ export function TreeTable({
   onAskAgain,
   measure,
   areaRef,
+  escapeLetsGo = true,
 }: {
   /** Every row on show, top to bottom (see [`treeRows`](./tree)). */
   rows: readonly TreeRow[];
@@ -252,6 +255,11 @@ export function TreeTable({
    * tree, so that the arrows walk the rows the reader's sheet follows.
    */
   areaRef?: RefObject<HTMLDivElement>;
+  /**
+   * Whether `Escape` is the tree's to let go of the focus with: not while the
+   * reader's sheet is open, whose `Escape` closes it.
+   */
+  escapeLetsGo?: boolean;
 }) {
   const own = useRef<HTMLDivElement>(null);
   const scroller = areaRef ?? own;
@@ -349,11 +357,6 @@ export function TreeTable({
   // What is happening to this folder, said over the rows because it is true of
   // every one of them: the pages go up together, as Packs.
   const packing = listing !== null && freezingHere(freeze, listing.path);
-  // The bar's "New folder…": the root's only, and only where a mapping reaches
-  // the root. Read off the root's own listing rather than the folder the focus
-  // is in, so the bar does not come and go as the focus moves.
-  const rootListing = listingOf('');
-  const offersNewFolder = rootListing !== null && rootListing.mapped;
   const emptyHere =
     listing !== null && listing.files.length === 0 && childFolders === 0;
 
@@ -393,8 +396,37 @@ export function TreeTable({
     void droppedFiles(event.dataTransfer).then((drop) => onAdd(target, drop), onUnreadable);
   };
 
-  const openRow = (row: FolderRow | FileRow) =>
+  // Opening a folder also opens it in the tree, so that the arrows go on
+  // straight into its files and the sheet, where it opened, follows them.
+  const openRow = (row: FolderRow | FileRow) => {
+    if (row.kind === 'folder' && !state.expanded.has(row.path)) {
+      onChange(toggled({ ...state, focus: row.key }, row.path));
+    }
     opened(row, { onOpenFolder, onOpenFile, onUnsupported, onUnmapped });
+  };
+  // `Escape` climbs: the focus goes to the folder the focused row stands in, and
+  // from a top-level row, which stands in the root, it is let go of.
+  const climbOrLetGo = (focus: string) => {
+    const parent = parentOf(keyed(focus).path);
+    if (parent === '') {
+      letGo();
+      return;
+    }
+    onChange({ ...state, focus: folderKey(parent) });
+    if (selection.keys.size > 0) {
+      onSelect(NOTHING_SELECTED);
+    }
+  };
+  // Nothing focused: the screen's actions — the header's **+**, a drop on the
+  // list's empty space — are about the Library root again.
+  const letGo = () => {
+    if (state.focus !== null) {
+      onChange({ ...state, focus: null });
+    }
+    if (selection.keys.size > 0) {
+      onSelect(NOTHING_SELECTED);
+    }
+  };
   const focused = rows.find(
     (row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === state.focus,
   );
@@ -414,6 +446,13 @@ export function TreeTable({
       if (focused !== undefined) {
         event.preventDefault();
         openRow(focused);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      if (escapeLetsGo && state.focus !== null) {
+        event.preventDefault();
+        climbOrLetGo(state.focus);
       }
       return;
     }
@@ -496,11 +535,12 @@ export function TreeTable({
       measured,
       2 * CELL_PAD,
     ),
+    // Its right edge kept close to the "⋮" beside it, which is about the same row.
     modified: columnWidth(
       'Modified',
       values.map((value) => value.modified),
       measured,
-      2 * CELL_PAD,
+      CELL_PAD + MODIFIED_END_PAD,
     ),
   };
   const columns = <Columns widths={widths} />;
@@ -524,6 +564,13 @@ export function TreeTable({
         onKeyDown={onKeyDown}
         onPointerDown={() => {
           pressed.current = true;
+        }}
+        // A click on the list's empty space, below the last row, lets go of
+        // the focus, as a file manager's does.
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            letGo();
+          }
         }}
         onFocus={onFocus}
         onBlur={(event) => {
@@ -552,22 +599,10 @@ export function TreeTable({
           outlineOffset: -2,
         }}
       >
-        {/* The bar and the banners stay at the top as the list scrolls,
+        {/* The banners stay at the top as the list scrolls,
             together: every one of them is true of the whole folder rather than
             of whichever rows happen to be in view. */}
         <div ref={block} style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-          {offersNewFolder && (
-            <div style={BAR}>
-              <button
-                type="button"
-                title={`New folder in ${placeOf('')}`}
-                onClick={() => onNewFolder('')}
-                style={BAR_BUTTON}
-              >
-                {NEW_FOLDER}
-              </button>
-            </div>
-          )}
           {sayUnmapped && listing !== null && (
             <Unmapped
               root={root}
@@ -592,7 +627,7 @@ export function TreeTable({
                 <th style={HEAD}>
                   <span style={HIDDEN}>On this device</span>
                 </th>
-                <th style={HEAD}>Modified</th>
+                <th style={{ ...HEAD, paddingRight: MODIFIED_END_PAD }}>Modified</th>
                 <th style={HEAD} />
               </tr>
             </thead>
@@ -715,8 +750,10 @@ export interface Openers {
  * the sheet is open it follows the focus onto any row, and says there what it
  * cannot draw.
  *
- * Opening never opens or closes a folder: a folder opened is shown in the
- * sheet, its cover, with the focus left on its row.
+ * A folder opened is shown in the sheet, its cover, with the focus left on its
+ * row; the tree's `Enter`, double-click and Open also open the folder in the
+ * tree (see `openRow`), so the arrows go on into its files. Opening never
+ * closes a folder.
  */
 export function opened(row: FolderRow | FileRow, openers: Openers): void {
   if (row.kind === 'folder') {
@@ -920,7 +957,12 @@ function Row({
           {folder?.incoming === true && <span style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>adding…</span>}
         </span>
       </td>
-      <td style={{ ...CELL, textAlign: 'right', color: ink(COLOR.dim) }}>
+      {/* A folder's size is the total of everything under it, drawn a step
+          fainter than a file's so the two are not read as the same thing. */}
+      <td
+        title={folder !== null && values.size !== '' ? FOLDER_SIZE_TITLE : undefined}
+        style={{ ...CELL, textAlign: 'right', color: ink(folder !== null ? COLOR.faint : COLOR.dim) }}
+      >
         {values.size}
       </td>
       <td style={{ ...CELL, textAlign: 'center', textOverflow: 'clip', padding: `0 ${DEVICE_PAD}px` }}>
@@ -930,7 +972,7 @@ function Row({
           <Device state={shown.state} message={shown.message} onAccent={onAccent} />
         ) : null}
       </td>
-      <td style={{ ...CELL, color: ink(COLOR.dim) }}>{values.modified}</td>
+      <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.modified}</td>
       <MenuCell name={row.name} offers={offers} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
@@ -1064,7 +1106,7 @@ function RowIconMark({ icon }: { icon: RowIcon }) {
     case 'folder':
       return (
         <svg role="img" aria-label="folder" {...shared}>
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <path d={FOLDER_ICON_PATH} />
         </svg>
       );
     case 'image':
@@ -1131,7 +1173,7 @@ function MenuCell({
   const stop = offers ? (event: MouseEvent) => event.stopPropagation() : undefined;
   return (
     <td
-      style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 4px' }}
+      style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 2px' }}
       onClick={stop}
       onDoubleClick={stop}
     >
@@ -1239,7 +1281,7 @@ function Columns({ widths }: { widths: { size: number; modified: number } }) {
       <col style={{ width: widths.size }} />
       <col style={{ width: ICON + 2 * DEVICE_PAD }} />
       <col style={{ width: widths.modified }} />
-      <col style={{ width: MENU_BUTTON_SIZE + 8 }} />
+      <col style={{ width: MENU_BUTTON_SIZE + 4 }} />
     </colgroup>
   );
 }
@@ -1251,6 +1293,12 @@ const ROW_FONT = `13px ${FONT}`;
 /** The padding either side of a value. */
 const CELL_PAD = 10;
 
+/** What a folder's size is, said where the pointer rests on it. */
+export const FOLDER_SIZE_TITLE = 'Total of everything inside';
+
+/** The room after the modified time, less than a cell's: the row's "⋮" follows it. */
+const MODIFIED_END_PAD = 2;
+
 /** How wide an icon is drawn, and the room either side of one in its column. */
 const ICON = 16;
 const DEVICE_PAD = 6;
@@ -1258,9 +1306,9 @@ const DEVICE_PAD = 6;
 /** The room a disclosure button takes, kept on a row without one. */
 const DISCLOSURE = 18;
 
-/** How far in a row at `depth` starts: 20px a level. */
+/** How far in a row at `depth` starts: 14px a level. */
 function indent(depth: number): number {
-  return 6 + depth * 20;
+  return 6 + depth * 14;
 }
 
 /** The least height of a row. */
@@ -1339,16 +1387,7 @@ const MENU_BUTTON: CSSProperties = {
   cursor: 'pointer',
 };
 
-/** The Library root's way to "New folder…", over the rows. */
-const BAR: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  alignItems: 'center',
-  padding: '4px 12px',
-  background: COLOR.panel,
-  borderBottom: `1px solid ${COLOR.border}`,
-};
-
+/** A small button inside a row, such as "ask again" on a folder whose listing was refused. */
 const BAR_BUTTON: CSSProperties = {
   border: `1px solid ${COLOR.border}`,
   background: 'transparent',

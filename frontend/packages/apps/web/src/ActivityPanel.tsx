@@ -120,6 +120,7 @@ export function ActivityPanel({
   locked: UnlockOffer | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const listId = useId();
   const seen = useFirstSeen(running);
   const gestured = useLastGesture();
@@ -154,29 +155,53 @@ export function ActivityPanel({
   return (
     <footer aria-label="Activity" style={PANEL}>
       <div style={ROW}>
-        <button
-          onClick={() => setOpen((was) => !was)}
-          aria-expanded={open}
-          aria-controls={listId}
-          style={TOGGLE}
-        >
-          <svg
-            aria-hidden="true"
-            width={12}
-            height={12}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ display: 'block', transform: open ? 'rotate(90deg)' : undefined }}
+        {/* The toggle and what it is about, kept together: the summary reads
+            as the icon's words, so it stands closer to the icon than the row's
+            other parts stand to each other. */}
+        <span style={LEAD}>
+          <button
+            onClick={() => setOpen((was) => !was)}
+            aria-expanded={open}
+            aria-controls={listId}
+            // An icon rather than the word: a clock turned back, for the work
+            // that ran — what the panel keeps once a run is over.
+            aria-label="Activity"
+            title="Activity"
+            // The one control that opens and closes the panel: pressed in — a
+            // tint and the icon in the accent — while the panel is open, and
+            // tinted under the pointer, so no chevron stands beside it.
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              ...TOGGLE,
+              background: open || hovered ? COLOR.hover : 'transparent',
+              color: open ? COLOR.accent : COLOR.text,
+            }}
           >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-          <span style={{ color: COLOR.text, fontWeight: 600 }}>Activity</span>
-        </button>
-        {locked !== null ? (
+            <svg
+              aria-hidden="true"
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ display: 'block' }}
+            >
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          </button>
+          {locked === null && !open && row.text !== '' && (
+            <span style={{ ...SUMMARY, color: summaryColour(row, running.length > 0) }} title={row.text}>
+              {row.text}
+            </span>
+          )}
+        </span>
+        {locked !== null && (
           <>
             <span style={{ color: COLOR.refused }}>{LOCKED}</span>
             <button
@@ -192,18 +217,8 @@ export function ActivityPanel({
               locked.said !== null && <span style={{ color: COLOR.text }}>{locked.said}</span>
             )}
           </>
-        ) : (
-          // Open, the groups below say all of it, and the row says it again
-          // nowhere: one sentence drawn twice is one a person reads twice.
-          !open && (
-            <>
-              <span style={{ ...SUMMARY, color: summaryColour(row, running.length > 0) }} title={row.text}>
-                {row.text}
-              </span>
-              {row.progress !== null && <Bar progress={row.progress} width={96} />}
-            </>
-          )
         )}
+        {locked === null && !open && row.progress !== null && <Bar progress={row.progress} width={96} />}
         {badge !== null && (
           <button
             onClick={showFailures}
@@ -224,12 +239,14 @@ export function ActivityPanel({
               in the summary: a refresh that is over has nothing to stop
               saying, and in the summary it would sit over the next run's
               progress. */}
-          {refresh.refused !== null ? (
-            <span style={{ color: COLOR.refused }}>{refresh.refused}</span>
-          ) : (
-            refresh.said !== null && <span>{refresh.said}</span>
-          )}
-          <SyncIcon running={refresh.running} waiting={refresh.waiting} onPress={refresh.ask} />
+          <span style={LEAD}>
+            {refresh.refused !== null ? (
+              <span style={{ color: COLOR.refused }}>{refresh.refused}</span>
+            ) : (
+              refresh.said !== null && <span>{refresh.said}</span>
+            )}
+            <SyncIcon running={refresh.running} waiting={refresh.waiting} onPress={refresh.ask} />
+          </span>
           <Shortcuts />
         </span>
       </div>
@@ -429,27 +446,37 @@ function Bar({ progress, width }: { progress: number; width: number }) {
 }
 
 /**
- * The **?** at the panel's right end, and the tree's keyboard shortcuts while
- * it is hovered or focused — the ones the tree binds, and no others.
+ * The tree's keyboard shortcuts — the ones the tree binds, and no others —
+ * shown over the panel's right end while `?` is pressed and gone again at the
+ * next key or press. Nothing on the screen stands for them: they are learned
+ * once, and a mark kept on show for them would outstay that.
+ *
+ * Not while typing (a `?` in a name field is a character) or while a dialog
+ * stands over the screen, whose keys are its own.
  */
 function Shortcuts() {
   const [shown, setShown] = useState(false);
-  const id = useId();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '?' && !typing(event.target) && document.querySelector('[role="dialog"]') === null) {
+        event.preventDefault();
+        setShown((was) => !was);
+        return;
+      }
+      setShown(false);
+    };
+    const onPointerDown = () => setShown(false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, []);
   return (
-    <span style={{ position: 'relative' }}>
-      <button
-        aria-label="Keyboard shortcuts"
-        aria-describedby={shown ? id : undefined}
-        onMouseEnter={() => setShown(true)}
-        onMouseLeave={() => setShown(false)}
-        onFocus={() => setShown(true)}
-        onBlur={() => setShown(false)}
-        style={{ ...ICON_BUTTON, borderRadius: '50%', border: `1px solid ${COLOR.control}` }}
-      >
-        ?
-      </button>
+    <span style={{ position: 'relative', alignSelf: 'stretch' }}>
       {shown && (
-        <div role="tooltip" id={id} style={TOOLTIP}>
+        <div role="tooltip" aria-label="Keyboard shortcuts" style={TOOLTIP}>
           <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px' }}>
             {SHORTCUTS.map(([keys, what]) => (
               <div key={keys} style={{ display: 'contents' }}>
@@ -464,18 +491,27 @@ function Shortcuts() {
   );
 }
 
+/** Whether a key pressed on `target` goes into text: a field, or anything editable. */
+function typing(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  );
+}
+
 /**
- * The tree's keyboard shortcuts, as the **?** lists them: what the tree and
- * the reader bind (see `TreeTable` and `ReaderView`), written here once.
+ * The tree's keyboard shortcuts, as `?` lists them: what the tree and the
+ * reader bind (see `TreeTable` and `ReaderView`), written here once.
  */
 export const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['↑ ↓', 'move'],
   ['→', 'expand, or go in'],
   ['←', 'collapse, or go to the parent'],
   ['Enter', 'open in the reader'],
-  ['Esc', 'close the reader'],
+  ['Esc', 'close the reader, or go to the parent'],
   ['Shift ↑ ↓, Shift / ⌘ (Ctrl) click', 'select several'],
   ['Right-click', 'actions'],
+  ['?', 'show these keys'],
 ];
 
 /**
@@ -564,23 +600,43 @@ const PANEL = {
   minHeight: 0,
 } as const;
 
+/**
+ * An icon button and the words that go with it: the toggle and its summary,
+ * and the sync icon and what its last asking came to. The button's square
+ * holds 6px beside the icon already, so a gap of 2 puts the words 8px from the
+ * icon itself.
+ */
+const LEAD = {
+  display: 'flex',
+  gap: 2,
+  alignItems: 'center',
+  minWidth: 0,
+} as const;
+
+/** The row's parts, 12px apart: the toggle and its words, the progress bar, the badge, and the icons at the end. */
 const ROW = {
   display: 'flex',
   gap: 12,
   alignItems: 'center',
   boxSizing: 'border-box',
   minHeight: 36,
-  padding: '0 8px 0 16px',
+  // Less at the left than at a text row's, since the toggle's square holds
+  // room around its icon: the icon itself starts 16px in.
+  padding: '0 8px 0 10px',
   minWidth: 0,
 } as const;
 
+/** The panel's open and close: square, as wide as the icon buttons at the row's right end. */
 const TOGGLE = {
-  display: 'flex',
-  gap: 6,
+  flex: '0 0 auto',
+  display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
+  boxSizing: 'border-box',
+  width: 28,
+  height: 28,
   border: 'none',
-  background: 'none',
-  color: COLOR.dim,
+  borderRadius: 6,
   font: 'inherit',
   padding: 0,
   cursor: 'pointer',
@@ -606,10 +662,11 @@ const BADGE = {
   cursor: 'pointer',
 } as const;
 
+/** The row's right end. Its icon buttons' squares hold room around their icons, so 4px between them is enough. */
 const END = {
   marginLeft: 'auto',
   display: 'flex',
-  gap: 12,
+  gap: 4,
   alignItems: 'center',
   flex: '0 0 auto',
 } as const;

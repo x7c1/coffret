@@ -1,5 +1,7 @@
 import { useEffect, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 
+import { LIBRARY_ROOT } from './location';
+import { FOLDER_ICON_PATH } from './rowIcon';
 import { COLOR, SHADOW } from './theme';
 
 /**
@@ -19,6 +21,7 @@ import { COLOR, SHADOW } from './theme';
  */
 export function Dialog({
   title,
+  heading,
   onCancel,
   onSubmit,
   actions,
@@ -28,6 +31,11 @@ export function Dialog({
 }: {
   /** The question, as the heading and as what the dialog is read out as. */
   title: string;
+  /**
+   * The heading as drawn, where it sets a name apart from the words around it
+   * (see [`Place`](#Place)); `title` is still what the dialog is read out as.
+   */
+  heading?: ReactNode;
   onCancel: () => void;
   onSubmit?: (event: FormEvent) => void;
   /** The answers, in the order they stand left to right. */
@@ -53,7 +61,7 @@ export function Dialog({
 
   const body = (
     <>
-      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' }}>{title}</h2>
+      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' }}>{heading ?? title}</h2>
       <div style={BODY}>{children}</div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
         {actions}
@@ -83,6 +91,50 @@ export function Dialog({
     </div>
   );
 }
+
+/**
+ * A folder named in a dialog's heading, set apart from the words of it: on a
+ * line of its own, a folder icon and the path in a tinted box, in the body's
+ * size and weight, so a name such as "Series A" is not read as part of the
+ * sentence. The Library root is named as the header names it.
+ */
+export function Place({ path }: { path: string }) {
+  return (
+    <span data-testid="place" style={PLACE}>
+      <svg
+        aria-hidden
+        width={14}
+        height={14}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        style={{ flex: '0 0 auto', color: COLOR.dim }}
+      >
+        <path d={FOLDER_ICON_PATH} />
+      </svg>
+      <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{path === '' ? LIBRARY_ROOT : path}</span>
+    </span>
+  );
+}
+
+const PLACE: CSSProperties = {
+  // A line of its own under the words of the heading, in the body's size and
+  // weight: the heading asks, and this names where.
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: 'fit-content',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  marginTop: 8,
+  padding: '4px 10px',
+  border: `1px solid ${COLOR.border}`,
+  borderRadius: 6,
+  background: COLOR.ground,
+  fontSize: 14,
+  fontWeight: 400,
+};
 
 /** A line of the dialog's body. */
 export const LINE: CSSProperties = { margin: 0 };

@@ -17,3 +17,6 @@ export function rowIconOf(row: FolderRow | FileRow): RowIcon {
   }
   return row.file.openable ? 'image' : 'file';
 }
+
+/** The folder icon's outline, in a 24px viewBox: drawn by the tree's rows and by a folder named in a dialog. */
+export const FOLDER_ICON_PATH = 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z';

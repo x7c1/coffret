@@ -10,7 +10,7 @@ import { TRY_AGAIN } from './Region';
 import { NOTHING_SELECTED, type Selection } from './selection';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
 import { COLOR } from './theme';
-import { EMPTY_MAPPED_ROOT, ON_THIS_DEVICE, TreeTable } from './TreeTable';
+import { EMPTY_MAPPED_ROOT, FOLDER_SIZE_TITLE, ON_THIS_DEVICE, TreeTable } from './TreeTable';
 
 afterEach(cleanup);
 
@@ -239,8 +239,8 @@ describe('one tree', () => {
     const nameCell = (title: string) =>
       screen.getByTitle(title).querySelector('td') as HTMLTableCellElement;
     expect(nameCell('albums').style.paddingLeft).toBe('6px');
-    expect(nameCell('2026').style.paddingLeft).toBe('26px');
-    expect(nameCell('cover.png').style.paddingLeft).toBe('26px');
+    expect(nameCell('2026').style.paddingLeft).toBe('20px');
+    expect(nameCell('cover.png').style.paddingLeft).toBe('20px');
   });
 
   // Each value column is as wide as the widest of its heading and its values.
@@ -251,7 +251,7 @@ describe('one tree', () => {
     );
     // `999.9 MB` is 8 characters at 8 a character, and 20 of padding; `—` is
     // narrower than `Modified`, which is 8 at 6.
-    expect(widths).toEqual(['', '84px', '28px', '68px', '36px']);
+    expect(widths).toEqual(['', '84px', '28px', '60px', '32px']);
   });
 
   // A folder's Size and Modified are the Library's about everything below it,
@@ -271,7 +271,18 @@ describe('one tree', () => {
     const widths = [...document.querySelector('table')!.querySelectorAll('col')].map(
       (col) => (col as HTMLElement).style.width,
     );
-    expect(widths.slice(1, 4)).toEqual(['84px', '28px', '148px']);
+    expect(widths.slice(1, 4)).toEqual(['84px', '28px', '140px']);
+  });
+
+  // A folder's size is a total, drawn a step fainter than a file's own and said
+  // so where the pointer rests on it.
+  it("draws a folder's size fainter than a file's, with what it totals in its title", () => {
+    mount(listing({ folders: [folder('2026', { size: 2_000 })], files: [file('cover.png', { size: 1_000 })] }));
+    const sizeCell = (title: string) => screen.getByTitle(title).querySelectorAll('td')[1] as HTMLTableCellElement;
+    expect(sizeCell('2026').style.color).toBe(resolved(COLOR.faint));
+    expect(sizeCell('2026').title).toBe(FOLDER_SIZE_TITLE);
+    expect(sizeCell('cover.png').style.color).toBe(resolved(COLOR.dim));
+    expect(sizeCell('cover.png').title).toBe('');
   });
 });
 
@@ -332,10 +343,13 @@ describe('the mouse on the tree', () => {
 
     fireEvent.doubleClick(screen.getByTitle('cover.png'));
     expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
-    // A double-click on a folder opens it in the reader, and does not expand it.
+    // A double-click on a folder opens it in the reader and in the tree, with
+    // the focus on it, so the arrows go on into its files.
     fireEvent.doubleClick(screen.getByTitle('2026'));
     expect(onOpenFolder).toHaveBeenCalledWith('albums/2026');
-    expect(screen.getByLabelText('expand 2026')).toBeTruthy();
+    const last = onChange.mock.calls.at(-1)?.[0];
+    expect(last.focus).toBe(folderKey('albums/2026'));
+    expect([...last.expanded]).toContain('albums/2026');
   });
 
   it('opens and closes a folder from its disclosure button without moving the focus', () => {
@@ -457,36 +471,14 @@ describe('the block over the rows', () => {
     expect(said()).toContain('this folder is empty');
   });
 
-  // "New folder…" over the rows is how a path is prepared under the Library
-  // root, which has no row of its own; a folder that has a row offers it, and
-  // "Pack this folder…", from the row's menu instead.
-  it('offers the root\'s "New folder…" over the rows while the Library root is mapped', () => {
-    const { onNewFolder } = mount(listing({ path: '' }));
-    const bar = screen.getByRole('button', { name: 'New folder…' });
-    expect(bar.getAttribute('title')).toBe('New folder in the Library');
-    fireEvent.click(bar);
-    expect(onNewFolder).toHaveBeenCalledWith('');
-    cleanup();
-    mount(listing({ path: '', mapped: false }));
+  // The Library root's "New folder…" is the header's **+** menu's; nothing over
+  // the rows offers it, and a folder's own actions are in its row's menu.
+  it('offers no "New folder…" or "Pack this folder…" over the rows', () => {
+    mount(listing({ path: '' }));
     expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
     cleanup();
-    // Nor where the focus is deeper but the root is still not mapped.
-    mount(listing({ path: 'books/vol-1', mapped: false, files: [file('page.jpg', {}, 'books/vol-1')] }), {
-      more: [listing({ path: '', mapped: false, folders: [folder('books', { mapped: false }, '')] })],
-    });
+    mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
     expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
-  });
-
-  // The bar stays put as the focus moves below the root, so opening a
-  // top-level folder does not slide the rows under the pointer; and it still
-  // makes the folder at the root, never in the folder the focus is in.
-  it('keeps the root\'s "New folder…" over the rows with the focus in a folder below it', () => {
-    const { onNewFolder } = mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
-    const bar = screen.getByRole('button', { name: 'New folder…' });
-    expect(bar.getAttribute('title')).toBe('New folder in the Library');
-    fireEvent.click(bar);
-    expect(onNewFolder).toHaveBeenCalledWith('');
-    // A folder's own actions stay in its row's menu.
     expect(screen.queryByRole('button', { name: 'Pack this folder…' })).toBeNull();
   });
 });

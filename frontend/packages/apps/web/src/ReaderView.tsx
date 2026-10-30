@@ -348,11 +348,14 @@ function Body({
 function Stack({ children }: { children: ReactNode }) {
   return (
     <div style={{ position: 'relative', width: STACK_WIDTH, height: STACK_HEIGHT, maxWidth: '100%' }}>
-      {[6, -4].map((turn) => (
+      {[
+        { turn: 6, ink: SHEET_COLOR.stackFar },
+        { turn: -4, ink: SHEET_COLOR.stackNear },
+      ].map(({ turn, ink }) => (
         <div
           key={turn}
           aria-hidden
-          style={{ ...STACK_SHEET, transform: `rotate(${turn}deg)` }}
+          style={{ ...STACK_SHEET, background: ink, borderColor: ink, transform: `rotate(${turn}deg)` }}
         />
       ))}
       <div

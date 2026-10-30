@@ -240,23 +240,31 @@ it('says the Library is locked and offers the unlock in place of the summary', (
   expect(ask).toHaveBeenCalled();
 });
 
-// The ? shows the tree's keyboard shortcuts while it is hovered or focused.
-it('shows the keyboard shortcuts while the ? is hovered or focused', () => {
+// `?` shows the tree's keyboard shortcuts, and the next key or press puts them
+// away; nothing on the screen stands for them. Not while typing, nor under a
+// dialog, whose keys are its own.
+it('shows the keyboard shortcuts on ? and puts them away on the next key', () => {
   panel();
-  const help = screen.getByRole('button', { name: 'Keyboard shortcuts' });
+  expect(screen.queryByRole('button', { name: 'Keyboard shortcuts' })).toBeNull();
   expect(screen.queryByRole('tooltip')).toBeNull();
 
-  fireEvent.mouseEnter(help);
-  const tip = within(screen.getByRole('tooltip'));
+  fireEvent.keyDown(window, { key: '?' });
+  const tip = within(screen.getByRole('tooltip', { name: 'Keyboard shortcuts' }));
   for (const [keys, what] of SHORTCUTS) {
     expect(tip.getByText(keys)).toBeTruthy();
     expect(tip.getByText(what)).toBeTruthy();
   }
-  fireEvent.mouseLeave(help);
+  fireEvent.keyDown(window, { key: 'ArrowDown' });
   expect(screen.queryByRole('tooltip')).toBeNull();
 
-  fireEvent.focus(help);
+  fireEvent.keyDown(window, { key: '?' });
   expect(screen.getByRole('tooltip')).toBeTruthy();
-  fireEvent.blur(help);
+  fireEvent.pointerDown(window);
   expect(screen.queryByRole('tooltip')).toBeNull();
+
+  const field = document.createElement('input');
+  document.body.append(field);
+  fireEvent.keyDown(field, { key: '?' });
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  field.remove();
 });

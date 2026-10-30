@@ -7,6 +7,7 @@ import { ActionsMenu, type MenuAt } from './ActionsMenu';
 import { landingOf, placeOf } from './destination';
 import { pickedFiles, type Drop } from './drop';
 import { locationOf } from './location';
+import { NEW_FOLDER } from './prospective';
 import { COLOR } from './theme';
 import type { Asked } from './useAsked';
 
@@ -32,7 +33,10 @@ import type { Asked } from './useAsked';
  *   [`landingOf`](./destination)) — read as the menu opens and kept for the
  *   answer. What is picked is handed to the screen, which asks for a folder on
  *   this device where none is chosen yet and confirms the add before anything
- *   is sent, as it does a drop.
+ *   is sent, as it does a drop. Below them, "New folder…" in that same folder,
+ *   where a mapping reaches it: making a place for files is part of adding
+ *   them, and it is how a folder is made at the Library root, which has no row
+ *   and so no row menu.
  *
  * One row on a wide window; on a narrow one it wraps rather than scrolling
  * sideways, the location taking a line of its own before anything is cut off
@@ -45,6 +49,8 @@ export function Header({
   onCollecting,
   onUnreadable,
   onKeysBack,
+  makesFolderIn,
+  onNewFolder,
 }: {
   /** The open Library, as the server last answered for it. */
   library: Asked<Library>;
@@ -61,6 +67,10 @@ export function Header({
    * focused row the files would have landed by.
    */
   onKeysBack: () => void;
+  /** Whether "New folder…" can be offered in `folder`: a mapping reaches it. */
+  makesFolderIn: (folder: string) => boolean;
+  /** "New folder…" was chosen for `parent`. */
+  onNewFolder: (parent: string) => void;
 }) {
   const location = locationOf(focus);
   const addInto = landingOf(focus);
@@ -70,9 +80,13 @@ export function Header({
   // The folder the picker chosen was opened for, kept across the wait for the
   // operating system's answer: the focus may move meanwhile.
   const picking = useRef('');
-  const openPicker = (item: ActionItem) => {
+  const choose = (item: ActionItem) => {
     const into = adding?.into ?? addInto;
     setAdding(null);
+    if (item.action.kind === 'newFolder') {
+      onNewFolder(into);
+      return;
+    }
     picking.current = into;
     (item.action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
   };
@@ -107,7 +121,7 @@ export function Header({
       <button
         type="button"
         aria-label="Add files"
-        title={`Add files to ${placeOf(addInto)}`}
+        title={`Add to ${placeOf(addInto)}`}
         aria-haspopup="menu"
         aria-expanded={adding !== null}
         // The menu closes on a press outside it, which this is; the click
@@ -130,8 +144,8 @@ export function Header({
       >
         <svg
           aria-hidden
-          width={20}
-          height={20}
+          width={18}
+          height={18}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -144,11 +158,11 @@ export function Header({
       </button>
       {adding !== null && (
         <ActionsMenu
-          title={`Add files to ${placeOf(adding.into)}`}
-          label={`add files to ${placeOf(adding.into)}`}
+          title={`Add to ${placeOf(adding.into)}`}
+          label={`add to ${placeOf(adding.into)}`}
           at={adding.at}
-          items={ADD_ITEMS}
-          onChoose={openPicker}
+          items={addItems(adding.into, makesFolderIn(adding.into))}
+          onChoose={choose}
           onClose={(how) => {
             setAdding(null);
             if (how === 'escape') {
@@ -181,11 +195,20 @@ export function Header({
   );
 }
 
-/** What the **+** offers: the operating system's picker for files, or for one folder. */
-const ADD_ITEMS: readonly ActionItem[] = [
-  { label: 'Files…', action: { kind: 'addFiles' }, destructive: false, separated: false },
-  { label: 'A folder…', action: { kind: 'addFolder' }, destructive: false, separated: false },
-];
+/**
+ * What the **+** offers for `into`: the operating system's picker for files, or
+ * for one folder, and "New folder…" there where a mapping reaches it.
+ */
+export function addItems(into: string, makesFolder: boolean): ActionItem[] {
+  const items: ActionItem[] = [
+    { label: 'Files…', action: { kind: 'addFiles' }, destructive: false, separated: false },
+    { label: 'A folder…', action: { kind: 'addFolder' }, destructive: false, separated: false },
+  ];
+  if (makesFolder) {
+    items.push({ label: NEW_FOLDER, action: { kind: 'newFolder', folder: into }, destructive: false, separated: true });
+  }
+  return items;
+}
 
 /**
  * What the header calls the Library: its name alone. Which Storage it is kept
@@ -233,7 +256,7 @@ const WHERE: CSSProperties = {
 };
 
 /**
- * Drawn like a button, since switching Libraries is to live here: a box 44px
+ * Drawn like a button, since switching Libraries is to live here: a box 32px
  * high, the name on one line in the middle of it — by its line height rather
  * than a flex box, so that a name too long for the row is still cut short with
  * an ellipsis.
@@ -243,8 +266,8 @@ const LIBRARY: CSSProperties = {
   minWidth: 0,
   maxWidth: '100%',
   boxSizing: 'border-box',
-  minHeight: 44,
-  lineHeight: '42px',
+  minHeight: 32,
+  lineHeight: '30px',
   padding: '0 12px',
   border: `1px solid ${COLOR.border}`,
   borderRadius: 8,
@@ -274,8 +297,8 @@ const LOCATION: CSSProperties = {
 /** The **+**: a square as high as the Library's box, filled with the accent, a white plus in it. */
 const ADD_BUTTON: CSSProperties = {
   flex: '0 0 auto',
-  width: 44,
-  height: 44,
+  width: 32,
+  height: 32,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

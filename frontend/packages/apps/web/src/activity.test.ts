@@ -11,7 +11,6 @@ import {
   failedBadge,
   firstStanding,
   inProgress,
-  NOTHING_RUNNING,
   offeredNow,
   retryOf,
   stillStanding,
@@ -141,11 +140,11 @@ const NOTHING: InFlight = {
   fetching: null,
 };
 
-// With nothing in progress the row is not blank: it says the newest thing that
-// ended, the answer to whatever just happened, and only where nothing has
-// ended does it say nothing is running.
-it('summarizes nothing running by the newest entry, or by saying so', () => {
-  expect(collapsed([], [])).toEqual({ text: NOTHING_RUNNING, progress: null, failed: 0, said: null });
+// With nothing in progress the row says the newest thing that
+// ended, the answer to whatever just happened; where nothing has ended it says
+// nothing at all, since being idle is the usual state.
+it('summarizes nothing running by the newest entry, or says nothing', () => {
+  expect(collapsed([], [])).toEqual({ text: '', progress: null, failed: 0, said: null });
   const newest = anEntry('added 3 files to the Library');
   expect(collapsed([], [newest, anEntry('older')])).toEqual({
     text: 'added 3 files to the Library',

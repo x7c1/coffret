@@ -15,12 +15,14 @@ const LIBRARY: Asked<Library> = {
   value: { name: 'books', library_id: 'abc', provider: 'drive' },
 };
 
-function mount(focus: string | null, library: Asked<Library> = LIBRARY) {
+function mount(focus: string | null, library: Asked<Library> = LIBRARY, mapped: readonly string[] = []) {
   const handlers = {
     onAdd: vi.fn(),
     onCollecting: vi.fn(),
     onUnreadable: vi.fn(),
     onKeysBack: vi.fn(),
+    makesFolderIn: (folder: string) => mapped.includes(folder),
+    onNewFolder: vi.fn(),
   };
   const view = render(<Header library={library} focus={focus} {...handlers} />);
   return { ...handlers, view };
@@ -95,15 +97,37 @@ it('opens Files… and A folder… from Add files, and adds to the focused folde
   };
   expect(await pick(folderKey('albums/2026'), 'Files…')).toEqual({
     into: 'albums/2026',
-    title: 'Add files to albums/2026',
+    title: 'Add to albums/2026',
     paths: ['a.jpg'],
   });
   expect(await pick(fileKey('albums/cover.png'), 'A folder…')).toEqual({
     into: 'albums',
-    title: 'Add files to albums',
+    title: 'Add to albums',
     paths: ['a.jpg'],
   });
-  expect(await pick(null, 'Files…')).toEqual({ into: '', title: 'Add files to the Library', paths: ['a.jpg'] });
+  expect(await pick(null, 'Files…')).toEqual({ into: '', title: 'Add to the Library', paths: ['a.jpg'] });
+});
+
+// Making a place for files is part of adding them, and the + menu is where a
+// folder is made at the Library root, which has no row of its own: "New
+// folder…" in the folder the + adds to, offered only where a mapping reaches it.
+it('offers "New folder…" in the folder the + adds to, where a mapping reaches it', () => {
+  const items = () => within(screen.getByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent);
+  const atRoot = mount(null, LIBRARY, ['']);
+  fireEvent.click(header().getByRole('button', { name: 'Add files' }));
+  expect(items()).toEqual(['Files…', 'A folder…', 'New folder…']);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+  expect(atRoot.onNewFolder).toHaveBeenCalledWith('');
+  expect(screen.queryByRole('menu')).toBeNull();
+  cleanup();
+  const inFolder = mount(fileKey('albums/cover.png'), LIBRARY, ['albums']);
+  fireEvent.click(header().getByRole('button', { name: 'Add files' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'New folder…' }));
+  expect(inFolder.onNewFolder).toHaveBeenCalledWith('albums');
+  cleanup();
+  mount(folderKey('albums/2026'), LIBRARY, ['']);
+  fireEvent.click(header().getByRole('button', { name: 'Add files' }));
+  expect(items()).toEqual(['Files…', 'A folder…']);
 });
 
 it('hands the keys back to the tree when the menu is let go of by Escape', () => {

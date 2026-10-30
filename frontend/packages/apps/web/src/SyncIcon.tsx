@@ -80,12 +80,17 @@ export function SyncIcon({
 }
 
 /** The icon's button: no frame, so the icon is the control. */
+/** Square and as wide as the other icon buttons along the Activity panel's row. */
 const BUTTON = {
   display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
+  boxSizing: 'border-box',
+  width: 28,
+  height: 28,
   border: 'none',
   background: 'none',
-  padding: 2,
-  borderRadius: 4,
+  padding: 0,
+  borderRadius: 6,
   font: 'inherit',
 } as const;
