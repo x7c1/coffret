@@ -356,7 +356,7 @@ const PREVIEW: CSSProperties = {
 /** A button of the pane: as high as the header's, so a finger finds it as easily. */
 const PANE_BUTTON: CSSProperties = {
   alignSelf: 'flex-start',
-  minHeight: 36,
+  minHeight: 32,
   font: 'inherit',
   fontSize: 14,
   fontWeight: 600,

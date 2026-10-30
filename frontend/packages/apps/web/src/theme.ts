@@ -28,7 +28,7 @@ export const COLOR = {
   text: '#16181d',
   /** Sizes, times, the location, headings: everything that is not the name. */
   dim: '#5b616e',
-  /** Fainter than `dim`: what stands in for a value, and the marks around one. */
+  /** Fainter than `dim`: what stands in for a value, the marks around one, and a folder's size, a total rather than a file's own. */
   faint: '#8a919c',
   /**
    * The one colour that acts: the focused row, the buttons that go ahead, a

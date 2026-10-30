@@ -957,7 +957,12 @@ function Row({
           {folder?.incoming === true && <span style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>adding…</span>}
         </span>
       </td>
-      <td style={{ ...CELL, textAlign: 'right', color: ink(COLOR.dim) }}>
+      {/* A folder's size is the total of everything under it, drawn a step
+          fainter than a file's so the two are not read as the same thing. */}
+      <td
+        title={folder !== null && values.size !== '' ? FOLDER_SIZE_TITLE : undefined}
+        style={{ ...CELL, textAlign: 'right', color: ink(folder !== null ? COLOR.faint : COLOR.dim) }}
+      >
         {values.size}
       </td>
       <td style={{ ...CELL, textAlign: 'center', textOverflow: 'clip', padding: `0 ${DEVICE_PAD}px` }}>
@@ -1287,6 +1292,9 @@ const ROW_FONT = `13px ${FONT}`;
 
 /** The padding either side of a value. */
 const CELL_PAD = 10;
+
+/** What a folder's size is, said where the pointer rests on it. */
+export const FOLDER_SIZE_TITLE = 'Total of everything inside';
 
 /** The room after the modified time, less than a cell's: the row's "⋮" follows it. */
 const MODIFIED_END_PAD = 2;

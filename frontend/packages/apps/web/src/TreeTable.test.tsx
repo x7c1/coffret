@@ -10,7 +10,7 @@ import { TRY_AGAIN } from './Region';
 import { NOTHING_SELECTED, type Selection } from './selection';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
 import { COLOR } from './theme';
-import { EMPTY_MAPPED_ROOT, ON_THIS_DEVICE, TreeTable } from './TreeTable';
+import { EMPTY_MAPPED_ROOT, FOLDER_SIZE_TITLE, ON_THIS_DEVICE, TreeTable } from './TreeTable';
 
 afterEach(cleanup);
 
@@ -272,6 +272,17 @@ describe('one tree', () => {
       (col) => (col as HTMLElement).style.width,
     );
     expect(widths.slice(1, 4)).toEqual(['84px', '28px', '140px']);
+  });
+
+  // A folder's size is a total, drawn a step fainter than a file's own and said
+  // so where the pointer rests on it.
+  it("draws a folder's size fainter than a file's, with what it totals in its title", () => {
+    mount(listing({ folders: [folder('2026', { size: 2_000 })], files: [file('cover.png', { size: 1_000 })] }));
+    const sizeCell = (title: string) => screen.getByTitle(title).querySelectorAll('td')[1] as HTMLTableCellElement;
+    expect(sizeCell('2026').style.color).toBe(resolved(COLOR.faint));
+    expect(sizeCell('2026').title).toBe(FOLDER_SIZE_TITLE);
+    expect(sizeCell('cover.png').style.color).toBe(resolved(COLOR.dim));
+    expect(sizeCell('cover.png').title).toBe('');
   });
 });
 

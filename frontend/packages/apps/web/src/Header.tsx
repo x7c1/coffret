@@ -144,8 +144,8 @@ export function Header({
       >
         <svg
           aria-hidden
-          width={20}
-          height={20}
+          width={18}
+          height={18}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -256,7 +256,7 @@ const WHERE: CSSProperties = {
 };
 
 /**
- * Drawn like a button, since switching Libraries is to live here: a box 36px
+ * Drawn like a button, since switching Libraries is to live here: a box 32px
  * high, the name on one line in the middle of it — by its line height rather
  * than a flex box, so that a name too long for the row is still cut short with
  * an ellipsis.
@@ -266,8 +266,8 @@ const LIBRARY: CSSProperties = {
   minWidth: 0,
   maxWidth: '100%',
   boxSizing: 'border-box',
-  minHeight: 36,
-  lineHeight: '34px',
+  minHeight: 32,
+  lineHeight: '30px',
   padding: '0 12px',
   border: `1px solid ${COLOR.border}`,
   borderRadius: 8,
@@ -297,8 +297,8 @@ const LOCATION: CSSProperties = {
 /** The **+**: a square as high as the Library's box, filled with the accent, a white plus in it. */
 const ADD_BUTTON: CSSProperties = {
   flex: '0 0 auto',
-  width: 36,
-  height: 36,
+  width: 32,
+  height: 32,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
