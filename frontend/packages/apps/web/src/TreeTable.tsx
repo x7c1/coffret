@@ -42,7 +42,7 @@ import {
   type Picked,
   type Selection,
 } from './selection';
-import { rowIconOf, type RowIcon } from './rowIcon';
+import { FOLDER_ICON_PATH, rowIconOf, type RowIcon } from './rowIcon';
 import { COLOR, FONT } from './theme';
 import {
   arrowed,
@@ -1106,7 +1106,7 @@ function RowIconMark({ icon }: { icon: RowIcon }) {
     case 'folder':
       return (
         <svg role="img" aria-label="folder" {...shared}>
-          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <path d={FOLDER_ICON_PATH} />
         </svg>
       );
     case 'image':
