@@ -78,7 +78,7 @@ A Library just made can then be started from the explorer, with no `map` or
 `sync` at the command line: the empty root offers to choose a folder of this
 device for it ("Choose a folder…"), and adding files where none is chosen yet
 asks for one first. "New folder…" in a folder's actions menu, or in the
-header's **+** menu (with nothing focused, for the Library root; `Escape` or a
+header's **+** menu (with nothing focused, for the Library root; `Escape`, which climbs to the parent folder and then lets go, or a
 click below the rows lets go of the focus), prepares the path an add is to land under — held by the
 page alone until files are added there, and forgotten on a reload — and files
 picked with the **+** in the header, or dropped onto the tree, start the sync

@@ -558,8 +558,9 @@ it('names the Library in the header, and the location follows the focus', async 
   expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
 });
 
-// `Escape` lets go of the focus, and with nothing focused the header's **+** is
-// about the Library root: its "New folder…" makes the folder there.
+// `Escape` climbs to the folder the focus stands in, and from a top-level row
+// lets go of the focus; with nothing focused the header's **+** is about the
+// Library root, and its "New folder…" makes the folder there.
 it('makes a folder at the Library root from the + once the focus is let go of', async () => {
   answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
   render(<App />);
@@ -571,6 +572,8 @@ it('makes a folder at the Library root from the + once the focus is let go of', 
   fireEvent.keyDown(area, { key: 'ArrowDown' });
   const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
   expect(location()).toBe('comics / Series');
+  fireEvent.keyDown(area, { key: 'Escape' });
+  expect(location()).toBe('comics');
   fireEvent.keyDown(area, { key: 'Escape' });
   expect(location()).toBe('Library');
   await openNewFolderFromAdd();

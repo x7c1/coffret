@@ -83,6 +83,13 @@ export const SHEET_COLOR = {
   raised: '#1b1d21',
   /** A refusal said on the sheet: `refused` lightened to be read on its ground. */
   refused: '#f97066',
+  /**
+   * The two sheets fanned behind a folder's cover, the farther the darker:
+   * light enough against the ground to read as paper under the cover rather
+   * than as part of the dark.
+   */
+  stackFar: '#4a4f58',
+  stackNear: '#646a74',
 } as const;
 
 /** The shadows, named for what casts them: each one is a colour too. */

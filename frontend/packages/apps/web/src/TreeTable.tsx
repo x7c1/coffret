@@ -47,6 +47,8 @@ import { COLOR, FONT } from './theme';
 import {
   arrowed,
   contextOf,
+  folderKey,
+  keyed,
   toggled,
   type Arrow,
   type FileRow,
@@ -82,8 +84,9 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * opens or closes the folder without moving the focus — except out of a folder
  * being closed over it. On a touch screen a tap opens, since a double tap is
  * not a gesture a touch screen reliably hands over. `Escape` while the sheet is
- * closed, or a click on the empty space below the rows, lets go of the focus,
- * so that the header's **+** is about the Library root again.
+ * closed climbs to the folder the focused row stands in, and from a top-level
+ * row lets go of the focus; so does a click on the empty space below the rows.
+ * With nothing focused the header's **+** is about the Library root again.
  *
  * Rows are selected together with modifier keys, as in a desktop file manager
  * (see [`selection`](./selection)): Shift+click selects a range from the
@@ -401,6 +404,19 @@ export function TreeTable({
     }
     opened(row, { onOpenFolder, onOpenFile, onUnsupported, onUnmapped });
   };
+  // `Escape` climbs: the focus goes to the folder the focused row stands in, and
+  // from a top-level row, which stands in the root, it is let go of.
+  const climbOrLetGo = (focus: string) => {
+    const parent = parentOf(keyed(focus).path);
+    if (parent === '') {
+      letGo();
+      return;
+    }
+    onChange({ ...state, focus: folderKey(parent) });
+    if (selection.keys.size > 0) {
+      onSelect(NOTHING_SELECTED);
+    }
+  };
   // Nothing focused: the screen's actions — the header's **+**, a drop on the
   // list's empty space — are about the Library root again.
   const letGo = () => {
@@ -436,7 +452,7 @@ export function TreeTable({
     if (event.key === 'Escape') {
       if (escapeLetsGo && state.focus !== null) {
         event.preventDefault();
-        letGo();
+        climbOrLetGo(state.focus);
       }
       return;
     }
