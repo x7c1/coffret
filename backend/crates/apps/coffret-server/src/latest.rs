@@ -38,3 +38,17 @@ pub struct Latest<A> {
     /// nobody has taken up since.
     pub discarded: Vec<Folder>,
 }
+
+impl<A> Latest<A> {
+    /// One run on its own, with nothing displaced, waiting or lost beside it:
+    /// a run as the log keeps it once it has ended, when the queue it ran in
+    /// has long moved on.
+    pub fn alone(on_record: A) -> Self {
+        Self {
+            on_record,
+            displaced: Vec::new(),
+            waiting: Vec::new(),
+            discarded: Vec::new(),
+        }
+    }
+}

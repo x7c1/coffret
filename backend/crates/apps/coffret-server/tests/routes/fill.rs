@@ -381,7 +381,7 @@ async fn a_fill_storage_stopped_is_still_named_once_the_next_folder_runs() {
     );
     assert_eq!(
         displaced[0]["run"], 1,
-        "and as the run it was, so a line put away does not take this one with it",
+        "and as the run it was, which tells it from the run after it",
     );
     for list in ["waiting", "discarded", "displaced"] {
         assert!(
@@ -455,6 +455,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
             "reconnect": null,
             "freeze": null,
             "delete": null,
+            "log": [],
         })
     );
 }

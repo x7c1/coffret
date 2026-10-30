@@ -123,9 +123,8 @@ interface FillOfItsOwn {
   /**
    * Which run of the fill this is, counted from the start of the server.
    *
-   * What tells one run's account of itself from the next's. A screen that lets
-   * somebody put a line away remembers which run they put away by this, so that
-   * doing so does not silently take the next run's line with it.
+   * What tells one run's account of itself from the next's: nothing else here
+   * distinguishes two runs that came to the same thing.
    */
   run: number;
   /** The folder being brought over; the Library root is the empty string. */
@@ -640,6 +639,43 @@ export interface KeptParcels {
   bytes: number;
 }
 
+/** The two flows that keep a queue of folders, by the word each is told under. */
+export type QueueFlow = 'fill' | 'freeze';
+
+/** What one entry of the server's log is about, by kind. */
+export type LoggedWork =
+  | { kind: 'fill'; run: Fill }
+  | { kind: 'sync'; run: Sync }
+  | { kind: 'freeze'; run: Freeze }
+  | { kind: 'delete'; run: Delete }
+  /** A folder a queue threw away when its worker ended without an answer. */
+  | { kind: 'discarded'; queue: QueueFlow; folder: string }
+  /** A file a reader asked for and was refused. */
+  | { kind: 'fetch'; path: string; refused: Refused };
+
+/** Which kinds of entry the log keeps. */
+export type LoggedKind = LoggedWork['kind'];
+
+/**
+ * One entry of the server's log of the work it finished (spec: LA-12).
+ *
+ * A run that ended is the run as the work answer would have said it the
+ * moment it ended, with nothing of the queue around it — so it is worded with
+ * what the running one is worded with.
+ */
+export type Logged = {
+  /** Which entry this is, counted from 1 by the process that answered. */
+  id: number;
+  /** When the server logged it, as ISO 8601 in UTC. */
+  at: string;
+  /**
+   * Whether a later run of the same work — for a refused file, the same file
+   * asked for again — has taken this one's place. A failure that is settled
+   * is history and offers no second attempt.
+   */
+  settled: boolean;
+} & LoggedWork;
+
 /** What the server is doing on its own — `GET /api/work`. */
 export interface Work {
   /**
@@ -648,18 +684,13 @@ export interface Work {
    * The same string for every answer one process gives, and a different one
    * after it is started again. It says nothing about the device or the
    * Library — the server composes it out of entropy as it starts — and what it
-   * is for is everything a page remembers between answers that is true of one
-   * process only: the run numbers below all start again at 1 with the next one,
-   * so a name the page has not seen before is the sign to forget what it was
-   * holding. The run numbers cannot say it themselves, since one lower than a
-   * run already put away is equally what an answer issued just before the
-   * dismissal looks like.
+   * is for is telling one process's answers from the next's: the run numbers
+   * below all start again at 1 with the next process, so they cannot say it
+   * themselves.
    *
    * It matters because a restart is ordinary rather than exceptional: a server
    * started from the command line is unlocked by starting it again with the
-   * Passphrase, and a tab left open across one would otherwise hide the new
-   * process's first runs — a fill's line and its declined Entries, and the one
-   * sentence saying a sync did not back a file up. An unlock in place, from the
+   * Passphrase, and a tab can stay open across one. An unlock in place, from the
    * desktop app's own window, keeps the name: it is the same process.
    */
   server: string;
@@ -716,6 +747,14 @@ export interface Work {
    * carries the page itself: that goes back only to the press that asked.
    */
   reconnect: Reconnect | null;
+  /**
+   * What the server has finished since it started, newest first: every fill,
+   * sync, freeze and deletion that ended, every folder a queue lost, and every
+   * file a reader was refused. The oldest are dropped past a fixed count, and
+   * a failure is kept until the same work ends again; a server started
+   * afterwards answers with none of it.
+   */
+  log: Logged[];
 }
 
 /** Asks what the server is doing on its own. */
@@ -962,7 +1001,18 @@ interface WorkSent {
   freeze: FreezeSent | null;
   delete: DeleteSent | null;
   reconnect: Reconnect | null;
+  log?: LoggedSent[];
 }
+
+/** One entry of the log as sent: its run or its refusal not read yet. */
+type LoggedSent = { id: number; at: string; settled: boolean } & (
+  | { kind: 'fill'; run: FillSent }
+  | { kind: 'sync'; run: SyncSent }
+  | { kind: 'freeze'; run: FreezeSent }
+  | { kind: 'delete'; run: DeleteSent }
+  | { kind: 'discarded'; queue: QueueFlow; folder: string }
+  | { kind: 'fetch'; path: string; refused: unknown }
+);
 
 /** A run as sent: its refusal and its findings not read yet. */
 type Sent<Run> = Omit<Run, 'status' | 'stopped' | 'declined' | 'findings' | 'displaced'> & {
@@ -1005,7 +1055,27 @@ export function workOf(sent: unknown): Work {
     freeze: work.freeze === null ? null : freezeOf(work.freeze),
     delete: work.delete === null ? null : deleteOf(work.delete),
     reconnect: work.reconnect,
+    log: (work.log ?? []).map(loggedOf),
   };
+}
+
+/** One entry of the log, its run read as the work answer's own runs are. */
+function loggedOf(sent: LoggedSent): Logged {
+  const { id, at, settled } = sent;
+  switch (sent.kind) {
+    case 'fill':
+      return { id, at, settled, kind: 'fill', run: fillOf(sent.run) };
+    case 'sync':
+      return { id, at, settled, kind: 'sync', run: syncOf(sent.run) };
+    case 'freeze':
+      return { id, at, settled, kind: 'freeze', run: freezeOf(sent.run) };
+    case 'delete':
+      return { id, at, settled, kind: 'delete', run: deleteOf(sent.run) };
+    case 'discarded':
+      return { id, at, settled, kind: 'discarded', queue: sent.queue, folder: sent.folder };
+    case 'fetch':
+      return { id, at, settled, kind: 'fetch', path: sent.path, refused: refusedOf(sent.refused) };
+  }
 }
 
 function catalogOf(catalog: WorkSent['catalog']): Catalog {

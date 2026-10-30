@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use coffret_device::Step;
 use tokio::sync::watch;
 
+use crate::activity_log::{ActivityLog, Ended};
 use crate::reported::Reported;
 
 use super::{DeleteRun, DeleteStatus, Target};
@@ -13,6 +15,9 @@ pub struct Deletes {
     /// The one place any of this is written, so that every reader sees a whole
     /// answer and a case can wait on one.
     progress: watch::Sender<Progress>,
+    /// Where every run that ends is logged, shared with the rest of the
+    /// server's work (see [`ActivityLog`]).
+    log: Arc<ActivityLog>,
 }
 
 /// The latest deletion, and how many are waiting behind it, read together.
@@ -35,7 +40,15 @@ impl Deletes {
     pub fn new() -> Self {
         Self {
             progress: watch::channel(Progress::default()).0,
+            log: Arc::new(ActivityLog::new()),
         }
+    }
+
+    /// Nothing being deleted, logging what ends into `log` — the server's one
+    /// log of its finished work, which [`new`](Self::new) keeps apart for a
+    /// case that drives this flow alone.
+    pub fn logging_to(log: Arc<ActivityLog>) -> Self {
+        Self { log, ..Self::new() }
     }
 
     /// The latest deletion and the queue behind it, under one borrow — and
@@ -89,17 +102,38 @@ impl Deletes {
 
     /// Puts back what a worker that ended without taking its leave left set.
     /// See [`Progress::abandon`].
+    ///
+    /// A run it stops is logged as one that stopped through
+    /// [`publish`](Self::publish) is.
     pub(super) fn abandon(&self) {
-        self.progress.send_if_modified(Progress::abandon);
+        self.progress.send_if_modified(|progress| {
+            let deleting = progress
+                .on_record
+                .as_ref()
+                .is_some_and(|run| run.status == DeleteStatus::Deleting);
+            let modified = progress.abandon();
+            if modified && deleting {
+                if let Some(run) = &progress.on_record {
+                    self.log.record(Ended::Delete(run.clone()));
+                }
+            }
+            modified
+        });
     }
 
     /// Says what the deletion in progress came to.
     pub(super) fn publish(&self, run: &DeleteRun) {
         self.progress.send_modify(|progress| {
-            progress.on_record = Some(DeleteRun {
+            let published = DeleteRun {
                 run: progress.runs,
                 ..run.clone()
-            });
+            };
+            // Logged under the same lock that publishes it, so no reader sees
+            // the run over before the log has it.
+            if published.status != DeleteStatus::Deleting {
+                self.log.record(Ended::Delete(published.clone()));
+            }
+            progress.on_record = Some(published);
         });
     }
 

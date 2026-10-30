@@ -29,7 +29,7 @@ pub struct LibraryDto {
 /// three fields are the ones it has: which Library this is, what it is
 /// called here, and which provider it is on are not things the Master Key
 /// keeps — they are read off the settings file that any process on this device
-/// can open. A status bar that went blank the moment the server locked would
+/// can open. An Activity panel that went blank the moment the server locked would
 /// leave a person looking at a screen with no name on it, unable to tell which
 /// of their devices had gone quiet.
 pub async fn library(State(state): State<Arc<ServerState>>) -> Json<LibraryDto> {

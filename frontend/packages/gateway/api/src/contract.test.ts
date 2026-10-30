@@ -22,6 +22,9 @@ import { expect, it } from 'vitest';
 
 import type {
   Work,
+  Logged,
+  LoggedKind,
+  QueueFlow,
   ByteCount,
   Catalog,
   CatalogState,
@@ -166,6 +169,15 @@ const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped
 const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
 const DELETE_STATUSES: Literals<DeleteStatus> = { deleting: true, done: true, stopped: true };
 const TURN_TAKERS: Literals<TurnTaker> = { sync: true, freeze: true, delete: true };
+const LOGGED_KINDS: Literals<LoggedKind> = {
+  fill: true,
+  sync: true,
+  freeze: true,
+  delete: true,
+  discarded: true,
+  fetch: true,
+};
+const QUEUE_FLOWS: Literals<QueueFlow> = { fill: true, freeze: true };
 const PACK_REFUSAL_REASONS: Literals<PackRefusalReason> = { key_lost: true, unverified: true };
 const PHASES: Literals<Phase> = {
   catching_up: true,
@@ -584,6 +596,7 @@ function work(value: unknown, where: string): Work {
     'freeze',
     'delete',
     'reconnect',
+    'log',
   ]);
   return {
     server: string(fields.server, `${where}.server`),
@@ -598,7 +611,55 @@ function work(value: unknown, where: string): Work {
     freeze: nullable(fields.freeze, (value) => freeze(value, `${where}.freeze`)),
     delete: nullable(fields.delete, (value) => deletion(value, `${where}.delete`)),
     reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
+    log: list(fields.log, `${where}.log`, logged),
   };
+}
+
+function logged(value: unknown, where: string): Logged {
+  const head = object(value, where, ['id', 'at', 'settled', 'kind'], [
+    'run',
+    'queue',
+    'folder',
+    'path',
+    'refused',
+  ]);
+  const id = number(head.id, `${where}.id`);
+  const at = string(head.at, `${where}.at`);
+  const settled = boolean(head.settled, `${where}.settled`);
+  const kind = one(LOGGED_KINDS, head.kind, `${where}.kind`);
+  const only = (...names: string[]) => object(value, where, ['id', 'at', 'settled', 'kind', ...names]);
+  switch (kind) {
+    case 'fill':
+      return { id, at, settled, kind, run: fill(only('run').run, `${where}.run`) };
+    case 'sync':
+      return { id, at, settled, kind, run: sync(only('run').run, `${where}.run`) };
+    case 'freeze':
+      return { id, at, settled, kind, run: freeze(only('run').run, `${where}.run`) };
+    case 'delete':
+      return { id, at, settled, kind, run: deletion(only('run').run, `${where}.run`) };
+    case 'discarded': {
+      const fields = only('queue', 'folder');
+      return {
+        id,
+        at,
+        settled,
+        kind,
+        queue: one(QUEUE_FLOWS, fields.queue, `${where}.queue`),
+        folder: string(fields.folder, `${where}.folder`),
+      };
+    }
+    case 'fetch': {
+      const fields = only('path', 'refused');
+      return {
+        id,
+        at,
+        settled,
+        kind,
+        path: string(fields.path, `${where}.path`),
+        refused: refused(fields.refused, `${where}.refused`),
+      };
+    }
+  }
 }
 
 function listedFolder(value: unknown, where: string): ListedFolder {
@@ -822,6 +883,8 @@ it('reads every work answer the server sends through the Work type', () => {
     FREEZE_STATUSES,
     DELETE_STATUSES,
     TURN_TAKERS,
+    LOGGED_KINDS,
+    QUEUE_FLOWS,
     PACK_REFUSAL_REASONS,
     PHASES,
     CATALOG_STATES,

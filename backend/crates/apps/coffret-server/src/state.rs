@@ -7,6 +7,7 @@ use coffret_device::{
 use tokio::sync::watch;
 use tokio::time::Instant;
 
+use crate::activity_log::ActivityLog;
 use crate::allowance::Allowance;
 use crate::api_error::{ApiError, WayBack};
 use crate::delete::Deletes;
@@ -34,8 +35,8 @@ use crate::unlocked::Unlocked;
 /// process the server runs in can do (see [`unlock`](Self::unlock)).
 ///
 /// What is left beside the cell is either not the Library's secret or not the
-/// Library at all. The name and the two identifying fields are what the status
-/// bar shows, and they are held here rather than read through the cell so that a
+/// Library at all. The name and the two identifying fields are what the
+/// explorer shows, and they are held here rather than read through the cell so that a
 /// locked server can still say which Library it is; the moment somebody was last
 /// here is what decides when the cell is emptied without anybody asking
 /// (spec: DK-4); and the run-tracking values are this process's own account of
@@ -46,7 +47,7 @@ use crate::unlocked::Unlocked;
 /// reaches a response — and what a browser is answered with is drawn from it a
 /// request at a time.
 pub struct ServerState {
-    /// The Library's name, which is what the status bar shows: the one its
+    /// The Library's name, which is what the Activity panel shows: the one its
     /// catalog held when the server started, and `None` where nothing has
     /// named it yet — which is said as such, never with the Library's ID in
     /// the name's place.
@@ -62,10 +63,9 @@ pub struct ServerState {
     ///
     /// Not about the Library and not about this device: it is drawn from
     /// entropy as this value is built, and what it is for is telling one
-    /// process's answers from the next's. A browser remembers things that are
-    /// true only of one process — which run's line somebody read and put away,
-    /// counted from 1 by each of the three flows — and a restart is an ordinary
-    /// step here, since a server started from the command line is unlocked by
+    /// process's answers from the next's. The run numbers a page reads are true
+    /// only of one process — each flow counts them from 1 — and a restart is an
+    /// ordinary step here, since a server started from the command line is unlocked by
     /// starting it again (spec: DK-1). An unlock in place keeps it: the process
     /// and its runs are the same ones. See [`ServerId`] for why it is this value
     /// and not one that was already lying around.
@@ -106,6 +106,17 @@ pub struct ServerState {
     /// [`fetches`](Self::fetches) is: it is about work in flight here, it is
     /// gone when the process is, and nothing in it is ever uploaded.
     pub fills: Fills,
+    /// What the server has finished: every run of the four flows that ended,
+    /// every folder a queue lost, every fetch a reader was refused other than
+    /// on a peek or by a locked Library or an Entry the catalog does not hold — newest
+    /// first, the oldest dropped past a fixed count save a failure the same
+    /// work has not settled, and never more than a fixed ceiling
+    /// (spec: LA-12).
+    ///
+    /// Shared with the four flows, which log each run as they publish its
+    /// end, and held in memory alone like the rest of this process's account
+    /// of its work: a server started afterwards answers with an empty log.
+    pub activity: Arc<ActivityLog>,
     /// How many reads of a listed folder's Container fronts are under way.
     ///
     /// State of this process in the sense [`fills`](Self::fills) is, and less:
@@ -202,6 +213,7 @@ impl ServerState {
     /// none where nothing has named it yet.
     pub fn new(name: Option<String>, library: OpenLibrary) -> Self {
         let live = Arc::clone(&library.live);
+        let activity = Arc::new(ActivityLog::new());
         Self {
             name,
             library_id: library.library_id,
@@ -212,11 +224,12 @@ impl ServerState {
             prompt: None,
             idle: Arc::new(Idle::started()),
             fetches: EntryFetches::new(),
-            fills: Fills::new(),
+            fills: Fills::logging_to(Arc::clone(&activity)),
             fronts: FrontsAhead::new(),
-            syncs: Syncs::new(),
-            freezes: Freezes::new(),
-            deletes: Deletes::new(),
+            syncs: Syncs::logging_to(Arc::clone(&activity)),
+            freezes: Freezes::logging_to(Arc::clone(&activity)),
+            deletes: Deletes::logging_to(Arc::clone(&activity)),
+            activity,
             pending_rows: PendingRows::new(),
             allowance: Allowance::generous(),
             catalog: Catalog::new(),

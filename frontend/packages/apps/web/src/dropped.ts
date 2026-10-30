@@ -68,7 +68,7 @@ export interface Dropping {
  * where no answer arrives either, the reload beside it is the request somebody
  * is actually waiting on, and that is what says a server has gone.
  *
- * It never rejects. What a refusal becomes is a sentence in the notice area
+ * It never rejects. What a refusal becomes is a notice in the Activity panel
  * beside the rows.
  */
 export async function askToAdd(dropping: Dropping): Promise<void> {
@@ -99,7 +99,7 @@ export async function askToAdd(dropping: Dropping): Promise<void> {
  * The first one and a count of the rest. A drop of three hundred pages onto a
  * folder the Library holds a Pack in refuses three hundred times for the one
  * reason, and three hundred sentences would say it three hundred times over a
- * notice area one line high.
+ * panel whose entries are a line each.
  */
 export function refusedLine(refused: readonly RefusedPart[]): string {
   const [first] = refused;

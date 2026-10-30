@@ -10,6 +10,7 @@
 
 mod support;
 
+mod activity;
 mod browse;
 mod contract;
 mod delete;

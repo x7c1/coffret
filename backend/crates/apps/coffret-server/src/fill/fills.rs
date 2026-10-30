@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
 use coffret_device::{ShortKeyring, UnheldParcel};
 use tokio::sync::watch;
 
+use crate::activity_log::{ActivityLog, Ended, Queue};
 use crate::folder::Folder;
 use crate::latest::Latest;
 
 use super::progress::Progress;
-use super::{EndedFills, FillRun};
+use super::{EndedFills, FillRun, FillStatus};
 
 /// What the server is bringing over, and what it has brought over last.
 #[derive(Debug)]
@@ -15,6 +18,9 @@ pub struct Fills {
     progress: watch::Sender<Progress>,
     /// The folders a run has ended on, noted where each run ends.
     ended: EndedFills,
+    /// Where every run that ends is logged, shared with the rest of the
+    /// server's work (see [`ActivityLog`]).
+    log: Arc<ActivityLog>,
 }
 
 impl Default for Fills {
@@ -29,7 +35,15 @@ impl Fills {
         Self {
             progress: watch::channel(Progress::default()).0,
             ended: EndedFills::new(),
+            log: Arc::new(ActivityLog::new()),
         }
+    }
+
+    /// Nothing being filled, logging what ends into `log` — the server's one
+    /// log of its finished work, which [`new`](Self::new) keeps apart for a
+    /// case that drives this flow alone.
+    pub fn logging_to(log: Arc<ActivityLog>) -> Self {
+        Self { log, ..Self::new() }
     }
 
     /// The latest fill, the runs it took the record from, the folders waiting
@@ -148,13 +162,25 @@ impl Fills {
     /// the flag. Notified only where there was something to put back, which is
     /// why this goes through [`send_if_modified`](watch::Sender::send_if_modified).
     ///
-    /// The run it stops is noted as ended, as one that stopped through
-    /// [`publish`](Self::publish) is.
+    /// The run it stops is noted as ended and logged, as one that stopped
+    /// through [`publish`](Self::publish) is, and every folder it throws away
+    /// is logged as lost.
     pub(super) fn abandon(&self) {
         self.progress.send_if_modified(|progress| {
+            let filling = progress.is_filling();
+            let lost_before = progress.discarded().len();
             let modified = progress.abandon();
             if let Some(run) = &progress.on_record {
                 self.ended.note(run);
+                if modified && filling {
+                    self.log.record(Ended::Fill(run.clone()));
+                }
+            }
+            for folder in &progress.discarded()[lost_before..] {
+                self.log.record(Ended::Discarded {
+                    queue: Queue::Fill,
+                    folder: folder.clone(),
+                });
             }
             modified
         });
@@ -192,10 +218,17 @@ impl Fills {
             }
             run.read_unheld(progress.hand_over_unheld());
             self.ended.note(run);
-            progress.on_record = Some(FillRun {
+            let published = FillRun {
                 run: progress.run(),
                 ..run.clone()
-            });
+            };
+            // Logged under the same lock that publishes it, so no reader sees
+            // the run over before the log has it. A run superseded by another
+            // folder did not end, and is not logged.
+            if matches!(published.status, FillStatus::Done | FillStatus::Stopped(_)) {
+                self.log.record(Ended::Fill(published.clone()));
+            }
+            progress.on_record = Some(published);
         });
     }
 }

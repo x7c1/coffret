@@ -210,7 +210,7 @@ export async function askToDelete(deleting: Deleting): Promise<Deleted> {
 }
 
 /**
- * What the notice area says of a deletion: the sentence, and the target a
+ * What the Activity panel says of a deletion: the sentence, and the target a
  * *try again* beside it would ask about again — `null` where nothing invites
  * one.
  *
@@ -258,8 +258,8 @@ export function startsAfterLine(waits: Exclude<WaitsFor, null>): string {
  * freeze or deletion armed before it, and one the server says is waiting for
  * its turn says so — in the words [`waitsFor`](./turns.ts) picks for every
  * line, so a line that stays put while a book is packed reads as waiting
- * rather than stuck. It stands in the status bar beside the other two flows'
- * lines, ranked as they are.
+ * rather than stuck. It stands in the Activity panel's **In progress** beside
+ * the other two flows' lines, ranked as they are.
  */
 export function deletingLine(run: Delete, waits: WaitsFor = null): string {
   const name = targetName(run);

@@ -173,7 +173,7 @@ it('takes back the folders of the books waiting their turn', () => {
   ]);
 });
 
-// And what a worker that died threw away. The status bar reaches one of these
+// And what a worker that died threw away. The Activity panel's Retry reaches one of these
 // by name, so it is not a dead end — but between the panic and the press there
 // is no row for it, and pressing it would move the screen to a folder the tree
 // does not draw.

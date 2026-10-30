@@ -31,7 +31,7 @@ export type Tried = 'open' | 'add';
 export const NOTHING_AT_THIS_PATH = 'the Library holds nothing at this path';
 
 /**
- * The line the notice area shows, naming what was tried and why it came to
+ * The notice the Activity panel shows, naming what was tried and why it came to
  * nothing.
  *
  * Two sentences rather than one, differing in the half that says what was
