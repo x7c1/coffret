@@ -5,9 +5,9 @@ import {
   useState,
   type MutableRefObject,
   type ReactNode,
-} from 'react';
+} from "react";
 
-import type { KeptParcels } from '@coffret/api';
+import type { KeptParcels } from "@coffret/api";
 
 import {
   answering,
@@ -20,12 +20,12 @@ import {
   type Outcome,
   type Row,
   type Running,
-} from './activity';
-import { size } from './humanize';
-import { ReconnectOffer, type Offer } from './ReconnectOffer';
-import type { Trouble } from './retry';
-import { SyncIcon } from './SyncIcon';
-import { COLOR, SHADOW } from './theme';
+} from "./activity";
+import { size } from "./humanize";
+import { ReconnectOffer, type Offer } from "./ReconnectOffer";
+import type { Trouble } from "./retry";
+import { SyncIcon } from "./SyncIcon";
+import { COLOR, SHADOW } from "./theme";
 
 /**
  * What the server and this page are doing and have done, along the bottom of
@@ -137,7 +137,7 @@ export function ActivityPanel({
     }
     const item = soughtItem.current;
     // Not in jsdom, which lays nothing out.
-    item?.scrollIntoView?.({ block: 'nearest' });
+    item?.scrollIntoView?.({ block: "nearest" });
     item?.focus({ preventScroll: true });
     const timer = setTimeout(() => setSought(null), SOUGHT_LIT);
     return () => clearTimeout(timer);
@@ -151,73 +151,87 @@ export function ActivityPanel({
   const expired =
     reconnect !== null &&
     locked === null &&
-    (trouble?.ranOut === true || entries.some((entry) => entry.standing && entry.ranOut));
+    (trouble?.ranOut === true ||
+      entries.some((entry) => entry.standing && entry.ranOut));
   return (
     <footer aria-label="Activity" style={PANEL}>
       <div style={ROW}>
-        <button
-          onClick={() => setOpen((was) => !was)}
-          aria-expanded={open}
-          aria-controls={listId}
-          // An icon rather than the word: a clock turned back, for the work
-          // that ran — what the panel keeps once a run is over.
-          aria-label="Activity"
-          title="Activity"
-          // The one control that opens and closes the panel: pressed in — a
-          // tint and the icon in the accent — while the panel is open, and
-          // tinted under the pointer, so no chevron stands beside it.
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            ...TOGGLE,
-            background: open || hovered ? COLOR.hover : 'transparent',
-            color: open ? COLOR.accent : COLOR.text,
-          }}
-        >
-          <svg
-            aria-hidden="true"
-            width={16}
-            height={16}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ display: 'block' }}
+        {/* The toggle and what it is about, kept together: the summary reads
+            as the icon's words, so it stands closer to the icon than the row's
+            other parts stand to each other. */}
+        <span style={LEAD}>
+          <button
+            onClick={() => setOpen((was) => !was)}
+            aria-expanded={open}
+            aria-controls={listId}
+            // An icon rather than the word: a clock turned back, for the work
+            // that ran — what the panel keeps once a run is over.
+            aria-label="Activity"
+            title="Activity"
+            // The one control that opens and closes the panel: pressed in — a
+            // tint and the icon in the accent — while the panel is open, and
+            // tinted under the pointer, so no chevron stands beside it.
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              ...TOGGLE,
+              background: open || hovered ? COLOR.hover : "transparent",
+              color: open ? COLOR.accent : COLOR.text,
+            }}
           >
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M12 7v5l4 2" />
-          </svg>
-        </button>
-        {locked !== null ? (
+            <svg
+              aria-hidden="true"
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ display: "block" }}
+            >
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          </button>
+          {locked === null && !open && (
+            <span
+              style={{
+                ...SUMMARY,
+                color: summaryColour(row, running.length > 0),
+              }}
+              title={row.text}
+            >
+              {row.text}
+            </span>
+          )}
+        </span>
+        {locked !== null && (
           <>
             <span style={{ color: COLOR.refused }}>{LOCKED}</span>
             <button
               onClick={locked.ask}
               disabled={locked.asking}
-              style={{ ...BUTTON, cursor: locked.asking ? 'default' : 'pointer' }}
+              style={{
+                ...BUTTON,
+                cursor: locked.asking ? "default" : "pointer",
+              }}
             >
               {UNLOCK}
             </button>
             {locked.refused !== null ? (
               <span style={{ color: COLOR.refused }}>{locked.refused}</span>
             ) : (
-              locked.said !== null && <span style={{ color: COLOR.text }}>{locked.said}</span>
+              locked.said !== null && (
+                <span style={{ color: COLOR.text }}>{locked.said}</span>
+              )
             )}
           </>
-        ) : (
-          // Open, the groups below say all of it, and the row says it again
-          // nowhere: one sentence drawn twice is one a person reads twice.
-          !open && (
-            <>
-              <span style={{ ...SUMMARY, color: summaryColour(row, running.length > 0) }} title={row.text}>
-                {row.text}
-              </span>
-              {row.progress !== null && <Bar progress={row.progress} width={96} />}
-            </>
-          )
+        )}
+        {locked === null && !open && row.progress !== null && (
+          <Bar progress={row.progress} width={96} />
         )}
         {badge !== null && (
           <button
@@ -244,7 +258,11 @@ export function ActivityPanel({
           ) : (
             refresh.said !== null && <span>{refresh.said}</span>
           )}
-          <SyncIcon running={refresh.running} waiting={refresh.waiting} onPress={refresh.ask} />
+          <SyncIcon
+            running={refresh.running}
+            waiting={refresh.waiting}
+            onPress={refresh.ask}
+          />
           <Shortcuts />
         </span>
       </div>
@@ -257,9 +275,11 @@ export function ActivityPanel({
               <ul style={ITEMS}>
                 {running.map((item) => (
                   <li key={item.key} style={ITEM}>
-                    <span style={TIME}>{clock(seen.get(item.key) ?? '')}</span>
+                    <span style={TIME}>{clock(seen.get(item.key) ?? "")}</span>
                     <span style={TEXT}>{item.text}</span>
-                    {item.progress !== null && <Bar progress={item.progress} width={120} />}
+                    {item.progress !== null && (
+                      <Bar progress={item.progress} width={120} />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -318,7 +338,9 @@ function EarlierItem({
       <span style={{ ...TEXT, color: entry.settled ? COLOR.dim : COLOR.text }}>
         {entry.text}
         {refused !== null && (
-          <span style={{ display: 'block', color: COLOR.refused }}>{refused}</span>
+          <span style={{ display: "block", color: COLOR.refused }}>
+            {refused}
+          </span>
         )}
       </span>
       {entry.retry !== null && entry.retryAs !== null && (
@@ -350,7 +372,9 @@ function summaryColour(row: Row, moving: boolean): string {
   if (said === null) {
     return moving ? COLOR.text : COLOR.dim;
   }
-  return said.settled || said.outcome === 'success' ? COLOR.dim : DOT_COLOUR[said.outcome];
+  return said.settled || said.outcome === "success"
+    ? COLOR.dim
+    : DOT_COLOUR[said.outcome];
 }
 
 /**
@@ -365,11 +389,11 @@ function useLastGesture(): number {
   const [gestured, setGestured] = useState(0);
   useEffect(() => {
     const stamp = () => setGestured(Date.now());
-    window.addEventListener('keydown', stamp, true);
-    window.addEventListener('pointerdown', stamp, true);
+    window.addEventListener("keydown", stamp, true);
+    window.addEventListener("pointerdown", stamp, true);
     return () => {
-      window.removeEventListener('keydown', stamp, true);
-      window.removeEventListener('pointerdown', stamp, true);
+      window.removeEventListener("keydown", stamp, true);
+      window.removeEventListener("pointerdown", stamp, true);
     };
   }, []);
   return gestured;
@@ -386,7 +410,10 @@ function useRenderAt(at: number | null): void {
     if (at === null) {
       return;
     }
-    const timer = setTimeout(() => setTick((tick) => tick + 1), Math.max(0, at - Date.now()));
+    const timer = setTimeout(
+      () => setTick((tick) => tick + 1),
+      Math.max(0, at - Date.now()),
+    );
     return () => clearTimeout(timer);
   }, [at]);
 }
@@ -404,7 +431,7 @@ function refusedHere(trouble: Trouble | null, entry: Entry): string | null {
 function Group({ title, children }: { title: string; children: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} style={{ padding: '4px 0' }}>
+    <section aria-labelledby={id} style={{ padding: "4px 0" }}>
       <h3 id={id} style={HEADING}>
         {title}
       </h3>
@@ -423,19 +450,19 @@ function Bar({ progress, width }: { progress: number; width: number }) {
       aria-valuemax={100}
       aria-valuenow={percent}
       style={{
-        flex: '0 0 auto',
+        flex: "0 0 auto",
         width,
         height: 4,
         borderRadius: 2,
         background: COLOR.border,
-        overflow: 'hidden',
+        overflow: "hidden",
       }}
     >
       <span
         style={{
-          display: 'block',
+          display: "block",
           width: `${percent}%`,
-          height: '100%',
+          height: "100%",
           background: COLOR.accent,
         }}
       />
@@ -451,7 +478,7 @@ function Shortcuts() {
   const [shown, setShown] = useState(false);
   const id = useId();
   return (
-    <span style={{ position: 'relative' }}>
+    <span style={{ position: "relative" }}>
       <button
         aria-label="Keyboard shortcuts"
         aria-describedby={shown ? id : undefined}
@@ -459,16 +486,29 @@ function Shortcuts() {
         onMouseLeave={() => setShown(false)}
         onFocus={() => setShown(true)}
         onBlur={() => setShown(false)}
-        style={{ ...ICON_BUTTON, borderRadius: '50%', border: `1px solid ${COLOR.control}` }}
+        style={{
+          ...ICON_BUTTON,
+          borderRadius: "50%",
+          border: `1px solid ${COLOR.control}`,
+        }}
       >
         ?
       </button>
       {shown && (
         <div role="tooltip" id={id} style={TOOLTIP}>
-          <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px' }}>
+          <dl
+            style={{
+              margin: 0,
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: "4px 12px",
+            }}
+          >
             {SHORTCUTS.map(([keys, what]) => (
-              <div key={keys} style={{ display: 'contents' }}>
-                <dt style={{ color: COLOR.text, whiteSpace: 'nowrap' }}>{keys}</dt>
+              <div key={keys} style={{ display: "contents" }}>
+                <dt style={{ color: COLOR.text, whiteSpace: "nowrap" }}>
+                  {keys}
+                </dt>
                 <dd style={{ margin: 0 }}>{what}</dd>
               </div>
             ))}
@@ -484,13 +524,13 @@ function Shortcuts() {
  * the reader bind (see `TreeTable` and `ReaderView`), written here once.
  */
 export const SHORTCUTS: readonly (readonly [string, string])[] = [
-  ['↑ ↓', 'move'],
-  ['→', 'expand, or go in'],
-  ['←', 'collapse, or go to the parent'],
-  ['Enter', 'open in the reader'],
-  ['Esc', 'close the reader'],
-  ['Shift ↑ ↓, Shift / ⌘ (Ctrl) click', 'select several'],
-  ['Right-click', 'actions'],
+  ["↑ ↓", "move"],
+  ["→", "expand, or go in"],
+  ["←", "collapse, or go to the parent"],
+  ["Enter", "open in the reader"],
+  ["Esc", "close the reader"],
+  ["Shift ↑ ↓, Shift / ⌘ (Ctrl) click", "select several"],
+  ["Right-click", "actions"],
 ];
 
 /**
@@ -498,7 +538,9 @@ export const SHORTCUTS: readonly (readonly [string, string])[] = [
  * column of **In progress**. The server says when a run ended, not when it
  * began, so the moment the page first heard of it is the honest time to show.
  */
-function useFirstSeen(running: readonly Running[]): ReadonlyMap<string, string> {
+function useFirstSeen(
+  running: readonly Running[],
+): ReadonlyMap<string, string> {
   const seen = useRef(new Map<string, string>());
   const now = new Date().toISOString();
   const keys = new Set(running.map((item) => item.key));
@@ -516,22 +558,22 @@ function useFirstSeen(running: readonly Running[]): ReadonlyMap<string, string> 
 }
 
 /** What the row says while the Library is locked, in place of the summary. */
-export const LOCKED = 'the Library is locked';
+export const LOCKED = "the Library is locked";
 
 /** The one button the row offers while it is. */
-export const UNLOCK = 'unlock';
+export const UNLOCK = "unlock";
 
 /** What the badge's press does, which is what it is named by. */
-export const SHOW_FAILURES = 'Show the failures';
+export const SHOW_FAILURES = "Show the failures";
 
 /** How long the failure the badge was pressed to show stays lit, in milliseconds. */
 const SOUGHT_LIT = 2000;
 
 /** What **In progress** says where nothing is. */
-export const NOTHING_IN_PROGRESS = 'Nothing is running.';
+export const NOTHING_IN_PROGRESS = "Nothing is running.";
 
 /** What **Earlier** says where nothing has ended. */
-export const NOTHING_EARLIER = 'Nothing has finished since the server started.';
+export const NOTHING_EARLIER = "Nothing has finished since the server started.";
 
 /**
  * The unlock the panel offers while the Library is locked: the button, whether
@@ -550,9 +592,9 @@ export interface UnlockOffer {
 
 /** What each outcome's dot is called, for a reader that cannot see its colour. */
 const OUTCOME: Record<Outcome, string> = {
-  success: 'Done',
-  failure: 'Failed',
-  notice: 'Notice',
+  success: "Done",
+  failure: "Failed",
+  notice: "Notice",
 };
 
 /** The colour of each outcome's dot, in the colours the rest of the screen uses. */
@@ -564,14 +606,14 @@ const DOT_COLOUR: Record<Outcome, string> = {
 
 /** The parcels kept, as the row says them: `3 parcels kept, 96.0 MB`. */
 function keptLine(kept: KeptParcels): string {
-  const parcels = kept.count === 1 ? 'parcel' : 'parcels';
+  const parcels = kept.count === 1 ? "parcel" : "parcels";
   return `${kept.count} ${parcels} kept, ${size(kept.bytes)}`;
 }
 
 const PANEL = {
-  flex: '0 0 auto',
-  display: 'flex',
-  flexDirection: 'column',
+  flex: "0 0 auto",
+  display: "flex",
+  flexDirection: "column",
   background: COLOR.panel,
   borderTop: `1px solid ${COLOR.border}`,
   fontSize: 13,
@@ -579,153 +621,162 @@ const PANEL = {
   minHeight: 0,
 } as const;
 
+/**
+ * The toggle and the words beside it. Its square holds 6px beside the icon
+ * already, so a gap of 2 puts the words 8px from the icon itself.
+ */
+const LEAD = {
+  display: "flex",
+  gap: 2,
+  alignItems: "center",
+  minWidth: 0,
+} as const;
+
+/** The row's parts, 12px apart: the toggle and its words, the progress bar, the badge, and the icons at the end. */
 const ROW = {
-  display: 'flex',
+  display: "flex",
   gap: 12,
-  alignItems: 'center',
-  boxSizing: 'border-box',
+  alignItems: "center",
+  boxSizing: "border-box",
   minHeight: 36,
   // Less at the left than at a text row's, since the toggle's square holds
   // room around its icon: the icon itself starts 16px in.
-  padding: '0 8px 0 10px',
+  padding: "0 8px 0 10px",
   minWidth: 0,
 } as const;
 
 /** The panel's open and close: square, as wide as the icon buttons at the row's right end. */
 const TOGGLE = {
-  flex: '0 0 auto',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  boxSizing: 'border-box',
+  flex: "0 0 auto",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
   width: 28,
   height: 28,
-  // Its square already holds room beside the icon, so the summary after it
-  // stands closer than the row's gap would put it.
-  marginRight: -8,
-  border: 'none',
+  border: "none",
   borderRadius: 6,
-  font: 'inherit',
+  font: "inherit",
   padding: 0,
-  cursor: 'pointer',
+  cursor: "pointer",
 } as const;
 
 const SUMMARY = {
   minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 } as const;
 
 const BADGE = {
-  flex: '0 0 auto',
-  padding: '2px 8px',
+  flex: "0 0 auto",
+  padding: "2px 8px",
   borderRadius: 10,
   background: COLOR.refusedGround,
   color: COLOR.refused,
-  border: 'none',
-  font: 'inherit',
+  border: "none",
+  font: "inherit",
   fontSize: 12,
   fontWeight: 600,
-  cursor: 'pointer',
+  cursor: "pointer",
 } as const;
 
 const END = {
-  marginLeft: 'auto',
-  display: 'flex',
+  marginLeft: "auto",
+  display: "flex",
   gap: 12,
-  alignItems: 'center',
-  flex: '0 0 auto',
+  alignItems: "center",
+  flex: "0 0 auto",
 } as const;
 
 /** The expanded list: a third of the window at most, scrolling past that. */
 const LIST = {
-  maxHeight: '35vh',
-  overflowY: 'auto',
+  maxHeight: "35vh",
+  overflowY: "auto",
   borderTop: `1px solid ${COLOR.border}`,
-  padding: '0 8px 6px 16px',
+  padding: "0 8px 6px 16px",
 } as const;
 
 const HEADING = {
-  margin: '8px 0 2px',
+  margin: "8px 0 2px",
   fontSize: 11,
   fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
   color: COLOR.dim,
 } as const;
 
-const ITEMS = { listStyle: 'none', margin: 0, padding: 0 } as const;
+const ITEMS = { listStyle: "none", margin: 0, padding: 0 } as const;
 
 const ITEM = {
-  display: 'flex',
+  display: "flex",
   gap: 10,
-  alignItems: 'center',
-  boxSizing: 'border-box',
+  alignItems: "center",
+  boxSizing: "border-box",
   minHeight: 32,
-  padding: '4px 0',
+  padding: "4px 0",
 } as const;
 
 const TIME = {
-  flex: '0 0 auto',
+  flex: "0 0 auto",
   minWidth: 64,
-  whiteSpace: 'nowrap',
-  fontVariantNumeric: 'tabular-nums',
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
 } as const;
 
 const TEXT = { flex: 1, minWidth: 0, color: COLOR.text } as const;
 
 /** The failure the badge was pressed to show, for the moment it is lit. */
-const SOUGHT = { background: COLOR.refusedGround, outline: 'none' } as const;
+const SOUGHT = { background: COLOR.refusedGround, outline: "none" } as const;
 
 const DOT = {
-  flex: '0 0 auto',
+  flex: "0 0 auto",
   width: 6,
   height: 6,
   borderRadius: 3,
 } as const;
 
-const EMPTY = { margin: '2px 0' } as const;
+const EMPTY = { margin: "2px 0" } as const;
 
 /** The unlock, drawn as every framed button on this screen is. */
 const BUTTON = {
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,
   color: COLOR.text,
-  font: 'inherit',
-  padding: '2px 10px',
+  font: "inherit",
+  padding: "2px 10px",
   borderRadius: 6,
-  cursor: 'pointer',
+  cursor: "pointer",
 } as const;
 
 /** A Retry, and the **?**: an icon in a 28px frame. */
 const ICON_BUTTON = {
-  flex: '0 0 auto',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  boxSizing: 'border-box',
+  flex: "0 0 auto",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxSizing: "border-box",
   width: 28,
   height: 28,
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,
   color: COLOR.text,
-  font: 'inherit',
+  font: "inherit",
   padding: 0,
   borderRadius: 6,
-  cursor: 'pointer',
+  cursor: "pointer",
 } as const;
 
 const TOOLTIP = {
-  position: 'absolute',
+  position: "absolute",
   right: 0,
-  bottom: 'calc(100% + 6px)',
+  bottom: "calc(100% + 6px)",
   zIndex: 10,
-  padding: '8px 10px',
+  padding: "8px 10px",
   background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,
   borderRadius: 8,
   boxShadow: SHADOW.menu,
   color: COLOR.dim,
-  whiteSpace: 'nowrap',
+  whiteSpace: "nowrap",
 } as const;
