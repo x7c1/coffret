@@ -764,8 +764,8 @@ A rename commits a change to the Catalog's names without replacing the
 affected Containers: replaying its record or adopting a Snapshot taken after it
 gives each Entry its new path, and a fetch finds an Entry in its Container by
 its entry number and places it at its current path (spec: FM-15, RV-5, EP-11).
-A person asks for a rename from the command line; the explorer does not offer
-one yet. Mappings continue to translate names to local paths; they do not make
+A person asks for a rename from the command line, or from the explorer, where
+Rename…, Move to… and a drag onto a folder each ask for a move (spec: LA-31). Mappings continue to translate names to local paths; they do not make
 local folders the authority for the namespace. A file renamed on disk is
 carried in as a rename only in the narrow case above, read within one sync's
 scan; every other local rename still reads to a sync as one file gone and
