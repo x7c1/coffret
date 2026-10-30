@@ -65,7 +65,7 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await shot(page, '03-first-page');
 
   // The sheet follows the tree's focus, and the keys stay with the tree: the
-  // next page row is the next page.
+  // next file is the next page.
   await page.keyboard.press('ArrowDown');
   await expect(reader.getByRole('img', { name: bookPage(1) })).toBeVisible();
   await expect(reader.getByLabel('position')).toHaveText(`2 / ${setting.pages}`);
@@ -75,9 +75,14 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await page.keyboard.press('ArrowUp');
   await expect(reader.getByRole('img', { name: bookPage(0) })).toBeVisible();
 
-  // One row further up is the book's folder: its cover, told apart from its
-  // first page, and the folder left open.
-  await page.keyboard.press('ArrowUp');
+  // With the sheet open the arrows go from file to file, so the book's folder
+  // is reached by its row: a click moves the focus there, and the sheet shows
+  // its cover, told apart from its first page, with the folder left open. Not
+  // `↑` from the first page, which would read back into the last file of the
+  // folder before it — the album, which the next journey needs untouched.
+  // Clicked on its name: the rest of the row is under the sheet, and the strip
+  // of the tree left uncovered is where the rows stay in reach.
+  await inTree(page, leaf(setting.book)).getByText(leaf(setting.book), { exact: true }).click();
   await expect(reader.getByRole('img', { name: `cover of ${leaf(setting.book)}` })).toBeVisible();
   await expect(reader.getByRole('img', { name: bookPage(0) })).toHaveCount(0);
   await expect(reader.getByText(`Folder · ${setting.pages} items`, { exact: false })).toBeVisible();

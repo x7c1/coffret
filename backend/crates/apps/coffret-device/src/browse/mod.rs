@@ -46,6 +46,12 @@ pub use entry_state::EntryState;
 mod file_row;
 pub use file_row::FileRow;
 
+mod files_beside;
+pub use files_beside::FilesBeside;
+
+// The files either side of one row, in reading order.
+mod beside;
+
 mod folder_listing;
 pub use folder_listing::FolderListing;
 

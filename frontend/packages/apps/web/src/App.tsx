@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addFiles,
   askToUnlock,
+  getBeside,
   getFolders,
   getLibrary,
   getListing,
@@ -83,6 +84,8 @@ import {
   contextOf,
   folderKey,
   keyed,
+  landedOn,
+  readOn,
   refocused,
   shownFolders,
   standing,
@@ -1387,6 +1390,49 @@ export function App() {
     [view.folder, sheeted, go],
   );
 
+  // `↑`/`↓` while the sheet is open: on to the file before or after the focus
+  // in reading order, folder rows passed over (see [`readOn`](./tree)). Where a
+  // closed folder stands in the way the rows cannot say what is in it, so the
+  // server says which file that is, and the folders on the way down to it are
+  // opened. An answer is let go of where the focus moved meanwhile, the sheet
+  // closed, or the key was pressed again — the later press asks for itself.
+  const treeNow = useRef(tree);
+  treeNow.current = tree;
+  const sheetedNow = useRef(sheeted);
+  sheetedNow.current = sheeted;
+  const readingOn = useRef(0);
+  const readOnward = useCallback(
+    (arrow: 'ArrowUp' | 'ArrowDown') => {
+      const step = readOn(rows, tree, arrow);
+      if (step.kind === 'focus') {
+        changeTree(step.state);
+        return;
+      }
+      if (step.kind === 'stay') {
+        return;
+      }
+      const asking = (readingOn.current += 1);
+      const from = tree.focus;
+      const current = () => asking === readingOn.current && sheetedNow.current && treeNow.current.focus === from;
+      getBeside(step.path, step.folder).then(
+        (beside) => {
+          const landed = arrow === 'ArrowDown' ? beside.next : beside.previous;
+          if (landed !== null && current()) {
+            changeTree(landedOn(treeNow.current, landed));
+          }
+        },
+        (refused: unknown) => {
+          if (current()) {
+            const name = step.path.slice(step.path.lastIndexOf('/') + 1);
+            const side = arrow === 'ArrowDown' ? 'after' : 'before';
+            setNotice(`the file ${side} ${name} was not opened — ${said(refused)}`);
+          }
+        },
+      );
+    },
+    [rows, tree, changeTree],
+  );
+
   // A folder row opened: the reader's sheet, on the folder's cover, with the
   // focus left on the folder's row and the folder left open or closed as it
   // was — and where it has no image directly in it, or is not on this device,
@@ -1532,13 +1578,24 @@ export function App() {
   // What the reader's sheet stands on: the row the URL has it open on, once
   // that row is drawn — a sheet restored from the URL waits for the listings
   // above it — and where it stands among the rows beside it.
-  const sheetRow = useMemo(
+  const drawnSheetRow = useMemo(
     () =>
       openKey === null
         ? undefined
         : rows.find((row): row is FolderRow | FileRow => row.kind !== 'note' && row.key === openKey),
     [rows, openKey],
   );
+  // Reading on into a folder the tree has just opened moves the sheet onto a
+  // row its listing has not drawn yet. Until it is, the sheet stays on the row
+  // it was on rather than closing — which would let go of every page it
+  // holds, the ones read ahead into that folder among them.
+  const lastSheetRow = useRef<FolderRow | FileRow | undefined>(undefined);
+  if (openKey === null) {
+    lastSheetRow.current = undefined;
+  } else if (drawnSheetRow !== undefined) {
+    lastSheetRow.current = drawnSheetRow;
+  }
+  const sheetRow = drawnSheetRow ?? lastSheetRow.current;
   const counter = useMemo(() => (openKey === null ? null : counterOf(rows, openKey)), [rows, openKey]);
   // Whether a dialog stands over the screen, whose `Escape` is its own and not
   // the sheet's.
@@ -1735,6 +1792,7 @@ export function App() {
                   onAskAgain={(folder) => reloadListings([folder])}
                   areaRef={treeArea}
                   escapeLetsGo={!sheeted}
+                  onReadOn={sheeted ? readOnward : undefined}
                 />
                 <DetailsPane
                   selected={selected}

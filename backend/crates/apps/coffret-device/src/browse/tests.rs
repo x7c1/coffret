@@ -767,3 +767,113 @@ async fn a_device_that_maps_nothing_reaches_no_folder() {
         [false]
     );
 }
+
+/// The files either side of a row, as text.
+async fn beside(
+    library: &OpenLibrary,
+    path: &str,
+    folder: bool,
+) -> (Option<String>, Option<String>) {
+    let found = library
+        .files_beside(&entry_path(path), folder)
+        .await
+        .expect("the catalog answers");
+    (
+        found.previous.map(|one| one.as_str().to_owned()),
+        found.next.map(|one| one.as_str().to_owned()),
+    )
+}
+
+fn some(path: &str) -> Option<String> {
+    Some(path.to_owned())
+}
+
+// EP-3: reading order is the tree's with every folder open — a folder's
+// folders before its files, each in byte order — so the file after the last
+// of one folder is the first of the next, at whatever depth, and a folder's
+// own files come after everything in its folders. Folders that nothing has
+// listed are read as readily as any: the answer is the catalog's.
+#[tokio::test]
+async fn the_files_beside_a_row_are_in_reading_order_across_folders() {
+    let library = library(&[
+        (
+            1,
+            ContainerKind::Pack,
+            &["series/vol-1/001.jpg", "series/vol-1/002.jpg"],
+        ),
+        (
+            2,
+            ContainerKind::Pack,
+            &["series/vol-2/001.jpg", "series/vol-2/extra/a.jpg"],
+        ),
+        (
+            3,
+            ContainerKind::OneFile,
+            &["series/notes.txt", "series/a.txt", "series.txt"],
+        ),
+    ])
+    .await;
+
+    // Off the end of one folder into the next.
+    assert_eq!(
+        beside(&library, "series/vol-1/002.jpg", false).await,
+        (
+            some("series/vol-1/001.jpg"),
+            some("series/vol-2/extra/a.jpg")
+        ),
+        "a folder's folders come before its files, whatever their names",
+    );
+    assert_eq!(
+        beside(&library, "series/vol-2/extra/a.jpg", false).await,
+        (some("series/vol-1/002.jpg"), some("series/vol-2/001.jpg")),
+    );
+    // Out of the last folder, onto the files of the folder above it.
+    assert_eq!(
+        beside(&library, "series/vol-2/001.jpg", false).await,
+        (some("series/vol-2/extra/a.jpg"), some("series/a.txt")),
+    );
+    assert_eq!(
+        beside(&library, "series/notes.txt", false).await,
+        (some("series/a.txt"), some("series.txt")),
+    );
+    // The two ends of the Library.
+    assert_eq!(
+        beside(&library, "series/vol-1/001.jpg", false).await,
+        (None, some("series/vol-1/002.jpg")),
+    );
+    assert_eq!(
+        beside(&library, "series.txt", false).await,
+        (some("series/notes.txt"), None),
+    );
+}
+
+// A folder's place is just before everything under it, so a reader on a
+// folder reads on into its first file and steps back onto the file before it.
+#[tokio::test]
+async fn the_files_beside_a_folder_are_its_first_and_the_one_before_it() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &["a/1.jpg", "b/c/1.jpg", "b/c/2.jpg", "b/1.jpg", "d.jpg"],
+    )])
+    .await;
+
+    assert_eq!(
+        beside(&library, "b", true).await,
+        (some("a/1.jpg"), some("b/c/1.jpg"))
+    );
+    assert_eq!(
+        beside(&library, "b/c", true).await,
+        (some("a/1.jpg"), some("b/c/1.jpg"))
+    );
+    assert_eq!(beside(&library, "a", true).await, (None, some("a/1.jpg")));
+    // A path the Library holds nothing at names a place all the same.
+    assert_eq!(
+        beside(&library, "b/0", true).await,
+        (some("a/1.jpg"), some("b/c/1.jpg"))
+    );
+    assert_eq!(
+        beside(&library, "b/z.jpg", false).await,
+        (some("b/1.jpg"), some("d.jpg"))
+    );
+}

@@ -22,19 +22,30 @@ use crate::refresh::when_stale::fetch_caught_up_if_stale;
 use crate::reported::Reported;
 use crate::state::ServerState;
 
-/// The `?peek=` the file route may be asked with beside `?path=`.
+/// The two ways of asking the file route that sit beside `?path=`: `?peek=`
+/// and `?fill=`.
 ///
-/// A query of its own rather than a field of [`PathQuery`], which every route
-/// naming one path reads: a peek is a way of asking this route alone. Both are
-/// read out of the one query string, and each ignores the other's parameter.
+/// A query of its own rather than fields of [`PathQuery`], which every route
+/// naming one path reads: these are ways of asking this route alone. Both are
+/// read out of the one query string, and each ignores the other's parameters.
 #[derive(Debug, Deserialize)]
-pub struct PeekQuery {
+pub struct ReadQuery {
     /// Whether the bytes are wanted only where they are on this device already.
     #[serde(default)]
     peek: bool,
+    /// Whether answering arms the fill of the file's folder, as reading a page
+    /// does; `false` is a read ahead of the reader (spec: LA-33).
+    #[serde(default = "arms_a_fill")]
+    fill: bool,
 }
 
-/// `GET /api/file?path=<entry>[&peek=true]`
+/// What a request that does not say arms: a fill, since a page opened is the
+/// signal the rest of its folder is wanted.
+fn arms_a_fill() -> bool {
+    true
+}
+
+/// `GET /api/file?path=<entry>[&peek=true | &fill=false]`
 ///
 /// The Entry's plaintext, from the folder this device maps it into. Present here
 /// already, and the file at its translated local path is it (spec: EP-9, EP-10);
@@ -58,6 +69,17 @@ pub struct PeekQuery {
 /// opening anything, and a preview that fetched from Storage, or set the rest
 /// of a folder coming, would turn a glance at a row into a download.
 ///
+/// With `fill=false` the route reads as it otherwise does — from disk where
+/// the file is here, and through a fetch from Storage where it is not — and
+/// arms no fill, of either kind (spec: LA-33). It is what the explorer asks
+/// for to read ahead of a reader: the first pages of the folder the reader is
+/// about to step into, and the cover of a folder the focus is on. A fill of a
+/// second folder supersedes the one running, so reading ahead into the next
+/// folder the ordinary way would stop the fill of the folder still being
+/// read. What its fetch found goes to the next fill published (see
+/// `Fills::hear`). Once the reader steps into the folder its pages are read
+/// the ordinary way, and that arms the fill there.
+///
 /// Served whole. A range request is not honoured, because nothing asks for one —
 /// a browser's `<img>` sends none — and honouring one would mean a second way of
 /// reading an Entry with a second set of answers about a fetch that has to
@@ -75,31 +97,42 @@ pub struct PeekQuery {
 /// the same file (spec: LA-12): a page that was not looking when its reader
 /// met Storage gone can read it back, and a reader that has the page now is
 /// not told it failed. A peek is nobody opening anything, and is logged
-/// neither way.
+/// neither way. A read ahead answered settles them as a read does — the file
+/// is here now, and a failure left standing beside it would tell its reader
+/// otherwise — but its refusal is not logged: it is the explorer guessing what
+/// will be opened next, and the refusal is met again, and said, when the file
+/// is.
 pub async fn file(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
-    peek: Query<PeekQuery>,
+    read: Query<ReadQuery>,
 ) -> Result<Response, ApiError> {
-    let asked = (!peek.peek).then(|| query.entry().ok()).flatten();
-    let answered = answer(Arc::clone(&state), query, peek).await;
+    let asked = (!read.peek).then(|| query.entry().ok()).flatten();
+    let opened = read.fill;
+    let answered = answer(Arc::clone(&state), query, read).await;
     if let Some(path) = asked {
-        logged(&state, &path, &answered);
+        logged(&state, &path, &answered, opened);
     }
     answered
 }
 
-/// Logs what one reader's request came to.
+/// Logs what one reader's request came to: a refusal only where it was
+/// `opened`, read the ordinary way rather than ahead.
 ///
 /// Not every refusal is a failure of the fetch. A locked Library is a state
 /// the explorer already says, once, with the unlock beside it — logged, it
 /// would be one more line for every page the reader asked for while locked.
 /// And an Entry that is not in the catalog is the reader holding a row the
 /// Library no longer has, which the listing it asks for next answers.
-fn logged(state: &ServerState, path: &EntryPath, answered: &Result<Response, ApiError>) {
+fn logged(
+    state: &ServerState,
+    path: &EntryPath,
+    answered: &Result<Response, ApiError>,
+    opened: bool,
+) {
     match answered {
         Ok(_) => state.activity.fetched(path.as_str()),
-        Err(refusal) if !matches!(refusal.kind(), "locked" | "no_such_entry") => {
+        Err(refusal) if opened && !matches!(refusal.kind(), "locked" | "no_such_entry") => {
             state.activity.record(Ended::Fetch {
                 path: path.as_str().to_owned(),
                 refusal: Reported::of(refusal),
@@ -113,8 +146,10 @@ fn logged(state: &ServerState, path: &EntryPath, answered: &Result<Response, Api
 async fn answer(
     state: Arc<ServerState>,
     query: PathQuery,
-    Query(PeekQuery { peek }): Query<PeekQuery>,
+    Query(ReadQuery { peek, fill }): Query<ReadQuery>,
 ) -> Result<Response, ApiError> {
+    // A peek arms nothing whatever it says of a fill: it sets nothing going.
+    let arms = fill && !peek;
     // The keys, once, for the whole of this: the three places the bytes may come
     // from are one question about one Entry, and a lock that landed between two
     // of them would be a request answered out of half an answer (spec: DK-2).
@@ -130,7 +165,7 @@ async fn answer(
     if library.state_of(&path).await? == EntryState::Present {
         match library.open_local_file(&path).await {
             Ok(Some(file)) => {
-                if !peek {
+                if arms {
                     fill_unless_whole(&state, &library, &path).await?;
                 }
                 return Ok(served(&path, file, "present"));
@@ -194,12 +229,16 @@ async fn answer(
         // this Entry again, and its line is where a person who only opens
         // files hears of them (spec: KL-15, PK-21). A fetch another caller had
         // already made read nothing, and has nothing to carry.
-        EntryFetch::Placed => fill_folder(
+        //
+        // A read ahead arms nothing, and what its fetch found is handed to
+        // the next fill published all the same (spec: LA-33).
+        EntryFetch::Placed if arms => fill_folder(
             Arc::clone(&state),
             Folder::holding(&path),
             fetched.short,
             fetched.unheld,
         ),
+        EntryFetch::Placed => state.fills.hear(fetched.short, fetched.unheld),
         EntryFetch::AlreadyPresent => {}
         // A declined Entry arms nothing, and what its fetch read of the Keyring
         // stays in the line the run wrote to the log. Only a locked one read it

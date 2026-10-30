@@ -77,7 +77,10 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * opens the focused row in the reader's sheet — for an image, or a folder
  * holding images — which then follows the focus (see
  * [`ReaderView`](./ReaderView)); on a folder it also opens the folder, so
- * `↓` goes on into its files with the sheet following. The list scrolls ahead
+ * `↓` goes on into its files with the sheet following. While the sheet is
+ * open, `↑`/`↓` go from file to file in reading order rather than row to row
+ * (see [`readOn`](./tree)): off the end of one folder into the first file of
+ * the next, opening it. The list scrolls ahead
  * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
  * double-click opens it as `Enter` does, and a press on the disclosure button
  * opens or closes the folder without moving the focus — except out of a folder
@@ -161,6 +164,7 @@ export function TreeTable({
   measure,
   areaRef,
   escapeLetsGo = true,
+  onReadOn,
 }: {
   /** Every row on show, top to bottom (see [`treeRows`](./tree)). */
   rows: readonly TreeRow[];
@@ -259,6 +263,13 @@ export function TreeTable({
    * reader's sheet is open, whose `Escape` closes it.
    */
   escapeLetsGo?: boolean;
+  /**
+   * What `↑`/`↓` do instead of moving to the row above or below, while the
+   * reader's sheet is open: read on to the file before or after the focus
+   * (see [`readOn`](./tree)). Unset while it is closed. Shift with them still
+   * grows the selection row by row.
+   */
+  onReadOn?: (arrow: 'ArrowUp' | 'ArrowDown') => void;
 }) {
   const own = useRef<HTMLDivElement>(null);
   const scroller = areaRef ?? own;
@@ -456,6 +467,13 @@ export function TreeTable({
       return;
     }
     event.preventDefault();
+    if (onReadOn !== undefined && !event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      onReadOn(event.key);
+      if (selection.keys.size > 0) {
+        onSelect(NOTHING_SELECTED);
+      }
+      return;
+    }
     const next = arrowed(rows, state, event.key as Arrow);
     const extend = event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
     const kept = stepped(rows, picked, next.focus, extend);

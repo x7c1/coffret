@@ -97,7 +97,7 @@ pub struct WorkDto {
     pub(super) reconnect: Option<ReconnectDto>,
     /// What the server has finished since it started, newest first: every
     /// fill, sync, freeze and deletion that ended, every folder a queue lost,
-    /// and every file a reader was refused other than on a peek or by a locked
+    /// and every file a reader was refused other than on a peek or a read ahead or by a locked
     /// Library or an Entry the catalog does not hold — the oldest dropped past a fixed
     /// count, a failure kept past it until the same work ends again, and never
     /// more than a fixed ceiling (spec: LA-12).

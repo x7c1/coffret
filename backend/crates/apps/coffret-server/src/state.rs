@@ -108,7 +108,7 @@ pub struct ServerState {
     pub fills: Fills,
     /// What the server has finished: every run of the four flows that ended,
     /// every folder a queue lost, every fetch a reader was refused other than
-    /// on a peek or by a locked Library or an Entry the catalog does not hold — newest
+    /// on a peek or a read ahead or by a locked Library or an Entry the catalog does not hold — newest
     /// first, the oldest dropped past a fixed count save a failure the same
     /// work has not settled, and never more than a fixed ceiling
     /// (spec: LA-12).

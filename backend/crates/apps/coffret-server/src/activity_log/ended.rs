@@ -34,7 +34,7 @@ pub enum Ended {
     },
     /// A file a reader asked for and was refused — by anything but a locked
     /// Library or an Entry the catalog does not hold, which the file route
-    /// leaves out of the log, as it leaves out every peek.
+    /// leaves out of the log, as it leaves out every peek and every read ahead.
     Fetch {
         /// The Entry Path it asked for.
         path: String,

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { getFile, isRefusal, peekFile, type Listing } from '@coffret/api';
+import { getBeside, getFile, getListing, readAhead, type Listing } from '@coffret/api';
 
 import { drawnPages } from './drawn';
 import { LIBRARY_ROOT } from './location';
@@ -8,7 +8,16 @@ import { parentOf } from './prospective';
 import { SHADOW, SHEET_COLOR } from './theme';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { refusedAsRanOut } from './ranOut';
-import { COVER_NOT_HERE, sheetShows, sheetWanted, UNSUPPORTED, type Counter, type Sheeted, type SheetShows } from './sheet';
+import {
+  aheadIn,
+  readsOnFrom,
+  sheetShows,
+  sheetWanted,
+  UNSUPPORTED,
+  type Counter,
+  type Sheeted,
+  type SheetShows,
+} from './sheet';
 import { said, type Asked } from './useAsked';
 
 /** How far ahead and behind the reader keeps pages ready. */
@@ -18,8 +27,6 @@ const PREFETCH_RADIUS = 3;
 type Shown =
   | { status: 'loading' }
   | { status: 'ready'; url: string }
-  /** A folder's cover was peeked at and is not on this device. */
-  | { status: 'absent' }
   | { status: 'failed'; message: string; ranOut: boolean };
 
 /**
@@ -27,9 +34,11 @@ type Shown =
  * tree's focus is on.
  *
  * It follows the focus and holds no place of its own. The keys stay with the
- * tree, so `↑`/`↓` down the page rows of an open book is paging, and the
- * next row up or down — the book's folder, the next book, a file the reader
- * cannot draw — is what the sheet shows next. It binds no keys to paging:
+ * tree, and while the sheet is open its `↑`/`↓` go from file to file in
+ * reading order (see [`readOn`](./tree)): down the pages of a folder is
+ * paging, and off the end of it is the first file of the next folder — a
+ * file the reader cannot draw included, which the sheet says it cannot show.
+ * A folder is shown where the focus is put on its row. It binds no keys to paging:
  * `←`/`→` are the tree's, opening and closing folders, and a book bound
  * right-to-left pages the other way from one bound left-to-right, which is
  * what made arrows that turned pages confusing. What it shows (see
@@ -48,9 +57,17 @@ type Shown =
  * A page this device does not have yet is fetched by the same request as any
  * other; what it costs is a placeholder while it is in flight, and a sentence
  * and a retry where it was refused. Neither is a screen a reader is stuck on.
- * A folder's cover is only peeked at (see [`sheetWanted`](./sheet)), so
- * walking past a shelf of books sets none of them coming; a cover not on this
- * device is said to be not here yet, on the stack where it would be drawn.
+ * A folder's cover is read ahead (see [`sheetWanted`](./sheet)): fetched where
+ * this device does not have it, and setting none of the folder coming, so
+ * walking past a run of folders fetches one image of each and no more.
+ *
+ * Near the end of a folder it reads ahead into the next (see
+ * [`readsOnFrom`](./sheet)): it asks the server which file comes after the
+ * folder's last, lists that file's folder — which sets the server reading the
+ * fronts of its Containers — and reads its first pages ahead, so that reading
+ * off the end of one folder lands on a page already here. None of that sets
+ * the next folder coming, which would stop the fill of the one being read;
+ * the first page read there once the focus steps in does.
  */
 export function ReaderView({
   row,
@@ -88,10 +105,10 @@ export function ReaderView({
 }) {
   // Every picture this reader has drawn, by Entry Path — see [`drawn`](./drawn),
   // which holds them and is the one place they are revoked from. Pages are
-  // read and covers peeked at, out of the one cache: a cover peeked is a first
-  // page already drawn, and a cover refused does not stand in the way of
-  // reading that page once somebody steps into the book.
-  const [drawn] = useState(() => drawnPages(getFile, peekFile));
+  // read, and covers and the pages past the end of the folder read ahead, out
+  // of the one cache: a cover read ahead is a first page already drawn, and
+  // stepping onto it still reads it, which is what sets its folder coming.
+  const [drawn] = useState(() => drawnPages(getFile, readAhead));
 
   const [shown, setShown] = useState<Shown>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -101,7 +118,7 @@ export function ReaderView({
   const path = wanted.shown?.path;
   const name = wanted.shown?.name;
   const remote = wanted.shown?.state === 'remote';
-  const peek = wanted.peek;
+  const ahead = wanted.ahead;
 
   useEffect(() => {
     if (path === undefined || name === undefined) {
@@ -110,16 +127,17 @@ export function ReaderView({
     const held = drawn.held(path);
     if (held !== undefined) {
       setShown({ status: 'ready', url: held });
+      // A page read ahead is drawn at once, and read all the same: the read is
+      // what tells the server its folder is being read (see `drawn`).
+      if (!ahead) {
+        void drawn.load(path);
+      }
       return;
     }
     let live = true;
     setShown({ status: 'loading' });
-    // A peek reaches nothing past this device's own disk, so there is no fetch
-    // for the Activity panel to name.
-    if (!peek) {
-      onFetching(name);
-    }
-    void drawn.load(path, peek).then(
+    onFetching(name);
+    void drawn.load(path, ahead).then(
       (url) => {
         // Nothing to show where the answer came back to a key this device has
         // given up: it was revoked as it landed, and the picture it was is
@@ -133,7 +151,7 @@ export function ReaderView({
         // screen.
         onFetching(null);
         setShown({ status: 'ready', url });
-        if (remote && !peek) {
+        if (remote) {
           // The file is on this device now, so a row still saying `remote` is
           // stale. Which rows changed is the server's to say, so the listing is
           // asked again rather than edited here.
@@ -143,14 +161,6 @@ export function ReaderView({
       (refused: unknown) => {
         if (live) {
           onFetching(null);
-          // The one answer a peek is expected to get: the cover is not on this
-          // device. Not a failure to retry — nothing was asked of Storage, and
-          // asking again would get the same — and not a cue to read it either,
-          // which would set the folder coming.
-          if (peek && isRefusal(refused) && refused.kind === 'no_such_entry') {
-            setShown({ status: 'absent' });
-            return;
-          }
           setShown({
             status: 'failed',
             message: said(refused),
@@ -163,7 +173,40 @@ export function ReaderView({
       live = false;
       onFetching(null);
     };
-  }, [path, name, remote, peek, attempt, drawn, onFetching, onFetched]);
+  }, [path, name, remote, ahead, attempt, drawn, onFetching, onFetched]);
+
+  // Near the end of a folder, the first pages of the next one, read ahead (see
+  // the comment on `ReaderView`). Asked once per folder end rather than once
+  // per page turned near it: the file read on from is the folder's last
+  // whichever of its last pages the focus is on. A fetch ahead that fails is let go of quietly — it is a
+  // guess, and the page it was for is asked for again, and answered for on
+  // the screen, when the focus lands on it.
+  const from = readsOnFrom(row);
+  const [across, setAcross] = useState<{ from: string; pages: string[] } | null>(null);
+  useEffect(() => {
+    if (from === null) {
+      return;
+    }
+    const aborter = new AbortController();
+    void getBeside(from, false, aborter.signal)
+      .then(async ({ next }) => {
+        if (next === null || parentOf(next) === parentOf(from)) {
+          return;
+        }
+        const listing = await getListing(parentOf(next), aborter.signal);
+        if (aborter.signal.aborted) {
+          return;
+        }
+        const pages = aheadIn(listing, next, PREFETCH_RADIUS);
+        setAcross({ from, pages });
+        for (const page of pages) {
+          void drawn.load(page, true).catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+    return () => aborter.abort();
+  }, [from, drawn]);
+  const acrossKey = across !== null && across.from === from ? JSON.stringify(across.pages) : null;
 
   // What is kept ready follows the focus: the picture drawn and the pages
   // around it, and nothing else — a long folder walked from end to end does
@@ -171,24 +214,31 @@ export function ReaderView({
   //
   // Keyed by the list's contents, spelled as one string, since the list itself
   // is a new array on every render and the effect is about which pages.
-  const aheadKey = wanted.ahead === null ? null : JSON.stringify(wanted.ahead);
+  const aroundKey = wanted.around === null ? null : JSON.stringify(wanted.around);
   useEffect(() => {
-    if (aheadKey === null) {
+    if (aroundKey === null) {
       return;
     }
-    const ahead = JSON.parse(aheadKey) as string[];
-    const keep = new Set<string>(ahead);
+    const around = JSON.parse(aroundKey) as string[];
+    const keep = new Set<string>(around);
     if (path !== undefined) {
       keep.add(path);
     }
-    for (const page of ahead) {
+    // And the pages read ahead past the end of the folder, while the focus is
+    // still near it.
+    if (acrossKey !== null) {
+      for (const page of JSON.parse(acrossKey) as string[]) {
+        keep.add(page);
+      }
+    }
+    for (const page of around) {
       // A page that would not prefetch is not this row's problem. It is asked
       // for again — and answered for, on the screen — when the focus lands on
       // it.
       void drawn.load(page).catch(() => undefined);
     }
     drawn.keepOnly(keep);
-  }, [aheadKey, path, drawn]);
+  }, [aroundKey, acrossKey, path, drawn]);
 
   // What a lock takes back. The pictures this reader is holding are plaintext
   // the Master Key made, and a lock ends this server's hold on that key — so
@@ -312,8 +362,7 @@ function Body({
                 shown={shown}
                 name={shows.cover.name}
                 alt={`cover of ${row.name}`}
-                // A peek brings nothing over, so its wait has nothing to explain.
-                remote={false}
+                remote={shows.cover.state === 'remote'}
                 onRetry={onRetry}
                 reconnect={reconnect}
                 style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
@@ -439,10 +488,6 @@ function Picture({
             try again
           </button>
         </div>
-      );
-    case 'absent':
-      return (
-        <span style={{ color: SHEET_COLOR.dim, fontSize: 13, textAlign: 'center', padding: 12 }}>{COVER_NOT_HERE}</span>
       );
     case 'ready':
       return <img src={shown.url} alt={alt} style={style} />;
