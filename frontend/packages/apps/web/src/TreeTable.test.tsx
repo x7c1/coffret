@@ -435,27 +435,37 @@ describe('the block over the rows', () => {
     expect(said()).toContain('this folder is empty');
   });
 
-  it('offers to pack a mapped folder that is not the root, and hands over which', () => {
-    const { onPack } = mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
-    fireEvent.click(screen.getByText('Pack this folder…'));
-    expect(onPack).toHaveBeenCalledWith('books/vol-1');
-    cleanup();
-    mount(listing({ mapped: false, files: [file('cover.png')] }));
-    expect(screen.queryByText('Pack this folder…')).toBeNull();
-    cleanup();
-    mount(listing({ path: '', files: [file('cover.png', {}, '')] }));
-    expect(screen.queryByText('Pack this folder…')).toBeNull();
-  });
-
   // "New folder…" over the rows is how a path is prepared under the Library
-  // root, which has no row of its own.
-  it('offers "New folder…" for the focused folder where a mapping reaches it', () => {
+  // root, which has no row of its own; a folder that has a row offers it, and
+  // "Pack this folder…", from the row's menu instead.
+  it('offers the root\'s "New folder…" over the rows while the Library root is mapped', () => {
     const { onNewFolder } = mount(listing({ path: '' }));
-    fireEvent.click(screen.getByText('New folder…'));
+    const bar = screen.getByRole('button', { name: 'New folder…' });
+    expect(bar.getAttribute('title')).toBe('New folder in the Library');
+    fireEvent.click(bar);
     expect(onNewFolder).toHaveBeenCalledWith('');
     cleanup();
     mount(listing({ path: '', mapped: false }));
-    expect(screen.queryByText('New folder…')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
+    cleanup();
+    // Nor where the focus is deeper but the root is still not mapped.
+    mount(listing({ path: 'books/vol-1', mapped: false, files: [file('page.jpg', {}, 'books/vol-1')] }), {
+      more: [listing({ path: '', mapped: false, folders: [folder('books', { mapped: false }, '')] })],
+    });
+    expect(screen.queryByRole('button', { name: 'New folder…' })).toBeNull();
+  });
+
+  // The bar stays put as the focus moves below the root, so opening a
+  // top-level folder does not slide the rows under the pointer; and it still
+  // makes the folder at the root, never in the folder the focus is in.
+  it('keeps the root\'s "New folder…" over the rows with the focus in a folder below it', () => {
+    const { onNewFolder } = mount(listing({ path: 'books/vol-1', files: [file('page.jpg', {}, 'books/vol-1')] }));
+    const bar = screen.getByRole('button', { name: 'New folder…' });
+    expect(bar.getAttribute('title')).toBe('New folder in the Library');
+    fireEvent.click(bar);
+    expect(onNewFolder).toHaveBeenCalledWith('');
+    // A folder's own actions stay in its row's menu.
+    expect(screen.queryByRole('button', { name: 'Pack this folder…' })).toBeNull();
   });
 });
 
@@ -672,33 +682,6 @@ describe('a drop on the tree', () => {
     });
     await vi.waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd.mock.calls[0][0]).toBe('albums/2026');
-  });
-
-  // The header's +: the operating system's picker, for files or a folder,
-  // over the focused folder — or the folder of the focused file.
-  it('adds files picked with + to the focused folder, or the folder of the focused file', async () => {
-    const picked = [{ name: 'a.jpg', size: 1, lastModified: 0, webkitRelativePath: '' } as File];
-    const pick = async (focus: string, which: 'Files…' | 'A folder…') => {
-      const added = mount(listing({ path: '', folders: [folder('albums', {}, '')] }), {
-        more: [listing({ folders: [folder('2026')], files: [file('cover.png')] })],
-        open: ['albums'],
-        focus,
-      });
-      const plus = screen.getByRole('button', { name: 'Add files' });
-      fireEvent.click(plus);
-      const input = screen.getByTestId(which === 'Files…' ? 'pick-files' : 'pick-folder') as HTMLInputElement;
-      const click = vi.spyOn(input, 'click').mockImplementation(() => undefined);
-      fireEvent.click(screen.getByRole('menuitem', { name: which }));
-      expect(click).toHaveBeenCalledTimes(1);
-      Object.defineProperty(input, 'files', { value: picked, configurable: true });
-      fireEvent.change(input);
-      await vi.waitFor(() => expect(added.onAdd).toHaveBeenCalledTimes(1));
-      const [into, drop] = added.onAdd.mock.calls[0];
-      cleanup();
-      return { into, paths: drop.files.map((one: { path: string }) => one.path) };
-    };
-    expect(await pick(folderKey('albums/2026'), 'Files…')).toEqual({ into: 'albums/2026', paths: ['a.jpg'] });
-    expect(await pick(fileKey('albums/cover.png'), 'A folder…')).toEqual({ into: 'albums', paths: ['a.jpg'] });
   });
 
   it('answers opening a file of an unmapped folder as an open, and does not open it', () => {

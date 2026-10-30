@@ -13,7 +13,7 @@ export const COLOR = {
    * to be filled with it rather than left clear.
    */
   ground: '#111',
-  /** The bar over the tree and the Activity panel, a shade off the ground. */
+  /** The header, the bar over the tree and the Activity panel, a shade off the ground. */
   panel: '#181818',
   /** The row of the tree focused by a click or the arrow keys. */
   selected: '#2b3d52',

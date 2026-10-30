@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import type { KeptParcels, Library } from '@coffret/api';
+import type { KeptParcels } from '@coffret/api';
 
 import {
   answering,
@@ -26,7 +26,6 @@ import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { SyncIcon } from './SyncIcon';
 import { COLOR } from './theme';
-import type { Asked } from './useAsked';
 
 /**
  * What the server and this page are doing and have done, along the bottom of
@@ -54,8 +53,9 @@ import type { Asked } from './useAsked';
  * is nothing to clear: the server forgets what is old on its own, and what a
  * person has read is still worth having to read again.
  *
- * The row also carries what there is to say about the Library itself: its name, the parcels this device keeps, and the sync icon
- * that asks it what is new — always there, unlike everything above, which
+ * The row also carries what there is to say about the Library itself: the
+ * parcels this device keeps, and the sync icon that asks it what is new —
+ * always there, unlike everything above, which
  * comes and goes with the work. While the Library is locked the row says so
  * in place of the summary, with the one button that unlocks it; every Retry
  * goes, since each would meet the same locked refusal.
@@ -67,7 +67,6 @@ import type { Asked } from './useAsked';
  * opening it shrinks them rather than covering what they show.
  */
 export function ActivityPanel({
-  library,
   kept,
   running,
   entries,
@@ -77,7 +76,6 @@ export function ActivityPanel({
   reconnect,
   locked,
 }: {
-  library: Asked<Library>;
   /**
    * The parcels this device keeps for the Library, and `null` where the
    * server has not said — before its first answer, and while it is locked.
@@ -207,12 +205,6 @@ export function ActivityPanel({
         )}
         {expired && reconnect !== null && <ReconnectOffer offer={reconnect} />}
         <span style={END}>
-          {/* A refusal standing where the Library's name goes is the sentence
-              saying why the screen above is empty, coloured like the ones up
-              there. */}
-          <span style={library.status === 'failed' ? { color: COLOR.refused } : undefined}>
-            {named(library)}
-          </span>
           {/* The parcels a reader's fetches read and kept, which nothing else
               on this page would ever mention, and which grow by a parcel or
               two for every book opened. */}
@@ -543,24 +535,6 @@ const DOT_COLOUR: Record<Outcome, string> = {
   failure: COLOR.refused,
   notice: COLOR.warn,
 };
-
-/**
- * What the panel calls the Library: its name alone. Which Storage it is kept
- * on is the server's word for a provider, and not something a reader chose or
- * needs to tell one Library from another by. A Library nothing has named yet
- * is said to have no name, and its ID is given as its ID rather than where the
- * name goes.
- */
-function named(library: Asked<Library>): string {
-  switch (library.status) {
-    case 'loading':
-      return 'opening the Library…';
-    case 'ready':
-      return library.value.name ?? `a Library with no name yet (ID ${library.value.library_id})`;
-    case 'failed':
-      return library.message;
-  }
-}
 
 /** The parcels kept, as the row says them: `3 parcels kept, 96.0 MB`. */
 function keptLine(kept: KeptParcels): string {

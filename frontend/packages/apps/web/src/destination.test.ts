@@ -5,13 +5,11 @@ import { addedFile, type Added, type Listing } from '@coffret/api';
 import {
   destinationsOf,
   landingOf,
-  LIBRARY_ROOT,
   levelsOf,
   namedBy,
   newLine,
   onDiskIn,
   onDiskLine,
-  pathLine,
 } from './destination';
 import { summarize } from './packChoice';
 import { fileKey, folderKey } from './tree';
@@ -45,7 +43,7 @@ describe('destinationsOf', () => {
     const [only, ...rest] = destinationsOf('comics/Foo', summary, exists);
     expect(rest).toEqual([]);
     expect(only.folder).toBe('Vol 3');
-    expect(pathLine(only.levels)).toBe('comics/Foo/Vol 3/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Foo/Vol 3');
     expect(only.levels.map((level) => level.state)).toEqual(['named', 'named', 'new']);
     expect(newLine(only.levels)).toBe(
       'Vol 3 is new — the Library has no such folder yet, and adding these files makes it',
@@ -56,7 +54,7 @@ describe('destinationsOf', () => {
   it('marks nothing new where the dropped folder is there already', () => {
     const summary = summarize([added('Vol 1/001.jpg')], ['Vol 1']);
     const [only] = destinationsOf('comics/Foo', summary, exists);
-    expect(pathLine(only.levels)).toBe('comics/Foo/Vol 1/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Foo/Vol 1');
     expect(newLine(only.levels)).toBeNull();
   });
 
@@ -64,17 +62,17 @@ describe('destinationsOf', () => {
   it('names a folder dropped onto the root as a top-level folder', () => {
     const summary = summarize([added('manga/001.jpg')], []);
     const [only] = destinationsOf('', summary, exists);
-    expect(pathLine(only.levels)).toBe('manga/');
+    expect(only.levels.map((level) => level.path)).toEqual(['manga']);
     expect(newLine(only.levels)).toBe(
       'manga is new — the Library has no such folder yet, and adding these files makes it',
     );
   });
 
-  // Loose files land in the folder they were let go over — the root by name.
+  // Loose files land in the folder they were let go over; over the root, that
+  // is no level at all.
   it('puts loose files in the folder dropped onto, beside any dropped folder', () => {
     const alone = destinationsOf('', summarize([added('cover.png')], []), exists);
     expect(alone).toEqual([{ folder: null, levels: [] }]);
-    expect(pathLine(alone[0].levels)).toBe(LIBRARY_ROOT);
     expect(newLine(alone[0].levels)).toBeNull();
 
     const both = destinationsOf(
@@ -82,9 +80,9 @@ describe('destinationsOf', () => {
       summarize([added('Vol 3/001.jpg'), added('cover.png')], []),
       exists,
     );
-    expect(both.map((into) => [into.folder, pathLine(into.levels)])).toEqual([
-      ['Vol 3', 'comics/Foo/Vol 3/'],
-      [null, 'comics/Foo/'],
+    expect(both.map((into) => [into.folder, into.levels.at(-1)?.path])).toEqual([
+      ['Vol 3', 'comics/Foo/Vol 3'],
+      [null, 'comics/Foo'],
     ]);
   });
 
@@ -93,7 +91,7 @@ describe('destinationsOf', () => {
   it('names every level the Library does not have yet', () => {
     const summary = summarize([added('ch-1/001.jpg')], []);
     const [only] = destinationsOf('comics/Bar', summary, exists);
-    expect(pathLine(only.levels)).toBe('comics/Bar/ch-1/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Bar/ch-1');
     expect(newLine(only.levels)).toBe(
       'Bar and ch-1 are new — the Library has no such folders yet, and adding these files makes them',
     );

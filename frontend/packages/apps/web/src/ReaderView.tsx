@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { getFile, isRefusal, peekFile, type Listing } from '@coffret/api';
 
 import { drawnPages } from './drawn';
+import { LIBRARY_ROOT } from './location';
 import { parentOf } from './prospective';
 import { COLOR } from './theme';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
@@ -244,7 +245,7 @@ export function ReaderView({
       <header style={HEADER}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 12, color: COLOR.dim, overflowWrap: 'anywhere' }}>
-            {where === '' ? 'Library' : where}
+            {where === '' ? LIBRARY_ROOT : where}
           </p>
           <h2 style={TITLE}>
             {row.kind === 'folder' ? <FolderMark /> : <FileMark />}

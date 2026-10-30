@@ -463,8 +463,7 @@ function collapsed(state: TreeState, folder: string): TreeState {
 
 /**
  * The folder the screen's own actions are about — what a drop on the list's
- * empty space lands in, and what "Pack this folder…" and "New folder…" over
- * the rows act on: the focused folder where it is open, and otherwise the
+ * empty space lands in: the focused folder where it is open, and otherwise the
  * folder the focused row stands in; the Library root where nothing is
  * focused.
  *
