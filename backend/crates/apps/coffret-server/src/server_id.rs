@@ -1,18 +1,15 @@
 //! What this process calls itself, for as long as it runs.
 //!
 //! A browser keeps things across answers that are only true of the process that
-//! said them — a line somebody read and put away is remembered by the run
-//! number it carried, and run numbers start again at 1 with every process. A
-//! locked Library is unlocked by typing the Passphrase and starting the server
-//! again (spec: DK-1), so a restart is an ordinary step rather than an edge
-//! case, and a tab left open across one would go on hiding runs 1..N of the new
-//! process: a fill's line and its declined Entries, and the one sentence that
-//! says a sync did not back a file up.
+//! said them — a run is told apart from the next by the run number it carried,
+//! and run numbers start again at 1 with every process. A locked Library is
+//! unlocked by typing the Passphrase and starting the server again (spec:
+//! DK-1), so a restart is an ordinary step rather than an edge case, and a tab
+//! left open across one could not tell runs 1..N of the new process from the
+//! old one's.
 //!
 //! So every answer says which process it came from, and a page that sees a new
-//! one throws away what it was holding. Comparing run numbers instead cannot
-//! work: a run number lower than a dismissed one is also what an answer issued
-//! before the dismissal looks like, and the two cannot be told apart that way.
+//! one throws away what it was holding.
 
 use coffret_device::lowercase_hex;
 use tracing::warn;
@@ -29,7 +26,7 @@ const RANDOM_BYTES: usize = 16;
 /// - It has to differ across process starts, which is the whole of its job.
 ///   Anything the device keeps — the Library ID, the directory it is in, the
 ///   port, the name it was started under — is the same after a restart, so a
-///   tab would go on hiding the new process's runs.
+///   tab could not tell the new process's runs from the old one's.
 /// - It must say nothing about this machine or this Library. It rides on an
 ///   ordinary answer and reaches a page, and a response coffret also writes
 ///   somewhere that outlives the process is a record there whatever it was
@@ -57,10 +54,10 @@ impl ServerId {
         if let Err(cause) = getrandom::fill(&mut bytes) {
             // Said out loud rather than swallowed: what is left is the same
             // name every other run of a machine in this state would draw, so a
-            // browser across a restart is back to hiding lines it was told to
-            // hide before it — which is the failure this whole value is here to
-            // end. Not a reason to refuse to serve a Library: nothing else on
-            // these routes depends on it.
+            // browser across a restart cannot tell the new process's answers
+            // from the old one's — which is what this whole value is here to
+            // prevent. Not a reason to refuse to serve a Library: nothing else
+            // on these routes depends on it.
             warn!(
                 error = %cause,
                 "this server could not draw a name for itself, so an explorer \

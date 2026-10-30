@@ -10,8 +10,8 @@ use super::{named_folders, DeclinedDto, DisplacedFillDto, FindingDto};
 pub(super) struct FillDto {
     /// Which run of the fill this is, counted from the start of this process.
     ///
-    /// What tells one run's account of itself from the next's, so that a line
-    /// somebody has read and put away does not take the next run's with it.
+    /// What tells one run's account of itself from the next's: nothing else here
+    /// distinguishes two runs that came to the same thing.
     run: u64,
     /// The folder being brought over; the Library root is the empty string, as
     /// it is in a listing.

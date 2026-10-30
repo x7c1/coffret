@@ -38,6 +38,7 @@ import {
   glimpse,
   inTree,
   ON_THIS_DEVICE,
+  openActivity,
   photo,
   row,
   rowsNamed,
@@ -295,6 +296,9 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
     expect(await colourOf(page, STRANDED)).not.toBe(await colourOf(page, IMPORTED));
     await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
     await expect(stateIcon(page, pages[0])).toHaveAccessibleName(TO_BE_PACKED);
+    // The second attempt is the Retry on the stopped freeze's entry in the
+    // Activity panel, which the server's log kept across the reload.
+    await openActivity(page);
     await expect(page.getByRole('button', { name: 'pack again' })).toBeVisible();
     await shot(page, '06-the-folder-came-back');
   } finally {
@@ -308,7 +312,11 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
   for (const name of pages) {
     await expect(stateIcon(page, name)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: FREEZE_MS });
   }
-  await expect(page.getByText(new RegExp(`packed ${setting.importPages} files`))).toBeVisible();
+  // Named by its folder: the panel is open, and it lists the first journey's
+  // book packed in the same words beside this one.
+  await expect(
+    page.getByText(new RegExp(`packed ${setting.importPages} files of .*${STRANDED}`)),
+  ).toBeVisible();
 
   // And it is the Library's folder now, drawn like the one beside it; the
   // commit released the reservation, so a reload finds its pages present

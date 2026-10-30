@@ -43,7 +43,7 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   await row(page, first).dblclick();
   await expect(page.getByRole('img', { name: first })).toBeVisible();
 
-  // The line the status bar shows while the folder is coming over. Photographed
+  // The line the Activity panel shows while the folder is coming over. Photographed
   // where it is caught and not asserted: see `glimpse`.
   await glimpse(page.getByText(/bringing over/), GLIMPSE_MS);
   await shot(page, '02-bringing-the-album-over');

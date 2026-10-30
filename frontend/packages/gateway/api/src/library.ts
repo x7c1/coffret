@@ -10,7 +10,7 @@ import { apiUrl, askedForJson } from './request';
  */
 export interface Library {
   /**
-   * The Library's name, which is what the status bar shows, and null where
+   * The Library's name, which is what the Activity panel shows, and null where
    * nothing has named it yet: `library_id` is its ID and never stands in for
    * the name.
    */

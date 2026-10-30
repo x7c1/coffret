@@ -30,12 +30,13 @@ import {
   preparedAfter,
   prospectiveFolders,
 } from './prospective';
+import { ActivityPanel } from './ActivityPanel';
+import { earlier, inProgress, offeredNow, type Entry, type PageNotice } from './activity';
 import { DeleteConfirm } from './DeleteConfirm';
 import { firstImage, uploadStopped } from './details';
 import { DetailsPane } from './DetailsPane';
 import {
   askToDelete,
-  deletedLine,
   refusedNotice,
   type DeleteNotice,
   type DeleteQuestion,
@@ -45,7 +46,6 @@ import { nothingAddedLine, withNotTaken, type Drop, type NotTaken } from './drop
 import { systemFilesLine, type SystemFile } from './systemFiles';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
-import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
 import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
@@ -73,8 +73,7 @@ import type { Edits, Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
 import { counterOf, sheetKey, sheetOn } from './sheet';
-import { Region, TRY_AGAIN } from './Region';
-import { StatusBar } from './StatusBar';
+import { Region } from './Region';
 import { heldAfter, strandedFolders } from './stranded';
 import { COLOR } from './theme';
 import { useRunReloads } from './runReloads';
@@ -99,8 +98,9 @@ import { said, useAsked, type Asked } from './useAsked';
 
 /**
  * The explorer's one screen: the Library as one tree of folders and files (see
- * [`TreeTable`](./TreeTable)) and a status bar — with the reader's sheet over
- * the right of the tree while it is open, following the focused row (see
+ * [`TreeTable`](./TreeTable)) and the Activity panel along the bottom (see
+ * [`ActivityPanel`](./ActivityPanel)) — with the reader's sheet over the right
+ * of the tree while it is open, following the focused row (see
  * [`ReaderView`](./ReaderView)).
  *
  * Where the screen is standing lives in the URL — the folder the focus is in,
@@ -129,13 +129,47 @@ export function App() {
   const [selection, setSelection] = useState<Selection>(NOTHING_SELECTED);
   const [fetching, setFetching] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
+  // How far the drop in flight has been sent, from 0 to 1, where the browser
+  // has said: the bar beside its line in the Activity panel.
+  const [sent, setSent] = useState<number | null>(null);
+  // The answers to gestures made on this page that no request carried to the
+  // server — a row asked to open and not opened, files dropped and not added —
+  // newest first. They go to the Activity panel's **Earlier** beside the
+  // server's own log, and live as long as the page: a sentence that answers a
+  // request the server never heard, or that could not reach it at all, is
+  // not one the server can be asked to keep.
+  //
   // A deletion's notice may carry the target a *try again* beside it asks about
   // again (see [`DeleteNotice`](./deleteEntries)); every other notice is a
   // sentence alone, set through `setNotice`.
-  const [shownNotice, showNotice] = useState<DeleteNotice | null>(null);
+  const [notices, setNotices] = useState<readonly PageNotice[]>([]);
+  const noticed = useRef(0);
+  const showNotice = useCallback((notice: DeleteNotice) => {
+    noticed.current += 1;
+    const id = noticed.current;
+    setNotices((held) =>
+      [
+        {
+          id,
+          at: new Date().toISOString(),
+          text: notice.text,
+          outcome: notice.retry === null ? ('notice' as const) : ('failure' as const),
+          retry: notice.retry,
+          settled: false,
+        },
+        ...held,
+      ].slice(0, NOTICES_KEPT),
+    );
+  }, []);
+  // `null` says nothing: a notice is part of what happened on this page, and a
+  // later gesture does not take it back.
   const setNotice = useCallback(
-    (text: string | null) => showNotice(text === null ? null : { text, retry: null }),
-    [],
+    (text: string | null) => {
+      if (text !== null) {
+        showNotice({ text, retry: null });
+      }
+    },
+    [showNotice],
   );
 
   // The back and forward buttons are the browser's, and this is all it takes to
@@ -145,11 +179,6 @@ export function App() {
       const next = parseHash(window.location.hash);
       setView(next);
       setTree((held) => restored(held, next));
-      // The notice answers one gesture on one row, and a move away from that row
-      // is the end of it. `go` clears it for the moves it makes; these are the
-      // moves it never sees, and a notice left standing would name a file the
-      // folder now on the screen does not hold.
-      setNotice(null);
     };
     window.addEventListener('hashchange', restore);
     window.addEventListener('popstate', restore);
@@ -159,14 +188,8 @@ export function App() {
     };
   }, []);
 
-  // `keepNotice` is for the one move the screen makes to answer something it
-  // is saying: a deletion that took the folder on the screen away moves the
-  // list up, and the sentence saying the deletion ended is what explains it.
-  const go = useCallback((next: ViewState, replace = false, keepNotice = false) => {
+  const go = useCallback((next: ViewState, replace = false) => {
     setView(next);
-    if (!keepNotice) {
-      setNotice(null);
-    }
     const current = parseHash(window.location.hash);
     if (toHash(current) === toHash(next)) {
       return;
@@ -190,8 +213,8 @@ export function App() {
   // or a prepared path forgotten — which the tree follows: opened down to the
   // folder, and the focus on it.
   const moveTo = useCallback(
-    (next: ViewState, replace = false, keepNotice = false) => {
-      go(next, replace, keepNotice);
+    (next: ViewState, replace = false) => {
+      go(next, replace);
       setTree((held) => restored(held, next));
     },
     [go],
@@ -257,8 +280,8 @@ export function App() {
   // One try-again for the screen, wherever it is pressed: the three requests
   // fail together far more often than apart, because what they fail at is the
   // server not being there. A retry that asked only for its own region would
-  // leave the status bar naming a failure the rest of the screen had recovered
-  // from — and the status bar has no button of its own to press.
+  // leave the Activity panel naming a failure the rest of the screen had
+  // recovered from — and the panel has no button of its own for these.
   //
   // What the server is doing on its own is asked again with them, although it
   // is not a region and shows no refusal of its own. The question a page asks
@@ -286,7 +309,7 @@ export function App() {
   // ask the three questions again, and that is the whole of the reporting: the
   // listing and the tree come back refused with the server's own sentence about
   // the Passphrase, in the same place every other refusal is shown, and the
-  // status bar keeps the Library's name because that is not a thing the Master
+  // Activity panel keeps the Library's name because that is not a thing the Master
   // Key kept. Nothing here invents a locked state of its own — the server is
   // the one that knows, and it is asked.
   //
@@ -306,10 +329,6 @@ export function App() {
   // Which answers are news is [`lockLanded`](./lock). The state it is read
   // against is in a ref rather than in state because nothing on the screen is
   // drawn from it.
-  //
-  // The notice goes down with the pages: what stands there answers a gesture
-  // made over rows that are about to leave the screen, and would otherwise
-  // stand over a screen refusing everything.
   //
   // And the unlock, arriving by the same road the other way: the Passphrase was
   // given in the desktop app's own window (spec: DK-1), and the answer turns
@@ -332,7 +351,6 @@ export function App() {
     held.current = custody;
     if (lockLanded(before, custody)) {
       setDiscarded((given) => given + 1);
-      setNotice(null);
       retry();
     } else if (unlockLanded(before, custody)) {
       setUnlockSaid(null);
@@ -387,7 +405,7 @@ export function App() {
       setUnlockAsking(false);
     });
   }, [prompting, recheckWork]);
-  // The one unlock the screen offers, wherever it is offered: the status bar's
+  // The one unlock the screen offers, wherever it is offered: the panel's
   // while the work answer says the Library is locked, and a region's wherever
   // its own request was refused by the lock — whether or not that answer has
   // been heard yet, so the two can stand at once and share one press.
@@ -654,7 +672,7 @@ export function App() {
   // packing, or finished with nothing committed. The Library does not name them,
   // and the freeze naming them is in the answer this page asks for as it comes
   // up, so the tree draws them from that: the rows and the banner are
-  // reachable, and the status bar's "pack again" is offered over a place
+  // reachable, and the Activity panel's "pack again" is offered over a place
   // somebody can walk into rather than over a name with nothing behind it.
   //
   // Read against the tree's answer, which is why it waits for one: a book that
@@ -920,10 +938,10 @@ export function App() {
 
   // "Pack this folder…": what a freeze of the folder would pack is asked first
   // and shown, and only Pack arms it — after which it is followed exactly as a
-  // drop's freeze is, through the work answer the status bar reads. Which of
-  // those steps the press came to is [`askToPack`](./packFolder); a refusal of
-  // either request is said in the notice area, since it answers a gesture made
-  // on the folder on the screen.
+  // drop's freeze is, through the work answer the Activity panel reads. Which
+  // of those steps the press came to is [`askToPack`](./packFolder); a refusal
+  // of either request is a notice of this page's own, since it answers a
+  // gesture made on the folder on the screen.
   const [packAsking, setPackAsking] = useState<{
     question: PackQuestion;
     answer: (pack: boolean) => void;
@@ -973,10 +991,10 @@ export function App() {
 
   // "Delete…" on a row: what deleting that file or folder would take out of the
   // Library is asked first and shown, and only Delete arms it — after which
-  // it is followed through the work answer, and its outcome is said in the
-  // notice area once it is over. Which of those steps the press came to is
-  // [`askToDelete`](./deleteEntries); a refusal of either request is said in
-  // the notice area too, since it answers a gesture made on a row.
+  // it is followed through the work answer, and what it came to is the
+  // server's to log once it is over (spec: LA-12). Which of those steps the
+  // press came to is [`askToDelete`](./deleteEntries); a refusal of either
+  // request is a notice of this page's own, since no deletion ran to log it.
   const [deleteAsking, setDeleteAsking] = useState<{
     question: DeleteQuestion;
     answer: (remove: boolean) => void;
@@ -1003,10 +1021,6 @@ export function App() {
   // returned, so a *try again* dropped this way leaves its notice standing to be
   // pressed once that count is over, rather than clearing it for nothing.
   const deletePressed = useRef(false);
-  // Whether this tab has armed a deletion, which is what makes the end of one
-  // news here: a page that comes up to a deletion somebody else finished has
-  // nobody waiting on its sentence.
-  const deletedHere = useRef(false);
   const deleteEntries = useCallback(
     (target: DeleteTarget): boolean => {
       if (deletePressed.current) {
@@ -1019,7 +1033,6 @@ export function App() {
         ask: askAboutDeleting,
         start: async (asked) => {
           await startDelete(asked);
-          deletedHere.current = true;
           // The rows it named are leaving; a selection left standing on them
           // would offer them a second time.
           setSelection(NOTHING_SELECTED);
@@ -1033,9 +1046,8 @@ export function App() {
     },
     [askAboutDeleting, follow],
   );
-  // The end of a deletion this tab armed: the rows and the tree are asked
-  // again, since what left the Library leaves them, and what it came to is
-  // said once — by its run, so the same ending read twice is said once.
+  // The end of a deletion: the rows and the tree are asked again, since what
+  // left the Library leaves them. What it came to is the server's log entry.
   const deleted = deletion === null ? null : `${deletion.run}:${deletion.status}`;
   // The run itself is read through a ref, so the effect below is keyed on the
   // run and its status alone: every poll brings a fresh object for the same
@@ -1054,7 +1066,6 @@ export function App() {
   lastDeletion.current = deletion;
   const shownFolder = useRef(view.folder);
   shownFolder.current = view.folder;
-  const announced = useRef<number | null>(null);
   const leaving = useRef(false);
   useEffect(() => {
     const ended = lastDeletion.current;
@@ -1070,16 +1081,11 @@ export function App() {
     if (ended.folders.some((folder) => on === folder || on.startsWith(`${folder}/`))) {
       leaving.current = true;
     }
-    if (deletedHere.current && announced.current !== ended.run) {
-      announced.current = ended.run;
-      showNotice(deletedLine(ended));
-    }
   }, [deleted, reloadListing, reloadFolders, reloadRoot]);
   // The tree's answer after such a deletion: the screen moves to the nearest
   // folder at or above it that the Library still holds — the root where none
   // does — rather than standing on a path it holds nothing at. A deletion
-  // refused for a Pack can leave the folder held, and then nothing moves. The
-  // notice saying the deletion ended stays, since it is what the move answers.
+  // refused for a Pack can leave the folder held, and then nothing moves.
   useEffect(() => {
     if (!leaving.current || known === null) {
       return;
@@ -1090,7 +1096,7 @@ export function App() {
       above = parentOf(above);
     }
     if (above !== shownFolder.current) {
-      moveTo({ folder: above, open: null }, true, true);
+      moveTo({ folder: above, open: null }, true);
     }
   }, [known, moveTo]);
 
@@ -1106,10 +1112,9 @@ export function App() {
   // moment, and the folder is what knows they are there until the flow behind
   // them commits.
   //
-  // A refusal about one part is said in the notice area beside the rows,
-  // because it is about a file on this screen; a refusal about the whole drop
-  // is said the same way, since it is the same sentence about all of them at
-  // once.
+  // A refusal about one part is a notice in the Activity panel, because it is
+  // about a file on this screen; a refusal about the whole drop is said the
+  // same way, since it is the same sentence about all of them at once.
   //
   // Which of those the drop came to, and what is asked again because of it, is
   // [`askToAdd`](./dropped) — the guards below are this screen's, since they
@@ -1154,6 +1159,7 @@ export function App() {
       }
       const send = (sending: readonly Added[], freeze: boolean) => {
         setAdding(addingLine(sending.length, target));
+        setSent(null);
         // The rows, at once, with every folder above them opened so they show.
         adds.current += 1;
         const id = adds.current;
@@ -1176,9 +1182,10 @@ export function App() {
         // How much of the request has gone, on the same line, as the browser
         // says it — paced, since it says it far more often than a line can be
         // read.
-        const onProgress = paced((sent, total) =>
-          setAdding(addingLine(sending.length, target, { sent, total })),
-        );
+        const onProgress = paced((gone, total) => {
+          setAdding(addingLine(sending.length, target, { sent: gone, total }));
+          setSent(total > 0 ? gone / total : null);
+        });
         return askToAdd({
           ask: () => addFiles(target, sending, { freeze, onProgress }),
           notice: setNotice,
@@ -1273,31 +1280,20 @@ export function App() {
     setNotice(nothingAddedLine(cause));
   }, []);
 
-  // The fill as the rows are allowed to read it. A person who put the fill's
-  // line away has put away what that fill had to say, and the `failed` and
-  // `declined` chips it wrote over the rows are the same sentence in the other
-  // place: leaving them standing would be a dismissal that dismissed half of
-  // one thing. The rows fall back to what the listing says, which is the one
-  // answer about what is on this device anyway.
-  const shownFill = isPutAway(work.dismissed, 'fill', fill) ? null : fill;
-
-  // And which run the rows of the folder on the screen read, which is not always
-  // the one on record. A fill Storage stopped keeps its line and its offer of a
-  // second attempt after the next folder has taken the record from it, and the
-  // `failed` and `declined` chips over these rows are the other half of what
-  // that line says — so they are owed for as long as it is. Which of those runs
-  // the bar is still showing is read the way the bar reads it: by name, since a
-  // run the record was taken from is never the one a dismissal's number names.
+  // Which run the rows of a folder read, which is not always the one on
+  // record. A fill Storage stopped keeps its entry and its Retry after the next
+  // folder has taken the record from it, and the `failed` and `declined` chips
+  // over these rows are the other half of what that entry says — so they are
+  // owed for as long as the server keeps the run.
   const fillOf = useCallback(
-    (folder: string) =>
-      fillOfFolder(shownFill, shownRuns(work.dismissed, 'fill', fill?.displaced ?? []), folder),
-    [shownFill, work.dismissed, fill],
+    (folder: string) => fillOfFolder(fill, fill?.displaced ?? [], folder),
+    [fill],
   );
 
   // Everywhere that is not the list or a row of the tree. A browser's own answer
   // to a file dropped on a page is to leave the page and show the file, and on a
   // screen that has just taught somebody that dropping files here adds them, a
-  // miss — the tree below its rows, the status bar, the reader standing over the
+  // miss — the tree below its rows, the Activity panel, the reader standing over the
   // list — would take the explorer away and whatever was open in it. So the page
   // refuses the drops nothing took. The list's and the rows' own handlers run
   // first and do the adding; this is only what happens to the ones that reach
@@ -1497,6 +1493,63 @@ export function App() {
   const dialogUp =
     choosing !== null || namingIn !== null || asking !== null || packAsking !== null || deleteAsking !== null;
 
+  // What the Activity panel lists: what is moving now, and what is over — the
+  // server's log of its finished work beside this page's own notices.
+  const running = useMemo(
+    () =>
+      inProgress({
+        adding,
+        sent: adding === null ? null : sent,
+        turn,
+        freeze,
+        sync,
+        deletion,
+        fill,
+        fetching,
+      }),
+    [adding, sent, turn, freeze, sync, deletion, fill, fetching],
+  );
+  const entries = useMemo(
+    () => offeredNow(earlier(work.log, notices, custody === 'locked'), { fill, sync, freeze }),
+    [work.log, notices, custody, fill, sync, freeze],
+  );
+  // One entry's Retry: the second attempt at the work that entry is about. A deletion's goes through the
+  // confirmation again, since what it would take out of the Library may have
+  // moved; a notice of this page's own whose *try again* was taken is settled,
+  // and one dropped because a count is still out is left to be pressed again.
+  const retryFill = work.retry;
+  const retrySync = work.retrySync;
+  const retryFreeze = work.retryFreeze;
+  const retryEntry = useCallback(
+    (entry: Entry) => {
+      const again = entry.retry;
+      if (again === null) {
+        return;
+      }
+      switch (again.flow) {
+        case 'fill':
+          retryFill(again.folder);
+          return;
+        case 'freeze':
+          retryFreeze(again.folder);
+          return;
+        case 'sync':
+          retrySync();
+          return;
+        case 'delete':
+          if (deleteEntries(again.target)) {
+            setNotices((held) =>
+              held.map((notice) =>
+                `page:${notice.id}` === entry.key ? { ...notice, settled: true } : notice,
+              ),
+            );
+          }
+          return;
+      }
+    },
+    [retryFill, retryFreeze, retrySync, deleteEntries],
+  );
+
   // A hash naming a row the folder it stands in does not hold — the Entry is
   // gone, or the URL was written by hand. The tree is the answer, and the URL
   // is put back in step with it.
@@ -1556,42 +1609,6 @@ export function App() {
               )}
             </p>
           )}
-          {/* The answer to a gesture that came to nothing — a row asked to open and
-              not opened, files dropped and not added. It stands above the list
-              and not inside it, so that it is on the screen whatever the list
-              is scrolled to — and it is said in the colour of something a
-              reader is told rather than in the grey of the columns, because a
-              gesture that was made and answered by nothing else is where a
-              sentence has to be noticed to be of any use. */}
-          {shownNotice !== null && (
-            <p
-              style={{
-                margin: 0,
-                padding: '8px 12px',
-                borderBottom: `1px solid ${COLOR.border}`,
-                color: COLOR.warn,
-                fontSize: 13,
-              }}
-            >
-              {shownNotice.text}
-              {shownNotice.retry !== null && (
-                <>
-                  {' '}
-                  <button
-                    onClick={() => {
-                      const again = shownNotice.retry;
-                      if (again !== null && deleteEntries(again)) {
-                        showNotice(null);
-                      }
-                    }}
-                    style={NOTICE_BUTTON}
-                  >
-                    {TRY_AGAIN}
-                  </button>
-                </>
-              )}
-            </p>
-          )}
           {/* The folder the focus is in, where its own listing was refused
               and the root's was not: the tree stands, and the refusal over it
               is about the one folder. */}
@@ -1616,8 +1633,9 @@ export function App() {
               // The tree, and the details pane on its right following the
               // focused row — and the reader's sheet over both but a strip of
               // the tree on the left, covering the tree's height and no more:
-              // the notices above it and the status bar below, which says what
-              // the sheet is fetching, stay uncovered.
+              // the catalog's sentence above it and the Activity panel below,
+              // which says what the sheet is fetching, stay uncovered, and
+              // opening the panel shrinks all three rather than covering them.
               <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
                 <TreeTable
                   rows={rows}
@@ -1708,23 +1726,13 @@ export function App() {
           onChoose={chooseDeleting}
         />
       )}
-      <StatusBar
+      <ActivityPanel
         library={library.state}
         kept={work.kept}
-        fetching={fetching}
-        adding={adding}
-        fill={fill}
-        sync={sync}
-        freeze={freeze}
-        deletion={deletion}
-        turn={turn}
-        finished={work.finished}
+        running={running}
+        entries={entries}
         trouble={work.trouble}
-        dismissed={work.dismissed}
-        onDismiss={work.dismiss}
-        onRetryFill={work.retry}
-        onRetrySync={work.retrySync}
-        onRetryFreeze={work.retryFreeze}
+        onRetry={retryEntry}
         refresh={{
           running: refreshing,
           waiting,
@@ -1769,13 +1777,8 @@ function inFront(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
 }
 
-/** The *try again* a deletion's notice offers beside its sentence. */
-const NOTICE_BUTTON = {
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
-  color: COLOR.text,
-  font: 'inherit',
-  padding: '0 8px',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
+/**
+ * How many of its own notices a page keeps: the server's log is bounded, and
+ * so is what a page adds to it.
+ */
+const NOTICES_KEPT = 50;

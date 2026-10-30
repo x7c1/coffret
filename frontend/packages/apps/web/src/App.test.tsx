@@ -56,6 +56,7 @@ const IDLE: Work = {
   freeze: null,
   delete: null,
   reconnect: null,
+  log: [],
 };
 
 function listing(path: string, over: Partial<Listing> = {}): Listing {
@@ -755,7 +756,13 @@ async function deleteFromTree(name: string, folder: string, after: () => void): 
   });
   vi.mocked(startDelete).mockImplementation(() => {
     after();
-    vi.mocked(getWork).mockResolvedValue({ ...IDLE, delete: deletionOf(folder) });
+    // The server logs the deletion as it publishes its end (spec: LA-12).
+    const ended = deletionOf(folder);
+    vi.mocked(getWork).mockResolvedValue({
+      ...IDLE,
+      delete: ended,
+      log: [{ id: 1, at: new Date().toISOString(), settled: false, kind: 'delete', run: ended }],
+    });
     return Promise.resolve(IDLE);
   });
   fireEvent.click(await tree().findByLabelText(`actions for ${name}`));
@@ -768,9 +775,9 @@ async function deleteFromTree(name: string, folder: string, after: () => void): 
   return on;
 }
 
-/** The notice over the list, and the empty string where none stands. */
-function noticeSaid(): string {
-  return [...document.querySelectorAll('main > p')].map((line) => line.textContent).join(' ');
+/** What the Activity panel's row says. */
+function activitySaid(): string {
+  return screen.getByRole('contentinfo', { name: 'Activity' }).textContent ?? '';
 }
 
 /** The folder the screen is on, as the URL says it. */
@@ -814,7 +821,7 @@ describe('the end of a deletion', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
     });
 
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     await waitFor(() => expect(rootAsked()).toBe(2));
@@ -839,7 +846,7 @@ describe('the end of a deletion', () => {
     await deleteFromTree('comics', 'comics', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: [] });
     });
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     // The list's own listing, asked again for the deletion, and nothing more.
@@ -851,7 +858,7 @@ describe('the end of a deletion', () => {
   });
 
   // The folder on the screen gone, the list moves to the nearest folder above
-  // that the Library still holds, and the notice saying so stays.
+  // that the Library still holds, and the panel says what the deletion came to.
   it('moves the list up from a folder the deletion took away', async () => {
     answers = library({
       '': ['comics/'],
@@ -872,7 +879,7 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(shownFolder()).toBe('comics'), {
       timeout: 3000,
     });
-    expect(noticeSaid()).toContain('removed from the Library');
+    expect(activitySaid()).toContain('removed from the Library');
   });
 
   it('moves the list to the root where nothing above is held any longer', async () => {
@@ -893,7 +900,7 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(shownFolder()).toBe(''), {
       timeout: 3000,
     });
-    expect(noticeSaid()).toContain('removed from the Library');
+    expect(activitySaid()).toContain('removed from the Library');
   });
 
   it('leaves the screen where it is when the folder deleted is elsewhere', async () => {
@@ -907,7 +914,7 @@ describe('the end of a deletion', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
       answers = library({ '': ['albums/'], albums: ['1.jpg'] });
     });
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     await waitFor(() => expect(tree().queryByTitle('comics')).toBeNull());

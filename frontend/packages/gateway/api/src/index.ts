@@ -38,6 +38,10 @@ export {
 } from './work';
 export type {
   Work,
+  Logged,
+  LoggedKind,
+  LoggedWork,
+  QueueFlow,
   ByteCount,
   Catalog,
   CatalogState,

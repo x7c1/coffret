@@ -15,7 +15,7 @@ use super::{Book, FreezeStatus};
 /// sync — this says what a run of the flow did and what it left alone.
 ///
 /// The folder is here, unlike a sync's account of itself, because a freeze is of
-/// one folder (spec: PK-17): the status bar names the book being brought in, and
+/// one folder (spec: PK-17): the Activity panel names the book being brought in, and
 /// the retry needs the same name to be offered under.
 ///
 /// How far along the run is *is* here, in [`step`](Self::step), and it is the
@@ -30,10 +30,10 @@ use super::{Book, FreezeStatus};
 pub struct FreezeRun {
     /// Which run of the freeze this is, counted from the start of this process.
     ///
-    /// What a screen tells one run's account of itself from the next's: a line
-    /// somebody has read and put away must not take the next book's line with
-    /// it. Stamped on by [`Freezes`](super::Freezes) rather than carried here
-    /// from the flow, so a fresh one is `0` until it is published.
+    /// What a screen tells one run's account of itself from the next's: two
+    /// runs that packed the same book are otherwise identical. Stamped on by
+    /// [`Freezes`](super::Freezes) rather than carried here from the flow, so a
+    /// fresh one is `0` until it is published.
     pub run: u64,
     /// The folder being packed.
     pub folder: Folder,
@@ -79,7 +79,7 @@ pub struct FreezeRun {
 
 impl FreezeRun {
     /// A freeze that has been armed and has packed nothing yet.
-    pub(super) fn starting(book: Book) -> Self {
+    pub(crate) fn starting(book: Book) -> Self {
         Self {
             run: 0,
             folder: book.folder,

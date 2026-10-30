@@ -12,12 +12,14 @@ use futures_util::{stream, TryStreamExt};
 use serde::Deserialize;
 use tracing::{info, warn};
 
+use crate::activity_log::Ended;
 use crate::api_error::ApiError;
 use crate::classify::classify;
 use crate::entry_query::PathQuery;
 use crate::fill::fill_folder;
 use crate::folder::Folder;
 use crate::refresh::when_stale::fetch_caught_up_if_stale;
+use crate::reported::Reported;
 use crate::state::ServerState;
 
 /// The `?peek=` the file route may be asked with beside `?path=`.
@@ -67,9 +69,50 @@ pub struct PeekQuery {
 /// Entry may be (spec: PK-3). Reading it into a `Vec` first would have made the
 /// server's memory a function of somebody's largest scan, on the one route whose
 /// product exists to store such things.
+///
+/// A request that is not a peek and is refused is logged among the server's
+/// finished work, and one answered settles the refusals logged before it for
+/// the same file (spec: LA-12): a page that was not looking when its reader
+/// met Storage gone can read it back, and a reader that has the page now is
+/// not told it failed. A peek is nobody opening anything, and is logged
+/// neither way.
 pub async fn file(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
+    peek: Query<PeekQuery>,
+) -> Result<Response, ApiError> {
+    let asked = (!peek.peek).then(|| query.entry().ok()).flatten();
+    let answered = answer(Arc::clone(&state), query, peek).await;
+    if let Some(path) = asked {
+        logged(&state, &path, &answered);
+    }
+    answered
+}
+
+/// Logs what one reader's request came to.
+///
+/// Not every refusal is a failure of the fetch. A locked Library is a state
+/// the explorer already says, once, with the unlock beside it — logged, it
+/// would be one more line for every page the reader asked for while locked.
+/// And an Entry that is not in the catalog is the reader holding a row the
+/// Library no longer has, which the listing it asks for next answers.
+fn logged(state: &ServerState, path: &EntryPath, answered: &Result<Response, ApiError>) {
+    match answered {
+        Ok(_) => state.activity.fetched(path.as_str()),
+        Err(refusal) if !matches!(refusal.kind(), "locked" | "no_such_entry") => {
+            state.activity.record(Ended::Fetch {
+                path: path.as_str().to_owned(),
+                refusal: Reported::of(refusal),
+            });
+        }
+        Err(_) => {}
+    }
+}
+
+/// The file itself, or what refused it.
+async fn answer(
+    state: Arc<ServerState>,
+    query: PathQuery,
     Query(PeekQuery { peek }): Query<PeekQuery>,
 ) -> Result<Response, ApiError> {
     // The keys, once, for the whole of this: the three places the bytes may come

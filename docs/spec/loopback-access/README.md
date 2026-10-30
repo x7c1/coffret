@@ -142,11 +142,24 @@ Concept background: [Library](../../concepts/library/),
   caller did, and how much room the disk has stays out of the sentence and
   goes in the record (EL-1). *(Form: test)*
 - **LA-12.** What a server holds about the work it runs — which fill, sync, or
-  freeze is running and how far it has got, which folders wait behind it, and
-  what the last run of each kind came to — is the running process's own state.
-  It lives exactly as long as the process: a server started afterwards answers
-  with no run under way, nothing waiting, and no last outcome, and work a
-  stopped server had waiting is done only once something asks for it again.
+  freeze is running and how far it has got, which folders wait behind it, what
+  the last run of each kind came to, and a **log** of the work it has finished
+  — is the running process's own state. The log holds every fill, sync,
+  freeze, and deletion that ended, every folder a queue threw away, and every
+  file a reader asked for and was refused, newest first. A refused file is
+  left out when it was a peek, or when what refused it was the Library being
+  locked or the catalog holding no such Entry. The log drops the oldest entry
+  past a fixed count, but keeps a failure past that count until a later run of
+  the same work ends and settles it — for a refused file, the same file asked
+  for again — and never holds more than a fixed ceiling, the oldest going
+  first past it. A run is in the log by the time any answer reports it over:
+  a server logs a run as it publishes the run's end, so no page reads a run as
+  ended that the log does not yet hold. The server serves the log, beside the
+  work running now and how far it has got, to an authorized page alone
+  (LA-2). It lives exactly as long as the process: a server started
+  afterwards answers with no run under way, nothing waiting, no last outcome,
+  and an empty log, and work a stopped server had waiting is done only once
+  something asks for it again.
   The one recorded exception is a drop's choice of a Pack, which the drop
   writes on the device as a reservation before its first file lands and marks
   received once its last has (PK-17): a server takes every received
@@ -170,10 +183,14 @@ Concept background: [Library](../../concepts/library/),
   a record proves: the catch-up it makes as it starts, where it lands,
   completes a batch whose record landed and whose refresh did not (OC-7), so
   the files that batch carried in are this device's before the server answers
-  anything. *(Form: test for what a server started afterwards answers; prose
-  for that account reaching no file — the catalog, the Library's directory,
-  Storage — which is an absence claim over the device's files, honored by
-  construction: the account is held in memory, in no serialized structure.)*
+  anything. *(Form: test for what the log holds, keeps, and drops, for the
+  page it is served to, and for what a server started afterwards answers;
+  prose for a run being in the log by the time it reads as over, honored by
+  construction: the run's end and its log entry are written under one lock;
+  prose for that account, the log included, reaching no file — the catalog, the
+  Library's directory, Storage — which is an absence claim over the device's
+  files, honored by construction: the account is held in memory, in no
+  serialized structure.)*
   - A run's reported status and its refusal go together: a fill, sync, or
     freeze whose status is `stopped` carries the refusal that stopped it —
     whatever refused the run, be it Storage, a Library locked before the run

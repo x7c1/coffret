@@ -176,7 +176,7 @@ export const LOOKING = `${CHECKING} — looking…`;
  *
  * The second names that control as the icon it is, by the name it is shown
  * under. This sentence stands at the top of the screen and the control is in
- * the bar at the bottom, so a person told to "ask what is new" would be left
+ * the panel at the bottom, so a person told to "ask what is new" would be left
  * looking for a button of that name among three others that all offer a second
  * attempt.
  */

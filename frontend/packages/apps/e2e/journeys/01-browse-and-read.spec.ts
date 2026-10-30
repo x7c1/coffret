@@ -27,7 +27,7 @@ import {
 test('walk the tree to a book, read a page, and reload back into it', async ({ page }) => {
   await page.goto('/');
 
-  // The status bar names the Library this device joined, under the name this
+  // The Activity panel names the Library this device joined, under the name this
   // device gave it.
   await expect(libraryName(page)).toBeVisible();
   const mapped = top(setting.album);

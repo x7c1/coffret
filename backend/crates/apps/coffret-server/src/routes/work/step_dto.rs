@@ -52,7 +52,7 @@ impl StepDto {
 /// route's vocabulary: the use case layer says what a run is doing, and what a
 /// browser calls it is the browser's business. Matched exhaustively, so a phase
 /// added to the flow stops this compiling until somebody says what a person
-/// reading a status bar should be told it is.
+/// reading the Activity panel should be told it is.
 fn named(phase: Phase) -> &'static str {
     match phase {
         Phase::CatchingUp => "catching_up",

@@ -109,7 +109,7 @@ export function rowFill(
   }
   // A file the Library does not hold yet. There is no Entry to fetch, so a fill
   // has nothing to say about it — and the run that will carry it in says what it
-  // did in the status bar rather than row by row. A file in this state was
+  // did in the Activity panel rather than row by row. A file in this state was
   // either never in the Library, and the next sync or freeze of its folder sees
   // it as new, or is a copy this device kept of an Entry since deleted, which
   // the next sync discards or keeps and reports instead (spec: EP-15);
@@ -155,10 +155,8 @@ export function rowFill(
  * are the other half of the sentence its line carries — so they are owed for as
  * long as the line is, which is past the moment the next folder starts.
  *
- * The stopped runs are handed in rather than read off the run on record, because
- * what the rows may show is what the bar is showing: one whose notice somebody
- * has put away has taken its chips with it, exactly as putting the fill's own
- * line away takes its.
+ * The stopped runs are handed in rather than read off the run on record, so
+ * that which of them the rows read is the caller's to say.
  */
 export function fillOfFolder(
   onRecord: Fill | null,
@@ -177,7 +175,7 @@ function declinedEntry(fill: Fill | DisplacedFill | null, path: string): Decline
 }
 
 /**
- * The line the status bar shows for a fill, or `null` for one worth no line.
+ * The line the Activity panel shows for a fill, or `null` for one worth no line.
  *
  * A fill that finished having placed everything says nothing: it is the rows
  * that changed, and they say so themselves. A fill that stopped keeps its line,
@@ -253,7 +251,7 @@ function declinedLine(fill: Fill): string {
 }
 
 /**
- * The line the status bar shows for the folders a fill's queue lost, or `null`
+ * The line the Activity panel shows for the folders a fill's queue lost, or `null`
  * where it lost none.
  *
  * Its own line rather than a clause on the fill's, because it is about neither
@@ -291,51 +289,14 @@ function discarded(folders: readonly string[], ended: string): string | null {
 }
 
 /**
- * The line the status bar shows for the fills that stopped and had the record
- * taken from them by a later run, or `null` where there are none.
- *
- * The run's own sentence, said by the same function that says it while that run
- * is the one on record: it stopped, and nothing about it changed when the next
- * folder started. Written out again here it would drift from the one the bar
- * showed a tick earlier, which is the same failure reported twice in two
- * wordings.
- *
- * Its own line rather than a clause on the running run's, for the reason the
- * discarded folders have one: it is about neither the run that is going nor the
- * one before it in particular. And distinct from the discarded line, because the
- * two say different things — one folder was never started on and this one is
- * half here — and a person owed both is owed both.
- */
-export function stoppedLine(runs: readonly DisplacedFill[]): string | null {
-  return andTheRest(runs.length, fillLine(runs[0] ?? null));
-}
-
-/** The same for the books a freeze stopped on. */
-export function stoppedBooksLine(runs: readonly DisplacedFreeze[]): string | null {
-  return andTheRest(runs.length, freezeLine(runs[0] ?? null));
-}
-
-/**
- * One run's sentence, with a count of the ones standing behind it.
- *
- * The bar has room for one line and one Storage outage stops every folder queued
- * behind the first, so the oldest speaks for them: a bare count says how many
- * there are, and each of them has a button of its own beside it saying which.
- */
-function andTheRest(count: number, line: string | null): string | null {
-  const rest = count - 1;
-  return line === null || rest < 1 ? line : `${line} (and ${rest} more stopped)`;
-}
-
-/**
- * The line the status bar shows for a sync, or `null` for one worth no line.
+ * The line the Activity panel shows for a sync, or `null` for one worth no line.
  *
  * A sync that finished with nothing to report says how many files it carried
- * in. The rows say the same of the folder on the screen, but the bar is where
- * the latest thing that happened is said, and a sync that said nothing left
- * the line to whatever finished before it — a Pack made minutes ago went on
- * saying `packed …` over every file added after it. One that found something
- * keeps its line instead,
+ * in. The rows say the same of the folder on the screen, but the Activity
+ * panel's collapsed row is where the latest thing that happened is said, and a
+ * sync that said nothing left the line to whatever finished before it — a Pack
+ * made minutes ago went on saying `packed …` over every file added after it.
+ * One that found something keeps its line instead,
  * because that finding is the only place the person who dropped a file is told
  * their file was not backed up — and one that stopped keeps its line for the
  * reason a stopped fill does: the retry hangs off it. A stopped one says what
@@ -426,7 +387,7 @@ function addedLine(added: number): string {
 const PACKING = 'packing';
 
 /**
- * The line the status bar shows for a freeze, or `null` for one worth no line.
+ * The line the Activity panel shows for a freeze, or `null` for one worth no line.
  *
  * The one that finished says what it came to rather than nothing, unlike a
  * finished fill or a quiet sync. That is the whole of what a person dropping a

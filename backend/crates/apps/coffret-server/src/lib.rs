@@ -147,6 +147,9 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod activity_log;
+pub use activity_log::{ActivityLog, Ended, Logged, Queue};
+
 mod allowance;
 pub use allowance::Allowance;
 

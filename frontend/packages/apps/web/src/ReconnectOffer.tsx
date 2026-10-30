@@ -35,7 +35,7 @@ export interface Offer {
  * saying so, the one button that renews it, and what the last press came to.
  *
  * One component for the four places a Storage refusal stands — the catch-up
- * notice, a region that could not be read, the reader, and the status bar —
+ * notice, a region that could not be read, the reader, and the Activity panel —
  * because they are one offer: a press in any of them starts the one flow the
  * server runs, and a second press while it waits is answered with the same
  * consent page. So every one of them shows the same state of it.

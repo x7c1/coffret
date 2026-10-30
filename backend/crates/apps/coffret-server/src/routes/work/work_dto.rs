@@ -3,7 +3,9 @@ use serde::Serialize;
 use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
-use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, ReconnectDto, SyncDto};
+use super::{
+    CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, LoggedDto, ReconnectDto, SyncDto,
+};
 
 /// What the server is doing on its own, which is four things — and the one
 /// thing it may have done to itself.
@@ -36,20 +38,17 @@ use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, Reconnect
 /// page asks as it comes up.
 ///
 /// And the first field of all is not about the Library either: it is which
-/// process answered. Everything below it that a browser remembers between
-/// answers — which run's line somebody read and put away — is true of one
-/// process only, because the run numbers start again at 1 with the next one.
+/// process answered. The run numbers below it are true of one process only,
+/// because they start again at 1 with the next one.
 #[derive(Serialize)]
 pub struct WorkDto {
     /// What the process that answered calls itself.
     ///
     /// The same string for every answer this process gives and a different one
-    /// after it is started again, which is all a page needs from it: what it
-    /// remembers about runs it has been shown is about this server's runs, and
-    /// a name it has not seen before is the sign to forget it. A page cannot
-    /// reach that conclusion from the run numbers — one lower than a run it put
-    /// away is equally what an answer issued just before the dismissal looks
-    /// like.
+    /// after it is started again, which is all a page needs from it to tell
+    /// one process's answers from the next's. The run numbers cannot tell it:
+    /// they start again at 1 with every process, so run 1 of a new server reads
+    /// like run 1 of the one before it.
     ///
     /// It says nothing about this device or this Library: see
     /// [`ServerId`](crate::server_id::ServerId) for what it is composed of and
@@ -96,6 +95,19 @@ pub struct WorkDto {
     /// clock, and the page that opened the consent page learns how it ended by
     /// asking this.
     pub(super) reconnect: Option<ReconnectDto>,
+    /// What the server has finished since it started, newest first: every
+    /// fill, sync, freeze and deletion that ended, every folder a queue lost,
+    /// and every file a reader was refused other than on a peek or by a locked
+    /// Library or an Entry the catalog does not hold — the oldest dropped past a fixed
+    /// count, a failure kept past it until the same work ends again, and never
+    /// more than a fixed ceiling (spec: LA-12).
+    ///
+    /// Beside the runs above rather than in place of them: those say what each
+    /// flow is doing now, and this is what a page that was closed or looking
+    /// elsewhere when a run ended reads back. It rides on the work answer
+    /// because every answer that can change it is one: a run ends while a page
+    /// polls this, and the presses that start one answer with it.
+    pub(super) log: Vec<LoggedDto>,
 }
 
 impl WorkDto {
@@ -122,6 +134,12 @@ impl WorkDto {
     /// The kept parcels are counted first, because that is the one part of the
     /// answer that waits on anything: everything else is read in one go after
     /// it, so the runs and the turn they are measured against stay one reading.
+    ///
+    /// The log is read last. A flow logs a run under the same lock that
+    /// publishes its end, so a run this answer reads as over is in the log it
+    /// reads after it; read first, the one answer that says a run is over could
+    /// leave its entry for a poll that never comes, since a page stops asking
+    /// once nothing is running.
     pub async fn of(state: &ServerState) -> Self {
         let kept_parcels = state.kept_tally().await.map(KeptParcelsDto::of);
         let turn = state.pending_rows.holder();
@@ -152,6 +170,7 @@ impl WorkDto {
                 .as_ref()
                 .map(|report| DeleteDto::of(report, turn)),
             reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
+            log: state.activity.entries().iter().map(LoggedDto::of).collect(),
         }
     }
 }

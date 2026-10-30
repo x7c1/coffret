@@ -369,7 +369,7 @@ impl Progress {
             && self.is_freezing()
     }
 
-    fn is_freezing(&self) -> bool {
+    pub(super) fn is_freezing(&self) -> bool {
         self.on_record
             .as_ref()
             .is_some_and(|run| matches!(run.status, FreezeStatus::Freezing))
@@ -702,8 +702,7 @@ mod tests {
         assert_eq!(progress.waiting(), [folder("books/vol-3")]);
     }
 
-    // What tells one book's account of itself from the next's, so that a line
-    // somebody has read and put away does not take the next book's with it.
+    // What tells one book's account of itself from the next's.
     #[test]
     fn each_book_taken_up_is_a_run_of_its_own() {
         let mut progress = Progress::default();

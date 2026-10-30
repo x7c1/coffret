@@ -3,7 +3,7 @@
 //
 // The helpers here name parts of the explorer and nothing about the wire. A
 // journey asserts what a person would see — a row on this device, a page
-// in the reader, a line in the status bar — and never what a route answered
+// in the reader, a line in the Activity panel — and never what a route answered
 // with: the routes are stage one's to check, in `scripts/e2e-it.sh`, and a
 // second reading of them here would be a second thing to keep in step with the
 // server.
@@ -33,7 +33,7 @@ export const NO_SESSION = /This tab holds no session with the explorer/;
  */
 export async function openExplorer(page: Page, { afterRestart = false } = {}): Promise<void> {
   await openLaunchFile(page, setting.launchDir, { afterRestart });
-  // The status bar is drawn only for a tab holding a session.
+  // The Activity panel is drawn only for a tab holding a session.
   await expect(page.locator('footer')).toBeVisible();
   // The ticket is gone from the address the tab is left at.
   await expect(page).toHaveURL(setting.webUrl);
@@ -96,7 +96,19 @@ export async function shot(page: Page, checkpoint: string): Promise<void> {
 }
 
 /**
- * The Library's name, where the status bar says it along the bottom: the name
+ * Opens the Activity panel along the bottom, where it is not open already:
+ * what the server finished, and the Retry on a failure, are listed there.
+ */
+export async function openActivity(page: Page): Promise<void> {
+  const toggle = page.getByRole('button', { name: 'Activity', exact: true });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
+/**
+ * The Library's name, where the Activity panel says it along the bottom: the name
  * alone, without the Storage it is kept on.
  */
 export function libraryName(page: Page): Locator {

@@ -107,6 +107,7 @@ function sheet(row: Sheeted, asked?: Asked<Listing>, escapable = true) {
     onFetching: () => undefined,
     onFetched: () => undefined,
     reconnect: null,
+    log: [],
   };
   const drawn = render(<ReaderView row={row} {...props} />);
   return { ...drawn, onClose, show: (next: Sheeted) => drawn.rerender(<ReaderView row={next} {...props} />) };

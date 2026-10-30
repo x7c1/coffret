@@ -52,7 +52,7 @@ pub struct DeleteRun {
 
 impl DeleteRun {
     /// A deletion that has been armed and has done nothing yet.
-    pub(super) fn starting(target: Target) -> Self {
+    pub(crate) fn starting(target: Target) -> Self {
         Self {
             run: 0,
             target,

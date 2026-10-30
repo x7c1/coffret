@@ -128,7 +128,7 @@ async fn every_folder_of_the_library_is_listed_flat() {
     );
 }
 
-// Three fields for the status bar, and nothing about where the Library lives
+// Three fields for the Activity panel, and nothing about where the Library lives
 // beyond which provider it is on.
 #[tokio::test]
 async fn the_status_bar_is_told_which_library_this_is() {

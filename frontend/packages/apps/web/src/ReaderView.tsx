@@ -39,7 +39,8 @@ type Shown =
  * It leaves a strip of the tree uncovered on the left, so the rows being
  * walked stay in sight — and in reach: a click on one moves the focus, and the
  * sheet follows. It covers the tree's height and no more, which leaves the
- * status bar below it uncovered, where it says what is being fetched.
+ * Activity panel below it uncovered, where it says what is being fetched —
+ * and opening the panel shortens the sheet with the tree rather than covering it.
  * `Escape` or its close button closes it; a click on it does nothing, since it
  * is where the pointer rests while somebody reads.
  *
@@ -113,7 +114,7 @@ export function ReaderView({
     let live = true;
     setShown({ status: 'loading' });
     // A peek reaches nothing past this device's own disk, so there is no fetch
-    // for the status bar to name.
+    // for the Activity panel to name.
     if (!peek) {
       onFetching(name);
     }
@@ -125,9 +126,9 @@ export function ReaderView({
         if (!live || url === undefined) {
           return;
         }
-        // The request is over either way, and the status bar's line is about a
+        // The request is over either way, and the panel's line is about a
         // request in flight: cleared here rather than only when the focus moves
-        // on, or the bar would go on saying "fetching" over a picture on the
+        // on, or the panel would go on saying "fetching" over a picture on the
         // screen.
         onFetching(null);
         setShown({ status: 'ready', url });
