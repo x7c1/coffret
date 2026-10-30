@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { Region, TRY_AGAIN } from './Region';
-import { UNLOCK, type UnlockOffer } from './StatusBar';
+import { UNLOCK, type UnlockOffer } from './ActivityPanel';
 import type { Asked } from './useAsked';
 
 afterEach(cleanup);

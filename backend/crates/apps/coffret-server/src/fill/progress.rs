@@ -25,8 +25,8 @@ use super::{FillRun, FillStatus};
 /// read, and one tab's last poll says nothing about another's, so "older than
 /// what was last seen" would be a rule about a tab this process cannot see.
 ///
-/// Eight, because that is more lines than the status bar can set out as
-/// separate offers and still be read, and fewer than a tab could come to by
+/// Eight, because that is more stopped runs than a person can tell apart at a
+/// glance, and fewer than a tab could come to by
 /// clicking for a minute. The freeze keeps its own list unbounded, and that is
 /// not an oversight: a freeze is a book somebody dropped on purpose into a
 /// folder made for it, not a click, and its line is the only thing naming a
@@ -440,7 +440,7 @@ impl Progress {
             || self.queued.contains(folder)
     }
 
-    fn is_filling(&self) -> bool {
+    pub(super) fn is_filling(&self) -> bool {
         self.on_record
             .as_ref()
             .is_some_and(|run| matches!(run.status, FillStatus::Filling))

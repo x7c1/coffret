@@ -2,8 +2,8 @@
 // places on the screen the journeys reach for.
 //
 // The helpers here name parts of the explorer and nothing about the wire. A
-// journey asserts what a person would see — a chip that says `remote`, a page
-// in the reader, a line in the status bar — and never what a route answered
+// journey asserts what a person would see — a row on this device, a page
+// in the reader, a line in the Activity panel — and never what a route answered
 // with: the routes are stage one's to check, in `scripts/e2e-it.sh`, and a
 // second reading of them here would be a second thing to keep in step with the
 // server.
@@ -33,7 +33,7 @@ export const NO_SESSION = /This tab holds no session with the explorer/;
  */
 export async function openExplorer(page: Page, { afterRestart = false } = {}): Promise<void> {
   await openLaunchFile(page, setting.launchDir, { afterRestart });
-  // The status bar is drawn only for a tab holding a session.
+  // The Activity panel is drawn only for a tab holding a session.
   await expect(page.locator('footer')).toBeVisible();
   // The ticket is gone from the address the tab is left at.
   await expect(page).toHaveURL(setting.webUrl);
@@ -79,7 +79,7 @@ export { expect } from '@playwright/test';
  * A picture of where the journey has got to, for a person to look at.
  *
  * Nothing compares these and nothing asserts on them beyond their existing:
- * whether the filer reads right, whether the chips are legible, whether the
+ * whether the filer reads right, whether the state icons are legible, whether the
  * outage notice says something a person could act on, are all questions only
  * eyes answer. What the journeys assert is what the page says; these are what
  * is left over, and they are the point of the target having a browser stage at
@@ -96,30 +96,60 @@ export async function shot(page: Page, checkpoint: string): Promise<void> {
 }
 
 /**
- * The Library's name, where the status bar says it along the bottom: the name
+ * Opens the Activity panel along the bottom, where it is not open already:
+ * what the server finished, and the Retry on a failure, are listed there.
+ */
+export async function openActivity(page: Page): Promise<void> {
+  const toggle = page.getByRole('button', { name: 'Activity', exact: true });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
+/**
+ * The Library's name, where the header says it at the top left: the name
  * alone, without the Storage it is kept on.
  */
 export function libraryName(page: Page): Locator {
-  return page.locator('footer').getByText(setting.library, { exact: true });
+  return page.getByRole('banner').getByText(setting.library, { exact: true });
 }
 
-/** The folder tree, down the left. */
+/** The tree, in the middle of the screen: the Library's folders and files as rows of one table. */
 export function tree(page: Page): Locator {
-  return page.getByRole('navigation', { name: 'folders' });
+  return page.getByRole('tree', { name: 'Library' });
 }
 
 /**
- * One folder in the tree, by name.
+ * One folder's row in the tree, by name.
  *
- * The name and not the marker beside it: the marker opens and closes the
- * branch, and what a journey walking to a folder means is the folder.
+ * By the row's own `title`, as [`row`](#row) finds a file, and narrowed to the
+ * rows that draw a folder: the Library admits a file and a folder of one name,
+ * and what a journey walking to a folder means is the folder.
  */
 export function inTree(page: Page, name: string): Locator {
-  return tree(page).getByTitle(name, { exact: true });
+  return tree(page)
+    .locator(`tr[title="${name}"]`)
+    .filter({ has: page.getByRole('img', { name: 'folder', exact: true }) });
 }
 
 /**
- * One row of the current folder's listing, by the name it shows.
+ * Walks into one folder the way a person does: a click on its row, which puts
+ * the focus there, and its disclosure button pressed where it is closed, which
+ * draws its rows under it. A folder open and focused is what the screen's own
+ * actions, and the URL, are about.
+ */
+export async function openInTree(page: Page, name: string): Promise<void> {
+  await inTree(page, name).click();
+  const disclosure = inTree(page, name).getByRole('button', { name: /^(expand|collapse) / });
+  if ((await disclosure.getAttribute('aria-expanded')) !== 'true') {
+    await disclosure.click();
+  }
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+}
+
+/**
+ * One row of the tree, by the name it shows.
  *
  * By the row's own `title`, which the explorer puts the file's name in so that
  * a name too long for the column can still be read. It is the whole name and
@@ -131,14 +161,42 @@ export function row(page: Page, name: string): Locator {
 }
 
 /**
- * What one row says its state is.
- *
- * The chip, which is the row's one word about itself: `present`, `remote`,
- * "not in Library" while a run has yet to carry it in, and `fetching`,
- * `failed` or `declined` while the server is bringing the folder over.
+ * The rows of the files named, each found by its whole name: what a folder
+ * holds, counted without the folders and notes the tree draws around it.
  */
-export function chip(page: Page, name: string): Locator {
-  return row(page, name).locator('span');
+export function rowsNamed(page: Page, names: readonly string[]): Locator {
+  return page.locator(names.map((name) => `tbody tr[title="${name}"]`).join(', '));
+}
+
+/** What the state icon says for a file this device has, fetched here or added from here. */
+export const ON_THIS_DEVICE = /^On this device$/;
+
+/** What it says while a file added here is on its way into the Library. */
+export const BEING_ADDED = /^On this device, being added to the Library/;
+
+/** What it says for a page of a book waiting for its Pack. */
+export const TO_BE_PACKED = /^On this device, waiting to be packed into the Library/;
+
+/** Every name the state icon goes by, whatever the state. */
+const STATE_ICON = /^(On this device|Being fetched to this device|Fetching failed|Not fetched)/;
+
+/**
+ * What one row says its state is: the icon in the narrow column after Size,
+ * whose label is its words — a laptop for a file on this device, a ring while
+ * one is being fetched or added, a warning where that failed.
+ *
+ * A file the Library holds and this device does not draws nothing there, so
+ * `remote` is this having no element at all, asserted beside the row being on
+ * the screen.
+ */
+export function stateIcon(page: Page, name: string): Locator {
+  return row(page, name).getByRole('img', { name: STATE_ICON });
+}
+
+/** That a row is on the screen and is in the Library only: no state icon. */
+export async function expectRemote(page: Page, name: string): Promise<void> {
+  await expect(row(page, name)).toBeVisible();
+  await expect(stateIcon(page, name)).toHaveCount(0);
 }
 
 /** The last component of an Entry Path, which is what a folder is called. */

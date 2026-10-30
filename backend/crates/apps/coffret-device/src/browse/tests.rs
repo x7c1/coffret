@@ -299,6 +299,210 @@ async fn a_row_is_present_only_where_this_device_materialized_it() {
     );
 }
 
+/// Whether each child folder of `folder` is present throughout, by name.
+async fn throughout(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String, bool)> {
+    library
+        .list(folder.map(entry_path).as_ref())
+        .await
+        .expect("the catalog answers")
+        .folders
+        .into_iter()
+        .map(|child| (child.name, child.present_throughout))
+        .collect()
+}
+
+// EP-10: a folder is here whole only where every Entry at every depth below it
+// has a present record — the promise that the whole book, or the whole series,
+// reads without Storage. One file anywhere below that this device does not
+// have, however deep, takes the promise back.
+#[tokio::test]
+async fn a_folder_is_present_throughout_only_where_every_file_below_it_is() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &[
+            // Every file here, one level down and two.
+            "books/all/page-1.png",
+            "books/all/vol-2/page-1.png",
+            // One file missing two levels down.
+            "books/deep/page-1.png",
+            "books/deep/vol-2/page-1.png",
+            // A file whose fetch failed: it left no present record.
+            "books/failed/page-1.png",
+            "books/failed/page-2.png",
+            // A file that was here and that this device witnessed go.
+            "books/gone/page-1.png",
+            // No file of its own, only a folder below it, which is here whole.
+            "books/nested/vol-1/page-1.png",
+        ],
+    )])
+    .await;
+    for path in [
+        "books/all/page-1.png",
+        "books/all/vol-2/page-1.png",
+        "books/deep/page-1.png",
+        "books/failed/page-1.png",
+        "books/gone/page-1.png",
+        "books/nested/vol-1/page-1.png",
+    ] {
+        hold(&library, path).await;
+    }
+    library
+        .index
+        .mark_absent(
+            &entry_path("books/gone/page-1.png"),
+            DeviceTime::from_unix_seconds(1_700_000_200),
+        )
+        .await
+        .expect("an absent observation is recorded");
+
+    assert_eq!(
+        throughout(&library, Some("books")).await,
+        vec![
+            ("all".to_owned(), true),
+            ("deep".to_owned(), false),
+            ("failed".to_owned(), false),
+            ("gone".to_owned(), false),
+            ("nested".to_owned(), true),
+        ],
+    );
+    // The root answers for `books` from the same subtree: not whole, since
+    // some of it is not here.
+    assert_eq!(
+        throughout(&library, None).await,
+        vec![("books".to_owned(), false)]
+    );
+    // And one level further down, each folder answers for its own subtree.
+    assert_eq!(
+        throughout(&library, Some("books/deep")).await,
+        vec![("vol-2".to_owned(), false)],
+    );
+    assert_eq!(
+        throughout(&library, Some("books/all")).await,
+        vec![("vol-2".to_owned(), true)],
+    );
+}
+
+/// How many files stand below each child folder of `folder`, and how many of
+/// them are here, by name.
+async fn counted(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String, u64, u64)> {
+    library
+        .list(folder.map(entry_path).as_ref())
+        .await
+        .expect("the catalog answers")
+        .folders
+        .into_iter()
+        .map(|child| (child.name, child.files_present, child.files_total))
+        .collect()
+}
+
+// EP-10: a folder counts every Entry at every depth below it, and those this
+// device has a present record for — "18 of 196 files" — out of the same scan
+// that answers whether all of them are here. A file one level down and a file
+// three levels down count alike, and a file that left this device does not
+// count as here.
+#[tokio::test]
+async fn a_folder_counts_the_files_below_it_and_those_here_at_every_depth() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &[
+            "series/vol-1/page-1.png",
+            "series/vol-1/page-2.png",
+            "series/vol-2/page-1.png",
+            "series/vol-2/extra/deep/page-1.png",
+            "series/cover.png",
+            "loose/a.txt",
+            "loose/b.txt",
+            "top.png",
+        ],
+    )])
+    .await;
+    for path in [
+        "series/vol-1/page-1.png",
+        "series/vol-1/page-2.png",
+        "series/vol-2/extra/deep/page-1.png",
+        "loose/a.txt",
+    ] {
+        hold(&library, path).await;
+    }
+    library
+        .index
+        .mark_absent(
+            &entry_path("loose/a.txt"),
+            DeviceTime::from_unix_seconds(1_700_000_200),
+        )
+        .await
+        .expect("an absent observation is recorded");
+
+    // The root counts each top-level folder's whole subtree, and not the file
+    // standing beside them.
+    assert_eq!(
+        counted(&library, None).await,
+        vec![("loose".to_owned(), 0, 2), ("series".to_owned(), 3, 5)],
+    );
+    // One level down, each volume counts its own subtree, the file three
+    // levels below `vol-2` included.
+    assert_eq!(
+        counted(&library, Some("series")).await,
+        vec![("vol-1".to_owned(), 2, 2), ("vol-2".to_owned(), 1, 2)],
+    );
+    // Deeper still, a folder holding only a folder counts what is below that.
+    assert_eq!(
+        counted(&library, Some("series/vol-2")).await,
+        vec![("extra".to_owned(), 1, 1)],
+    );
+    // The bytes add up over the same subtree, here or not: every case Entry is
+    // 100 bytes long.
+    let sizes: Vec<(String, u64)> = library
+        .list(None)
+        .await
+        .expect("the catalog answers")
+        .folders
+        .into_iter()
+        .map(|child| (child.name, child.size))
+        .collect();
+    assert_eq!(
+        sizes,
+        vec![("loose".to_owned(), 200), ("series".to_owned(), 500)],
+    );
+    // The yes-or-no agrees with the counts wherever it is asked.
+    let whole: Vec<(String, bool)> = counted(&library, Some("series"))
+        .await
+        .into_iter()
+        .map(|(name, here, of)| (name, here == of))
+        .collect();
+    assert_eq!(throughout(&library, Some("series")).await, whole);
+}
+
+// A folder has no time of its own (spec: EP-2), so its Modified is the latest
+// Entry time at any depth below it. The planting order gives each Entry the
+// next second, and the paths are chosen so the newest one stands deepest and
+// is neither the first nor the last the catalog's EP-3 order reaches: taking
+// the first or the last time seen would each answer something else.
+#[tokio::test]
+async fn a_folder_is_modified_when_the_newest_file_at_any_depth_below_it_was() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &["book/a.png", "book/z.png", "book/m/deep/page.png"],
+    )])
+    .await;
+
+    let times: Vec<(String, Mtime)> = library
+        .list(None)
+        .await
+        .expect("the catalog answers")
+        .folders
+        .into_iter()
+        .map(|child| (child.name, child.mtime))
+        .collect();
+    assert_eq!(
+        times,
+        vec![("book".to_owned(), Mtime::from_unix_seconds(1_700_000_002))],
+    );
+}
+
 // PK-15: the kind is what says whether an Entry can be replaced one file at a
 // time, so it travels in the row rather than being asked for afterwards.
 #[tokio::test]

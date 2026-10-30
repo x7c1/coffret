@@ -7,10 +7,10 @@ import { NOT_UNDOABLE, type DeleteQuestion } from './deleteEntries';
 afterEach(cleanup);
 
 const ALBUMS: DeleteQuestion = {
-  target: { folder: 'albums', paths: [] },
-  title: 'Delete 📁 albums?',
+  target: { folders: ['albums'], paths: [] },
+  title: 'Delete “albums”?',
   removes: '12 files, 340.0 MB will be removed from the Library',
-  rebuilds: '2 Packs holding other files will be rebuilt — reads 1.8 GB, writes 1.5 GB',
+  rebuilds: { line: '2 Packs holding other files will be rebuilt', cost: 'Reads 1.8 GB, writes 1.5 GB' },
   refused: ['page-002.jpg stays in the Library — the Library has no key for the Pack holding them'],
   missing: null,
   waits: null,
@@ -22,9 +22,10 @@ const ALBUMS: DeleteQuestion = {
 it('shows what will be removed, rebuilt and refused, and that it cannot be undone', () => {
   render(<DeleteConfirm question={ALBUMS} onChoose={() => undefined} />);
 
-  const dialog = screen.getByRole('dialog').textContent;
+  const dialog = screen.getByRole('dialog', { name: 'Delete “albums”?' }).textContent;
   expect(dialog).toContain('12 files, 340.0 MB will be removed from the Library');
-  expect(dialog).toContain('2 Packs holding other files will be rebuilt — reads 1.8 GB, writes 1.5 GB');
+  expect(dialog).toContain('2 Packs holding other files will be rebuilt');
+  expect(dialog).toContain('Reads 1.8 GB, writes 1.5 GB');
   expect(dialog).toContain('the Library has no key for the Pack holding them');
   expect(dialog).toContain(NOT_UNDOABLE);
 });
@@ -45,6 +46,11 @@ it('answers yes only to Delete', () => {
 it('puts the focus on Cancel', () => {
   render(<DeleteConfirm question={ALBUMS} onChoose={() => undefined} />);
   expect(document.activeElement?.textContent).toBe('Cancel');
+});
+
+it('says nothing of a rebuild where no Pack keeps other files', () => {
+  render(<DeleteConfirm question={{ ...ALBUMS, rebuilds: null }} onChoose={() => undefined} />);
+  expect(screen.getByRole('dialog').textContent).not.toContain('rebuilt');
 });
 
 it('offers no Delete where nothing would be removed', () => {

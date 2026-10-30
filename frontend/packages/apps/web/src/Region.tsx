@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
-import { UNLOCK, type UnlockOffer } from './StatusBar';
+import { UNLOCK, type UnlockOffer } from './ActivityPanel';
 import { COLOR } from './theme';
 import type { Asked } from './useAsked';
 
@@ -19,7 +19,7 @@ export const TRY_AGAIN = 'try again';
  * Except where what refused it is the lock. Asking again only earns the same
  * refusal while the Library stays locked, so a *try again* there is a button
  * that changes nothing however often it is pressed. The region offers the
- * unlock instead — the same ask the status bar's button makes — and says what
+ * unlock instead — the same ask the Activity panel's button makes — and says what
  * that ask came to beside it, so that a server with no window to bring forward
  * (one started from the command line) answers with where to unlock rather than
  * with the refusal the region is already showing.

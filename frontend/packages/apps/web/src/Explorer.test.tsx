@@ -10,12 +10,14 @@ import {
   holdToken,
   isRefusal,
   Refusal,
+  type ListedFile,
+  type Listing,
 } from '@coffret/api';
 
 import { Explorer, HOW_TO_OPEN, LOCKED_POLL_MS, NO_SESSION } from './Explorer';
-import type { Page } from './pages';
 import { ReaderView } from './ReaderView';
 import { establish, shelf, type Opened } from './session';
+import { fileKey, type FileRow } from './tree';
 
 // The pages the reader fetches, as it reaches them. Everything else the package
 // exports is the real thing — the token it holds and the requests it makes
@@ -219,19 +221,50 @@ it('draws no answer that arrives after the lock or the end of the session', asyn
   expect(screen.queryByText('library main')).toBeNull();
 });
 
-/** A screen that is a reader open on two pages. */
-const PAGES: Page[] = [
-  { path: 'albums/one.jpg', name: 'one.jpg', remote: false },
-  { path: 'albums/two.jpg', name: 'two.jpg', remote: false },
-];
+function page(name: string): ListedFile {
+  return {
+    name,
+    path: `albums/${name}`,
+    size: 4,
+    mtime: null,
+    deposited_at: null,
+    state: 'present',
+    container: 'one-file',
+    reserved: false,
+    openable: true,
+    content_type: 'image/jpeg',
+  };
+}
 
+const ALBUM: Listing = {
+  path: 'albums',
+  mapped: true,
+  held: true,
+  folders: [],
+  files: [page('one.jpg'), page('two.jpg')],
+  folders_on_disk: [],
+  empty_mapped_prefixes: [],
+};
+
+const FIRST: FileRow = {
+  kind: 'file',
+  key: fileKey('albums/one.jpg'),
+  path: 'albums/one.jpg',
+  name: 'one.jpg',
+  depth: 1,
+  file: ALBUM.files[0],
+  in: ALBUM,
+};
+
+/** A screen that is the reader's sheet open on the first of two pages. */
 function Reading() {
   return (
     <ReaderView
-      pages={PAGES}
-      at={0}
+      row={FIRST}
+      asked={undefined}
+      counter={{ at: 1, of: 2 }}
       discarded={0}
-      onNavigate={() => undefined}
+      escapable
       onClose={() => undefined}
       onFetching={() => undefined}
       onFetched={() => undefined}

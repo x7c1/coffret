@@ -175,6 +175,44 @@ export async function droppedFiles(transfer: DataTransfer): Promise<Drop> {
 }
 
 /**
+ * What files picked with the header's **+** carry, as one drop: each with its
+ * path relative to where it was picked from — its own name, or, for a folder
+ * picked whole, the folder's name and the way down to the file
+ * (`webkitRelativePath`) — so that picking and dropping are one gesture from
+ * here on, through the same confirmation.
+ *
+ * What an operating system keeps is left out by the rule the walk of a drop
+ * reads (spec: EP-17), and a folder of it once however many files were under
+ * it. In the desktop app the files are handed to it by their paths, as a drop
+ * is: a folder picked whole goes as that folder (see the app's preload).
+ */
+export async function pickedFiles(files: readonly File[]): Promise<Drop> {
+  const bridge = desktopBridge();
+  if (bridge !== null) {
+    return heldBy(bridge, files);
+  }
+  const walked: Walked = { files: [], systemFiles: [] };
+  const said = new Set<string>();
+  for (const file of files) {
+    const path = file.webkitRelativePath === '' ? file.name : file.webkitRelativePath;
+    const parts = path.split('/');
+    // The first component the system keeps, if any: directly in a picked
+    // folder is the second component, as it is for a dropped one.
+    const at = parts.findIndex((name, depth) => isSystemFile(name, depth === 1));
+    if (at === -1) {
+      walked.files.push(addedFile(path, file));
+      continue;
+    }
+    const kept = parts.slice(0, at + 1).join('/');
+    if (!said.has(kept)) {
+      said.add(kept);
+      walked.systemFiles.push({ path: kept, folder: at < parts.length - 1 });
+    }
+  }
+  return { ...walked, notTaken: [] };
+}
+
+/**
  * What one drop carried: the files it is added as, what the desktop app met in
  * it and did not take — none in a browser, whose walk takes everything it can
  * read or refuses the drop — and, apart from both, what either walk left out
@@ -315,7 +353,7 @@ export function notTakenNotice(notTaken: readonly NotTaken[]): string | null {
   if (notTaken.length === 0) {
     return null;
   }
-  const things = notTaken.length === 1 ? '1 thing in the drop was' : `${notTaken.length} things in the drop were`;
+  const things = notTaken.length === 1 ? '1 thing was' : `${notTaken.length} things were`;
   return `${things} not taken: ${notTakenLine(notTaken)}`;
 }
 
@@ -344,7 +382,7 @@ export function nothingAddedLine(cause: unknown): string {
   if (cause instanceof NothingTaken) {
     return `nothing was added — ${notTakenLine(cause.notTaken)}`;
   }
-  return `nothing was added — that drop could not be read: ${said(cause)}`;
+  return `nothing was added — those files could not be read: ${said(cause)}`;
 }
 
 /**

@@ -56,14 +56,32 @@ function row(page: Page, name: string): Locator {
   return page.locator(`tbody tr[title="${name}"]`);
 }
 
-/** What one row says its state is. */
-function chip(page: Page, name: string): Locator {
-  return row(page, name).locator('span');
+/**
+ * What one row says its state is: the icon in the narrow column after Size,
+ * whose label is its words. A file the Library holds and this device does not
+ * draws none.
+ */
+function stateIcon(page: Page, name: string): Locator {
+  return row(page, name).getByRole('img', {
+    name: /^(On this device|Being fetched to this device|Fetching failed|Not fetched)/,
+  });
 }
 
-/** One folder in the tree down the left, by name. */
-function inTree(page: Page, name: string): Locator {
-  return page.getByRole('navigation', { name: 'folders' }).getByTitle(name, { exact: true });
+/** What the state icon says for a file this device has. */
+const ON_THIS_DEVICE = /^On this device$/;
+
+/** One folder's disclosure button in the tree, which opens and closes it. */
+function disclosure(page: Page, name: string): Locator {
+  return page
+    .getByRole('tree', { name: 'Library' })
+    .locator(`tr[title="${name}"]`)
+    .getByRole('button', { name: /^(expand|collapse) / });
+}
+
+/** Opens one folder in the tree, drawing its rows under it. */
+async function expand(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: `expand ${name}`, exact: true }).click();
+  await expect(disclosure(page, name)).toHaveAttribute('aria-expanded', 'true');
 }
 
 /** A picture of where the journey has got to, for a person to look at. */
@@ -178,14 +196,14 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // URL it was loaded from, which the page takes out of the address; and the
     // Passphrase window goes.
     const explorer = await opened;
-    await expect(explorer.locator('footer').getByText(setting.library, { exact: true })).toBeVisible();
+    await expect(explorer.getByRole('banner').getByText(setting.library, { exact: true })).toBeVisible();
     expect(new URL(explorer.url()).hash).toBe('');
     await expect.poll(() => shown(doorWindow)).toBe(false);
 
     // It lists the Library: the mapped folder at the root, and the album in it.
     await expect(row(explorer, setting.mapped)).toBeVisible();
-    await row(explorer, setting.mapped).dblclick();
-    await row(explorer, leaf(setting.album)).dblclick();
+    await expand(explorer, setting.mapped);
+    await expand(explorer, leaf(setting.album));
     await expect(row(explorer, setting.firstPhoto)).toBeVisible();
     await shot(explorer, '02-listed');
 
@@ -198,15 +216,20 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     await expect(question).toContainText('1 file');
     await question.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(row(explorer, dropped)).toHaveCount(1);
-    await expect(chip(explorer, dropped)).toHaveText('present', { timeout: SYNC_MS });
+    await expect(stateIcon(explorer, dropped)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: SYNC_MS });
     await shot(explorer, '03-dropped');
 
     // Left alone for the idle interval, the server locks the Library. The next
     // thing the explorer asks is refused as locked, and the Passphrase window
     // comes back to take the Passphrase: asked for by the page itself, or by
     // *unlock* where the page did not have the focus to ask.
+    // The mapped folder closed and then focused is the folder the details pane
+    // describes, its listing asked for afresh: the next thing the explorer
+    // asks. The refusal is the lock heard, and the tree gives way to the
+    // refusal at once, so nothing more is pressed in it until the unlock.
     await expect.poll(lockedForIdling, { timeout: LOCK_MS, intervals: [5_000] }).toBe(true);
-    await inTree(explorer, setting.mapped).click();
+    await explorer.getByRole('button', { name: `collapse ${setting.mapped}`, exact: true }).click();
+    await row(explorer, setting.mapped).click();
     try {
       await expect.poll(() => shown(doorWindow), { timeout: OWN_ASK_MS }).toBe(true);
     } catch {
@@ -218,13 +241,15 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     await shot(door, '04-unlock');
 
     // Unlocked in place: the window goes, and the explorer that was open is
-    // the one that answers again, without being loaded afresh.
+    // the one that answers again, without being loaded afresh — the mapped
+    // folder still closed, as it was left.
     await door.locator('#passphrase').fill(setting.passphrase);
     await door.locator('#open').click();
     await expect.poll(() => shown(doorWindow)).toBe(false);
+    await expand(explorer, setting.mapped);
     await expect(row(explorer, leaf(setting.album))).toBeVisible();
-    await row(explorer, leaf(setting.album)).dblclick();
-    await expect(chip(explorer, dropped)).toHaveText('present');
+    await expand(explorer, leaf(setting.album));
+    await expect(stateIcon(explorer, dropped)).toHaveAccessibleName(ON_THIS_DEVICE);
     await shot(explorer, '05-unlocked');
 
     // Quitting ends the app, and with it everything it started.

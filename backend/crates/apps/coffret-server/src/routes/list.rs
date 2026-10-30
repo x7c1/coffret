@@ -90,6 +90,31 @@ struct FolderDto {
     /// it. In the row because mappings are made at the top level, so the
     /// children of the Library root are where two siblings can differ.
     mapped: bool,
+    /// Whether this device has every file at every depth below it
+    /// (spec: EP-10), which the explorer marks as the whole folder reading
+    /// offline.
+    ///
+    /// Here rather than worked out by the browser, which holds the listings it
+    /// has asked for and not every descendant; the catalog answers it out of
+    /// the same read as the rest of this listing.
+    present_throughout: bool,
+    /// How many files stand at every depth below it, and how many of them
+    /// this device has (spec: EP-10): what the explorer's details pane says
+    /// as "18 of 196 files". From the same read, and for the same reason the
+    /// browser cannot count them itself.
+    files_total: u64,
+    files_present: u64,
+    /// The bytes those `files_total` files come to, here or not: the folder's
+    /// size as the details pane states it. From the same read.
+    size: u64,
+    /// The latest modification time among those `files_total` files, at any
+    /// depth below it, in UTC as a file's `mtime` is, and `null` for the count
+    /// of seconds no calendar reaches.
+    ///
+    /// A folder of the Library is implied by the paths under it and has no
+    /// time of its own (spec: EP-2), so its Modified is defined as when the
+    /// newest file anywhere inside it was modified. From the same read.
+    mtime: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -253,6 +278,11 @@ fn folder_dto(folder: &ChildFolder) -> FolderDto {
         name: folder.name.clone(),
         path: folder.path.as_str().to_owned(),
         mapped: folder.mapped,
+        present_throughout: folder.present_throughout,
+        files_total: folder.files_total,
+        files_present: folder.files_present,
+        size: folder.size,
+        mtime: iso8601(folder.mtime),
     }
 }
 

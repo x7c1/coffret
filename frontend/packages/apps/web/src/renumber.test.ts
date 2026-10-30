@@ -5,6 +5,9 @@ import { addedFile, type Added } from '@coffret/api';
 import {
   corrected,
   editedPath,
+  folded,
+  hasHidden,
+  irregular,
   leftWholeLine,
   linesOf,
   misorderedLine,
@@ -12,8 +15,10 @@ import {
   NO_NUMBERING,
   refusalLine,
   renumber,
+  tallyLine,
   unchangedLine,
   type Edits,
+  type Folded,
   type Numbering,
 } from './renumber';
 import { inLibraryOrder } from './stranded';
@@ -655,5 +660,73 @@ describe('correcting a new name', () => {
       to: '0015',
       misordered: { sorts: 'before', neighbour: '002' },
     });
+  });
+});
+
+// The preview always shows the lines that do not follow the rule, and folds
+// the regular ones between them, keeping the first and the last.
+describe('the folded preview', () => {
+  /** A folded group as the preview writes it: each line's old name, or the fold's count. */
+  function written(entries: readonly Folded[]): string[] {
+    return entries.map((entry) =>
+      'more' in entry
+        ? `… ${entry.more} more …`
+        : `${entry.irregular ? '!' : ''}${'renamed' in entry.line ? entry.line.renamed.from : entry.line.unchanged.from}`,
+    );
+  }
+
+  /** Twenty pages, a cover before them, a spread in the middle and a file that is no page. */
+  const BOOK = [
+    added('b/cover.jpg'),
+    ...Array.from({ length: 20 }, (_, at) => added(`b/p${at + 1}.jpg`)).filter(
+      (one) => !['b/p10.jpg', 'b/p11.jpg'].includes(one.path),
+    ),
+    added('b/p10+p11.jpg'),
+    added('b/ComicInfo.xml'),
+  ];
+
+  it('keeps every irregular line, the first and last regular lines, and folds the rest with their counts', () => {
+    const group = renumber(BOOK, PAGES).groups[0];
+    expect(written(folded(group, false))).toEqual([
+      // Put before the first page: irregular.
+      '!cover.jpg',
+      // The first regular line.
+      'p1.jpg',
+      '… 8 more …',
+      // A two-page spread: irregular.
+      '!p10+p11.jpg',
+      '… 8 more …',
+      // The last regular line.
+      'p20.jpg',
+      // A file that is no page, left unnumbered: irregular.
+      '!ComicInfo.xml',
+    ]);
+    expect(hasHidden([group])).toBe(true);
+    expect(written(folded(group, true))).toHaveLength(linesOf(group).length);
+    expect(tallyLine([group])).toBe('20 renamed · 3 to check');
+  });
+
+  it('shows a run of one regular line rather than counting it', () => {
+    const group = renumber(BOOK, PAGES, new Map([['b/p3.jpg', 'three.jpg']])).groups[0];
+    expect(written(folded(group, false)).slice(0, 5)).toEqual([
+      '!cover.jpg',
+      'p1.jpg',
+      'p2.jpg',
+      // Corrected by hand: irregular.
+      '!p3.jpg',
+      '… 6 more …',
+    ]);
+    expect(tallyLine([group])).toBe('20 renamed · 4 to check');
+  });
+
+  it('marks a corrected name as irregular, and a group left whole as regular', () => {
+    const edits = new Map([['b/p5.jpg', 'five.jpg']]);
+    const group = renumber(BOOK, PAGES, edits).groups[0];
+    const line = linesOf(group).find((one) => 'renamed' in one && one.renamed.from === 'p5.jpg')!;
+    expect(irregular(line, group)).toBe(true);
+
+    const whole = renumber([added('c/a1.jpg'), added('c/a01.jpg'), added('c/a2.jpg')], PAGES).groups[0];
+    expect(whole.leftWhole).not.toBeNull();
+    expect(linesOf(whole).every((one) => !irregular(one, whole))).toBe(true);
   });
 });

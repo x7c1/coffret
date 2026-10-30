@@ -16,9 +16,8 @@ use super::{Declined, FillStatus};
 pub struct FillRun {
     /// Which run of the fill this is, counted from the start of this process.
     ///
-    /// What a screen tells one run's account of itself from the next's: a line
-    /// somebody has read and put away must not take the next run's line with it,
-    /// and nothing else here distinguishes two runs that came to the same thing.
+    /// What a screen tells one run's account of itself from the next's: nothing
+    /// else here distinguishes two runs that came to the same thing.
     /// It is stamped on by [`Fills`](super::Fills) rather than carried here from
     /// the flow — a run is a folder taken off the queue, and what counts them is
     /// the one thing that sees them all — so a fresh one is `0` until it is
@@ -58,7 +57,7 @@ pub struct FillRun {
 
 impl FillRun {
     /// A fill that has been armed and has not read its folder's listing yet.
-    pub(super) fn starting(folder: Folder) -> Self {
+    pub(crate) fn starting(folder: Folder) -> Self {
         Self {
             run: 0,
             folder,

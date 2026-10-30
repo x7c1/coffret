@@ -12,7 +12,9 @@
 //! Two things are taken out before the file is compared, and only those: a
 //! file's `mtime` is the time the fixture planted it and its `deposited_at` the
 //! time the fixture's batch stamped it, both differ every run, so each is
-//! written as one fixed instant wherever it is not `null`.
+//! written as one fixed instant wherever it is not `null`. A folder's `mtime`
+//! is the latest of its planted files', so it is written as the planted
+//! instant too.
 
 use std::path::Path;
 
@@ -33,14 +35,23 @@ const PLANTED_AT: &str = "2026-01-01T00:00:00Z";
 /// The instant every committed Entry's deposit time is written as.
 const DEPOSITED_AT: &str = "2026-01-02T00:00:00Z";
 
-/// `answer` with every file's time replaced by [`PLANTED_AT`] and every
-/// deposit time by [`DEPOSITED_AT`].
+/// `answer` with every file's and folder's time replaced by [`PLANTED_AT`]
+/// and every deposit time by [`DEPOSITED_AT`].
 fn steadied(mut answer: Value) -> Value {
-    if let Some(files) = answer.get_mut("files").and_then(Value::as_array_mut) {
-        for file in files {
-            for (field, instant) in [("mtime", PLANTED_AT), ("deposited_at", DEPOSITED_AT)] {
-                if file.get(field).is_some_and(|time| !time.is_null()) {
-                    file[field] = Value::from(instant);
+    for (rows, fields) in [
+        (
+            "files",
+            &[("mtime", PLANTED_AT), ("deposited_at", DEPOSITED_AT)][..],
+        ),
+        ("folders", &[("mtime", PLANTED_AT)][..]),
+    ] {
+        let Some(rows) = answer.get_mut(rows).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for row in rows {
+            for &(field, instant) in fields {
+                if row.get(field).is_some_and(|time| !time.is_null()) {
+                    row[field] = Value::from(instant);
                 }
             }
         }

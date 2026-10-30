@@ -1,14 +1,16 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { Refusal, type Browsed, type Mapped } from '@coffret/api';
+import { Refusal, type Browsed, type Listing, type Mapped } from '@coffret/api';
 
 import {
   browseTo,
   chosen,
+  chooseLine,
+  chooseTitle,
   descend,
+  folderToChoose,
   mapHere,
-  mapLabel,
-  MAP_THIS_FOLDER,
+  noFolderChosenLine,
   pickerFor,
   toParent,
   typedOver,
@@ -157,9 +159,69 @@ it('asks for a folder rather than mapping nothing', async () => {
   expect(picking.now().refused).toBe('choose a folder, or type its whole path');
 });
 
-// The banner's button names what a mapping is for: the folder itself at the
-// top level, and the top-level folder further down.
-it('labels the button by the top-level folder a mapping is for', () => {
-  expect(mapLabel('books', 'books')).toBe(MAP_THIS_FOLDER);
-  expect(mapLabel('books/vol-1', 'books')).toBe('map books…');
+// What the step asks names the part of the Library the folder is for, and
+// says how far the folder reaches — never the word "map".
+it('asks for a folder for a top-level folder or for the whole Library, in the same terms as the banner', () => {
+  expect(chooseTitle('books')).toBe('Choose a folder on this device for “books”');
+  expect(chooseTitle(null)).toBe('Choose a folder on this device for the Library');
+  expect(chooseLine('books')).toBe(
+    'Files added are kept there as well as in the Library, and everything under “books” uses it.',
+  );
+  expect(chooseLine(null)).toContain('everything in the Library uses it');
+  expect(noFolderChosenLine('books')).toBe('No folder chosen for “books” yet');
+  for (const said of [chooseTitle('books'), chooseLine(null), noFolderChosenLine(null)]) {
+    expect(said).not.toMatch(/\bmap/i);
+    expect(said).not.toContain('not on this device');
+  }
+});
+
+/**
+ * The listing of a Library root: `books` with a folder of this device chosen
+ * for it or not, `albums` without, and the whole Library chosen for or not.
+ */
+function rootListing({ books, library }: { books: boolean; library: boolean }): Listing {
+  return {
+    path: '',
+    // A folder's own answer repeats the root's where one is chosen for the
+    // whole Library, as the server says it.
+    mapped: library,
+    held: true,
+    folders: [
+      { name: 'books', path: 'books', mapped: books || library, present_throughout: false, files_total: 1, files_present: 0, size: 1, mtime: null },
+      { name: 'albums', path: 'albums', mapped: library, present_throughout: false, files_total: 1, files_present: 0, size: 1, mtime: null },
+    ],
+    files: [],
+    folders_on_disk: [],
+    empty_mapped_prefixes: [],
+  };
+}
+
+// EP-9: adding needs a folder on this device for the destination's top-level
+// folder or for the whole Library, and is asked for only where neither exists.
+describe('when the folder-on-this-device step appears', () => {
+  it('asks where neither the top-level folder nor the whole Library has one', () => {
+    const none = rootListing({ books: false, library: false });
+    expect(folderToChoose('books/Foo', none)).toEqual({ prefix: 'books' });
+    expect(folderToChoose('books', none)).toEqual({ prefix: 'books' });
+  });
+
+  it('does not ask where the top-level folder has one', () => {
+    expect(folderToChoose('books/Foo', rootListing({ books: true, library: false }))).toBeNull();
+    // Nor for a top-level folder chosen for with nothing in it yet.
+    const empty = { ...rootListing({ books: false, library: false }), empty_mapped_prefixes: ['comics'] };
+    expect(folderToChoose('comics/Series', empty)).toBeNull();
+  });
+
+  it('does not ask where only the whole Library has one', () => {
+    const library = rootListing({ books: false, library: true });
+    expect(folderToChoose('books/Foo', library)).toBeNull();
+    expect(folderToChoose('', library)).toBeNull();
+  });
+
+  it('asks for the whole Library at the root, whatever top-level folders have one', () => {
+    // The server takes an add at the root only through the whole Library's
+    // folder, so a top-level folder's own does not let it through (spec: EP-9).
+    expect(folderToChoose('', rootListing({ books: true, library: false }))).toEqual({ prefix: null });
+    expect(folderToChoose('', rootListing({ books: false, library: false }))).toEqual({ prefix: null });
+  });
 });

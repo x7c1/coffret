@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { dropLine, type DropOutcome } from './dropTarget';
-import { COLOR } from './theme';
+import { COLOR, SHADOW } from './theme';
 
 /**
  * What a banner over the rows is drawn as.
@@ -35,43 +35,82 @@ export function Banner({
 }
 
 /**
- * Said while files are dragged over a drop target — the file list, or a row of
- * the folder tree: what letting go of them there will do, as `dropLine` words
- * it. A folder that takes no drop says so in the refused colour the outline
- * around it is drawn in, and one not known yet either way in a neutral one.
+ * Said while files are dragged over the tree: a pill at the bottom of it,
+ * naming the folder letting go of them there adds to (see `dropLine`), with
+ * that folder's row outlined in the same colour. It stands over the rows
+ * rather than among them, and takes no pointer, so the drag goes on reading
+ * the row under it.
  */
-export function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) {
+export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: string }) {
   return (
-    <Banner tone={TONE[outcome]} background={GROUND[outcome]}>
-      {dropLine(outcome, held)}
-    </Banner>
+    <div
+      role="status"
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 12,
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+        zIndex: 2,
+      }}
+    >
+      <span
+        style={{
+          maxWidth: 'calc(100% - 32px)',
+          padding: '5px 14px',
+          borderRadius: 999,
+          border: `1px solid ${TONE[outcome]}`,
+          background: GROUND[outcome],
+          color: TONE[outcome],
+          fontSize: 13,
+          boxShadow: SHADOW.menu,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {dropLine(outcome, landing)}
+      </span>
+    </div>
   );
 }
 
-/** The outline a drag over a drop target brings up, in the colour of its outcome. */
+/**
+ * The ring a drag over a drop target brings up, in the colour of its outcome:
+ * drawn inside the edge (the outline is offset inward by its width), so that a
+ * row's ring does not run under the rows either side of it.
+ */
 export function dropOutline(dragged: boolean, outcome: DropOutcome): string {
   if (!dragged) {
     return 'none';
   }
-  return `2px dashed ${TONE[outcome]}`;
+  return `2px solid ${RING[outcome]}`;
 }
 
-/**
- * The colour of a drop's outcome: refused, taken, or neither while it is not
- * known yet — so that no row shows one colour the instant a drag starts and
- * flips to the other when the answer arrives.
- */
+/** What the row a drop lands in is tinted with inside its ring, in the tone of its outcome. */
+export function dropGround(outcome: DropOutcome): string {
+  return GROUND[outcome];
+}
+
+/** The colour of a drop's outcome: taken, or refused. */
 const TONE: Record<DropOutcome, string> = {
-  taken: COLOR.added,
-  taken_after: COLOR.added,
+  taken: COLOR.accentDeep,
+  taken_after: COLOR.accentDeep,
   refused: COLOR.refused,
-  unknown: COLOR.dim,
 };
 
-/** What is under the drop line, in the tone of its outcome. */
+/** The ring around a drop target: the accent itself where the drop is taken, its text shade being for words. */
+const RING: Record<DropOutcome, string> = {
+  taken: COLOR.accent,
+  taken_after: COLOR.accent,
+  refused: COLOR.refused,
+};
+
+/** What is under the drop pill, in the tone of its outcome. */
 const GROUND: Record<DropOutcome, string> = {
-  taken: COLOR.addedGround,
-  taken_after: COLOR.addedGround,
+  taken: COLOR.accentTint,
+  taken_after: COLOR.accentTint,
   refused: COLOR.refusedGround,
-  unknown: COLOR.panel,
 };

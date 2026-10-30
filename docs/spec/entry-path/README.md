@@ -154,6 +154,15 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     root and appears under another is a deletion under the first and a new
     file under the second, never a rename (EP-10): a scan pairs a file that
     went with one that appeared only under the same mapped root.
+  - A drop or an import addressed at the Library root is taken only through
+    the Library-root mapping. A top-level mapping represents its own subtree
+    and not what sits beside it, so top-level mappings alone do not reach the
+    root — not even for parts whose names begin with a component one of them
+    represents — and such a request is refused as a whole, before anything
+    lands, as a `409` `refused_placement` of reason `unmapped`. One addressed
+    at a folder is taken where a mapping reaches that folder — the one for its
+    top-level component, or the Library-root mapping where none is — and is
+    refused the same way where neither does.
 - **EP-10.** A device's mappings (EP-9) only translate Entry Paths into
   local paths; they do not assert that every Entry under a mapped subtree is
   present on the device. A scan discovers new and modified files under the
@@ -703,7 +712,8 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     A freeze's preview of a folder counts the files and the folders it left
     out this way, so the explorer can name them among what a freeze leaves as
     it is.
-  - A drop leaves them out before anything is written. A browser's drop is
+  - A drop — a pick with the explorer's + among them, which is one drop
+    (LA-26) — leaves them out before anything is written. A browser's drop is
     walked on the page against the same list and such a name is never sent;
     the desktop app's walk of a drop (LA-29) leaves it out and reports it
     under a reason of its own, apart from what it did not take. In both, what

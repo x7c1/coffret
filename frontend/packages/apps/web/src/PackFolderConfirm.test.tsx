@@ -2,25 +2,31 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { PackFolderConfirm } from './PackFolderConfirm';
-import { questionOf, type PackQuestion } from './packFolder';
+import { PACK_EXPLAINED, questionOf, type PackQuestion } from './packFolder';
 
 afterEach(cleanup);
 
 const BOOK: PackQuestion = {
   folder: 'books/BookX',
-  line: '📁 BookX — 80 files, 58.0 MB will be packed into Packs',
+  title: 'Pack “BookX”?',
+  line: '80 files, 58.0 MB will be packed',
   packs: true,
-  leftOut: 'left as they are: 2 files already in a Pack',
+  leftOut: ['2 files already in a Pack', '3 files not on this device'],
   waits: null,
 };
 
-it('shows what will be packed, and offers Pack and Cancel', () => {
+it('shows what will be packed and what is left as it is, and offers Pack and Cancel', () => {
   const onChoose = vi.fn();
   render(<PackFolderConfirm question={BOOK} onChoose={onChoose} />);
 
-  const dialog = screen.getByRole('dialog').textContent;
-  expect(dialog).toContain('📁 BookX — 80 files, 58.0 MB will be packed into Packs');
-  expect(dialog).toContain('left as they are: 2 files already in a Pack');
+  const dialog = screen.getByRole('dialog', { name: 'Pack “BookX”?' }).textContent;
+  expect(dialog).toContain('80 files, 58.0 MB will be packed');
+  expect(dialog).toContain('Left as they are');
+  expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    '2 files already in a Pack',
+    '3 files not on this device',
+  ]);
+  expect(dialog).toContain(PACK_EXPLAINED);
   fireEvent.click(screen.getByText('Pack'));
   fireEvent.click(screen.getByText('Cancel'));
   expect(onChoose.mock.calls).toEqual([[true], [false]]);
@@ -43,14 +49,15 @@ it('offers no Pack where there is nothing to pack', () => {
     <PackFolderConfirm
       question={{
         ...BOOK,
-        line: '📁 BookX — nothing to pack: 80 files already in a Pack',
+        line: 'Nothing to pack: 80 files already in a Pack.',
         packs: false,
-        leftOut: null,
+        leftOut: [],
       }}
       onChoose={onChoose}
     />,
   );
   expect(screen.queryByText('Pack')).toBeNull();
+  expect(screen.queryByText('Left as they are')).toBeNull();
   fireEvent.click(screen.getByText('Close'));
   expect(onChoose).toHaveBeenCalledWith(false);
 });
@@ -75,7 +82,7 @@ it('offers only Close for a folder being packed already', () => {
   render(<PackFolderConfirm question={question} onChoose={onChoose} />);
 
   const dialog = screen.getByRole('dialog').textContent;
-  expect(dialog).toContain('this folder is being packed already');
+  expect(dialog).toContain('This folder is being packed already.');
   expect(dialog).not.toContain('packed after it');
   expect(screen.queryByText('Pack')).toBeNull();
   fireEvent.click(screen.getByText('Close'));

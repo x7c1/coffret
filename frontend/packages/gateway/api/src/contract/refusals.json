@@ -29,6 +29,13 @@
   },
   {
     "body": {
+      "error": "no_such_entry",
+      "message": "this device holds no file at that path"
+    },
+    "status": 404
+  },
+  {
+    "body": {
       "error": "no_such_route",
       "message": "this server answers nothing at that path"
     },

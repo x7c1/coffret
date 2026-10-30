@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { filesUnder, type DroppedEntry } from './drop';
+import { filesUnder, pickedFiles, type DroppedEntry } from './drop';
 
 /** One file a case dropped, with its content standing in for a real `File`. */
 function file(name: string): DroppedEntry {
@@ -139,4 +139,26 @@ it('leaves out what an operating system keeps and hands it back apart', async ()
     { path: 'book/inner/desktop.ini', folder: false },
     { path: '.DS_Store', folder: false },
   ]);
+});
+
+// EP-17, LA-26: files picked with the header's + are one drop: a file by its
+// name, a folder picked whole by its way down, and what the system keeps left
+// out once.
+it('reads files picked with +, a folder picked whole by its way down', async () => {
+  const picked = (name: string, relative = '') =>
+    ({ name, size: 1, lastModified: 0, webkitRelativePath: relative }) as File;
+  const drop = await pickedFiles([
+    picked('001.jpg', 'Book/001.jpg'),
+    picked('002.jpg', 'Book/sub/002.jpg'),
+    picked('.DS_Store', 'Book/.DS_Store'),
+    picked('a', 'Book/__MACOSX/a'),
+    picked('b', 'Book/__MACOSX/b'),
+  ]);
+  expect(drop.files.map((one) => one.path)).toEqual(['Book/001.jpg', 'Book/sub/002.jpg']);
+  expect(drop.systemFiles).toEqual([
+    { path: 'Book/.DS_Store', folder: false },
+    { path: 'Book/__MACOSX', folder: true },
+  ]);
+  expect(drop.notTaken).toEqual([]);
+  expect((await pickedFiles([picked('cover.png')])).files.map((one) => one.path)).toEqual(['cover.png']);
 });

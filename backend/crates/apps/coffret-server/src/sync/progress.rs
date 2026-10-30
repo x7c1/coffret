@@ -127,7 +127,7 @@ impl Progress {
         !self.working
     }
 
-    fn is_syncing(&self) -> bool {
+    pub(super) fn is_syncing(&self) -> bool {
         self.on_record
             .as_ref()
             .is_some_and(|run| matches!(run.status, SyncStatus::Syncing))

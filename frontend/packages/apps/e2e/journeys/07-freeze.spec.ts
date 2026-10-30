@@ -6,16 +6,16 @@
 // Container per page — a few hundred uploads, a few hundred objects, and a few
 // hundred provider calls to open it again. So a drop holding a folder is asked
 // about before anything is sent, as every drop is confirmed: naming the folder
-// with its count and size and the full path it lands under, and offering it as
-// a Pack. Adding it as a Pack packs exactly the pages the drop carried: they
+// it lands in and the dropped folder with its count and size, and offering it
+// as One Pack. Adding it as a Pack packs exactly the pages the drop carried: they
 // land, a freeze packs them together, and what the Library gains is Packs
 // (spec: PK-1, PK-7, PK-17).
 //
 // What a person sees is the whole of what this journey asserts: the question
-// names the dropped folder, how many files it holds, and where it lands — a
-// folder the Library does not have yet, marked new — the folder is on the
+// names where it lands, the dropped folder and how many files it holds — a
+// folder the Library does not have there yet, marked New folder — the folder is on the
 // tree though the Library has not committed it yet, the rows appear the moment
-// the pages land, they become ordinary `present` rows when the batch commits,
+// the pages land, they become ordinary rows on this device when the batch commits,
 // and a reload finds the folder as the Library's own rather than this
 // browser's. That the Containers behind them are Packs is not something a
 // screen shows — the listing carries the kind and the explorer draws a state —
@@ -34,15 +34,19 @@ import path from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 
 import {
-  chip,
   expect,
   glimpse,
   inTree,
+  ON_THIS_DEVICE,
+  openActivity,
   photo,
   row,
+  rowsNamed,
   setting,
   shot,
+  stateIcon,
   test,
+  TO_BE_PACKED,
 } from './journey';
 import { startStorage, stopStorage } from './storage';
 
@@ -59,19 +63,20 @@ const GLIMPSE_MS = 4_000;
 const FREEZE_MS = 120_000;
 
 /** What the question offers for a Pack, chosen unless somebody says otherwise. */
-const AS_A_PACK = 'As a Pack (recommended)';
+const AS_ONE_PACK = /^One Pack/;
 
 /**
  * Answers the confirmation a drop of the book `name` onto the album brings up:
- * it names the folder with its count, says where it lands — under the album,
- * as a folder the Library does not have yet — and goes as a Pack on Add.
+ * it says where it lands — the album — names the folder with its count,
+ * marked as a folder the Library does not have there yet, and goes as One
+ * Pack on Add.
  */
 async function addAsAPack(page: Page, name: string): Promise<void> {
-  const question = page.getByRole('dialog');
-  await expect(question).toContainText(`📁 ${name} — ${setting.importPages} files`);
-  await expect(question).toContainText(`goes into ${setting.album}/${name}/`);
-  await expect(question).toContainText(`${name} is new`);
-  await expect(question.getByRole('radio', { name: AS_A_PACK })).toBeChecked();
+  const question = page.getByRole('dialog', { name: `Add to ${setting.album}` });
+  const incoming = question.getByRole('list', { name: 'incoming' });
+  await expect(incoming).toContainText(`📁 ${name} — ${setting.importPages} files`);
+  await expect(incoming).toContainText('New folder');
+  await expect(question.getByRole('radio', { name: AS_ONE_PACK })).toBeChecked();
   await question.getByRole('button', { name: 'Add', exact: true }).click();
 }
 
@@ -214,8 +219,8 @@ test('drop a book folder, add it as a Pack, and watch it pack', async ({ page })
   const book = await bookCalled(IMPORTED);
   await page.goto(`/#path=${setting.album}`);
   await dropFolderOnto(inTree(page, path.basename(setting.album)), book);
-  await expect(page.getByRole('dialog')).toContainText(
-    `goes into ${setting.album}/${IMPORTED}/`,
+  await expect(page.getByRole('dialog', { name: `Add to ${setting.album}` })).toContainText(
+    `📁 ${IMPORTED} —`,
   );
   await shot(page, '01-asked-how-to-add-the-folder');
   await addAsAPack(page, IMPORTED);
@@ -226,19 +231,19 @@ test('drop a book folder, add it as a Pack, and watch it pack', async ({ page })
   await page.goto(`/#path=${setting.album}/${IMPORTED}`);
 
   // In the folder from that moment, whatever the freeze has managed by then.
-  // Which word each chip has for it is the machine's speed — "not in Library"
-  // until the batch commits, `present` where the freeze outran the first
-  // frame — so the rows are asserted and the packing moment is photographed
-  // where it is caught.
-  await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
-  await expect(chip(page, pages[0])).toHaveText(/^(not in Library|present)$/);
+  // Which state each icon says is the machine's speed — being added until the
+  // batch commits, on this device where the freeze outran the first frame — so
+  // the rows are asserted and the packing moment is photographed where it is
+  // caught.
+  await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
+  await expect(stateIcon(page, pages[0])).toHaveAccessibleName(/^On this device/);
   await glimpse(page.getByText(/packing this folder/), GLIMPSE_MS);
   await shot(page, '02-the-pages-landed');
 
   // And when the batch commits they are ordinary rows: the Library holds the
   // Entries, and this device has the files they were made from.
   for (const name of pages) {
-    await expect(chip(page, name)).toHaveText('present', { timeout: FREEZE_MS });
+    await expect(stateIcon(page, name)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: FREEZE_MS });
   }
   await expect(page.getByText(new RegExp(`packed ${setting.importPages} files`))).toBeVisible();
   await shot(page, '03-packed-into-the-library');
@@ -247,13 +252,26 @@ test('drop a book folder, add it as a Pack, and watch it pack', async ({ page })
   // server names it, and a reload finds it there.
   await page.reload();
   await expect(inTree(page, IMPORTED)).toBeVisible();
-  await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
+  await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
   await shot(page, '04-an-ordinary-folder-of-the-library');
 });
 
+/**
+ * Puts the focus on the page row `name`, off both folders: the focused row is
+ * drawn in white on the accent whatever it is, so two folders' names are only
+ * told apart by colour where neither holds the focus — and the reload lands it
+ * on the folder in the address.
+ */
+async function focusAPage(page: Page, name: string): Promise<void> {
+  await row(page, name).click();
+  await expect(row(page, name)).toHaveAttribute('data-focused', '');
+}
+
 /** The colour a folder's name is drawn in on the tree. */
-function colourOf(name: Locator): Promise<string> {
-  return name.evaluate((element) => getComputedStyle(element).color);
+function colourOf(page: Page, name: string): Promise<string> {
+  return inTree(page, name)
+    .getByText(name, { exact: true })
+    .evaluate((element) => getComputedStyle(element).color);
 }
 
 // A book whose freeze Storage stopped is a folder full of pages on the disk and
@@ -273,7 +291,7 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
     await dropAsAPack(page, book);
     await expect(inTree(page, STRANDED)).toBeVisible({ timeout: FREEZE_MS });
     await page.goto(`/#path=${setting.album}/${STRANDED}`);
-    await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
+    await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
     await expect(page.getByText(/could not pack/)).toBeVisible({ timeout: FREEZE_MS });
     await shot(page, '05-storage-stopped-the-book');
 
@@ -286,11 +304,13 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
     await page.reload();
     await expect(inTree(page, STRANDED)).toBeVisible();
     await expect(inTree(page, IMPORTED)).toBeVisible();
-    expect(await colourOf(inTree(page, STRANDED))).not.toBe(
-      await colourOf(inTree(page, IMPORTED)),
-    );
-    await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
-    await expect(chip(page, pages[0])).toHaveText('to be packed');
+    await focusAPage(page, pages[0]);
+    expect(await colourOf(page, STRANDED)).not.toBe(await colourOf(page, IMPORTED));
+    await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
+    await expect(stateIcon(page, pages[0])).toHaveAccessibleName(TO_BE_PACKED);
+    // The second attempt is the Retry on the stopped freeze's entry in the
+    // Activity panel, which the server's log kept across the reload.
+    await openActivity(page);
     await expect(page.getByRole('button', { name: 'pack again' })).toBeVisible();
     await shot(page, '06-the-folder-came-back');
   } finally {
@@ -302,16 +322,21 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
   // Storage is back, and the second attempt packs what was sitting there.
   await page.getByRole('button', { name: 'pack again' }).click();
   for (const name of pages) {
-    await expect(chip(page, name)).toHaveText('present', { timeout: FREEZE_MS });
+    await expect(stateIcon(page, name)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: FREEZE_MS });
   }
-  await expect(page.getByText(new RegExp(`packed ${setting.importPages} files`))).toBeVisible();
+  // Named by its folder: the panel is open, and it lists the first journey's
+  // book packed in the same words beside this one.
+  await expect(
+    page.getByText(new RegExp(`packed ${setting.importPages} files of .*${STRANDED}`)),
+  ).toBeVisible();
 
   // And it is the Library's folder now, drawn like the one beside it; the
   // commit released the reservation, so a reload finds its pages present
   // rather than still to be packed.
   await page.reload();
   await expect(inTree(page, STRANDED)).toBeVisible();
-  expect(await colourOf(inTree(page, STRANDED))).toBe(await colourOf(inTree(page, IMPORTED)));
-  await expect(chip(page, pages[0])).toHaveText('present');
+  await focusAPage(page, pages[0]);
+  expect(await colourOf(page, STRANDED)).toBe(await colourOf(page, IMPORTED));
+  await expect(stateIcon(page, pages[0])).toHaveAccessibleName(ON_THIS_DEVICE);
   await shot(page, '07-packed-at-the-second-attempt');
 });

@@ -40,7 +40,7 @@ import { inLibraryOrder } from './stranded';
 import { said } from './useAsked';
 
 /** What a folder the Library does not hold yet is marked with, wherever it is drawn. */
-export const PROSPECTIVE = 'not in the Library yet — drop files here to add them';
+export const PROSPECTIVE = 'not in the Library yet — add files to it';
 
 /** The menu item that prepares a path inside a folder. */
 export const NEW_FOLDER = 'New folder…';
@@ -248,6 +248,12 @@ export function prospectiveIn(listing: Listing, prospective: readonly string[]):
         name,
         path,
         mapped: listing.mapped || (listing.path === '' && listing.empty_mapped_prefixes.includes(name)),
+        // The Library holds nothing under it, so nothing of it is here to read.
+        present_throughout: false,
+        files_total: 0,
+        files_present: 0,
+        size: 0,
+        mtime: null,
       };
     });
 }

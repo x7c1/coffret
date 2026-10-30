@@ -2,22 +2,25 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 
 import type { Added } from '@coffret/api';
 
-import { newLine, onDiskLine, pathLine, type Destination, type Level } from './destination';
+import { onDiskLine, newLine, type Destination, type Level } from './destination';
+import { BUTTON, Dialog, LINE, PRIMARY } from './Dialog';
 import { notTakenNotice, type NotTaken } from './drop';
 import { systemFilesLine, type SystemFile } from './systemFiles';
 import {
   ADD,
+  addTitle,
   CANCEL,
-  choiceLabels,
   collisionsOf,
   existsLine,
-  folderLine,
   foldersReached,
-  looseLine,
+  incomingLine,
+  incomingOf,
+  MARK_LABEL,
   NOTHING_HELD,
-  questionOf,
   refusedLine,
   replacesLine,
+  STORE_CHOICES,
+  totalLine,
   type Choice,
   type DropSummary,
   type HeldFiles,
@@ -27,21 +30,20 @@ import {
   corrected,
   EDITED,
   editedPath,
-  elided,
+  folded,
   groupHeading,
   hasHidden,
   leftWholeLine,
-  linesOf,
   misorderedLine,
   NO_EDITS,
   NO_NUMBERING,
-  PUT_BACK,
   refusalLine,
   renumber,
+  tallyLine,
+  UNDO,
   unchangedLine,
   type Edits,
   type Group,
-  type Line,
   type Numbering,
   type Refusal,
   type Rename,
@@ -58,73 +60,64 @@ const REMEMBERED = {
   volumes: 'coffret.drop.number-volumes',
 } as const;
 
+/** How many incoming items the confirmation names before it counts the rest. */
+const ITEMS_SHOWN = 8;
+
 /**
- * The confirmation every drop is answered with before anything is sent: where
- * it lands, what it carries, and Add or Cancel.
+ * The confirmation every add is answered with before anything is sent —
+ * files picked with the header's **+** and files dropped onto the tree alike:
+ * `Add to <path>`, what the drop carries, and Add or Cancel.
  *
- * Where it lands is said as the Library will hold it — the full path of the
- * folder each part of the drop goes under, see `destination.ts` — with the
- * levels the Library does not have yet marked as new, since a drop is also how
- * a folder comes to be.
+ * Under the heading, the whole drop counted — how many files and how much —
+ * and then the incoming items: each dropped folder with what it holds, and
+ * each file dropped loose, marked `New folder`, `New` or `Replaces` as it is
+ * to the folder it lands in (see [`incomingOf`](./packChoice)). A folder the
+ * Library already has there carries no mark and says so instead: the files in
+ * it stay, and a dropped file at the path of one of them replaces it or is
+ * refused. Where the folder added to is not one the Library holds yet — a
+ * folder prepared with "New folder…", say — a line says the drop makes it.
  *
- * A drop of files alone says how many and how much, and that they are added one
- * by one. A drop holding a folder names each dropped folder with how many files
- * it holds and how much they come to, and asks what it goes in as: a Pack,
- * chosen unless somebody says otherwise, or the files one by one.
+ * A drop holding a folder is asked how it is stored: **One Pack**, chosen
+ * unless somebody says otherwise, or **Separate files**, each with a line
+ * saying what it is for. A Pack chosen here packs only the files this drop
+ * carries, never the other files already in that folder (spec: PK-17).
  *
- * A folder the Library already has where the drop lands is said to exist, and
- * the same answers are offered all the same. Adding goes as it always does: a
- * file whose path holds an Entry inside a Pack is refused on its own, and one
- * whose path holds a one-file Entry replaces that file. A Pack chosen here packs
- * only the files this drop carries — a replaced one among them — never the
- * other files already in that folder (spec: PK-17).
- *
- * Where the desktop app met something in the drop and did not take it — a
- * symbolic link, a name coffret keeps for itself — the confirmation says so in
- * one line, whether the drop is added straight away or asked what it goes in
- * as: what is listed above is what was taken, and what was let go of is more
- * than that (spec: LA-26). A browser's drop has nothing to say here.
- *
- * What either walk left out because an operating system keeps it — `.DS_Store`,
- * `Thumbs.db`, `._` files — is neither counted nor sized above, and is said in
- * one line of its own in the dim colour, naming a few of the distinct names:
- * such files are in almost every drop, and saying them as the line above says
- * what was not taken would read as something gone wrong (spec: EP-17).
- *
- * Where the Library already holds a file at a path the drop is sent under, the
- * confirmation says so by name: how many files replace a one-file Entry, the
- * first few of them spelled out, and how many a Pack holds and so are refused.
- * The paths are the ones the drop will be sent under, so ticking a box below
- * that renames them changes what is said here too. Where nothing collides,
- * nothing more is said.
+ * The one-line notes, each shown only where it applies: what the desktop app
+ * met in the drop and did not take (spec: LA-26); what either walk left out
+ * because an operating system keeps it, in the dim colour, since such files
+ * are in almost every drop (spec: EP-17); the files that replace a one-file
+ * Entry, the first few by name; and how many a Pack holds the path of and so
+ * are refused. The paths are the ones the drop will be sent under, so ticking
+ * a box below that renames them changes what is said here too.
  *
  * For a drop holding a folder, two boxes offer to number the pages and the
- * volume folders of what was dropped, off unless the last drop ticked them.
- * Ticking one shows what it would rename before anything is sent, because a
- * rename is only worth having where it reads the names the way the person
- * meant — and Add carries the boxes beside the choice. The preview lists each
- * folder's names in the order they are read in, renamed or not, and the files
- * that are no pages after them. Files dropped alone are no folder's pages, and
- * are sent under the names they were dropped with.
+ * volume folders, off unless the last drop ticked them. Ticking one shows
+ * what it would rename inside the confirmation, before anything is sent: a
+ * header line, `<n> renamed · <m> to check`, and each folder's names in the
+ * order they are read in, where the lines that do not follow the rule — a
+ * name left unnumbered, a two-page spread, a name corrected by hand — are
+ * always shown and tinted, and the regular ones between them fold into
+ * `… <n> more …` (see [`folded`](./renumber)). **Show all** lists every line,
+ * and grows the dialog to the window's height less a margin, the preview
+ * taking the height that is left and scrolling inside it. Files dropped alone
+ * are no folder's pages, and are sent under the names they were dropped with.
  *
  * Where the rule read a name otherwise than the person meant, they correct it
- * here rather than untick the box and rename after the drop: clicking a new
- * name in the preview opens it for editing — the last component only, since
- * the name is what is corrected, not where it lands — and Enter or leaving the
- * field takes it, Escape puts the field away without it. While the field is
- * open its Escape is not the dialog's Cancel and its Enter is not Add. A name
- * that cannot be held where it lands — empty, with `/` in it, `.` or `..`, or
- * one a name beside it already is — is not taken: the field stays open and
- * says why, and Add sends the names last taken. A name that breaks the order
- * the names beside it are read in is taken and said to break it, since it may
- * be a typo. A corrected line is marked as such and offers to put back the
- * rule's name. A corrected volume folder carries the pages under it, in the
- * lines below it and in the paths sent. What the Library holds under the
- * folder it now names is asked for as the corrections are made (`holding`),
- * and Add waits for the answer, so a replacement or refusal there is said as
- * any other is. A press of Add while it waits does nothing, so the reading,
- * and then what it turned up, is said beside Add as well as above, where a
- * long preview may have scrolled it away. Add carries the corrections beside
+ * here: clicking a new name opens it for editing — the last component only,
+ * since the name is what is corrected, not where it lands — and Enter or
+ * leaving the field takes it, Escape puts the field away without it. While
+ * the field is open its Escape is not the dialog's Cancel and its Enter is not
+ * Add. A name that cannot be held where it lands — empty, with `/` in it, `.`
+ * or `..`, or one a name beside it already is — is not taken: the field stays
+ * open and says why, and Add sends the names last taken. A name that breaks
+ * the order the names beside it are read in is taken and said to break it,
+ * since it may be a typo. A corrected line is marked as such and offers Undo,
+ * which puts back the rule's name. A corrected volume folder carries the
+ * pages under it, in the lines below it and in the paths sent. What the
+ * Library holds under the folder it now names is asked for as the corrections
+ * are made (`holding`), and Add waits for the answer, so a replacement or
+ * refusal there is said as any other is — beside Add as well as above, where
+ * a long preview may have scrolled it away. Add carries the corrections beside
  * the boxes. They belong to this question only: ticking or unticking either
  * box starts again from the rule's names, and nothing of them is kept for the
  * next drop.
@@ -133,6 +126,7 @@ const REMEMBERED = {
  * Cancel costs nothing, because nothing has been sent.
  */
 export function DropConfirm({
+  landing,
   summary,
   files,
   destinations,
@@ -142,6 +136,8 @@ export function DropConfirm({
   holding,
   onChoose,
 }: {
+  /** The folder the drop is added to; the Library root is the empty string. */
+  landing: string;
   summary: DropSummary;
   /** The drop's files as dropped, which the preview is worked out from. */
   files: readonly Added[];
@@ -173,9 +169,11 @@ export function DropConfirm({
   // The person's corrections of the rule's names, which a box ticked or
   // unticked discards: the rule's names they corrected are other names then.
   const [edits, setEdits] = useState<Edits>(NO_EDITS);
+  // Whether the preview lists every line, which grows the dialog with it.
+  const [all, setAll] = useState(false);
   const tick = (which: keyof Numbering, on: boolean) => {
     remember(REMEMBERED[which], on);
-    setTicked((held) => ({ ...held, [which]: on }));
+    setTicked((before) => ({ ...before, [which]: on }));
     setEdits(NO_EDITS);
   };
   const correct = (path: string, name: string | null): Refusal | null => {
@@ -186,16 +184,7 @@ export function DropConfirm({
     setEdits(result.edits);
     return null;
   };
-
-  useEffect(() => {
-    const closing = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onChoose('cancel', numbering, edits);
-      }
-    };
-    window.addEventListener('keydown', closing);
-    return () => window.removeEventListener('keydown', closing);
-  }, [onChoose, numbering, edits]);
+  const cancel = () => onChoose('cancel', numbering, edits);
 
   const renumbered = useMemo(() => renumber(files, numbering, edits), [files, numbering, edits]);
   const groups = renumbered.groups;
@@ -259,140 +248,22 @@ export function DropConfirm({
   const left = notTakenNotice(notTaken);
   const kept = systemFilesLine(systemFiles);
 
-  const labels = choiceLabels(summary);
-  const question = questionOf(summary);
+  const items = incomingOf(summary, files, known);
+  const shownItems = items.slice(0, ITEMS_SHOWN);
   const into = (folder: string | null) =>
     destinations.find((destination) => destination.folder === folder) ?? null;
-  const loose = into(null);
+  // The levels down to the folder added to: the loose files' destination, or a
+  // dropped folder's without its own name.
+  const landingLevels = into(null)?.levels ?? destinations[0]?.levels.slice(0, -1) ?? [];
+  const title = addTitle(landing);
   return (
-    <div
-      role="presentation"
-      onClick={() => onChoose('cancel', numbering, edits)}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10,
-        background: 'rgba(0, 0, 0, 0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={question}
-        onClick={(event) => event.stopPropagation()}
-        style={{
-          width: 'min(520px, calc(100vw - 32px))',
-          maxHeight: 'calc(100vh - 64px)',
-          overflow: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          padding: 16,
-          background: COLOR.panel,
-          border: `1px solid ${COLOR.border}`,
-          borderRadius: 6,
-          color: COLOR.text,
-          fontSize: 13,
-        }}
-      >
-        <p style={{ margin: 0 }}>{question}</p>
-        {asked && (
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-            {summary.folders.map((folder) => {
-              const destination = into(folder.name);
-              return (
-                <li key={folder.name} style={{ padding: '2px 0' }}>
-                  {folderLine(folder)}
-                  {destination !== null && <Where levels={destination.levels} />}
-                  {folder.exists && (
-                    <span style={{ ...INSET, color: COLOR.warn }}>{existsLine(folder)}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {summary.loose > 0 && (
-          <div>
-            <span style={{ color: asked ? COLOR.dim : COLOR.text }}>{looseLine(summary)}</span>
-            {loose !== null && <Where levels={loose.levels} />}
-          </div>
-        )}
-        {left !== null && (
-          <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{left}</p>
-        )}
-        {kept !== null && (
-          <p style={{ margin: 0, color: COLOR.dim, overflowWrap: 'anywhere' }}>{kept}</p>
-        )}
-        {replaces !== null && (
-          <p style={{ margin: 0, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
-        )}
-        {refused !== null && <p style={{ margin: 0, color: COLOR.warn }}>{refused}</p>}
-        {reading && <p style={{ margin: 0, color: COLOR.dim }}>{READING}</p>}
-        {asked && (
-          <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <legend style={{ padding: 0, marginBottom: 4, color: COLOR.dim }}>add it as</legend>
-            {(['pack', 'one_by_one'] as const).map((choice) => (
-              <label key={choice} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input
-                  type="radio"
-                  name="how"
-                  checked={how === choice}
-                  onChange={() => setHow(choice)}
-                />
-                {labels[choice]}
-              </label>
-            ))}
-          </fieldset>
-        )}
-        {asked && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="checkbox"
-                checked={ticked.pages}
-                onChange={(event) => tick('pages', event.target.checked)}
-              />
-              Number the pages
-            </label>
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input
-                type="checkbox"
-                checked={ticked.volumes}
-                onChange={(event) => tick('volumes', event.target.checked)}
-              />
-              Number the volume folders
-            </label>
-          </div>
-        )}
-        {/* Keyed by the boxes, so that ticking one also puts away a name
-            being corrected: the corrections are discarded with it. */}
-        {(numbering.pages || numbering.volumes) && (
-          <Preview
-            key={`${numbering.pages}:${numbering.volumes}`}
-            groups={groups}
-            correct={correct}
-          />
-        )}
-        {/* At the foot of the dialog and kept in view as it scrolls: a preview
-            of a few hundred renames would otherwise push the one thing every
-            drop needs answered out of reach. */}
-        <div
-          style={{
-            position: 'sticky',
-            bottom: -16,
-            margin: '0 -16px -16px',
-            padding: '10px 16px 16px',
-            background: COLOR.panel,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
+    <Dialog
+      title={title}
+      onCancel={cancel}
+      width={560}
+      fill={all}
+      actions={
+        <>
           {(reading || foundLines.length > 0) && (
             <div
               aria-live="polite"
@@ -409,7 +280,7 @@ export function DropConfirm({
               )}
             </div>
           )}
-          <button type="button" onClick={() => onChoose('cancel', numbering, edits)} style={CHOICE}>
+          <button type="button" onClick={cancel} style={BUTTON}>
             {CANCEL}
           </button>
           <button
@@ -417,78 +288,141 @@ export function DropConfirm({
             autoFocus
             disabled={reading}
             onClick={() => onChoose(how, numbering, edits)}
-            style={{ ...CHOICE, borderColor: COLOR.added }}
+            style={PRIMARY}
           >
             {ADD}
           </button>
+        </>
+      }
+    >
+      <p style={{ ...LINE, color: COLOR.dim }}>{totalLine(summary)}</p>
+      <Making levels={landingLevels} />
+      <ul aria-label="incoming" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {shownItems.map((item) => {
+          const level = item.folder ? into(item.name)?.levels.at(-1) : undefined;
+          return (
+            <li key={`${item.folder ? 'folder' : 'file'}:${item.name}`}>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', minWidth: 0 }}>
+                {item.mark !== null && (
+                  <span style={item.mark === 'replaces' ? MARK_REPLACES : MARK}>{MARK_LABEL[item.mark]}</span>
+                )}
+                <span style={{ overflowWrap: 'anywhere' }}>
+                  {item.folder ? '📁 ' : ''}
+                  {incomingLine(item)}
+                </span>
+              </span>
+              {item.folder && item.mark === null && (
+                <span style={{ ...INSET, color: COLOR.warn }}>{existsLine(item)}</span>
+              )}
+              {level?.state === 'on_disk' && (
+                <span style={{ ...INSET, color: COLOR.accentDeep }}>{onDiskLine([level])}</span>
+              )}
+            </li>
+          );
+        })}
+        {items.length > shownItems.length && (
+          <li style={{ color: COLOR.dim }}>… and {items.length - shownItems.length} more</li>
+        )}
+      </ul>
+      {left !== null && <p style={{ ...LINE, color: COLOR.warn, overflowWrap: 'anywhere' }}>{left}</p>}
+      {kept !== null && <p style={{ ...LINE, color: COLOR.dim, overflowWrap: 'anywhere' }}>{kept}</p>}
+      {replaces !== null && (
+        <p style={{ ...LINE, color: COLOR.warn, overflowWrap: 'anywhere' }}>{replaces}</p>
+      )}
+      {refused !== null && <p style={{ ...LINE, color: COLOR.warn }}>{refused}</p>}
+      {reading && <p style={{ ...LINE, color: COLOR.dim }}>{READING}</p>}
+      {asked && (
+        <fieldset style={{ margin: 0, padding: 0, border: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <legend style={{ padding: 0, marginBottom: 4, color: COLOR.dim }}>Store the folder as</legend>
+          {(['pack', 'one_by_one'] as const).map((choice) => (
+            <label key={choice} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+              <input type="radio" name="how" checked={how === choice} onChange={() => setHow(choice)} />
+              <span>
+                {STORE_CHOICES[choice].label}
+                <span style={{ color: COLOR.dim }}> — {STORE_CHOICES[choice].note}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {asked && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={ticked.pages}
+              onChange={(event) => tick('pages', event.target.checked)}
+            />
+            Number the pages
+          </label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={ticked.volumes}
+              onChange={(event) => tick('volumes', event.target.checked)}
+            />
+            Number the volume folders
+          </label>
         </div>
-      </div>
-    </div>
+      )}
+      {/* Keyed by the boxes, so that ticking one also puts away a name
+          being corrected: the corrections are discarded with it. */}
+      {(numbering.pages || numbering.volumes) && (
+        <Preview
+          key={`${numbering.pages}:${numbering.volumes}`}
+          groups={groups}
+          all={all}
+          onAll={setAll}
+          correct={correct}
+        />
+      )}
+    </Dialog>
   );
 }
 
 /**
- * Where one part of the drop lands, as the Library will hold it, with the
- * levels it does not have yet drawn in the colour of what is on its way in and
- * said in words below.
+ * What the confirmation says of the levels down to the folder added to that
+ * the Library does not hold yet: the ones the drop makes, and the ones that
+ * stand on this device's disk and go in with it. Nothing where every one is
+ * the Library's.
  */
-function Where({ levels }: { levels: readonly Level[] }) {
+function Making({ levels }: { levels: readonly Level[] }) {
   const made = newLine(levels);
   const standing = onDiskLine(levels);
   return (
     <>
-      <span style={{ ...INSET, overflowWrap: 'anywhere' }}>
-        <span style={{ color: COLOR.dim }}>goes into </span>
-        {levels.length === 0
-          ? pathLine(levels)
-          : levels.map((level) => (
-              <span
-                key={level.path}
-                data-new={level.state === 'new' ? '' : undefined}
-                data-on-disk={level.state === 'on_disk' ? '' : undefined}
-                style={LEVEL[level.state]}
-              >
-                {`${level.name}/`}
-              </span>
-            ))}
-      </span>
-      {standing !== null && <span style={{ ...INSET, color: COLOR.added }}>{standing}</span>}
-      {made !== null && <span style={{ ...INSET, color: COLOR.added }}>{made}</span>}
+      {standing !== null && <p style={{ ...LINE, color: COLOR.accentDeep }}>{standing}</p>}
+      {made !== null && <p style={{ ...LINE, color: COLOR.accentDeep }}>{made}</p>}
     </>
   );
 }
 
 /**
- * How a level is drawn: as the Library names it, or in the colour of what is on
- * its way in — slanted where the drop is what makes it, upright where it stands
- * on the disk already.
- */
-const LEVEL: Record<Level['state'], CSSProperties | undefined> = {
-  named: undefined,
-  on_disk: { color: COLOR.added },
-  new: { color: COLOR.added, fontStyle: 'italic' },
-};
-
-/**
- * What the ticked boxes would rename, group by group: both ends of each group's
- * names, renamed or left as they are, in the order they are read in (see
- * `linesOf`), with a way to see all of it. A new name shown is one the person
- * can correct, through `correct`.
+ * What the ticked boxes would rename: a header line counting the renames and
+ * the lines to check, with Show all, and group by group the lines in the order
+ * they are read in — the irregular ones always, tinted, and the regular ones
+ * between them folded (see `folded`). A new name shown is one the person can
+ * correct, through `correct`.
+ *
+ * With `all` the box takes the height the dialog has left and scrolls inside.
  */
 function Preview({
   groups,
+  all,
+  onAll,
   correct,
 }: {
   groups: readonly Group[];
+  all: boolean;
+  onAll: (all: boolean) => void;
   /** Corrects the new name of a dropped path, or puts it back where null, or says why not. */
   correct: (path: string, name: string | null) => Refusal | null;
 }) {
-  const [all, setAll] = useState(false);
   if (groups.length === 0) {
-    return <p style={{ margin: 0, color: COLOR.dim }}>nothing in this drop is renamed</p>;
+    return <p style={{ ...LINE, color: COLOR.dim }}>nothing in this drop is renamed</p>;
   }
   return (
-    <div
+    <section
       aria-label="what is renamed"
       style={{
         display: 'flex',
@@ -498,43 +432,54 @@ function Preview({
         border: `1px solid ${COLOR.border}`,
         borderRadius: 4,
         overflowWrap: 'anywhere',
+        ...(all ? { flex: '1 1 0', minHeight: 160, overflow: 'auto' } : {}),
       }}
     >
-      {groups.map((group) => {
-        const lines = elided(linesOf(group), all);
-        const shown = (line: Line) =>
-          'renamed' in line ? (
-            <RenameLine
-              key={line.renamed.from}
-              rename={line.renamed}
-              path={editedPath(group, line.renamed)}
-              correct={correct}
-            />
-          ) : (
-            <li key={line.unchanged.from} style={{ color: COLOR.dim }}>
-              {unchangedLine(line.unchanged)}
-            </li>
-          );
-        return (
-          <div key={`${group.kind}:${group.folder}`}>
-            <p style={{ margin: 0, color: COLOR.dim }}>{groupHeading(group)}</p>
-            {group.leftWhole !== null && (
-              <p style={{ margin: 0, color: COLOR.warn }}>{leftWholeLine(group.leftWhole)}</p>
-            )}
-            <ul style={{ margin: 0, paddingLeft: 16 }}>
-              {lines.head.map(shown)}
-              {lines.hidden > 0 && <li style={{ color: COLOR.dim }}>… {lines.hidden} more …</li>}
-              {lines.tail.map(shown)}
-            </ul>
-          </div>
-        );
-      })}
-      {(all || hasHidden(groups)) && (
-        <button type="button" onClick={() => setAll(!all)} style={{ ...CHOICE, alignSelf: 'start' }}>
-          {all ? 'Show less' : 'Show all'}
-        </button>
-      )}
-    </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: COLOR.dim, marginRight: 'auto' }}>{tallyLine(groups)}</span>
+        {(all || hasHidden(groups)) && (
+          <button type="button" onClick={() => onAll(!all)} style={SMALL}>
+            {all ? 'Show less' : 'Show all'}
+          </button>
+        )}
+      </div>
+      {groups.map((group) => (
+        <div key={`${group.kind}:${group.folder}`}>
+          <p style={{ ...LINE, color: COLOR.dim }}>{groupHeading(group)}</p>
+          {group.leftWhole !== null && (
+            <p style={{ ...LINE, color: COLOR.warn }}>{leftWholeLine(group.leftWhole)}</p>
+          )}
+          <ul style={{ margin: 0, paddingLeft: 16 }}>
+            {folded(group, all).map((entry, at) => {
+              if ('more' in entry) {
+                return (
+                  <li key={`more:${at}`} style={{ color: COLOR.dim, listStyle: 'none' }}>
+                    … {entry.more} more …
+                  </li>
+                );
+              }
+              const line = entry.line;
+              return 'renamed' in line ? (
+                <RenameLine
+                  key={line.renamed.from}
+                  rename={line.renamed}
+                  path={editedPath(group, line.renamed)}
+                  tinted={entry.irregular}
+                  correct={correct}
+                />
+              ) : (
+                <li
+                  key={line.unchanged.from}
+                  style={{ color: COLOR.dim, ...(entry.irregular ? TINTED : {}) }}
+                >
+                  {unchangedLine(line.unchanged)}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -546,11 +491,14 @@ function Preview({
 function RenameLine({
   rename,
   path,
+  tinted,
   correct,
 }: {
   rename: Rename;
   /** The dropped path the line's corrections are kept under. */
   path: string;
+  /** Whether the line does not follow the rule, and is tinted to be looked at. */
+  tinted: boolean;
   correct: (path: string, name: string | null) => Refusal | null;
 }) {
   // What is being typed, or null while the name is shown rather than edited.
@@ -559,8 +507,8 @@ function RenameLine({
   // Whether the field is still open, read where leaving it would take the
   // name: Escape and Enter close it before the field goes and its blur comes.
   const open = useRef(false);
-  // Whether the name shown next takes the focus: where Enter, Escape or put
-  // back puts away the control that had it, which would leave the focus on
+  // Whether the name shown next takes the focus: where Enter, Escape or Undo
+  // puts away the control that had it, which would leave the focus on
   // nothing and the keyboard with no place in the dialog. Leaving the field
   // for something else keeps the focus there.
   const refocus = useRef(false);
@@ -594,8 +542,8 @@ function RenameLine({
   };
 
   return (
-    <li>
-      {rename.from} → {parent}
+    <li style={tinted ? TINTED : undefined}>
+      {rename.from} <span style={{ color: COLOR.faint }}>→</span> {parent}
       {draft === null ? (
         <button
           type="button"
@@ -654,7 +602,7 @@ function RenameLine({
             }}
             style={{ ...NAME, color: COLOR.dim }}
           >
-            {PUT_BACK}
+            {UNDO}
           </button>
         </>
       )}
@@ -696,16 +644,24 @@ const FIELD: CSSProperties = {
   minWidth: '12em',
 };
 
-/** A line under the one it belongs to, set in past the folder's mark. */
-const INSET: CSSProperties = { display: 'block', paddingLeft: 22 };
+/** A line under the one it belongs to, set in past the item's mark. */
+const INSET: CSSProperties = { display: 'block', paddingLeft: 12, fontSize: 12 };
 
-const CHOICE: CSSProperties = {
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
-  color: COLOR.text,
-  font: 'inherit',
-  padding: '5px 10px',
-  borderRadius: 4,
-  textAlign: 'left',
-  cursor: 'pointer',
+/** A line that does not follow the rule: tinted, so it is the one looked at. */
+const TINTED: CSSProperties = { background: COLOR.warnGround, borderRadius: 3 };
+
+/** An item's mark, a small label before its name. */
+const MARK: CSSProperties = {
+  flex: '0 0 auto',
+  fontSize: 11,
+  padding: '0 6px',
+  borderRadius: 3,
+  border: `1px solid ${COLOR.accentDeep}`,
+  color: COLOR.accentDeep,
 };
+
+/** A mark that takes the place of a file the Library holds. */
+const MARK_REPLACES: CSSProperties = { ...MARK, borderColor: COLOR.warn, color: COLOR.warn };
+
+/** A button inside the body: Show all. */
+const SMALL: CSSProperties = { ...BUTTON, fontSize: 12, padding: '1px 8px' };

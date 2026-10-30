@@ -11,7 +11,10 @@
 // decrypted — and every rule about when that goes is worth stating once, in a
 // place a case can count the revocations at.
 
-/** How the bytes of one page are asked for, which is [`getFile`](@coffret/api). */
+/**
+ * How the bytes of one page are asked for: [`getFile`](@coffret/api) to read
+ * it, [`peekFile`](@coffret/api) to look at it.
+ */
 export type Fetching = (path: string) => Promise<Blob>;
 
 /** The pages a reader is holding, and every way one of them goes. */
@@ -24,12 +27,20 @@ export interface Drawn {
    * One page asked for twice — the reader turning onto what it was prefetching
    * — is one request, and both callers wait on its answer.
    *
+   * `peek` asks with the peeking function rather than the reading one: a
+   * folder's cover, which looking at must not set the folder coming. A peek
+   * may wait on a read already running for the same file, since a read's
+   * bytes answer it as well; a read never waits on a peek, whose refusal —
+   * the file is not on this device — is no answer to somebody stepping into
+   * the book. Bytes either brings back are the same file's and are held alike,
+   * so a cover peeked is a first page already drawn.
+   *
    * `undefined` where the answer came back to a key this device has given up, or
    * to a reader that has gone. Those bytes are revoked as they land, and a
    * revoked URL is not a page: handing it back would draw a broken one where the
    * page being asked for again is going.
    */
-  load: (path: string) => Promise<string | undefined>;
+  load: (path: string, peek?: boolean) => Promise<string | undefined>;
   /**
    * Drops every page outside `wanted`, so a long folder does not leave the tab
    * holding every page of it.
@@ -57,9 +68,11 @@ export interface Drawn {
  * Keyed by Entry Path rather than by position, because a listing refreshed
  * under the reader would otherwise let one page's bytes answer for another's.
  */
-export function drawnPages(fetching: Fetching): Drawn {
+export function drawnPages(fetching: Fetching, peeking: Fetching = fetching): Drawn {
   const held = new Map<string, string>();
-  const running = new Map<string, Promise<string | undefined>>();
+  // The request running for each path, and whether it is a peek — which only
+  // another peek may wait on.
+  const running = new Map<string, { fetched: Promise<string | undefined>; peek: boolean }>();
   let closed = false;
   // Which round of holding a page belongs to. A discard opens a new one, and
   // what a request of an older round brings back is nobody's: the key it was
@@ -76,22 +89,23 @@ export function drawnPages(fetching: Fetching): Drawn {
   return {
     held: (path) => held.get(path),
 
-    load(path) {
+    load(path, peek = false) {
       const drawn = held.get(path);
       if (drawn !== undefined) {
         return Promise.resolve(drawn);
       }
       const started = running.get(path);
-      if (started !== undefined) {
-        return started;
+      if (started !== undefined && (peek || !started.peek)) {
+        return started.fetched;
       }
       const asked = round;
-      const fetched = fetching(path).then(
+      const fetched: Promise<string | undefined> = (peek ? peeking : fetching)(path).then(
         (blob) => {
           const url = URL.createObjectURL(blob);
           // Only where this is still the request that is running: a discard
-          // clears the map, and what a later caller started is not this.
-          if (running.get(path) === fetched) {
+          // clears the map, and what a later caller started — a read over a
+          // peek still in flight — is not this.
+          if (running.get(path)?.fetched === fetched) {
             running.delete(path);
           }
           if (closed || asked !== round) {
@@ -103,17 +117,25 @@ export function drawnPages(fetching: Fetching): Drawn {
             URL.revokeObjectURL(url);
             return undefined;
           }
+          // A peek and the read that overtook it can both land. The first is
+          // the one held; the second is the same bytes, and a URL over them
+          // kept nowhere would never be revoked.
+          const first = held.get(path);
+          if (first !== undefined) {
+            URL.revokeObjectURL(url);
+            return first;
+          }
           held.set(path, url);
           return url;
         },
         (refused: unknown) => {
-          if (running.get(path) === fetched) {
+          if (running.get(path)?.fetched === fetched) {
             running.delete(path);
           }
           throw refused;
         },
       );
-      running.set(path, fetched);
+      running.set(path, { fetched, peek });
       return fetched;
     },
 

@@ -35,7 +35,7 @@ export interface Offer {
  * saying so, the one button that renews it, and what the last press came to.
  *
  * One component for the four places a Storage refusal stands — the catch-up
- * notice, a region that could not be read, the reader, and the status bar —
+ * notice, a region that could not be read, the reader, and the Activity panel —
  * because they are one offer: a press in any of them starts the one flow the
  * server runs, and a second press while it waits is answered with the same
  * consent page. So every one of them shows the same state of it.
@@ -46,8 +46,12 @@ export interface Offer {
  * open the tab (see [`consentLink`](./reconnect)) — unless the flow waiting is
  * one another window started, whose page this one was never handed, and then
  * the line says so instead.
+ *
+ * Its words and its button are drawn in `ink` — the light screen's colours, or
+ * the reader's sheet's where it stands on the sheet's dark ground, so the
+ * button reads as the sheet's Retry beside it does.
  */
-export function ReconnectOffer({ offer }: { offer: Offer }) {
+export function ReconnectOffer({ offer, ink = SCREEN_INK }: { offer: Offer; ink?: Ink }) {
   const elsewhere = openedElsewhere(offer.reconnect, offer.consentPage);
   const line =
     offer.refused ?? (elsewhere ? OPENED_ELSEWHERE : reconnectLine(offer.reconnect)) ?? offer.said;
@@ -56,15 +60,18 @@ export function ReconnectOffer({ offer }: { offer: Offer }) {
     <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
       <span>{RAN_OUT}</span>
       {offersReconnect(offer.reconnect) && (
-        <button onClick={offer.ask} style={BUTTON}>
+        <button
+          onClick={offer.ask}
+          style={{ ...BUTTON, border: `1px solid ${ink.border}`, background: ink.raised, color: ink.text }}
+        >
           {RECONNECTING}
         </button>
       )}
       {line !== null && (
-        <span style={{ color: offer.refused !== null ? COLOR.refused : COLOR.text }}>{line}</span>
+        <span style={{ color: offer.refused !== null ? ink.refused : ink.text }}>{line}</span>
       )}
       {link !== null && (
-        <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: COLOR.text }}>
+        <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: ink.text }}>
           {NO_TAB}
         </a>
       )}
@@ -72,10 +79,18 @@ export function ReconnectOffer({ offer }: { offer: Offer }) {
   );
 }
 
+/** The colours the offer is drawn in: its words, a refusal, and its button's frame and fill. */
+interface Ink {
+  text: string;
+  refused: string;
+  border: string;
+  raised: string;
+}
+
+/** The light screen's colours, where every offer but the reader's stands. */
+const SCREEN_INK: Ink = { text: COLOR.text, refused: COLOR.refused, border: COLOR.border, raised: COLOR.panel };
+
 const BUTTON = {
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
-  color: COLOR.text,
   font: 'inherit',
   padding: '1px 10px',
   borderRadius: 4,

@@ -19,6 +19,13 @@ impl OpenLibrary {
     /// EP-10) — the mappings answer the separate question of whether anything
     /// here could be fetched, which is [`mapped`](FolderListing::mapped).
     ///
+    /// The same present records answer for each child folder how many Entries
+    /// stand at every depth below it, how many of them are here, and so whether
+    /// every one is ([`present_throughout`](ChildFolder::present_throughout)),
+    /// and the Entries themselves what they come to in bytes and when the
+    /// newest of them was modified ([`mtime`](ChildFolder::mtime)): the scan already
+    /// covers the whole subtree, so those answers read nothing more.
+    ///
     /// An Entry standing at exactly the folder's own path is not in the listing.
     /// The Library admits one — nothing stops a file and a folder sharing a
     /// path, since neither is a thing the Library has — and it is not a child of
@@ -56,8 +63,9 @@ impl OpenLibrary {
         };
         let reach = Reach::of(mappings);
 
-        let mut folders = Vec::new();
-        let mut named: BTreeSet<EntryPath> = BTreeSet::new();
+        let mut folders: Vec<ChildFolder> = Vec::new();
+        // Each child folder named so far, and where it stands in `folders`.
+        let mut named: BTreeMap<EntryPath, usize> = BTreeMap::new();
         let mut files = Vec::new();
         for location in &entries {
             let path = location.path();
@@ -88,13 +96,35 @@ impl OpenLibrary {
                 // this folder at all.
                 continue;
             };
-            if named.insert(child.clone()) {
-                folders.push(ChildFolder {
-                    name: child.name().to_owned(),
-                    mapped: reach.reaches(Some(&child)),
-                    path: child,
-                });
-            }
+            // Whether this device has the Entry decides, with every other
+            // Entry under the same child, how much of that child is here and
+            // whether all of it is.
+            let here = present.contains(path);
+            let at = match named.get(&child) {
+                Some(&at) => at,
+                None => {
+                    named.insert(child.clone(), folders.len());
+                    folders.push(ChildFolder {
+                        name: child.name().to_owned(),
+                        mapped: reach.reaches(Some(&child)),
+                        path: child,
+                        present_throughout: true,
+                        files_total: 0,
+                        files_present: 0,
+                        size: 0,
+                        // The first Entry under the child is the latest so
+                        // far; the ones after it can only move it later.
+                        mtime: location.entry.mtime,
+                    });
+                    folders.len() - 1
+                }
+            };
+            let counted = &mut folders[at];
+            counted.files_total += 1;
+            counted.files_present += u64::from(here);
+            counted.size += location.entry.extent.size();
+            counted.mtime = counted.mtime.max(location.entry.mtime);
+            counted.present_throughout &= here;
         }
 
         // A mapped top-level folder that holds no Entry is not a folder of the
@@ -102,7 +132,7 @@ impl OpenLibrary {
         // one: the explorer offers it as a place to drop into.
         let empty_mapped_prefixes: Vec<EntryPath> = prefixes
             .into_iter()
-            .filter(|prefix| !named.contains(prefix))
+            .filter(|prefix| !named.contains_key(prefix))
             .collect();
 
         debug!(

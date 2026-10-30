@@ -89,8 +89,8 @@ export function heldAfter(
  * book Storage stopped moves to `displaced` the moment the next one is taken off
  * the queue — which two books in one session is enough to reach. Each is a state
  * a reload can land in, and a folder missing from the tree in any of them is a
- * folder nobody can walk into: the status bar reaches a discarded or a stopped one
- * by name, and a waiting one only becomes visible when its turn comes.
+ * folder nobody can walk into: the Activity panel offers a discarded or a stopped
+ * one again by name, and a waiting one only becomes visible when its turn comes.
  *
  * A folder the Library names is not one of these. Its first Entry committed, so
  * it is an ordinary folder the server answers for, and taking it back would draw
@@ -118,7 +118,7 @@ export function strandedFolders(
   // whatever it packed. One that stopped contributes its folder like one still
   // packing does — the pages are sitting on the disk and out of the Library,
   // and the folder stands here until somebody packs it again, which is what
-  // the status bar's "pack again" needs a place to walk into for. What is
+  // the Activity panel's "pack again" needs a place to walk into for. What is
   // queued behind either of them is another matter and does not end with the
   // run on record, which is why the queues are read whatever it says.
   //

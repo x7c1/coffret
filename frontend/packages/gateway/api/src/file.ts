@@ -25,3 +25,16 @@ export async function getFile(path: string, signal?: AbortSignal): Promise<Blob>
   const response = await asked(fileUrl(path), signal);
   return response.blob();
 }
+
+/**
+ * One file's bytes where they are on this device already, and a refusal where
+ * they are not — `GET /api/file?path=&peek=true`.
+ *
+ * What a preview asks for: the server answers from the file it placed or the
+ * one somebody added, and neither fetches from Storage nor sets the rest of the
+ * folder coming, as opening a page does. Looking at a row is not opening it.
+ */
+export async function peekFile(path: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await asked(apiUrl('file', { path, peek: 'true' }), signal);
+  return response.blob();
+}

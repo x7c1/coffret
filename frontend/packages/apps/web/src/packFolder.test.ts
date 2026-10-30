@@ -35,29 +35,32 @@ describe('packOffered', () => {
 describe('questionOf', () => {
   it('names the folder with what will be packed, as the drop names a dropped one', () => {
     const question = questionOf(preview());
-    expect(question.line).toBe('📁 BookX — 80 files, 58.0 MB will be packed into Packs');
+    expect(question.title).toBe('Pack “BookX”?');
+    expect(question.line).toBe('80 files, 58.0 MB will be packed');
     expect(question.packs).toBe(true);
-    expect(question.leftOut).toBeNull();
+    expect(question.leftOut).toEqual([]);
     expect(question.waits).toBeNull();
   });
 
   // A count smaller than the folder is not a surprise when the rest is named.
   it('says what is left as it is, in its broad groups', () => {
     const question = questionOf(preview({ in_pack: 3, changed_in_pack: 1, not_here: 2 }));
-    expect(question.leftOut).toBe(
-      'left as they are: 3 files already in a Pack, 1 file in a Pack and changed here, ' +
-        '2 files not on this device',
-    );
+    expect(question.leftOut).toEqual([
+      '3 files already in a Pack',
+      '1 file in a Pack and changed here',
+      '2 files not on this device',
+    ]);
   });
 
   // EP-17: what an operating system keeps beside the pages is one more group
   // left as it is, and a folder holding nothing else says that is why.
   it('names what the system keeps among what is left as it is', () => {
-    expect(questionOf(preview({ in_pack: 3, system_files: 2, system_folders: 1 })).leftOut).toBe(
-      'left as they are: 3 files already in a Pack, 2 files and 1 folder the system keeps',
-    );
+    expect(questionOf(preview({ in_pack: 3, system_files: 2, system_folders: 1 })).leftOut).toEqual([
+      '3 files already in a Pack',
+      '2 files and 1 folder the system keeps',
+    ]);
     expect(questionOf(preview({ files: 0, bytes: 0, system_files: 1 })).line).toBe(
-      '📁 BookX — nothing to pack: 1 file the system keeps',
+      'Nothing to pack: 1 file the system keeps.',
     );
   });
 
@@ -71,7 +74,7 @@ describe('questionOf', () => {
   // there is no later run to promise and nothing to press but Close.
   it('says a folder being packed already is, instead of offering Pack', () => {
     const question = questionOf(preview({ after_current: true, already_packing: true }));
-    expect(question.line).toBe('📁 BookX — this folder is being packed already');
+    expect(question.line).toBe('This folder is being packed already.');
     expect(question.packs).toBe(false);
     expect(question.waits).toBeNull();
   });
@@ -80,17 +83,17 @@ describe('questionOf', () => {
   it('says why there is nothing to pack instead of offering Pack', () => {
     const packed = questionOf(preview({ files: 0, bytes: 0, in_pack: 80 }));
     expect(packed.packs).toBe(false);
-    expect(packed.line).toBe('📁 BookX — nothing to pack: 80 files already in a Pack');
+    expect(packed.line).toBe('Nothing to pack: 80 files already in a Pack.');
 
     const remote = questionOf(preview({ files: 0, bytes: 0, not_here: 12 }));
-    expect(remote.line).toBe('📁 BookX — nothing to pack: 12 files not on this device');
+    expect(remote.line).toBe('Nothing to pack: 12 files not on this device.');
 
     const empty = questionOf(preview({ files: 0, bytes: 0 }));
-    expect(empty.line).toBe('📁 BookX — nothing to pack: it holds no files');
+    expect(empty.line).toBe('Nothing to pack: it holds no files.');
 
     const unreachable = questionOf(preview({ files: 0, bytes: 0, unavailable: 1, not_here: 3 }));
     expect(unreachable.line).toBe(
-      '📁 BookX — nothing to pack: the folder on this device it is mapped to cannot be reached right now',
+      'Nothing to pack: the folder chosen for it on this device cannot be reached right now.',
     );
   });
 });
@@ -118,7 +121,7 @@ describe('askToPack', () => {
     const { given, asked, start } = packing(true);
     expect(await askToPack(given)).toBe('armed');
     expect(asked.map((question) => question.line)).toEqual([
-      '📁 BookX — 80 files, 58.0 MB will be packed into Packs',
+      '80 files, 58.0 MB will be packed',
     ]);
     expect(start).toHaveBeenCalledWith('books/BookX');
   });

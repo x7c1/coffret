@@ -18,7 +18,8 @@ contract of the explorer host, LA-22 to LA-25 that of the desktop app's
 **Passphrase door**: a listener of the app's own that serves the page a
 Passphrase is typed into and takes what that page submits, and LA-26 onwards
 that of the **import**: the files a drop onto the explorer's window in the
-desktop app let go of, walked on the device by their paths, held under a
+desktop app let go of, or its + picked, walked on the device by their paths,
+held under a
 one-time **drop handle**, and carried into the Library by a request that names
 the handle and never a path. The two credentials
 never cross: the server key is what the host shows the server, a browser token
@@ -141,11 +142,24 @@ Concept background: [Library](../../concepts/library/),
   caller did, and how much room the disk has stays out of the sentence and
   goes in the record (EL-1). *(Form: test)*
 - **LA-12.** What a server holds about the work it runs — which fill, sync, or
-  freeze is running and how far it has got, which folders wait behind it, and
-  what the last run of each kind came to — is the running process's own state.
-  It lives exactly as long as the process: a server started afterwards answers
-  with no run under way, nothing waiting, and no last outcome, and work a
-  stopped server had waiting is done only once something asks for it again.
+  freeze is running and how far it has got, which folders wait behind it, what
+  the last run of each kind came to, and a **log** of the work it has finished
+  — is the running process's own state. The log holds every fill, sync,
+  freeze, and deletion that ended, every folder a queue threw away, and every
+  file a reader asked for and was refused, newest first. A refused file is
+  left out when it was a peek, or when what refused it was the Library being
+  locked or the catalog holding no such Entry. The log drops the oldest entry
+  past a fixed count, but keeps a failure past that count until a later run of
+  the same work ends and settles it — for a refused file, the same file asked
+  for again — and never holds more than a fixed ceiling, the oldest going
+  first past it. A run is in the log by the time any answer reports it over:
+  a server logs a run as it publishes the run's end, so no page reads a run as
+  ended that the log does not yet hold. The server serves the log, beside the
+  work running now and how far it has got, to an authorized page alone
+  (LA-2). It lives exactly as long as the process: a server started
+  afterwards answers with no run under way, nothing waiting, no last outcome,
+  and an empty log, and work a stopped server had waiting is done only once
+  something asks for it again.
   The one recorded exception is a drop's choice of a Pack, which the drop
   writes on the device as a reservation before its first file lands and marks
   received once its last has (PK-17): a server takes every received
@@ -169,10 +183,14 @@ Concept background: [Library](../../concepts/library/),
   a record proves: the catch-up it makes as it starts, where it lands,
   completes a batch whose record landed and whose refresh did not (OC-7), so
   the files that batch carried in are this device's before the server answers
-  anything. *(Form: test for what a server started afterwards answers; prose
-  for that account reaching no file — the catalog, the Library's directory,
-  Storage — which is an absence claim over the device's files, honored by
-  construction: the account is held in memory, in no serialized structure.)*
+  anything. *(Form: test for what the log holds, keeps, and drops, for the
+  page it is served to, and for what a server started afterwards answers;
+  prose for a run being in the log by the time it reads as over, honored by
+  construction: the run's end and its log entry are written under one lock;
+  prose for that account, the log included, reaching no file — the catalog, the
+  Library's directory, Storage — which is an absence claim over the device's
+  files, honored by construction: the account is held in memory, in no
+  serialized structure.)*
   - A run's reported status and its refusal go together: a fill, sync, or
     freeze whose status is `stopped` carries the refusal that stopped it —
     whatever refused the run, be it Storage, a Library locked before the run
@@ -443,6 +461,16 @@ Concept background: [Library](../../concepts/library/),
   list of the items' paths. No event records a handle, a path on the device or a
   dropped file's name (EL-1): walking, holding and taking a drop, and
   importing it, are recorded by counts and refusal kinds. *(Form: test)*
+  - The files and folders picked with the explorer's + are one drop onto the
+    explorer, taken exactly as a drop is, so every rule that says "a drop"
+    says it of a pick too. In the desktop app they are held by their paths
+    under one handle as this rule holds a drop: a file picked on its own stands
+    as that file, and a folder picked whole stands as that folder, walked as a
+    dropped folder is (LA-29) rather than as the files the picker listed in
+    it. In a browser they are walked on the page as a browser's drop is,
+    against the same list of the files an operating system keeps (EP-17), a
+    folder picked whole standing as that folder there too, and sent as one
+    upload.
 - **LA-27.** An import (`POST /api/import`) is a JSON body naming the folder of
   the Library, whether the drop goes in as a Pack (PK-17), the handle, and per
   file its index in the held set and the name it is to have relative to the
@@ -463,7 +491,8 @@ Concept background: [Library](../../concepts/library/),
   stated: one that grew since it was dropped is refused part way through, as a
   `conflict`, and leaves neither a file under its final name nor its scratch
   (EP-11). *(Form: test)*
-- **LA-29.** The walk of a drop follows no symbolic link and takes none: a link
+- **LA-29.** The walk of a drop — a pick with the explorer's + included
+  (LA-26) — follows no symbolic link and takes none: a link
   to a file and a link to a folder are each reported as neither, as is anything
   else that is not a regular file or a folder, and nothing under a linked
   folder is walked (EP-8). A dropped folder is walked depth first, its children

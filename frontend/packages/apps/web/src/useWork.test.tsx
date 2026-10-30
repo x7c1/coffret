@@ -64,7 +64,12 @@ function aFill(
   };
 }
 
+/**
+ * The work answer with `fill` as the latest fill, and in the log as well where
+ * it is over — which is where the server puts a run as it ends (spec: LA-12).
+ */
 function answer(fill: Fill | null): Work {
+  const over = fill !== null && fill.status !== 'filling';
   return {
     server: 'one-process',
     library: 'unlocked',
@@ -76,6 +81,7 @@ function answer(fill: Fill | null): Work {
     freeze: null,
     delete: null,
     reconnect: null,
+    log: over ? [{ id: fill.run, at: '2026-10-30T09:00:00Z', settled: false, kind: 'fill', run: fill }] : [],
   };
 }
 
@@ -98,12 +104,12 @@ afterEach(() => {
 });
 
 // What a press of "bring over again" was refused with stays on the screen for
-// as long as the button that met it does — and the next poll is not that. The
-// poll answers with the very run the button is offered from, so the refusal is
+// as long as the Retry that met it does — and the next poll is not that. The
+// poll answers with the very entry the Retry is offered from, so the refusal is
 // still about something a person can see; taking it away there would leave the
 // button standing and nothing saying why pressing it did nothing. What does end
-// it is the offer ending: the run leaving the state the button was offered
-// from, which here is the folder being brought over after all.
+// it is the offer ending: the entry settled by a later run of the same folder,
+// which here is the folder being brought over after all.
 it('keeps a refused press across a poll and lets it go once the offer ends', async () => {
   asked.mockResolvedValue(answer(aFill()));
   // A reader open, so that the page is polling rather than having asked once.
@@ -134,10 +140,9 @@ it('keeps a refused press across a poll and lets it go once the offer ends', asy
   expect(result.current.trouble, 'the button is gone, and so is what it met').toBeNull();
 });
 
-// And the other road an offer ends by: the notice it stood beside put away.
-// A refusal of a button that is no longer drawn is about nothing a person can
-// look at.
-it('lets a refused press go once its notice is put away', async () => {
+// A refusal of a press whose entry is no longer offering it is about nothing
+// a person can look at: an entry settled by the run after it offers no Retry.
+it('lets a refused press go once its entry is settled', async () => {
   asked.mockResolvedValue(answer(aFill()));
   const { result } = renderHook(() => useWork(true));
   await ticks(0);
@@ -149,10 +154,11 @@ it('lets a refused press go once its notice is put away', async () => {
   });
   expect(result.current.trouble).not.toBeNull();
 
-  act(() => result.current.dismiss({ kind: 'line', flow: 'fill' }));
-  expect(result.current.trouble).toBeNull();
-
-  // Nor does it come back when the next answer brings the same run.
+  const settled = answer(aFill());
+  asked.mockResolvedValue({
+    ...settled,
+    log: settled.log.map((entry) => ({ ...entry, settled: true })),
+  });
   await ticks();
   expect(result.current.trouble).toBeNull();
 });

@@ -1,9 +1,10 @@
 // Taking a file or a folder out of the Library, asked first.
 //
 // Each folder row and each row of a file the Library holds offers "Delete…"
-// in its menu, and the files picked out together offer one "Delete…" for all
-// of them: the server is asked what the deletion would take out and what it
-// would rebuild, that is shown, and only Delete arms it. Cancel arms nothing.
+// in its actions menu, and the rows selected together offer one
+// "Delete <n> items…" for all of them: the server is asked what the deletion
+// would take out and what it would rebuild, that is shown, and only Delete
+// arms it. Cancel arms nothing.
 //
 // What is shown is what leaves the Library. Once that has committed, the server
 // discards this device's own unedited copies of the deleted files into the
@@ -11,12 +12,11 @@
 // file the person has just deleted does not go on standing in the folder as one
 // the Library does not hold.
 //
-// A deletion names one folder, or any number of files: a row's menu names its
-// own, and the explorer's selection (see [`selection`](./selection)) names
-// every file picked out, so that a Pack holding several of them is rebuilt
-// once rather than once per file. Nothing here differs between one file and
-// many — the server takes several at once, and `targetName` words them as a
-// count.
+// A deletion names any number of folders and files: a row's actions menu
+// names its own, and the explorer's selection (see [`selection`](./selection)) names
+// every row selected, so that a Pack holding several of them is rebuilt once
+// rather than once per row. Nothing here differs between one row and many —
+// the server takes several at once, and `targetName` words them as a count.
 //
 // Kept free of DOM and of React so it is unit testable, as `packFolder.ts`
 // beside it is.
@@ -37,6 +37,11 @@ import { waitingClause, type WaitsFor } from './turns';
 /** What the rows' action is called. */
 export const DELETE = 'Delete…';
 
+/** What the action is called for several rows selected together: `Delete 3 items…`. */
+export function deleteItems(target: { folders: readonly string[]; paths: readonly string[] }): string {
+  return `Delete ${items(namedCount(target))}…`;
+}
+
 /** Said in every question, because it is the one thing a person must know. */
 export const NOT_UNDOABLE = 'This cannot be undone from the explorer.';
 
@@ -53,7 +58,7 @@ export function deleteOffered(file: { container: string | null }): boolean {
 export interface DeleteQuestion {
   /** What Delete would arm. */
   target: DeleteTarget;
-  /** `Delete 📁 albums?` — the thing the person pressed on. */
+  /** `Delete “albums”?`, or `Delete 3 items?` — the thing the person pressed on. */
   title: string;
   /**
    * `12 files, 340.0 MB will be removed from the Library`, or where nothing
@@ -61,10 +66,12 @@ export interface DeleteQuestion {
    */
   removes: string;
   /**
-   * `2 Packs holding other files will be rebuilt — reads 1.8 GB, writes 1.5 GB`,
-   * and `null` where no Pack keeps other files.
+   * What rebuilding the Packs that keep other files costs, and `null` where no
+   * Pack keeps other files: every Container the deletion touches goes whole —
+   * a one-file Container, or a Pack whose every file it names
+   * (spec: PK-9, PK-10).
    */
-  rebuilds: string | null;
+  rebuilds: Rebuilds | null;
   /** One sentence per Pack the deletion would be refused for, with its reason. */
   refused: string[];
   /** The named files the Library does not hold, where there are any. */
@@ -75,24 +82,52 @@ export interface DeleteQuestion {
   deletes: boolean;
 }
 
-/** The name a target goes by in a sentence: the folder's or the one file's. */
-export function targetName(target: { folder: string | null; paths: readonly string[] }): string {
-  if (target.folder !== null) {
-    return `📁 ${lastOf(target.folder)}`;
+/**
+ * What a Pack rebuild costs, said in the highlighted box of the question:
+ * `2 Packs holding other files will be rebuilt`, then `Reads 1.8 GB, writes
+ * 1.5 GB`. Rebuilding reads each such Pack whole and uploads its replacement,
+ * which is the one part of a deletion that costs time and transfer.
+ */
+export interface Rebuilds {
+  line: string;
+  cost: string;
+}
+
+/** How many rows a target names: its folders and its files. */
+function namedCount(target: { folders: readonly string[]; paths: readonly string[] }): number {
+  return target.folders.length + target.paths.length;
+}
+
+/**
+ * The name a target goes by in a sentence: the one folder's, the one file's,
+ * or a count — of files where it names files alone, and of items where it
+ * names folders too.
+ */
+export function targetName(target: { folders: readonly string[]; paths: readonly string[] }): string {
+  if (namedCount(target) === 1) {
+    return target.folders.length === 1 ? `📁 ${lastOf(target.folders[0])}` : lastOf(target.paths[0]);
   }
-  if (target.paths.length === 1) {
-    return lastOf(target.paths[0]);
+  return target.folders.length === 0 ? count(target.paths.length) : items(namedCount(target));
+}
+
+/**
+ * The question's title: the one row by its name in quotes, `Delete “albums”?`,
+ * and several as a count of items, `Delete 3 items?`.
+ */
+export function titleOf(target: { folders: readonly string[]; paths: readonly string[] }): string {
+  if (namedCount(target) === 1) {
+    return `Delete “${lastOf(target.folders[0] ?? target.paths[0])}”?`;
   }
-  return count(target.paths.length);
+  return `Delete ${items(namedCount(target))}?`;
 }
 
 /** The question for one preview. */
 export function questionOf(preview: DeletePreview): DeleteQuestion {
-  const target = { folder: preview.folder, paths: preview.paths };
+  const target = { folders: preview.folders, paths: preview.paths };
   const deletes = preview.entries > 0;
   return {
     target,
-    title: `Delete ${targetName(target)}?`,
+    title: titleOf(target),
     removes: deletes
       ? `${count(preview.entries)}, ${size(preview.bytes)} will be removed from the Library`
       : 'nothing will be removed from the Library',
@@ -114,12 +149,11 @@ function rebuildLine(counted: {
   rebuilt: number;
   rebuild_read: number;
   rebuild_written: number;
-}): string {
-  return (
-    `${packs(counted.rebuilt)} holding other files will be rebuilt — ` +
-    `reads ${size(counted.rebuild_read)}, ` +
-    `writes ${size(counted.rebuild_written)}`
-  );
+}): Rebuilds {
+  return {
+    line: `${packs(counted.rebuilt)} holding other files will be rebuilt`,
+    cost: `Reads ${size(counted.rebuild_read)}, writes ${size(counted.rebuild_written)}`,
+  };
 }
 
 /** One Pack the deletion is refused for: the files that stay, and why. */
@@ -129,7 +163,7 @@ function refusedLine(refused: RefusedPack): string {
   return `${names} ${stay} in the Library — ${refused.message}`;
 }
 
-/** Everything deleting one file or folder reaches out to. */
+/** Everything deleting files and folders reaches out to. */
 export interface Deleting {
   /** What "Delete…" was pressed on. */
   target: DeleteTarget;
@@ -176,7 +210,7 @@ export async function askToDelete(deleting: Deleting): Promise<Deleted> {
 }
 
 /**
- * What the notice area says of a deletion: the sentence, and the target a
+ * What the Activity panel says of a deletion: the sentence, and the target a
  * *try again* beside it would ask about again — `null` where nothing invites
  * one.
  *
@@ -193,7 +227,7 @@ export interface DeleteNotice {
 
 /** The target again, where a refusal of `kind` invites asking about it again. */
 function retryOf(target: DeleteTarget, kind: RefusalKind | null): DeleteTarget | null {
-  return kind === 'conflict' ? { folder: target.folder, paths: target.paths } : null;
+  return kind === 'conflict' ? { folders: target.folders, paths: target.paths } : null;
 }
 
 /**
@@ -224,8 +258,8 @@ export function startsAfterLine(waits: Exclude<WaitsFor, null>): string {
  * freeze or deletion armed before it, and one the server says is waiting for
  * its turn says so — in the words [`waitsFor`](./turns.ts) picks for every
  * line, so a line that stays put while a book is packed reads as waiting
- * rather than stuck. It stands in the status bar beside the other two flows'
- * lines, ranked as they are.
+ * rather than stuck. It stands in the Activity panel's **In progress** beside
+ * the other two flows' lines, ranked as they are.
  */
 export function deletingLine(run: Delete, waits: WaitsFor = null): string {
   const name = targetName(run);
@@ -324,6 +358,11 @@ function findingLines(findings: readonly Finding[]): string[] {
 /** `1 file`, `12 files`. */
 function count(files: number): string {
   return files === 1 ? '1 file' : `${files} files`;
+}
+
+/** `1 item`, `3 items`. */
+function items(named: number): string {
+  return named === 1 ? '1 item' : `${named} items`;
 }
 
 /** `1 Pack`, `2 Packs`. */

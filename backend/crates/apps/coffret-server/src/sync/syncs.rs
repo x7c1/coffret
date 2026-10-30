@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use coffret_device::Step;
 use tokio::sync::watch;
+
+use crate::activity_log::{ActivityLog, Ended};
 
 use super::progress::Progress;
 use super::SyncRun;
@@ -10,6 +14,9 @@ pub struct Syncs {
     /// The one place any of this is written, so that every reader sees a whole
     /// answer and a case can wait on one.
     progress: watch::Sender<Progress>,
+    /// Where every run that ends is logged, shared with the rest of the
+    /// server's work (see [`ActivityLog`]).
+    log: Arc<ActivityLog>,
 }
 
 impl Default for Syncs {
@@ -23,7 +30,15 @@ impl Syncs {
     pub fn new() -> Self {
         Self {
             progress: watch::channel(Progress::default()).0,
+            log: Arc::new(ActivityLog::new()),
         }
+    }
+
+    /// Nothing being synced, logging what ends into `log` — the server's one
+    /// log of its finished work, which [`new`](Self::new) keeps apart for a
+    /// case that drives this flow alone.
+    pub fn logging_to(log: Arc<ActivityLog>) -> Self {
+        Self { log, ..Self::new() }
     }
 
     /// The latest sync, running or finished, and `None` where none has run.
@@ -73,8 +88,20 @@ impl Syncs {
     /// all of this itself, and by the time it is over another worker may own
     /// the flag. Notified only where there was something to put back, which is
     /// why this goes through [`send_if_modified`](watch::Sender::send_if_modified).
+    ///
+    /// A run it stops is logged as one that stopped through
+    /// [`publish`](Self::publish) is.
     pub(super) fn abandon(&self) {
-        self.progress.send_if_modified(Progress::abandon);
+        self.progress.send_if_modified(|progress| {
+            let running = progress.is_syncing();
+            let modified = progress.abandon();
+            if modified && running {
+                if let Some(run) = &progress.on_record {
+                    self.log.record(Ended::Sync(run.clone()));
+                }
+            }
+            modified
+        });
     }
 
     /// Says where the sync in progress has got to.
@@ -84,10 +111,16 @@ impl Syncs {
     /// flow that is is this value's to say.
     pub(super) fn publish(&self, run: &SyncRun) {
         self.progress.send_modify(|progress| {
-            progress.on_record = Some(SyncRun {
+            let published = SyncRun {
                 run: progress.run(),
                 ..run.clone()
-            });
+            };
+            // Logged under the same lock that publishes it, so no reader sees
+            // the run over before the log has it.
+            if !matches!(published.status, super::SyncStatus::Syncing) {
+                self.log.record(Ended::Sync(published.clone()));
+            }
+            progress.on_record = Some(published);
         });
     }
 

@@ -10,8 +10,10 @@
 //! last a tick on a live server. The serialization is the route's own: these
 //! are the same DTOs, built by the same `of` functions the route calls.
 
+use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
 
 use coffret_device::{
     ByteCount, FindingReason, Generation, KeptTally, Phase, RootRefused, RootUnavailable,
@@ -22,6 +24,7 @@ use coffret_model::ContainerId;
 use super::{
     CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, ReconnectDto, SyncDto, WorkDto,
 };
+use crate::activity_log::{Ended, Logged, Queue};
 use crate::api_error::{held_to, ApiError};
 use crate::delete::{DeleteReport, DeleteRun, DeleteStatus, RefusedPack, Target};
 use crate::displaced::Displaced;
@@ -268,6 +271,7 @@ fn answer(
         freeze: freeze.as_ref().map(|latest| FreezeDto::of(latest, turn)),
         delete: None,
         reconnect: None,
+        log: Vec::new(),
     }
 }
 
@@ -293,12 +297,12 @@ fn deleting(answer: WorkDto, run: DeleteRun, waiting: usize) -> WorkDto {
 fn deletion(run: u64, folder: bool, status: DeleteStatus) -> DeleteRun {
     let target = if folder {
         Target {
-            folder: Some(entry_path("albums")),
+            folders: BTreeSet::from([entry_path("albums")]),
             paths: Default::default(),
         }
     } else {
         Target {
-            folder: None,
+            folders: Default::default(),
             paths: [
                 entry_path("books/vol-1/page-002.jpg"),
                 entry_path("albums/a.jpg"),
@@ -342,6 +346,57 @@ fn reconnecting(answer: WorkDto, reconnect: &Reconnect) -> WorkDto {
         reconnect: Some(ReconnectDto::of(reconnect)),
         ..answer
     }
+}
+
+/// An entry of every kind the log keeps, newest first, logged a minute apart.
+fn logged() -> Vec<Logged> {
+    let ended = vec![
+        Ended::Fetch {
+            path: "albums/cover.png".to_owned(),
+            refusal: storage(),
+        },
+        Ended::Discarded {
+            queue: Queue::Freeze,
+            folder: folder("books/vol-2"),
+        },
+        Ended::Discarded {
+            queue: Queue::Fill,
+            folder: folder("books"),
+        },
+        Ended::Delete(DeleteRun {
+            entries: 5,
+            bytes: 8_200_000,
+            removed: 5,
+            ..deletion(1, true, DeleteStatus::Done)
+        }),
+        Ended::Freeze(FreezeRun {
+            packs: 1,
+            entries: 188,
+            ..freeze(1, "books/vol-1", FreezeStatus::Done)
+        }),
+        Ended::Sync(sync(2, SyncStatus::Stopped(storage()))),
+        Ended::Sync(SyncRun {
+            added: 3,
+            ..sync(1, SyncStatus::Done)
+        }),
+        Ended::Fill(fill(2, "albums", FillStatus::Done)),
+        Ended::Fill(fill(1, "albums", FillStatus::Stopped(storage()))),
+    ];
+    let count = ended.len() as u64;
+    ended
+        .into_iter()
+        .enumerate()
+        .map(|(newer, ended)| {
+            let id = count - newer as u64;
+            Logged {
+                id,
+                at: SystemTime::UNIX_EPOCH + Duration::from_secs(1_793_000_000 + 60 * id),
+                // The fill that stopped, which the one after it settled.
+                settled: id == 1,
+                ended,
+            }
+        })
+        .collect()
 }
 
 fn alone<A>(run: A) -> Latest<A> {
@@ -443,7 +498,7 @@ fn every_answer() -> Vec<WorkDto> {
         })),
     );
 
-    // A reader's fetches left parcels behind, which the status bar counts.
+    // A reader's fetches left parcels behind, which the Activity panel counts.
     let finished = WorkDto {
         kept_parcels: Some(KeptParcelsDto::of(KeptTally {
             count: 3,
@@ -601,7 +656,14 @@ fn every_answer() -> Vec<WorkDto> {
         ),
     ];
 
-    let mut every = vec![idle, running, sending, committing];
+    // What the server has finished, an entry of every kind, newest first: a
+    // failure standing and one a later run settled among them.
+    let logged = WorkDto {
+        log: logged().iter().map(super::LoggedDto::of).collect(),
+        ..quiet()
+    };
+
+    let mut every = vec![idle, running, sending, committing, logged];
     every.extend(deletions);
     every.extend(phases);
     every.extend([finished, stopped, superseded]);

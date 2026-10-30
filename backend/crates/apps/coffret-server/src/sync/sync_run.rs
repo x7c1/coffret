@@ -19,11 +19,10 @@ use super::SyncStatus;
 pub struct SyncRun {
     /// Which run of the sync this is, counted from the start of this process.
     ///
-    /// What a screen tells one run's account of itself from the next's: a line
-    /// somebody has read and put away must not take the next run's line with it,
-    /// and two runs that found the same thing are otherwise identical. Stamped
-    /// on by [`Syncs`](super::Syncs) rather than carried here from the flow, so
-    /// a fresh one is `0` until it is published.
+    /// What a screen tells one run's account of itself from the next's: two
+    /// runs that found the same thing are otherwise identical. Stamped on by
+    /// [`Syncs`](super::Syncs) rather than carried here from the flow, so a
+    /// fresh one is `0` until it is published.
     pub run: u64,
     /// Where the sync stands, and what stopped it where something did.
     ///
@@ -59,7 +58,7 @@ pub struct SyncRun {
 
 impl SyncRun {
     /// A sync that has been armed and has not walked anything yet.
-    pub(super) fn starting() -> Self {
+    pub(crate) fn starting() -> Self {
         Self {
             run: 0,
             status: SyncStatus::Syncing,

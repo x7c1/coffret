@@ -37,6 +37,9 @@ use freeze_dto::FreezeDto;
 mod kept_parcels_dto;
 use kept_parcels_dto::KeptParcelsDto;
 
+mod logged_dto;
+use logged_dto::LoggedDto;
+
 mod reconnect_dto;
 use reconnect_dto::ReconnectDto;
 

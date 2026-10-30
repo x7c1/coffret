@@ -104,6 +104,23 @@ it('prepares a path, or says why not and asks nothing it need not', async () => 
   expect(refused).toHaveProperty('refused');
 });
 
+// EP-2: what the "New folder…" dialog says under its field, for each name the
+// Library would refuse — and nothing for a name it takes.
+it('refuses in the dialog an empty name, a `/`, `.`, `..` and a name already used', async () => {
+  const list = (path: string) =>
+    Promise.resolve(listing({ path, folders: [{ name: 'Vol. 01', path: 'comics/Vol. 01', mapped: true }] }));
+  const said = async (typed: string) => {
+    const answer = await prepare({ parent: 'comics', typed, prospective: [], list });
+    return 'refused' in answer ? answer.refused : answer.path;
+  };
+  expect(await said('')).toBe('a folder needs a name');
+  expect(await said('Vol. 02/extras')).toBe('a folder name cannot hold a “/” — prepare one folder at a time');
+  expect(await said('.')).toBe('“.” and “..” are not names');
+  expect(await said('..')).toBe('“.” and “..” are not names');
+  expect(await said('Vol. 01')).toBe('there is already something called Vol. 01 here');
+  expect(await said('Vol. 02')).toBe('comics/Vol. 02');
+});
+
 // A prepared path stays until the Library names it, and the list comes back as
 // it was where nothing left it.
 it('lets a prepared path go once the Library names it', () => {
@@ -151,11 +168,13 @@ it('gives the rows that stand directly in a folder', () => {
   const root = listing({
     mapped: false,
     empty_mapped_prefixes: ['comics'],
-    folders: [{ name: 'books', path: 'books', mapped: true }],
+    folders: [{ name: 'books', path: 'books', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
   });
-  expect(prospectiveIn(root, prospective)).toEqual([{ name: 'comics', path: 'comics', mapped: true }]);
+  expect(prospectiveIn(root, prospective)).toEqual([
+    { name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 0, files_present: 0, size: 0, mtime: null },
+  ]);
   expect(prospectiveIn(listing({ path: 'comics', held: false }), prospective)).toEqual([
-    { name: 'Series', path: 'comics/Series', mapped: true },
+    { name: 'Series', path: 'comics/Series', mapped: true, present_throughout: false, files_total: 0, files_present: 0, size: 0, mtime: null },
   ]);
 });
 
@@ -171,6 +190,6 @@ it('leaves a prepared level new in a drop’s confirmation', () => {
   );
   expect(destination.levels.map((level) => level.state)).toEqual(['new', 'new']);
   expect(newLine(destination.levels)).toBe(
-    'comics and Series are new — the Library has no such folders yet, and this drop makes them',
+    'comics and Series are new — the Library has no such folders yet, and adding these files makes them',
   );
 });

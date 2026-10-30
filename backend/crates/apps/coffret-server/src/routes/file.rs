@@ -9,17 +9,32 @@ use coffret_device::{
     EntryFetch, EntryPath, EntryState, Error, FetchError, LocalFile, OpenLibrary, Redacted,
 };
 use futures_util::{stream, TryStreamExt};
+use serde::Deserialize;
 use tracing::{info, warn};
 
+use crate::activity_log::Ended;
 use crate::api_error::ApiError;
 use crate::classify::classify;
 use crate::entry_query::PathQuery;
 use crate::fill::fill_folder;
 use crate::folder::Folder;
 use crate::refresh::when_stale::fetch_caught_up_if_stale;
+use crate::reported::Reported;
 use crate::state::ServerState;
 
-/// `GET /api/file?path=<entry>`
+/// The `?peek=` the file route may be asked with beside `?path=`.
+///
+/// A query of its own rather than a field of [`PathQuery`], which every route
+/// naming one path reads: a peek is a way of asking this route alone. Both are
+/// read out of the one query string, and each ignores the other's parameter.
+#[derive(Debug, Deserialize)]
+pub struct PeekQuery {
+    /// Whether the bytes are wanted only where they are on this device already.
+    #[serde(default)]
+    peek: bool,
+}
+
+/// `GET /api/file?path=<entry>[&peek=true]`
 ///
 /// The Entry's plaintext, from the folder this device maps it into. Present here
 /// already, and the file at its translated local path is it (spec: EP-9, EP-10);
@@ -33,6 +48,16 @@ use crate::state::ServerState;
 /// sync has carried in yet, and a fetch. The first two are files already on this
 /// device; the third is the only one that reaches Storage.
 ///
+/// With `peek=true` the route answers from this device alone and sets nothing
+/// going: only the first two are asked, and where neither has the file it is
+/// refused as not here ([`ApiError::not_on_this_device`]) rather than fetched.
+/// Nor does a peek arm
+/// the fill a page answered from disk otherwise arms (see
+/// `fill_unless_whole`). It is what the explorer's details pane asks for to
+/// draw a preview of the focused row: walking the focus down a list is not
+/// opening anything, and a preview that fetched from Storage, or set the rest
+/// of a folder coming, would turn a glance at a row into a download.
+///
 /// Served whole. A range request is not honoured, because nothing asks for one —
 /// a browser's `<img>` sends none — and honouring one would mean a second way of
 /// reading an Entry with a second set of answers about a fetch that has to
@@ -44,9 +69,51 @@ use crate::state::ServerState;
 /// Entry may be (spec: PK-3). Reading it into a `Vec` first would have made the
 /// server's memory a function of somebody's largest scan, on the one route whose
 /// product exists to store such things.
+///
+/// A request that is not a peek and is refused is logged among the server's
+/// finished work, and one answered settles the refusals logged before it for
+/// the same file (spec: LA-12): a page that was not looking when its reader
+/// met Storage gone can read it back, and a reader that has the page now is
+/// not told it failed. A peek is nobody opening anything, and is logged
+/// neither way.
 pub async fn file(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
+    peek: Query<PeekQuery>,
+) -> Result<Response, ApiError> {
+    let asked = (!peek.peek).then(|| query.entry().ok()).flatten();
+    let answered = answer(Arc::clone(&state), query, peek).await;
+    if let Some(path) = asked {
+        logged(&state, &path, &answered);
+    }
+    answered
+}
+
+/// Logs what one reader's request came to.
+///
+/// Not every refusal is a failure of the fetch. A locked Library is a state
+/// the explorer already says, once, with the unlock beside it — logged, it
+/// would be one more line for every page the reader asked for while locked.
+/// And an Entry that is not in the catalog is the reader holding a row the
+/// Library no longer has, which the listing it asks for next answers.
+fn logged(state: &ServerState, path: &EntryPath, answered: &Result<Response, ApiError>) {
+    match answered {
+        Ok(_) => state.activity.fetched(path.as_str()),
+        Err(refusal) if !matches!(refusal.kind(), "locked" | "no_such_entry") => {
+            state.activity.record(Ended::Fetch {
+                path: path.as_str().to_owned(),
+                refusal: Reported::of(refusal),
+            });
+        }
+        Err(_) => {}
+    }
+}
+
+/// The file itself, or what refused it.
+async fn answer(
+    state: Arc<ServerState>,
+    query: PathQuery,
+    Query(PeekQuery { peek }): Query<PeekQuery>,
 ) -> Result<Response, ApiError> {
     // The keys, once, for the whole of this: the three places the bytes may come
     // from are one question about one Entry, and a lock that landed between two
@@ -63,7 +130,9 @@ pub async fn file(
     if library.state_of(&path).await? == EntryState::Present {
         match library.open_local_file(&path).await {
             Ok(Some(file)) => {
-                fill_unless_whole(&state, &library, &path).await?;
+                if !peek {
+                    fill_unless_whole(&state, &library, &path).await?;
+                }
                 return Ok(served(&path, file, "present"));
             }
             // The row says this device placed the file and the file is not
@@ -90,6 +159,11 @@ pub async fn file(
     // would be refusing to show somebody what they had just put there.
     if let Some(file) = library.added_at(&path).await? {
         return Ok(served(&path, file, "added"));
+    }
+
+    // Everything past here reaches Storage, which a peek never does.
+    if peek {
+        return Err(ApiError::not_on_this_device());
     }
 
     // Answered the moment the Entry is on disk, while the rest of the parcel it

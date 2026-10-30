@@ -4,15 +4,15 @@ import { addedFile, type Added, type Listing } from '@coffret/api';
 
 import {
   destinationsOf,
-  LIBRARY_ROOT,
+  landingOf,
   levelsOf,
   namedBy,
   newLine,
   onDiskIn,
   onDiskLine,
-  pathLine,
 } from './destination';
 import { summarize } from './packChoice';
+import { fileKey, folderKey } from './tree';
 
 /** One dropped file at `path`, relative to the folder dropped onto. */
 function added(path: string): Added {
@@ -43,10 +43,10 @@ describe('destinationsOf', () => {
     const [only, ...rest] = destinationsOf('comics/Foo', summary, exists);
     expect(rest).toEqual([]);
     expect(only.folder).toBe('Vol 3');
-    expect(pathLine(only.levels)).toBe('comics/Foo/Vol 3/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Foo/Vol 3');
     expect(only.levels.map((level) => level.state)).toEqual(['named', 'named', 'new']);
     expect(newLine(only.levels)).toBe(
-      'Vol 3 is new — the Library has no such folder yet, and this drop makes it',
+      'Vol 3 is new — the Library has no such folder yet, and adding these files makes it',
     );
   });
 
@@ -54,7 +54,7 @@ describe('destinationsOf', () => {
   it('marks nothing new where the dropped folder is there already', () => {
     const summary = summarize([added('Vol 1/001.jpg')], ['Vol 1']);
     const [only] = destinationsOf('comics/Foo', summary, exists);
-    expect(pathLine(only.levels)).toBe('comics/Foo/Vol 1/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Foo/Vol 1');
     expect(newLine(only.levels)).toBeNull();
   });
 
@@ -62,17 +62,17 @@ describe('destinationsOf', () => {
   it('names a folder dropped onto the root as a top-level folder', () => {
     const summary = summarize([added('manga/001.jpg')], []);
     const [only] = destinationsOf('', summary, exists);
-    expect(pathLine(only.levels)).toBe('manga/');
+    expect(only.levels.map((level) => level.path)).toEqual(['manga']);
     expect(newLine(only.levels)).toBe(
-      'manga is new — the Library has no such folder yet, and this drop makes it',
+      'manga is new — the Library has no such folder yet, and adding these files makes it',
     );
   });
 
-  // Loose files land in the folder they were let go over — the root by name.
+  // Loose files land in the folder they were let go over; over the root, that
+  // is no level at all.
   it('puts loose files in the folder dropped onto, beside any dropped folder', () => {
     const alone = destinationsOf('', summarize([added('cover.png')], []), exists);
     expect(alone).toEqual([{ folder: null, levels: [] }]);
-    expect(pathLine(alone[0].levels)).toBe(LIBRARY_ROOT);
     expect(newLine(alone[0].levels)).toBeNull();
 
     const both = destinationsOf(
@@ -80,9 +80,9 @@ describe('destinationsOf', () => {
       summarize([added('Vol 3/001.jpg'), added('cover.png')], []),
       exists,
     );
-    expect(both.map((into) => [into.folder, pathLine(into.levels)])).toEqual([
-      ['Vol 3', 'comics/Foo/Vol 3/'],
-      [null, 'comics/Foo/'],
+    expect(both.map((into) => [into.folder, into.levels.at(-1)?.path])).toEqual([
+      ['Vol 3', 'comics/Foo/Vol 3'],
+      [null, 'comics/Foo'],
     ]);
   });
 
@@ -91,9 +91,9 @@ describe('destinationsOf', () => {
   it('names every level the Library does not have yet', () => {
     const summary = summarize([added('ch-1/001.jpg')], []);
     const [only] = destinationsOf('comics/Bar', summary, exists);
-    expect(pathLine(only.levels)).toBe('comics/Bar/ch-1/');
+    expect(only.levels.at(-1)?.path).toBe('comics/Bar/ch-1');
     expect(newLine(only.levels)).toBe(
-      'Bar and ch-1 are new — the Library has no such folders yet, and this drop makes them',
+      'Bar and ch-1 are new — the Library has no such folders yet, and adding these files makes them',
     );
   });
 });
@@ -153,14 +153,14 @@ describe('onDiskIn', () => {
     expect(bar.levels.map((level) => level.state)).toEqual(['named', 'on_disk']);
     expect(newLine(bar.levels)).toBeNull();
     expect(onDiskLine(bar.levels)).toBe(
-      'Bar is on this device’s disk and not in the Library yet — this drop adds it together ' +
+      'Bar is on this device’s disk and not in the Library yet — it is added together ' +
         'with what is already in it',
     );
     // A folder neither named nor on disk is still new.
     expect(baz.levels.map((level) => level.state)).toEqual(['named', 'new']);
     expect(onDiskLine(baz.levels)).toBeNull();
     expect(newLine(baz.levels)).toBe(
-      'Baz is new — the Library has no such folder yet, and this drop makes it',
+      'Baz is new — the Library has no such folder yet, and adding these files makes it',
     );
   });
 
@@ -169,5 +169,25 @@ describe('onDiskIn', () => {
     expect(onDisk('comics/Caf\u00e9')).toBe(true);
     expect(onDisk('comics/Bar/Caf\u00e9')).toBe(false);
     expect(onDisk('Caf\u00e9')).toBe(false);
+  });
+});
+
+// One rule for both ways in: the header's + reads it off the focused row, a
+// drop off the row under the pointer — a folder's own folder, a file's the
+// folder it stands in.
+describe('where files are added', () => {
+  it('adds with + to a focused folder, or to the folder of a focused file', () => {
+    expect(landingOf(folderKey('comics/Foo'))).toBe('comics/Foo');
+    expect(landingOf(fileKey('comics/Foo/cover.jpg'))).toBe('comics/Foo');
+    // Nothing focused, and a file at the root, are the Library root.
+    expect(landingOf(null)).toBe('');
+    expect(landingOf(fileKey('loose.jpg'))).toBe('');
+  });
+
+  it('adds a drop on a folder row to that folder, and on a file row to its folder', () => {
+    const rowUnderPointer = (kind: 'folder' | 'file', path: string) =>
+      landingOf(kind === 'folder' ? folderKey(path) : fileKey(path));
+    expect(rowUnderPointer('folder', 'albums/2026')).toBe('albums/2026');
+    expect(rowUnderPointer('file', 'albums/2026/beach.jpg')).toBe('albums/2026');
   });
 });

@@ -37,7 +37,7 @@ async fn the_preview_counts_exactly_what_the_deletion_does() {
 
     let (status, preview) = body_of(served.get(named).await).await;
     assert_eq!(status, 200, "{preview}");
-    assert_eq!(preview["folder"], serde_json::Value::Null);
+    assert_eq!(preview["folders"], json!([]));
     assert_eq!(preview["paths"], json!(["albums/cover.png", "scans/b.jpg"]));
     assert_eq!(preview["entries"], 2);
     assert_eq!(
@@ -108,7 +108,7 @@ async fn a_folder_is_deleted_with_everything_under_it() {
 
     let (status, preview) = body_of(served.get("/api/delete?path=albums").await).await;
     assert_eq!(status, 200, "{preview}");
-    assert_eq!(preview["folder"], "albums");
+    assert_eq!(preview["folders"], json!(["albums"]));
     assert_eq!(preview["paths"], json!([]));
     assert_eq!(preview["entries"], 5);
     assert_eq!(preview["removed"], 5);
@@ -120,7 +120,7 @@ async fn a_folder_is_deleted_with_everything_under_it() {
     served.delete_idle().await;
     let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(deletion(&work)["status"], "done", "{work}");
-    assert_eq!(deletion(&work)["folder"], "albums");
+    assert_eq!(deletion(&work)["folders"], json!(["albums"]));
     assert_eq!(deletion(&work)["entries"], 5);
 
     let (status, listing) = body_of(served.get("/api/list?path=albums").await).await;
@@ -134,6 +134,41 @@ async fn a_folder_is_deleted_with_everything_under_it() {
         1,
         "and the rest is left"
     );
+}
+
+// PK-9: several folders in one deletion, the explorer's selection of several
+// rows. The Entries are the union of everything under each, and every
+// Container holding one of them is examined — here five one-file Containers
+// and a Pack all of whose files are named, each removed outright in one run.
+#[tokio::test]
+async fn several_folders_are_deleted_in_one_run() {
+    let served = with_a_pack().await;
+    let named = "/api/delete?path=scans&path=albums";
+
+    let (status, preview) = body_of(served.get(named).await).await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["folders"], json!(["albums", "scans"]));
+    assert_eq!(
+        preview["entries"], 8,
+        "five under albums, three under scans"
+    );
+    assert_eq!(
+        preview["removed"], 6,
+        "five one-file Containers and the Pack"
+    );
+    assert_eq!(preview["rebuilt"], 0, "the Pack keeps nothing else");
+
+    let (status, _) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202);
+    served.delete_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(deletion(&work)["status"], "done", "{work}");
+    assert_eq!(deletion(&work)["folders"], json!(["albums", "scans"]));
+    assert_eq!(deletion(&work)["entries"], 8);
+    for folder in ["albums", "scans"] {
+        let (_, listing) = body_of(served.get(&format!("/api/list?path={folder}")).await).await;
+        assert_eq!(listing["held"], false, "{folder} is gone: {listing}");
+    }
 }
 
 // One deletion at a time: a second confirmed while the first is running waits

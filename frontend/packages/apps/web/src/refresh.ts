@@ -26,7 +26,7 @@ export interface Refreshing {
   line: (line: string | null) => void;
   /** Says what refused it, and `null` clears what refused the last one. */
   trouble: (line: string | null) => void;
-  /** Asks the folder tree and the open folder what they hold now. */
+  /** Asks the Library's folders and every listing the tree shows what they hold now. */
   reload: () => void;
   /**
    * Says the catalog has reached the Library's head, so nothing is waiting any
@@ -176,7 +176,7 @@ export const LOOKING = `${CHECKING} — looking…`;
  *
  * The second names that control as the icon it is, by the name it is shown
  * under. This sentence stands at the top of the screen and the control is in
- * the bar at the bottom, so a person told to "ask what is new" would be left
+ * the panel at the bottom, so a person told to "ask what is new" would be left
  * looking for a button of that name among three others that all offer a second
  * attempt.
  */

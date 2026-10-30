@@ -35,7 +35,7 @@ it('says changes are waiting in its colour and in its name', () => {
   const icon = screen.getByRole('button', { name: CHANGES_WAITING });
   expect(CHANGES_WAITING.startsWith(CHECKING)).toBe(true);
   expect(icon.getAttribute('title')).toBe(CHANGES_WAITING);
-  expect(icon.style.color).toBe(resolved(COLOR.newer));
+  expect(icon.style.color).toBe(resolved(COLOR.accent));
   expect(icon.querySelector('circle')).not.toBeNull();
 });
 

@@ -10,7 +10,18 @@
 // could say that of a folder the server never touched — which is why the spec
 // files are numbered and the worker is one.
 
-import { chip, expect, glimpse, photo, row, setting, shot, test } from './journey';
+import {
+  expect,
+  expectRemote,
+  glimpse,
+  ON_THIS_DEVICE,
+  photo,
+  row,
+  setting,
+  shot,
+  stateIcon,
+  test,
+} from './journey';
 
 /** How long the progress line is waited for before its picture is taken. */
 const GLIMPSE_MS = 4_000;
@@ -25,14 +36,14 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   // none of the files is here.
   const first = photo(0);
   const last = photo(setting.photos - 1);
-  await expect(chip(page, first)).toHaveText('remote');
-  await expect(chip(page, last)).toHaveText('remote');
+  await expectRemote(page, first);
+  await expectRemote(page, last);
   await shot(page, '01-nothing-here-yet');
 
   await row(page, first).dblclick();
   await expect(page.getByRole('img', { name: first })).toBeVisible();
 
-  // The line the status bar shows while the folder is coming over. Photographed
+  // The line the Activity panel shows while the folder is coming over. Photographed
   // where it is caught and not asserted: see `glimpse`.
   await glimpse(page.getByText(/bringing over/), GLIMPSE_MS);
   await shot(page, '02-bringing-the-album-over');
@@ -42,8 +53,8 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   // different question of the screen than this journey is asking — and the last
   // photograph of the album is far enough from the first that no prefetch of
   // the reader's own reaches it. Its arriving is the fill and nothing else.
-  await expect(chip(page, last)).toHaveText('present', { timeout: BACKFILL_MS });
-  await expect(chip(page, photo(1))).toHaveText('present');
+  await expect(stateIcon(page, last)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: BACKFILL_MS });
+  await expect(stateIcon(page, photo(1))).toHaveAccessibleName(ON_THIS_DEVICE);
 
   await page.keyboard.press('Escape');
   await expect(page.getByText(/bringing over/)).toHaveCount(0);

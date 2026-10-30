@@ -17,7 +17,7 @@
     "after_current": false,
     "bytes": 13,
     "entries": 2,
-    "folder": null,
+    "folders": [],
     "missing": [
       "books/gone.png"
     ],
@@ -125,9 +125,14 @@
       ],
       "folders": [
         {
+          "files_present": 0,
+          "files_total": 2,
           "mapped": true,
+          "mtime": "2026-01-01T00:00:00Z",
           "name": "2026",
-          "path": "albums/2026"
+          "path": "albums/2026",
+          "present_throughout": false,
+          "size": 12
         }
       ],
       "folders_on_disk": [
@@ -173,14 +178,24 @@
       "files": [],
       "folders": [
         {
+          "files_present": 3,
+          "files_total": 5,
           "mapped": true,
+          "mtime": "2026-01-01T00:00:00Z",
           "name": "albums",
-          "path": "albums"
+          "path": "albums",
+          "present_throughout": false,
+          "size": 46
         },
         {
+          "files_present": 0,
+          "files_total": 1,
           "mapped": true,
+          "mtime": "2026-01-01T00:00:00Z",
           "name": "books",
-          "path": "books"
+          "path": "books",
+          "present_throughout": false,
+          "size": 8
         }
       ],
       "folders_on_disk": [],
@@ -193,14 +208,24 @@
       "files": [],
       "folders": [
         {
+          "files_present": 0,
+          "files_total": 5,
           "mapped": true,
+          "mtime": "2026-01-01T00:00:00Z",
           "name": "albums",
-          "path": "albums"
+          "path": "albums",
+          "present_throughout": false,
+          "size": 46
         },
         {
+          "files_present": 0,
+          "files_total": 1,
           "mapped": false,
+          "mtime": "2026-01-01T00:00:00Z",
           "name": "books",
-          "path": "books"
+          "path": "books",
+          "present_throughout": false,
+          "size": 8
         }
       ],
       "folders_on_disk": [],

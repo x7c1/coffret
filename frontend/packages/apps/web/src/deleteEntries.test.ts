@@ -16,7 +16,7 @@ import {
 /** What the server answers for a folder of twelve files, two inside Packs. */
 function preview(over: Partial<DeletePreview> = {}): DeletePreview {
   return {
-    folder: 'albums',
+    folders: ['albums'],
     paths: [],
     entries: 12,
     bytes: 340_000_000,
@@ -35,7 +35,7 @@ function preview(over: Partial<DeletePreview> = {}): DeletePreview {
 function run(over: Partial<Delete> = {}): Delete {
   return {
     run: 1,
-    folder: 'albums',
+    folders: ['albums'],
     paths: [],
     entries: 0,
     bytes: 0,
@@ -72,23 +72,42 @@ describe('deleteOffered', () => {
 describe('questionOf', () => {
   it('says what leaves the Library and what a rebuild costs', () => {
     const question = questionOf(preview());
-    expect(question.title).toBe('Delete 📁 albums?');
+    expect(question.title).toBe('Delete “albums”?');
     expect(question.removes).toBe('12 files, 340.0 MB will be removed from the Library');
-    expect(question.rebuilds).toBe(
-      '2 Packs holding other files will be rebuilt — reads 1.8 GB, writes 1.5 GB',
-    );
+    expect(question.rebuilds).toEqual({
+      line: '2 Packs holding other files will be rebuilt',
+      cost: 'Reads 1.8 GB, writes 1.5 GB',
+    });
     expect(question.refused).toEqual([]);
     expect(question.deletes).toBe(true);
-    expect(question.target).toEqual({ folder: 'albums', paths: [] });
+    expect(question.target).toEqual({ folders: ['albums'], paths: [] });
   });
 
-  it('names one file by its name, and says nothing of a rebuild where there is none', () => {
-    const question = questionOf(
-      preview({ folder: null, paths: ['albums/cover.png'], entries: 1, bytes: 5, rebuilt: 0 }),
+  it('names one file by its name, and several rows as a count of items', () => {
+    const one = questionOf(
+      preview({ folders: [], paths: ['albums/cover.png'], entries: 1, bytes: 5, rebuilt: 0 }),
     );
-    expect(question.title).toBe('Delete cover.png?');
-    expect(question.removes).toBe('1 file, 5 B will be removed from the Library');
-    expect(question.rebuilds).toBeNull();
+    expect(one.title).toBe('Delete “cover.png”?');
+    expect(one.removes).toBe('1 file, 5 B will be removed from the Library');
+
+    const several = questionOf(preview({ folders: ['albums', 'books'], paths: ['scans/a.jpg'] }));
+    expect(several.title).toBe('Delete 3 items?');
+    expect(several.target).toEqual({ folders: ['albums', 'books'], paths: ['scans/a.jpg'] });
+  });
+
+  // PK-9, PK-10: only a Pack that keeps files the deletion does not name is
+  // rebuilt — read whole and uploaded again — and only that is worth a note.
+  // A Pack whose every file goes, and a one-file Container, are removed
+  // outright, which costs nothing to speak of.
+  it('notes a rebuild only where a Pack keeps other files', () => {
+    expect(questionOf(preview({ rebuilt: 1, rebuild_read: 2_000_000, rebuild_written: 1_000_000 })).rebuilds).toEqual({
+      line: '1 Pack holding other files will be rebuilt',
+      cost: 'Reads 2.0 MB, writes 1.0 MB',
+    });
+    // Whole Packs and one-file Containers removed: nothing rebuilt.
+    expect(
+      questionOf(preview({ removed: 12, rebuilt: 0, rebuild_read: 0, rebuild_written: 0 })).rebuilds,
+    ).toBeNull();
   });
 
   it('says what would be refused and why, and the files the Library does not hold', () => {
@@ -113,7 +132,7 @@ describe('askToDelete', () => {
   function deleting(answer: boolean, over: Partial<Deleting> = {}) {
     const asked: DeleteQuestion[] = [];
     const steps = {
-      target: { folder: 'albums', paths: [] },
+      target: { folders: ['albums'], paths: [] },
       preview: vi.fn(() => Promise.resolve(preview())),
       ask: vi.fn((question: DeleteQuestion) => {
         asked.push(question);
@@ -129,7 +148,7 @@ describe('askToDelete', () => {
   it('arms the deletion only on Delete', async () => {
     const yes = deleting(true);
     expect(await askToDelete(yes.steps)).toBe('armed');
-    expect(yes.steps.start).toHaveBeenCalledWith({ folder: 'albums', paths: [] });
+    expect(yes.steps.start).toHaveBeenCalledWith({ folders: ['albums'], paths: [] });
 
     const no = deleting(false);
     expect(await askToDelete(no.steps)).toBe('cancelled');
@@ -167,6 +186,13 @@ describe('the lines a deletion stands under', () => {
       ),
     ).toBe('deleting 📁 albums — rebuilding Packs 1/2 (1 more after it)');
     expect(deletedLine(run())).toBeNull();
+  });
+
+  // Several rows deleted together go by a count: of files where only files
+  // were named, and of items where folders were too.
+  it('names several rows by a count', () => {
+    expect(deletingLine(run({ folders: [], paths: ['albums/a.jpg', 'albums/b.jpg'] }))).toBe('deleting 2 files…');
+    expect(deletingLine(run({ folders: ['albums', 'books'], paths: ['c.jpg'] }))).toBe('deleting 3 items…');
   });
 
   it('says it is waiting while a book is being packed or a backup runs', () => {
@@ -256,7 +282,7 @@ describe('the lines a deletion stands under', () => {
       ),
     ).toEqual({
       text: '📁 albums was not deleted — another device changed the Library meanwhile',
-      retry: { folder: 'albums', paths: [] },
+      retry: { folders: ['albums'], paths: [] },
     });
   });
 
@@ -278,13 +304,13 @@ describe('the lines a deletion stands under', () => {
 });
 
 describe('refusedNotice', () => {
-  const target = { folder: null, paths: ['albums/a.jpg'] };
+  const target = { folders: [], paths: ['albums/a.jpg'] };
 
   it('offers a conflict again, for the same target', () => {
     const conflict = new Refusal('conflict', 409, 'another device changed the Library meanwhile');
     expect(refusedNotice(target, conflict, conflict.message)).toEqual({
       text: 'a.jpg was not deleted — another device changed the Library meanwhile',
-      retry: { folder: null, paths: ['albums/a.jpg'] },
+      retry: { folders: [], paths: ['albums/a.jpg'] },
     });
   });
 

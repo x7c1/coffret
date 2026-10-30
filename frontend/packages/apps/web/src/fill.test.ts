@@ -5,7 +5,6 @@ import type {
   Catalog,
   CatalogState,
   DisplacedFill,
-  DisplacedFreeze,
   Fill,
   Freeze,
   ListedFile,
@@ -29,8 +28,6 @@ import {
   SAYS,
   shouldAsk,
   shouldPoll,
-  stoppedBooksLine,
-  stoppedLine,
   syncLine,
 } from './fill';
 import { waitsFor } from './turns';
@@ -132,21 +129,6 @@ function displacedFill(over: Partial<Omit<DisplacedFill, 'status'>> = {}): Displ
     total: 3,
     done: 1,
     declined: [],
-    findings: [],
-    status: 'stopped',
-    stopped: STORAGE,
-    ...over,
-  };
-}
-
-/** A freeze Storage stopped that a later one took the record from. */
-function displacedFreeze(over: Partial<Omit<DisplacedFreeze, 'status'>> = {}): DisplacedFreeze {
-  return {
-    run: 1,
-    step: null,
-    folder: 'books/vol-1',
-    packs: 0,
-    entries: 0,
     findings: [],
     status: 'stopped',
     stopped: STORAGE,
@@ -258,7 +240,7 @@ it('keeps a line for a fill that stopped, because the retry hangs off it', () =>
 });
 
 // EP-13: the mapped root was refused, so the fill placed nothing. The refusal
-// carries recovery guidance now, and the line the status bar already writes is
+// carries recovery guidance now, and the line the Activity panel already writes is
 // what puts it in front of a person — so this needs no case in the explorer
 // and no new state on a row. The existing line is asked to prove it says the
 // whole thing.
@@ -414,7 +396,7 @@ it('marks a file waiting to be packed apart from one waiting for a sync', () => 
   const shown = rowFill(reserved, 'scans/vol-1', null);
   expect(shown.state).toBe('reserved');
   expect(SAYS[shown.state]).toBe('to be packed');
-  expect(shown.message).toContain('dropped to be added as a Pack');
+  expect(shown.message).toContain('to be added as a Pack');
 
   expect(
     rowFill({ ...file('scans/vol-1/page-001.jpg', 'present'), reserved: true }, 'scans/vol-1', null)
@@ -521,8 +503,8 @@ it('says a part of a Container read from Storage again, once however many there 
 });
 
 // One line for all of them, because a folder of three hundred Entries declined
-// for the one reason would otherwise be three hundred sentences in a bar one
-// line high. The rows carry the rest, each marked with its own.
+// for the one reason would otherwise be three hundred sentences in the Activity
+// panel. The rows carry the rest, each marked with its own.
 it('names the first declined Entry and counts the others', () => {
   expect(
     fillLine(
@@ -565,44 +547,6 @@ it('names the books the freeze queue lost in the freeze words', () => {
   expect(discardedBooksLine(['books/vol-2'])).not.toBe(discardedLine(['books/vol-2']));
 });
 
-// A run Storage stopped that the next folder took the record from. It says what
-// it said while it was the run on record — nothing about it changed when the
-// next one started — and it says it through the same function, so the sentence
-// cannot drift from the one the bar showed a tick earlier.
-it('keeps the sentence of a run the next one took the record from', () => {
-  expect(stoppedLine([])).toBeNull();
-  const stopped = displacedFill({
-    folder: 'albums',
-    stopped: { kind: 'storage', message: 'Storage did not answer', reason: null, surfaced: null },
-  });
-  expect(stoppedLine([stopped])).toBe(fillLine(stopped));
-  expect(stoppedLine([stopped])).toBe('could not bring over albums — Storage did not answer');
-});
-
-// One Storage outage stops every folder queued behind the first, and the bar has
-// room for one line: the oldest speaks, and the count says how many stand behind
-// it — each with a button of its own naming which.
-it('counts the runs standing behind the one it names', () => {
-  const first = displacedFill({ folder: 'albums' });
-  const second = displacedFill({ folder: 'letters' });
-
-  expect(stoppedLine([first, second])).toBe(`${fillLine(first)} (and 1 more stopped)`);
-});
-
-// The books say it in the freeze's own words, for the reason the discarded lines
-// do: the two flows are separate tasks and can stop at the same moment, so a
-// person owed both sentences must not be given one of them twice.
-it('keeps the sentence of a book the next one took the record from', () => {
-  expect(stoppedBooksLine([])).toBeNull();
-  const stopped = displacedFreeze({
-    folder: 'books/vol-1',
-    stopped: { kind: 'storage', message: 'Storage did not answer', reason: null, surfaced: null },
-  });
-
-  expect(stoppedBooksLine([stopped])).toBe('could not pack books/vol-1 — Storage did not answer');
-  expect(stoppedBooksLine([stopped])).not.toBe(stoppedLine([displacedFill()]));
-});
-
 // Which run the rows of a folder read. The one on record where it is about this
 // folder, and otherwise the run that stopped on it — the `failed` and `declined`
 // chips are the other half of what that run's line says, and are owed for as
@@ -635,14 +579,13 @@ it('gives the rows the run that is about their folder', () => {
     state: 'failed',
     message: STORAGE.message,
   });
-  // A run somebody has put away is not among the ones handed in, so the rows
-  // fall back to what the listing says — as they do when the fill's own line is
-  // put away.
+  // With no run on record and none displaced, the rows fall back to what the
+  // listing says.
   expect(fillOfFolder(null, [], 'albums')).toBeNull();
 });
 
-// A finished sync with nothing to report says what it carried in: the bar's
-// line is the latest thing that happened, and a sync that said nothing left it
+// A finished sync with nothing to report says what it carried in: the panel's
+// collapsed row says the latest thing that happened, and a sync that said nothing left it
 // to a Pack made before it.
 it('says what a sync is doing, and how many files it added once it is over', () => {
   expect(syncLine(syncing())).toBe('backing up what was added…');
@@ -874,9 +817,9 @@ it('asks a quiet server once and then nothing at all', () => {
 
 // The walkthrough a reload used to lose. The page comes up, asks its one
 // question, and the answer is a book Storage stopped packing: the line the
-// "pack again" hangs off is back on the bar — and no interval starts behind it,
+// Retry hangs off is back in the Activity panel — and no interval starts behind it,
 // because the run is over and there is nothing to follow.
-it('comes back from a reload with the stopped book on the bar and nothing polling', () => {
+it('comes back from a reload with the stopped book in the Activity panel and nothing polling', () => {
   const stopped = freezing({
     status: 'stopped',
     stopped: STORAGE,

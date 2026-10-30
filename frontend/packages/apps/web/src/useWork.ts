@@ -12,25 +12,16 @@ import {
   type Freeze,
   type KeptParcels,
   type LibraryState,
+  type Logged,
   type Reconnect,
   type Sync,
   type TurnTaker,
 } from '@coffret/api';
 
-import {
-  canPutAway,
-  putAway,
-  putAwayFolders,
-  servedBy,
-  stillOffered,
-  NOTHING_DISMISSED,
-  type Dismissable,
-  type Dismissed,
-} from './dismissed';
+import { stillStanding } from './activity';
 import { POLL_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
-import { finishedAfter, NOTHING_FINISHED } from './finished';
 import { refusedAsRanOut } from './ranOut';
-import { offeredFolders, stillStanding, type Pressed, type Trouble } from './retry';
+import type { Pressed, Trouble } from './retry';
 import { said } from './useAsked';
 
 /**
@@ -52,7 +43,8 @@ import { said } from './useAsked';
  * The answer carries two things that are not work: whether this device still
  * holds the Library open, and how far its catalog has got with the Library. Both
  * are followed here because both arrive here, and because this is the one
- * question a page asks without being told to.
+ * question a page asks without being told to. And it carries the server's log
+ * of the work it finished, which the Activity panel lists (spec: LA-12).
  */
 export function useWork(readerOpen: boolean): {
   fill: Fill | null;
@@ -66,11 +58,10 @@ export function useWork(readerOpen: boolean): {
    */
   turn: TurnTaker | null;
   /**
-   * The sync, the freeze and the deletion whose runs are over, the most
-   * recently finished first — as this tab saw the answers report the endings.
-   * See [`finishedAfter`](./finished).
+   * What the server has finished since it started, newest first, and empty
+   * until an answer has said.
    */
-  finished: readonly TurnTaker[];
+  log: readonly Logged[];
   /**
    * Whether this device still holds the Library open, and `null` until an
    * answer has said.
@@ -102,14 +93,13 @@ export function useWork(readerOpen: boolean): {
   /**
    * The press that was refused and what refused it, and `null` where none was.
    *
-   * Only while the offer it answered is still being made; which press that was
-   * decides it, and is kept alongside the sentence — see
-   * [`stillStanding`](./retry).
+   * Only while an entry of the log still offers what it pressed; which press
+   * that was decides it, and is kept alongside the sentence — see
+   * [`stillStanding`](./activity).
    *
-   * The press goes out with the sentence rather than being kept back here. The
-   * bar has room for one line, but that line is about one of several buttons
-   * standing side by side and the sentence in it is the server's about the
-   * operation, so the screen needs the press to say which of them was refused.
+   * The press goes out with the sentence rather than being kept back here: the
+   * sentence is the server's about the operation, and the panel says it beside
+   * the entry whose Retry was pressed.
    */
   trouble: Trouble | null;
   retry: (folder: string) => void;
@@ -132,17 +122,13 @@ export function useWork(readerOpen: boolean): {
    * and has no refusal of its own on the screen.
    */
   recheck: () => void;
-  /** What this tab has been told it need not show again. */
-  dismissed: Dismissed;
-  /** Puts away what the bar is standing beside, whichever kind of notice it is. */
-  dismiss: (what: Dismissable) => void;
 } {
   const [fill, setFill] = useState<Fill | null>(null);
   const [sync, setSync] = useState<Sync | null>(null);
   const [freeze, setFreeze] = useState<Freeze | null>(null);
   const [deletion, setDeletion] = useState<Delete | null>(null);
   const [turn, setTurn] = useState<TurnTaker | null>(null);
-  const [finished, setFinished] = useState(NOTHING_FINISHED);
+  const [log, setLog] = useState<readonly Logged[]>([]);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [kept, setKept] = useState<KeptParcels | null>(null);
@@ -156,7 +142,6 @@ export function useWork(readerOpen: boolean): {
   // open is never.
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<Trouble | null>(null);
-  const [dismissed, setDismissed] = useState<Dismissed>(NOTHING_DISMISSED);
   const polling =
     shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion) ||
     following;
@@ -167,12 +152,12 @@ export function useWork(readerOpen: boolean): {
   const asked = useRef(false);
 
   // What one answer does, whichever question it came from: a reload that came
-  // back to a stopped freeze has to reach the status bar's line and its "pack
+  // back to a stopped freeze has to reach the panel's entry and its "pack
   // again" by the same road a poll's answer does.
   //
-  // Out here rather than inside the effect because three askers share it now:
-  // the interval, the question a page asks as it comes up, and the screen's
-  // try-again.
+  // Out here rather than inside the effect because several askers share it: the
+  // interval, the question a page asks as it comes up, the screen's try-again,
+  // and the presses of a Retry, which answer with the work answer too.
   const answered = useCallback((work: Work) => {
     asked.current = true;
     setFill(work.fill);
@@ -180,27 +165,11 @@ export function useWork(readerOpen: boolean): {
     setFreeze(work.freeze);
     setDeletion(work.delete);
     setTurn(work.turn);
-    // Which run finished last, across the flows: the work answer carries no
-    // clock, so the order is the order the answers reported the endings in.
-    setFinished((before) => finishedAfter(before, work));
+    setLog(work.log);
     setLibrary(work.library);
     setCatalog(work.catalog);
     setKept(work.kept_parcels);
     setReconnect(work.reconnect);
-    // What this tab has put away is put away with one server, and every answer
-    // says which one gave it. A name that has changed is a process that was
-    // started again — the way a command-line server's locked Library is
-    // opened — and everything held goes with it, because the new process counts
-    // its runs from 1 and would otherwise have its first ones hidden by the old
-    // one's dismissals.
-    //
-    // Then the folders, which last only while the server goes on offering them.
-    // Taking one up — a button here, or opening a file in it — takes it off
-    // these lists, and this is where that shows: a folder thrown away a second
-    // time is a fresh offer rather than one put away before it was made.
-    setDismissed((away) =>
-      stillTold(servedBy(away, work.server), work.fill, work.freeze),
-    );
     // Whatever the answer says about the flows a press arms — the sync and the
     // freeze a drop arms, and a deletion — it is an answer: from here on they
     // decide for themselves whether there is anything to follow.
@@ -212,11 +181,8 @@ export function useWork(readerOpen: boolean): {
       setFollowing(false);
     }
     // Nothing here about the refusal a press met. What ends one is the offer it
-    // answered no longer being made, and that is read off what these lines have
-    // just set rather than decided from the answer: a run leaving the state its
-    // button was offered from is one of the ways an offer ends, a folder leaving
-    // the list of the ones a queue lost is another, and somebody putting the
-    // notice away is a third — which nothing here can see at all.
+    // answered no longer being made, and that is read off the log these lines
+    // have just set rather than decided from the answer.
   }, []);
 
   // A question that failed is not put on the screen. This follows work nobody
@@ -272,12 +238,12 @@ export function useWork(readerOpen: boolean): {
   // nothing and said nothing would be the one thing worse than the failure it
   // is offered against.
   //
-  // The reply carries the fill as it stands the moment it is armed, which is
-  // what takes the stopped state off the screen at once rather than at the next
-  // tick — and what starts the polling that follows the rest of it.
+  // The reply is the work answer as it stands the moment the fill is armed,
+  // which puts the run under way on the screen at once rather than at the next
+  // tick — and starts the polling that follows the rest of it.
   //
-  // One folder at a time rather than one request at a time. The bar offers a
-  // button per folder — the one that stopped, and one for each the queue lost —
+  // One folder at a time rather than one request at a time. The panel offers a
+  // Retry per folder — each one that stopped, and each the queue lost —
   // and the fill queues what it is asked for by name, so a guard that dropped
   // the second press while the first request was open would be this page
   // throwing away exactly what the server no longer throws away. What it still
@@ -291,27 +257,13 @@ export function useWork(readerOpen: boolean): {
     asking.current.add(folder);
     setTrouble(null);
     void startFill(folder)
-      .then(
-        (work) => {
-          setFill(work.fill);
-          // Through `servedBy` for the reason the poll's answer is: this is an
-          // answer like any other, and the process that gave it may not be the
-          // one whose runs this tab put away.
-          setDismissed((away) =>
-            stillOffered(
-              servedBy(away, work.server),
-              'fill',
-              offeredFolders(work.fill),
-            ),
-          );
-        },
-        (refused: unknown) =>
-          setTrouble(troubleOf({ flow: 'fill', folder }, refused)),
+      .then(answered, (refused: unknown) =>
+        setTrouble(troubleOf({ flow: 'fill', folder }, refused)),
       )
       .finally(() => {
         asking.current.delete(folder);
       });
-  }, []);
+  }, [answered]);
 
   // The same, for the sync. It takes no folder: which folders a sync walks is
   // the device's mappings and never something a screen chooses.
@@ -323,27 +275,11 @@ export function useWork(readerOpen: boolean): {
     syncing.current = true;
     setTrouble(null);
     void startSync()
-      .then(
-        (work) => {
-          setSync(work.sync);
-          // Through `servedBy` for the reason the other two answers are: this
-          // is an answer like any other, and the process that gave it may not
-          // be the one whose runs this tab put away. Without it the run this
-          // press has just started — counted from 1 by a server that was
-          // started again — is measured against a number put away under the
-          // old one, and what that hides is the one sentence saying a file
-          // somebody dropped is not backed up. No folders are read back from
-          // it: a sync offers none, since it walks the device's mappings
-          // rather than a folder a screen chose.
-          setDismissed((away) => servedBy(away, work.server));
-        },
-        (refused: unknown) =>
-          setTrouble(troubleOf({ flow: 'sync' }, refused)),
-      )
+      .then(answered, (refused: unknown) => setTrouble(troubleOf({ flow: 'sync' }, refused)))
       .finally(() => {
         syncing.current = false;
       });
-  }, []);
+  }, [answered]);
 
   // And the same for the freeze. It takes the folder, unlike the sync: a freeze
   // is of one book, and the one to take up again is the one that stopped — or
@@ -357,63 +293,23 @@ export function useWork(readerOpen: boolean): {
     packing.current.add(folder);
     setTrouble(null);
     void startFreeze(folder)
-      .then(
-        (work) => {
-          setFreeze(work.freeze);
-          // The same, for the same reason.
-          setDismissed((away) =>
-            stillOffered(
-              servedBy(away, work.server),
-              'freeze',
-              offeredFolders(work.freeze),
-            ),
-          );
-        },
-        (refused: unknown) =>
-          setTrouble(troubleOf({ flow: 'freeze', folder }, refused)),
+      .then(answered, (refused: unknown) =>
+        setTrouble(troubleOf({ flow: 'freeze', folder }, refused)),
       )
       .finally(() => {
         packing.current.delete(folder);
       });
-  }, []);
+  }, [answered]);
 
   const follow = useCallback(() => setFollowing(true), []);
 
-  // Putting a finished run's line away. What is put away is a run and not a
-  // sentence: two runs of one flow can come to the same words, and a screen
-  // that remembered the words would swallow the second one's — which for a
-  // finding saying a dropped file is not backed up is the whole loss.
-  //
-  // A run still going is not put away at all. Its counts are still moving, and
-  // the next answer would bring the line straight back.
-  const dismiss = useCallback(
-    (what: Dismissable) => {
-      // The folders a queue lost are not a run and have no number, and the runs
-      // a later one took the record from are not the run a number would name:
-      // what is remembered of either is the folder, until the server stops
-      // offering it.
-      if (what.kind !== 'line') {
-        setDismissed((away) => putAwayFolders(away, what.queue, what.folders));
-        return;
-      }
-      const run = { fill, sync, freeze, delete: deletion }[what.flow];
-      if (!canPutAway(run)) {
-        return;
-      }
-      setDismissed((away) => putAway(away, what.flow, run.run));
-    },
-    [fill, sync, freeze, deletion],
-  );
-
   // What a press was refused with, for as long as that press is still on offer.
   //
-  // Read off the answer on record rather than ended by whichever answer happens
-  // to arrive next. The three runs cannot speak for the other buttons: a folder
-  // a queue lost is not a run and never has a status, so a refusal from one of
-  // those was being taken off the screen by the next poll — inside a second,
-  // with the button that met it still standing and nothing left saying why
-  // pressing it did nothing.
-  const standing = stillStanding(trouble, fill, sync, freeze, dismissed);
+  // Read off the log on record rather than ended by whichever answer happens to
+  // arrive next: the next poll brings the same entry back, and taking the
+  // refusal away there would leave the Retry that met it standing with nothing
+  // saying why pressing it did nothing.
+  const standing = stillStanding(trouble, log);
 
   // And let go of once it is not, rather than left lying here unshown. What
   // goes on the screen is decided above; this is what keeps a refusal from
@@ -435,7 +331,7 @@ export function useWork(readerOpen: boolean): {
     freeze,
     deletion,
     turn,
-    finished: finished.order,
+    log,
     library,
     catalog,
     kept,
@@ -446,29 +342,7 @@ export function useWork(readerOpen: boolean): {
     retryFreeze,
     follow,
     recheck,
-    dismissed,
-    dismiss,
   };
-}
-
-/**
- * What a tab still need not show, given the folders an answer named.
- *
- * Both queues at once, because one answer carries both: a folder put away on
- * either of them is kept only for as long as that queue goes on offering it —
- * by either of the two ways it offers one, which is what
- * [`offeredFolders`](./retry) names together.
- */
-function stillTold(
-  dismissed: Dismissed,
-  fill: Fill | null,
-  freeze: Freeze | null,
-): Dismissed {
-  return stillOffered(
-    stillOffered(dismissed, 'fill', offeredFolders(fill)),
-    'freeze',
-    offeredFolders(freeze),
-  );
 }
 
 /** One press that was refused, and what refused it. */

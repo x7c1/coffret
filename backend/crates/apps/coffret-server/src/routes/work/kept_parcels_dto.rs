@@ -1,7 +1,7 @@
 use coffret_device::KeptTally;
 use serde::Serialize;
 
-/// The parcels this device keeps for the Library, as the status bar shows them.
+/// The parcels this device keeps for the Library, as the Activity panel shows them.
 ///
 /// A fetch keeps every parcel it read until every Entry it covers that this
 /// device maps is on the device or witnessed absent, or its Container leaves

@@ -3,13 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   addFiles,
+  browseFolders,
+  getFile,
   getFolders,
   getLibrary,
   getListing,
   getRemoteHead,
   getWork,
+  mapFolder,
+  peekFile,
   previewDelete,
   startDelete,
+  Refusal,
   type Delete,
   type ListedFile,
   type Listing,
@@ -17,22 +22,25 @@ import {
 } from '@coffret/api';
 
 import { App } from './App';
-import { NOT_KNOWN_YET, TAKEN } from './dropTarget';
 import { parseHash, toHash } from './hash';
+import { size, time } from './humanize';
 import { ADD } from './packChoice';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
-import { COLOR } from './theme';
 
 // The server, as the screen reaches it. Everything else the package exports is
 // the real thing.
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   addFiles: vi.fn(),
+  browseFolders: vi.fn(),
+  getFile: vi.fn(),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
   getListing: vi.fn(),
   getRemoteHead: vi.fn(),
   getWork: vi.fn(),
+  mapFolder: vi.fn(),
+  peekFile: vi.fn(),
   previewDelete: vi.fn(),
   startDelete: vi.fn(),
 }));
@@ -48,6 +56,7 @@ const IDLE: Work = {
   freeze: null,
   delete: null,
   reconnect: null,
+  log: [],
 };
 
 function listing(path: string, over: Partial<Listing> = {}): Listing {
@@ -79,6 +88,24 @@ function page(path: string): ListedFile {
 }
 
 /**
+ * A Library of folders and files by folder: each key a folder, each value its
+ * children, a name ending in `/` a folder.
+ */
+function library(tree: Record<string, string[]>): (path: string) => Listing {
+  return (path) => {
+    const under = (name: string) => (path === '' ? name : `${path}/${name}`);
+    const children = tree[path] ?? [];
+    return listing(path, {
+      held: path === '' || path in tree,
+      folders: children
+        .filter((name) => name.endsWith('/'))
+        .map((name) => ({ name: name.slice(0, -1), path: under(name.slice(0, -1)), mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null })),
+      files: children.filter((name) => !name.endsWith('/')).map((name) => page(under(name))),
+    });
+  };
+}
+
+/**
  * The Library each case stands in front of, by folder; `committed` turns it
  * into the one a drop's files landed in and a run carried in.
  */
@@ -92,6 +119,12 @@ beforeEach(() => {
   vi.mocked(getRemoteHead).mockResolvedValue({ head: 'same' } as never);
   vi.mocked(getWork).mockResolvedValue(IDLE);
   vi.mocked(getListing).mockImplementation((path: string) => Promise.resolve(answers(path)));
+  // The reader's pages: jsdom has no object URLs, and the reader only needs
+  // one to put on the image.
+  vi.mocked(getFile).mockResolvedValue(new Blob(['page']));
+  vi.mocked(peekFile).mockResolvedValue(new Blob(['page']));
+  URL.createObjectURL = () => 'blob:page';
+  URL.revokeObjectURL = () => undefined;
 });
 
 afterEach(() => {
@@ -99,31 +132,40 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/** The tree down the left, and the list on the right. */
+/** The middle of the screen, where the one tree stands once the root is listed. */
 function tree() {
-  return within(screen.getByRole('navigation', { name: 'folders' }));
-}
-function list() {
   const main = document.querySelector('main');
   if (main === null) {
-    throw new Error('the screen draws its list');
+    throw new Error('the screen draws its middle');
   }
   return within(main as HTMLElement);
 }
 
-/** Chooses "New folder…" from a row's menu, names it, and presses Prepare. */
-async function newFolder(where: ReturnType<typeof tree>, row: string, name: string) {
-  fireEvent.click(await where.findByLabelText(`actions for ${row}`));
-  fireEvent.click(where.getByRole('menuitem', { name: 'New folder…' }));
+/** Chooses "New folder…" from a row's menu, names it, and presses Create. */
+async function newFolder(row: string, name: string) {
+  fireEvent.click(await tree().findByLabelText(`actions for ${row}`));
+  fireEvent.click(tree().getByRole('menuitem', { name: 'New folder…' }));
   await nameIt(name);
 }
 
-/** Types `name` into the open dialog and presses Prepare. */
+/** Chooses "New folder…" from the header's **+**, for the folder it adds to, and names it. */
+async function newFolderHere(name: string) {
+  await openNewFolderFromAdd();
+  await nameIt(name);
+}
+
+/** Opens the header's **+** menu and chooses "New folder…" in it. */
+async function openNewFolderFromAdd() {
+  fireEvent.click(await within(screen.getByRole('banner')).findByRole('button', { name: 'Add files' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'New folder…' }));
+}
+
+/** Types `name` into the open dialog and presses Create. */
 async function nameIt(name: string) {
-  const dialog = await screen.findByRole('dialog', { name: 'new folder' });
+  const dialog = await screen.findByRole('dialog', { name: /^New folder in / });
   fireEvent.change(within(dialog).getByLabelText('folder name'), { target: { value: name } });
   await act(async () => {
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Prepare' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
   });
 }
 
@@ -150,9 +192,7 @@ describe('starting a Library from the explorer', () => {
   it('refuses a name the Library would refuse, and prepares nothing', async () => {
     answers = (path) => listing(path, path === '' ? { folders_on_disk: ['scans'] } : {});
     render(<App />);
-    await screen.findByRole('navigation', { name: 'folders' });
-    fireEvent.click(await tree().findByLabelText('actions for Library'));
-    fireEvent.click(tree().getByRole('menuitem', { name: 'New folder…' }));
+    await openNewFolderFromAdd();
 
     for (const [typed, said] of [
       ['', 'a folder needs a name'],
@@ -169,23 +209,21 @@ describe('starting a Library from the explorer', () => {
   });
 
   it('prepares nothing when the dialog is let go of while the name is still being judged', async () => {
-    render(<App />);
-    await screen.findByRole('navigation', { name: 'folders' });
-    // The root's own listing is on hand; the one asked for to judge the name
-    // inside `comics` is held back until after Cancel.
-    let answer: (listed: Listing) => void = () => undefined;
-    fireEvent.click(await tree().findByLabelText('actions for Library'));
-    fireEvent.click(tree().getByRole('menuitem', { name: 'New folder…' }));
-    await nameIt('comics');
-    vi.mocked(getListing).mockImplementationOnce(
-      () => new Promise<Listing>((resolve) => (answer = resolve)),
+    // Every listing of `comics` — the one asked for to judge the name inside
+    // it, and the one the details pane asks for once the new folder takes the
+    // focus — is held back until after Cancel.
+    const held: (() => void)[] = [];
+    vi.mocked(getListing).mockImplementation((path: string) =>
+      path === 'comics'
+        ? new Promise<Listing>((resolve) => held.push(() => resolve(listing('comics'))))
+        : Promise.resolve(answers(path)),
     );
-    fireEvent.click(await list().findByLabelText('actions for comics'));
-    fireEvent.click(list().getByRole('menuitem', { name: 'New folder…' }));
-    await nameIt('Series');
+    render(<App />);
+    await newFolderHere('comics');
+    await newFolder('comics', 'Series');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await act(async () => {
-      answer(listing('comics'));
+      held.forEach((answer) => answer());
     });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(tree().queryByTitle('Series')).toBeNull();
@@ -193,58 +231,35 @@ describe('starting a Library from the explorer', () => {
 
   it('prepares a path, and one inside it, and a drop there makes them ordinary folders', async () => {
     let committed = false;
-    answers = (path) => {
-      if (!committed) {
-        return listing(path);
-      }
-      switch (path) {
-        case '':
-          return listing('', { folders: [{ name: 'comics', path: 'comics', mapped: true }] });
-        case 'comics':
-          return listing('comics', {
-            held: true,
-            folders: [{ name: 'Series', path: 'comics/Series', mapped: true }],
-          });
-        default:
-          return listing(path, { held: true, files: [page('comics/Series/vol-1.jpg')] });
-      }
-    };
+    answers = (path) =>
+      committed
+        ? library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['vol-1.jpg'] })(path)
+        : listing(path);
     vi.mocked(addFiles).mockImplementation(() => {
       committed = true;
       return Promise.resolve({ written: ['comics/Series/vol-1.jpg'], refused: [] });
     });
     render(<App />);
-    await screen.findByRole('navigation', { name: 'folders' });
 
-    // The tree's root row is the one row an empty Library has.
-    await newFolder(tree(), 'Library', 'comics');
+    // An empty Library has no row; the header's + "New folder…" prepares one
+    // under the root.
+    await newFolderHere('comics');
     expect(screen.queryByRole('dialog')).toBeNull();
-    const row = list().getByTitle('comics');
-    expect(row.textContent).toContain(PROSPECTIVE);
-    expect(tree().getByTitle(PROSPECTIVE)).toBeTruthy();
+    expect(tree().getByTitle('comics').textContent).toContain('not in Library');
     // Nothing was sent for it.
     expect(addFiles).not.toHaveBeenCalled();
 
-    // A path inside it, from the list's row.
-    await newFolder(list(), 'comics', 'Series');
-    expect(tree().getByTitle('Series')).toBeTruthy();
+    // A path inside it, from its row, which opens it to show the new row.
+    await newFolder('comics', 'Series');
+    expect(await tree().findByTitle('Series')).toBeTruthy();
     expect(tree().getAllByTitle(PROSPECTIVE)).toHaveLength(2);
 
-    // Opened, each is an empty listing a drop can target.
-    fireEvent.doubleClick(list().getByTitle('comics'));
-    await waitFor(() => expect(list().getByTitle('Series').textContent).toContain(PROSPECTIVE));
-    fireEvent.doubleClick(list().getByTitle('Series'));
-    await waitFor(() => expect(getListing).toHaveBeenCalledWith('comics/Series', expect.anything()));
-    expect(await list().findByText(PROSPECTIVE)).toBeTruthy();
-
-    // The drop is confirmed like any other, with both levels marked new.
-    const target = document.querySelector('main [data-scroll-area]');
-    if (target === null) {
-      throw new Error('the list takes the drop');
-    }
-    fireEvent.drop(target, carrying('vol-1.jpg'));
+    // A drop on its row is confirmed like any other, with both levels marked new.
+    fireEvent.dragEnter(screen.getByRole('tree'), { dataTransfer: { types: ['Files'] } });
+    fireEvent.dragOver(tree().getByTitle('Series'));
+    fireEvent.drop(screen.getByRole('tree'), carrying('vol-1.jpg'));
     const confirm = await screen.findByRole('dialog');
-    expect(confirm.textContent).toContain('comics/Series/');
+    expect(within(confirm).getByRole('heading').textContent).toBe('Add to comics/Series');
     expect(confirm.textContent).toContain('comics and Series are new');
     await act(async () => {
       fireEvent.click(within(confirm).getByRole('button', { name: ADD }));
@@ -252,40 +267,129 @@ describe('starting a Library from the explorer', () => {
     await waitFor(() => expect(addFiles).toHaveBeenCalledTimes(1));
     expect(vi.mocked(addFiles).mock.calls[0][0]).toBe('comics/Series');
 
-    // Read again, the Library names both, and the marks go.
-    await waitFor(() => expect(list().getByTitle('vol-1.jpg')).toBeTruthy());
-    fireEvent.click(tree().getByTitle('comics'));
-    await waitFor(() =>
-      expect(list().getByTitle('Series').textContent).not.toContain(PROSPECTIVE),
-    );
-    fireEvent.click(tree().getByTitle('Library'));
-    await waitFor(() => expect(list().getByTitle('comics').textContent).not.toContain(PROSPECTIVE));
-    expect(document.body.textContent).not.toContain(PROSPECTIVE);
+    // Read again, the Library names both, and the marks go; the folder added
+    // to was opened by the add, and shows the file.
+    await waitFor(() => expect(document.body.textContent).not.toContain('not in Library'));
+    expect(tree().getByLabelText('collapse Series')).toBeTruthy();
+    expect(await tree().findByTitle('vol-1.jpg')).toBeTruthy();
   });
 
   // EP-9: a top-level folder this device maps with nothing under it is drawn,
-  // marked, in the list and the tree, and takes "New folder…".
+  // marked, and takes "New folder…".
   it('draws an empty mapped top-level folder as a place to drop into', async () => {
     answers = (path) =>
       path === ''
         ? listing('', {
             mapped: false,
-            folders: [{ name: 'albums', path: 'albums', mapped: false }],
+            folders: [{ name: 'albums', path: 'albums', mapped: false, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
             empty_mapped_prefixes: ['comics'],
           })
         : listing(path);
     vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
     render(<App />);
-    await screen.findByRole('navigation', { name: 'folders' });
 
-    await waitFor(() => expect(list().getByTitle('comics').textContent).toContain(PROSPECTIVE));
-    expect(list().getByTitle('albums').textContent).not.toContain(PROSPECTIVE);
-    expect(await tree().findByTitle(PROSPECTIVE)).toBeTruthy();
-    // The root is not mapped, and a root of folders keeps the banner back.
-    expect(screen.queryByText('map the Library root…')).toBeNull();
-    expect(tree().queryByLabelText('actions for Library')).toBeNull();
-    await newFolder(list(), 'comics', 'Series');
-    expect(tree().getByTitle('Series')).toBeTruthy();
+    await waitFor(() => expect(tree().getByTitle('comics').textContent).toContain('not in Library'));
+    expect(tree().getByTitle('albums').textContent).not.toContain('not in Library');
+    // The root is not mapped, and a root of folders keeps the banner back; no
+    // path can be prepared right under it.
+    expect(screen.queryByText('Choose a folder…')).toBeNull();
+    expect(tree().queryByRole('button', { name: 'New folder…' })).toBeNull();
+    await newFolder('comics', 'Series');
+    expect(await tree().findByTitle('Series')).toBeTruthy();
+  });
+});
+
+// EP-9: adding needs a folder on this device for the destination's top-level
+// folder or for the whole Library; where neither is chosen it is asked for
+// first, inside the flow, and the confirmation follows.
+describe('adding where no folder on this device is chosen', () => {
+  it('asks for one first, records it, and goes on to the confirmation', async () => {
+    let chosen = false;
+    answers = (path) => {
+      const mapped = chosen;
+      const of = library({ '': ['books/'], books: ['old.jpg'] })(path);
+      return {
+        ...of,
+        mapped,
+        folders: of.folders.map((one) => ({ ...one, mapped })),
+      };
+    };
+    vi.mocked(browseFolders).mockResolvedValue({ path: '/home/someone', parent: '/home', folders: [] });
+    vi.mocked(mapFolder).mockImplementation(() => {
+      chosen = true;
+      return Promise.resolve({
+        prefix: 'books',
+        local_root: '/home/someone/books',
+        replaced: null,
+        marker: 'written',
+        message: 'books is kept in /home/someone/books',
+      });
+    });
+    render(<App />);
+
+    expect(await tree().findByTitle('books')).toBeTruthy();
+    expect(tree().getByTitle('books').textContent).toContain('no folder chosen');
+    fireEvent.dragEnter(screen.getByRole('tree'), { dataTransfer: { types: ['Files'] } });
+    fireEvent.dragOver(tree().getByTitle('books'));
+    fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+
+    const step = await screen.findByRole('dialog', { name: 'Choose a folder on this device for “books”' });
+    expect(step.textContent).toContain('everything under “books” uses it');
+    expect(step.textContent).not.toMatch(/\bmap/i);
+    fireEvent.change(within(step).getByLabelText('Folder on this device'), {
+      target: { value: '/home/someone/books' },
+    });
+    await act(async () => {
+      fireEvent.click(within(step).getByRole('button', { name: 'Use this folder' }));
+    });
+    expect(mapFolder).toHaveBeenCalledWith('/home/someone/books', 'books');
+
+    const confirm = await screen.findByRole('dialog', { name: 'Add to books' });
+    expect(confirm.textContent).toContain('new.jpg');
+    expect(addFiles).not.toHaveBeenCalled();
+  });
+
+  it('adds nothing, and asks nothing more, where the step is cancelled', async () => {
+    answers = (path) => {
+      const of = library({ '': ['books/'], books: ['old.jpg'] })(path);
+      return { ...of, mapped: false, folders: of.folders.map((one) => ({ ...one, mapped: false })) };
+    };
+    render(<App />);
+    expect(await tree().findByTitle('books')).toBeTruthy();
+    fireEvent.dragOver(tree().getByTitle('books'));
+    fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+    const step = await screen.findByRole('dialog', { name: /^Choose a folder on this device/ });
+    fireEvent.click(within(step).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mapFolder).not.toHaveBeenCalled();
+    expect(addFiles).not.toHaveBeenCalled();
+  });
+});
+
+// After Add the new rows are on the tree at once, in the uploading state,
+// before the request has answered.
+it('draws the files being added as rows at once', async () => {
+  answers = library({ '': ['albums/'], albums: ['old.jpg'] });
+  let landed: (value: { written: string[]; refused: never[] }) => void = () => undefined;
+  vi.mocked(addFiles).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        landed = resolve;
+      }),
+  );
+  render(<App />);
+  expect(await tree().findByTitle('albums')).toBeTruthy();
+  fireEvent.dragOver(tree().getByTitle('albums'));
+  fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+  const confirm = await screen.findByRole('dialog', { name: 'Add to albums' });
+  await act(async () => {
+    fireEvent.click(within(confirm).getByRole('button', { name: ADD }));
+  });
+  // Opened down to, and drawn as being added while nothing has answered.
+  const row = await tree().findByTitle('new.jpg');
+  expect(within(row).getByRole('img').getAttribute('aria-label')).toMatch(/being added/);
+  await act(async () => {
+    landed({ written: ['albums/new.jpg'], refused: [] });
   });
 });
 
@@ -294,11 +398,14 @@ describe('starting a Library from the explorer', () => {
 it('forgets a prepared path and the ones under it, and asks nothing', async () => {
   answers = (path) => listing(path);
   render(<App />);
-  await screen.findByRole('navigation', { name: 'folders' });
-  await newFolder(tree(), 'Library', 'comics');
-  await newFolder(list(), 'comics', 'Series');
-  await newFolder(tree(), 'Library', 'books');
-  expect(tree().getByTitle('Series')).toBeTruthy();
+  // The + makes `books` beside `comics` at the root before `Series` is made
+  // inside `comics` from its row.
+  await newFolderHere('comics');
+  // The new folder takes the focus; letting go of it brings the + back to the root.
+  fireEvent.keyDown(screen.getByRole('tree'), { key: 'Escape' });
+  await newFolderHere('books');
+  await newFolder('comics', 'Series');
+  expect(await tree().findByTitle('Series')).toBeTruthy();
 
   const asked = [
     vi.mocked(getListing).mock.calls.length,
@@ -310,34 +417,25 @@ it('forgets a prepared path and the ones under it, and asks nothing', async () =
 
   expect(tree().queryByTitle('comics')).toBeNull();
   expect(tree().queryByTitle('Series')).toBeNull();
-  expect(list().queryByTitle('comics')).toBeNull();
   // The others prepared are left as they were.
-  expect(tree().getByTitle('books')).toBeTruthy();
-  expect(list().getByTitle('books').textContent).toContain(PROSPECTIVE);
+  expect(tree().getByTitle('books').textContent).toContain('not in Library');
   expect([
     vi.mocked(getListing).mock.calls.length,
     vi.mocked(getFolders).mock.calls.length,
     vi.mocked(getWork).mock.calls.length,
   ]).toEqual(asked);
   expect(addFiles).not.toHaveBeenCalled();
-
-  // From the list's row too.
-  fireEvent.click(list().getByLabelText('actions for books'));
-  fireEvent.click(list().getByRole('menuitem', { name: FORGET_FOLDER }));
-  expect(list().queryByTitle('books')).toBeNull();
-  expect(tree().queryByTitle('books')).toBeNull();
 });
 
-// Forgetting the folder the list is showing, or one above it, from the tree
-// leaves the list where the forgotten path was prepared.
-it('moves the list out of a prepared path forgotten under it', async () => {
+// Forgetting the folder the focus is in, or one above it, leaves the screen in
+// the folder the forgotten path was prepared in.
+it('moves the screen out of a prepared path forgotten under it', async () => {
   answers = (path) => listing(path);
   render(<App />);
-  await screen.findByRole('navigation', { name: 'folders' });
-  await newFolder(tree(), 'Library', 'comics');
-  await newFolder(tree(), 'comics', 'Series');
-  fireEvent.click(tree().getByTitle('Series'));
-  await waitFor(() => expect(shownFolder()).toBe('comics/Series'));
+  await newFolderHere('comics');
+  await newFolder('comics', 'Series');
+  fireEvent.click(await tree().findByTitle('Series'));
+  await waitFor(() => expect(shownFolder()).toBe('comics'));
 
   fireEvent.click(tree().getByLabelText('actions for comics'));
   fireEvent.click(tree().getByRole('menuitem', { name: FORGET_FOLDER }));
@@ -346,11 +444,342 @@ it('moves the list out of a prepared path forgotten under it', async () => {
   expect(tree().queryByTitle('comics')).toBeNull();
 });
 
+// Walking the tree moves the URL to the folder the focus is in, without a
+// history entry for each row the keys pass; opening a folder adds one, and
+// shows its cover with the focus left on it and the folder left closed.
+it('follows the focus in the URL, and opens a folder on its cover and in the tree', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg', '002.jpg'] });
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Series'] });
+  render(<App />);
+  await tree().findByTitle('comics');
+  const area = screen.getByRole('tree');
+  const before = window.history.length;
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await waitFor(() => expect(shownFolder()).toBe('comics'));
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  // A closed folder's rows are not on show, so the folder it stands in is the
+  // one the URL names.
+  expect(shownFolder()).toBe('comics');
+  expect(window.history.length).toBe(before);
+
+  fireEvent.keyDown(area, { key: 'Enter' });
+  await waitFor(() => expect(parseHash(window.location.hash).cover).toBe('comics/Series'));
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('cover of Series')).toBeTruthy();
+  expect(reader.getByText(`Folder · 2 items · ${size(0)}`)).toBeTruthy();
+  // The focus stays on the folder, and the folder is open too, so `↓` goes on
+  // into its pages with the sheet following.
+  expect(tree().getByTitle('Series').getAttribute('aria-selected')).toBe('true');
+  expect(tree().getByLabelText('collapse Series')).toBeTruthy();
+  await tree().findByTitle('001.jpg');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('comics/Series/001.jpg'));
+  expect(tree().getByTitle('001.jpg').getAttribute('aria-selected')).toBe('true');
+});
+
+// The sheet follows the tree's focus: walking the page rows of an open book
+// is paging, and the history keeps one entry for the whole of it.
+it('shows what the focus moves to while the sheet is open', async () => {
+  const base = library({ '': ['comics/'], comics: ['Series/', 'notes.txt'], 'comics/Series': ['001.jpg', '002.jpg'] });
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      files: one.files.map((file) => (file.name === 'notes.txt' ? { ...file, openable: false } : file)),
+    };
+  };
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Series'] });
+  window.history.replaceState(null, '', '#path=comics&cover=comics/Series');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('cover of Series')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('1 / 2');
+  const area = screen.getByRole('tree');
+  area.focus();
+  const before = window.history.length;
+
+  // `→` is the tree's: it opens the folder, and the sheet stays on it.
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('001.jpg');
+  expect(reader.getByAltText('cover of Series')).toBeTruthy();
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByAltText('001.jpg')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('1 / 2');
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'comics/Series', open: 'comics/Series/001.jpg' });
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByAltText('002.jpg')).toBeTruthy();
+  expect(reader.queryByAltText('001.jpg')).toBeNull();
+  expect(reader.getByLabelText('position').textContent).toBe('2 / 2');
+
+  // Off the end of the book, onto a file of the folder above that the reader
+  // cannot draw: the sheet says so, and counts it among its own siblings.
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(reader.getByLabelText('position').textContent).toBe('2 / 2');
+  expect(window.history.length).toBe(before);
+
+  // Escape closes it, and the focus stays where the reading stopped.
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'comics', open: null });
+  expect(tree().getByTitle('notes.txt').getAttribute('aria-selected')).toBe('true');
+});
+
+// The header over the tree: the Library's name, and where the focus stands,
+// moving with the tree's focus as the details pane does; and its + opens over
+// the folder the focus is in.
+it('names the Library in the header, and the location follows the focus', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
+  render(<App />);
+  await tree().findByTitle('comics');
+  const header = within(screen.getByRole('banner'));
+  await waitFor(() => expect(header.getByTestId('library').textContent).toBe('main'));
+  const location = () => header.getByTestId('location').textContent;
+  expect(location()).toBe('Library');
+  const area = screen.getByRole('tree');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(location()).toBe('comics');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('001.jpg');
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  expect(location()).toBe('comics / Series / 001.jpg');
+  expect(header.getByRole('button', { name: 'Add files' }).getAttribute('title')).toBe(
+    'Add to comics/Series',
+  );
+  // Nothing of the Library's name is left in the Activity panel's row.
+  expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
+});
+
+// `Escape` climbs to the folder the focus stands in, and from a top-level row
+// lets go of the focus; with nothing focused the header's **+** is about the
+// Library root, and its "New folder…" makes the folder there.
+it('makes a folder at the Library root from the + once the focus is let go of', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
+  render(<App />);
+  await tree().findByTitle('comics');
+  const area = screen.getByRole('tree');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
+  expect(location()).toBe('comics / Series');
+  fireEvent.keyDown(area, { key: 'Escape' });
+  expect(location()).toBe('comics');
+  fireEvent.keyDown(area, { key: 'Escape' });
+  expect(location()).toBe('Library');
+  await openNewFolderFromAdd();
+  expect(await screen.findByRole('dialog', { name: 'New folder in the Library' })).toBeTruthy();
+  await nameIt('books');
+  // The new folder takes the focus where it was made: at the root.
+  await waitFor(() => expect(location()).toBe('books'));
+});
+
+// A click on the empty space below the rows lets go of the focus too.
+it('lets go of the focus on a click below the rows', async () => {
+  answers = library({ '': ['comics/'], comics: ['1.jpg'] });
+  render(<App />);
+  fireEvent.click(await tree().findByTitle('comics'));
+  const location = () => within(screen.getByRole('banner')).getByTestId('location').textContent;
+  expect(location()).toBe('comics');
+  fireEvent.click(screen.getByRole('tree'));
+  expect(location()).toBe('Library');
+});
+
+// The details pane follows the focused row, says what it is in words that fit
+// any file, and opens what `Enter` opens.
+it('describes the focused row in the details pane, and opens it from there', async () => {
+  const base = library({
+    '': ['comics/', 'papers/'],
+    comics: ['Series/'],
+    'comics/Series': ['001.jpg', '002.jpg'],
+    papers: ['manual.pdf'],
+  });
+  // What the Library says of everything below `comics`: its bytes, and when
+  // the newest file anywhere in it was modified.
+  const modified = '2026-03-04T05:06:00Z';
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      folders: one.folders.map((folder) =>
+        folder.path === 'comics' ? { ...folder, size: 5_000_000, mtime: modified } : folder,
+      ),
+    };
+  };
+  render(<App />);
+  await tree().findByTitle('comics');
+  const area = screen.getByRole('tree');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  expect(pane.getByText('Nothing selected')).toBeTruthy();
+
+  // A folder holding a folder and no images: its items, and no Open.
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'comics' })).toBeTruthy();
+  await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
+  expect(definition(pane, 'Kind')).toBe('Folder');
+  expect(definition(pane, 'Size')).toBe(size(5_000_000));
+  expect(definition(pane, 'Modified')).toBe(time(modified));
+  expect(definition(pane, 'On this device')).toBe('No');
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+  // And `Enter` on it opens no sheet, and says why.
+  fireEvent.keyDown(area, { key: 'Enter' });
+  expect(
+    await screen.findByText('comics holds nothing the reader can show — open a folder of pages, or a file'),
+  ).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
+
+  // `Enter` opened it in the tree, though: a folder of pages inside, closed —
+  // its cover, peeked and never fetched, and Open.
+  await tree().findByTitle('Series');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'Series' })).toBeTruthy();
+  await waitFor(() => expect(peekFile).toHaveBeenCalledWith('comics/Series/001.jpg', expect.anything()));
+  expect(getFile).not.toHaveBeenCalled();
+  fireEvent.click(await pane.findByRole('button', { name: 'Open' }));
+  await waitFor(() =>
+    expect(parseHash(window.location.hash)).toEqual({
+      folder: 'comics',
+      open: null,
+      cover: 'comics/Series',
+    }),
+  );
+  // And hands the focus to the tree, whose keys the sheet follows.
+  expect(document.activeElement).toBe(area);
+});
+
+// Rows selected together with modifier keys are what the details pane
+// describes — the same rows the tree tints — and its `Delete <n> items…` asks
+// the same question the actions menu does, for all of them in one deletion.
+it('describes the rows selected together, and deletes them from the details pane', async () => {
+  answers = library({ '': ['comics/', 'papers/', 'cover.jpg'], comics: ['1.jpg'], papers: ['manual.pdf'] });
+  vi.mocked(previewDelete).mockResolvedValue({
+    folders: ['comics', 'papers'],
+    paths: ['cover.jpg'],
+    entries: 3,
+    bytes: 30,
+    removed: 2,
+    rebuilt: 1,
+    rebuild_read: 2_000_000,
+    rebuild_written: 1_000_000,
+    refused: [],
+    missing: [],
+    after_current: false,
+  });
+  render(<App />);
+  fireEvent.click(await tree().findByTitle('comics'));
+  fireEvent.click(tree().getByTitle('cover.jpg'), { shiftKey: true });
+
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  expect(await pane.findByRole('heading', { name: '3 items selected' })).toBeTruthy();
+  fireEvent.click(pane.getByRole('button', { name: 'Delete 3 items…' }));
+  const asked = await screen.findByRole('dialog', { name: 'Delete 3 items?' });
+  expect(vi.mocked(previewDelete)).toHaveBeenCalledWith({ folders: ['comics', 'papers'], paths: ['cover.jpg'] });
+  expect(asked.textContent).toContain('1 Pack holding other files will be rebuilt');
+  expect(document.activeElement?.textContent).toBe('Cancel');
+  fireEvent.click(within(asked).getByRole('button', { name: 'Cancel' }));
+  expect(startDelete).not.toHaveBeenCalled();
+
+  // A plain click drops the selection, and the pane describes one row again.
+  fireEvent.click(tree().getByTitle('papers'));
+  expect(await pane.findByRole('heading', { name: 'papers' })).toBeTruthy();
+});
+
+// A folder created with "New folder…" takes the focus, so the next drop or
+// "New folder…" is about it.
+it('focuses the folder "New folder…" creates', async () => {
+  answers = (path) => listing(path);
+  render(<App />);
+  await newFolderHere('comics');
+  await waitFor(() => expect(tree().getByTitle('comics').getAttribute('aria-selected')).toBe('true'));
+  await newFolder('comics', 'Series');
+  await waitFor(() => expect(tree().getByTitle('Series').getAttribute('aria-selected')).toBe('true'));
+  expect(tree().getByTitle('comics').getAttribute('aria-selected')).toBe('false');
+});
+
+// The sheet opens only on a row the reader can show: on a file it cannot,
+// the pane offers no Open, and `Enter` leaves the sheet shut and says why.
+it('opens no sheet on a file the reader cannot show, and says why', async () => {
+  const base = library({ '': ['papers/'], papers: ['manual.pdf'] });
+  answers = (path) => {
+    const one = base(path);
+    return { ...one, files: one.files.map((file) => ({ ...file, openable: false })) };
+  };
+  render(<App />);
+  await tree().findByTitle('papers');
+  const area = screen.getByRole('tree');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowRight' });
+  await tree().findByTitle('manual.pdf');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'manual.pdf' })).toBeTruthy();
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+
+  fireEvent.keyDown(area, { key: 'Enter' });
+  expect(await screen.findByText('manual.pdf — preview of this format is not supported yet')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'papers', open: null });
+});
+
+// With the sheet already open, it follows the focus onto a file it cannot
+// draw, and says so in itself rather than closing.
+it('follows the focus onto a file it cannot draw while the sheet is open', async () => {
+  const base = library({ '': ['papers/'], papers: ['001.jpg', 'manual.pdf'] });
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      files: one.files.map((file) => (file.name === 'manual.pdf' ? { ...file, openable: false } : file)),
+    };
+  };
+  window.history.replaceState(null, '', '#path=papers&open=papers/001.jpg');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('001.jpg')).toBeTruthy();
+  const area = screen.getByRole('tree');
+  area.focus();
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(parseHash(window.location.hash)).toEqual({ folder: 'papers', open: 'papers/manual.pdf' });
+  expect(screen.queryByText('manual.pdf — preview of this format is not supported yet')).toBeNull();
+});
+
+// A focused folder whose listing was refused does not count its items as
+// still coming.
+it('says no item count for a focused folder whose listing was refused', async () => {
+  answers = library({ '': ['comics/'], comics: ['001.jpg'] });
+  vi.mocked(getListing).mockImplementation((path: string) =>
+    path === 'comics' ? Promise.reject(new Error('refused')) : Promise.resolve(answers(path)),
+  );
+  render(<App />);
+  await tree().findByTitle('comics');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+  fireEvent.keyDown(screen.getByRole('tree'), { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'comics' })).toBeTruthy();
+  await waitFor(() => expect(definition(pane, 'Items')).toBe('—'));
+  expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
+});
+
+/** What the details pane says against one fact's name. */
+function definition(pane: ReturnType<typeof within>, name: string): string | null {
+  const term = pane.getByText(name, { selector: 'dt' });
+  return term.nextElementSibling?.textContent ?? null;
+}
+
 /** A deletion of `folder` that ended, every file of it removed. */
 function deletionOf(folder: string): Delete {
   return {
     run: 1,
-    folder,
+    folders: [folder],
     paths: [],
     entries: 3,
     bytes: 30,
@@ -370,13 +799,17 @@ function deletionOf(folder: string): Delete {
 }
 
 /**
- * Deletes the book `name` from its row of the tree. The Library becomes `after`
+ * Deletes the folder `name` from its row of the tree. The Library becomes `after`
  * — the tree's answer and the listings — once the deletion is armed, and the
  * next work answer says it ended.
+ *
+ * Answers with the folder the screen was on as Delete was pressed: the menu
+ * focuses the row it was opened on, which moves the screen to the folder that
+ * row stands in.
  */
-async function deleteFromTree(name: string, folder: string, after: () => void) {
+async function deleteFromTree(name: string, folder: string, after: () => void): Promise<string> {
   vi.mocked(previewDelete).mockResolvedValue({
-    folder,
+    folders: [folder],
     paths: [],
     entries: 3,
     bytes: 30,
@@ -390,20 +823,28 @@ async function deleteFromTree(name: string, folder: string, after: () => void) {
   });
   vi.mocked(startDelete).mockImplementation(() => {
     after();
-    vi.mocked(getWork).mockResolvedValue({ ...IDLE, delete: deletionOf(folder) });
+    // The server logs the deletion as it publishes its end (spec: LA-12).
+    const ended = deletionOf(folder);
+    vi.mocked(getWork).mockResolvedValue({
+      ...IDLE,
+      delete: ended,
+      log: [{ id: 1, at: new Date().toISOString(), settled: false, kind: 'delete', run: ended }],
+    });
     return Promise.resolve(IDLE);
   });
   fireEvent.click(await tree().findByLabelText(`actions for ${name}`));
   fireEvent.click(tree().getByRole('menuitem', { name: 'Delete…' }));
   const asked = await screen.findByRole('dialog');
+  const on = shownFolder();
   await act(async () => {
     fireEvent.click(within(asked).getByRole('button', { name: 'Delete' }));
   });
+  return on;
 }
 
-/** The notice over the list, and the empty string where none stands. */
-function noticeSaid(): string {
-  return [...document.querySelectorAll('main > p')].map((line) => line.textContent).join(' ');
+/** What the Activity panel's row says. */
+function activitySaid(): string {
+  return screen.getByRole('contentinfo', { name: 'Activity' }).textContent ?? '';
 }
 
 /** The folder the screen is on, as the URL says it. */
@@ -425,11 +866,14 @@ describe('the end of a deletion', () => {
     answers = (path) =>
       path === ''
         ? deleted
-          ? listing('', { folders: [{ name: 'albums', path: 'albums', mapped: true }], empty_mapped_prefixes: ['comics'] })
+          ? listing('', {
+              folders: [{ name: 'albums', path: 'albums', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
+              empty_mapped_prefixes: ['comics'],
+            })
           : listing('', {
               folders: [
-                { name: 'albums', path: 'albums', mapped: true },
-                { name: 'comics', path: 'comics', mapped: true },
+                { name: 'albums', path: 'albums', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null },
+                { name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null },
               ],
             })
         : listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
@@ -439,19 +883,17 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(tree().getByTitle('comics')).toBeTruthy());
     await waitFor(() => expect(rootAsked()).toBe(1));
 
-    await deleteFromTree('comics', 'comics', () => {
+    const on = await deleteFromTree('comics', 'comics', () => {
       deleted = true;
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
     });
 
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     await waitFor(() => expect(rootAsked()).toBe(2));
-    await waitFor(() =>
-      expect(tree().getByTitle('comics').parentElement?.textContent).toContain('not in Library'),
-    );
-    expect(shownFolder()).toBe('albums');
+    await waitFor(() => expect(tree().getByTitle('comics').textContent).toContain('not in Library'));
+    expect(shownFolder()).toBe(on);
   });
 
   // At the root the listing asked again is the root's own, and nothing else is
@@ -459,7 +901,9 @@ describe('the end of a deletion', () => {
   it('asks the root once where the screen is on it', async () => {
     answers = (path) =>
       path === ''
-        ? listing('', { folders: [{ name: 'comics', path: 'comics', mapped: true }] })
+        ? listing('', {
+            folders: [{ name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }],
+          })
         : listing(path, { held: true });
     vi.mocked(getFolders).mockResolvedValue({ folders: ['comics'] });
     render(<App />);
@@ -469,7 +913,7 @@ describe('the end of a deletion', () => {
     await deleteFromTree('comics', 'comics', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: [] });
     });
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     // The list's own listing, asked again for the deletion, and nothing more.
@@ -481,15 +925,20 @@ describe('the end of a deletion', () => {
   });
 
   // The folder on the screen gone, the list moves to the nearest folder above
-  // that the Library still holds, and the notice saying so stays.
+  // that the Library still holds, and the panel says what the deletion came to.
   it('moves the list up from a folder the deletion took away', async () => {
-    answers = (path) => listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
+    answers = library({
+      '': ['comics/'],
+      comics: ['Other/', 'Series/', '1.jpg'],
+      'comics/Other': ['1.jpg'],
+      'comics/Series': ['1.jpg'],
+    });
     vi.mocked(getFolders).mockResolvedValue({
       folders: ['comics', 'comics/Other', 'comics/Series'],
     });
     window.history.replaceState(null, '', toHash({ folder: 'comics/Series', open: null }));
     render(<App />);
-    await waitFor(() => expect(list().getByTitle('1.jpg')).toBeTruthy());
+    await waitFor(() => expect(tree().getAllByTitle('1.jpg').length).toBeGreaterThan(0));
 
     await deleteFromTree('Series', 'comics/Series', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', 'comics/Other'] });
@@ -497,15 +946,20 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(shownFolder()).toBe('comics'), {
       timeout: 3000,
     });
-    expect(noticeSaid()).toContain('removed from the Library');
+    expect(activitySaid()).toContain('removed from the Library');
   });
 
   it('moves the list to the root where nothing above is held any longer', async () => {
-    answers = (path) => listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
+    answers = library({
+      '': ['albums/', 'comics/'],
+      albums: ['1.jpg'],
+      comics: ['Series/'],
+      'comics/Series': ['1.jpg'],
+    });
     vi.mocked(getFolders).mockResolvedValue({ folders: ['albums', 'comics', 'comics/Series'] });
     window.history.replaceState(null, '', toHash({ folder: 'comics/Series', open: null }));
     render(<App />);
-    await waitFor(() => expect(list().getByTitle('1.jpg')).toBeTruthy());
+    await waitFor(() => expect(tree().getAllByTitle('1.jpg').length).toBeGreaterThan(0));
 
     await deleteFromTree('Series', 'comics/Series', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
@@ -513,65 +967,41 @@ describe('the end of a deletion', () => {
     await waitFor(() => expect(shownFolder()).toBe(''), {
       timeout: 3000,
     });
-    expect(noticeSaid()).toContain('removed from the Library');
+    expect(activitySaid()).toContain('removed from the Library');
   });
 
   it('leaves the screen where it is when the folder deleted is elsewhere', async () => {
-    answers = (path) => listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
+    answers = library({ '': ['albums/', 'comics/'], albums: ['1.jpg'], comics: ['1.jpg'] });
     vi.mocked(getFolders).mockResolvedValue({ folders: ['albums', 'comics'] });
     window.history.replaceState(null, '', toHash({ folder: 'albums', open: null }));
     render(<App />);
-    await waitFor(() => expect(list().getByTitle('1.jpg')).toBeTruthy());
+    await waitFor(() => expect(tree().getAllByTitle('1.jpg').length).toBeGreaterThan(0));
 
-    await deleteFromTree('comics', 'comics', () => {
+    const on = await deleteFromTree('comics', 'comics', () => {
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
+      answers = library({ '': ['albums/'], albums: ['1.jpg'] });
     });
-    await waitFor(() => expect(noticeSaid()).toContain('removed from the Library'), {
+    await waitFor(() => expect(activitySaid()).toContain('removed from the Library'), {
       timeout: 3000,
     });
     await waitFor(() => expect(tree().queryByTitle('comics')).toBeNull());
-    expect(shownFolder()).toBe('albums');
+    expect(shownFolder()).toBe(on);
   });
 });
 
-// A row of the tree is read off the root's listing: until it answers, a drag
-// over a row is drawn in neither colour and says the answer is not in yet,
-// and once it has, each row says what it comes to.
-it('keeps a tree row neutral until the root’s listing answers', async () => {
-  let answerRoot: (root: Listing) => void = () => undefined;
-  vi.mocked(getListing).mockImplementation((path: string) =>
-    path === ''
-      ? new Promise<Listing>((resolve) => (answerRoot = resolve))
-      : Promise.resolve(listing(path, { held: true })),
-  );
-  vi.mocked(getFolders).mockResolvedValue({ folders: ['albums', 'books'] });
-  window.history.replaceState(null, '', toHash({ folder: 'albums', open: null }));
+// The tree draws from the listings alone, so a refusal of the Library's
+// folders would otherwise leave nothing on the screen saying it, and nothing
+// to press to ask again — while the stranded folders and the way out of a
+// deleted folder wait on that answer.
+it('says a refusal of the Library’s folders over the tree, and asks again', async () => {
+  answers = library({ '': ['comics/'] });
+  vi.mocked(getFolders).mockRejectedValue(new Refusal('server', 500, 'the catalog could not be read'));
   render(<App />);
-  await waitFor(() => expect(tree().getByTitle('books')).toBeTruthy());
+  await tree().findByTitle('comics');
+  expect(await tree().findByText('the catalog could not be read')).toBeTruthy();
 
-  /** The element a row's drag handlers are on, which holds its name. */
-  const rowOf = (name: string) => tree().getByTitle(name).parentElement?.parentElement as HTMLElement;
-  const carryingFiles = { dataTransfer: { types: ['Files'] } };
-  fireEvent.dragEnter(rowOf('albums'), carryingFiles);
-  fireEvent.dragEnter(rowOf('books'), carryingFiles);
-  for (const name of ['albums', 'books']) {
-    expect(rowOf(name).textContent).toContain(NOT_KNOWN_YET);
-    expect(rowOf(name).style.outline).toBe(`2px dashed ${COLOR.dim}`);
-  }
-
-  await act(async () => {
-    answerRoot(
-      listing('', {
-        mapped: false,
-        folders: [
-          { name: 'albums', path: 'albums', mapped: true },
-          { name: 'books', path: 'books', mapped: false },
-        ],
-      }),
-    );
-  });
-  expect(rowOf('albums').textContent).toContain(TAKEN);
-  expect(rowOf('albums').style.outline).toBe(`2px dashed ${COLOR.added}`);
-  expect(rowOf('books').textContent).toContain('a drop here is not taken');
-  expect(rowOf('books').style.outline).toBe(`2px dashed ${COLOR.refused}`);
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics'] });
+  fireEvent.click(tree().getByRole('button', { name: 'try again' }));
+  await waitFor(() => expect(tree().queryByText('the catalog could not be read')).toBeNull());
+  expect(tree().getByTitle('comics')).toBeTruthy();
 });

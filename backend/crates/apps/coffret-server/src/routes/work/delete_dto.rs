@@ -11,8 +11,8 @@ pub(super) struct DeleteDto {
     /// Which run of the deletion this is, counted from the start of this
     /// process.
     run: u64,
-    /// The folder it deletes, and `null` where it names files only.
-    folder: Option<String>,
+    /// The folders it deletes, in Entry Path order; empty where it names files only.
+    folders: Vec<String>,
     /// The files it names, in Entry Path order.
     paths: Vec<String>,
     /// `deleting`, `done` or `stopped`.
@@ -55,7 +55,7 @@ impl DeleteDto {
         let run = &report.on_record;
         Self {
             run: run.run,
-            folder: run.target.folder_named(),
+            folders: run.target.folders_named(),
             paths: run.target.paths_named(),
             status: run.status.as_str(),
             entries: run.entries,

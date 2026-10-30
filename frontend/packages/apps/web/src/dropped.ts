@@ -68,7 +68,7 @@ export interface Dropping {
  * where no answer arrives either, the reload beside it is the request somebody
  * is actually waiting on, and that is what says a server has gone.
  *
- * It never rejects. What a refusal becomes is a sentence in the notice area
+ * It never rejects. What a refusal becomes is a notice in the Activity panel
  * beside the rows.
  */
 export async function askToAdd(dropping: Dropping): Promise<void> {
@@ -99,7 +99,7 @@ export async function askToAdd(dropping: Dropping): Promise<void> {
  * The first one and a count of the rest. A drop of three hundred pages onto a
  * folder the Library holds a Pack in refuses three hundred times for the one
  * reason, and three hundred sentences would say it three hundred times over a
- * notice area one line high.
+ * panel whose entries are a line each.
  */
 export function refusedLine(refused: readonly RefusedPart[]): string {
   const [first] = refused;
@@ -145,9 +145,9 @@ export function brokeOff(refused: unknown, library: Named | null): string {
   }
   if (isRefusal(refused) && refused.kind === 'unreachable') {
     return (
-      'that drop did not finish sending, so how much of it arrived is not known here — ' +
+      'those files did not finish sending, so how many of them arrived is not known here — ' +
       'the rows below are the folder as it stands now, and anything not in them can be ' +
-      'dropped again'
+      'added again'
     );
   }
   return said(refused);
@@ -177,25 +177,25 @@ export function overBudgetLine(overdrawn: Overdrawn, library: Named | null): str
   // Fewer files at a time, and not subfolders: a drop of loose files has none,
   // and a folder dropped whole may have none either.
   const instead =
-    'Drop fewer files at a time, or copy them into this folder on the device it is ' +
-    `mapped to and run ${sync}.`;
+    'Add fewer files at a time, or copy them to where this folder is on this device ' +
+    `and run ${sync}.`;
   switch (overdrawn.budget) {
     case 'part': {
       const [carried, limit] = against(overdrawn.size, overdrawn.limit);
       return (
         `${overdrawn.name} is ${carried}, more than the ${limit} ` +
-        'one file can be when dropped here. Copy it into this folder on the device it is ' +
-        `mapped to and run ${sync}.`
+        'one file can be when added here. Copy it to where this folder is on this ' +
+        `device and run ${sync}.`
       );
     }
     case 'parts':
       return (
-        `this drop holds ${overdrawn.count} files, more than the ${overdrawn.limit} one drop ` +
-        `can carry. ${instead}`
+        `these are ${overdrawn.count} files, more than the ${overdrawn.limit} that can be ` +
+        `added at once. ${instead}`
       );
     case 'request': {
       const [carried, limit] = against(overdrawn.carried, overdrawn.limit);
-      return `this drop comes to ${carried}, more than the ${limit} one drop can carry. ${instead}`;
+      return `these files come to ${carried}, more than the ${limit} that can be added at once. ${instead}`;
     }
   }
 }

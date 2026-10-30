@@ -356,6 +356,35 @@ async fn a_name_in_another_spelling_names_the_same_entry() {
     }
 }
 
+// A peek is answered from this device alone: an Entry it does not have is not
+// fetched and stays remote, and the refusal says the file is not here rather
+// than that the Library holds nothing there. A file somebody added is on this
+// device, so a peek shows it.
+#[tokio::test]
+async fn a_peek_at_an_entry_this_device_does_not_have_fetches_nothing() {
+    let served = Served::library().await;
+
+    let (status, refusal) = body_of(
+        served
+            .get("/api/file?path=albums/2026/spring.jpg&peek=true")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 404);
+    assert_eq!(refusal["error"], "no_such_entry");
+    assert_eq!(refusal["message"], "this device holds no file at that path");
+    assert!(!served.holds("albums/2026/spring.jpg"));
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["fill"], serde_json::Value::Null, "no fill: {work}");
+
+    served.plant_locally("albums/just-added.txt", b"local addition");
+    let added = served
+        .get("/api/file?path=albums/just-added.txt&peek=true")
+        .await;
+    assert_eq!(added.status(), 200);
+    assert_eq!(bytes(added).await, b"local addition");
+}
+
 // EP-5: the Library holds at most one current Entry at a path, and none there is
 // an answer about the request rather than a failure.
 #[tokio::test]
