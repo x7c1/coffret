@@ -242,6 +242,57 @@
     "prefix": "books",
     "replaced": null
   },
+  "move_preview": {
+    "edited": [],
+    "entries": 3,
+    "following": 2,
+    "leaving": 0,
+    "leaving_bytes": 0,
+    "pairs": [
+      {
+        "from": "albums/2026",
+        "to": "books/2026"
+      },
+      {
+        "from": "albums/cover.png",
+        "to": "books/cover.png"
+      }
+    ],
+    "refused": [],
+    "uploading": []
+  },
+  "moved": {
+    "entries": 3,
+    "findings": [
+      {
+        "message": "this device's file was relocated here to follow a rename of its Entry",
+        "path": "books/2026/spring.jpg",
+        "reason": "surfaced",
+        "surfaced": "Relocated"
+      },
+      {
+        "message": "this device's file was relocated here to follow a rename of its Entry",
+        "path": "books/2026/summer.jpg",
+        "reason": "surfaced",
+        "surfaced": "Relocated"
+      }
+    ],
+    "left": 0,
+    "pairs": [
+      {
+        "from": "albums/2026",
+        "to": "books/2026"
+      },
+      {
+        "from": "albums/cover.png",
+        "to": "books/cover.png"
+      }
+    ],
+    "relocated": 2,
+    "status": "done",
+    "stopped": null,
+    "unrelocated": null
+  },
   "reconnecting": {
     "message": "answer Google's consent page in the tab that opened, and this device goes on with the renewed permission",
     "url": "https://consent.example/?state=the-flows-own"

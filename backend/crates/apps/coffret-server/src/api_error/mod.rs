@@ -2,7 +2,7 @@
 //!
 //! The value, and the builders every way of naming one goes through, are here.
 //! The ways of naming one are grouped by what they answer: [`admission`],
-//! [`paths`], [`declines`], [`placements`] (with [`refused_root`]),
+//! [`paths`], [`declines`], [`placements`] (with [`refused_root`]), [`moves`],
 //! [`drop_budget`], [`local_folders`] and [`server`]. What a failure from below
 //! becomes is in [`from_error`], what may be said about one in a diagnostic
 //! event is in [`redact`], and what goes on the wire is in [`into_response`].
@@ -24,6 +24,8 @@ mod imports;
 mod into_response;
 
 mod local_folders;
+
+mod moves;
 
 mod paths;
 
@@ -116,8 +118,8 @@ pub struct ApiError {
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
     /// `unauthorized` (403), `no_such_entry` or `no_such_route` (404),
-    /// `declined`, `refused_placement`, `epoch`, `library_predates_format` or
-    /// `conflict` (409), `locked`
+    /// `declined`, `refused_placement`, `refused_move`, `epoch`,
+    /// `library_predates_format` or `conflict` (409), `locked`
     /// (423), `storage` or `unverified` (502), and `server` (500).
     ///
     /// `declined` and `refused_placement` are the two verdicts on a placement,
@@ -168,6 +170,14 @@ pub struct ApiError {
     /// carrying a name an operating system keeps beside a person's files
     /// (spec: EP-17). Present wherever the kind is `declined` or
     /// `refused_placement`, and the whole set for the same reason.
+    ///
+    /// `refused_move` always carries one too, which is what refused the move
+    /// ([`moves`]): `nothing_to_move`, `overlapping`, `same_path`,
+    /// `reserved_namespace`, `into_itself`, `destination_taken`,
+    /// `file_and_folder` or `rename_rule` for a set the Library does not admit
+    /// (spec: FM-15, EP-5), `edited` for a file of this device's in it that
+    /// changed since it was placed (spec: EP-15), and `uploading` for a file
+    /// under it the Library does not hold yet (spec: EP-10).
     ///
     /// And one that is not about a placement: `unauthenticated` under
     /// `storage`, for a credential Storage no longer takes — a grant that ran

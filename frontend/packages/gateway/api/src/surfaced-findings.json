@@ -12,6 +12,7 @@
   "DiscardRefused",
   "Relocated",
   "RelocationDiscarded",
+  "RelocationLeft",
   "RelocationRefused",
   "Renamed",
   "RenameRefused",

@@ -425,19 +425,18 @@ fn from_delete(cause: DeleteError) -> ApiError {
     refusal.caused_by(cause)
 }
 
-/// What a rename's own failure comes back as.
+/// What a rename's own failure comes back as: the move route's.
 ///
-/// No route renames yet, so this is where the verdicts a rename shares with
-/// every other flow are placed — Storage, the commit, the catalog — and its own
-/// refusals wait for the route that will give a browser something to act on.
-/// Until then they are the server's, as every verdict nothing asked for is.
+/// The verdicts a rename shares with every other flow are placed as theirs are
+/// — Storage, the commit, the catalog — and its own refusal of the set is a
+/// `refused_move`, in the words a preview shows it in.
 fn from_rename(cause: RenameError) -> ApiError {
     let refusal = match &cause {
         RenameError::Storage(storage) => from_storage(storage),
         RenameError::Commit(commit) => from_commit(&commit.error),
         RenameError::Index(IndexError::PendingRowsBusy { .. }) => ApiError::pending_rows_busy(),
         RenameError::Index(_) | RenameError::NotRelocated { .. } => catalog_unusable(),
-        RenameError::Refused(_) => ApiError::could_not_answer(),
+        RenameError::Refused(refused) => ApiError::move_refused_by(refused),
     };
     refusal.caused_by(cause)
 }

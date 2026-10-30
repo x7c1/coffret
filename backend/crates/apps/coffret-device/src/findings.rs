@@ -337,13 +337,16 @@ fn renamed(renamed: &RenamedPath) -> Finding {
 ///
 /// Said about the file a person would go and look at: where it stands now for
 /// one relocated, and where it still stands — or stood, for one discarded —
-/// for the others.
+/// for the others; one that left this device because it could not follow is
+/// said at the Entry Path its Entry has now, which is where a person finds it
+/// again.
 fn relocation(relocation: &Relocation) -> Finding {
     let (path, reason) = match relocation {
         Relocation::Relocated { from, to } => (to, FindingReason::Relocated { from: from.clone() }),
         Relocation::Discarded { from, to } => {
             (from, FindingReason::RelocationDiscarded { to: to.clone() })
         }
+        Relocation::Left { from, to } => (to, FindingReason::RelocationLeft { from: from.clone() }),
         Relocation::Refused { from, to, reason } => (
             from,
             FindingReason::RelocationRefused {

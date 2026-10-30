@@ -49,6 +49,8 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   each top-level component this device maps that no Entry stands under yet
 - translate (an Entry Path into a local path under the mapped root)
 - stamp (the filesystem a mapped root stood on, during a scan)
+- leave (this device, as a file does that cannot follow a rename of its Entry
+  to where no mapping reaches or onto another filesystem)
 - adopt (the identity a mapped root's marker already carries, when the mapping
   is recorded)
 - issue (a new identity for a mapped root, when a person asks for one)
@@ -100,10 +102,18 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
   root itself if the person named it through a symbolic link, and below it
   descends without following links, so a mapping reaches the folder the person
   pointed it at and nothing a link inside it points to (spec: EP-8).
-- A rename can give an Entry a current path under another mapping. The device
-  does not relocate its file across: a file is relocated only within the
-  mapped root it stands in, so it stays where it was placed, waiting, and is
-  reported (spec: EP-9, EP-10).
+- A rename can give an Entry a current path under another mapping, or under
+  none. Where the two mapped roots stand on the same mounted filesystem — one
+  `st_dev`, the filesystem identity a scan stamps for each root — and both
+  vouch for themselves, the device's file follows with one filesystem rename,
+  as it does within one root. Where no mapping reaches the new path, or the
+  roots stand on different filesystems — or the rename is refused as crossing
+  them anyway, as a bind mount or a subvolume can make it — the file **leaves**
+  the device unless it was edited: an unedited one is discarded into the
+  desktop's trash and its record forgotten, so the Entry is in the Library and
+  not on this device at its new path, and an edited one stays where it was
+  placed, waiting, and is reported.
+  Nothing is copied across (spec: EP-9, EP-10, EP-12, EP-13).
 - Recording a mapping needs no [Passphrase](../passphrase/): it is device state
   kept unencrypted in this device's Index, and what a device calls its own
   folders says nothing the Library keeps secret.

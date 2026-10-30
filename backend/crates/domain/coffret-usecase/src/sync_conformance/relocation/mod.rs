@@ -4,9 +4,13 @@
 //! A rename changes an Entry's current path in the catalog, and the file this
 //! device placed for it stays where it was, its record waiting to follow. A
 //! sync relocates every such file before it scans: one rename inside the
-//! mapped root, and the record after it. A file that cannot be relocated — its root
-//! not there, the file edited, something of the person's where it would go —
-//! is left exactly where it stands, reported, and tried again by the next run.
+//! mapped root, or across two on one filesystem, and the record after it. A
+//! file that cannot follow at all — no mapped root reaches the new path, or
+//! the one that does is on another filesystem — leaves this device: discarded
+//! into the trash where it is unedited. A file that cannot be relocated this
+//! run — its root not there, the file edited, something of the person's where
+//! it would go — is left exactly where it stands, reported, and tried again by
+//! the next run.
 //! Throughout, nothing is uploaded, overwritten, or claimed for another Entry.
 
 use std::path::{Path, PathBuf};
@@ -48,14 +52,21 @@ pub use relocated::{
     files_whose_entries_traded_names_exchange_them,
 };
 
+mod leaving;
+pub use leaving::{
+    a_file_follows_its_entry_across_mapped_roots_on_one_filesystem,
+    a_file_the_filesystem_will_not_rename_across_leaves_the_device,
+    a_file_whose_new_path_no_mapping_reaches_leaves_the_device,
+    a_file_whose_new_root_is_on_another_filesystem_leaves_the_device,
+    an_edited_file_that_cannot_follow_is_kept_and_reported,
+};
+
 mod refusals;
 pub use refusals::{
     a_cycle_refused_partway_reports_the_rest_as_waiting,
     a_file_behind_a_refused_waiting_file_waits_for_it,
     a_file_edited_since_it_was_placed_is_not_relocated,
-    a_relocation_across_mapped_roots_is_refused,
     a_relocation_onto_a_name_the_system_files_rule_leaves_out_is_refused,
-    a_relocation_onto_another_filesystem_is_refused,
     a_relocation_through_a_symbolic_link_is_refused, a_relocation_under_an_unavailable_root_waits,
     a_relocation_without_an_atomic_rename_is_refused,
     something_standing_at_the_new_path_is_never_overwritten,

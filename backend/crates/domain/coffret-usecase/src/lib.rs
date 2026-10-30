@@ -310,6 +310,11 @@ pub use local_operation::LocalOperation;
 mod mapped_relative_location;
 pub use mapped_relative_location::MappedRelativeLocation;
 
+// One side of a relocation: a name below a mapped root, and the identity that
+// root is held against (spec: EP-10, EP-13).
+mod mapped_name;
+pub use mapped_name::MappedName;
+
 // How a refusal of a mapped root names which mapping it is about: the clause
 // inside `RefusedRoot`'s own sentence, kept apart from it because EP-9 gives a
 // mapping two shapes and only one of them has a component to be named by. Not
@@ -385,8 +390,9 @@ pub use parcel_files::ParcelFiles;
 
 // A sixth, beside the trash and for the same reason: where a file this device
 // placed goes once a rename has given its Entry another current path. One
-// rename inside one mapped root, and what refuses it is its own vocabulary
-// around the descent's (spec: EP-10).
+// rename within one mounted filesystem, inside one mapped root or across two,
+// and what refuses it is its own vocabulary around the descent's
+// (spec: EP-10).
 mod relocations;
 pub use relocations::Relocations;
 

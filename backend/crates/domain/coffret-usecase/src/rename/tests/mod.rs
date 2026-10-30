@@ -31,6 +31,7 @@ mod recording_store;
 use recording_store::RecordingStore;
 
 mod detected;
+mod pairs;
 mod races;
 mod refusals;
 mod renamed;

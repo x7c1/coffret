@@ -176,8 +176,8 @@
     "library": "unlocked",
     "log": [
       {
-        "at": "2026-10-26T07:42:20Z",
-        "id": 9,
+        "at": "2026-10-26T07:45:20Z",
+        "id": 12,
         "kind": "fetch",
         "path": "albums/cover.png",
         "refused": {
@@ -188,19 +188,96 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:41:20Z",
+        "at": "2026-10-26T07:44:20Z",
         "folder": "books/vol-2",
-        "id": 8,
+        "id": 11,
         "kind": "discarded",
         "queue": "freeze",
         "settled": false
       },
       {
-        "at": "2026-10-26T07:40:20Z",
+        "at": "2026-10-26T07:43:20Z",
         "folder": "books",
-        "id": 7,
+        "id": 10,
         "kind": "discarded",
         "queue": "fill",
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:42:20Z",
+        "id": 9,
+        "kind": "move",
+        "run": {
+          "entries": 0,
+          "findings": [],
+          "left": 0,
+          "pairs": [
+            {
+              "from": "albums/2026",
+              "to": "scans/2026"
+            }
+          ],
+          "relocated": 0,
+          "status": "stopped",
+          "stopped": {
+            "error": "storage",
+            "message": "the Library's Storage no longer accepts this device's grant",
+            "reason": "unauthenticated"
+          },
+          "unrelocated": null
+        },
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:41:20Z",
+        "id": 8,
+        "kind": "move",
+        "run": {
+          "entries": 2,
+          "findings": [],
+          "left": 0,
+          "pairs": [
+            {
+              "from": "albums/2026",
+              "to": "scans/2026"
+            }
+          ],
+          "relocated": 0,
+          "status": "done",
+          "stopped": null,
+          "unrelocated": {
+            "error": "server",
+            "message": "the server could not answer"
+          }
+        },
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:40:20Z",
+        "id": 7,
+        "kind": "move",
+        "run": {
+          "entries": 2,
+          "findings": [
+            {
+              "message": "this file's Entry was renamed here, where this device's file could not follow it, so the unedited file was discarded into the trash; the Entry is in the Library and not on this device",
+              "path": "scans/2026/b.jpg",
+              "reason": "surfaced",
+              "surfaced": "RelocationLeft"
+            }
+          ],
+          "left": 1,
+          "pairs": [
+            {
+              "from": "albums/2026",
+              "to": "scans/2026"
+            }
+          ],
+          "relocated": 1,
+          "status": "done",
+          "stopped": null,
+          "unrelocated": null
+        },
         "settled": false
       },
       {
@@ -331,6 +408,33 @@
     "server": "contract-server",
     "sync": null,
     "turn": null
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
+    "fill": null,
+    "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
+    "library": "unlocked",
+    "log": [],
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 4,
+      "status": "syncing",
+      "step": null,
+      "stopped": null,
+      "waits": true
+    },
+    "turn": "move"
   },
   {
     "catalog": {
@@ -784,6 +888,12 @@
           "surfaced": "RelocationDiscarded"
         },
         {
+          "message": "this file's Entry was renamed here, where this device's file could not follow it, so the unedited file was discarded into the trash; the Entry is in the Library and not on this device",
+          "path": "scans/c2.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationLeft"
+        },
+        {
           "message": "this file's Entry was renamed, and this device's file could not be relocated to follow it: a file this device did not place stands at its new path; it is left in place, and the next run tries again",
           "path": "inbox/d.jpg",
           "reason": "surfaced",
@@ -946,6 +1056,12 @@
           "path": "inbox/c.jpg",
           "reason": "surfaced",
           "surfaced": "RelocationDiscarded"
+        },
+        {
+          "message": "this file's Entry was renamed here, where this device's file could not follow it, so the unedited file was discarded into the trash; the Entry is in the Library and not on this device",
+          "path": "scans/c2.jpg",
+          "reason": "surfaced",
+          "surfaced": "RelocationLeft"
         },
         {
           "message": "this file's Entry was renamed, and this device's file could not be relocated to follow it: a file this device did not place stands at its new path; it is left in place, and the next run tries again",

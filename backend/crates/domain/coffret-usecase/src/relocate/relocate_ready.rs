@@ -4,6 +4,7 @@ use coffret_model::EntryPath;
 
 use crate::device_state::LocalEntryState;
 use crate::index_error::IndexResult;
+use crate::mapped_name::MappedName;
 use crate::relocate_error::RelocateError;
 
 use super::{relocate_refusal, Pending, Relocation, RelocationRefused, Run};
@@ -34,21 +35,33 @@ impl Run<'_> {
     }
 
     /// One rename on disk, and then the record follows it.
+    ///
+    /// A rename the two filesystems refuse — a bind mount or a subvolume below
+    /// one root, or two roots this device took for one filesystem — is a file
+    /// that cannot follow its Entry, and it leaves this device as one (spec:
+    /// EP-10).
     async fn relocate_one(&mut self, one: Pending) -> IndexResult<()> {
         let Pending { looked, source } = one;
         let root = &looked.mapping.local_root;
         let expected = looked.mapping.expected_root_id;
-        match self
+        let target = &looked.target_mapping;
+        let renamed = self
             .disk
             .relocations
             .relocate(
-                root,
-                expected.as_ref(),
-                &source.relative,
-                &looked.to_relative,
+                MappedName {
+                    root,
+                    expected: expected.as_ref(),
+                    relative: &source.relative,
+                },
+                MappedName {
+                    root: &target.local_root,
+                    expected: target.expected_root_id.as_ref(),
+                    relative: &looked.to_relative,
+                },
             )
-            .await
-        {
+            .await;
+        match renamed {
             Ok(()) => {
                 self.index
                     .relocate_local_entries(&[(looked.from().clone(), looked.to().clone())])
@@ -58,6 +71,9 @@ impl Run<'_> {
                     from: looked.from().clone(),
                     to: looked.to().clone(),
                 });
+            }
+            Err(RelocateError::AnotherFilesystem { .. }) => {
+                self.leave(&looked.local, &looked.mapping, &source).await?;
             }
             // What stands in the way may be this device's own file, waiting
             // for a relocation of its own that was refused this run.

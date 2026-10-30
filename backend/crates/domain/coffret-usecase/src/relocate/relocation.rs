@@ -6,8 +6,9 @@ use crate::relocate::relocation_refused::RelocationRefused;
 /// another current path (spec: EP-10).
 ///
 /// A run that relocates reports every waiting file it acted on or could not:
-/// one relocated is work done, one refused is a file still standing at a name the
-/// Library no longer gives it, which a person may have to act on.
+/// one relocated, discarded, or one that left this device is work done, one
+/// refused is a file still standing at a name the Library no longer gives it,
+/// which a person may have to act on.
 ///
 /// The Entry Paths travel in the value because the caller is what decides what
 /// to do about them. They never travel into a diagnostic event.
@@ -34,6 +35,19 @@ pub enum Relocation {
         /// Where the copy that stands is.
         to: EntryPath,
     },
+    /// The file could not follow its Entry on this device — no mapped folder
+    /// of this device reaches the Entry's current path, or the folder that does
+    /// stands on another filesystem than the file — so this one, still as this
+    /// device placed it, was discarded into the desktop's trash and its record
+    /// forgotten: the Entry is in the Library and not on this device at its
+    /// current path, and opening it there fetches it again (spec: EP-10,
+    /// EP-15).
+    Left {
+        /// Where the discarded file stood.
+        from: EntryPath,
+        /// Where its Entry stands now.
+        to: EntryPath,
+    },
     /// The file was left where it stands, its record still waiting, for the
     /// reason given; the next run that relocates tries again.
     Refused {
@@ -52,6 +66,7 @@ impl Relocation {
         match self {
             Self::Relocated { from, .. }
             | Self::Discarded { from, .. }
+            | Self::Left { from, .. }
             | Self::Refused { from, .. } => from,
         }
     }
@@ -59,9 +74,10 @@ impl Relocation {
     /// Where its Entry stands now.
     pub fn to(&self) -> &EntryPath {
         match self {
-            Self::Relocated { to, .. } | Self::Discarded { to, .. } | Self::Refused { to, .. } => {
-                to
-            }
+            Self::Relocated { to, .. }
+            | Self::Discarded { to, .. }
+            | Self::Left { to, .. }
+            | Self::Refused { to, .. } => to,
         }
     }
 }

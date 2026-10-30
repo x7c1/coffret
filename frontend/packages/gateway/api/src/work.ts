@@ -547,6 +547,59 @@ interface DeleteOfItsOwn {
   waiting: number;
 }
 
+/** How a move ended. */
+export type MoveStatus =
+  /** Its record committed, whatever became of this device's files. */
+  | 'done'
+  /**
+   * It stopped short of the commit, and `stopped` says what stopped it. A move
+   * that stopped committed nothing: every file it named stands where it was.
+   */
+  | 'stopped';
+
+/** One `(from, to)` of a move: a file, or a folder with everything under it. */
+export interface MovePair {
+  /** The Entry Path moved. */
+  from: string;
+  /** The Entry Path it is moved to. */
+  to: string;
+}
+
+/**
+ * What one move did — the answer of `POST /api/move`, and the run the log
+ * keeps of it.
+ */
+export type Move = MoveOfItsOwn & Standing<MoveStatus>;
+
+/** What one move came to, beside its status. */
+interface MoveOfItsOwn {
+  /** What it was asked to move, in the order it was named. */
+  pairs: MovePair[];
+  /** How many files of the Library it gave a new path, and `0` where it stopped. */
+  entries: number;
+  /** How many of this device's files followed them. */
+  relocated: number;
+  /**
+   * How many of this device's files could not follow — no folder this device
+   * maps reaches the new path, or the one that does is on another filesystem —
+   * and left this device, discarded into the desktop's trash.
+   */
+  left: number;
+  /**
+   * What kept this device's files from following, on a move that is `done` —
+   * its change to the Library holds — and whose files could not be relocated
+   * after it; `null` everywhere else. The files stay where they were, and the
+   * next sync or fetch relocates them.
+   */
+  unrelocated: Refused | null;
+  /**
+   * What became of this device's files of them, said as a sync's relocations
+   * are; then what its commit left for later, and the Keyring repairs it
+   * performed.
+   */
+  findings: Finding[];
+}
+
 /**
  * Which of the two states this device holds the Library in.
  *
@@ -617,10 +670,11 @@ export interface Reconnect {
 }
 
 /**
- * One of the three flows that take turns at this device's pending work, in the
- * word the work answer names it by.
+ * One of the four flows that take turns at this device's pending work, in the
+ * word the work answer names it by. A move takes the turn while its request is
+ * open, and is never on record as running: the request answers it.
  */
-export type TurnTaker = 'sync' | 'freeze' | 'delete';
+export type TurnTaker = 'sync' | 'freeze' | 'delete' | 'move';
 
 /**
  * The parcels this device keeps for the Library, and how much of its disk they
@@ -648,6 +702,7 @@ export type LoggedWork =
   | { kind: 'sync'; run: Sync }
   | { kind: 'freeze'; run: Freeze }
   | { kind: 'delete'; run: Delete }
+  | { kind: 'move'; run: Move }
   /** A folder a queue threw away when its worker ended without an answer. */
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   /** A file a reader asked for and was refused. */
@@ -723,8 +778,8 @@ export interface Work {
    * Which flow's run holds this device's pending work right now, and `null`
    * where nobody does.
    *
-   * A sync, a freeze and a deletion take turns at that work in the order their
-   * runs ask for it, and a run waiting for its turn is on record as running
+   * A sync, a freeze, a deletion and a move take turns at that work in the
+   * order their runs ask for it, and a run waiting for its turn is on record as running
    * with no step — exactly as one that has just taken it is. So the server
    * says which is which: each run's `waits`, and this for whom they wait. A
    * page that guessed from the missing step could have two runs each claim to
@@ -749,7 +804,7 @@ export interface Work {
   reconnect: Reconnect | null;
   /**
    * What the server has finished since it started, newest first: every fill,
-   * sync, freeze and deletion that ended, every folder a queue lost, and every
+   * sync, freeze, deletion and move that ended, every folder a queue lost, and every
    * file a reader was refused. The oldest are dropped past a fixed count, and
    * a failure is kept until the same work ends again; a server started
    * afterwards answers with none of it.
@@ -1016,6 +1071,7 @@ type LoggedSent = { id: number; at: string; settled: boolean } & (
   | { kind: 'sync'; run: SyncSent }
   | { kind: 'freeze'; run: FreezeSent }
   | { kind: 'delete'; run: DeleteSent }
+  | { kind: 'move'; run: MoveSent }
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   | { kind: 'fetch'; path: string; refused: unknown }
 );
@@ -1032,6 +1088,8 @@ type FillSent = Sent<FillOfItsOwn & FillQueue>;
 type SyncSent = Sent<SyncOfItsOwn>;
 type FreezeSent = Sent<FreezeOfItsOwn & FreezeQueue>;
 type DeleteSent = Sent<DeleteOfItsOwn>;
+/** A move as sent: its refusals and its findings not read yet. */
+export type MoveSent = Sent<Omit<MoveOfItsOwn, 'unrelocated'>> & { unrelocated: unknown };
 
 /**
  * One work answer, read.
@@ -1077,6 +1135,8 @@ function loggedOf(sent: LoggedSent): Logged {
       return { id, at, settled, kind: 'freeze', run: freezeOf(sent.run) };
     case 'delete':
       return { id, at, settled, kind: 'delete', run: deleteOf(sent.run) };
+    case 'move':
+      return { id, at, settled, kind: 'move', run: moveOf(sent.run) };
     case 'discarded':
       return { id, at, settled, kind: 'discarded', queue: sent.queue, folder: sent.folder };
     case 'fetch':
@@ -1197,6 +1257,19 @@ function deleteOf(run: DeleteSent): Delete {
     waits: run.waits,
     waiting: run.waiting,
     ...standingOf<DeleteStatus>(run),
+  };
+}
+
+/** One move, its refusals and findings read as every run's are. */
+export function moveOf(run: MoveSent): Move {
+  return {
+    pairs: run.pairs,
+    entries: run.entries,
+    relocated: run.relocated,
+    left: run.left,
+    unrelocated: run.unrelocated == null ? null : refusedOf(run.unrelocated),
+    findings: (run.findings ?? []).map(findingOf),
+    ...standingOf<MoveStatus>(run),
   };
 }
 

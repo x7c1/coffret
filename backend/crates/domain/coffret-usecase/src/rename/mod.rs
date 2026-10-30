@@ -11,21 +11,24 @@
 //!
 //! The sequence, and the rule each step answers to:
 //!
-//! 1. **Refuse what needs no catalog.** The same path on both sides, and
-//!    either side in the namespace reserved for derived Entries
-//!    (spec: FM-15).
+//! 1. **Refuse what needs no catalog.** For each pair of the set, the same
+//!    path on both sides, and either side in the namespace reserved for
+//!    derived Entries (spec: FM-15); for the set, no pair at all, one source
+//!    named with two destinations, and two destinations one of which is or is
+//!    under the other. A pair whose source is under another pair's source is
+//!    one move of that folder, and is taken out.
 //! 2. **Catch up** (spec: CK-9). Which Entries the source names, and what
 //!    stands where they would go, are questions about the current Library.
-//! 3. **Plan** (spec: EP-5, FM-15). The source names the Entry at that path,
+//! 3. **Plan** (spec: EP-5, FM-15). Each source names the Entry at that path,
 //!    if any, and every current Entry under it — one Entry or a folder of
 //!    them — and each is renamed by its own element, the rest of its path kept
-//!    under the destination. The record enumerates them: an Entry another
+//!    under that pair's destination; a source naming nothing refuses the set. The record enumerates them: an Entry another
 //!    device adds under the folder meanwhile is never swept in (spec: EP-7).
 //!    A destination already held by an Entry the record does not rename away,
 //!    one that would make a path both a file and a folder, and a folder renamed
 //!    under itself are refused, as is anything FM-15's rename-set check
 //!    refuses — all before anything is written.
-//! 4. **Commit** (spec: CP-1, CP-4). One batch of renames, prepared against
+//! 4. **Commit** (spec: CP-1, CP-4). One batch of every pair's renames, prepared against
 //!    the head the plan read, through [`commit_batch`](crate::commit::commit_batch):
 //!    a commit another device made meanwhile is rebased onto, or answered with
 //!    [`RebaseConflict`](crate::commit::CommitError::RebaseConflict)
@@ -33,8 +36,14 @@
 //! 5. **Relocate this device's files** (spec: EP-10). Where the caller hands
 //!    over the device's mapped folders ([`RenameRequest::with_local_disk`]),
 //!    the files this device holds of the renamed Entries follow them at once,
-//!    as the next sync or fetch would relocate them; a refusal is reported the
-//!    way a sync reports one, and the rename stands.
+//!    as the next sync or fetch would relocate them — or leave this device
+//!    where they cannot follow; a refusal is reported the way a sync reports
+//!    one, and the rename stands.
+//!
+//! [`preview_rename`] runs the first three steps of the same request and stops
+//! before the commit, answering what the set would rename and what this
+//! device's files of it would do — follow their Entries, leave this device, or
+//! stay for an edit — without writing anything (spec: EP-10).
 //!
 //! What is deliberately not here: noticing that a person renamed a file on
 //! disk, which is the [`sync`](crate::sync)'s to notice — it holds the pair it
@@ -44,6 +53,9 @@
 
 mod plan;
 
+mod preview;
+pub use preview::preview_rename;
+
 mod refuse_detected;
 pub(crate) use refuse_detected::refuse_detected;
 
@@ -52,6 +64,12 @@ pub use rename_error::{RenameError, RenameResult};
 
 mod rename_outcome;
 pub use rename_outcome::RenameOutcome;
+
+mod rename_pair;
+pub use rename_pair::RenamePair;
+
+mod rename_preview;
+pub use rename_preview::RenamePreview;
 
 mod rename_refusal;
 pub use rename_refusal::RenameRefusal;

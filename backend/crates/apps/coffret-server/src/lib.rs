@@ -160,6 +160,9 @@ pub use authorize::{Admission, SERVER_KEY_HEADER};
 
 mod classify;
 
+mod moves;
+pub use moves::{move_pairs, refusals_of, MoveRun, MoveStatus};
+
 mod delete;
 pub use delete::{
     delete_target, DeleteReport, DeleteRun, DeleteStatus, Deletes, RefusedPack, Target,

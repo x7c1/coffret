@@ -34,6 +34,7 @@ use crate::finding::Finding;
 use crate::folder::Folder;
 use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
+use crate::moves::{MoveRun, MoveStatus};
 use crate::pending_rows::TurnTaker;
 use crate::reconnect::Reconnect;
 use crate::refresh::Standing;
@@ -111,6 +112,12 @@ fn every_finding() -> Vec<Finding> {
             path: entry_path("inbox/c.jpg"),
             reason: FindingReason::RelocationDiscarded {
                 to: entry_path("albums/c.jpg"),
+            },
+        },
+        Found::Surfaced {
+            path: entry_path("scans/c2.jpg"),
+            reason: FindingReason::RelocationLeft {
+                from: entry_path("inbox/c2.jpg"),
             },
         },
         Found::Surfaced {
@@ -349,6 +356,14 @@ fn reconnecting(answer: WorkDto, reconnect: &Reconnect) -> WorkDto {
 }
 
 /// An entry of every kind the log keeps, newest first, logged a minute apart.
+/// A move of `albums/2026` to `scans/2026`, before anything is counted.
+fn moved() -> MoveRun {
+    MoveRun::starting(vec![coffret_device::RenamePair::new(
+        entry_path("albums/2026"),
+        entry_path("scans/2026"),
+    )])
+}
+
 fn logged() -> Vec<Logged> {
     let ended = vec![
         Ended::Fetch {
@@ -363,6 +378,37 @@ fn logged() -> Vec<Logged> {
             queue: Queue::Fill,
             folder: folder("books"),
         },
+        Ended::Move(MoveRun {
+            status: MoveStatus::Stopped(storage()),
+            ..moved()
+        }),
+        // Committed, and this device's files could not follow: done, with what
+        // kept them.
+        Ended::Move(MoveRun {
+            entries: 2,
+            unrelocated: Some(Reported::of(&ApiError::from(
+                coffret_device::Error::Rename {
+                    cause: Box::new(coffret_device::RenameError::NotRelocated {
+                        generation: Generation::FIRST,
+                        cause: coffret_usecase::IndexError::NoCheckpoint,
+                    }),
+                },
+            ))),
+            ..moved()
+        }),
+        Ended::Move(MoveRun {
+            entries: 2,
+            relocated: 1,
+            left: 1,
+            findings: vec![Finding::of(&coffret_device::Finding::Surfaced {
+                path: entry_path("scans/2026/b.jpg"),
+                reason: FindingReason::RelocationLeft {
+                    from: entry_path("albums/2026/b.jpg"),
+                },
+            })
+            .expect("a file that left this device is something to say")],
+            ..moved()
+        }),
         Ended::Delete(DeleteRun {
             entries: 5,
             bytes: 8_200_000,
@@ -663,7 +709,18 @@ fn every_answer() -> Vec<WorkDto> {
         ..quiet()
     };
 
-    let mut every = vec![idle, running, sending, committing, logged];
+    // A sync waiting for its turn while a move holds it: a move takes the
+    // same turn and answers its own request, so the sync is the one on record.
+    let behind_a_move = {
+        let waiting = sync(4, SyncStatus::Syncing);
+        WorkDto {
+            turn: Some(TurnTaker::Move.as_str()),
+            sync: Some(SyncDto::of(&waiting, Some(TurnTaker::Move))),
+            ..quiet()
+        }
+    };
+
+    let mut every = vec![idle, running, sending, committing, logged, behind_a_move];
     every.extend(deletions);
     every.extend(phases);
     every.extend([finished, stopped, superseded]);

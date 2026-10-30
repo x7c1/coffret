@@ -9,8 +9,13 @@ use crate::rename::rename_outcome::RenameOutcome;
 use crate::rename::rename_request::RenameRequest;
 use crate::sync::{complete_after_catch_up, PendingWork};
 
-/// Renames an Entry, or a folder of Entries, in one Journal record, and uploads
+/// Renames Entries, or folders of Entries, in one Journal record, and uploads
 /// nothing (spec: FM-15, CP-1).
+///
+/// Every pair the request names lands in that one record, or none does: a
+/// pair refused on its own, or two that overlap, refuse the whole set before
+/// anything is written. A pair whose source is under another pair's source is
+/// part of that folder's move (spec: EP-18).
 ///
 /// The steps, and the rule each answers to, are listed in the
 /// [module documentation](crate::rename).
@@ -31,15 +36,14 @@ pub async fn rename_entries(request: RenameRequest<'_>) -> RenameResult<RenameOu
         index,
         keys,
         spool,
-        from,
-        to,
+        pairs,
         progress,
         policy,
         now,
         disk,
     } = request;
 
-    plan::refuse_outright(&from, &to)?;
+    let pairs = plan::pairs_of(&pairs)?;
 
     progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
@@ -56,7 +60,7 @@ pub async fn rename_entries(request: RenameRequest<'_>) -> RenameResult<RenameOu
         renames,
         renamed,
         folder,
-    } = plan::plan(index, &from, &to).await?;
+    } = plan::plan(index, &pairs).await?;
 
     let batch = PreparedBatch::default().renaming(renames).prepared_at(base);
     let commit = commit_batch(
@@ -83,13 +87,23 @@ pub async fn rename_entries(request: RenameRequest<'_>) -> RenameResult<RenameOu
     // Counted rather than named: the paths are the user's own names for their
     // files (spec: EL-1).
     info!(
+        pairs = pairs.len(),
         renamed = renamed.len(),
         folder,
         head = commit.record.generation().get(),
         attempts = commit.attempts,
         relocated = relocations
             .iter()
-            .filter(|relocation| !matches!(relocation, Relocation::Refused { .. }))
+            .filter(|relocation| {
+                matches!(
+                    relocation,
+                    Relocation::Relocated { .. } | Relocation::Discarded { .. }
+                )
+            })
+            .count(),
+        relocation_left = relocations
+            .iter()
+            .filter(|relocation| matches!(relocation, Relocation::Left { .. }))
             .count(),
         relocation_refused = relocations
             .iter()

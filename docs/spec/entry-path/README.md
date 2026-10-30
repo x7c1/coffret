@@ -214,12 +214,17 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     takes the path the file waited for; an adopted Snapshot that holds no
     Entry at that path ends the wait the same way.
   - A sync, and a folder fetch, **relocate** every file awaiting relocation
-    before they scan or place anything: the file is renamed from where it
-    stands to the local path the Entry's current path translates to, with one
-    filesystem rename that makes the folders the new path needs and never
+    before they scan or place anything, and the device that commits a rename
+    relocates its own right after the commit: the file is renamed from where
+    it stands to the local path the Entry's current path translates to, with
+    one filesystem rename that makes the folders the new path needs and never
     replaces anything standing there, and only then does the record follow
-    it to the new path, ending the wait. A relocation never uploads,
-    re-encrypts, or commits anything. A folder the run's relocations left with
+    it to the new path, ending the wait. The two paths may lie under one
+    mapped root, or under two whose roots stand on the same **filesystem** —
+    here and throughout this rule, the same mounted filesystem, one `st_dev`,
+    as the filesystem identity the scan records for each mapped root says
+    (EP-12) — each root vouching for itself (EP-13). A relocation never
+    uploads, re-encrypts, or commits anything. A folder the run's relocations left with
     nothing in it is removed as EP-15 removes the folders its discards empty.
     Files whose Entries traded paths among themselves, which no rename of one
     of them can start, are exchanged into place, each exchange one rename
@@ -227,25 +232,39 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     reads one file for the person who asked, and what it places at the new
     path is met by the next run as the destination already holding this
     device's copy.
+  - A file that **cannot follow** its Entry — no mapped root of this device
+    reaches the new path, or the root that does stands on another filesystem
+    than the file's as the two recorded filesystem identities say, or the
+    rename is refused as crossing filesystems (`EXDEV`: a bind mount, another
+    btrfs subvolume, two roots whose filesystem identities no scan had told
+    apart) — leaves this device. Unedited — EP-15's test of length, modification time and
+    content hash against the record — it is discarded into the desktop's trash
+    as EP-15 discards a departed file and its record is forgotten, so the
+    Entry is in the Library and not on this device at its new path, and a
+    fetch of it there places it again; the run reports it as discarded with
+    the Entry Path. Edited, it is never discarded: it stays where it stands,
+    its record waiting, and every run reports it refused for its edit. A
+    record whose file is gone has nothing to leave, and is forgotten. Nothing
+    is copied and deleted in a rename's place.
   - A relocation is **refused**, the file left where it stands and the record
     still waiting, and the refusal reported with its reason on every run that
     meets it: where the mapped root holding either path is unavailable
     (EP-12), or stands on another filesystem than the one recorded for it
-    until a scan re-stamps it; where the two paths do not lie under one mapped
-    root (EP-9), or the new path passes through a name a mapped folder keeps
-    for itself (EP-14, EP-16, the scratch prefix of EP-11) or one an operating
-    system keeps (EP-17), which no scan would find the file at again; where
-    either path crosses a symbolic link or anything else that is not a folder
-    of the root (EP-8); where the file was edited since it was placed — its
-    length and modification time differ from the record's and its content does
-    not hash to the hash the record carries (EP-15); where something stands at
-    the new path that is not this device's placed copy of the same Entry;
-    where the two paths stand on different filesystems, since nothing is
-    copied and deleted in a rename's place; where their filesystem offers no
+    until a scan re-stamps it; where the path the file stands at is under no
+    mapped root of this device any more (EP-9), or the new path passes through
+    a name a mapped folder keeps for itself (EP-14, EP-16, the scratch prefix
+    of EP-11) or one an operating system keeps (EP-17), which no scan would
+    find the file at again; where either path crosses a symbolic link or
+    anything else that is not a folder of its root (EP-8); where the file was
+    edited since it was placed — its length and modification time differ from
+    the record's and its content does not hash to the hash the record carries
+    (EP-15); where something stands at the new path that is not this device's
+    placed copy of the same Entry; where files that trade places stand on two
+    filesystems, which no exchange joins; where their filesystem offers no
     rename that never replaces, or no exchange, since none is emulated by
-    checking that the new path is free and then renaming onto it; and where
-    the root does not vouch for itself (EP-13) or the disk refuses. A later
-    run, once the cause is gone, relocates the file.
+    checking that the new path is free and then renaming onto it; and where a
+    root does not vouch for itself (EP-13) or the disk refuses. A later run,
+    once the cause is gone, relocates the file.
   - Where the new path already holds this device's own copy of the same
     Entry, its record agreeing with the file there (EP-11) — a fetch placed
     it while the old file waited — the old file is redundant: an unedited one
@@ -751,3 +770,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - Whether a root holds nothing (EP-12), and whether the run's discards
     emptied a folder (EP-15), are not changed: a folder holding only such
     files still holds something.
+- **EP-18.** A rename names one or more `(from, to)` pairs and commits them in
+  one Journal record (FM-15) or none. Before anything is written it refuses
+  the whole set where it names no pair, where one source is named with two
+  destinations, where two pairs share a destination or one destination is
+  under another pair's, or where any pair is refused on its own (EP-5,
+  FM-15). A pair whose source is under another pair's source is part of that
+  folder's move, and is not refused: the folder's move carries it to where its
+  place in the folder puts it, whatever its own pair named. *(Form: test)*

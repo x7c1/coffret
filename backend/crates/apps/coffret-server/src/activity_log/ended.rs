@@ -2,6 +2,7 @@ use crate::delete::{DeleteRun, DeleteStatus};
 use crate::fill::{FillRun, FillStatus};
 use crate::folder::Folder;
 use crate::freeze::{FreezeRun, FreezeStatus};
+use crate::moves::{MoveRun, MoveStatus};
 use crate::reported::Reported;
 use crate::sync::{SyncRun, SyncStatus};
 
@@ -19,6 +20,11 @@ pub enum Ended {
     Freeze(FreezeRun),
     /// A deletion that ended.
     Delete(DeleteRun),
+    /// A move that went past its refusals, committed or stopped short of the
+    /// commit. One refused before its commit — by the set, whether the preview
+    /// or the rename's own plan refuses it, an edited file or one still
+    /// uploading — did nothing, and is answered rather than logged.
+    Move(MoveRun),
     /// A folder a queue threw away when its worker ended without an answer.
     Discarded {
         /// Which queue lost it.
@@ -44,6 +50,7 @@ pub(super) enum Key {
     Freeze(Folder),
     Sync,
     Delete(Vec<String>, Vec<String>),
+    Move(Vec<(String, String)>),
     Fetch(String),
 }
 
@@ -56,6 +63,7 @@ impl Ended {
             Self::Sync(run) => matches!(run.status, SyncStatus::Stopped(_)),
             Self::Freeze(run) => matches!(run.status, FreezeStatus::Stopped(_)),
             Self::Delete(run) => matches!(run.status, DeleteStatus::Stopped(_)),
+            Self::Move(run) => matches!(run.status, MoveStatus::Stopped(_)),
             Self::Discarded { .. } | Self::Fetch { .. } => true,
         }
     }
@@ -79,6 +87,7 @@ impl Ended {
             } => Key::Freeze(folder.clone()),
             Self::Sync(_) => Key::Sync,
             Self::Delete(run) => Key::Delete(run.target.folders_named(), run.target.paths_named()),
+            Self::Move(run) => Key::Move(run.pairs_named()),
             Self::Fetch { path, .. } => Key::Fetch(path.clone()),
         }
     }

@@ -130,13 +130,19 @@ Entry and changes only its Entry Path (see
 - A rename changes an Entry's current Entry Path and nothing on any disk. A
   device that placed a file for the Entry **relocates** it: one rename on its
   own disk, from the local path the old Entry Path translates to, to the one
-  the current Entry Path does, under one mapped root and never through a
-  symbolic link, and never onto anything standing there. The device's record
-  of the file follows only once the file is relocated, so an interruption
-  leaves the record at the file's old path and the next run finishes the
-  relocation without renaming or overwriting anything twice. A relocation it
-  cannot make leaves the file where it is and is reported (spec: EP-8, EP-10,
-  EP-12).
+  the current Entry Path does — under one mapped root, or across two that
+  stand on the same filesystem — never through a symbolic link, and never onto
+  anything standing there. The device's record of the file follows only once
+  the file is relocated, so an interruption leaves the record at the file's
+  old path and the next run finishes the relocation without renaming or
+  overwriting anything twice. A relocation it cannot make this run leaves the
+  file where it is and is reported (spec: EP-8, EP-10, EP-12).
+  - A file that cannot follow at all — no mapping of this device reaches the
+    current Entry Path, or the one that does stands on another filesystem —
+    **leaves** the device unless it was edited: unedited, it is discarded into
+    the desktop's trash and the Entry is no longer on this device, and edited,
+    it is kept where it stands and reported, since the Library does not hold
+    what changed (spec: EP-10, EP-15).
 - A fetch **places** an Entry only where this device can vouch for what is at
   the path — nothing there, or a file its own materialization record still
   agrees with — and **declines** every other Entry, reporting the reason,

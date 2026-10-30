@@ -40,6 +40,12 @@ use kept_parcels_dto::KeptParcelsDto;
 mod logged_dto;
 use logged_dto::LoggedDto;
 
+mod move_dto;
+pub(crate) use move_dto::MoveDto;
+
+mod pair_dto;
+pub(crate) use pair_dto::PairDto;
+
 mod reconnect_dto;
 use reconnect_dto::ReconnectDto;
 

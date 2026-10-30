@@ -264,6 +264,17 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     passed.commit_elsewhere("albums/late.jpg", b"late").await;
     let newer = answered_as_json(&passed, "GET", "/api/remote-head").await;
 
+    // A move on a server of its own, so the other answers read the Library as
+    // the fixture left it: a folder this device has brought over and a file
+    // it has not, both moved under another top-level folder.
+    let mover = Served::library().await;
+    mover.arm_fill("albums/2026");
+    mover.fill_idle().await;
+    let moving =
+        "/api/move?from=albums/2026&to=books/2026&from=albums/cover.png&to=books/cover.png";
+    let move_preview = answered_as_json(&mover, "GET", moving).await;
+    let moved = answered_as_json(&mover, "POST", moving).await;
+
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
@@ -296,6 +307,10 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
             "/api/delete?entry=books/page-001.png&entry=books/gone.png&entry=albums/cover.png",
         )
         .await,
+        // What moving a folder and a file would do, and what it did: the
+        // device maps the whole Library, so its files of the folder follow.
+        "move_preview": move_preview,
+        "moved": moved,
         "reconnecting": reconnecting,
         "unlock": {
             "already_unlocked": already_unlocked,

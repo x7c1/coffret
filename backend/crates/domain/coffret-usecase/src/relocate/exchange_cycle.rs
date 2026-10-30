@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use coffret_model::EntryPath;
 
 use crate::index_error::IndexResult;
+use crate::mapped_name::MappedName;
 
 use super::{relocate_refusal, Pending, Relocation, RelocationRefused, Run};
 
@@ -17,20 +18,26 @@ impl Run<'_> {
     /// home. Each exchange is followed by its two records.
     pub(super) async fn exchange_cycle(&mut self, members: Vec<Pending>) -> IndexResult<()> {
         let anchor = &members[0];
-        let root = anchor.looked.mapping.local_root.clone();
-        let expected = anchor.looked.mapping.expected_root_id;
+        let anchor_mapping = anchor.looked.mapping.clone();
         let anchor_at = anchor.looked.from().clone();
         let anchor_relative = anchor.source.relative.clone();
         for (position, member) in members.iter().enumerate().skip(1) {
             let arriving = &members[position - 1];
+            let mapping = &member.looked.mapping;
             match self
                 .disk
                 .relocations
                 .exchange(
-                    &root,
-                    expected.as_ref(),
-                    &anchor_relative,
-                    &member.source.relative,
+                    MappedName {
+                        root: &anchor_mapping.local_root,
+                        expected: anchor_mapping.expected_root_id.as_ref(),
+                        relative: &anchor_relative,
+                    },
+                    MappedName {
+                        root: &mapping.local_root,
+                        expected: mapping.expected_root_id.as_ref(),
+                        relative: &member.source.relative,
+                    },
                 )
                 .await
             {

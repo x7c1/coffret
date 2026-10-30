@@ -176,6 +176,86 @@
   },
   {
     "body": {
+      "error": "refused_move",
+      "message": "the Library holds no Entry at or under \"albums/gone\"",
+      "reason": "nothing_to_move"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "\"albums/a.jpg\" would be renamed to \"kept/2026/a.jpg\", inside \"kept/2026\", which \"albums/2026\" is renamed to",
+      "reason": "overlapping"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "the new Entry Path is the one it already has",
+      "reason": "same_path"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "\".coffret-derived/a.jpg\" lies under .coffret-derived, which coffret keeps for derived Entries",
+      "reason": "reserved_namespace"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "a folder cannot be renamed to a path under itself",
+      "reason": "into_itself"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "another Entry already stands at \"books/a.jpg\"",
+      "reason": "destination_taken"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "the rename would make \"books\" both a file and a folder",
+      "reason": "file_and_folder"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "the rename is not one the Library admits: another Entry would stand at the same path",
+      "reason": "rename_rule"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "this device's file \"albums/spring.jpg\" is changed on this device since it was placed, and the Library does not hold what changed; carry it into the Library, or put it back, before moving it",
+      "reason": "edited"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "refused_move",
+      "message": "\"albums/spring.jpg\" and 1 other of the files under it are not in the Library yet; wait until it is carried in before moving it",
+      "reason": "uploading"
+    },
+    "status": 409
+  },
+  {
+    "body": {
       "error": "epoch",
       "message": "this device has to be enrolled in the Library again: the Library's Master Key was replaced, and this device holds only the one before it — enroll it again with the new Recovery Code"
     },

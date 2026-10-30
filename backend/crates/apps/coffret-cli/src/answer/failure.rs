@@ -332,7 +332,8 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
 /// [`device_kind`] lists every variant.
 fn rename_refusal_kind(refusal: &RenameRefusal) -> &'static str {
     match refusal {
-        RenameRefusal::NothingAt { .. } => "nothing_to_rename",
+        RenameRefusal::Nothing | RenameRefusal::NothingAt { .. } => "nothing_to_rename",
+        RenameRefusal::Overlapping { .. } => "overlapping",
         RenameRefusal::SamePath => "same_path",
         RenameRefusal::ReservedNamespace { .. } => "reserved_namespace",
         RenameRefusal::IntoItself => "into_itself",
