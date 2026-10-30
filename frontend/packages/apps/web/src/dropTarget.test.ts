@@ -1,48 +1,36 @@
 import { expect, it } from 'vitest';
 
-import { NO_FOLDER_HERE, type Listing } from '@coffret/api';
+import type { Listing } from '@coffret/api';
 
-import { dropLine, dropOutcome, mappedAt, NOT_KNOWN_YET, PACKED_AFTER, TAKEN } from './dropTarget';
+import { dropLine, dropOutcome, mappedAt, PACKED_AFTER } from './dropTarget';
 import { NOTHING_AT_THIS_PATH } from './unmapped';
 
-// Every drop is confirmed before anything is sent — where it lands and what it
-// is added as — and the line while the drag is in the air says so, wherever the
-// folder it is over came from.
-it('says the drop is confirmed, where and how, before anything is sent', () => {
-  const outcome = dropOutcome({ mapped: true, freezing: false });
+// Every drop is confirmed before anything is sent, so the pill while the drag
+// is in the air names only where it lands — the Library by name at the root.
+it('says where the drop lands', () => {
+  const outcome = dropOutcome({ held: true, freezing: false });
   expect(outcome).toBe('taken');
-  expect(dropLine(outcome, true)).toBe(TAKEN);
-  expect(TAKEN).toContain('where it goes, and how, is confirmed before anything is sent');
+  expect(dropLine(outcome, 'comics/Foo')).toBe('Drop to add to comics/Foo');
+  expect(dropLine(outcome, '')).toBe('Drop to add to the Library');
 });
 
-// EP-9: a folder no mapping of this device reaches takes nothing, and the
-// reason is the one the answer to letting go gives.
-it('refuses a drop onto a folder that is not on this device', () => {
+// A path the Library holds nothing at takes nothing, and the reason is the one
+// the answer to letting go gives. A folder no folder of this device is chosen
+// for is not refused: the add flow asks for one (spec: EP-9).
+it('refuses a drop onto a path the Library holds nothing at', () => {
   for (const freezing of [false, true]) {
-    expect(dropOutcome({ mapped: false, freezing })).toBe('refused');
+    expect(dropOutcome({ held: false, freezing })).toBe('refused');
   }
-  expect(dropLine('refused', true)).toBe(`a drop here is not taken — ${NO_FOLDER_HERE}`);
-  expect(dropLine('refused', false)).toBe(`a drop here is not taken — ${NOTHING_AT_THIS_PATH}`);
+  expect(dropLine('refused', 'typo')).toBe(`a drop here is not taken — ${NOTHING_AT_THIS_PATH}`);
 });
 
 // PK-7: freezes run one at a time, so a drop while one is running is still
 // taken and says a folder added as a Pack now is packed after that one.
 it('says a folder added as a Pack while a freeze runs is packed after it', () => {
-  const outcome = dropOutcome({ mapped: true, freezing: true });
+  const outcome = dropOutcome({ held: true, freezing: true });
   expect(outcome).toBe('taken_after');
-  expect(dropLine(outcome, true)).toBe(`${TAKEN} — ${PACKED_AFTER}`);
+  expect(dropLine(outcome, 'albums')).toBe(`Drop to add to albums — ${PACKED_AFTER}`);
   expect(PACKED_AFTER).toContain('packed after it');
-});
-
-// A row of the tree is read off the root's listing, which may not have answered
-// when the drag begins: the line neither promises the drop nor refuses it.
-it('says a drop is not known to be taken while whether a mapping reaches is unknown', () => {
-  for (const freezing of [false, true]) {
-    expect(dropOutcome({ mapped: null, freezing })).toBe('unknown');
-  }
-  expect(dropLine('unknown', true)).toBe(NOT_KNOWN_YET);
-  expect(NOT_KNOWN_YET).toContain('not known yet');
-  expect(NOT_KNOWN_YET).not.toContain(TAKEN);
 });
 
 /** The listing of a Library root, mapped or not, over two top-level folders. */

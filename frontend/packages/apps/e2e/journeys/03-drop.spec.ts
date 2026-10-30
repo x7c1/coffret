@@ -1,9 +1,9 @@
 // Dragging a photograph onto a folder, which is the whole of adding one.
 //
-// There is no upload button: what a person means by dragging a file onto a
-// folder is not in doubt, and the one thing the screen asks before anything is
-// sent is the confirmation every drop gets — where it lands, and that a file on
-// its own is added as it is. What the screen owes them afterwards is what
+// What a person means by dragging a file onto a folder is not in doubt, and
+// the one thing the screen asks before anything is sent is the confirmation
+// every add gets — dropped or picked with the header's +: where it lands, and
+// that the file is new there. What the screen owes them afterwards is what
 // follows — the file is in the folder while the Library does not have it yet,
 // the sync the server armed carries it in, and then the Library has it — and
 // this journey is that. How much of the middle is ever on the screen is
@@ -47,12 +47,13 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   // folder is.
   await dropFileOnto(page, row(page, photo(0)), setting.dropFile);
 
-  // Confirmed before anything is sent: one file, added on its own, into the
-  // album the list is showing. Nothing is in the folder until Add.
-  const question = page.getByRole('dialog');
+  // Confirmed before anything is sent: one file, new to the album it was
+  // dropped in, which the heading names. Nothing is in the folder until Add.
+  const question = page.getByRole('dialog', { name: `Add to ${setting.album}` });
   await expect(question).toContainText('1 file');
-  await expect(question).toContainText('added on its own');
-  await expect(question).toContainText(`goes into ${setting.album}/`);
+  const incoming = question.getByRole('list', { name: 'incoming' });
+  await expect(incoming).toContainText('New');
+  await expect(incoming).toContainText(dropped);
   await expect(question).not.toContainText('is new');
   await expect(row(page, dropped)).toHaveCount(0);
   await question.getByRole('button', { name: 'Add', exact: true }).click();

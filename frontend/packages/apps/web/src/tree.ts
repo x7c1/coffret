@@ -86,6 +86,25 @@ export interface FolderRow {
   prospective: boolean;
   /** The folder of a book whose freeze has not committed (see [`stranded`](./stranded)). */
   stranded: boolean;
+  /**
+   * A folder files are being added under from this page, which no listing
+   * names yet (see {@link IncomingFile}).
+   */
+  incoming?: boolean;
+}
+
+/**
+ * A file this page is adding — picked with **+** or dropped, confirmed, and
+ * on its way to the server — drawn as a row at once, before any listing names
+ * it, so that Add is answered on the tree where the files will be. The row is
+ * one the folder's listing takes over once it names the path.
+ */
+export interface IncomingFile {
+  /** Its Entry Path, as it is sent. */
+  path: string;
+  size: number;
+  /** Whether it goes up as part of a Pack, which its row says while it waits. */
+  packed: boolean;
 }
 
 /** A file as a row of the tree. */
@@ -128,6 +147,8 @@ export interface TreeSource {
   prospective: readonly string[];
   /** The folders of books whose freeze has not committed. */
   stranded: readonly string[];
+  /** The files this page is adding, which no listing may name yet. */
+  incoming?: readonly IncomingFile[];
 }
 
 /**
@@ -150,6 +171,7 @@ export function treeRows(source: TreeSource): TreeRow[] {
   // freeze has not committed may stand in a folder the Library does not hold
   // either.
   const strandedAbove = new Set(source.stranded.flatMap(ancestry));
+  const incoming = source.incoming ?? [];
   const walk = (folder: string, depth: number) => {
     const asked = source.listing(folder);
     if (asked === undefined || asked.status !== 'ready') {
@@ -165,12 +187,14 @@ export function treeRows(source: TreeSource): TreeRow[] {
       return;
     }
     const listing = asked.value;
-    for (const child of foldersIn(listing, source.prospective, strandedAbove)) {
+    const arriving = incomingIn(listing, incoming);
+    for (const child of foldersIn(listing, source.prospective, strandedAbove, arriving.folders)) {
       const named = listing.folders.some((one) => one.path === child.path);
       // Not where the Library names it already: its first Entry committed, and
       // it is an ordinary folder from here on.
       const notHeld = prospective.has(child.path) && !named;
       const waiting = strandedAbove.has(child.path) && !named;
+      const adding = arriving.folders.some((one) => one.path === child.path);
       const expandable = !notHeld || knownUnder(child.path, source);
       const expanded = expandable && source.expanded.has(child.path);
       rows.push({
@@ -185,12 +209,13 @@ export function treeRows(source: TreeSource): TreeRow[] {
         expandable,
         prospective: notHeld,
         stranded: waiting,
+        ...(adding ? { incoming: true } : {}),
       });
       if (expanded) {
         walk(child.path, depth + 1);
       }
     }
-    for (const file of listing.files) {
+    for (const file of arriving.files) {
       rows.push({
         kind: 'file',
         key: fileKey(file.path),
@@ -215,6 +240,7 @@ function foldersIn(
   listing: Listing,
   prospective: readonly string[],
   stranded: ReadonlySet<string>,
+  arriving: readonly ListedFolder[] = [],
 ): ListedFolder[] {
   const named = new Set(listing.folders.map((folder) => folder.path));
   const notHeld = prospectiveIn(listing, prospective);
@@ -234,11 +260,87 @@ function foldersIn(
       size: 0,
       mtime: null,
     }));
-  const extra = [...notHeld, ...waiting];
+  for (const folder of waiting) {
+    named.add(folder.path);
+  }
+  const extra = [...notHeld, ...waiting, ...arriving.filter((folder) => !named.has(folder.path))];
   if (extra.length === 0) {
     return listing.folders;
   }
   return [...listing.folders, ...extra].sort((left, right) => inLibraryOrder(left.path, right.path));
+}
+
+/**
+ * What of `incoming` stands directly in the folder `listing` lists and the
+ * listing does not name yet: the files, merged with its own in the Library's
+ * order, and the folders some of them are under.
+ */
+function incomingIn(
+  listing: Listing,
+  incoming: readonly IncomingFile[],
+): { files: ListedFile[]; folders: ListedFolder[] } {
+  if (incoming.length === 0) {
+    return { files: listing.files, folders: [] };
+  }
+  const prefix = listing.path === '' ? '' : `${listing.path}/`;
+  const listed = new Set(listing.files.map((file) => file.path));
+  const files: ListedFile[] = [];
+  const folders = new Map<string, ListedFolder>();
+  for (const one of incoming) {
+    if (!one.path.startsWith(prefix)) {
+      continue;
+    }
+    const rest = one.path.slice(prefix.length);
+    const cut = rest.indexOf('/');
+    if (cut === -1) {
+      if (!listed.has(one.path)) {
+        files.push(arrivingFile(one, rest));
+      }
+      continue;
+    }
+    const name = rest.slice(0, cut);
+    const path = `${prefix}${name}`;
+    if (!folders.has(path)) {
+      folders.set(path, {
+        name,
+        path,
+        mapped: listing.mapped,
+        present_throughout: false,
+        // Nothing under it is the Library's yet, so the Library counts none.
+        files_total: 0,
+        files_present: 0,
+        size: 0,
+        mtime: null,
+      });
+    }
+  }
+  return {
+    files:
+      files.length === 0
+        ? listing.files
+        : [...listing.files, ...files].sort((left, right) => inLibraryOrder(left.path, right.path)),
+    folders: [...folders.values()],
+  };
+}
+
+/**
+ * An incoming file as a row: standing in the folder and not an Entry yet, as
+ * a file a drop wrote is once it lands (`added`), and waiting for its Pack
+ * where it goes up as one.
+ */
+function arrivingFile(one: IncomingFile, name: string): ListedFile {
+  return {
+    name,
+    path: one.path,
+    size: one.size,
+    mtime: null,
+    deposited_at: null,
+    state: 'added',
+    container: null,
+    reserved: one.packed,
+    openable: false,
+    content_type: 'application/octet-stream',
+  };
 }
 
 /**

@@ -3,12 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   addFiles,
+  browseFolders,
   getFile,
   getFolders,
   getLibrary,
   getListing,
   getRemoteHead,
   getWork,
+  mapFolder,
   peekFile,
   previewDelete,
   startDelete,
@@ -30,12 +32,14 @@ import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   addFiles: vi.fn(),
+  browseFolders: vi.fn(),
   getFile: vi.fn(),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
   getListing: vi.fn(),
   getRemoteHead: vi.fn(),
   getWork: vi.fn(),
+  mapFolder: vi.fn(),
   peekFile: vi.fn(),
   previewDelete: vi.fn(),
   startDelete: vi.fn(),
@@ -248,7 +252,7 @@ describe('starting a Library from the explorer', () => {
     fireEvent.dragOver(tree().getByTitle('Series'));
     fireEvent.drop(screen.getByRole('tree'), carrying('vol-1.jpg'));
     const confirm = await screen.findByRole('dialog');
-    expect(confirm.textContent).toContain('comics/Series/');
+    expect(within(confirm).getByRole('heading').textContent).toBe('Add to comics/Series');
     expect(confirm.textContent).toContain('comics and Series are new');
     await act(async () => {
       fireEvent.click(within(confirm).getByRole('button', { name: ADD }));
@@ -256,9 +260,10 @@ describe('starting a Library from the explorer', () => {
     await waitFor(() => expect(addFiles).toHaveBeenCalledTimes(1));
     expect(vi.mocked(addFiles).mock.calls[0][0]).toBe('comics/Series');
 
-    // Read again, the Library names both, and the marks go.
+    // Read again, the Library names both, and the marks go; the folder added
+    // to was opened by the add, and shows the file.
     await waitFor(() => expect(document.body.textContent).not.toContain('not in Library'));
-    fireEvent.click(tree().getByLabelText('expand Series'));
+    expect(tree().getByLabelText('collapse Series')).toBeTruthy();
     expect(await tree().findByTitle('vol-1.jpg')).toBeTruthy();
   });
 
@@ -280,10 +285,104 @@ describe('starting a Library from the explorer', () => {
     expect(tree().getByTitle('albums').textContent).not.toContain('not in Library');
     // The root is not mapped, and a root of folders keeps the banner back; no
     // path can be prepared right under it.
-    expect(screen.queryByText('map the Library root…')).toBeNull();
+    expect(screen.queryByText('Choose a folder…')).toBeNull();
     expect(tree().queryByRole('button', { name: 'New folder…' })).toBeNull();
     await newFolder('comics', 'Series');
     expect(await tree().findByTitle('Series')).toBeTruthy();
+  });
+});
+
+// EP-9: adding needs a folder on this device for the destination's top-level
+// folder or for the whole Library; where neither is chosen it is asked for
+// first, inside the flow, and the confirmation follows.
+describe('adding where no folder on this device is chosen', () => {
+  it('asks for one first, records it, and goes on to the confirmation', async () => {
+    let chosen = false;
+    answers = (path) => {
+      const mapped = chosen;
+      const of = library({ '': ['books/'], books: ['old.jpg'] })(path);
+      return {
+        ...of,
+        mapped,
+        folders: of.folders.map((one) => ({ ...one, mapped })),
+      };
+    };
+    vi.mocked(browseFolders).mockResolvedValue({ path: '/home/someone', parent: '/home', folders: [] });
+    vi.mocked(mapFolder).mockImplementation(() => {
+      chosen = true;
+      return Promise.resolve({
+        prefix: 'books',
+        local_root: '/home/someone/books',
+        replaced: null,
+        marker: 'written',
+        message: 'books is kept in /home/someone/books',
+      });
+    });
+    render(<App />);
+
+    expect(await tree().findByTitle('books')).toBeTruthy();
+    expect(tree().getByTitle('books').textContent).toContain('no folder chosen');
+    fireEvent.dragEnter(screen.getByRole('tree'), { dataTransfer: { types: ['Files'] } });
+    fireEvent.dragOver(tree().getByTitle('books'));
+    fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+
+    const step = await screen.findByRole('dialog', { name: 'Choose a folder on this device for “books”' });
+    expect(step.textContent).toContain('everything under “books” uses it');
+    expect(step.textContent).not.toMatch(/\bmap/i);
+    fireEvent.change(within(step).getByLabelText('Folder on this device'), {
+      target: { value: '/home/someone/books' },
+    });
+    await act(async () => {
+      fireEvent.click(within(step).getByRole('button', { name: 'Use this folder' }));
+    });
+    expect(mapFolder).toHaveBeenCalledWith('/home/someone/books', 'books');
+
+    const confirm = await screen.findByRole('dialog', { name: 'Add to books' });
+    expect(confirm.textContent).toContain('new.jpg');
+    expect(addFiles).not.toHaveBeenCalled();
+  });
+
+  it('adds nothing, and asks nothing more, where the step is cancelled', async () => {
+    answers = (path) => {
+      const of = library({ '': ['books/'], books: ['old.jpg'] })(path);
+      return { ...of, mapped: false, folders: of.folders.map((one) => ({ ...one, mapped: false })) };
+    };
+    render(<App />);
+    expect(await tree().findByTitle('books')).toBeTruthy();
+    fireEvent.dragOver(tree().getByTitle('books'));
+    fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+    const step = await screen.findByRole('dialog', { name: /^Choose a folder on this device/ });
+    fireEvent.click(within(step).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mapFolder).not.toHaveBeenCalled();
+    expect(addFiles).not.toHaveBeenCalled();
+  });
+});
+
+// After Add the new rows are on the tree at once, in the uploading state,
+// before the request has answered.
+it('draws the files being added as rows at once', async () => {
+  answers = library({ '': ['albums/'], albums: ['old.jpg'] });
+  let landed: (value: { written: string[]; refused: never[] }) => void = () => undefined;
+  vi.mocked(addFiles).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        landed = resolve;
+      }),
+  );
+  render(<App />);
+  expect(await tree().findByTitle('albums')).toBeTruthy();
+  fireEvent.dragOver(tree().getByTitle('albums'));
+  fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
+  const confirm = await screen.findByRole('dialog', { name: 'Add to albums' });
+  await act(async () => {
+    fireEvent.click(within(confirm).getByRole('button', { name: ADD }));
+  });
+  // Opened down to, and drawn as being added while nothing has answered.
+  const row = await tree().findByTitle('new.jpg');
+  expect(within(row).getByRole('img').getAttribute('aria-label')).toMatch(/being added/);
+  await act(async () => {
+    landed({ written: ['albums/new.jpg'], refused: [] });
   });
 });
 

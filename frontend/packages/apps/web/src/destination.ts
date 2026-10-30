@@ -21,6 +21,30 @@ import type { Listing } from '@coffret/api';
 
 import type { DropSummary } from './packChoice';
 import { parentOf } from './prospective';
+import { keyed } from './tree';
+
+/**
+ * The folder files are added to, read off one row of the tree: a folder row's
+ * own folder, the folder a file row stands in, and the Library root where no
+ * row is named.
+ *
+ * One rule for both ways in. The header's **+** reads it off the focused row,
+ * and a drop off the row under the pointer — so files picked with the focus on
+ * a page land beside that page, as files dropped onto it do, and a folder
+ * focused or dropped onto takes them inside it whether it is open or not.
+ */
+export function landingOf(key: string | null): string {
+  if (key === null) {
+    return '';
+  }
+  const row = keyed(key);
+  return row.kind === 'folder' ? row.path : parentOf(row.path);
+}
+
+/** How a landing folder is named in a sentence: its path, or the Library for the root. */
+export function placeOf(landing: string): string {
+  return landing === '' ? 'the Library' : landing;
+}
 
 /**
  * Where one level of a drop's destination stands.
@@ -165,8 +189,8 @@ export function newLine(levels: readonly Level[]): string | null {
   }
   const named = listed(made);
   return made.length === 1
-    ? `${named} is new — the Library has no such folder yet, and this drop makes it`
-    : `${named} are new — the Library has no such folders yet, and this drop makes them`;
+    ? `${named} is new — the Library has no such folder yet, and adding these files makes it`
+    : `${named} are new — the Library has no such folders yet, and adding these files makes them`;
 }
 
 /**
@@ -181,9 +205,9 @@ export function onDiskLine(levels: readonly Level[]): string | null {
   }
   const named = listed(standing);
   return standing.length === 1
-    ? `${named} is on this device’s disk and not in the Library yet — this drop adds it ` +
+    ? `${named} is on this device’s disk and not in the Library yet — it is added ` +
         'together with what is already in it'
-    : `${named} are on this device’s disk and not in the Library yet — this drop adds them ` +
+    : `${named} are on this device’s disk and not in the Library yet — they are added ` +
         'together with what is already in them';
 }
 

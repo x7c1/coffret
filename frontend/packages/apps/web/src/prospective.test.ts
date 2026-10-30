@@ -190,6 +190,6 @@ it('leaves a prepared level new in a drop’s confirmation', () => {
   );
   expect(destination.levels.map((level) => level.state)).toEqual(['new', 'new']);
   expect(newLine(destination.levels)).toBe(
-    'comics and Series are new — the Library has no such folders yet, and this drop makes them',
+    'comics and Series are new — the Library has no such folders yet, and adding these files makes them',
   );
 });

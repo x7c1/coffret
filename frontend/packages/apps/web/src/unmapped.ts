@@ -43,78 +43,30 @@ export const NOTHING_AT_THIS_PATH = 'the Library holds nothing at this path';
  * drop they did not make.
  *
  * Which fact it is, is `held`'s to say, and one path never gets both. A folder
- * the Library holds that no mapping of this device reaches is the EP-9 reason:
- * the folder is there, and this device has nowhere to put what is in it. A path
- * the Library holds nothing at is the other, and mapping is not what is wrong
- * with it — the screen over these rows deliberately says nothing about mapping
- * such a path, since being told to map a part of the Library there is none of
- * sends somebody choosing a folder for nothing, and a notice that gave the mapping
- * reason anyway would leave one path carrying two explanations at once.
+ * the Library holds that no folder of this device is chosen for is the EP-9
+ * reason: the folder is there, and this device has nowhere to put what is in
+ * it. A path the Library holds nothing at is the other, and the missing folder
+ * on this device is not what is wrong with it — the screen over these rows
+ * deliberately offers no choice of folder for such a path, since being asked to
+ * choose one for a part of the Library there is none of sends somebody choosing
+ * a folder for nothing, and a notice that gave the EP-9 reason anyway would
+ * leave one path carrying two explanations at once.
  *
- * `below` is the folders inside this one that this device *does* have a folder
- * for, which is only ever a Library root's children: a mapping stands for one
- * top-level component and everything under it, so deeper down every child
- * repeats its parent's answer. Naming them is the whole of what this adds to
- * the banner. A drop of a nested folder onto an unmapped root is refused entire
- * although a mapped folder below the root could have taken its share, and a
- * refusal that does not say which part was refusable leaves somebody to work
- * out by trial which of their folders the device has. It goes with the EP-9
- * reason alone, and not by being held back: a folder of the Library is what the
- * paths under it imply, so a path the Library does not hold has no children of
- * any kind, mapped or otherwise.
- *
- * Refused entire, and not split. Taking the part that has somewhere to go is
- * the better outcome for a person and is a different gesture underneath: the
- * drop is one request against one folder, so a half-accepted drop is several
- * requests, a rule for which files each carries, and an answer that has to
- * report what landed and what did not from more than one place. What is wrong
- * here is that the refusal says nothing about the folders, and that is wrong
- * under either shape — so it is fixed first, and on its own.
- *
- * It says nothing about `below` for an `open`. The row that was clicked stands
- * in *this* folder, and no folder beside it can hold that file: there is no
- * other place to offer, and offering one would be inviting somebody to look for
- * their file where it is not.
+ * An add into a folder with no folder chosen does not come here: the add flow
+ * asks for one instead (see [`folderToChoose`](./mapping)), so what reaches
+ * this for an add is a path the Library holds nothing at.
  */
-export function unmappedLine(
-  tried: Tried,
-  held: boolean,
-  below: readonly string[],
-): string {
+export function unmappedLine(tried: Tried, held: boolean): string {
   if (!held) {
     // One clause for both gestures, because there is nothing further to say
-    // about either: no mapping would change this, and there is no folder below
-    // to offer. What was tried is the only half that differs.
+    // about either: no folder chosen would change this. What was tried is the
+    // only half that differs.
     return tried === 'open'
       ? `nothing was opened — ${NOTHING_AT_THIS_PATH}`
       : `nothing was added — ${NOTHING_AT_THIS_PATH}`;
   }
   // The server's own clause, since a click here asks it nothing.
-  const reason = NO_FOLDER_HERE;
-  if (tried === 'open') {
-    return `nothing was opened — ${reason}, so there is nowhere here to put the file that row stands for`;
-  }
-  if (below.length === 0) {
-    return `nothing was added — ${reason}`;
-  }
-  return `nothing was added — ${reason}; the folders below it that do are ${named(below)}, and a drop onto one of those is taken`;
-}
-
-/**
- * The folders, as a list a sentence can carry.
- *
- * Two of them and a count of the rest, which is the economy the drop's own
- * refusals keep: the notice area is one line, and a Library root of thirty
- * top-level folders would otherwise put a paragraph in it. Two rather than one
- * because the point of naming any is that a person recognizes theirs, and one
- * name reads as the only answer.
- */
-function named(below: readonly string[]): string {
-  if (below.length === 1) {
-    return below[0];
-  }
-  if (below.length === 2) {
-    return `${below[0]} and ${below[1]}`;
-  }
-  return `${below[0]}, ${below[1]} and ${below.length - 2} more`;
+  return tried === 'open'
+    ? `nothing was opened — ${NO_FOLDER_HERE}, so there is nowhere here to put the file that row stands for`
+    : `nothing was added — ${NO_FOLDER_HERE}`;
 }

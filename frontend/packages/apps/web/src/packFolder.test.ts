@@ -93,7 +93,7 @@ describe('questionOf', () => {
 
     const unreachable = questionOf(preview({ files: 0, bytes: 0, unavailable: 1, not_here: 3 }));
     expect(unreachable.line).toBe(
-      'Nothing to pack: the folder on this device it is mapped to cannot be reached right now.',
+      'Nothing to pack: the folder chosen for it on this device cannot be reached right now.',
     );
   });
 });

@@ -896,36 +896,8 @@ export function misorderedLine(misordered: Misordered): string {
 /** The mark on a line whose new name the person corrected. */
 export const EDITED = '(edited)';
 
-/** What puts back the name the rule gave. */
-export const PUT_BACK = 'put back';
-
-/**
- * How many renames the preview shows at each end of a group before it says
- * how many are between them. A book's first and last pages are what tell a
- * person the rule read the names the way they meant; the two hundred between
- * them say the same thing again.
- */
-const PREVIEW_ENDS = 3;
-
-/** A list as the preview shows it: both ends, and how many were left out. */
-export interface Elided<T> {
-  head: T[];
-  /** How many are between `head` and `tail` and not shown. */
-  hidden: number;
-  tail: T[];
-}
-
-/** `items` cut to `PREVIEW_ENDS` at each end, or all of them where `all`. */
-export function elided<T>(items: readonly T[], all: boolean): Elided<T> {
-  if (all || items.length <= PREVIEW_ENDS * 2) {
-    return { head: [...items], hidden: 0, tail: [] };
-  }
-  return {
-    head: items.slice(0, PREVIEW_ENDS),
-    hidden: items.length - PREVIEW_ENDS * 2,
-    tail: items.slice(items.length - PREVIEW_ENDS),
-  };
-}
+/** What puts back the name the rule gave, on a corrected line. */
+export const UNDO = 'Undo';
 
 /** One line of a group in the preview: a rename, or a name left as it is. */
 export type Line = { renamed: Rename } | { unchanged: Rename };
@@ -944,9 +916,95 @@ export function linesOf(group: Group): Line[] {
   ].sort((a, b) => inReadingOrder(group.kind, own(a), own(b)));
 }
 
+/**
+ * Whether a line does not follow the rule, which the preview always shows and
+ * tints: a name left unnumbered beside names that were — a volume folder
+ * outside the sequence, a file that is no page — a two-page spread, a name put
+ * after the page before it (`000_cover.jpg`), and a name corrected by hand or
+ * read out of order. Every other line is a name that is its number and no
+ * more, `001.jpg`, renamed so or already so, which says nothing its neighbours
+ * do not.
+ *
+ * The names of a group left whole are no exception to anything: the group's
+ * own line says why none of them was renamed, and they fold like regular ones.
+ */
+export function irregular(line: Line, group: Group): boolean {
+  if ('unchanged' in line) {
+    return group.leftWhole === null && !numberOnly(split(line.unchanged.to)[1], group.kind);
+  }
+  const rename = line.renamed;
+  if (rename.ruled !== undefined || rename.misordered !== undefined) {
+    return true;
+  }
+  return !numberOnly(split(rename.to)[1], group.kind);
+}
+
+/**
+ * Whether a name is its number and nothing more — a page's with its extension
+ * after it — as the rule names a page or a volume, or as one already was.
+ */
+function numberOnly(name: string, kind: Group['kind']): boolean {
+  return /^\d+$/.test(kind === 'pages' ? splitExtension(name)[0] : name);
+}
+
+/** One entry of a folded preview: a line, or a count of the regular lines folded between two shown. */
+export type Folded = { line: Line; irregular: boolean } | { more: number };
+
+/**
+ * A group's lines as the preview shows them: every irregular line (see
+ * {@link irregular}), the first and the last regular line — which tell a
+ * person the rule read the names the way they meant — and in place of each
+ * run of regular lines between those, how many it holds. A run of one is
+ * shown rather than counted, since `… 1 more …` takes the room of the line.
+ * With `all`, every line.
+ */
+export function folded(group: Group, all: boolean): Folded[] {
+  const lines = linesOf(group);
+  const marks = lines.map((line) => irregular(line, group));
+  if (all) {
+    return lines.map((line, at) => ({ line, irregular: marks[at] }));
+  }
+  const first = marks.indexOf(false);
+  const last = marks.lastIndexOf(false);
+  const shown: Folded[] = [];
+  let run: Line[] = [];
+  const close = () => {
+    if (run.length === 1) {
+      shown.push({ line: run[0], irregular: false });
+    } else if (run.length > 1) {
+      shown.push({ more: run.length });
+    }
+    run = [];
+  };
+  lines.forEach((line, at) => {
+    if (marks[at] || at === first || at === last) {
+      close();
+      shown.push({ line, irregular: marks[at] });
+    } else {
+      run.push(line);
+    }
+  });
+  close();
+  return shown;
+}
+
 /** Whether showing everything would show more than the preview does now. */
 export function hasHidden(groups: readonly Group[]): boolean {
-  return groups.some((group) => elided(linesOf(group), false).hidden > 0);
+  return groups.some((group) => folded(group, false).some((entry) => 'more' in entry));
+}
+
+/**
+ * The preview's header line: how many names the drop renames, and how many
+ * lines do not follow the rule and are worth a look — `80 renamed · 2 to check`.
+ */
+export function tallyLine(groups: readonly Group[]): string {
+  let renamed = 0;
+  let check = 0;
+  for (const group of groups) {
+    renamed += group.renamed.length;
+    check += linesOf(group).filter((line) => irregular(line, group)).length;
+  }
+  return `${renamed} renamed · ${check} to check`;
 }
 
 /** The heading over one group: `Pages in BookX/vol1`, `Volume folders in BookX`. */

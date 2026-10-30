@@ -35,16 +35,45 @@ export function Banner({
 }
 
 /**
- * Said while files are dragged over the tree — over a folder's row, or over the
- * rest of it for the folder the focus is in: what letting go of them there will do, as `dropLine` words
- * it. A folder that takes no drop says so in the refused colour the outline
- * around it is drawn in, and one not known yet either way in a neutral one.
+ * Said while files are dragged over the tree: a pill at the bottom of it,
+ * naming the folder letting go of them there adds to (see `dropLine`), with
+ * that folder's row outlined in the same colour. It stands over the rows
+ * rather than among them, and takes no pointer, so the drag goes on reading
+ * the row under it.
  */
-export function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) {
+export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: string }) {
   return (
-    <Banner tone={TONE[outcome]} background={GROUND[outcome]}>
-      {dropLine(outcome, held)}
-    </Banner>
+    <div
+      role="status"
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 12,
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+        zIndex: 2,
+      }}
+    >
+      <span
+        style={{
+          maxWidth: 'calc(100% - 32px)',
+          padding: '5px 14px',
+          borderRadius: 999,
+          border: `1px solid ${TONE[outcome]}`,
+          background: GROUND[outcome],
+          color: TONE[outcome],
+          fontSize: 13,
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {dropLine(outcome, landing)}
+      </span>
+    </div>
   );
 }
 
@@ -56,22 +85,16 @@ export function dropOutline(dragged: boolean, outcome: DropOutcome): string {
   return `2px dashed ${TONE[outcome]}`;
 }
 
-/**
- * The colour of a drop's outcome: refused, taken, or neither while it is not
- * known yet — so that no row shows one colour the instant a drag starts and
- * flips to the other when the answer arrives.
- */
+/** The colour of a drop's outcome: taken, or refused. */
 const TONE: Record<DropOutcome, string> = {
   taken: COLOR.added,
   taken_after: COLOR.added,
   refused: COLOR.refused,
-  unknown: COLOR.dim,
 };
 
-/** What is under the drop line, in the tone of its outcome. */
+/** What is under the drop pill, in the tone of its outcome. */
 const GROUND: Record<DropOutcome, string> = {
   taken: COLOR.addedGround,
   taken_after: COLOR.addedGround,
   refused: COLOR.refusedGround,
-  unknown: COLOR.panel,
 };

@@ -241,7 +241,7 @@ const PHOTOS_AND_A_LINK: HeldDrop = {
 };
 
 const LINK_LINE =
-  '1 thing in the drop was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
+  '1 thing was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
 
 describe('a drop the app took only part of', () => {
   it('carries what was not taken beside what was, leaving out what had no path', async () => {
@@ -276,7 +276,7 @@ describe('a drop the app took only part of', () => {
 
     expect(chosen).toBe('refused');
     expect(said).toHaveLength(1);
-    expect(said[0]).toMatch(/^this drop holds 10001 files, more than the \d+ one drop can carry\. /);
+    expect(said[0]).toMatch(/^these are 10001 files, more than the \d+ that can be added at once\. /);
     // A sentence of its own, after the advice the refusal ends on rather than
     // part of it.
     expect(said[0].endsWith(`main\`. ${LINK_LINE}.`)).toBe(true);
@@ -327,7 +327,7 @@ describe('a drop that came to no files', () => {
     const cause = await filesUnder([refusing]).catch((refused: unknown) => refused);
 
     expect(nothingAddedLine(cause)).toBe(
-      'nothing was added — that drop could not be read: the explorer could not finish that',
+      'nothing was added — those files could not be read: the explorer could not finish that',
     );
     error.mockRestore();
   });

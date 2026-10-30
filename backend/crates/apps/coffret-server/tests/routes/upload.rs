@@ -322,6 +322,36 @@ async fn a_drop_onto_a_folder_that_is_not_on_this_device_is_refused_whole() {
     );
 }
 
+// EP-9: a drop onto the Library root goes through the Library-root mapping
+// alone. A top-level mapping stands for its own subtree and not for what sits
+// beside it, so a device that maps only `albums` refuses the whole drop — even
+// the part `albums/new.png`, whose Entry Path falls under that mapping.
+#[tokio::test]
+async fn a_drop_onto_the_library_root_without_a_root_mapping_is_refused_whole() {
+    let served = Served::mapping_only("albums").await;
+
+    let (status, refusal) = body_of(
+        served
+            .upload("", &[("albums/new.png", b"new"), ("notes.txt", b"n")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 409);
+    assert_eq!(refusal["error"], "refused_placement");
+    assert_eq!(refusal["reason"], "unmapped");
+    assert!(
+        !served.local_path("new.png").exists(),
+        "nothing landed under the mapping the part's name begins with",
+    );
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["sync"],
+        serde_json::Value::Null,
+        "nothing landed, so there is nothing to carry in",
+    );
+}
+
 // EP-13: a mapped folder whose marker names another identity is not the folder
 // the mapping was recorded against, and nothing is placed into it. The route is
 // one of the single writers EP-11 names, so it fails that request as a whole

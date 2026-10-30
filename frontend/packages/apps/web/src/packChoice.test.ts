@@ -3,19 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { addedFile, type Added, type ContainerKind, type Listing } from '@coffret/api';
 
 import {
-  choiceLabels,
+  addTitle,
   chooseAndAdd,
   collisionsOf,
   existsLine,
-  folderLine,
   heldIn,
   heldUnder,
-  looseLine,
+  incomingLine,
+  incomingOf,
+  MARK_LABEL,
   NOTHING_HELD,
-  questionOf,
   refusedLine,
   replacesLine,
+  STORE_CHOICES,
   summarize,
+  totalLine,
   type Choice,
   type Choosing,
   type HeldFiles,
@@ -47,7 +49,8 @@ describe('summarize', () => {
       { name: 'BookX', files: 81, bytes: 58_000_000, exists: false },
     ]);
     expect(summary.files).toBe(files.length);
-    expect(folderLine(summary.folders[0])).toBe('📁 BookX — 81 files, 58.0 MB');
+    expect(totalLine(summary)).toBe('81 files, 58.0 MB');
+    expect(incomingLine(incomingOf(summary, files, NOTHING_HELD)[0])).toBe('BookX — 81 files, 58.0 MB');
   });
 
   // Files alone are confirmed too: how many and how much, and that they go
@@ -55,12 +58,8 @@ describe('summarize', () => {
   it('counts a drop of files alone, and says they are added one by one', () => {
     const summary = summarize([added('cover.png', 1_500_000), added('notes.txt', 500_000)], []);
     expect(summary).toEqual({ folders: [], loose: 2, looseBytes: 2_000_000, files: 2 });
-    expect(questionOf(summary)).toBe('this drop holds 2 files — add them to the Library?');
-    expect(looseLine(summary)).toBe('2 files, 2.0 MB — added one by one');
-
-    const one = summarize([added('cover.png', 1_000)], []);
-    expect(questionOf(one)).toBe('this drop holds 1 file — add it to the Library?');
-    expect(looseLine(one)).toMatch(/^1 file, .* — added on its own$/);
+    expect(totalLine(summary)).toBe('2 files, 2.0 MB');
+    expect(totalLine(summarize([added('cover.png', 1_000)], []))).toMatch(/^1 file, /);
   });
 
   // Several folders are listed each with its own totals, and loose files beside
@@ -75,12 +74,43 @@ describe('summarize', () => {
     expect(summary.loose).toBe(1);
     expect(summary.files).toBe(6);
     expect(existsLine(summary.folders[1])).toMatch(/^vol-2 already exists here — /);
-    expect(questionOf(summary)).toBe('this drop holds 2 folders — how should it go into the Library?');
-    expect(looseLine(summary)).toBe('and 1 file beside them, added the same way');
-    expect(choiceLabels(summary)).toEqual({
-      pack: 'As a Pack (recommended)',
-      one_by_one: 'The 6 files one by one',
-    });
+    expect(STORE_CHOICES.pack.label).toBe('One Pack');
+    expect(STORE_CHOICES.one_by_one.label).toBe('Separate files');
+  });
+
+  it('heads the confirmation with where the drop lands', () => {
+    expect(addTitle('comics/Foo')).toBe('Add to comics/Foo');
+    expect(addTitle('')).toBe('Add to the Library');
+  });
+});
+
+describe('the incoming items', () => {
+  // Each item is marked as what it is to the folder it lands in: a folder the
+  // Library does not have there, a file it does not have, or a file taking the
+  // place of the one-file Entry at its path.
+  it('marks a new folder, a new file and a file that replaces one', () => {
+    const files = [...book('BookX', 2), ...book('vol-2', 2), added('cover.png'), added('notes.txt'), added('packed.jpg')];
+    const summary = summarize(files, ['vol-2']);
+    const held: HeldFiles = new Map<string, ContainerKind>([
+      ['notes.txt', 'one-file'],
+      ['packed.jpg', 'pack'],
+    ]);
+    const items = incomingOf(summary, files, held);
+    expect(items.map((item) => [item.name, item.folder, item.mark])).toEqual([
+      ['BookX', true, 'new_folder'],
+      // A folder already there is no new one: the line beside it says so.
+      ['vol-2', true, null],
+      ['cover.png', false, 'new'],
+      ['notes.txt', false, 'replaces'],
+      // A Pack holds that path, so it is refused, which the refusal line counts.
+      ['packed.jpg', false, null],
+    ]);
+    expect([MARK_LABEL.new_folder, MARK_LABEL.new, MARK_LABEL.replaces]).toEqual([
+      'New folder',
+      'New',
+      'Replaces',
+    ]);
+    expect(incomingLine(items[2])).toBe('cover.png — 10 B');
   });
 });
 
@@ -249,13 +279,13 @@ describe('collisions', () => {
     const collisions = collisionsOf(files, held);
     expect(collisions.refused).toEqual([]);
     expect(replacesLine(collisions)).toBe(
-      '7 files in this drop replace the files the Library already has at the same path: ' +
+      '7 files being added replace the files the Library already has at the same path: ' +
         'BookX/p0.jpg, BookX/p1.jpg, BookX/p2.jpg, BookX/p3.jpg, BookX/p4.jpg, and 2 more',
     );
     expect(refusedLine(collisions)).toBeNull();
 
     expect(replacesLine(collisionsOf([files[0]], held))).toBe(
-      '1 file in this drop replaces the file the Library already has at the same path: BookX/p0.jpg',
+      '1 file being added replaces the file the Library already has at the same path: BookX/p0.jpg',
     );
   });
 

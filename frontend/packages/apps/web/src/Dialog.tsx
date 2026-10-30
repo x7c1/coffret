@@ -3,10 +3,16 @@ import { useEffect, type CSSProperties, type FormEvent, type ReactNode } from 'r
 import { COLOR } from './theme';
 
 /**
- * The frame the explorer's questions stand in — "Delete…", "New folder…" and
- * "Pack this folder…": a panel over the dimmed screen with the question as its
- * heading, what it has to say under it, and the answers in a row at the
+ * The frame the explorer's questions stand in — "Delete…", "New folder…",
+ * "Pack this folder…", the folder on this device chosen while adding, and the
+ * confirmation of an add: a panel over the dimmed screen with the question as
+ * its heading, what it has to say under it, and the answers in a row at the
  * bottom right, the one that goes ahead last.
+ *
+ * The panel is never taller than the window less a margin: what it has to say
+ * scrolls between the heading and the answers, which stay in view. With
+ * `fill` it is as tall as that from the start, for a body that holds a box
+ * taking the rest of the height and scrolling inside it.
  *
  * Escape and a click outside it are `onCancel`, as they close any dialog. With
  * `onSubmit` the panel is a form, so `Enter` in its field is the submit button.
@@ -16,6 +22,8 @@ export function Dialog({
   onCancel,
   onSubmit,
   actions,
+  width = 440,
+  fill = false,
   children,
 }: {
   /** The question, as the heading and as what the dialog is read out as. */
@@ -24,6 +32,10 @@ export function Dialog({
   onSubmit?: (event: FormEvent) => void;
   /** The answers, in the order they stand left to right. */
   actions: ReactNode;
+  /** How wide the panel is, where the window has the room. */
+  width?: number;
+  /** Whether the panel takes the window's height less a margin, whatever its body holds. */
+  fill?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -42,8 +54,10 @@ export function Dialog({
   const body = (
     <>
       <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: 'anywhere' }}>{title}</h2>
-      {children}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>{actions}</div>
+      <div style={BODY}>{children}</div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
+        {actions}
+      </div>
     </>
   );
   const panel = {
@@ -51,7 +65,11 @@ export function Dialog({
     'aria-modal': true,
     'aria-label': title,
     onClick: (event: { stopPropagation: () => void }) => event.stopPropagation(),
-    style: PANEL,
+    style: {
+      ...PANEL,
+      width: `min(${width}px, calc(100vw - 32px))`,
+      ...(fill ? { height: TALLEST } : {}),
+    },
   } as const;
   return (
     <div role="presentation" onClick={onCancel} style={BACKDROP}>
@@ -126,8 +144,12 @@ const BACKDROP: CSSProperties = {
   justifyContent: 'center',
 };
 
+/** The tallest a panel is: the window's height, less a margin above and below. */
+const TALLEST = 'calc(100vh - 48px)';
+
 const PANEL: CSSProperties = {
-  width: 'min(440px, calc(100vw - 32px))',
+  maxHeight: TALLEST,
+  boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
@@ -139,4 +161,14 @@ const PANEL: CSSProperties = {
   color: COLOR.text,
   fontSize: 13,
   lineHeight: 1.45,
+};
+
+/** What the dialog says, between the heading and the answers: scrolled where it runs long. */
+const BODY: CSSProperties = {
+  flex: '1 1 auto',
+  minHeight: 0,
+  overflow: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
 };

@@ -115,7 +115,7 @@ export function questionOf(preview: FreezePreview): PackQuestion {
  */
 function nothingBecause(preview: FreezePreview, reasons: string[]): string {
   if (preview.unavailable > 0) {
-    return 'the folder on this device it is mapped to cannot be reached right now';
+    return 'the folder chosen for it on this device cannot be reached right now';
   }
   if (reasons.length === 0) {
     return 'it holds no files';
