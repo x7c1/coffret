@@ -585,7 +585,9 @@ const ROW = {
   alignItems: 'center',
   boxSizing: 'border-box',
   minHeight: 36,
-  padding: '0 8px 0 16px',
+  // Less at the left than at a text row's, since the toggle's square holds
+  // room around its icon: the icon itself starts 16px in.
+  padding: '0 8px 0 10px',
   minWidth: 0,
 } as const;
 
@@ -598,6 +600,9 @@ const TOGGLE = {
   boxSizing: 'border-box',
   width: 28,
   height: 28,
+  // Its square already holds room beside the icon, so the summary after it
+  // stands closer than the row's gap would put it.
+  marginRight: -8,
   border: 'none',
   borderRadius: 6,
   font: 'inherit',
