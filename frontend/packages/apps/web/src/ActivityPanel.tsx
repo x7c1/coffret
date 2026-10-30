@@ -25,7 +25,7 @@ import { size } from './humanize';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { SyncIcon } from './SyncIcon';
-import { COLOR } from './theme';
+import { COLOR, SHADOW } from './theme';
 
 /**
  * What the server and this page are doing and have done, along the bottom of
@@ -160,9 +160,20 @@ export function ActivityPanel({
           aria-controls={listId}
           style={TOGGLE}
         >
-          <span aria-hidden="true" style={{ display: 'inline-block', width: 10 }}>
-            {open ? '▾' : '▸'}
-          </span>
+          <svg
+            aria-hidden="true"
+            width={12}
+            height={12}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ display: 'block', transform: open ? 'rotate(90deg)' : undefined }}
+          >
+            <path d="m9 6 6 6-6 6" />
+          </svg>
           <span style={{ color: COLOR.text, fontWeight: 600 }}>Activity</span>
         </button>
         {locked !== null ? (
@@ -189,7 +200,7 @@ export function ActivityPanel({
               <span style={{ ...SUMMARY, color: summaryColour(row, running.length > 0) }} title={row.text}>
                 {row.text}
               </span>
-              {row.progress !== null && <Bar progress={row.progress} width={80} />}
+              {row.progress !== null && <Bar progress={row.progress} width={96} />}
             </>
           )
         )}
@@ -410,7 +421,7 @@ function Bar({ progress, width }: { progress: number; width: number }) {
           display: 'block',
           width: `${percent}%`,
           height: '100%',
-          background: COLOR.fetching,
+          background: COLOR.accent,
         }}
       />
     </span>
@@ -433,7 +444,7 @@ function Shortcuts() {
         onMouseLeave={() => setShown(false)}
         onFocus={() => setShown(true)}
         onBlur={() => setShown(false)}
-        style={{ ...ICON_BUTTON, width: 20, height: 20, borderRadius: 10 }}
+        style={{ ...ICON_BUTTON, borderRadius: '50%', border: `1px solid ${COLOR.control}` }}
       >
         ?
       </button>
@@ -531,7 +542,7 @@ const OUTCOME: Record<Outcome, string> = {
 
 /** The colour of each outcome's dot, in the colours the rest of the screen uses. */
 const DOT_COLOUR: Record<Outcome, string> = {
-  success: COLOR.present,
+  success: COLOR.success,
   failure: COLOR.refused,
   notice: COLOR.warn,
 };
@@ -548,7 +559,7 @@ const PANEL = {
   flexDirection: 'column',
   background: COLOR.panel,
   borderTop: `1px solid ${COLOR.border}`,
-  fontSize: 12,
+  fontSize: 13,
   color: COLOR.dim,
   minHeight: 0,
 } as const;
@@ -557,7 +568,9 @@ const ROW = {
   display: 'flex',
   gap: 12,
   alignItems: 'center',
-  padding: '4px 12px',
+  boxSizing: 'border-box',
+  minHeight: 36,
+  padding: '0 8px 0 16px',
   minWidth: 0,
 } as const;
 
@@ -582,12 +595,14 @@ const SUMMARY = {
 
 const BADGE = {
   flex: '0 0 auto',
-  padding: '0 8px',
-  borderRadius: 8,
+  padding: '2px 8px',
+  borderRadius: 10,
   background: COLOR.refusedGround,
   color: COLOR.refused,
-  border: `1px solid ${COLOR.refused}`,
+  border: 'none',
   font: 'inherit',
+  fontSize: 12,
+  fontWeight: 600,
   cursor: 'pointer',
 } as const;
 
@@ -604,15 +619,15 @@ const LIST = {
   maxHeight: '35vh',
   overflowY: 'auto',
   borderTop: `1px solid ${COLOR.border}`,
-  padding: '0 12px 6px',
+  padding: '0 8px 6px 16px',
 } as const;
 
 const HEADING = {
-  margin: '6px 0 2px',
+  margin: '8px 0 2px',
   fontSize: 11,
   fontWeight: 600,
   textTransform: 'uppercase',
-  letterSpacing: 0.5,
+  letterSpacing: '0.04em',
   color: COLOR.dim,
 } as const;
 
@@ -622,7 +637,9 @@ const ITEM = {
   display: 'flex',
   gap: 10,
   alignItems: 'center',
-  padding: '3px 0',
+  boxSizing: 'border-box',
+  minHeight: 32,
+  padding: '4px 0',
 } as const;
 
 const TIME = {
@@ -639,9 +656,9 @@ const SOUGHT = { background: COLOR.refusedGround, outline: 'none' } as const;
 
 const DOT = {
   flex: '0 0 auto',
-  width: 8,
-  height: 8,
-  borderRadius: 4,
+  width: 6,
+  height: 6,
+  borderRadius: 3,
 } as const;
 
 const EMPTY = { margin: '2px 0' } as const;
@@ -652,25 +669,26 @@ const BUTTON = {
   background: COLOR.panel,
   color: COLOR.text,
   font: 'inherit',
-  padding: '1px 10px',
-  borderRadius: 4,
+  padding: '2px 10px',
+  borderRadius: 6,
   cursor: 'pointer',
 } as const;
 
-/** A Retry, and the **?**: an icon in a small frame. */
+/** A Retry, and the **?**: an icon in a 28px frame. */
 const ICON_BUTTON = {
   flex: '0 0 auto',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: 22,
-  height: 20,
+  boxSizing: 'border-box',
+  width: 28,
+  height: 28,
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,
   color: COLOR.text,
   font: 'inherit',
   padding: 0,
-  borderRadius: 4,
+  borderRadius: 6,
   cursor: 'pointer',
 } as const;
 
@@ -680,9 +698,10 @@ const TOOLTIP = {
   bottom: 'calc(100% + 6px)',
   zIndex: 10,
   padding: '8px 10px',
-  background: COLOR.ground,
+  background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,
-  borderRadius: 4,
+  borderRadius: 8,
+  boxShadow: SHADOW.menu,
   color: COLOR.dim,
   whiteSpace: 'nowrap',
 } as const;

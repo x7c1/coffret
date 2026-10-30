@@ -47,7 +47,7 @@ export type Action =
 export interface ActionItem {
   label: string;
   action: Action;
-  /** Drawn in light red: it takes something away. */
+  /** Drawn in red, and shaded in a tint of it: it takes something away. */
   destructive: boolean;
   /** Set apart from the items above it by a line. */
   separated: boolean;

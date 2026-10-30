@@ -40,7 +40,11 @@ it('names the Library first in the header, with no icon before it', () => {
   expect(name.children).toHaveLength(0);
   expect(name.previousElementSibling).toBeNull();
   expect(name.tagName).not.toBe('BUTTON');
-  expect(screen.getByRole('banner').querySelector('svg, img')).toBeNull();
+  // The one icon in the header is the **+**'s plus, at the other end.
+  expect(name.parentElement?.querySelector('svg, img')).toBeNull();
+  expect([...screen.getByRole('banner').querySelectorAll('svg, img')]).toEqual([
+    screen.getByRole('button', { name: 'Add files' }).querySelector('svg'),
+  ]);
 });
 
 it('says a refused Library request where the name goes', () => {

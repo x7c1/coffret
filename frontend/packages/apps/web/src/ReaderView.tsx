@@ -5,7 +5,7 @@ import { getFile, isRefusal, peekFile, type Listing } from '@coffret/api';
 import { drawnPages } from './drawn';
 import { LIBRARY_ROOT } from './location';
 import { parentOf } from './prospective';
-import { COLOR } from './theme';
+import { SHADOW, SHEET_COLOR } from './theme';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { refusedAsRanOut } from './ranOut';
 import { COVER_NOT_HERE, sheetShows, sheetWanted, UNSUPPORTED, type Counter, type Sheeted, type SheetShows } from './sheet';
@@ -244,7 +244,7 @@ export function ReaderView({
     <section aria-label="Reader" className="sheet" style={SHEET}>
       <header style={HEADER}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 12, color: COLOR.dim, overflowWrap: 'anywhere' }}>
+          <p style={{ margin: 0, fontSize: 12, color: SHEET_COLOR.dim, overflowWrap: 'anywhere' }}>
             {where === '' ? LIBRARY_ROOT : where}
           </p>
           <h2 style={TITLE}>
@@ -253,7 +253,7 @@ export function ReaderView({
           </h2>
         </div>
         {counter !== null && (
-          <span aria-label="position" style={{ fontSize: 13, color: COLOR.dim, whiteSpace: 'nowrap' }}>
+          <span aria-label="position" style={{ fontSize: 13, color: SHEET_COLOR.dim, whiteSpace: 'nowrap' }}>
             {counter.at} / {counter.of}
           </span>
         )}
@@ -319,14 +319,14 @@ function Body({
                 style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
               />
             ) : (
-              <span style={{ color: COLOR.dim, fontSize: 13, textAlign: 'center', padding: 12 }}>
+              <span style={{ color: SHEET_COLOR.dim, fontSize: 13, textAlign: 'center', padding: 12 }}>
                 {shows.refused ?? shows.note}
               </span>
             )}
           </Stack>
           <div style={{ textAlign: 'center' }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: 'anywhere' }}>{row.name}</p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: COLOR.dim }}>{shows.caption}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: SHEET_COLOR.dim }}>{shows.caption}</p>
           </div>
         </div>
       );
@@ -334,7 +334,7 @@ function Body({
       return (
         <div style={{ textAlign: 'center', padding: 16 }}>
           <p style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: 'anywhere' }}>{shows.name}</p>
-          <p style={{ margin: '6px 0 0', fontSize: 13, color: COLOR.dim }}>{UNSUPPORTED}</p>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: SHEET_COLOR.dim }}>{UNSUPPORTED}</p>
         </div>
       );
   }
@@ -362,7 +362,7 @@ function Stack({ children }: { children: ReactNode }) {
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          background: COLOR.ground,
+          background: SHEET_COLOR.ground,
         }}
       >
         {children}
@@ -397,7 +397,7 @@ function Picture({
       // its own disk, and saying it was not there would be saying the opposite
       // of what the row it was opened from says (spec: EP-10).
       return (
-        <p style={{ color: COLOR.dim, textAlign: 'center', margin: 0, padding: 12 }}>
+        <p style={{ color: SHEET_COLOR.dim, textAlign: 'center', margin: 0, padding: 12 }}>
           fetching {name}…
           {remote && (
             <>
@@ -412,21 +412,21 @@ function Picture({
     case 'failed':
       return (
         <div style={{ textAlign: 'center', maxWidth: 520, padding: 16 }}>
-          <p style={{ color: COLOR.refused }}>{shown.message}</p>
+          <p style={{ color: SHEET_COLOR.refused }}>{shown.message}</p>
           {/* A picture refused because the permission ran out is one no retry
               brings back: the reconnect is offered above it, and the retry
               stays for once the permission is renewed. */}
           {shown.ranOut && reconnect !== null && (
-            <p style={{ color: COLOR.text, fontSize: 13 }}>
-              <ReconnectOffer offer={reconnect} />
+            <p style={{ color: SHEET_COLOR.text, fontSize: 13 }}>
+              <ReconnectOffer offer={reconnect} ink={SHEET_COLOR} />
             </p>
           )}
           <button
             onClick={onRetry}
             style={{
-              border: `1px solid ${COLOR.border}`,
-              background: COLOR.panel,
-              color: COLOR.text,
+              border: `1px solid ${SHEET_COLOR.border}`,
+              background: SHEET_COLOR.raised,
+              color: SHEET_COLOR.text,
               font: 'inherit',
               padding: '5px 14px',
               borderRadius: 4,
@@ -439,7 +439,7 @@ function Picture({
       );
     case 'absent':
       return (
-        <span style={{ color: COLOR.dim, fontSize: 13, textAlign: 'center', padding: 12 }}>{COVER_NOT_HERE}</span>
+        <span style={{ color: SHEET_COLOR.dim, fontSize: 13, textAlign: 'center', padding: 12 }}>{COVER_NOT_HERE}</span>
       );
     case 'ready':
       return <img src={shown.url} alt={alt} style={style} />;
@@ -489,9 +489,10 @@ const SHEET: CSSProperties = {
   left: SHEET_LEFT,
   display: 'flex',
   flexDirection: 'column',
-  background: '#0a0a0a',
-  borderLeft: `1px solid ${COLOR.border}`,
-  boxShadow: '-12px 0 24px rgba(0, 0, 0, 0.5)',
+  background: SHEET_COLOR.ground,
+  color: SHEET_COLOR.text,
+  borderLeft: `1px solid ${SHEET_COLOR.border}`,
+  boxShadow: SHADOW.sheet,
   zIndex: 10,
 };
 
@@ -500,7 +501,7 @@ const HEADER: CSSProperties = {
   alignItems: 'center',
   gap: 12,
   padding: '10px 12px 10px 16px',
-  borderBottom: `1px solid ${COLOR.border}`,
+  borderBottom: `1px solid ${SHEET_COLOR.border}`,
 };
 
 const TITLE: CSSProperties = {
@@ -518,9 +519,9 @@ const CLOSE: CSSProperties = {
   justifyContent: 'center',
   width: 28,
   height: 28,
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
-  color: COLOR.text,
+  border: `1px solid ${SHEET_COLOR.border}`,
+  background: SHEET_COLOR.raised,
+  color: SHEET_COLOR.text,
   borderRadius: 4,
   cursor: 'pointer',
 };
@@ -539,6 +540,6 @@ const STACK_SHEET: CSSProperties = {
   position: 'absolute',
   inset: 0,
   borderRadius: 3,
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
+  border: `1px solid ${SHEET_COLOR.border}`,
+  background: SHEET_COLOR.raised,
 };

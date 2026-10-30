@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 
-import { COLOR } from './theme';
+import { COLOR, SHADOW } from './theme';
 
 /**
  * The frame the explorer's questions stand in — "Delete…", "New folder…",
@@ -22,7 +22,7 @@ export function Dialog({
   onCancel,
   onSubmit,
   actions,
-  width = 440,
+  width = 480,
   fill = false,
   children,
 }: {
@@ -53,7 +53,7 @@ export function Dialog({
 
   const body = (
     <>
-      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: 'anywhere' }}>{title}</h2>
+      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' }}>{title}</h2>
       <div style={BODY}>{children}</div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
         {actions}
@@ -67,7 +67,7 @@ export function Dialog({
     onClick: (event: { stopPropagation: () => void }) => event.stopPropagation(),
     style: {
       ...PANEL,
-      width: `min(${width}px, calc(100vw - 32px))`,
+      width: `min(${width}px, 100% - 32px)`,
       ...(fill ? { height: TALLEST } : {}),
     },
   } as const;
@@ -95,11 +95,11 @@ export function Note({ tone, children }: { tone: 'warn' | 'plain'; children: Rea
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
-        padding: '8px 10px',
-        borderRadius: 4,
-        border: `1px solid ${tone === 'warn' ? COLOR.warn : COLOR.border}`,
+        padding: '10px 12px',
+        borderRadius: 8,
+        border: `1px solid ${tone === 'warn' ? COLOR.warnGround : COLOR.border}`,
         background: tone === 'warn' ? COLOR.warnGround : COLOR.ground,
-        color: tone === 'warn' ? COLOR.warn : COLOR.text,
+        color: tone === 'warn' ? COLOR.warnDeep : COLOR.text,
       }}
     >
       {children}
@@ -109,21 +109,24 @@ export function Note({ tone, children }: { tone: 'warn' | 'plain'; children: Rea
 
 /** An answer that goes nowhere: Cancel, Close. */
 export const BUTTON: CSSProperties = {
+  minHeight: 36,
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,
   color: COLOR.text,
   font: 'inherit',
   fontSize: 13,
-  padding: '5px 14px',
-  borderRadius: 4,
+  padding: '0 16px',
+  borderRadius: 8,
   cursor: 'pointer',
 };
 
-/** The answer that goes ahead. */
+/** The answer that goes ahead: filled with the accent, as **Open** and the **+** are. */
 export const PRIMARY: CSSProperties = {
   ...BUTTON,
-  border: `1px solid ${COLOR.selected}`,
-  background: COLOR.selected,
+  border: `1px solid ${COLOR.accent}`,
+  background: COLOR.accent,
+  color: COLOR.onAccent,
+  fontWeight: 600,
 };
 
 /** The answer that goes ahead and takes something away. */
@@ -132,13 +135,14 @@ export const DANGER: CSSProperties = {
   border: `1px solid ${COLOR.refused}`,
   background: COLOR.refusedGround,
   color: COLOR.refused,
+  fontWeight: 600,
 };
 
 const BACKDROP: CSSProperties = {
   position: 'fixed',
   inset: 0,
   zIndex: 30,
-  background: 'rgba(0, 0, 0, 0.55)',
+  background: COLOR.backdrop,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -152,12 +156,12 @@ const PANEL: CSSProperties = {
   boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column',
-  gap: 10,
-  padding: 18,
+  gap: 14,
+  padding: 24,
   background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,
-  borderRadius: 8,
-  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+  borderRadius: 12,
+  boxShadow: SHADOW.dialog,
   color: COLOR.text,
   fontSize: 13,
   lineHeight: 1.45,

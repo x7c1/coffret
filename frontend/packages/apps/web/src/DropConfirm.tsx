@@ -315,7 +315,7 @@ export function DropConfirm({
                 <span style={{ ...INSET, color: COLOR.warn }}>{existsLine(item)}</span>
               )}
               {level?.state === 'on_disk' && (
-                <span style={{ ...INSET, color: COLOR.added }}>{onDiskLine([level])}</span>
+                <span style={{ ...INSET, color: COLOR.accentDeep }}>{onDiskLine([level])}</span>
               )}
             </li>
           );
@@ -391,8 +391,8 @@ function Making({ levels }: { levels: readonly Level[] }) {
   const standing = onDiskLine(levels);
   return (
     <>
-      {standing !== null && <p style={{ ...LINE, color: COLOR.added }}>{standing}</p>}
-      {made !== null && <p style={{ ...LINE, color: COLOR.added }}>{made}</p>}
+      {standing !== null && <p style={{ ...LINE, color: COLOR.accentDeep }}>{standing}</p>}
+      {made !== null && <p style={{ ...LINE, color: COLOR.accentDeep }}>{made}</p>}
     </>
   );
 }
@@ -543,7 +543,7 @@ function RenameLine({
 
   return (
     <li style={tinted ? TINTED : undefined}>
-      {rename.from} → {parent}
+      {rename.from} <span style={{ color: COLOR.faint }}>→</span> {parent}
       {draft === null ? (
         <button
           type="button"
@@ -656,8 +656,8 @@ const MARK: CSSProperties = {
   fontSize: 11,
   padding: '0 6px',
   borderRadius: 3,
-  border: `1px solid ${COLOR.added}`,
-  color: COLOR.added,
+  border: `1px solid ${COLOR.accentDeep}`,
+  color: COLOR.accentDeep,
 };
 
 /** A mark that takes the place of a file the Library holds. */

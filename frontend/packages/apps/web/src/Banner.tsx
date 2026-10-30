@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { dropLine, type DropOutcome } from './dropTarget';
-import { COLOR } from './theme';
+import { COLOR, SHADOW } from './theme';
 
 /**
  * What a banner over the rows is drawn as.
@@ -65,7 +65,7 @@ export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: 
           background: GROUND[outcome],
           color: TONE[outcome],
           fontSize: 13,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
+          boxShadow: SHADOW.menu,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -77,24 +77,40 @@ export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: 
   );
 }
 
-/** The outline a drag over a drop target brings up, in the colour of its outcome. */
+/**
+ * The ring a drag over a drop target brings up, in the colour of its outcome:
+ * drawn inside the edge (the outline is offset inward by its width), so that a
+ * row's ring does not run under the rows either side of it.
+ */
 export function dropOutline(dragged: boolean, outcome: DropOutcome): string {
   if (!dragged) {
     return 'none';
   }
-  return `2px dashed ${TONE[outcome]}`;
+  return `2px solid ${RING[outcome]}`;
+}
+
+/** What the row a drop lands in is tinted with inside its ring, in the tone of its outcome. */
+export function dropGround(outcome: DropOutcome): string {
+  return GROUND[outcome];
 }
 
 /** The colour of a drop's outcome: taken, or refused. */
 const TONE: Record<DropOutcome, string> = {
-  taken: COLOR.added,
-  taken_after: COLOR.added,
+  taken: COLOR.accentDeep,
+  taken_after: COLOR.accentDeep,
+  refused: COLOR.refused,
+};
+
+/** The ring around a drop target: the accent itself where the drop is taken, its text shade being for words. */
+const RING: Record<DropOutcome, string> = {
+  taken: COLOR.accent,
+  taken_after: COLOR.accent,
   refused: COLOR.refused,
 };
 
 /** What is under the drop pill, in the tone of its outcome. */
 const GROUND: Record<DropOutcome, string> = {
-  taken: COLOR.addedGround,
-  taken_after: COLOR.addedGround,
+  taken: COLOR.accentTint,
+  taken_after: COLOR.accentTint,
   refused: COLOR.refusedGround,
 };

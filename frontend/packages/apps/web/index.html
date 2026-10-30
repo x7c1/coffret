@@ -13,23 +13,24 @@
       #root {
         margin: 0;
         height: 100%;
-        background: #111;
-        color: #eee;
-        font-family: system-ui, sans-serif;
+        /* COLOR.ground and COLOR.text of src/theme.ts, and its FONT. */
+        background: #f7f8fa;
+        color: #16181d;
+        font-family: Inter, system-ui, sans-serif;
+        font-size: 14px;
       }
 
-      /* The hover states of the explorer. Here rather than inline because a
-         hover is a state of the element and not a property of it: writing it
-         in React means holding it, and a row that holds its own hover is a row
-         that re-renders on the way past. */
+      /* The hover states of the explorer, in COLOR.hover of src/theme.ts. Here
+         rather than inline because a hover is a state of the element and not a
+         property of it: writing it in React means holding it, and a row that
+         holds its own hover is a row that re-renders on the way past. A row
+         drawn in a colour of its own — focused, selected, under a drop — keeps
+         it, its inline background winning over this. */
       tr.row.activatable {
         cursor: pointer;
       }
       tr.row.activatable:hover {
-        background: #222;
-      }
-      button.tree-name:hover {
-        background: #222;
+        background: #eef1f5;
       }
 
       /* A row's "⋮" shows on the row under the pointer and on the focused
@@ -43,7 +44,12 @@
         visibility: visible;
       }
       tr.row .row-actions:hover {
-        background: #2a2a2a;
+        background: #eef1f5;
+      }
+      /* On the focused row's accent, a darker shade of it (COLOR.accentDeep):
+         the light hover would put the white mark on white. */
+      tr.row[data-focused][aria-selected='true'] .row-actions:hover {
+        background: #1d4ed8;
       }
 
       /* The details pane gives its width back to the tree on a narrow

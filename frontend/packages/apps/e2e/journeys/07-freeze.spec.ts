@@ -256,6 +256,17 @@ test('drop a book folder, add it as a Pack, and watch it pack', async ({ page })
   await shot(page, '04-an-ordinary-folder-of-the-library');
 });
 
+/**
+ * Puts the focus on the page row `name`, off both folders: the focused row is
+ * drawn in white on the accent whatever it is, so two folders' names are only
+ * told apart by colour where neither holds the focus — and the reload lands it
+ * on the folder in the address.
+ */
+async function focusAPage(page: Page, name: string): Promise<void> {
+  await row(page, name).click();
+  await expect(row(page, name)).toHaveAttribute('data-focused', '');
+}
+
 /** The colour a folder's name is drawn in on the tree. */
 function colourOf(page: Page, name: string): Promise<string> {
   return inTree(page, name)
@@ -293,6 +304,7 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
     await page.reload();
     await expect(inTree(page, STRANDED)).toBeVisible();
     await expect(inTree(page, IMPORTED)).toBeVisible();
+    await focusAPage(page, pages[0]);
     expect(await colourOf(page, STRANDED)).not.toBe(await colourOf(page, IMPORTED));
     await expect(rowsNamed(page, pages)).toHaveCount(setting.importPages);
     await expect(stateIcon(page, pages[0])).toHaveAccessibleName(TO_BE_PACKED);
@@ -323,6 +335,7 @@ test('lose Storage mid-book, reload, and pack the book again', async ({ page }) 
   // rather than still to be packed.
   await page.reload();
   await expect(inTree(page, STRANDED)).toBeVisible();
+  await focusAPage(page, pages[0]);
   expect(await colourOf(page, STRANDED)).toBe(await colourOf(page, IMPORTED));
   await expect(stateIcon(page, pages[0])).toHaveAccessibleName(ON_THIS_DEVICE);
   await shot(page, '07-packed-at-the-second-attempt');

@@ -79,7 +79,7 @@ export function DetailsPane({
   return (
     <aside className="details" aria-label="Details" style={PANE}>
       {selected.length === 0 ? (
-        <p style={{ margin: 0, padding: 16, color: COLOR.dim, fontSize: 13 }}>Nothing selected</p>
+        <p style={{ margin: 0, padding: PAD, color: COLOR.dim, fontSize: 13 }}>Nothing selected</p>
       ) : selected.length === 1 ? (
         <One
           row={selected[0]}
@@ -140,7 +140,7 @@ function One({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
+    <div style={BLOCKS}>
       <div style={PREVIEW}>
         {url !== null ? (
           <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
@@ -154,7 +154,7 @@ function One({
         <p style={{ margin: 0, color: COLOR.dim, fontSize: 12, overflowWrap: 'anywhere' }}>
           {where === '' ? LIBRARY_ROOT : where}
         </p>
-        <h2 style={{ margin: '2px 0 0', fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' }}>{row.name}</h2>
+        <h2 style={{ ...TITLE, margin: '2px 0 0' }}>{row.name}</h2>
       </div>
       {opensInReader(row, listing) && (
         <button type="button" onClick={() => onOpen(row)} style={OPEN}>
@@ -162,7 +162,7 @@ function One({
         </button>
       )}
       {folder !== null && (folder.prospective || folder.stranded) && (
-        <p style={{ margin: 0, color: COLOR.added, fontSize: 13 }}>
+        <p style={{ margin: 0, color: COLOR.accentDeep, fontSize: 13 }}>
           {folder.prospective ? NOT_IN_LIBRARY_YET : NOT_PACKED_YET}
         </p>
       )}
@@ -180,11 +180,11 @@ function Several({ rows, onDelete }: { rows: readonly Described[]; onDelete: (ta
   const summary = summaryOf(rows);
   const target = deleteTargetOf(rows);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
+    <div style={BLOCKS}>
       <div style={PREVIEW}>
         <StackedSheets count={summary.count} />
       </div>
-      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{selectedHeading(summary.count)}</h2>
+      <h2 style={TITLE}>{selectedHeading(summary.count)}</h2>
       <Facts
         facts={[
           ['Folders', String(summary.folders)],
@@ -204,7 +204,7 @@ function Several({ rows, onDelete }: { rows: readonly Described[]; onDelete: (ta
 /** The two-column list of facts: a name, and what it is. */
 function Facts({ facts }: { facts: readonly [string, ReactNode][] }) {
   return (
-    <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 12, rowGap: 6, fontSize: 13 }}>
+    <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 12, rowGap: 10, fontSize: 13 }}>
       {facts.map(([name, value]) => (
         <div key={name} style={{ display: 'contents' }}>
           <dt style={{ color: COLOR.dim }}>{name}</dt>
@@ -324,46 +324,59 @@ function StackedSheets({ count }: { count: number }) {
 /** About 320px: room for a cover at a readable size, and the tree keeps the rest. */
 const WIDTH = 320;
 
+/** The room around the pane's blocks. */
+const PAD = 20;
+
+/** On the ground, as the tree beside it is: the panels are what stands over the two. */
 const PANE: CSSProperties = {
   flex: `0 0 ${WIDTH}px`,
   width: WIDTH,
+  boxSizing: 'border-box',
   overflowY: 'auto',
   borderLeft: `1px solid ${COLOR.border}`,
-  background: COLOR.panel,
+  background: COLOR.ground,
 };
+
+/** The pane's blocks, top to bottom: the preview, the name, Open, the facts. */
+const BLOCKS: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 16, padding: PAD };
+
+const TITLE: CSSProperties = { margin: 0, fontSize: 18, fontWeight: 700, overflowWrap: 'anywhere' };
 
 const PREVIEW: CSSProperties = {
   height: 220,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: COLOR.ground,
+  background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,
-  borderRadius: 4,
+  borderRadius: 8,
   overflow: 'hidden',
 };
 
-/** Drawn in light red, as the actions menu draws a deletion. */
-const DELETE_BUTTON: CSSProperties = {
+/** A button of the pane: as high as the header's, so a finger finds it as easily. */
+const PANE_BUTTON: CSSProperties = {
   alignSelf: 'flex-start',
-  border: `1px solid ${COLOR.refused}`,
-  background: 'transparent',
-  color: COLOR.refused,
+  minHeight: 44,
   font: 'inherit',
-  fontSize: 13,
-  padding: '4px 16px',
-  borderRadius: 4,
+  fontSize: 14,
+  fontWeight: 600,
+  padding: '0 16px',
+  borderRadius: 8,
   cursor: 'pointer',
 };
 
+/** Drawn in red on its tint, as the actions menu draws a deletion. */
+const DELETE_BUTTON: CSSProperties = {
+  ...PANE_BUTTON,
+  border: `1px solid ${COLOR.refused}`,
+  background: COLOR.refusedGround,
+  color: COLOR.refused,
+};
+
+/** Filled with the accent: the one thing the pane offers to do. */
 const OPEN: CSSProperties = {
-  alignSelf: 'flex-start',
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.selected,
-  color: COLOR.text,
-  font: 'inherit',
-  fontSize: 13,
-  padding: '4px 16px',
-  borderRadius: 4,
-  cursor: 'pointer',
+  ...PANE_BUTTON,
+  border: 'none',
+  background: COLOR.accent,
+  color: COLOR.onAccent,
 };
