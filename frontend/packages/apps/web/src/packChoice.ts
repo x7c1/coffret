@@ -42,6 +42,7 @@ import {
   type Overdrawn,
 } from '@coffret/api';
 
+import { placeOf } from './destination';
 import { size } from './humanize';
 import { renumber, type Edits, type Numbering } from './renumber';
 
@@ -120,22 +121,87 @@ export function summarize(files: readonly Added[], existing: readonly string[]):
   return { folders: [...folders.values()], loose, looseBytes, files: files.length };
 }
 
-/**
- * The question itself, which is also the dialog's label. The drop is what is
- * asked about — the answer applies to all of it — so it is the drop that is
- * counted in: folder by folder where it holds any, and file by file where not.
- */
-export function questionOf(summary: DropSummary): string {
-  if (summary.folders.length === 0) {
-    return `this drop holds ${count(summary.files)} — add ${summary.files === 1 ? 'it' : 'them'} to the Library?`;
-  }
-  const held = summary.folders.length === 1 ? 'a folder' : `${summary.folders.length} folders`;
-  return `this drop holds ${held} — how should it go into the Library?`;
+/** The confirmation's heading: where the drop lands. */
+export function addTitle(landing: string): string {
+  return `Add to ${placeOf(landing)}`;
 }
 
-/** The line naming one dropped folder: `📁 BookX — 80 files, 58.0 MB`. */
-export function folderLine(folder: DroppedFolder): string {
-  return `📁 ${folder.name} — ${count(folder.files)}, ${size(folder.bytes)}`;
+/** The whole drop counted: every file it carries and how much they come to, `81 files, 58.0 MB`. */
+export function totalLine(summary: DropSummary): string {
+  const bytes = summary.folders.reduce((sum, folder) => sum + folder.bytes, summary.looseBytes);
+  return `${count(summary.files)}, ${size(bytes)}`;
+}
+
+/**
+ * What one incoming item is to the folder it lands in, as its mark says it:
+ * a folder the Library does not have there yet, a file it does not have, or a
+ * file that takes the place of the one-file Entry at its path.
+ */
+export type Mark = 'new_folder' | 'new' | 'replaces';
+
+/** The words of each mark. */
+export const MARK_LABEL: Record<Mark, string> = {
+  new_folder: 'New folder',
+  new: 'New',
+  replaces: 'Replaces',
+};
+
+/** One thing the drop brings in at the top: a dropped folder, or a file dropped loose. */
+export interface Incoming {
+  /** Its name, which is its path relative to the folder it lands in. */
+  name: string;
+  /** Whether it is a folder, counted by what it holds at every depth. */
+  folder: boolean;
+  /** How many files it is: what a folder holds, and one for a file. */
+  files: number;
+  bytes: number;
+  /**
+   * What it is to the folder it lands in, or `null` where no mark says it: a
+   * folder the Library already has there, which the line beside it says
+   * (see {@link existsLine}), and a file a Pack holds the path of, which the
+   * drop's refusal line counts.
+   */
+  mark: Mark | null;
+}
+
+/**
+ * The items the confirmation lists, each with its mark: the dropped folders
+ * in the order the drop named them, then the loose files in the drop's order.
+ *
+ * A loose file is sent under the name it was dropped with — numbering renames
+ * only what is under a folder — so `held`, keyed by the path relative to the
+ * folder dropped onto, answers for it by its name.
+ */
+export function incomingOf(summary: DropSummary, files: readonly Added[], held: HeldFiles): Incoming[] {
+  const folders = summary.folders.map(
+    (folder): Incoming => ({
+      name: folder.name,
+      folder: true,
+      files: folder.files,
+      bytes: folder.bytes,
+      mark: folder.exists ? null : 'new_folder',
+    }),
+  );
+  const loose = files
+    .filter((added) => !added.path.includes('/'))
+    .map((added): Incoming => {
+      const kind = held.get(added.path);
+      return {
+        name: added.path,
+        folder: false,
+        files: 1,
+        bytes: added.size,
+        mark: kind === 'one-file' ? 'replaces' : kind === 'pack' ? null : 'new',
+      };
+    });
+  return [...folders, ...loose];
+}
+
+/** One incoming item's line beside its mark: `BookX — 80 files, 58.0 MB`, `cover.png — 1.5 MB`. */
+export function incomingLine(item: Incoming): string {
+  return item.folder
+    ? `${item.name} — ${count(item.files)}, ${size(item.bytes)}`
+    : `${item.name} — ${size(item.bytes)}`;
 }
 
 /**
@@ -145,38 +211,26 @@ export function folderLine(folder: DroppedFolder): string {
  * where a Pack holds it (spec: PK-10). Said here because both answers do it, and
  * Cancel is the one that does not.
  */
-export function existsLine(folder: DroppedFolder): string {
+export function existsLine(folder: { name: string }): string {
   return (
-    `${folder.name} already exists here — the files in it stay, and a dropped file ` +
+    `${folder.name} already exists here — the files in it stay, and an added file ` +
     'with the same name as one of them replaces it (or is refused, where a Pack holds it)'
   );
 }
 
 /**
- * What the loose files are told, where there are any: beside folders, that
- * they go the way the folders are asked to; on their own, that they are added
- * one by one — a Container each — with how many and how much.
+ * The two ways a drop holding a folder can be stored, each with the line that
+ * says what it is for. The confirmation offers them as a choice, One Pack
+ * chosen unless somebody says otherwise; the loose files beside a folder go the
+ * same way.
  */
-export function looseLine(summary: DropSummary): string {
-  if (summary.folders.length === 0) {
-    const how = summary.loose === 1 ? 'added on its own' : 'added one by one';
-    return `${count(summary.loose)}, ${size(summary.looseBytes)} — ${how}`;
-  }
-  const beside = summary.folders.length === 1 ? 'it' : 'them';
-  return `and ${count(summary.loose)} beside ${beside}, added the same way`;
-}
-
-/**
- * The two ways a drop holding a folder can be added, worded for this drop. The
- * confirmation offers them as a choice, with Add and Cancel below.
- */
-export function choiceLabels(summary: DropSummary): Record<Exclude<Choice, 'cancel'>, string> {
-  return {
-    pack: 'As a Pack (recommended)',
-    one_by_one:
-      summary.files === 1 ? 'The 1 file on its own' : `The ${summary.files} files one by one`,
-  };
-}
+export const STORE_CHOICES: Record<Exclude<Choice, 'cancel'>, { label: string; note: string }> = {
+  pack: { label: 'One Pack', note: 'kept and fetched together, best for a book or an album' },
+  one_by_one: {
+    label: 'Separate files',
+    note: 'each file kept on its own, best for files you will replace',
+  },
+};
 
 /** What sends the drop, once the confirmation says where and how. */
 export const ADD = 'Add';
@@ -238,7 +292,7 @@ export function replacesLine(collisions: Collisions): string | null {
   const more = replaced.length - NAMED_REPLACEMENTS;
   const verb = replaced.length === 1 ? 'replaces the file' : 'replace the files';
   return (
-    `${count(replaced.length)} in this drop ${verb} the Library already has at the same ` +
+    `${count(replaced.length)} being added ${verb} the Library already has at the same ` +
     `path: ${named}${more > 0 ? `, and ${more} more` : ''}`
   );
 }

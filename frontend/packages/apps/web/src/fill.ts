@@ -101,7 +101,7 @@ export function rowFill(
     return {
       state: 'reserved',
       message:
-        'this file was dropped to be added as a Pack — the freeze waiting for it packs it with the rest of what was dropped, or says why not',
+        'this file is to be added as a Pack — the freeze waiting for it packs it with the rest of what came with it, or says why not',
     };
   }
   if (file.state === 'present') {
@@ -660,7 +660,7 @@ export function paced(
  * the folder on the screen would be naming the one place most of them are not.
  */
 export function collectingLine(): string {
-  return 'reading what was dropped…';
+  return 'reading the files…';
 }
 
 /** Whether a fill is under way, rather than finished, stopped or left. */

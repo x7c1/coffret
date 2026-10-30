@@ -5,7 +5,11 @@
 // sent as bytes. This exposes one function to the page, `coffretDesktop.
 // takeDrop`: given the dropped `File`s, it maps each to its path on this device
 // with `webUtils.getPathForFile` and asks the main process to walk them over
-// the one channel the app listens on. The page is answered with a one-time
+// the one channel the app listens on. Files picked with the explorer's **+**
+// go the same way; a folder picked whole arrives as every file under it, each
+// carrying its way down from the folder (`webkitRelativePath`), and is handed
+// over as the folder itself, so that the walk names its files relative to
+// where it was picked from as it does for a folder dropped. The page is answered with a one-time
 // drop handle and each file's path relative to the folder it was dropped from;
 // the paths themselves never reach the page.
 //
@@ -28,9 +32,24 @@ const TAKE_DROP = 'coffret:take-drop';
  */
 const INVOKE_REFUSED = /^Error invoking remote method '[^']*': (?:Error: )?/;
 
+/**
+ * The path one file stands for: its own, or — for a file of a folder picked
+ * whole — the picked folder's, which is its path with the way down from that
+ * folder taken off and the folder's own name put back. The two ways down are
+ * the same length whichever separator each is written with.
+ */
+function pickedPath(file: File): string {
+  const path = webUtils.getPathForFile(file);
+  const relative = file.webkitRelativePath;
+  if (relative === '') {
+    return path;
+  }
+  return path.slice(0, path.length - relative.length) + relative.split('/')[0];
+}
+
 contextBridge.exposeInMainWorld('coffretDesktop', {
   async takeDrop(files: readonly File[]): Promise<unknown> {
-    const paths = Array.from(files, (file) => webUtils.getPathForFile(file));
+    const paths = [...new Set(Array.from(files, pickedPath))];
     try {
       return await ipcRenderer.invoke(TAKE_DROP, paths);
     } catch (refused: unknown) {

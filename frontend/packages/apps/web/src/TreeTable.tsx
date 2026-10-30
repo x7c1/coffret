@@ -17,15 +17,16 @@ import type { DeleteTarget, DisplacedFill, Fill, Freeze, ListedFile, Listing } f
 
 import { actionsFor, type ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
-import { Banner, DropBanner, dropOutline } from './Banner';
+import { Banner, DropPill, dropOutline } from './Banner';
 import { canvasMeasure, columnWidth, type Measured } from './columns';
 import { counted, type Described } from './details';
 import { useDragOver } from './dragOver';
-import { droppedFiles, type Drop } from './drop';
+import { landingOf, placeOf } from './destination';
+import { droppedFiles, pickedFiles, type Drop } from './drop';
 import { dropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
-import { mapLabel, MAP_THE_ROOT } from './mapping';
+import { CHOOSE_A_FOLDER, noFolderChosenLine } from './mapping';
 import { packOffered, PACK_THIS_FOLDER } from './packFolder';
 import { NEW_FOLDER, parentOf, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
@@ -93,10 +94,10 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * that row the only focus.
  *
  * What the screen's own actions are about is the folder the focus is in (see
- * [`contextOf`](./tree)), and the block over the rows speaks for it: whether
- * it is on this device, whether it is being packed, "New folder…" and "Pack
- * this folder…" — the Library root's way to them, which has no row of its own
- * to open a menu on.
+ * [`contextOf`](./tree)), and the block over the rows speaks for it: whether a
+ * folder of this device is chosen for it, whether it is being packed, "New
+ * folder…" and "Pack this folder…" — the Library root's way to them, which has
+ * no row of its own to open a menu on.
  *
  * Each row's state is the listing's answer, with what the server is doing
  * about it over the top: `present`, `remote` and `added` are the listing's to
@@ -110,12 +111,17 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * server's answer, `present_throughout`): the promise that the whole book reads
  * offline.
  *
- * The tree is also where files are added. A drop on a folder row adds to that
+ * The tree is also where files are added, two ways. The **+** in the bar over
+ * the rows ("Add files") opens the operating system's picker — for files, or
+ * for a folder, since no browser's picker takes both at once — and adds to the
+ * focused folder, or the folder the focused file stands in (see
+ * [`landingOf`](./destination)). And a drop on a folder row adds to that
  * folder, on a file row to the folder it stands in, and anywhere else on the
- * list to the folder the focus is in; a folder no mapping of this device
- * reaches takes no drop, and says so while the drag is still in the air.
- * Every drop is confirmed before anything is sent, and that confirmation is
- * the screen's, after the tree has handed the files over.
+ * list to the folder the focus is in. While files are dragged, the row of the
+ * folder they would land in is outlined and a pill at the bottom of the tree
+ * says `Drop to add to <path>`. Both ways hand the files to the screen, which
+ * asks for a folder on this device where none is chosen yet and confirms
+ * every add before anything is sent.
  *
  * The folders the Library does not hold yet (see [`prospective`](./prospective))
  * are rows too, marked as such, and so are the folders of books whose freeze
@@ -135,7 +141,6 @@ export function TreeTable({
   freeze,
   stranded,
   strandedKnown,
-  mappedAt,
   onOpenFolder,
   onOpenFile,
   onUnsupported,
@@ -143,7 +148,6 @@ export function TreeTable({
   onCollecting,
   onUnreadable,
   onUnmapped,
-  onUnmappedDrop,
   onMap,
   onPack,
   onDelete,
@@ -196,12 +200,6 @@ export function TreeTable({
    */
   strandedKnown: boolean;
   /**
-   * Whether a mapping of this device reaches a folder, or `null` where that is
-   * not known (see [`mappedAt`](./dropTarget)). Unknown is not refused: the
-   * drop asks the folder's own listing before anything is sent.
-   */
-  mappedAt: (folder: string) => boolean | null;
-  /**
    * A folder row opened: the reader's sheet, on the folder's cover — where it
    * holds images, which only its listing can say.
    */
@@ -210,23 +208,25 @@ export function TreeTable({
   onOpenFile: (path: string) => void;
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
-  /** A drop on `folder`: its files, each with its path relative to it, and what the desktop app did not take. */
+  /**
+   * Files picked with **+** or dropped, for `folder`: each with its path
+   * relative to it, and what the desktop app did not take.
+   */
   onAdd: (folder: string, drop: Drop) => void;
-  /** A drop was taken and its files are being read out of it, which can take seconds. */
+  /** Files were picked or dropped and are being read, which can take seconds. */
   onCollecting: () => void;
-  /** The drop came to no files: the walk could not be finished, or the desktop app took nothing of it. */
+  /** They came to no files: the walk could not be finished, or the desktop app took nothing of them. */
   onUnreadable: (cause: unknown) => void;
   /**
    * A gesture made in a folder with nowhere on this device to put its files:
-   * a file opened there, or a drop on the folder the focus is in. `held` is
-   * whether this screen has a folder to talk about at all, and `where` is the
-   * listing the gesture was made in, whose mapped folders are named as the
-   * ones that would take it.
+   * a file opened there, or a drop on a path the Library holds nothing at.
+   * `held` is whether this screen has a folder to talk about at all.
    */
-  onUnmapped: (tried: Tried, held: boolean, where: Listing) => void;
-  /** A drop onto a folder row no mapping of this device reaches. */
-  onUnmappedDrop: (folder: string) => void;
-  /** The banner's button: map a folder on this device to the top-level folder named, or the Library root. */
+  onUnmapped: (tried: Tried, held: boolean) => void;
+  /**
+   * The banner's button: choose a folder on this device for the top-level
+   * folder named, or for the whole Library.
+   */
   onMap: (prefix: string | null) => void;
   /** "Pack this folder…" on the folder the focus is in. */
   onPack: (folder: string) => void;
@@ -361,7 +361,9 @@ export function TreeTable({
 
   // What a drop comes to, read for the folder it would land in: the folder row
   // under the pointer, the folder a file row under it stands in, and the
-  // focused folder anywhere else on the list.
+  // focused folder anywhere else on the list. A folder no folder of this
+  // device is chosen for takes it as any other — the screen asks for one —
+  // and only a path the Library holds nothing at refuses it.
   const drag = useDragOver();
   const [over, setOver] = useState<string | null>(null);
   useEffect(() => {
@@ -370,26 +372,20 @@ export function TreeTable({
     }
   }, [drag.dragged]);
   const target = over ?? contextPath;
-  const targetMapped = (folder: string) =>
-    folder === contextPath && listing !== null ? listing.mapped : mappedAt(folder);
-  const outcome = dropOutcome({
-    mapped: drag.dragged ? targetMapped(target) : null,
-    freezing: isFreezing(freeze),
-  });
+  const refusedHere = target === contextPath && nowhere;
+  const outcome = dropOutcome({ held: !refusedHere, freezing: isFreezing(freeze) });
+  // The row the drop lands in, outlined while the drag is over the tree; the
+  // whole list where no row stands for it — the Library root.
+  const outlinedRow = rows.some((row) => row.kind === 'folder' && row.path === target);
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
     drag.ended();
     setOver(null);
-    const mapped = targetMapped(target);
-    if (mapped === false) {
+    if (refusedHere) {
       // Said and not merely not done: a drop is a gesture with an outcome, and
       // a screen that goes on looking exactly as it did tells nobody that none
       // of those files were added.
-      if (target === contextPath && listing !== null) {
-        onUnmapped('add', !nowhere, listing);
-      } else {
-        onUnmappedDrop(target);
-      }
+      onUnmapped('add', false);
       return;
     }
     // The walk is asynchronous and the event is not: what it carries is gone
@@ -397,6 +393,34 @@ export function TreeTable({
     // first, because the walk itself is a wait a person is owed a word about.
     onCollecting();
     void droppedFiles(event.dataTransfer).then((drop) => onAdd(target, drop), onUnreadable);
+  };
+
+  // The header's **+**: a small menu of the two pickers, since no browser's
+  // picker takes files and a folder at once, and the picker chosen opens over
+  // the focused folder — or the folder of the focused file — which is read as
+  // the menu opens and kept for the answer.
+  const filesPicker = useRef<HTMLInputElement>(null);
+  const folderPicker = useRef<HTMLInputElement | null>(null);
+  const [adding, setAdding] = useState<{ at: MenuAt; into: string } | null>(null);
+  const addInto = landingOf(state.focus);
+  const picking = useRef('');
+  const openPicker = (item: ActionItem) => {
+    const into = adding?.into ?? addInto;
+    setAdding(null);
+    picking.current = into;
+    (item.action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
+  };
+  const pickedFrom = (input: HTMLInputElement) => {
+    const files = Array.from(input.files ?? []);
+    // Emptied, so that the same files picked again are a change the input
+    // reports rather than one it swallows.
+    input.value = '';
+    if (files.length === 0) {
+      return;
+    }
+    const into = picking.current;
+    onCollecting();
+    void pickedFiles(files).then((drop) => onAdd(into, drop), onUnreadable);
   };
 
   const openRow = (row: FolderRow | FileRow) =>
@@ -519,48 +543,74 @@ export function TreeTable({
     menuItems(selected.length > 1 && selected.some((one) => one.key === row.key) ? selected : [row]).length > 0;
 
   return (
-    <div
-      ref={scroller}
-      role="tree"
-      aria-label="Library"
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      onPointerDown={() => {
-        pressed.current = true;
-      }}
-      onFocus={onFocus}
-      onBlur={(event) => {
-        if (event.target === event.currentTarget) {
-          pressed.current = false;
-        }
-      }}
-      onDragEnter={drag.onDragEnter}
-      onDragOver={drag.onDragOver}
-      onDragLeave={drag.onDragLeave}
-      onDrop={onDrop}
-      // The menu is fixed to the window and the rows it was opened on would
-      // move from under it as the list is scrolled, so it goes rather than
-      // float over others. The wheel and not every scroll: opening it can move
-      // the focus, and the list scrolling ahead of the focus is not somebody
-      // scrolling away.
-      onWheel={menu === null ? undefined : () => closeMenu()}
-      style={{
-        flex: 1,
-        overflow: 'auto',
-        minWidth: 0,
-        // The tree's own focus is drawn by the focused row, so the outline is a
-        // drag's alone — around the whole list where the drop lands in the
-        // focused folder, and around the folder's row where it lands there.
-        outline: over === null || over === contextPath ? dropOutline(drag.dragged, outcome) : 'none',
-        outlineOffset: -2,
-      }}
-    >
-      {/* The bar and the banners stay at the top as the list scrolls,
-          together: every one of them is true of the whole folder rather than
-          of whichever rows happen to be in view. */}
-      <div ref={block} style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-        {(offersPack || offersNewFolder) && listing !== null && (
+    // The tree and, over its bottom edge, the pill a drag brings up: a frame
+    // of their own, so that the pill stays where it is as the rows scroll.
+    <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative' }}>
+      <div
+        ref={scroller}
+        role="tree"
+        aria-label="Library"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onPointerDown={() => {
+          pressed.current = true;
+        }}
+        onFocus={onFocus}
+        onBlur={(event) => {
+          if (event.target === event.currentTarget) {
+            pressed.current = false;
+          }
+        }}
+        onDragEnter={drag.onDragEnter}
+        onDragOver={drag.onDragOver}
+        onDragLeave={drag.onDragLeave}
+        onDrop={onDrop}
+        // The menu is fixed to the window and the rows it was opened on would
+        // move from under it as the list is scrolled, so it goes rather than
+        // float over others. The wheel and not every scroll: opening it can move
+        // the focus, and the list scrolling ahead of the focus is not somebody
+        // scrolling away.
+        onWheel={menu === null ? undefined : () => closeMenu()}
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          minWidth: 0,
+          // The tree's own focus is drawn by the focused row, so the outline is a
+          // drag's alone — around the row of the folder the drop lands in, and
+          // around the whole list where no row stands for it (the Library root).
+          outline: outlinedRow ? 'none' : dropOutline(drag.dragged, outcome),
+          outlineOffset: -2,
+        }}
+      >
+        {/* The bar and the banners stay at the top as the list scrolls,
+            together: every one of them is true of the whole folder rather than
+            of whichever rows happen to be in view. */}
+        <div ref={block} style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <div style={BAR}>
+            <button
+              type="button"
+              aria-label="Add files"
+              title={`Add files to ${placeOf(addInto)}`}
+              aria-haspopup="menu"
+              aria-expanded={adding !== null}
+              // The menu closes on a press outside it, which this is; the click
+              // below opens it, or closes it where it is open.
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                if (adding !== null) {
+                  setAdding(null);
+                  return;
+                }
+                const box = event.currentTarget.getBoundingClientRect();
+                setAdding({
+                  at: { x: box.left, y: box.bottom, side: 'start', byKeys: event.detail === 0 },
+                  into: addInto,
+                });
+              }}
+              style={ADD_BUTTON}
+            >
+              +
+            </button>
             <span style={{ flex: 1, color: COLOR.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {root ? 'Library' : contextPath}
             </span>
@@ -569,132 +619,168 @@ export function TreeTable({
                 {NEW_FOLDER}
               </button>
             )}
-            {offersPack && (
+            {offersPack && listing !== null && (
               <button type="button" onClick={() => onPack(listing.path)} style={BAR_BUTTON}>
                 {PACK_THIS_FOLDER}
               </button>
             )}
           </div>
+          {sayUnmapped && listing !== null && (
+            <Unmapped
+              root={root}
+              path={listing.path}
+              files={listing.files.length > 0}
+              folders={childFolders > 0}
+              onMap={onMap}
+            />
+          )}
+          {packing && <Packing />}
+          {emptyHere && rows.length > 0 && (
+            <Banner tone={COLOR.dim} background={COLOR.panel}>
+              {emptyLine(listing, root, nowhere, prospectiveHere)}
+            </Banner>
+          )}
+          <table style={{ ...TABLE, font: HEAD_FONT }}>
+            {columns}
+            <thead>
+              <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
+                <th style={HEAD}>Name</th>
+                <th style={HEAD}>Size</th>
+                <th style={HEAD}>
+                  <span style={HIDDEN}>On this device</span>
+                </th>
+                <th style={HEAD}>Modified</th>
+                <th style={HEAD} />
+              </tr>
+            </thead>
+          </table>
+        </div>
+        {rows.length === 0 ? (
+          <p style={{ padding: 16, color: COLOR.dim }}>
+            {emptyLine(listing, root, nowhere, prospectiveHere)}
+          </p>
+        ) : (
+          <table style={{ ...TABLE, font: ROW_FONT }}>
+            {columns}
+            {/* No text selection across rows: Shift+click selects rows here, as
+                in a file manager, and would otherwise also select their text. */}
+            <tbody style={{ userSelect: 'none' }}>
+              {rows.map((row) =>
+                row.kind === 'note' ? (
+                  <tr key={row.key}>
+                    <td
+                      colSpan={5}
+                      style={{
+                        ...CELL,
+                        paddingLeft: indent(row.depth) + DISCLOSURE,
+                        color: row.refused === null ? COLOR.dim : COLOR.refused,
+                      }}
+                    >
+                      {row.refused === null ? (
+                        'loading…'
+                      ) : (
+                        // Offered on the line itself: an open folder below the
+                        // one the focus is in has no other place that says its
+                        // rows did not come, nor anything to press about it.
+                        <>
+                          {row.refused}
+                          <button type="button" onClick={() => onAskAgain(row.path)} style={{ ...BAR_BUTTON, marginLeft: 10 }}>
+                            {TRY_AGAIN}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  <Row
+                    key={row.key}
+                    row={row}
+                    rowRef={(element) => {
+                      if (element === null) {
+                        drawn.current.delete(row.key);
+                      } else {
+                        drawn.current.set(row.key, element);
+                      }
+                    }}
+                    focused={state.focus === row.key}
+                    selected={isSelected(selection, row.key)}
+                    // Taken out of the selection with ⌘/Ctrl+click, the focus
+                    // is left on a row that is not selected.
+                    focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
+                    dropOutline={
+                      row.kind === 'folder' && row.path === target ? dropOutline(drag.dragged, outcome) : 'none'
+                    }
+                    shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
+                    offers={offersOf(row)}
+                    menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
+                    onPress={(how) => pick(clicked(rows, picked, row.key, how))}
+                    onMenu={(at) => openMenu(row.key, at)}
+                    onToggle={() => {
+                      scroller.current?.focus();
+                      onChange(toggled(state, row.path));
+                    }}
+                    onOpen={() => openRow(row)}
+                    onDragOverRow={() => setOver(landingOf(row.key))}
+                  />
+                ),
+              )}
+            </tbody>
+          </table>
         )}
-        {sayUnmapped && listing !== null && (
-          <Unmapped
-            root={root}
-            path={listing.path}
-            files={listing.files.length > 0}
-            folders={childFolders > 0}
-            onMap={onMap}
+        {menu !== null && (
+          <ActionsMenu
+            label={`actions for ${menu.rows.length === 1 ? menu.rows[0].name : counted(menu.rows.length, 'item', 'items')}`}
+            at={menu.at}
+            items={menuItems(menu.rows)}
+            onChoose={choose}
+            onClose={closeMenu}
           />
         )}
-        {packing && <Packing />}
-        {drag.dragged && drag.carriesFiles && (
-          <DropBanner outcome={outcome} held={target === contextPath ? !nowhere : true} />
+        {adding !== null && (
+          <ActionsMenu
+            label={`add files to ${placeOf(adding.into)}`}
+            at={adding.at}
+            items={ADD_ITEMS}
+            onChoose={openPicker}
+            onClose={(how) => {
+              setAdding(null);
+              if (how === 'escape') {
+                scroller.current?.focus();
+              }
+            }}
+          />
         )}
-        {emptyHere && rows.length > 0 && (
-          <Banner tone={COLOR.dim} background={COLOR.panel}>
-            {emptyLine(listing, root, nowhere, prospectiveHere)}
-          </Banner>
-        )}
-        <table style={{ ...TABLE, font: HEAD_FONT }}>
-          {columns}
-          <thead>
-            <tr style={{ ...HEAD_ROW, color: COLOR.dim, textAlign: 'left' }}>
-              <th style={HEAD}>Name</th>
-              <th style={HEAD}>Size</th>
-              <th style={HEAD}>
-                <span style={HIDDEN}>On this device</span>
-              </th>
-              <th style={HEAD}>Modified</th>
-              <th style={HEAD} />
-            </tr>
-          </thead>
-        </table>
-      </div>
-      {rows.length === 0 ? (
-        <p style={{ padding: 16, color: COLOR.dim }}>
-          {emptyLine(listing, root, nowhere, prospectiveHere)}
-        </p>
-      ) : (
-        <table style={{ ...TABLE, font: ROW_FONT }}>
-          {columns}
-          {/* No text selection across rows: Shift+click selects rows here, as
-              in a file manager, and would otherwise also select their text. */}
-          <tbody style={{ userSelect: 'none' }}>
-            {rows.map((row) =>
-              row.kind === 'note' ? (
-                <tr key={row.key}>
-                  <td
-                    colSpan={5}
-                    style={{
-                      ...CELL,
-                      paddingLeft: indent(row.depth) + DISCLOSURE,
-                      color: row.refused === null ? COLOR.dim : COLOR.refused,
-                    }}
-                  >
-                    {row.refused === null ? (
-                      'loading…'
-                    ) : (
-                      // Offered on the line itself: an open folder below the
-                      // one the focus is in has no other place that says its
-                      // rows did not come, nor anything to press about it.
-                      <>
-                        {row.refused}
-                        <button type="button" onClick={() => onAskAgain(row.path)} style={{ ...BAR_BUTTON, marginLeft: 10 }}>
-                          {TRY_AGAIN}
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                <Row
-                  key={row.key}
-                  row={row}
-                  rowRef={(element) => {
-                    if (element === null) {
-                      drawn.current.delete(row.key);
-                    } else {
-                      drawn.current.set(row.key, element);
-                    }
-                  }}
-                  focused={state.focus === row.key}
-                  selected={isSelected(selection, row.key)}
-                  // Taken out of the selection with ⌘/Ctrl+click, the focus
-                  // is left on a row that is not selected.
-                  focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
-                  dropOutline={
-                    row.kind === 'folder' && over === row.path && over !== contextPath
-                      ? dropOutline(drag.dragged, outcome)
-                      : 'none'
-                  }
-                  shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
-                  offers={offersOf(row)}
-                  menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
-                  onPress={(how) => pick(clicked(rows, picked, row.key, how))}
-                  onMenu={(at) => openMenu(row.key, at)}
-                  onToggle={() => {
-                    scroller.current?.focus();
-                    onChange(toggled(state, row.path));
-                  }}
-                  onOpen={() => openRow(row)}
-                  onDragOverRow={() => setOver(row.kind === 'folder' ? row.path : parentOf(row.path))}
-                />
-              ),
-            )}
-          </tbody>
-        </table>
-      )}
-      {menu !== null && (
-        <ActionsMenu
-          label={`actions for ${menu.rows.length === 1 ? menu.rows[0].name : counted(menu.rows.length, 'item', 'items')}`}
-          at={menu.at}
-          items={menuItems(menu.rows)}
-          onChoose={choose}
-          onClose={closeMenu}
+        <input
+          ref={filesPicker}
+          type="file"
+          multiple
+          hidden
+          data-testid="pick-files"
+          onChange={(event) => pickedFrom(event.currentTarget)}
         />
-      )}
+        <input
+          ref={(input) => {
+            folderPicker.current = input;
+            // Not in React's own attributes: what makes the picker take a
+            // folder whole, in every browser the explorer runs in.
+            input?.setAttribute('webkitdirectory', '');
+          }}
+          type="file"
+          hidden
+          data-testid="pick-folder"
+          onChange={(event) => pickedFrom(event.currentTarget)}
+        />
+      </div>
+      {drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
     </div>
   );
 }
+
+/** What the **+** offers: the operating system's picker for files, or for one folder. */
+const ADD_ITEMS: readonly ActionItem[] = [
+  { label: 'Files…', action: { kind: 'addFiles' }, destructive: false, separated: false },
+  { label: 'A folder…', action: { kind: 'addFolder' }, destructive: false, separated: false },
+];
 
 /** What opening a row can come to, as [`opened`](#opened) hands it on. */
 export interface Openers {
@@ -708,7 +794,7 @@ export interface Openers {
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
   /** A file row opened in a folder with nowhere on this device to put it. */
-  onUnmapped: (tried: Tried, held: boolean, where: Listing) => void;
+  onUnmapped: (tried: Tried, held: boolean) => void;
 }
 
 /**
@@ -731,7 +817,7 @@ export function opened(row: FolderRow | FileRow, openers: Openers): void {
     return;
   }
   if (!row.in.mapped) {
-    openers.onUnmapped('open', row.in.held || row.in.path === '', row.in);
+    openers.onUnmapped('open', row.in.held || row.in.path === '');
   } else if (row.file.openable) {
     openers.onOpenFile(row.path);
   } else {
@@ -748,8 +834,12 @@ const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
  * else on the screen offers them.
  */
 export const EMPTY_MAPPED_ROOT =
-  'this Library is empty — drop files here to add them, or choose “New folder…” ' +
-  'above the list to prepare where they go';
+  'this Library is empty — add files with + above the list or drop them here, or choose ' +
+  '“New folder…” to prepare where they go';
+
+/** What a folder row's "no folder chosen" says when pointed at. */
+const NO_FOLDER_CHOSEN_TITLE =
+  'No folder on this device is chosen for this part of the Library, so its files cannot be fetched here';
 
 /**
  * What an empty folder says, in three states and not two: a folder of the
@@ -904,8 +994,11 @@ function Row({
             </span>
           )}
           {folder !== null && !folder.folder.mapped && !folder.prospective && (
-            <span style={{ ...NOTE, color: COLOR.warn }}>not here</span>
+            <span title={NO_FOLDER_CHOSEN_TITLE} style={{ ...NOTE, color: COLOR.warn }}>
+              no folder chosen
+            </span>
           )}
+          {folder?.incoming === true && <span style={NOTE}>adding…</span>}
         </span>
       </td>
       <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
@@ -1091,9 +1184,11 @@ function Packing() {
 }
 
 /**
- * Said over the rows where the focused folder is not on this device, with the
- * button that maps the top-level folder it is under — or the Library root —
- * since a mapping is keyed by one top-level component (spec: EP-9).
+ * Said over the rows where no folder of this device is chosen for the folder
+ * the focus is in, with the button that chooses one for the top-level folder
+ * it is under — or for the whole Library — since a choice is keyed by one
+ * top-level component (spec: EP-9). Never that the folder is "not on this
+ * device": that is what the column says of a file that is not here.
  */
 function Unmapped({
   root,
@@ -1109,11 +1204,11 @@ function Unmapped({
   onMap: (prefix: string | null) => void;
 }) {
   const top = path.split('/')[0];
-  const button = (prefix: string | null, label: string) => (
+  const button = (prefix: string | null) => (
     <>
-      {' '}
+      {' — '}
       <button onClick={() => onMap(prefix)} style={MAP_BUTTON}>
-        {label}
+        {CHOOSE_A_FOLDER}
       </button>
     </>
   );
@@ -1121,25 +1216,25 @@ function Unmapped({
     <Banner tone={COLOR.warn} background={COLOR.warnGround}>
       {root && !files && !folders ? (
         <>
-          this Library holds nothing yet, and nothing on this device is mapped to its
-          root — map a folder here to start putting files in it
-          {button(null, MAP_THE_ROOT)}
+          {noFolderChosenLine(null)}: this Library holds nothing yet, and a folder on this
+          device is where its first files are kept
+          {button(null)}
         </>
       ) : root ? (
         <>
-          the Library root is not mapped on this device — files sitting directly in it
-          cannot be fetched, though a folder below can be mapped on its own
-          {button(null, MAP_THE_ROOT)}
+          {noFolderChosenLine(null)}: files sitting directly in it cannot be fetched, though
+          a folder below can have one of its own
+          {button(null)}
         </>
       ) : (
         <>
-          this folder is not on this device — map <code>{top}</code> to a folder here{' '}
+          {noFolderChosenLine(top)}: choose one{' '}
           {files
             ? 'to fetch its files'
             : folders
               ? 'to fetch what is in the folders below it'
               : 'before putting anything in it'}
-          {button(top, mapLabel(path, top))}
+          {button(top)}
         </>
       )}
     </Banner>
@@ -1252,6 +1347,22 @@ const BAR: CSSProperties = {
   padding: '4px 12px',
   background: COLOR.panel,
   borderBottom: `1px solid ${COLOR.border}`,
+};
+
+/** The bar's **+**, square and a little larger than its words. */
+const ADD_BUTTON: CSSProperties = {
+  flex: '0 0 auto',
+  width: 24,
+  height: 22,
+  border: `1px solid ${COLOR.border}`,
+  background: 'transparent',
+  color: COLOR.text,
+  font: 'inherit',
+  fontSize: 16,
+  lineHeight: 1,
+  padding: 0,
+  borderRadius: 4,
+  cursor: 'pointer',
 };
 
 const BAR_BUTTON: CSSProperties = {

@@ -40,7 +40,7 @@ import { inLibraryOrder } from './stranded';
 import { said } from './useAsked';
 
 /** What a folder the Library does not hold yet is marked with, wherever it is drawn. */
-export const PROSPECTIVE = 'not in the Library yet — drop files here to add them';
+export const PROSPECTIVE = 'not in the Library yet — add files to it';
 
 /** The menu item that prepares a path inside a folder. */
 export const NEW_FOLDER = 'New folder…';

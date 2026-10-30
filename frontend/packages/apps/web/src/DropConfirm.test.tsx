@@ -33,15 +33,21 @@ const FILES: Added[] = [
   addedFile('BookX/cover.png', { size: 10, lastModified: 0 } as File),
 ];
 
-it('names the folder with its count and size, and offers a Pack or one by one', () => {
+it('says where it adds, names the folder with its count and size, and offers One Pack or separate files', () => {
   const onChoose = vi.fn();
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
 
-  expect(screen.getByRole('dialog').textContent).toContain('📁 BookX — 80 files, 58.0 MB');
-  // A Pack unless somebody says otherwise.
-  expect(screen.getByLabelText<HTMLInputElement>('As a Pack (recommended)').checked).toBe(true);
+  const said = screen.getByRole('dialog', { name: 'Add to comics' });
+  expect(said.textContent).toContain('80 files, 58.0 MB');
+  expect(said.textContent).toContain('📁 BookX — 80 files, 58.0 MB');
+  // One Pack unless somebody says otherwise, each choice saying what it is for.
+  expect(packChoice().checked).toBe(true);
+  expect(said.textContent).toContain('One Pack — kept and fetched together, best for a book or an album');
+  expect(said.textContent).toContain(
+    'Separate files — each file kept on its own, best for files you will replace',
+  );
   fireEvent.click(add());
-  fireEvent.click(screen.getByLabelText('The 80 files one by one'));
+  fireEvent.click(screen.getByRole('radio', { name: /^Separate files/ }));
   fireEvent.click(add());
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(onChoose.mock.calls).toEqual([
@@ -56,15 +62,31 @@ function add(): HTMLElement {
   return screen.getByRole('button', { name: 'Add' });
 }
 
-// Where the drop lands is said as the Library will hold it, with the level the
-// drop makes marked as new.
-it('says where the dropped folder lands, and that it is new', () => {
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
-  const said = screen.getByRole('dialog');
-  expect(said.textContent).toContain('goes into comics/BookX/');
-  expect(said.textContent).toContain('BookX is new — the Library has no such folder yet');
-  const marked = [...said.querySelectorAll('[data-new]')].map((level) => level.textContent);
-  expect(marked).toEqual(['BookX/']);
+/** The choice of storing a dropped folder as One Pack. */
+function packChoice(): HTMLInputElement {
+  return screen.getByRole<HTMLInputElement>('radio', { name: /^One Pack/ });
+}
+
+/** The marks the incoming items carry, top to bottom. */
+function marks(): string[] {
+  const list = screen.getByRole('list', { name: 'incoming' });
+  return [...list.querySelectorAll('li')].map((item) => item.textContent ?? '');
+}
+
+// A dropped folder the Library has no folder of where it lands is marked as
+// a new folder.
+it('marks a dropped folder the Library does not have there as a new folder', () => {
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+  expect(marks()).toEqual(['New folder📁 BookX — 80 files, 58.0 MB']);
+});
+
+// Where the folder added to is not one the Library holds yet — prepared with
+// "New folder…" — the confirmation says the drop makes it.
+it('says the drop makes a folder added to that the Library does not hold yet', () => {
+  const prepared = destinationsOf('comics/New', BOOK, (path) => path === 'comics');
+  render(<DropConfirm landing="comics/New" summary={BOOK} files={FILES} destinations={prepared} onChoose={() => undefined} />);
+  const said = screen.getByRole('dialog', { name: 'Add to comics/New' });
+  expect(said.textContent).toContain('New is new — the Library has no such folder yet');
 });
 
 // A dropped folder already standing on this device's disk is not new: the
@@ -76,17 +98,13 @@ it('says a dropped folder standing on disk is on disk and not in the Library yet
     (path) => path === 'comics',
     (path) => path === 'comics/BookX',
   );
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={onDisk} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={onDisk} onChoose={() => undefined} />);
   const said = screen.getByRole('dialog');
   expect(said.textContent).toContain(
-    'BookX is on this device’s disk and not in the Library yet — this drop adds it together ' +
+    'BookX is on this device’s disk and not in the Library yet — it is added together ' +
       'with what is already in it',
   );
   expect(said.textContent).not.toContain('is new');
-  expect(said.querySelectorAll('[data-new]')).toHaveLength(0);
-  expect([...said.querySelectorAll('[data-on-disk]')].map((level) => level.textContent)).toEqual([
-    'BookX/',
-  ]);
 });
 
 // A drop of files alone is confirmed too: how many, how much, that they go one
@@ -101,16 +119,16 @@ describe('a drop of files alone', () => {
   it('says how many, how much, where, and that they are added one by one', () => {
     const onChoose = vi.fn();
     render(
-      <DropConfirm
+      <DropConfirm landing="comics/Foo"
         summary={summary}
         files={LOOSE}
         destinations={destinationsOf('comics/Foo', summary, () => true)}
         onChoose={onChoose}
       />,
     );
-    const said = screen.getByRole('dialog').textContent ?? '';
-    expect(said).toContain('2 files, 2.0 MB — added one by one');
-    expect(said).toContain('goes into comics/Foo/');
+    const said = screen.getByRole('dialog', { name: 'Add to comics/Foo' }).textContent ?? '';
+    expect(said).toContain('2 files, 2.0 MB');
+    expect(marks()).toEqual(['Newcover.png — 1.5 MB', 'Newnotes.txt — 500.0 kB']);
     expect(said).not.toContain('is new');
     // No Pack to choose and nothing to number: they are no folder's pages.
     expect(screen.queryByRole('radio')).toBeNull();
@@ -121,23 +139,23 @@ describe('a drop of files alone', () => {
     expect(onChoose).toHaveBeenCalledWith('one_by_one', NO_NUMBERING, NO_EDITS);
   });
 
-  it('names the top of the Library where they are dropped there', () => {
+  it('names the Library where they are dropped at its root', () => {
     render(
-      <DropConfirm
+      <DropConfirm landing=""
         summary={summary}
         files={LOOSE}
         destinations={destinationsOf('', summary, () => false)}
         onChoose={() => undefined}
       />,
     );
-    expect(screen.getByRole('dialog').textContent).toContain('goes into the top of the Library');
+    expect(screen.getByRole('dialog', { name: 'Add to the Library' })).toBeTruthy();
   });
 
   it('sends nothing on Cancel, and numbers nothing whatever the last drop ticked', () => {
     window.localStorage.setItem('coffret.drop.number-pages', 'true');
     const onChoose = vi.fn();
     render(
-      <DropConfirm
+      <DropConfirm landing=""
         summary={summary}
         files={LOOSE}
         destinations={destinationsOf('', summary, () => true)}
@@ -155,13 +173,13 @@ describe('a drop of files alone', () => {
 describe('what the desktop app did not take', () => {
   const LINK = [{ path: 'link-to-photos', reason: 'not_a_file_or_folder' }];
   const LINE =
-    '1 thing in the drop was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
+    '1 thing was not taken: link-to-photos is a link or something else that is neither a file nor a folder';
   const LOOSE: Added[] = [addedFile('cover.png', { size: 10, lastModified: 0 } as File)];
   const loose = summarize(LOOSE, []);
 
   it('is said where files alone are added', () => {
     render(
-      <DropConfirm
+      <DropConfirm landing=""
         summary={loose}
         files={LOOSE}
         destinations={destinationsOf('', loose, () => true)}
@@ -174,14 +192,14 @@ describe('what the desktop app did not take', () => {
 
   it('is said where the drop is asked what it goes in as', () => {
     render(
-      <DropConfirm summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
+      <DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
     );
     expect(screen.getByRole('dialog').textContent).toContain(LINE);
-    expect(screen.getByLabelText('As a Pack (recommended)')).toBeTruthy();
+    expect(packChoice()).toBeTruthy();
   });
 
   it('is not said where nothing was left out', () => {
-    render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+    render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
     expect(screen.getByRole('dialog').textContent).not.toContain('not taken');
   });
 });
@@ -200,7 +218,7 @@ describe('what the system keeps', () => {
 
   it('is said in the dim colour, apart from what was not taken', () => {
     render(
-      <DropConfirm
+      <DropConfirm landing="comics"
         summary={BOOK}
         files={FILES}
         destinations={INTO}
@@ -211,14 +229,14 @@ describe('what the system keeps', () => {
     );
     const kept = screen.getByText(LINE);
     expect(kept.style.color).toBe(hex(COLOR.dim));
-    const warned = screen.getByText(/^1 thing in the drop was not taken: link-to-photos/);
+    const warned = screen.getByText(/^1 thing was not taken: link-to-photos/);
     expect(warned.style.color).toBe(hex(COLOR.warn));
     expect(warned.textContent).not.toContain('.DS_Store');
   });
 
   it('counts the folders it left out apart from the files', () => {
     render(
-      <DropConfirm
+      <DropConfirm landing="comics"
         summary={BOOK}
         files={FILES}
         destinations={INTO}
@@ -233,11 +251,11 @@ describe('what the system keeps', () => {
 
   it('is not said where nothing was left out', () => {
     render(
-      <DropConfirm summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
+      <DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} notTaken={LINK} onChoose={() => undefined} />,
     );
     const said = screen.getByRole('dialog').textContent;
     expect(said).not.toContain('the system keeps');
-    expect(said).toContain('1 thing in the drop was not taken');
+    expect(said).toContain('1 thing was not taken');
   });
 });
 
@@ -252,7 +270,7 @@ function hex(colour: string): string {
 // the same answers stand.
 it('says a dropped folder already exists here, and still offers the answers', () => {
   render(
-    <DropConfirm
+    <DropConfirm landing="comics"
       summary={{ ...BOOK, folders: [{ ...BOOK.folders[0], exists: true }] }}
       files={FILES}
       destinations={INTO}
@@ -260,14 +278,16 @@ it('says a dropped folder already exists here, and still offers the answers', ()
     />,
   );
   expect(screen.getByRole('dialog').textContent).toContain('BookX already exists here');
-  expect(screen.getByLabelText('As a Pack (recommended)')).toBeTruthy();
+  // No mark: the line says what it is.
+  expect(marks()[0].startsWith('📁 BookX')).toBe(true);
+  expect(packChoice()).toBeTruthy();
   expect(add()).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
 });
 
 it('is cancelled by Escape, as any dialog is', () => {
   const onChoose = vi.fn();
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onChoose).toHaveBeenCalledWith('cancel', NO_NUMBERING, NO_EDITS);
 });
@@ -275,7 +295,7 @@ it('is cancelled by Escape, as any dialog is', () => {
 // Off unless somebody ticked them: a drop names its files the way it always
 // did until a person asks for anything else.
 it('offers both renames unticked, and shows nothing of them until one is ticked', () => {
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
   const pages = screen.getByLabelText<HTMLInputElement>('Number the pages');
   const volumes = screen.getByLabelText<HTMLInputElement>('Number the volume folders');
   expect(pages.checked).toBe(false);
@@ -285,15 +305,18 @@ it('offers both renames unticked, and shows nothing of them until one is ticked'
 
 it('previews what ticking a box renames, and carries it to the answer', () => {
   const onChoose = vi.fn();
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
   fireEvent.click(screen.getByLabelText('Number the pages'));
 
   const preview = screen.getByLabelText('what is renamed').textContent ?? '';
+  expect(preview).toContain('80 renamed · 1 to check');
+  // The cover put before the first page is irregular and always shown; the
+  // first and last regular lines stand either side of the fold.
+  expect(preview).toContain('cover.png → 000_cover.png');
   expect(preview).toContain('king01-#001.JPG → 001.jpg');
   expect(preview).toContain('king01-#079.JPG → 079.jpg');
-  expect(preview).toContain('74 more');
+  expect(preview).toContain('… 77 more …');
   expect(preview).not.toContain('king01-#040.JPG');
-  expect(preview).toContain('cover.png → 000_cover.png');
 
   fireEvent.click(screen.getByText('Show all'));
   expect(screen.getByLabelText('what is renamed').textContent).toContain(
@@ -317,7 +340,7 @@ it('previews a prefixed name and a spread as renames, and a folder left whole', 
     file('BookY/p0.jpg'),
     file('BookY/p1.jpg'),
   ];
-  render(<DropConfirm summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
   fireEvent.click(screen.getByLabelText('Number the pages'));
 
   const preview = screen.getByLabelText('what is renamed').textContent ?? '';
@@ -342,7 +365,7 @@ it('lists renamed and unchanged names in the order they are read in', () => {
     file('BookX/001.jpg'),
     file('BookX/2.jpg'),
   ];
-  render(<DropConfirm summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={files} destinations={INTO} onChoose={() => undefined} />);
   fireEvent.click(screen.getByLabelText('Number the pages'));
 
   const lines = [...screen.getByLabelText('what is renamed').querySelectorAll('li')].map(
@@ -358,11 +381,11 @@ it('lists renamed and unchanged names in the order they are read in', () => {
 
 // A person scanning books drops one after another and means the same each time.
 it('remembers a ticked box for the next drop', () => {
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
   fireEvent.click(screen.getByLabelText('Number the volume folders'));
   cleanup();
 
-  render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
+  render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={() => undefined} />);
   expect(screen.getByLabelText<HTMLInputElement>('Number the volume folders').checked).toBe(true);
   expect(screen.getByLabelText<HTMLInputElement>('Number the pages').checked).toBe(false);
 });
@@ -376,10 +399,10 @@ describe('what a drop onto a folder of the same name replaces', () => {
 
   it('says nothing more where no dropped path is held', () => {
     const held: HeldFiles = new Map([['BookX/elsewhere.jpg', 'one-file']]);
-    render(<DropConfirm summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
+    render(<DropConfirm landing="comics" summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
     const said = screen.getByRole('dialog').textContent ?? '';
     expect(said).toContain('BookX already exists here');
-    expect(said).not.toContain('in this drop replace');
+    expect(said).not.toContain('being added replace');
     expect(said).not.toContain('refused, because');
   });
 
@@ -388,10 +411,10 @@ describe('what a drop onto a folder of the same name replaces', () => {
       ['BookX/cover.png', 'one-file'],
       ['BookX/king01-#001.JPG', 'one-file'],
     ]);
-    render(<DropConfirm summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
+    render(<DropConfirm landing="comics" summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
     const said = screen.getByRole('dialog').textContent ?? '';
     expect(said).toContain(
-      '2 files in this drop replace the files the Library already has at the same path: ' +
+      '2 files being added replace the files the Library already has at the same path: ' +
         'BookX/king01-#001.JPG, BookX/cover.png',
     );
     expect(said).not.toContain('refused, because');
@@ -403,14 +426,14 @@ describe('what a drop onto a folder of the same name replaces', () => {
       ['BookX/001.jpg', 'pack'],
       ['BookX/002.jpg', 'pack'],
     ]);
-    render(<DropConfirm summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
+    render(<DropConfirm landing="comics" summary={EXISTING} files={FILES} destinations={INTO} held={held} onChoose={() => undefined} />);
     expect(screen.getByRole('dialog').textContent).not.toContain('refused, because');
 
     // Numbered, the cover lands on a one-file Entry and two pages on paths a
     // Pack holds.
     fireEvent.click(screen.getByLabelText('Number the pages'));
     const said = screen.getByRole('dialog').textContent ?? '';
-    expect(said).toContain('1 file in this drop replaces the file the Library already has');
+    expect(said).toContain('1 file being added replaces the file the Library already has');
     expect(said).toContain('2 files are refused, because a Pack holds the file at that path');
   });
 });
@@ -421,7 +444,7 @@ describe('correcting a new name in the preview', () => {
   /** The confirmation of `BOOK` with its pages numbered, and what it answers with. */
   function numbered() {
     const onChoose = vi.fn();
-    render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+    render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
     fireEvent.click(screen.getByLabelText('Number the pages'));
     return onChoose;
   }
@@ -482,29 +505,29 @@ describe('correcting a new name in the preview', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
-  it('puts back the name the rule gave', () => {
+  it('puts back the name the rule gave on Undo', () => {
     const onChoose = numbered();
     correct('001.jpg', 'one.jpg');
     expect(preview()).toContain('king01-#001.JPG → one.jpg (edited)');
-    fireEvent.click(screen.getByRole('button', { name: 'put back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(preview()).toContain('king01-#001.JPG → 001.jpg');
     expect(preview()).not.toContain('(edited)');
     fireEvent.click(add());
     expect(onChoose).toHaveBeenCalledWith('pack', { pages: true, volumes: false }, NO_EDITS);
   });
 
-  // The control that had the focus goes away with Enter, Escape or put back;
+  // The control that had the focus goes away with Enter, Escape or Undo;
   // the focus lands on the name shown in its place rather than on nothing.
-  it('gives the focus back to the name when the field or put back goes away', () => {
+  it('gives the focus back to the name when the field or Undo goes away', () => {
     numbered();
     correct('001.jpg', 'one.jpg');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'one.jpg' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'put back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '001.jpg' }));
 
-    correct('002.jpg', 'typo.jpg', 'Escape');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: '002.jpg' }));
+    correct('079.jpg', 'typo.jpg', 'Escape');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '079.jpg' }));
   });
 
   // The field stays open and says why; Add sends the names last taken.
@@ -538,7 +561,7 @@ describe('correcting a new name in the preview', () => {
     'discards every edit when "%s" is toggled',
     (box) => {
       const onChoose = vi.fn();
-      render(<DropConfirm summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
+      render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
       if (box === 'Number the pages') {
         // Ticked, so that toggling it twice comes back to a preview to edit.
         fireEvent.click(screen.getByLabelText('Number the volume folders'));
@@ -568,7 +591,7 @@ describe('correcting a new name in the preview', () => {
     );
     const onChoose = vi.fn();
     render(
-      <DropConfirm summary={BOOK} files={files} destinations={INTO} holding={holding} onChoose={onChoose} />,
+      <DropConfirm landing="comics" summary={BOOK} files={files} destinations={INTO} holding={holding} onChoose={onChoose} />,
     );
     fireEvent.click(screen.getByLabelText('Number the volume folders'));
     expect(holding).not.toHaveBeenCalled();
@@ -586,7 +609,7 @@ describe('correcting a new name in the preview', () => {
     await waitFor(() => expect(add()).toHaveProperty('disabled', false));
     // And then what the read turned up, above and beside Add.
     const line =
-      '1 file in this drop replaces the file the Library already has at the same path: BookX/first/p.jpg';
+      '1 file being added replaces the file the Library already has at the same path: BookX/first/p.jpg';
     expect(screen.getAllByText(line)).toHaveLength(2);
     expect(add().parentElement?.textContent).toContain(line);
     expect(add().parentElement?.textContent).not.toContain('reading what the Library holds');

@@ -75,13 +75,15 @@ one beside it, say, either flag is refused with both directories until one of
 them is moved out.
 
 A Library just made can then be started from the explorer, with no `map` or
-`sync` at the command line: the empty root offers to map a folder of this
-device to it, "New folder…" in a folder's actions menu, or over the rows for the
-Library root, prepares the path a drop is to land under — held by the page
-alone until something is dropped there, and forgotten on a reload — and a drop
-starts the sync that carries the files in. A top-level folder mapped with `map --prefix`
-and nothing in it yet is listed at the root, marked as not in the Library yet,
-to drop into the same way.
+`sync` at the command line: the empty root offers to choose a folder of this
+device for it ("Choose a folder…"), and adding files where none is chosen yet
+asks for one first. "New folder…" in a folder's actions menu, or over the rows
+for the Library root, prepares the path an add is to land under — held by the
+page alone until files are added there, and forgotten on a reload — and files
+picked with the **+** over the tree, or dropped onto it, start the sync (or the
+freeze) that carries them in. A top-level folder mapped with `map --prefix` and
+nothing in it yet is listed at the root, marked as not in the Library yet, to
+add into the same way.
 
 `make rename-smoke LIBRARY=<name>` checks that the build in the checkout
 renames correctly against such a Library on its real Storage, a development

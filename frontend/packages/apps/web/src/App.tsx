@@ -45,12 +45,12 @@ import { nothingAddedLine, withNotTaken, type Drop, type NotTaken } from './drop
 import { systemFilesLine, type SystemFile } from './systemFiles';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
-import { mappedAt } from './dropTarget';
 import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
 import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
-import { MapPicker } from './MapPicker';
+import { ChooseFolder } from './ChooseFolder';
+import { folderToChoose } from './mapping';
 import { NewFolderDialog } from './NewFolderDialog';
 import {
   chooseAndAdd,
@@ -87,6 +87,7 @@ import {
   treeRows,
   type FileRow,
   type FolderRow,
+  type IncomingFile,
   type TreeState,
 } from './tree';
 import { opened, TreeTable } from './TreeTable';
@@ -109,11 +110,11 @@ import { said, useAsked, type Asked } from './useAsked';
  * places a person opened, not between the rows the arrow keys passed.
  *
  * A Library has no folders to make — a folder is the separators in the Entry
- * Paths under it (spec: EP-2) — so a folder comes to be by a drop: onto the
- * list or a row of the tree, confirmed with the full path it lands under
- * before anything is sent. "New folder…" prepares the path a drop is to land
- * under, held by this page alone and drawn as not in the Library yet until
- * one does (see [`prospective`](./prospective)).
+ * Paths under it (spec: EP-2) — so a folder comes to be by adding files to it:
+ * picked with the **+** over the tree or dropped onto it, and confirmed with
+ * the path it lands under before anything is sent. "New folder…" prepares the
+ * path an add is to land under, held by this page alone and drawn as not in
+ * the Library yet until one does (see [`prospective`](./prospective)).
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -673,10 +674,10 @@ export function App() {
     }
   }, [naming, known]);
 
-  // Which folders a mapping of this device reaches, for the tree's rows — what
-  // a drag over one is told — and which top-level folders it maps with nothing
-  // under them yet: the root's listing says both (see
-  // [`mappedAt`](./dropTarget)), and the tree always holds it.
+  // The root's listing, which the tree always holds: it says which top-level
+  // folders have a folder of this device chosen for them — those the add flow
+  // asks for none (see [`folderToChoose`](./mapping)) — and which of them have
+  // nothing under them yet, which are drawn to add into.
   const reloadRoot = useCallback(() => reloadListings(['']), [reloadListings]);
   const rootKnown: Listing | null = rootState.status === 'ready' ? rootState.value : null;
   // A folder's listing as the tree holds it, or asked for where it holds none.
@@ -804,24 +805,65 @@ export function App() {
     [namingIn, prospective, listingOf, closeNaming],
   );
 
-  // Mapping one: the banner over a folder this device does not have opens the
-  // picker for the top-level folder it names, or for the Library root, and a
-  // mapping recorded there is what the listing reads next — so it is asked
-  // again, which is what takes the banner away and gives the rows their state.
-  // What the server said of the mapping is the notice, because it may name a
-  // folder the same part of the Library pointed at before, and everything under
-  // that one has just left this device's reach.
-  const [mapping, setMapping] = useState<{ prefix: string | null } | null>(null);
-  const closeMapping = useCallback(() => setMapping(null), []);
-  const mapped = useCallback(
-    (answer: Mapped) => {
-      setMapping(null);
-      setNotice(answer.message);
-      reloadListing();
-      reloadRoot();
-    },
+  // Choosing a folder on this device for part of the Library (see
+  // [`ChooseFolder`](./ChooseFolder)): from the banner over a folder none is
+  // chosen for — the top-level folder it names, or the whole Library — and
+  // from inside the add flow, which waits on the answer. A choice recorded is
+  // what the listings read next, so they are asked again, which is what takes
+  // the banner away and gives the rows their state. What the server said of it
+  // is the notice, because it may name a folder the same part of the Library
+  // pointed at before, and everything under that one has just left this
+  // device's reach.
+  const [choosing, setChoosing] = useState<{
+    prefix: string | null;
+    answer: (chosen: Mapped | null) => void;
+  } | null>(null);
+  const chooseFolder = useCallback(
+    (prefix: string | null) =>
+      new Promise<Mapped | null>((resolve) => {
+        setChoosing({
+          prefix,
+          answer: (chosen) => {
+            setChoosing(null);
+            if (chosen !== null) {
+              setNotice(chosen.message);
+              reloadListing();
+              reloadRoot();
+            }
+            resolve(chosen);
+          },
+        });
+      }),
     [reloadListing, reloadRoot],
   );
+  const chosenFolder = useCallback((answer: Mapped) => choosing?.answer(answer), [choosing]);
+  const closeChoosing = useCallback(() => choosing?.answer(null), [choosing]);
+  // The banner's button: the same question, with nothing waiting on it.
+  const openChoosing = useCallback(
+    (prefix: string | null) => void chooseFolder(prefix),
+    [chooseFolder],
+  );
+
+  // The files this page is adding, drawn as rows at once (see
+  // [`IncomingFile`](./tree)): each add's, from Add until the folder it lands
+  // in has been listed again after its request ended — `settled` holds the
+  // listing on hand as it ended, and a different one is the answer that names
+  // what landed.
+  const [incoming, setIncoming] = useState<
+    readonly { id: number; landing: string; files: readonly IncomingFile[]; settled: Asked<Listing> | undefined | null }[]
+  >([]);
+  const adds = useRef(0);
+  const listingNow = useRef(heldListing);
+  listingNow.current = heldListing;
+  useEffect(() => {
+    setIncoming((held) => {
+      const left = held.filter(
+        (one) => one.settled === null || heldListing(one.landing) === one.settled,
+      );
+      return left.length === held.length ? held : left;
+    });
+  }, [heldListing]);
+  const incomingFiles = useMemo(() => incoming.flatMap((one) => one.files), [incoming]);
 
   // Whether the folder on the screen is a stranded one. It says what the list
   // draws over a path the Library holds nothing at, and nothing about how a
@@ -831,6 +873,7 @@ export function App() {
   // The confirmation every drop is answered with before anything is sent, and
   // where its answer goes. `null` while nothing is being asked.
   const [asking, setAsking] = useState<{
+    landing: string;
     summary: DropSummary;
     files: readonly Added[];
     held: HeldFiles;
@@ -842,6 +885,7 @@ export function App() {
   } | null>(null);
   const askAboutDrop = useCallback(
     (
+      landing: string,
       summary: DropSummary,
       files: readonly Added[],
       held: HeldFiles,
@@ -852,6 +896,7 @@ export function App() {
     ) =>
       new Promise<Answer>((resolve) => {
         setAsking({
+          landing,
           summary,
           files,
           held,
@@ -1053,34 +1098,41 @@ export function App() {
   // that can carry it in instead.
   const knownLibrary = library.state.status === 'ready' ? library.state.value : null;
 
-  // Files dropped on the list are added to the folder it is showing, and files
-  // dropped on a row of the tree to that row's folder. The listing is asked for
-  // again as soon as they land, which is what puts them on the screen: they are
-  // in the folder from that moment, and the folder is what knows they are there
-  // until the flow behind them commits.
+  // Files picked with the **+** or dropped are added to the folder the tree
+  // handed them over for: the focused folder or the one a focused file stands
+  // in, or the row the drop was let go over (see [`landingOf`](./destination)).
+  // They are drawn on the tree at Add, in the uploading state, and the listing
+  // is asked for again as soon as they land: they are in the folder from that
+  // moment, and the folder is what knows they are there until the flow behind
+  // them commits.
   //
-  // A refusal about one part is said in the notice area beside the rows, because
-  // it is about a file on this screen; a refusal about the whole drop is said the
-  // same way, since it is the same sentence about all of them at once.
+  // A refusal about one part is said in the notice area beside the rows,
+  // because it is about a file on this screen; a refusal about the whole drop
+  // is said the same way, since it is the same sentence about all of them at
+  // once.
   //
   // Which of those the drop came to, and what is asked again because of it, is
   // [`askToAdd`](./dropped) — the guards below are this screen's, since they
   // are about state only it holds.
   //
-  // And before any of it, the confirmation, which is
-  // [`chooseAndAdd`](./packChoice): a drop that cannot be sent at all is
-  // refused without a question, and every other one is asked about — where it
-  // lands, and for a drop holding a folder whether it goes as a Pack or one by
-  // one. Where it lands is read against the folder it was let go over: the
-  // list's own listing where that is the folder on the screen, and that
-  // folder's listing asked for where it is a row of the tree — which also says
-  // whether a mapping reaches it, where the drag could not know.
+  // Before any of it, a folder on this device where adding needs one and none
+  // is chosen — for the folder's top-level folder or for the whole Library
+  // (spec: EP-9, see [`folderToChoose`](./mapping)) — asked inside the flow,
+  // and recorded before the confirmation comes up. Cancelling it adds nothing,
+  // quietly, as Cancel on the confirmation does.
+  //
+  // Then the confirmation, which is [`chooseAndAdd`](./packChoice): a drop that
+  // cannot be sent at all is refused without a question, and every other one
+  // is asked about — where it lands, and for a drop holding a folder whether
+  // it goes as One Pack or as separate files. Where it lands is read against
+  // that folder's listing, the tree's where it holds one and asked for where
+  // not, and asked afresh after a folder on this device was chosen for it.
   //
   // What the desktop app met in the drop and did not take is said wherever the
   // drop is answered (spec: LA-26): in the confirmation, and where the drop is
-  // answered without one — refused for its budgets, let go over a folder no
-  // mapping reaches, or where it lands could not be read — after the reason
-  // nothing was added.
+  // answered without one — refused for its budgets, let go over a path the
+  // Library holds nothing at, or where it lands could not be read — after the
+  // reason nothing was added.
   const add = useCallback(
     (target: string, { files, notTaken, systemFiles }: Drop) => {
       const notAdded = (line: string) => setNotice(withNotTaken(line, notTaken));
@@ -1095,13 +1147,32 @@ export function App() {
         const kept = systemFilesLine(systemFiles);
         setNotice(
           kept === null
-            ? 'nothing was added — that drop carried no files'
+            ? 'nothing was added — there were no files to add'
             : `nothing was added — ${kept}`,
         );
         return;
       }
       const send = (sending: readonly Added[], freeze: boolean) => {
         setAdding(addingLine(sending.length, target));
+        // The rows, at once, with every folder above them opened so they show.
+        adds.current += 1;
+        const id = adds.current;
+        const prefix = target === '' ? '' : `${target}/`;
+        setIncoming((held) => [
+          ...held,
+          {
+            id,
+            landing: target,
+            files: sending.map((one) => ({ path: `${prefix}${one.path}`, size: one.size, packed: freeze })),
+            settled: null,
+          },
+        ]);
+        setTree((held) => {
+          const above = target === '' ? [] : [...ancestry(target), target];
+          return above.every((folder) => held.expanded.has(folder))
+            ? held
+            : { ...held, expanded: new Set([...held.expanded, ...above]) };
+        });
         // How much of the request has gone, on the same line, as the browser
         // says it — paced, since it says it far more often than a line can be
         // read.
@@ -1114,6 +1185,11 @@ export function App() {
           reload: reloadListing,
           follow: work.follow,
           library: knownLibrary,
+        }).finally(() => {
+          // Let go of once the folder is listed again — by the reload just
+          // asked for — so the rows hand over to the listing's own.
+          const settled = listingNow.current(target);
+          setIncoming((held) => held.map((one) => (one.id === id ? { ...one, settled } : one)));
         });
       };
       const unlisted = (refused: unknown): HeldFiles => {
@@ -1121,17 +1197,6 @@ export function App() {
         return NOTHING_HELD;
       };
       const confirm = async (where: Listing) => {
-        if (!where.mapped) {
-          // As the list says it of a drop onto a folder no mapping reaches.
-          notAdded(
-            unmappedLine(
-              'add',
-              where.held || stranded.includes(target) || prospective.includes(target),
-              where.folders.filter((folder) => folder.mapped).map((folder) => folder.name),
-            ),
-          );
-          return;
-        }
         await chooseAndAdd({
           files,
           existing: where.folders.map((folder) => folder.name),
@@ -1156,18 +1221,37 @@ export function App() {
             // into, which no numbering would have.
             const holding = (folders: readonly string[]) =>
               heldIn(where, folders, (path) => getListing(path)).catch(unlisted);
-            return askAboutDrop(summary, asked, held, destinations, notTaken, systemFiles, holding);
+            return askAboutDrop(target, summary, asked, held, destinations, notTaken, systemFiles, holding);
           },
           send,
           refuse: (overdrawn) => notAdded(overBudgetLine(overdrawn, knownLibrary)),
         });
       };
-      const where = listingOf(target);
+      const proceed = async () => {
+        const where = await listingOf(target);
+        if (!where.mapped && !(where.held || stranded.includes(target) || prospective.includes(target))) {
+          // A path the Library holds nothing at: no folder of this device
+          // would change that, and nothing is asked.
+          notAdded(unmappedLine('add', false));
+          return;
+        }
+        const asked = where.mapped ? null : folderToChoose(target, await listingOf(''));
+        if (asked === null) {
+          await confirm(where);
+          return;
+        }
+        setAdding(null);
+        const chosen = await chooseFolder(asked.prefix);
+        if (chosen === null) {
+          return;
+        }
+        await confirm(await getListing(target));
+      };
       const unread = (refused: unknown) =>
-        notAdded(`nothing was added — where that drop lands could not be read: ${said(refused)}`);
-      void where.then(confirm, unread).finally(() => setAdding(null));
+        notAdded(`nothing was added — where those files go could not be read: ${said(refused)}`);
+      void proceed().catch(unread).finally(() => setAdding(null));
     },
-    [listingOf, known, stranded, prospective, askAboutDrop, work, reloadListing, knownLibrary],
+    [listingOf, known, stranded, prospective, askAboutDrop, work, reloadListing, knownLibrary, chooseFolder],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -1188,22 +1272,6 @@ export function App() {
     setAdding(null);
     setNotice(nothingAddedLine(cause));
   }, []);
-
-  // A drop onto a folder row the root's listing says no mapping reaches,
-  // answered as the drop on the focused folder is.
-  const unmappedDrop = useCallback(
-    (folder: string) =>
-      setNotice(
-        unmappedLine(
-          'add',
-          true,
-          folder === '' && rootKnown !== null
-            ? rootKnown.folders.filter((one) => one.mapped).map((one) => one.name)
-            : [],
-        ),
-      ),
-    [rootKnown],
-  );
 
   // The fill as the rows are allowed to read it. A person who put the fill's
   // line away has put away what that fill had to say, and the `failed` and
@@ -1276,8 +1344,9 @@ export function App() {
         expanded: tree.expanded,
         prospective,
         stranded,
+        incoming: incomingFiles,
       }),
-    [heldListing, tree.expanded, prospective, stranded],
+    [heldListing, tree.expanded, prospective, stranded, incomingFiles],
   );
 
   // The focus moved or a folder opened or closed: the URL follows the folder
@@ -1311,13 +1380,7 @@ export function App() {
       const name = path.slice(path.lastIndexOf('/') + 1);
       const show = (where: Listing) => {
         if (!where.mapped) {
-          setNotice(
-            unmappedLine(
-              'open',
-              true,
-              where.folders.filter((one) => one.mapped).map((one) => one.name),
-            ),
-          );
+          setNotice(unmappedLine('open', true));
           return;
         }
         if (firstImage(where) === null) {
@@ -1349,18 +1412,10 @@ export function App() {
   // The sentence the server would have answered with, said here because
   // neither gesture becomes a request: what each says is
   // [`unmappedLine`](./unmapped), and `held` is which of the two reasons it
-  // gives — the mapping that is missing (spec: EP-9), or the folder the Library
-  // does not have. The folders it may name are the listing's own where the
-  // gesture was made.
+  // gives — no folder of this device chosen (spec: EP-9), or the folder the
+  // Library does not have.
   const unmapped = useCallback(
-    (tried: Tried, held: boolean, where: Listing) =>
-      setNotice(
-        unmappedLine(
-          tried,
-          held,
-          where.folders.filter((one) => one.mapped).map((one) => one.name),
-        ),
-      ),
+    (tried: Tried, held: boolean) => setNotice(unmappedLine(tried, held)),
     [],
   );
 
@@ -1440,7 +1495,7 @@ export function App() {
   // Whether a dialog stands over the screen, whose `Escape` is its own and not
   // the sheet's.
   const dialogUp =
-    mapping !== null || namingIn !== null || asking !== null || packAsking !== null || deleteAsking !== null;
+    choosing !== null || namingIn !== null || asking !== null || packAsking !== null || deleteAsking !== null;
 
   // A hash naming a row the folder it stands in does not hold — the Entry is
   // gone, or the URL was written by hand. The tree is the answer, and the URL
@@ -1581,7 +1636,6 @@ export function App() {
                   // `stranded` is false until that answer lands whether or not
                   // this folder is one of them.
                   strandedKnown={known !== null}
-                  mappedAt={(folder) => mappedAt(folder, rootKnown)}
                   onOpenFolder={openFolder}
                   onOpenFile={openFile}
                   onUnsupported={unsupported}
@@ -1589,8 +1643,7 @@ export function App() {
                   onCollecting={collecting}
                   onUnreadable={unreadable}
                   onUnmapped={unmapped}
-                  onUnmappedDrop={unmappedDrop}
-                  onMap={(prefix) => setMapping({ prefix })}
+                  onMap={openChoosing}
                   onPack={packFolder}
                   onDelete={deleteEntries}
                   onNewFolder={openNaming}
@@ -1624,14 +1677,15 @@ export function App() {
           </Region>
         </main>
       </div>
-      {mapping !== null && (
-        <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
+      {choosing !== null && (
+        <ChooseFolder prefix={choosing.prefix} onChosen={chosenFolder} onClose={closeChoosing} />
       )}
       {namingIn !== null && (
         <NewFolderDialog parent={namingIn} onPrepare={prepareNamed} onClose={closeNaming} />
       )}
       {asking !== null && (
         <DropConfirm
+          landing={asking.landing}
           summary={asking.summary}
           files={asking.files}
           held={asking.held}

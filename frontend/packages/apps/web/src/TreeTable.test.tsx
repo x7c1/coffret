@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Fill, ListedFile, ListedFolder, Listing } from '@coffret/api';
 
-import { TAKEN } from './dropTarget';
 import { size, time } from './humanize';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
@@ -101,7 +100,6 @@ function mount(shown: Listing, options: Options = {}) {
     onUnsupported: vi.fn(),
     onAdd: vi.fn(),
     onUnmapped: vi.fn(),
-    onUnmappedDrop: vi.fn(),
     onMap: vi.fn(),
     onPack: vi.fn(),
     onDelete: vi.fn(),
@@ -151,7 +149,6 @@ function mount(shown: Listing, options: Options = {}) {
         freeze={null}
         stranded={options.stranded ?? false}
         strandedKnown={options.strandedKnown ?? true}
-        mappedAt={(at) => held.get(at)?.mapped ?? (at.startsWith(`${shown.path}/`) ? shown.mapped : null)}
         onOpenFolder={calls.onOpenFolder}
         onOpenFile={calls.onOpenFile}
         onUnsupported={calls.onUnsupported}
@@ -159,7 +156,6 @@ function mount(shown: Listing, options: Options = {}) {
         onCollecting={() => undefined}
         onUnreadable={() => undefined}
         onUnmapped={calls.onUnmapped}
-        onUnmappedDrop={calls.onUnmappedDrop}
         onMap={calls.onMap}
         onPack={calls.onPack}
         onDelete={calls.onDelete}
@@ -381,32 +377,42 @@ describe('the keys on the tree', () => {
 });
 
 describe('the block over the rows', () => {
-  // The banner names what mapping this folder would be for.
-  it('tells a folder of files from a folder of folders, and names the top-level folder to map', () => {
+  // The banner names the top-level folder a folder on this device would be
+  // chosen for — and never says the folder is "not on this device", which the
+  // column says of a file that is not here.
+  it('tells a folder of files from a folder of folders, and names the top-level folder to choose for', () => {
     mount(listing({ mapped: false, files: [file('cover.png')] }));
-    expect(said()).toContain('this folder is not on this device — map ');
-    expect(said()).toContain('to fetch its files');
+    expect(said()).toContain('No folder chosen for “albums” yet: choose one to fetch its files');
+    expect(said()).not.toContain('not on this device');
+    expect(said()).not.toMatch(/\bmap/);
     cleanup();
 
     mount(listing({ path: 'books/vol-1', mapped: false, folders: [folder('scans', { mapped: false }, 'books/vol-1')] }));
+    expect(said()).toContain('No folder chosen for “books” yet');
     expect(said()).toContain('to fetch what is in the folders below it');
-    expect(document.querySelector('code')?.textContent).toBe('books');
   });
 
-  it('offers to map the folder from the banner, and the root over an unmapped root', () => {
+  it('offers to choose a folder from the banner, and one for the Library over an unmapped root', () => {
     const { onMap } = mount(listing({ path: 'books/vol-1', mapped: false, files: [file('p.png', {}, 'books/vol-1')] }));
-    fireEvent.click(screen.getByText('map books…'));
+    fireEvent.click(screen.getByText('Choose a folder…'));
     expect(onMap).toHaveBeenCalledWith('books');
     cleanup();
 
     const root = mount(listing({ path: '', mapped: false, files: [file('loose.png', {}, '')] }));
-    fireEvent.click(screen.getByText('map the Library root…'));
+    expect(said()).toContain('No folder chosen for the Library yet');
+    fireEvent.click(screen.getByText('Choose a folder…'));
     expect(root.onMap).toHaveBeenCalledWith(null);
   });
 
   it('keeps the banner back at a root holding only folders', () => {
     mount(listing({ path: '', mapped: false, folders: [folder('albums', { mapped: true }, '')] }));
-    expect(screen.queryByText('map the Library root…')).toBeNull();
+    expect(screen.queryByText('Choose a folder…')).toBeNull();
+  });
+
+  // A folder row with no folder chosen says so in those words.
+  it('marks a folder row with no folder chosen in those words', () => {
+    mount(listing({ path: '', folders: [folder('books', { mapped: false }, '')] }));
+    expect(within(screen.getByTitle('books')).getByText('no folder chosen')).toBeTruthy();
   });
 
   // A folder of the Library holds something by definition, so an empty listing
@@ -602,25 +608,47 @@ describe('an open folder whose listing was refused', () => {
 });
 
 describe('a drop on the tree', () => {
-  it('says what a drop will do while files are dragged over it, and nothing for text', () => {
+  it('says where a drop lands while files are dragged over it, and nothing for text', () => {
     const { tree } = mount(listing({ files: [file('cover.png')] }));
     fireEvent.dragEnter(tree, carryingFiles);
-    expect(tree.textContent).toContain(TAKEN);
+    expect(screen.getByRole('status').textContent).toBe('Drop to add to albums');
     fireEvent.dragLeave(tree);
-    expect(tree.textContent).not.toContain('drop to');
+    expect(said()).not.toContain('Drop to add');
     fireEvent.dragEnter(tree, { dataTransfer: { types: ['text/plain'] } });
-    expect(tree.textContent).not.toContain('drop to');
+    expect(said()).not.toContain('Drop to add');
   });
 
-  it('refuses a drop on a folder no mapping reaches, and says which gesture it was', () => {
-    const { tree, onUnmapped } = mount(listing({ path: '', mapped: false, folders: [folder('albums', {}, '')] }));
+  // The pill and the outline follow the row under the pointer: a folder row's
+  // own folder, and a file row's folder.
+  it('outlines the row the drop lands in, and names it in the pill', () => {
+    const { tree } = mount(listing({ path: '', folders: [folder('albums', {}, '')], files: [file('loose.png', {}, '')] }), {
+      more: [listing({ files: [file('cover.png')] })],
+      open: ['albums'],
+    });
+    fireEvent.dragEnter(tree, carryingFiles);
+    fireEvent.dragOver(screen.getByTitle('cover.png'), carryingFiles);
+    expect(screen.getByRole('status').textContent).toBe('Drop to add to albums');
+    expect(screen.getByTitle('albums').style.outline).toContain('dashed');
+    expect(tree.style.outline).toBe('none');
+    fireEvent.dragOver(screen.getByTitle('loose.png'), carryingFiles);
+    expect(screen.getByRole('status').textContent).toBe('Drop to add to the Library');
+    expect(screen.getByTitle('albums').style.outline).toBe('none');
+    expect(tree.style.outline).toContain('dashed');
+  });
+
+  // A folder no folder of this device is chosen for takes the drop — the
+  // screen asks for one (spec: EP-9) — and only a path naming nothing refuses it.
+  it('hands over a drop on a folder with no folder chosen, and refuses one on a path naming nothing', async () => {
+    const { tree, onAdd, onUnmapped } = mount(listing({ path: '', mapped: false, folders: [folder('albums', {}, '')] }));
     fireEvent.drop(tree, emptyDrop);
-    expect(onUnmapped).toHaveBeenCalledWith('add', true, expect.objectContaining({ path: '' }));
+    await vi.waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+    expect(onAdd.mock.calls[0][0]).toBe('');
+    expect(onUnmapped).not.toHaveBeenCalled();
     cleanup();
 
     const nowhere = mount(listing({ path: 'nowhere', mapped: false, held: false }));
     fireEvent.drop(nowhere.tree, emptyDrop);
-    expect(nowhere.onUnmapped).toHaveBeenCalledWith('add', false, expect.anything());
+    expect(nowhere.onUnmapped).toHaveBeenCalledWith('add', false);
   });
 
   it('hands a drop on a folder row over for that folder', async () => {
@@ -646,10 +674,37 @@ describe('a drop on the tree', () => {
     expect(onAdd.mock.calls[0][0]).toBe('albums/2026');
   });
 
+  // The header's +: the operating system's picker, for files or a folder,
+  // over the focused folder — or the folder of the focused file.
+  it('adds files picked with + to the focused folder, or the folder of the focused file', async () => {
+    const picked = [{ name: 'a.jpg', size: 1, lastModified: 0, webkitRelativePath: '' } as File];
+    const pick = async (focus: string, which: 'Files…' | 'A folder…') => {
+      const added = mount(listing({ path: '', folders: [folder('albums', {}, '')] }), {
+        more: [listing({ folders: [folder('2026')], files: [file('cover.png')] })],
+        open: ['albums'],
+        focus,
+      });
+      const plus = screen.getByRole('button', { name: 'Add files' });
+      fireEvent.click(plus);
+      const input = screen.getByTestId(which === 'Files…' ? 'pick-files' : 'pick-folder') as HTMLInputElement;
+      const click = vi.spyOn(input, 'click').mockImplementation(() => undefined);
+      fireEvent.click(screen.getByRole('menuitem', { name: which }));
+      expect(click).toHaveBeenCalledTimes(1);
+      Object.defineProperty(input, 'files', { value: picked, configurable: true });
+      fireEvent.change(input);
+      await vi.waitFor(() => expect(added.onAdd).toHaveBeenCalledTimes(1));
+      const [into, drop] = added.onAdd.mock.calls[0];
+      cleanup();
+      return { into, paths: drop.files.map((one: { path: string }) => one.path) };
+    };
+    expect(await pick(folderKey('albums/2026'), 'Files…')).toEqual({ into: 'albums/2026', paths: ['a.jpg'] });
+    expect(await pick(fileKey('albums/cover.png'), 'A folder…')).toEqual({ into: 'albums', paths: ['a.jpg'] });
+  });
+
   it('answers opening a file of an unmapped folder as an open, and does not open it', () => {
     const { onUnmapped, onOpenFile } = mount(listing({ mapped: false, files: [file('cover.png')] }));
     fireEvent.doubleClick(screen.getByTitle('cover.png'));
-    expect(onUnmapped).toHaveBeenCalledWith('open', true, expect.objectContaining({ path: 'albums' }));
+    expect(onUnmapped).toHaveBeenCalledWith('open', true);
     expect(onOpenFile).not.toHaveBeenCalled();
   });
 });

@@ -414,7 +414,7 @@ it('marks a file waiting to be packed apart from one waiting for a sync', () => 
   const shown = rowFill(reserved, 'scans/vol-1', null);
   expect(shown.state).toBe('reserved');
   expect(SAYS[shown.state]).toBe('to be packed');
-  expect(shown.message).toContain('dropped to be added as a Pack');
+  expect(shown.message).toContain('to be added as a Pack');
 
   expect(
     rowFill({ ...file('scans/vol-1/page-001.jpg', 'present'), reserved: true }, 'scans/vol-1', null)

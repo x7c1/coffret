@@ -143,7 +143,7 @@ it('tells the person what to do about a drop that broke', async () => {
   const line = brokeOff(broken(), FAMILY);
 
   expect(line).toContain('the rows below are the folder as it stands now');
-  expect(line).toContain('can be dropped again');
+  expect(line).toContain('can be added again');
 });
 
 // A refusal read off an answer that did arrive is the server's own sentence,
@@ -190,8 +190,8 @@ it('says which file is too large to drop and how to add it instead', async () =>
   await run.run();
 
   expect(run.notice.at(-1)).toBe(
-    'film/holiday.mov is 3.2 GB, more than the 1.1 GB one file can be when dropped here. ' +
-      'Copy it into this folder on the device it is mapped to and run ' +
+    'film/holiday.mov is 3.2 GB, more than the 1.1 GB one file can be when added here. ' +
+      'Copy it to where this folder is on this device and run ' +
       '`coffret sync --library family`.',
   );
   // Nothing was sent, so nothing was armed to follow; the folder is still asked.
@@ -202,8 +202,8 @@ it('says which file is too large to drop and how to add it instead', async () =>
 // sent, and the sentence names both ways past it.
 it('says how many files are too many to drop and both ways to add them instead', () => {
   expect(overBudgetLine({ budget: 'parts', count: 5210, limit: 4096 }, FAMILY)).toBe(
-    'this drop holds 5210 files, more than the 4096 one drop can carry. Drop fewer files at ' +
-      'a time, or copy them into this folder on the device it is mapped to and run ' +
+    'these are 5210 files, more than the 4096 that can be added at once. Add fewer files at ' +
+      'a time, or copy them to where this folder is on this device and run ' +
       '`coffret sync --library family`.',
   );
 });
@@ -213,8 +213,8 @@ it('says how much is too much to drop at once and both ways to add it instead', 
   expect(
     overBudgetLine({ budget: 'request', carried: 70e9, limit: 64 * GiB }, FAMILY),
   ).toBe(
-    'this drop comes to 70.0 GB, more than the 68.7 GB one drop can carry. Drop fewer ' +
-      'files at a time, or copy them into this folder on the device it is mapped to and run ' +
+    'these files come to 70.0 GB, more than the 68.7 GB that can be added at once. Add fewer ' +
+      'files at a time, or copy them to where this folder is on this device and run ' +
       '`coffret sync --library family`.',
   );
 });

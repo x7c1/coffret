@@ -37,7 +37,11 @@ export type Action =
   | { kind: 'newFolder'; folder: string }
   | { kind: 'pack'; folder: string }
   | { kind: 'delete'; target: DeleteTarget }
-  | { kind: 'forget'; folder: string };
+  | { kind: 'forget'; folder: string }
+  // The header's **+**, whose menu is the same popover: the operating
+  // system's picker for files, or for one folder.
+  | { kind: 'addFiles' }
+  | { kind: 'addFolder' };
 
 /** One item of the menu. */
 export interface ActionItem {

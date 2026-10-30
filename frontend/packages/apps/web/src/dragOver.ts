@@ -10,8 +10,8 @@ export interface DragOver {
   /**
    * Whether what is being dragged carries files, as the browser says on the
    * way in. Only such a drag gets the line saying what letting go will do: a
-   * selection of text or a link dropped here adds nothing (the drop says "that
-   * drop carried no files"), and a line promising otherwise would be wrong.
+   * selection of text or a link dropped here adds nothing (the drop says "there
+   * were no files to add"), and a line promising otherwise would be wrong.
    */
   carriesFiles: boolean;
   onDragEnter: (event: DragEvent) => void;

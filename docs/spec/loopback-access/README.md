@@ -18,7 +18,8 @@ contract of the explorer host, LA-22 to LA-25 that of the desktop app's
 **Passphrase door**: a listener of the app's own that serves the page a
 Passphrase is typed into and takes what that page submits, and LA-26 onwards
 that of the **import**: the files a drop onto the explorer's window in the
-desktop app let go of, walked on the device by their paths, held under a
+desktop app let go of, or its + picked, walked on the device by their paths,
+held under a
 one-time **drop handle**, and carried into the Library by a request that names
 the handle and never a path. The two credentials
 never cross: the server key is what the host shows the server, a browser token
@@ -443,6 +444,16 @@ Concept background: [Library](../../concepts/library/),
   list of the items' paths. No event records a handle, a path on the device or a
   dropped file's name (EL-1): walking, holding and taking a drop, and
   importing it, are recorded by counts and refusal kinds. *(Form: test)*
+  - The files and folders picked with the explorer's + are one drop onto the
+    explorer, taken exactly as a drop is, so every rule that says "a drop"
+    says it of a pick too. In the desktop app they are held by their paths
+    under one handle as this rule holds a drop: a file picked on its own stands
+    as that file, and a folder picked whole stands as that folder, walked as a
+    dropped folder is (LA-29) rather than as the files the picker listed in
+    it. In a browser they are walked on the page as a browser's drop is,
+    against the same list of the files an operating system keeps (EP-17), a
+    folder picked whole standing as that folder there too, and sent as one
+    upload.
 - **LA-27.** An import (`POST /api/import`) is a JSON body naming the folder of
   the Library, whether the drop goes in as a Pack (PK-17), the handle, and per
   file its index in the held set and the name it is to have relative to the
@@ -463,7 +474,8 @@ Concept background: [Library](../../concepts/library/),
   stated: one that grew since it was dropped is refused part way through, as a
   `conflict`, and leaves neither a file under its final name nor its scratch
   (EP-11). *(Form: test)*
-- **LA-29.** The walk of a drop follows no symbolic link and takes none: a link
+- **LA-29.** The walk of a drop — a pick with the explorer's + included
+  (LA-26) — follows no symbolic link and takes none: a link
   to a file and a link to a folder are each reported as neither, as is anything
   else that is not a regular file or a folder, and nothing under a linked
   folder is walked (EP-8). A dropped folder is walked depth first, its children
