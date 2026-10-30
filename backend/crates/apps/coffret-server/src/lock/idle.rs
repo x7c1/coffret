@@ -84,6 +84,13 @@ impl Idle {
         }
     }
 
+    /// How many holds on the Library are open right now, which the watcher
+    /// logs when it puts the lock off: an open hold is work still running,
+    /// not a request made since the quiet began.
+    pub(crate) fn holds(&self) -> usize {
+        self.presence().holds
+    }
+
     /// The two of them, whatever a guard was left holding.
     ///
     /// Poisoning is recovered from for the reason [`Custody`](super::Custody)

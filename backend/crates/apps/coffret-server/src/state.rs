@@ -464,4 +464,9 @@ impl ServerState {
     pub(crate) fn last_seen(&self) -> Instant {
         self.idle.last_seen()
     }
+
+    /// How many pieces of work hold the Library right now (spec: DK-4).
+    pub(crate) fn holds_open(&self) -> usize {
+        self.idle.holds()
+    }
 }
