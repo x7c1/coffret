@@ -461,14 +461,16 @@ function Shortcuts() {
         onMouseLeave={() => setShown(false)}
         onFocus={() => setShown(true)}
         onBlur={() => setShown(false)}
-        // Drawn as the sync icon beside it is: a 16px stroke icon on no frame,
-        // in a square as wide as the row's other icon buttons.
+        // Drawn as the sync icon beside it is: a stroke icon on no frame, in a
+        // square as wide as the row's other icon buttons.
         style={{ ...ICON_BUTTON, border: 'none', background: 'none', color: 'inherit', cursor: 'help' }}
       >
+        {/* 18px rather than the sync icon's 16: a mark inside a circle reads
+            smaller than an open stroke drawn the same size. */}
         <svg
           aria-hidden="true"
-          width={16}
-          height={16}
+          width={18}
+          height={18}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -660,10 +662,11 @@ const BADGE = {
   cursor: 'pointer',
 } as const;
 
+/** The row's right end. Its icon buttons' squares hold room around their icons, so 4px between them is enough. */
 const END = {
   marginLeft: 'auto',
   display: 'flex',
-  gap: 12,
+  gap: 4,
   alignItems: 'center',
   flex: '0 0 auto',
 } as const;
