@@ -24,8 +24,8 @@ pub struct ListingDto {
     /// (spec: EP-9).
     ///
     /// Here rather than left to the file route's refusal, because the mappings
-    /// answer it before anything is clicked: a browser told `false` says "this
-    /// folder is not on this device" over the rows it is already showing,
+    /// answer it before anything is clicked: a browser told `false` says "No
+    /// folder chosen for … yet" over the rows it is already showing,
     /// instead of letting a reader ask for a file, wait out a round trip to
     /// Storage, and be declined. It says nothing about what is on disk — that
     /// is each row's `state`.

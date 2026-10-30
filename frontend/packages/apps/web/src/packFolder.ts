@@ -59,7 +59,8 @@ export interface PackQuestion {
   packs: boolean;
   /**
    * What would be left as it is, one group a line with why — `2 files already
-   * in a Pack`, `3 files not on this device` — and empty where nothing would.
+   * in a Pack`, `3 files not on this device`, `4 files not in the Library yet`
+   * — and empty where nothing would.
    */
   leftOut: string[];
   /** Said where a freeze is already running and this one would wait for it. */
@@ -126,14 +127,16 @@ function nothingBecause(preview: FreezePreview, reasons: string[]): string {
 /**
  * The broad groups of what a freeze would leave as they are, each with why,
  * where there are any: already in a Pack, in a Pack and changed here (which is
- * `update`'s to carry), not on this device, and what the system keeps.
+ * `update`'s to carry), not on this device, not in the Library yet, and what
+ * the system keeps.
  *
- * There is no group for files not in the Library yet, though a freeze does
- * leave some: the files of a drop still landing, or of one cut off part way,
- * which no freeze selects until that drop has finished receiving (spec: PK-17).
- * The preview leaves them out without counting them, so the question cannot
- * name them. Files added here outside such a drop, or whose upload failed,
- * are not among those left: a freeze packs them, and `files` counts them.
+ * Not in the Library yet are the files of a drop still landing, or of one cut
+ * off part way, which no freeze selects until that drop has finished receiving
+ * (spec: PK-17) — counted whether or not they have reached this device's disk,
+ * so that a folder holding nothing else says why there is nothing to pack
+ * rather than that it holds no files. Files added here outside such a drop, or
+ * whose upload failed, are not among them: a freeze packs those, and `files`
+ * counts them.
  */
 function leftOutParts(preview: FreezePreview): string[] {
   const parts: string[] = [];
@@ -145,6 +148,9 @@ function leftOutParts(preview: FreezePreview): string[] {
   }
   if (preview.not_here > 0) {
     parts.push(`${count(preview.not_here)} not on this device`);
+  }
+  if (preview.receiving > 0) {
+    parts.push(`${count(preview.receiving)} not in the Library yet`);
   }
   // What an operating system keeps beside the pages — `.DS_Store`, `Thumbs.db`
   // — which the scan leaves out of every freeze (spec: EP-17).

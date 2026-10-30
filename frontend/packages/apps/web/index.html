@@ -78,6 +78,15 @@
         }
       }
 
+      /* A field's placeholder, in COLOR.faint of src/theme.ts: set here
+         because no inline style reaches a pseudo-element. The opacity undoes
+         the dimming some browsers lay over the colour on their own. */
+      input::placeholder,
+      textarea::placeholder {
+        color: #8a919c;
+        opacity: 1;
+      }
+
       code {
         font-family: ui-monospace, monospace;
       }

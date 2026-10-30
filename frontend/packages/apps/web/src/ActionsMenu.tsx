@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
-import type { ActionItem } from './actions';
+import type { Action, ActionItem } from './actions';
 import { COLOR, SHADOW } from './theme';
 
 /** Where the menu opens: a point on the screen, and which side of it the menu hangs from. */
@@ -36,7 +36,8 @@ export interface MenuAt {
  * The item under the pointer or the keyboard's focus is shaded; `↑`/`↓`
  * move that focus and `Enter` chooses, so the menu works from the keyboard
  * as a menu does. A destructive item is drawn in red, and shaded in a tint of
- * it.
+ * it. An item with no action is drawn faint and disabled: the pointer and the
+ * keys pass over it, and nothing chooses it.
  *
  * Kept on the screen: where it would run past the bottom of the window it opens
  * upward from the point instead, and where past the right edge, leftward.
@@ -60,7 +61,8 @@ export function ActionsMenu({
   label: string;
   at: MenuAt;
   items: readonly ActionItem[];
-  onChoose: (item: ActionItem) => void;
+  /** An item that can be chosen was: what it does. */
+  onChoose: (action: Action) => void;
   /**
    * The menu is let go of: by `Escape`, after which the keys belong where they
    * were before it opened, or by a press `away` from it, which puts the focus
@@ -70,7 +72,9 @@ export function ActionsMenu({
 }) {
   const menu = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
-  const [active, setActive] = useState(at.byKeys === true ? 0 : -1);
+  // The first item that can be chosen, which the keys start on.
+  const first = items.findIndex((item) => item.action !== null);
+  const [active, setActive] = useState(at.byKeys === true ? first : -1);
 
   useLayoutEffect(() => {
     const element = menu.current;
@@ -79,13 +83,13 @@ export function ActionsMenu({
     }
     // Opened again elsewhere without closing first — from another row's "⋮" —
     // the shade starts over, since the items under it may be others.
-    setActive(at.byKeys === true ? 0 : -1);
+    setActive(at.byKeys === true ? first : -1);
     const box = element.getBoundingClientRect();
     setPlace(placed(at, { width: box.width, height: box.height }, {
       width: window.innerWidth,
       height: window.innerHeight,
     }));
-  }, [at]);
+  }, [at, first]);
   // The menu takes the keyboard, so that `↑`/`↓` and `Enter` reach it — once
   // it is placed, since until then it is hidden, and a hidden element takes
   // no focus; and again each time it is placed anew, since the "⋮" pressed to
@@ -121,11 +125,13 @@ export function ActionsMenu({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      setActive((was) => (was === -1 && step === -1 ? items.length - 1 : (was + step + items.length) % items.length));
+      setActive((was) => stepped(items, was, event.key === 'ArrowDown' ? 1 : -1));
     } else if (event.key === 'Enter' && active !== -1) {
       event.preventDefault();
-      onChoose(items[active]);
+      const action = items[active]?.action ?? null;
+      if (action !== null) {
+        onChoose(action);
+      }
     }
   };
 
@@ -151,6 +157,24 @@ export function ActionsMenu({
       </div>
       {items.map((item, index) => {
         const shaded = index === active;
+        const action = item.action;
+        if (action === null) {
+          return (
+            <div key={item.label}>
+              {item.separated && <div role="separator" style={SEPARATOR} />}
+              <button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                disabled
+                aria-disabled
+                style={{ ...ITEM, color: COLOR.faint, background: 'transparent', cursor: 'default' }}
+              >
+                {item.label}
+              </button>
+            </div>
+          );
+        }
         return (
           <div key={item.label}>
             {item.separated && <div role="separator" style={SEPARATOR} />}
@@ -160,7 +184,7 @@ export function ActionsMenu({
               tabIndex={-1}
               onMouseEnter={() => setActive(index)}
               onMouseLeave={() => setActive((was) => (was === index ? -1 : was))}
-              onClick={() => onChoose(item)}
+              onClick={() => onChoose(action)}
               style={{
                 ...ITEM,
                 color: item.destructive ? COLOR.refused : COLOR.text,
@@ -174,6 +198,22 @@ export function ActionsMenu({
       })}
     </div>
   );
+}
+
+/**
+ * The item `↑` (`step` -1) or `↓` (1) shades after `was`, `-1` being none:
+ * the next one round that can be chosen, and none where no item can be.
+ */
+function stepped(items: readonly ActionItem[], was: number, step: 1 | -1): number {
+  const count = items.length;
+  let at = was === -1 && step === -1 ? count : was;
+  for (let tried = 0; tried < count; tried += 1) {
+    at = (at + step + count) % count;
+    if (items[at].action !== null) {
+      return at;
+    }
+  }
+  return -1;
 }
 
 /**

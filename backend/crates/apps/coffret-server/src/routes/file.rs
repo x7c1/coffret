@@ -250,8 +250,8 @@ async fn answer(
 ///
 /// The same fill a placement arms, with nothing to carry: no fetch ran, so
 /// nothing of the Keyring was read and no kept parcel was found unheld. A
-/// folder wholly here, the common case, arms nothing; the catalog is asked
-/// only where no fill has ended on the folder.
+/// folder whose own files are all here, the common case, arms nothing; the
+/// catalog is asked only where no fill has ended on the folder.
 async fn fill_unless_whole(
     state: &Arc<ServerState>,
     library: &OpenLibrary,
@@ -261,7 +261,7 @@ async fn fill_unless_whole(
     if state.fills.has_ended(&folder) {
         return Ok(());
     }
-    if !library.wholly_present(folder.listed()).await? {
+    if !library.directly_present(folder.listed()).await? {
         fill_folder(Arc::clone(state), folder, None, Vec::new());
     }
     Ok(())

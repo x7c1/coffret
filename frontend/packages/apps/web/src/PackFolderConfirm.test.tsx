@@ -73,6 +73,7 @@ it('offers only Close for a folder being packed already', () => {
     in_pack: 0,
     changed_in_pack: 0,
     not_here: 0,
+    receiving: 0,
     system_files: 0,
     system_folders: 0,
     unavailable: 0,
@@ -94,4 +95,29 @@ it('is cancelled by Escape, as any dialog is', () => {
   render(<PackFolderConfirm question={BOOK} onChoose={onChoose} />);
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(onChoose).toHaveBeenCalledWith(false);
+});
+
+// PK-17: the files of a drop not finished bringing them in are left for that
+// drop's own freeze, and the dialog names them among what is left as it is.
+it('lists the files on their way in under what is left as it is', () => {
+  const question = questionOf({
+    folder: 'books/BookX',
+    files: 80,
+    bytes: 58_000_000,
+    in_pack: 0,
+    changed_in_pack: 0,
+    not_here: 0,
+    receiving: 4,
+    system_files: 0,
+    system_folders: 0,
+    unavailable: 0,
+    after_current: false,
+    already_packing: false,
+  });
+  render(<PackFolderConfirm question={question} onChoose={() => undefined} />);
+
+  expect(screen.getByRole('dialog').textContent).toContain('Left as they are');
+  expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    '4 files not in the Library yet',
+  ]);
 });

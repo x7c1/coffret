@@ -250,8 +250,10 @@ asks for the Library to be unlocked — a press of *unlock*, or the idle lock
 seen — the Passphrase window comes back to take the Passphrase, and goes again
 once the Library is unlocked; the explorer comes back in place. A page that
 has lost its session gets a fresh one from *Reload the explorer* in the app's
-menu (Cmd/Ctrl+R). Addresses the explorer opens a window for, such as Google's
-consent page, open in the system browser.
+menu (Cmd/Ctrl+R). On Linux and Windows the windows keep that menu's bar
+hidden until Alt is pressed; its shortcuts work either way. Addresses the
+explorer opens a window for, such as Google's consent page, open in the system
+browser.
 
 Closing the Passphrase window before a Library is open quits the app, since
 nothing is served yet. Once one is open the app stays resident: closing the

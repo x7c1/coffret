@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 
 import type { Library } from '@coffret/api';
 
-import type { ActionItem } from './actions';
+import type { Action, ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
 import { landingOf, placeOf } from './destination';
 import { pickedFiles, type Drop } from './drop';
@@ -80,15 +80,15 @@ export function Header({
   // The folder the picker chosen was opened for, kept across the wait for the
   // operating system's answer: the focus may move meanwhile.
   const picking = useRef('');
-  const choose = (item: ActionItem) => {
+  const choose = (action: Action) => {
     const into = adding?.into ?? addInto;
     setAdding(null);
-    if (item.action.kind === 'newFolder') {
+    if (action.kind === 'newFolder') {
       onNewFolder(into);
       return;
     }
     picking.current = into;
-    (item.action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
+    (action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
   };
   const pickedFrom = (input: HTMLInputElement) => {
     const files = Array.from(input.files ?? []);

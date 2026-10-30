@@ -15,9 +15,10 @@ use crate::unavailable_root::UnavailableRoot;
 /// Every count is of files the run's own scan would consider, judged by the
 /// run's own rules (spec: PK-1, PK-2, EP-10, PK-17), except
 /// [`not_here`](Self::not_here), which also counts the Entries under the folder
-/// whose files this device does not have at all, and the two counts of what an
-/// operating system keeps, which the scan leaves out before any rule is asked
-/// of it (spec: EP-17).
+/// whose files this device does not have at all, [`receiving`](Self::receiving),
+/// which counts the paths a drop in progress reserved whether or not their
+/// files have landed, and the two counts of what an operating system keeps,
+/// which the scan leaves out before any rule is asked of it (spec: EP-17).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FreezePreview {
     /// How many files a freeze would pack.
@@ -34,6 +35,13 @@ pub struct FreezePreview {
     /// How many Entries under the folder this device has no file of its own
     /// for: none on disk, or one this device never placed (spec: EP-10).
     pub not_here: usize,
+    /// How many paths under the folder a drop in progress — one still being
+    /// received, or one cut off part way — has reserved, which no freeze
+    /// selects until that drop has finished receiving (spec: PK-17). Their
+    /// files are on their way into the Library rather than in it, whether or
+    /// not they have landed on disk yet, and none of them is counted anywhere
+    /// else here.
+    pub receiving: usize,
     /// How many files an operating system keeps — `.DS_Store`, `Thumbs.db` and
     /// the like — the scan left out under the folder, which a freeze leaves as
     /// they are (spec: EP-17).

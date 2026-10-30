@@ -12,6 +12,8 @@ import {
   filesUnder,
   heldBy,
   nothingAddedLine,
+  NothingTaken,
+  pickedFiles,
   notTakenLine,
   notTakenNotice,
   withNotTaken,
@@ -289,6 +291,73 @@ describe('a drop the app took only part of', () => {
   it('says nothing more of a drop the app took all of, or of a browser’s', () => {
     expect(notTakenNotice([])).toBeNull();
     expect(withNotTaken('nothing was added — x', [])).toBe('nothing was added — x');
+  });
+});
+
+// LA-26: files picked with the header's + are one drop, and in the desktop
+// app they are handed to it by path exactly as a drop is — a folder picked
+// whole going as that folder, which the preload works out — rather than read
+// by the page. In a browser they are the page's own files.
+describe('files picked with +', () => {
+  /** A file of a folder picked whole, by its way down, as the file input hands one over. */
+  const picked = (relative: string) => {
+    const file = new File(['page'], relative.split('/').at(-1) ?? relative, { lastModified: 7 });
+    Object.defineProperty(file, 'webkitRelativePath', { value: relative });
+    return file;
+  };
+
+  it('are handed to the desktop app, and become the records it answered with', async () => {
+    const takeDrop = vi.fn<DesktopBridge['takeDrop']>(async () => BOOK);
+    vi.stubGlobal('coffretDesktop', { takeDrop });
+    const pages = [picked('vol-1/page-1.jpg'), picked('vol-1/page-2.jpg'), picked('vol-1/.DS_Store')];
+
+    const drop = await pickedFiles(pages);
+
+    expect(takeDrop).toHaveBeenCalledOnce();
+    expect(takeDrop).toHaveBeenCalledWith(pages);
+    expect(drop.files).toEqual(
+      BOOK.files.map((file, index) => ({
+        path: file.path,
+        size: 100,
+        mtime: 1_444_000_000_000,
+        source: { kind: 'held', handle: HANDLE, index },
+      })),
+    );
+    // What the system keeps is the app's walk to leave out, and its answer
+    // left nothing out here: the page does not read the names itself.
+    expect(drop.systemFiles).toEqual([]);
+    expect(drop.notTaken).toEqual([]);
+  });
+
+  it('say what the desktop app left out, and throw where it took nothing', async () => {
+    vi.stubGlobal('coffretDesktop', { takeDrop: async () => PHOTOS_AND_A_LINK });
+    const drop = await pickedFiles([new File([''], 'a.jpg')]);
+    expect(drop.notTaken).toEqual([LINK]);
+
+    vi.stubGlobal('coffretDesktop', {
+      takeDrop: async (): Promise<HeldDrop> => ({ handle: null, files: [], notTaken: [LINK] }),
+    });
+    await expect(pickedFiles([new File([''], 'link-to-photos')])).rejects.toEqual(new NothingTaken([LINK]));
+  });
+
+  it('ask the desktop app nothing where nothing was picked', async () => {
+    const takeDrop = vi.fn<DesktopBridge['takeDrop']>(async () => BOOK);
+    vi.stubGlobal('coffretDesktop', { takeDrop });
+
+    expect(await pickedFiles([])).toEqual({ files: [], notTaken: [], systemFiles: [] });
+    expect(takeDrop).not.toHaveBeenCalled();
+  });
+
+  it('are read by the page itself in a browser, with no bridge to hand them to', async () => {
+    expect(desktopBridge()).toBeNull();
+    const pages = [picked('vol-1/page-1.jpg'), picked('vol-1/.DS_Store')];
+
+    const drop = await pickedFiles(pages);
+
+    expect(drop.files.map((added) => added.path)).toEqual(['vol-1/page-1.jpg']);
+    expect(drop.files[0].source).not.toHaveProperty('kind', 'held');
+    expect(drop.systemFiles).toEqual([{ path: 'vol-1/.DS_Store', folder: false }]);
+    expect(drop.notTaken).toEqual([]);
   });
 });
 

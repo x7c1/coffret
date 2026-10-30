@@ -891,7 +891,7 @@ export async function startFreeze(folder: string, signal?: AbortSignal): Promise
  *
  * The server's own freeze scan, stopped before a file is read, so the count is
  * exactly what {@link startFreeze} of the same folder packs — give or take files
- * that change between the two calls. The three counts of what it would leave
+ * that change between the two calls. The four counts of what it would leave
  * out, and the two of what an operating system keeps there, are there so that
  * a count smaller than the folder is not a surprise.
  */
@@ -912,6 +912,12 @@ export interface FreezePreview {
   changed_in_pack: number;
   /** How many Entries under it this device has no file of its own for. */
   not_here: number;
+  /**
+   * How many paths under it a drop still being received, or one cut off part
+   * way, has reserved: files on their way into the Library, landed here or
+   * not, which no freeze packs until that drop has finished receiving.
+   */
+  receiving: number;
   /**
    * How many files an operating system keeps — `.DS_Store`, `Thumbs.db` and
    * the like — the scan left out under it, which a freeze leaves as they are.

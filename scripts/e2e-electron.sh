@@ -25,9 +25,10 @@
 # would stand in for it. Nothing in the app or its bundle turns the sandbox off.
 # On a Linux machine with no display, run this under `xvfb-run`, as CI does.
 #
-# Nothing is left behind but the pictures under .tmp/e2e-electron/screenshots/.
-# MinIO is removed on the way out, and .tmp/e2e-electron/ is made again on
-# every run.
+# Nothing is left behind but the pictures under .tmp/e2e-electron/screenshots/
+# and, for a run that failed, its logs, traces and pictures under
+# .tmp/e2e-electron-failed/<when>/. MinIO is removed on the way out, and
+# .tmp/e2e-electron/ is made again on every run.
 
 set -euo pipefail
 
@@ -206,7 +207,23 @@ COFFRET_E2E_ELECTRON_BIN="$ELECTRON_BIN" \
   COFFRET_E2E_IDLE_MINUTES="$IDLE_MINUTES" \
   COFFRET_E2E_ARTIFACTS="$ARTIFACTS" \
   COFFRET_E2E_SCREENSHOTS="$SCREENSHOTS" \
-  pnpm --filter @coffret/e2e run test:electron
+  pnpm --filter @coffret/e2e run test:electron || {
+  # The run's directory is made again by the next run, so what a failure
+  # leaves to read — the app's log above all, which says what put the idle
+  # lock off — is kept apart from it, one directory per failed run.
+  kept="$ROOT/.tmp/e2e-electron-failed/$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$kept"
+  # A run that failed early may not have made all three; what is missing has
+  # nothing to keep, and what could not be copied is said rather than claimed.
+  missed=""
+  for dir in "$LOG_DIR" "$ARTIFACTS" "$SCREENSHOTS"; do
+    [ -d "$dir" ] || continue
+    cp -r "$dir" "$kept/" || missed="$missed $dir"
+  done
+  [ -z "$missed" ] ||
+    fail "the desktop app's journey failed, and$missed could not be kept under $kept (cp said why above)"
+  fail "the desktop app's journey failed; its logs, traces and pictures are kept under $kept"
+}
 
 echo
 echo "=== the desktop app's journey held ==="

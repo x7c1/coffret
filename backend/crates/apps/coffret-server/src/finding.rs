@@ -7,7 +7,7 @@ use crate::api_error::refused_root_said;
 /// One thing a run that succeeded still has to say.
 ///
 /// One shape for the sync and for the freeze alike, because the obligation is
-/// one obligation and the person who dropped the file does not know which flow
+/// one obligation and the person who added the file does not know which flow
 /// met it: both hand back [`coffret_device::Finding`]s, and a second vocabulary
 /// would be a second set of sentences for the same states.
 ///
@@ -22,7 +22,7 @@ use crate::api_error::refused_root_said;
 /// (spec: PK-14, EP-10, EP-12). Reading only the counts would tell somebody their
 /// file is safe when it is not, which is the one outcome those rules forbid.
 ///
-/// So each of them reaches the browser, and the person who dropped a file is told
+/// So each of them reaches the browser, and the person who added a file is told
 /// without opening a terminal. What a run *settled* on the way is not among them:
 /// a batch an interrupted run left behind and this one finished is said for the
 /// record, and there is nobody to say it to here.
@@ -173,7 +173,7 @@ impl Finding {
                 surfaced: None,
             }),
             // Not shown, because none of these leaves anything for the person
-            // who dropped a file. Each leaves the committed state correct: a
+            // who added a file. Each leaves the committed state correct: a
             // settled batch is one the run already dealt with, Keyring replicas
             // no head names are kept for review and read by nothing, and what a
             // refused disposal, an untrashed removal or a failed checkpoint
@@ -353,18 +353,16 @@ fn said(reason: &FindingReason) -> &'static str {
              but renaming its Entry here was refused, so this file is carried in as a new one"
         }
         FindingReason::AwaitsPack => {
-            "this file was dropped to be added as a Pack, and waits for the freeze that packs it"
+            "this file was added to go into a Pack, and waits for the freeze that packs it"
         }
         FindingReason::Unreserved { lapse } => match lapse {
             Lapse::Gone => {
-                "this file was dropped to be added as a Pack and is gone, so no Pack was built \
+                "this file was added to go into a Pack and is gone, so no Pack was built \
                  for it"
             }
-            Lapse::InPack => {
-                "this file was dropped to be added as a Pack, and a Pack already holds it"
-            }
+            Lapse::InPack => "this file was added to go into a Pack, and a Pack already holds it",
             Lapse::Ineligible => {
-                "this file was dropped to be added as a Pack, and is no longer a file a freeze \
+                "this file was added to go into a Pack, and is no longer a file a freeze \
                  packs"
             }
         },

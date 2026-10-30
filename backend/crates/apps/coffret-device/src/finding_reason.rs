@@ -279,17 +279,15 @@ impl fmt::Display for FindingReason {
                 );
             }
             Self::AwaitsPack => {
-                "it was dropped to be added as a Pack, and waits for the freeze that packs it"
+                "it was added to go into a Pack, and waits for the freeze that packs it"
             }
             Self::Unreserved { lapse } => match lapse {
                 Lapse::Gone => {
-                    "it was dropped to be added as a Pack and is gone, so no Pack was built for it"
+                    "it was added to go into a Pack and is gone, so no Pack was built for it"
                 }
-                Lapse::InPack => {
-                    "it was dropped to be added as a Pack, and a Pack already holds it"
-                }
+                Lapse::InPack => "it was added to go into a Pack, and a Pack already holds it",
                 Lapse::Ineligible => {
-                    "it was dropped to be added as a Pack, and is no longer a file a freeze packs"
+                    "it was added to go into a Pack, and is no longer a file a freeze packs"
                 }
             },
             Self::Renamed { from } => {

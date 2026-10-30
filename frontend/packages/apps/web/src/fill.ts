@@ -42,7 +42,7 @@ export type RowState =
   /** It is in the folder and the Library does not have it. */
   | 'added'
   /**
-   * It is in the folder, dropped to be added as a Pack, and waits for the
+   * It is in the folder, added to go into a Pack, and waits for the
    * freeze that packs it rather than for the next sync.
    */
   | 'reserved'

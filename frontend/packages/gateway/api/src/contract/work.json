@@ -912,13 +912,13 @@
           "surfaced": "RenameRefused"
         },
         {
-          "message": "this file was dropped to be added as a Pack, and waits for the freeze that packs it",
+          "message": "this file was added to go into a Pack, and waits for the freeze that packs it",
           "path": "scans/vol-1/page-001.jpg",
           "reason": "surfaced",
           "surfaced": "AwaitsPack"
         },
         {
-          "message": "this file was dropped to be added as a Pack and is gone, so no Pack was built for it",
+          "message": "this file was added to go into a Pack and is gone, so no Pack was built for it",
           "path": "scans/vol-1/page-002.jpg",
           "reason": "surfaced",
           "surfaced": "Unreserved"
@@ -1082,13 +1082,13 @@
           "surfaced": "RenameRefused"
         },
         {
-          "message": "this file was dropped to be added as a Pack, and waits for the freeze that packs it",
+          "message": "this file was added to go into a Pack, and waits for the freeze that packs it",
           "path": "scans/vol-1/page-001.jpg",
           "reason": "surfaced",
           "surfaced": "AwaitsPack"
         },
         {
-          "message": "this file was dropped to be added as a Pack and is gone, so no Pack was built for it",
+          "message": "this file was added to go into a Pack and is gone, so no Pack was built for it",
           "path": "scans/vol-1/page-002.jpg",
           "reason": "surfaced",
           "surfaced": "Unreserved"

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time::sleep_until;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::freeze::resume_reserved;
 use crate::state::ServerState;
@@ -80,10 +80,26 @@ async fn lock_after_quiet(state: &ServerState, interval: Duration) {
             // of existence and leaves a server nothing will ever lock.
             None => std::future::pending::<()>().await,
         }
-        if state.last_seen() > quiet_since {
+        let last_seen = state.last_seen();
+        if last_seen > quiet_since {
             // Somebody wanted the Library while this slept. They are here, and
             // the interval is measured from them rather than from whoever was
             // last here before them.
+            //
+            // Said, at the level a person asks for when reading why a Library
+            // stayed unlocked: whether work is still holding it, or how long
+            // ago it was last let go of. At most once an interval, since this
+            // wakes once an interval.
+            debug!(
+                operation = "lock",
+                how = "put_off",
+                holds = state.holds_open(),
+                // A number rather than the string a `u128` is written as, for
+                // a reader that does arithmetic with it; no quiet is half a
+                // billion years long.
+                idle_ms = u64::try_from(last_seen.elapsed().as_millis()).unwrap_or(u64::MAX),
+                "the Library was wanted during the idle interval, so the lock was put off",
+            );
             continue;
         }
         state.lock();
