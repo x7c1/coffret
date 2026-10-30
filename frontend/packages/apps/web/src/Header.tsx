@@ -121,7 +121,7 @@ export function Header({
       <button
         type="button"
         aria-label="Add files"
-        title={`Add files to ${placeOf(addInto)}`}
+        title={`Add to ${placeOf(addInto)}`}
         aria-haspopup="menu"
         aria-expanded={adding !== null}
         // The menu closes on a press outside it, which this is; the click
@@ -158,8 +158,8 @@ export function Header({
       </button>
       {adding !== null && (
         <ActionsMenu
-          title={`Add files to ${placeOf(adding.into)}`}
-          label={`add files to ${placeOf(adding.into)}`}
+          title={`Add to ${placeOf(adding.into)}`}
+          label={`add to ${placeOf(adding.into)}`}
           at={adding.at}
           items={addItems(adding.into, makesFolderIn(adding.into))}
           onChoose={choose}
@@ -256,7 +256,7 @@ const WHERE: CSSProperties = {
 };
 
 /**
- * Drawn like a button, since switching Libraries is to live here: a box 44px
+ * Drawn like a button, since switching Libraries is to live here: a box 36px
  * high, the name on one line in the middle of it — by its line height rather
  * than a flex box, so that a name too long for the row is still cut short with
  * an ellipsis.
@@ -266,8 +266,8 @@ const LIBRARY: CSSProperties = {
   minWidth: 0,
   maxWidth: '100%',
   boxSizing: 'border-box',
-  minHeight: 44,
-  lineHeight: '42px',
+  minHeight: 36,
+  lineHeight: '34px',
   padding: '0 12px',
   border: `1px solid ${COLOR.border}`,
   borderRadius: 8,
@@ -297,8 +297,8 @@ const LOCATION: CSSProperties = {
 /** The **+**: a square as high as the Library's box, filled with the accent, a white plus in it. */
 const ADD_BUTTON: CSSProperties = {
   flex: '0 0 auto',
-  width: 44,
-  height: 44,
+  width: 36,
+  height: 36,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',

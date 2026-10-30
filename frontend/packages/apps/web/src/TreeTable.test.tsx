@@ -251,7 +251,7 @@ describe('one tree', () => {
     );
     // `999.9 MB` is 8 characters at 8 a character, and 20 of padding; `—` is
     // narrower than `Modified`, which is 8 at 6.
-    expect(widths).toEqual(['', '84px', '28px', '68px', '36px']);
+    expect(widths).toEqual(['', '84px', '28px', '60px', '32px']);
   });
 
   // A folder's Size and Modified are the Library's about everything below it,
@@ -271,7 +271,7 @@ describe('one tree', () => {
     const widths = [...document.querySelector('table')!.querySelectorAll('col')].map(
       (col) => (col as HTMLElement).style.width,
     );
-    expect(widths.slice(1, 4)).toEqual(['84px', '28px', '148px']);
+    expect(widths.slice(1, 4)).toEqual(['84px', '28px', '140px']);
   });
 });
 

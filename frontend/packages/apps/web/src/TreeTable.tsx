@@ -535,11 +535,12 @@ export function TreeTable({
       measured,
       2 * CELL_PAD,
     ),
+    // Its right edge kept close to the "⋮" beside it, which is about the same row.
     modified: columnWidth(
       'Modified',
       values.map((value) => value.modified),
       measured,
-      2 * CELL_PAD,
+      CELL_PAD + MODIFIED_END_PAD,
     ),
   };
   const columns = <Columns widths={widths} />;
@@ -626,7 +627,7 @@ export function TreeTable({
                 <th style={HEAD}>
                   <span style={HIDDEN}>On this device</span>
                 </th>
-                <th style={HEAD}>Modified</th>
+                <th style={{ ...HEAD, paddingRight: MODIFIED_END_PAD }}>Modified</th>
                 <th style={HEAD} />
               </tr>
             </thead>
@@ -966,7 +967,7 @@ function Row({
           <Device state={shown.state} message={shown.message} onAccent={onAccent} />
         ) : null}
       </td>
-      <td style={{ ...CELL, color: ink(COLOR.dim) }}>{values.modified}</td>
+      <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.modified}</td>
       <MenuCell name={row.name} offers={offers} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
@@ -1167,7 +1168,7 @@ function MenuCell({
   const stop = offers ? (event: MouseEvent) => event.stopPropagation() : undefined;
   return (
     <td
-      style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 4px' }}
+      style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 2px' }}
       onClick={stop}
       onDoubleClick={stop}
     >
@@ -1275,7 +1276,7 @@ function Columns({ widths }: { widths: { size: number; modified: number } }) {
       <col style={{ width: widths.size }} />
       <col style={{ width: ICON + 2 * DEVICE_PAD }} />
       <col style={{ width: widths.modified }} />
-      <col style={{ width: MENU_BUTTON_SIZE + 8 }} />
+      <col style={{ width: MENU_BUTTON_SIZE + 4 }} />
     </colgroup>
   );
 }
@@ -1286,6 +1287,9 @@ const ROW_FONT = `13px ${FONT}`;
 
 /** The padding either side of a value. */
 const CELL_PAD = 10;
+
+/** The room after the modified time, less than a cell's: the row's "⋮" follows it. */
+const MODIFIED_END_PAD = 2;
 
 /** How wide an icon is drawn, and the room either side of one in its column. */
 const ICON = 16;

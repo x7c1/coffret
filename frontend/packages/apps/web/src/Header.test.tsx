@@ -97,15 +97,15 @@ it('opens Files… and A folder… from Add files, and adds to the focused folde
   };
   expect(await pick(folderKey('albums/2026'), 'Files…')).toEqual({
     into: 'albums/2026',
-    title: 'Add files to albums/2026',
+    title: 'Add to albums/2026',
     paths: ['a.jpg'],
   });
   expect(await pick(fileKey('albums/cover.png'), 'A folder…')).toEqual({
     into: 'albums',
-    title: 'Add files to albums',
+    title: 'Add to albums',
     paths: ['a.jpg'],
   });
-  expect(await pick(null, 'Files…')).toEqual({ into: '', title: 'Add files to the Library', paths: ['a.jpg'] });
+  expect(await pick(null, 'Files…')).toEqual({ into: '', title: 'Add to the Library', paths: ['a.jpg'] });
 });
 
 // Making a place for files is part of adding them, and the + menu is where a

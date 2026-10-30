@@ -552,7 +552,7 @@ it('names the Library in the header, and the location follows the focus', async 
   fireEvent.keyDown(area, { key: 'ArrowRight' });
   expect(location()).toBe('comics / Series / 001.jpg');
   expect(header.getByRole('button', { name: 'Add files' }).getAttribute('title')).toBe(
-    'Add files to comics/Series',
+    'Add to comics/Series',
   );
   // Nothing of the Library's name is left in the Activity panel's row.
   expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
