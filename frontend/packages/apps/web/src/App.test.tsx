@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addFiles,
   browseFolders,
+  getBeside,
   getFile,
   getFolders,
   getLibrary,
@@ -13,6 +14,7 @@ import {
   mapFolder,
   peekFile,
   previewDelete,
+  readAhead,
   startDelete,
   Refusal,
   type Delete,
@@ -33,6 +35,7 @@ vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   addFiles: vi.fn(),
   browseFolders: vi.fn(),
+  getBeside: vi.fn(),
   getFile: vi.fn(),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
@@ -42,6 +45,7 @@ vi.mock('@coffret/api', async (actual) => ({
   mapFolder: vi.fn(),
   peekFile: vi.fn(),
   previewDelete: vi.fn(),
+  readAhead: vi.fn(),
   startDelete: vi.fn(),
 }));
 
@@ -105,6 +109,12 @@ function library(tree: Record<string, string[]>): (path: string) => Listing {
   };
 }
 
+/** Every file under `folder`, in reading order: its folders' first, then its own. */
+function readingOrder(folder: string): string[] {
+  const held = answers(folder);
+  return [...held.folders.flatMap((one) => readingOrder(one.path)), ...held.files.map((one) => one.path)];
+}
+
 /**
  * The Library each case stands in front of, by folder; `committed` turns it
  * into the one a drop's files landed in and a run carried in.
@@ -123,6 +133,17 @@ beforeEach(() => {
   // one to put on the image.
   vi.mocked(getFile).mockResolvedValue(new Blob(['page']));
   vi.mocked(peekFile).mockResolvedValue(new Blob(['page']));
+  vi.mocked(readAhead).mockResolvedValue(new Blob(['page']));
+  // The files either side of a row, in reading order, out of the Library the
+  // case stands in front of — as the server reads them out of its catalog.
+  vi.mocked(getBeside).mockImplementation((path: string, folder: boolean) => {
+    const files = readingOrder('');
+    const at = folder
+      ? files.findIndex((one) => one.startsWith(`${path}/`))
+      : files.indexOf(path) + 1;
+    const after = at === -1 ? files.length : at;
+    return Promise.resolve({ previous: files[after - (folder ? 1 : 2)] ?? null, next: files[after] ?? null });
+  });
   URL.createObjectURL = () => 'blob:page';
   URL.revokeObjectURL = () => undefined;
 });
@@ -528,6 +549,79 @@ it('shows what the focus moves to while the sheet is open', async () => {
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
   expect(parseHash(window.location.hash)).toEqual({ folder: 'comics', open: null });
   expect(tree().getByTitle('notes.txt').getAttribute('aria-selected')).toBe('true');
+});
+
+// With the sheet open, ↓ reads on: off the end of one folder into the first
+// file of the next, which the server names since the tree has not opened it,
+// and the folder is opened and stays open. Near the end the reader has read the
+// next folder's first pages ahead, without reading them — reading is what sets
+// a folder coming — and once the focus is there they are read.
+it('reads on from the end of one folder into the next with the sheet open', async () => {
+  const base = library({
+    '': ['series/'],
+    series: ['vol-1/', 'vol-2/', 'notes.txt'],
+    'series/vol-1': ['001.jpg', '002.jpg'],
+    'series/vol-2': ['001.jpg', '002.jpg'],
+  });
+  answers = (path) => {
+    const one = base(path);
+    return {
+      ...one,
+      files: one.files.map((file) => (file.name === 'notes.txt' ? { ...file, openable: false } : file)),
+    };
+  };
+  window.history.replaceState(null, '', '#path=series/vol-1&open=series/vol-1/002.jpg');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('002.jpg')).toBeTruthy();
+  await waitFor(() => expect(readAhead).toHaveBeenCalledWith('series/vol-2/001.jpg'));
+  expect(getFile).not.toHaveBeenCalledWith('series/vol-2/001.jpg');
+  expect(tree().getByLabelText('expand vol-2')).toBeTruthy();
+  const area = screen.getByRole('tree');
+  area.focus();
+  const before = window.history.length;
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-2/001.jpg'));
+  expect(getBeside).toHaveBeenCalledWith('series/vol-1/002.jpg', false);
+  expect(await tree().findByLabelText('collapse vol-2')).toBeTruthy();
+  expect(tree().getByLabelText('collapse vol-1')).toBeTruthy();
+  await waitFor(() => expect(reader.getByLabelText('position').textContent).toBe('1 / 2'));
+  expect(reader.getByRole('heading', { name: '001.jpg' })).toBeTruthy();
+  await waitFor(() => expect(getFile).toHaveBeenCalledWith('series/vol-2/001.jpg'));
+  expect(window.history.length).toBe(before);
+
+  // Back up: the rows on show answer it, the folder rows passed over.
+  fireEvent.keyDown(area, { key: 'ArrowUp' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-1/002.jpg'));
+
+  // On to the end: off the last folder onto a file of the one above it that
+  // the reader cannot show, which it says, and no further.
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(parseHash(window.location.hash).open).toBe('series/notes.txt');
+  expect(reader.getByLabelText('position').textContent).toBe('3 / 3');
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(parseHash(window.location.hash).open).toBe('series/notes.txt');
+});
+
+// And at the start of the Library ↑ does nothing; it does not wrap.
+it('reads back no further than the first file of the Library', async () => {
+  answers = library({ '': ['vol-1/', 'vol-2/'], 'vol-1': ['001.jpg'], 'vol-2': ['001.jpg'] });
+  window.history.replaceState(null, '', '#path=vol-1&open=vol-1/001.jpg');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByAltText('001.jpg')).toBeTruthy();
+  const area = screen.getByRole('tree');
+  area.focus();
+  fireEvent.keyDown(area, { key: 'ArrowUp' });
+  // Nothing above it is closed, so the rows answer: there is no file before.
+  expect(getBeside).not.toHaveBeenCalledWith('vol-1/001.jpg', false);
+  await act(async () => undefined);
+  expect(parseHash(window.location.hash).open).toBe('vol-1/001.jpg');
+  expect(reader.getByAltText('001.jpg')).toBeTruthy();
 });
 
 // The header over the tree: the Library's name, and where the focus stands,

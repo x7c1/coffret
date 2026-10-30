@@ -1,14 +1,17 @@
-//! The eighteen things a browser may ask of a Library.
+//! The twenty-one things a browser may ask of a Library.
 //!
-//! Three of them are about what the Library holds and answer out of the
-//! catalog alone; the fourth is the only one that reaches Storage for bytes,
+//! Four of them are about what the Library holds and answer out of the
+//! catalog alone — which Library this is, every folder in it, what one folder
+//! holds, and which files stand either side of one row in reading order, so a
+//! reader at the end of one folder can read on into the next (spec: LA-32);
+//! the fifth is the only one that reaches Storage for bytes,
 //! and it reaches it for one Entry at a time. There is deliberately no route
 //! that hands Storage's listing out, and none that hands anything encrypted
 //! out: what crosses this boundary is plaintext the device already has, or is
 //! about to place, and nothing else — the one route that walks the listing
 //! answers with a single word about it.
 //!
-//! The refresh is the fifth, and the one that reaches Storage for no bytes at
+//! The refresh is the sixth, and the one that reaches Storage for no bytes at
 //! all: it replays what the Journal holds into the catalog (spec: CK-9) and says
 //! what changed. It is how a device that has just joined, or one another device
 //! has committed past, learns there is anything to show — and it hands over
@@ -81,7 +84,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the eighteen go on answering once the Library is locked — which
+//! Three of the twenty-one go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -98,10 +101,13 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the eighteen are two answers that are not routes at all: one for a path
-//! none of them is registered at, and one for a path of theirs asked by a
+//! Beside the twenty-one are two answers that are not routes at all: one for a
+//! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
+
+mod beside;
+pub use beside::beside;
 
 mod browse;
 pub use browse::browse;

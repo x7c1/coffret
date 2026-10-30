@@ -62,6 +62,7 @@ import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
 import hostRefusals from './contract/host-refusals.json';
+import type { Beside } from './beside';
 import type { Browsed } from './browse';
 import type { Folders } from './folders';
 import type { Library } from './library';
@@ -967,6 +968,13 @@ it('reads every other answer the server sends through its type', () => {
   const listed: Folders = {
     folders: folders(object(answers.folders, 'folders', ['folders']).folders, 'folders'),
   };
+  const beside: Beside = (() => {
+    const fields = object(answers.beside, 'beside', ['previous', 'next']);
+    return {
+      previous: nullable(fields.previous, (value) => string(value, 'beside.previous')),
+      next: nullable(fields.next, (value) => string(value, 'beside.next')),
+    };
+  })();
   const refreshed: Refreshed = (() => {
     const fields = object(answers.refreshed, 'refreshed', ['advanced', 'gained', 'entries']);
     return {
@@ -1118,6 +1126,7 @@ it('reads every other answer the server sends through its type', () => {
 
   expect(library.provider).toBe('drive');
   expect(listed.folders.length).toBeGreaterThan(0);
+  expect(beside.next).toBe('books/page-001.png');
   expect(refreshed.entries).toBeGreaterThan(0);
   expect(looked.current.head).toBe('current');
   expect(looked.newer.head).toBe('newer');

@@ -167,8 +167,8 @@ impl Progress {
         start
     }
 
-    /// Keeps what the fetch arming a fill found of the committed Keyring, for
-    /// the run that takes the arming up.
+    /// Keeps what the fetch arming a fill, or a read ahead (spec: LA-33), found of
+    /// the committed Keyring, for the next run published that takes it in.
     pub(super) fn hear(&mut self, found: ShortKeyring) {
         self.heard = Some(graver(self.heard, found));
     }

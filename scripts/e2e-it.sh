@@ -15,7 +15,7 @@
 #      routes are asked what a person would have clicked to find out.
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
-#      seven journeys through the built explorer and photographs each checkpoint.
+#      eight journeys through the built explorer and photographs each checkpoint.
 #      The explorer is served by the development host, `coffret-explorer-dev`,
 #      which admits a browser only by a browser token, exactly as the desktop
 #      app's host does: each journey opens the launch file the host wrote, as a

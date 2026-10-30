@@ -8,6 +8,8 @@ import {
   contextOf,
   fileKey,
   folderKey,
+  landedOn,
+  readOn,
   refocused,
   shownFolders,
   standing,
@@ -220,6 +222,150 @@ describe('the keys on the tree', () => {
     expect(contextOf(state(folderKey('albums'), ['albums']))).toBe('albums');
     // A closed folder's listing is not on hand, so the folder it stands in is.
     expect(contextOf(state(folderKey('albums/2026'), ['albums']))).toBe('albums');
+  });
+});
+
+// With the reader's sheet open, `↑`/`↓` read on: to the file before or after
+// the focus in reading order, at any depth, folder rows passed over. Where a
+// closed folder stands in the way only the server can say what is in it, so
+// the case answers for it out of the fixture, in reading order, as the server
+// does.
+describe('reading on with the reader open', () => {
+  /** Every file of the fixture, in reading order: each folder's folders, then its files. */
+  function readingOrder(folder = ''): string[] {
+    const held = LIBRARY[folder];
+    return [...held.folders.flatMap((one) => readingOrder(one.path)), ...held.files.map((one) => one.path)];
+  }
+
+  /** What the server answers for a row: the file after or before it. */
+  function server(path: string, isFolder: boolean, arrow: 'ArrowUp' | 'ArrowDown'): string | null {
+    const files = readingOrder();
+    if (isFolder) {
+      const inside = files.findIndex((one) => one.startsWith(`${path}/`));
+      return arrow === 'ArrowDown' ? (files[inside] ?? null) : (files[inside - 1] ?? null);
+    }
+    const at = files.indexOf(path);
+    return files[at + (arrow === 'ArrowDown' ? 1 : -1)] ?? null;
+  }
+
+  /** Presses `arrow` with the sheet open, asking the server where the rows cannot say. */
+  function read(start: TreeState, arrow: 'ArrowUp' | 'ArrowDown'): { state: TreeState; asked: boolean } {
+    const step = readOn(rowsOf(start.expanded), start, arrow);
+    switch (step.kind) {
+      case 'focus':
+        return { state: step.state, asked: false };
+      case 'stay':
+        return { state: start, asked: false };
+      case 'ask': {
+        const landed = server(step.path, step.folder, arrow);
+        return { state: landed === null ? start : landedOn(start, landed), asked: true };
+      }
+    }
+  }
+
+  it('reads off the end of one folder into the first file of the next, opening it', () => {
+    const open = ['albums', 'albums/2026'];
+    // `albums/2026` holds what comes before `albums`'s own files.
+    const off = read(state(fileKey('albums/2026/b.jpg'), open), 'ArrowDown');
+    expect(off).toEqual({ state: state(fileKey('albums/cover.png'), open), asked: false });
+    // `books` is closed, so the server says its first file, two levels down,
+    // and every folder on the way is opened.
+    const into = read(off.state, 'ArrowDown');
+    expect(into.asked).toBe(true);
+    expect(into.state.focus).toBe(fileKey('books/vol-1/p1.png'));
+    expect([...into.state.expanded]).toEqual(['albums', 'albums/2026', 'books', 'books/vol-1']);
+    // Now on show, the rows answer the rest, and the folders read through stay open.
+    const next = read(into.state, 'ArrowDown');
+    expect(next).toEqual({ state: { ...into.state, focus: fileKey('books/vol-1/p2.png') }, asked: false });
+    // Out of the last folder, onto a file of the Library root: a file the
+    // reader cannot show is landed on like any other, and the sheet says so.
+    expect(read(next.state, 'ArrowDown').state.focus).toBe(fileKey('readme.txt'));
+  });
+
+  it('steps back from the first file of a folder onto the last of the one before', () => {
+    const open = ['books', 'books/vol-1'];
+    const back = read(state(fileKey('books/vol-1/p1.png'), open), 'ArrowUp');
+    // `books` and `books/vol-1` are passed over, and `albums` is closed.
+    expect(back.asked).toBe(true);
+    expect(back.state.focus).toBe(fileKey('albums/cover.png'));
+    expect(read(back.state, 'ArrowUp').state.focus).toBe(fileKey('albums/2026/b.jpg'));
+    expect(read(state(fileKey('readme.txt'), open), 'ArrowUp').state.focus).toBe(fileKey('books/vol-1/p2.png'));
+  });
+
+  it('reads into a closed folder the focus is on, and out of an open one', () => {
+    const into = read(state(folderKey('books')), 'ArrowDown');
+    expect(into.asked).toBe(true);
+    expect(into.state.focus).toBe(fileKey('books/vol-1/p1.png'));
+    const open = ['albums', 'albums/2026'];
+    expect(read(state(folderKey('albums'), open), 'ArrowDown')).toEqual({
+      state: state(fileKey('albums/2026/a.jpg'), open),
+      asked: false,
+    });
+  });
+
+  it('asks the server where an open folder’s rows are not on hand', () => {
+    const rows = treeRows({
+      listing: (path) => (path === 'books' ? { status: 'loading' } : asked(path)),
+      expanded: new Set(['books']),
+      prospective: [],
+      stranded: [],
+    });
+    expect(readOn(rows, state(fileKey('readme.txt'), ['books']), 'ArrowUp')).toEqual({
+      kind: 'ask',
+      path: 'readme.txt',
+      folder: false,
+    });
+  });
+
+  // Reading on landed in a folder whose listing was then refused: the focused
+  // row is not drawn, so the rows say nothing either side of it, and the
+  // server is asked about the focus itself — the keys keep working.
+  it('asks the server about a focus whose row is not drawn', () => {
+    const open = ['albums', 'books', 'books/vol-1'];
+    const rows = treeRows({
+      listing: (path) => (path === 'books/vol-1' ? { status: 'failed', message: 'refused' } : asked(path)),
+      expanded: new Set(open),
+      prospective: [],
+      stranded: [],
+    });
+    const landed = state(fileKey('books/vol-1/p1.png'), open);
+    expect(rows.some((row) => row.key === landed.focus)).toBe(false);
+    const back = readOn(rows, landed, 'ArrowUp');
+    expect(back).toEqual({ kind: 'ask', path: 'books/vol-1/p1.png', folder: false });
+    const on = readOn(rows, landed, 'ArrowDown');
+    expect(on).toEqual({ kind: 'ask', path: 'books/vol-1/p1.png', folder: false });
+    // The server answers out of reading order: back to the file before, and on to the next.
+    expect(server('books/vol-1/p1.png', false, 'ArrowUp')).toBe('albums/cover.png');
+    expect(server('books/vol-1/p1.png', false, 'ArrowDown')).toBe('books/vol-1/p2.png');
+    // A folder focus not drawn is asked about as a folder.
+    expect(readOn(rows, state(folderKey('books/vol-1/inner'), open), 'ArrowDown')).toEqual({
+      kind: 'ask',
+      path: 'books/vol-1/inner',
+      folder: true,
+    });
+    // With no row focused there is nothing to read on from.
+    expect(readOn(rows, state(null, open), 'ArrowDown')).toEqual({ kind: 'stay' });
+  });
+
+  it('does nothing at either end of the Library, and does not wrap', () => {
+    const everything = ['albums', 'albums/2026', 'books', 'books/vol-1'];
+    const last = state(fileKey('readme.txt'), everything);
+    expect(readOn(rowsOf(everything), last, 'ArrowDown')).toEqual({ kind: 'stay' });
+    const first = state(fileKey('albums/2026/a.jpg'), everything);
+    expect(readOn(rowsOf(everything), first, 'ArrowUp')).toEqual({ kind: 'stay' });
+    // With the folders closed, the server is asked and answers the same.
+    expect(read(state(fileKey('albums/cover.png'), ['albums']), 'ArrowUp').state).toEqual(
+      state(fileKey('albums/2026/b.jpg'), ['albums', 'albums/2026']),
+    );
+    const closed = state(fileKey('readme.txt'));
+    expect(read(closed, 'ArrowDown')).toEqual({ state: closed, asked: false });
+  });
+
+  it('leaves the keys with the reader closed as they were: row by row', () => {
+    const open = ['albums', 'albums/2026'];
+    expect(press(state(fileKey('albums/2026/b.jpg'), open), 'ArrowDown').focus).toBe(fileKey('albums/cover.png'));
+    expect(press(state(fileKey('albums/cover.png'), open), 'ArrowDown').focus).toBe(folderKey('books'));
+    expect(press(state(fileKey('albums/2026/a.jpg'), open), 'ArrowUp').focus).toBe(folderKey('albums/2026'));
   });
 });
 

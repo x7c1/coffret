@@ -4,8 +4,11 @@ import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
 import { size } from './humanize';
 import {
+  aheadIn,
   counterOf,
   NO_IMAGES,
+  READ_ON_WITHIN,
+  readsOnFrom,
   sheetKey,
   sheetOn,
   sheetShows,
@@ -180,25 +183,60 @@ describe('sheetWanted', () => {
     const row = rowAt(fileKey('shelf/vol-1/p2.jpg'));
     expect(sheetWanted(row, sheetShows(row, undefined), 3)).toEqual({
       shown: LIBRARY['shelf/vol-1'].files[1],
-      peek: false,
-      ahead: ['shelf/vol-1/p3.jpg', 'shelf/vol-1/p1.jpg'],
+      ahead: false,
+      around: ['shelf/vol-1/p3.jpg', 'shelf/vol-1/p1.jpg'],
     });
   });
 
-  // Walking past a folder is looking at it: its cover is peeked, which sets
-  // nothing coming.
-  it('peeks at a folder its cover and fetches nothing ahead', () => {
+  // LA-33: walking past a folder is looking at it: its cover is read ahead,
+  // fetched where it is not here and setting none of the folder coming.
+  it('reads a folder its cover ahead and keeps nothing around it', () => {
     const row = rowAt(folderKey('shelf/vol-1'));
     expect(sheetWanted(row, sheetShows(row, asked('shelf/vol-1')), 3)).toEqual({
       shown: LIBRARY['shelf/vol-1'].files[0],
-      peek: true,
-      ahead: [],
+      ahead: true,
+      around: [],
     });
   });
 
   it('fetches nothing for a file it cannot draw, and lets go of nothing held', () => {
     const row = rowAt(fileKey('shelf/vol-1/notes.txt'));
-    expect(sheetWanted(row, sheetShows(row, undefined), 3)).toEqual({ shown: null, peek: false, ahead: null });
+    expect(sheetWanted(row, sheetShows(row, undefined), 3)).toEqual({ shown: null, ahead: false, around: null });
+  });
+});
+
+// Near the end of a folder the reader reads ahead into the next one, from the
+// folder's last file — the same whichever of the last files the focus is on,
+// so it is asked once per folder end.
+describe('reading on past the end of a folder', () => {
+  /** A file row of a folder of `count` pages, the focus on the one at `at`. */
+  function pageOf(count: number, at: number): Sheeted {
+    const paths = Array.from({ length: count }, (_, one) => `run/vol/${String(one).padStart(3, '0')}.jpg`);
+    const held = listing('run/vol', [], paths);
+    const one = held.files[at];
+    return { kind: 'file', key: fileKey(one.path), path: one.path, name: one.name, depth: 1, file: one, in: held };
+  }
+
+  it('reads on from the folder’s last file within its last ten files, and not before', () => {
+    expect(READ_ON_WITHIN).toBe(10);
+    expect(readsOnFrom(pageOf(30, 19))).toBeNull();
+    expect(readsOnFrom(pageOf(30, 20))).toBe('run/vol/029.jpg');
+    expect(readsOnFrom(pageOf(30, 29))).toBe('run/vol/029.jpg');
+    // A folder shorter than that is near its end from its first file.
+    expect(readsOnFrom(pageOf(4, 0))).toBe('run/vol/003.jpg');
+    // A file the reader cannot draw counts as any: it is a file of the folder.
+    expect(readsOnFrom(rowAt(fileKey('shelf/vol-1/notes.txt')))).toBe('shelf/vol-1/p3.jpg');
+  });
+
+  it('reads on from no folder row', () => {
+    expect(readsOnFrom(rowAt(folderKey('shelf/vol-1')))).toBeNull();
+  });
+
+  it('reads the next folder’s first pages ahead from the file read on into', () => {
+    const next = listing('shelf/vol-1', [], ['shelf/vol-1/notes.txt', 'shelf/vol-1/p1.jpg', 'shelf/vol-1/p2.jpg', 'shelf/vol-1/p3.jpg']);
+    expect(aheadIn(next, 'shelf/vol-1/notes.txt', 2)).toEqual(['shelf/vol-1/p1.jpg', 'shelf/vol-1/p2.jpg']);
+    expect(aheadIn(next, 'shelf/vol-1/p2.jpg', 3)).toEqual(['shelf/vol-1/p2.jpg', 'shelf/vol-1/p3.jpg']);
+    expect(aheadIn(next, 'shelf/vol-1/gone.jpg', 3)).toEqual([]);
   });
 });
 

@@ -383,8 +383,10 @@ export type Arrow = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
  *   row stands in.
  *
  * Neither `←` nor `→` turns a page, and nothing else does either: the
- * reader's sheet follows the focus, so `↑`/`↓` down the page rows of an open
- * book is paging (see [`ReaderView`](./ReaderView)).
+ * reader's sheet follows the focus. While it is open, `↑`/`↓` are
+ * [`readOn`](#readOn)'s instead: they move from file to file in reading order,
+ * passing folder rows over, so reading off the end of one folder goes on into
+ * the next (see [`ReaderView`](./ReaderView)).
  *
  * With no row focused, any of them focuses the first row — or, for `↑`, the
  * last — so that the keys have somewhere to start.
@@ -437,6 +439,78 @@ export function arrowed(rows: readonly TreeRow[], state: TreeState, arrow: Arrow
       return holder === undefined ? state : { ...state, focus: holder.key };
     }
   }
+}
+
+/**
+ * Where `↑`/`↓` take the focus while the reader's sheet is open: to the file
+ * before or after the focused row in reading order, at any depth — folder
+ * rows are passed over, so reading off the end of one folder goes on into the
+ * first file of the next.
+ *
+ * Reading order is the order the tree draws the Library in with every folder
+ * open, so where every row between the focus and the file it lands on is on
+ * show, the rows answer it: a file row is where the focus goes, and an open
+ * folder's row is passed over, its rows being drawn under it. A file the
+ * reader cannot show is landed on like any other; the sheet says so.
+ *
+ * Where a closed folder stands in the way — or an open one whose listing is
+ * not on hand — the rows cannot say what is in it, and the move is the
+ * server's to answer (see [`getBeside`](@coffret/api)): `ask` names the row
+ * the answer is wanted about. The focused folder itself is in the way of
+ * `↓` where it is closed, since its own files come first. So is a focus
+ * whose own row is not drawn, as where reading on landed in a folder whose
+ * listing was then refused: the server is asked about the focus itself. Past
+ * the last row with nothing in the way, there is no file further on, and the
+ * focus stays.
+ */
+export type ReadOn =
+  /** The rows answer it: the focus goes to the file named. */
+  | { kind: 'focus'; state: TreeState }
+  /** There is no file further that way: the focus stays where it is. */
+  | { kind: 'stay' }
+  /** Only the server can say: the row at `path`, a folder or not. */
+  | { kind: 'ask'; path: string; folder: boolean };
+
+export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'ArrowUp' | 'ArrowDown'): ReadOn {
+  if (state.focus === null) {
+    return { kind: 'stay' };
+  }
+  const at = rows.findIndex((row) => row.kind !== 'note' && row.key === state.focus);
+  if (at === -1) {
+    // The focused row is not drawn — it stands in a folder whose listing was
+    // refused or is still out — so the rows say nothing on either side of it.
+    const focused = keyed(state.focus);
+    return { kind: 'ask', path: focused.path, folder: focused.kind === 'folder' };
+  }
+  const from = rows[at] as Walkable;
+  const ask: ReadOn = { kind: 'ask', path: from.path, folder: from.kind === 'folder' };
+  const down = arrow === 'ArrowDown';
+  // Whether a row hides what stands under it: a note is a listing not on
+  // hand, and a closed folder with anything to open draws nothing of it.
+  const hides = (row: TreeRow) =>
+    row.kind === 'note' || (row.kind === 'folder' && row.expandable && !row.expanded);
+  if (down && hides(from)) {
+    return ask;
+  }
+  for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
+    const row = rows[step];
+    if (row.kind === 'file') {
+      return { kind: 'focus', state: { ...state, focus: row.key } };
+    }
+    if (hides(row)) {
+      return ask;
+    }
+  }
+  return { kind: 'stay' };
+}
+
+/**
+ * The tree with the focus on the file at `path`, and every folder on the way
+ * down to it opened: where reading on lands in a folder that was closed. The
+ * folders read through stay open.
+ */
+export function landedOn(state: TreeState, path: string): TreeState {
+  return { focus: fileKey(path), expanded: new Set([...state.expanded, ...ancestry(parentOf(path))]) };
 }
 
 /**

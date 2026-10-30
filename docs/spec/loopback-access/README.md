@@ -17,12 +17,15 @@ LA-1 to LA-12, with LA-30 and LA-31 for the move of files and folders, are
 the contract of the server itself, LA-13 to LA-21 the
 contract of the explorer host, LA-22 to LA-25 that of the desktop app's
 **Passphrase door**: a listener of the app's own that serves the page a
-Passphrase is typed into and takes what that page submits, and LA-26 onwards
+Passphrase is typed into and takes what that page submits, and LA-26 to LA-29
 that of the **import**: the files a drop onto the explorer's window in the
 desktop app let go of, or its + picked, walked on the device by their paths,
 held under a
 one-time **drop handle**, and carried into the Library by a request that names
-the handle and never a path. The two credentials
+the handle and never a path. LA-32 onwards are the server's again: how a
+**reader** — the explorer's sheet over the file the tree's focus is on — reads
+on from one folder into the next, and reads ahead of itself without setting a
+folder coming. The two credentials
 never cross: the server key is what the host shows the server, a browser token
 is what a browser shows the host, and neither of the two accepts the other's.
 Nor does the door's token stand for either.
@@ -151,8 +154,8 @@ Concept background: [Library](../../concepts/library/),
   asked for and was refused, newest first. A move, answered by its own
   request, has no last run in the running state; it appears in the log and
   the turn only. A refused file is
-  left out when it was a peek, or when what refused it was the Library being
-  locked or the catalog holding no such Entry. The log drops the oldest entry
+  left out when it was a peek or a read ahead (LA-33), or when what refused it
+  was the Library being locked or the catalog holding no such Entry. The log drops the oldest entry
   past a fixed count, but keeps a failure past that count until a later run of
   the same work ends and settles it — for a refused file, the same file asked
   for again — and never holds more than a fixed ceiling, the oldest going
@@ -548,3 +551,34 @@ Concept background: [Library](../../concepts/library/),
   each file again from the folder its dropped item stood in, descending without
   following a link, so a file replaced by a link since it was dropped is refused
   rather than followed. *(Form: test)*
+
+### Reading on
+
+- **LA-32.** The server answers, for one row of the Library — a file or a
+  folder, named by its Entry Path — the file before it and the file after it
+  in **reading order** (`GET /api/beside?path=<row>[&folder=true]`), each
+  `null` at that end of the Library. Reading order is the order the explorer's
+  tree draws the whole Library in with every folder open: depth first, and in
+  each folder its folders before its files, each in EP-3 order, so the file
+  after the last file of one folder is the first file of the next, at any
+  depth. A folder takes no place of its own: its place is just before
+  everything under it. Only the catalog's current Entries are in the order —
+  a file standing in a mapped folder that no run has carried in is not — and
+  the answer is the catalog's alone: it reads nothing of Storage, so it
+  answers for folders nobody has listed, and it arms nothing. A row the
+  Library holds nothing at is answered for the place its path names; a path
+  that is not one is refused as `400` (EP-2). *(Form: test)*
+- **LA-33.** A file may be read without arming the fill of its folder: the
+  **read ahead** (`GET /api/file?path=<entry>&fill=false`). It is answered as
+  a read is, from the file on this device or, where there is none, by the
+  fetch that places it (EP-11), and it arms no fill — neither the one a fetch
+  arms nor the one a page answered from disk in a folder not wholly here arms
+  — so the fill running when it lands goes on running and nothing waits
+  behind it. What its fetch read of the committed Keyring (KL-15) and the kept
+  parcels it found not held (PK-21) go to the next fill the server publishes,
+  which reports them as its own: in the ordinary case the fill of the folder
+  being read, or the one armed when a page of the folder read ahead of is read
+  the ordinary way. Its refusal is not logged (LA-12). The explorer reads
+  ahead for the first pages of the folder its reader is about to read on into,
+  and for the cover of a folder the reader is on, so that walking past a
+  folder fetches one image and sets none of it coming. *(Form: test)*

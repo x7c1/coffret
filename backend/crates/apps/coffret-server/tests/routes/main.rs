@@ -11,6 +11,7 @@
 mod support;
 
 mod activity;
+mod beside;
 mod browse;
 mod contract;
 mod delete;
@@ -24,6 +25,7 @@ mod lock;
 mod map;
 mod mapping;
 mod moves;
+mod read_ahead;
 mod reconnect;
 mod redaction;
 mod refresh;

@@ -1,28 +1,42 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { getFile, peekFile, Refusal, type ListedFile, type ListedFolder, type Listing } from '@coffret/api';
+import {
+  getBeside,
+  getFile,
+  getListing,
+  readAhead,
+  Refusal,
+  type ListedFile,
+  type ListedFolder,
+  type Listing,
+} from '@coffret/api';
 
 import { size } from './humanize';
 import { ReaderView } from './ReaderView';
-import { COVER_NOT_HERE, NO_IMAGES, UNSUPPORTED, type Sheeted } from './sheet';
+import { NO_IMAGES, UNSUPPORTED, type Sheeted } from './sheet';
 import { fileKey, folderKey, type FileRow, type FolderRow } from './tree';
 import type { Asked } from './useAsked';
 
-// The server, as the reader reaches it: one picture's bytes, read or peeked
-// at. Everything else the package exports is the real thing.
+// The server, as the reader reaches it: one picture's bytes, read or read
+// ahead, and what it reads on into past the end of a folder. Everything else
+// the package exports is the real thing.
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
+  getBeside: vi.fn(),
   getFile: vi.fn(),
-  peekFile: vi.fn(),
+  getListing: vi.fn(),
+  readAhead: vi.fn(),
 }));
 
 const fetched = vi.mocked(getFile);
-const peeked = vi.mocked(peekFile);
+const early = vi.mocked(readAhead);
+const beside = vi.mocked(getBeside);
+const listed = vi.mocked(getListing);
 
-/** The server's answer to a peek at a file this device does not have. */
-function notHere(): Promise<Blob> {
-  return Promise.reject(new Refusal('no_such_entry', 404, 'this device holds no file at that path'));
+/** Storage refusing a fetch, as the server says it. */
+function storageGone(): Promise<Blob> {
+  return Promise.reject(new Refusal('storage', 503, 'Storage did not answer'));
 }
 
 function file(path: string, openable = true): ListedFile {
@@ -83,9 +97,13 @@ function folderRow(path: string): FolderRow {
 
 beforeEach(() => {
   fetched.mockReset();
-  peeked.mockReset();
+  early.mockReset();
+  beside.mockReset();
+  listed.mockReset();
   fetched.mockImplementation((path: string) => Promise.resolve(new Blob([path])));
-  peeked.mockImplementation((path: string) => Promise.resolve(new Blob([path])));
+  early.mockImplementation((path: string) => Promise.resolve(new Blob([path])));
+  // Nothing after the folder, unless a case says otherwise.
+  beside.mockResolvedValue({ previous: null, next: null });
   // jsdom has no object URLs, and the reader only needs one to put on the
   // image. Each test file runs in an environment of its own, so these do not
   // reach any other.
@@ -131,43 +149,74 @@ it('shows a folder holding images by its cover, and what it holds', async () => 
   expect(screen.getByText(`Folder · 3 items · ${size(20)}`)).toBeTruthy();
 });
 
-// Walking past a book is looking at it: its cover is peeked at, which sets
-// nothing coming, where a page is read, which is the book being read.
-it("peeks at a folder's cover, and reads a page", async () => {
+// LA-33: walking past a book is looking at it: its cover is read ahead, which
+// sets none of it coming, where a page is read, which is the book being read
+// — the page the cover was included, once the focus steps onto it.
+it("reads a folder's cover ahead, and reads a page", async () => {
   const { show } = sheet(folderRow('albums'), { status: 'ready', value: ALBUM });
   expect(await screen.findByAltText('cover of albums')).toBeTruthy();
-  expect(peeked).toHaveBeenCalledWith('albums/one.jpg');
+  expect(early).toHaveBeenCalledWith('albums/one.jpg');
   expect(fetched).not.toHaveBeenCalled();
-
-  show(fileRow(1));
-  expect(await screen.findByAltText('two.jpg')).toBeTruthy();
-  expect(fetched).toHaveBeenCalledWith('albums/two.jpg');
-  expect(peeked).not.toHaveBeenCalledWith('albums/two.jpg');
-});
-
-// A cover not on this device is said to be not here, on the stack, with what
-// the folder holds under it — and not read in its place.
-it('says a cover not on this device is not here yet', async () => {
-  peeked.mockImplementation(notHere);
-  sheet(folderRow('albums'), { status: 'ready', value: ALBUM });
-  expect(await screen.findByText(COVER_NOT_HERE)).toBeTruthy();
-  expect(screen.getByText(`Folder · 3 items · ${size(20)}`)).toBeTruthy();
-  expect(screen.queryByRole('button', { name: 'try again' })).toBeNull();
-  expect(screen.queryByRole('img')).toBeNull();
-  expect(fetched).not.toHaveBeenCalled();
-});
-
-// Stepping into the book from a cover that was not here reads its first page:
-// the refused peek is no answer to that.
-it('reads the first page after its cover was refused as not here', async () => {
-  peeked.mockImplementation(notHere);
-  const { show } = sheet(folderRow('albums'), { status: 'ready', value: ALBUM });
-  expect(await screen.findByText(COVER_NOT_HERE)).toBeTruthy();
+  expect(beside).not.toHaveBeenCalled();
 
   show(fileRow(0));
   expect(await screen.findByAltText('one.jpg')).toBeTruthy();
   expect(fetched).toHaveBeenCalledWith('albums/one.jpg');
-  expect(screen.queryByText(COVER_NOT_HERE)).toBeNull();
+  expect(early).toHaveBeenCalledTimes(1);
+});
+
+// A cover this device does not have is fetched like a page, and the wait says
+// so, on the stack where it is drawn.
+it('fetches a cover this device does not have, and says it is being brought over', async () => {
+  early.mockImplementation(() => new Promise<Blob>(() => undefined));
+  const away: Listing = { ...ALBUM, files: ALBUM.files.map((one) => ({ ...one, state: 'remote' })) };
+  sheet(folderRow('albums'), { status: 'ready', value: away });
+  expect(await screen.findByText('this device does not have it yet, so it is being brought over')).toBeTruthy();
+  expect(screen.getByText(`Folder · 3 items · ${size(20)}`)).toBeTruthy();
+  expect(fetched).not.toHaveBeenCalled();
+});
+
+// Stepping into the book from a cover whose read ahead was refused reads its
+// first page: the refusal is no answer to that.
+it('reads the first page after its cover was refused', async () => {
+  early.mockImplementation(storageGone);
+  const { show } = sheet(folderRow('albums'), { status: 'ready', value: ALBUM });
+  expect(await screen.findByText('Storage did not answer')).toBeTruthy();
+
+  show(fileRow(0));
+  expect(await screen.findByAltText('one.jpg')).toBeTruthy();
+  expect(fetched).toHaveBeenCalledWith('albums/one.jpg');
+});
+
+// LA-33: within ten files of the end of its folder the reader asks
+// which file comes after the folder's last, lists that file's folder and reads
+// its first pages ahead — none of them read, so the next folder is not set
+// coming and the fill of this one goes on.
+it('reads ahead into the next folder near the end of this one', async () => {
+  const next: Listing = {
+    ...ALBUM,
+    path: 'albums2',
+    files: ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'].map((name) => file(`albums2/${name}`)),
+  };
+  beside.mockResolvedValue({ previous: 'albums/two.jpg', next: 'albums2/a.jpg' });
+  listed.mockResolvedValue(next);
+  sheet(fileRow(1));
+  expect(await screen.findByAltText('two.jpg')).toBeTruthy();
+
+  await waitFor(() => expect(early).toHaveBeenCalledTimes(3));
+  expect(beside).toHaveBeenCalledWith('albums/notes.txt', false, expect.anything());
+  expect(listed).toHaveBeenCalledWith('albums2', expect.anything());
+  expect(early.mock.calls.map(([path]) => path)).toEqual(['albums2/a.jpg', 'albums2/b.jpg', 'albums2/c.jpg']);
+  expect(fetched).not.toHaveBeenCalledWith('albums2/a.jpg');
+});
+
+// And nothing past the end of the Library: there is no folder to read into.
+it('reads nothing ahead at the end of the Library', async () => {
+  sheet(fileRow(1));
+  expect(await screen.findByAltText('two.jpg')).toBeTruthy();
+  await waitFor(() => expect(beside).toHaveBeenCalled());
+  expect(listed).not.toHaveBeenCalled();
+  expect(early).not.toHaveBeenCalled();
 });
 
 it('shows a folder holding no images as the stack saying so', () => {

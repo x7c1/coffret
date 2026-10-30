@@ -103,7 +103,10 @@ EP-15, KL-15, OC-2, CK-8).
 
 The **explorer** is the browser surface for browsing and operating a Library.
 Its **reader** displays an ordered sequence of Entries; a **page** is one step
-of that sequence. The explorer itself is also loaded as a page, in the
+of that sequence. The sequence is the Library's files in **reading order** —
+the order the explorer's tree draws them in with every folder open, a
+folder's folders before its files — so reading on from the last file of one
+folder steps into the first file of the next (spec: LA-32). The explorer itself is also loaded as a page, in the
 desktop app's window or in a browser, and "the explorer's page" means that
 page, never a step of the reader's sequence. An Entry is **openable** when
 the reader supports displaying it, as determined from its name; every file
@@ -283,6 +286,10 @@ control for a sync, since a drop starts one.
   background the parcels holding the rest of what that folder holds and this
   device has not got — parcel after parcel, never Entry by Entry, and none it
   already holds (spec: PK-16, PK-21))
+- read ahead (a file the explorer's reader is about to show — the first pages
+  of the folder it reads on into, or a folder's cover — read, and fetched where
+  this device does not have it, without arming the fill of its folder, so the
+  fill of the folder being read goes on (spec: LA-33))
 - arm (a run on this device: ask for it, so the server starts it as soon as
   the runs ahead of it allow)
 - supersede (a fill, by arming one for another folder: the earlier fill stops

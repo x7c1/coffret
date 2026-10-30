@@ -1,4 +1,8 @@
 {
+  "beside": {
+    "next": "books/page-001.png",
+    "previous": "albums/just-added.txt"
+  },
   "browsed": {
     "folders": [
       {

@@ -31,6 +31,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/library", get(routes::library))
         .route("/api/folders", get(routes::folders))
         .route("/api/list", get(routes::list))
+        .route("/api/beside", get(routes::beside))
         .route("/api/file", get(routes::file))
         .route("/api/work", get(routes::work))
         .route("/api/browse", get(routes::browse))

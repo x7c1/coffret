@@ -176,8 +176,8 @@ s3-store-it:
 # dying under an open page and coming back, the other device committing a
 # photograph that this one finds when the refresh control is pressed, another it
 # finds without pressing anything because the server was restarted in between,
-# and a book's pages dropped into a folder made in the browser and packed
-# together.
+# a book's pages dropped into a folder made in the browser and packed
+# together, and the reader reading off the end of the album into the book.
 #
 # What it needs: Docker, and a browser it downloads on the first run (a couple
 # of hundred megabytes, kept in Playwright's own cache and reused afterwards).
