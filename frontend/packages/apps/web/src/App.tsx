@@ -83,7 +83,9 @@ import {
   contextOf,
   folderKey,
   keyed,
+  refocused,
   shownFolders,
+  standing,
   treeRows,
   type FileRow,
   type FolderRow,
@@ -342,6 +344,9 @@ export function App() {
   // is drawn from it and the URL still names the row. What the last press of
   // *unlock* came to goes too: it was about a locked Library.
   const [discarded, setDiscarded] = useState(0);
+  // Whether the focus is to be put back on the tree once it is drawn again
+  // after an unlock (below, where the rows are).
+  const [refocusing, setRefocusing] = useState(false);
   const [unlockSaid, setUnlockSaid] = useState<string | null>(null);
   const [unlockRefused, setUnlockRefused] = useState<string | null>(null);
   const held = useRef<LibraryState | null>(null);
@@ -358,6 +363,7 @@ export function App() {
     } else if (unlockLanded(before, custody)) {
       setUnlockSaid(null);
       setUnlockRefused(null);
+      setRefocusing(true);
       retry();
     }
   }, [custody, retry]);
@@ -1348,6 +1354,15 @@ export function App() {
     [heldListing, tree.expanded, prospective, stranded, incomingFiles],
   );
 
+  // A folder a listing shows is gone — a deletion took it away — is no longer
+  // open (see [`standing`](./tree)), so it is not asked for again.
+  useEffect(() => {
+    const kept = standing(tree.expanded, rows, heldListing);
+    if (kept !== tree.expanded) {
+      setTree((held) => (held.expanded === tree.expanded ? { ...held, expanded: kept } : held));
+    }
+  }, [tree.expanded, rows, heldListing]);
+
   // The focus moved or a folder opened or closed: the URL follows the folder
   // the focus is in, without a history entry of its own (see `contextOf`) —
   // and, while the reader's sheet is open, the row it is on, which is the
@@ -1473,6 +1488,30 @@ export function App() {
     setSelection({ keys: new Set(), anchor: key });
     treeArea.current?.focus();
   }, [focusPrepared, rows, tree, changeTree]);
+
+  // The tree drawn again after an unlock: the lock refused every listing, so
+  // the tree went from the screen and the keys with it. Once the rows are back
+  // the focus is put on the row it was on — or, where that row is gone, on the
+  // nearest folder above it still drawn (see [`refocused`](./tree)) — and the
+  // keys back on the tree, unless something else on the page took them in the
+  // meantime.
+  useEffect(() => {
+    if (!refocusing) {
+      return;
+    }
+    const back = refocused(rows, tree.focus, heldListing);
+    if (back === undefined) {
+      return;
+    }
+    setRefocusing(false);
+    if (back !== tree.focus) {
+      changeTree({ ...tree, focus: back });
+    }
+    const keys = document.activeElement;
+    if (keys === null || keys === document.body || treeArea.current?.contains(keys) === true) {
+      treeArea.current?.focus();
+    }
+  }, [refocusing, rows, tree, heldListing, changeTree]);
 
   // The header's Add files menu let go of by `Escape`: the keys go back to the
   // tree, as they do out of any menu opened over it.

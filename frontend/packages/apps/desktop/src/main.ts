@@ -141,7 +141,7 @@ function assemble(
     title: identity.title,
     ...(identity.windowIcon === null ? {} : { icon: join(ASSETS, identity.windowIcon) }),
   };
-  const passphraseWindow = new BrowserWindow(passphraseWindowOptions(appearance));
+  const passphraseWindow = new BrowserWindow(passphraseWindowOptions(process.platform, appearance));
   keepTitle(passphraseWindow);
   // The door's origin, fixed for the run, once its first URL is known.
   let doorOrigin: string | null = null;
@@ -209,7 +209,7 @@ function assemble(
       }
       const origin = explorerOrigin(address);
       explorerServed = origin;
-      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD, appearance));
+      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD, process.platform, appearance));
       keepTitle(window);
       guardNavigation(window.webContents, 'explorer', () => origin, warn);
       window.webContents.setWindowOpenHandler(explorerWindowOpener((url) => shell.openExternal(url), warn));

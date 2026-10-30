@@ -8,7 +8,9 @@ import {
   contextOf,
   fileKey,
   folderKey,
+  refocused,
   shownFolders,
+  standing,
   toggled,
   treeRows,
   type Arrow,
@@ -218,5 +220,69 @@ describe('the keys on the tree', () => {
     expect(contextOf(state(folderKey('albums'), ['albums']))).toBe('albums');
     // A closed folder's listing is not on hand, so the folder it stands in is.
     expect(contextOf(state(folderKey('albums/2026'), ['albums']))).toBe('albums');
+  });
+});
+
+describe('the folders kept open', () => {
+  // A deletion took `albums/2026` away: its parent's listing no longer names
+  // it, so it is not asked for again — nor is anything under it.
+  it('drops a folder a listing shows is gone, and what was open under it', () => {
+    const gone: Record<string, Listing> = { ...LIBRARY, albums: listing('albums', [], ['albums/cover.png']) };
+    const ask = (path: string): Asked<Listing> | undefined =>
+      gone[path] === undefined ? undefined : { status: 'ready', value: gone[path] };
+    const expanded = new Set(['albums', 'albums/2026', 'albums/2026/08', 'books']);
+    const rows = treeRows({ listing: ask, expanded, prospective: [], stranded: [] });
+    expect([...standing(expanded, rows, ask)]).toEqual(['albums', 'books']);
+  });
+
+  it('keeps the set as it is where nothing is gone', () => {
+    const expanded = new Set(['albums', 'albums/2026']);
+    expect(standing(expanded, rowsOf(expanded), asked)).toBe(expanded);
+  });
+
+  // A listing still out, or refused — as every one is while the Library is
+  // locked — shows nothing gone.
+  it('drops nothing where the listing that would show it is out or refused', () => {
+    const expanded = new Set(['albums', 'albums/2026']);
+    for (const held of [{ status: 'loading' }, { status: 'failed', message: 'locked' }] as Asked<Listing>[]) {
+      const ask = (path: string) => (path === 'albums' ? held : asked(path));
+      const rows = treeRows({ listing: ask, expanded, prospective: [], stranded: [] });
+      expect(standing(expanded, rows, ask)).toBe(expanded);
+    }
+  });
+
+  // A folder under one that is closed is not on show, so its parent's listing
+  // being on hand says nothing about it.
+  it('keeps a folder under a closed one', () => {
+    const expanded = new Set(['albums/2026']);
+    expect(standing(expanded, rowsOf(expanded), asked)).toBe(expanded);
+  });
+});
+
+describe('the focus after the tree is drawn again', () => {
+  const expanded = ['albums', 'albums/2026'];
+
+  it('goes back to the row it was on', () => {
+    expect(refocused(rowsOf(expanded), fileKey('albums/2026/a.jpg'), asked)).toBe(fileKey('albums/2026/a.jpg'));
+  });
+
+  it('goes to the nearest folder above it still drawn where the row is gone', () => {
+    expect(refocused(rowsOf(expanded), fileKey('albums/2026/gone.jpg'), asked)).toBe(folderKey('albums/2026'));
+    expect(refocused(rowsOf(expanded), fileKey('albums/gone/x.jpg'), asked)).toBe(folderKey('albums'));
+    expect(refocused(rowsOf(expanded), fileKey('gone/x.jpg'), asked)).toBeNull();
+    expect(refocused(rowsOf(expanded), null, asked)).toBeNull();
+  });
+
+  // The root, or a folder on the way down, still being asked: the row may yet
+  // be drawn, so nothing is settled.
+  it('waits while the listings on the way down are out', () => {
+    const loading = (out: string) => (path: string) =>
+      path === out ? ({ status: 'loading' } as const) : asked(path);
+    const row = fileKey('albums/2026/a.jpg');
+    for (const out of ['', 'albums/2026']) {
+      const ask = loading(out);
+      const rows = treeRows({ listing: ask, expanded: new Set(expanded), prospective: [], stranded: [] });
+      expect(refocused(rows, row, ask)).toBeUndefined();
+    }
   });
 });

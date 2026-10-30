@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
-import { actionsFor, deleteTargetOf, type ActionContext } from './actions';
+import { actionsFor, deleteTargetOf, NOTHING_TO_DELETE, type ActionContext } from './actions';
 import type { Described } from './details';
 import type { FileRow, FolderRow } from './tree';
 
@@ -98,7 +98,9 @@ describe('what the actions menu offers', () => {
   it('offers a non-image file Delete… alone, and a file only added here nothing', () => {
     expect(labels([fileRow(file('books/manual.pdf'))])).toEqual(['Delete…']);
     expect(labels([fileRow(file('books/new.jpg', { state: 'added', container: null }))])).toEqual(['Open']);
-    expect(labels([fileRow(file('books/new.pdf', { state: 'added', container: null }))])).toEqual([]);
+    expect(labels([fileRow(file('books/new.pdf', { state: 'added', container: null }))])).toEqual([
+      NOTHING_TO_DELETE,
+    ]);
   });
 
   it('offers a folder of images Open, New folder…, Pack this folder… and Delete…', () => {
@@ -151,8 +153,8 @@ describe('what the actions menu offers', () => {
   });
 
   // Rows the Library does not hold have nothing to take out of it: left out of
-  // the deletion and the count, and a selection of only such rows offers
-  // nothing.
+  // the deletion and the count, and a selection of only such rows has nothing
+  // to delete.
   it('leaves out of a selection’s deletion what the Library does not hold', () => {
     const added = fileRow(file('books/new.jpg', { state: 'added', container: null }));
     const prepared = folderRow(folder('books/new'), { prospective: true });
@@ -162,6 +164,15 @@ describe('what the actions menu offers', () => {
       paths: ['books/cover.jpg'],
     });
     expect(labels([added, prepared, stranded, fileRow(file('books/cover.jpg'))])).toEqual(['Delete 1 item…']);
-    expect(labels([added, prepared])).toEqual([]);
+    expect(labels([added, prepared])).toEqual([NOTHING_TO_DELETE]);
+  });
+
+  // The right-click takes the place of the browser's own menu, so rows with
+  // nothing to offer still open one: a single item that cannot be chosen.
+  it('offers rows with nothing to delete one disabled item saying so', () => {
+    const prepared = (path: string) => folderRow(folder(path, { files_total: 0 }), { prospective: true, expandable: false });
+    const items = actionsFor([prepared('books/new'), prepared('books/other')], CONTEXT);
+    expect(items).toEqual([{ label: NOTHING_TO_DELETE, action: null, destructive: false, separated: false }]);
+    expect(actionsFor([], CONTEXT)).toEqual([]);
   });
 });

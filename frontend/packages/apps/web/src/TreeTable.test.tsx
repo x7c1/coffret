@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Fill, ListedFile, ListedFolder, Listing } from '@coffret/api';
 
 import { size, time } from './humanize';
+import { NOTHING_TO_DELETE } from './actions';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { NOTHING_SELECTED, type Selection } from './selection';
@@ -178,11 +179,7 @@ function said(): string {
 
 /** The labels of the items a row's "⋮" offers, opening it to read them. */
 function menuOf(name: string): string[] {
-  const mark = screen.queryByLabelText(`actions for ${name}`);
-  if (mark === null) {
-    return [];
-  }
-  fireEvent.click(mark);
+  fireEvent.click(screen.getByLabelText(`actions for ${name}`));
   const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
   fireEvent.keyDown(document, { key: 'Escape' });
   return items;
@@ -229,7 +226,28 @@ describe('one tree', () => {
     const ink = (title: string) => (icon(title).parentElement as HTMLElement).style.color;
     expect(ink('cover.png')).toBe(resolved(COLOR.onAccent));
     expect(ink('notes.pdf')).toBe(resolved(COLOR.accent));
-    expect(ink('2026')).toBe(resolved(COLOR.dim));
+    expect(ink('2026')).toBe(resolved(COLOR.folderStroke));
+  });
+
+  // A folder's icon is filled pale blue inside a deeper blue outline — selected
+  // or not — and on the focused row's accent it is a white outline alone.
+  it('fills a folder’s icon pale blue, and leaves it a white outline on the focused row', () => {
+    mount(listing({ folders: [folder('2026'), folder('2027'), folder('2028')] }), {
+      focus: folderKey('albums/2028'),
+    });
+    // 2028 stays selected beside the focus, which the click moves to 2026.
+    fireEvent.click(screen.getByTitle('2026'), { metaKey: true });
+    const icon = (title: string) => screen.getByTitle(title).querySelector('svg[data-icon]') as SVGElement;
+    const ink = (title: string) => (icon(title).parentElement as HTMLElement).style.color;
+    expect(icon('2026').getAttribute('fill')).toBe('none');
+    expect(icon('2026').getAttribute('stroke')).toBe('currentColor');
+    expect(ink('2026')).toBe(resolved(COLOR.onAccent));
+    for (const unfocused of ['2027', '2028']) {
+      expect(icon(unfocused).getAttribute('fill')).toBe(COLOR.folderFill);
+      expect(icon(unfocused).getAttribute('stroke')).toBe('currentColor');
+      expect(ink(unfocused)).toBe(resolved(COLOR.folderStroke));
+    }
+    expect(selectedNames()).toContain('2028');
   });
 
   it('indents a row by its depth, a file keeping the room of a disclosure button', () => {
@@ -544,9 +562,21 @@ describe('the actions menu', () => {
     expect(onOpenFile).toHaveBeenCalledWith('albums/cover.png');
   });
 
-  it('draws no "⋮" on a row with nothing to offer', () => {
-    mount(listing({ files: [file('new.pdf', { state: 'added', container: null, openable: false })] }));
-    expect(menuOf('new.pdf')).toEqual([]);
+  // The right-click takes the place of the browser's own menu, so a row with
+  // nothing to offer still answers it: one item, disabled, saying so.
+  it('says there is nothing to delete on a row with nothing to offer', () => {
+    const { onDelete } = mount(
+      listing({ files: [file('new.pdf', { state: 'added', container: null, openable: false })] }),
+    );
+    expect(menuOf('new.pdf')).toEqual([NOTHING_TO_DELETE]);
+    fireEvent.contextMenu(screen.getByTitle('new.pdf'));
+    const item = screen.getByRole('menuitem', { name: NOTHING_TO_DELETE });
+    expect((item as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(item);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' });
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Enter' });
+    expect(screen.getByRole('menu')).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it('marks a folder the Library does not hold yet, and offers to forget only a prepared one', () => {
@@ -610,6 +640,28 @@ describe('selecting rows with modifier keys', () => {
     expect(selectedNames()).toEqual(['d.png']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete…' }));
     expect(onDelete).toHaveBeenLastCalledWith({ folders: [], paths: ['albums/d.png'] });
+  });
+
+  // Folders prepared and not in the Library yet have nothing in it to delete:
+  // a right-click on a selection of them opens the menu all the same, with the
+  // one disabled item saying so, rather than swallowing the click.
+  it('answers a right-click on a selection with nothing to delete', () => {
+    const { onDelete, onForget } = mount(listing({ path: '' }), {
+      prospective: ['comics', 'manga'],
+      prepared: ['comics', 'manga'],
+      focus: folderKey('comics'),
+    });
+    fireEvent.click(screen.getByTitle('manga'), { shiftKey: true });
+    expect(selectedNames()).toEqual(['comics', 'manga']);
+    fireEvent.contextMenu(screen.getByTitle('manga'));
+    expect(screen.getByRole('menu', { name: 'actions for 2 items' })).toBeTruthy();
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual([NOTHING_TO_DELETE]);
+    expect((items[0] as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(items[0]);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(onForget).not.toHaveBeenCalled();
+    expect(selectedNames()).toEqual(['comics', 'manga']);
   });
 
   it('draws no "Select" mode and no boxes', () => {

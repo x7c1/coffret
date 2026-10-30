@@ -62,8 +62,8 @@ mod remote_in;
 // Whether this device has one Entry's file.
 mod state_of;
 
-// Whether this device has every Entry of one folder.
-mod wholly_present;
+// Whether this device has every Entry standing directly in one folder.
+mod directly_present;
 
 #[cfg(test)]
 mod tests;

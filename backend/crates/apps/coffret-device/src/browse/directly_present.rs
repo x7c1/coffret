@@ -17,7 +17,7 @@ impl OpenLibrary {
     /// present, so a folder of them is never whole here; what a caller does
     /// about one is decided where the folder's own listing says whether it is
     /// [`mapped`](super::FolderListing::mapped).
-    pub async fn wholly_present(&self, folder: Option<&EntryPath>) -> Result<bool> {
+    pub async fn directly_present(&self, folder: Option<&EntryPath>) -> Result<bool> {
         Ok(self.remote_in(folder).await?.is_empty())
     }
 }

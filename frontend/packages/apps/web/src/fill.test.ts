@@ -654,7 +654,7 @@ it('keeps a line for a sync that left something alone', () => {
 it('counts the files a sync left for their Pack after what it came to', () => {
   const waiting = (path: string) => ({
     path,
-    message: 'this file was dropped to be added as a Pack, and waits for the freeze that packs it',
+    message: 'this file was added to go into a Pack, and waits for the freeze that packs it',
     reason: 'surfaced' as const,
     surfaced: 'AwaitsPack' as const,
   });

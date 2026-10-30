@@ -134,6 +134,11 @@ pub struct PreviewDto {
     /// How many Entries under the folder this device has no file of its own
     /// for (spec: EP-10).
     not_here: usize,
+    /// How many paths under the folder a drop still being received, or one
+    /// cut off part way, has reserved, whose files are on their way into the
+    /// Library and which no freeze selects until that drop has finished
+    /// receiving (spec: PK-17).
+    receiving: usize,
     /// How many files an operating system keeps — `.DS_Store`, `Thumbs.db`
     /// and the like — the scan left out under the folder (spec: EP-17).
     system_files: usize,
@@ -167,6 +172,7 @@ impl PreviewDto {
             in_pack: preview.in_pack,
             changed_in_pack: preview.changed_in_pack,
             not_here: preview.not_here,
+            receiving: preview.receiving,
             system_files: preview.system_files,
             system_folders: preview.system_folders,
             unavailable: preview.unavailable.len(),

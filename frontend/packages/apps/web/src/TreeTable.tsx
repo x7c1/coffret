@@ -15,7 +15,7 @@ import {
 
 import type { DeleteTarget, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
-import { actionsFor, type ActionItem } from './actions';
+import { actionsFor, type Action } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
 import { Banner, dropGround, DropPill, dropOutline } from './Banner';
 import { canvasMeasure, columnWidth, type Measured } from './columns';
@@ -36,7 +36,6 @@ import {
   isSelected,
   NOTHING_SELECTED,
   rightClicked,
-  selectedRows,
   stepped,
   type Click,
   type Picked,
@@ -67,10 +66,10 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * Modified, a folder's Size and Modified being those of everything below it
  * (see `valuesOf`). A folder row opens and closes from the disclosure button at its
  * start; a file and an empty folder keep that room, so that every name at one
- * depth starts at one place. Every file is a row, each page of a scanned book
- * included. Each value column is as wide as the widest of its heading and the
- * values on show, measured from the rendered strings (see
- * [`columnWidth`](./columns)).
+ * depth starts at one place. Every file is a row, each page of a book whose
+ * pages are image files included. Each value column is as wide as the widest
+ * of its heading and the values on show, measured from the rendered strings
+ * (see [`columnWidth`](./columns)).
  *
  * The keys walk the rows the way a file manager's tree does (see
  * [`arrowed`](./tree)): `↑`/`↓` move the focus, `→` opens a folder and then
@@ -301,15 +300,12 @@ export function TreeTable({
     if (next !== picked) {
       pick(next);
     }
-    if (menuItems(target).length > 0) {
-      setMenu({ at, rows: target });
-    }
+    setMenu({ at, rows: target });
   };
-  const choose = (item: ActionItem) => {
+  const choose = (action: Action) => {
     setMenu(null);
     // The keys go back to the tree, so that the arrows walk the rows again.
     scroller.current?.focus();
-    const action = item.action;
     switch (action.kind) {
       case 'open':
         openRow(action.row);
@@ -545,13 +541,6 @@ export function TreeTable({
   };
   const columns = <Columns widths={widths} />;
 
-  // What the "⋮" of a row would open on: the selection where the row is in
-  // one of several, and the row alone otherwise — the same rows a right-click
-  // there acts on. A row with nothing to offer draws no "⋮".
-  const selected = selectedRows(rows, picked);
-  const offersOf = (row: FolderRow | FileRow): boolean =>
-    menuItems(selected.length > 1 && selected.some((one) => one.key === row.key) ? selected : [row]).length > 0;
-
   return (
     // The tree and, over its bottom edge, the pill a drag brings up: a frame
     // of their own, so that the pill stays where it is as the rows scroll.
@@ -687,7 +676,6 @@ export function TreeTable({
                     focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
                     drop={row.kind === 'folder' && row.path === target && drag.dragged ? outcome : null}
                     shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
-                    offers={offersOf(row)}
                     menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
                     onPress={(how) => pick(clicked(rows, picked, row.key, how))}
                     onMenu={(at) => openMenu(row.key, at)}
@@ -811,7 +799,6 @@ function Row({
   focusOutside,
   drop,
   shown,
-  offers,
   menuOpen,
   onPress,
   onMenu,
@@ -835,8 +822,6 @@ function Row({
   drop: DropOutcome | null;
   /** What a file row's state is, the listing's and the fill's together; `null` for a folder. */
   shown: RowFill | null;
-  /** Whether the actions menu has anything for this row, which is whether it draws a "⋮". */
-  offers: boolean;
   /** Whether the actions menu is open on this row, which keeps its "⋮" on show. */
   menuOpen: boolean;
   /** A click on the row, with what the keys held with it ask for (see [`clickOf`](./selection)). */
@@ -923,8 +908,8 @@ function Row({
           ) : (
             <span aria-hidden style={{ flex: '0 0 auto', width: DISCLOSURE }} />
           )}
-          <span style={{ ...MARK, color: ink(icon === 'folder' ? COLOR.dim : COLOR.accent) }}>
-            <RowIconMark icon={icon} />
+          <span style={{ ...MARK, color: ink(icon === 'folder' ? COLOR.folderStroke : COLOR.accent) }}>
+            <RowIconMark icon={icon} onAccent={onAccent} />
           </span>
           <span
             style={{
@@ -973,7 +958,7 @@ function Row({
         ) : null}
       </td>
       <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.modified}</td>
-      <MenuCell name={row.name} offers={offers} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
+      <MenuCell name={row.name} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
 }
@@ -1082,14 +1067,16 @@ function Warning({ color, label }: { color: string; label: string }) {
 
 /**
  * The icon in front of a row's name (see [`rowIconOf`](./rowIcon)), in the
- * colour of the mark it stands in.
+ * colour of the mark it stands in — a folder's outlined in `folderStroke` and
+ * filled with `folderFill`, a file's an outline in the accent, and either a
+ * white outline alone on the focused row's accent (`onAccent`).
  *
  * The folder's is read out as `folder`, which is how a row is told for a
  * folder's from the outside; a file's is left unread, its name being all it
  * says — and the one image a file row holds stays the state icon in its narrow
  * column.
  */
-function RowIconMark({ icon }: { icon: RowIcon }) {
+function RowIconMark({ icon, onAccent }: { icon: RowIcon; onAccent: boolean }) {
   const shared = {
     width: ICON,
     height: ICON,
@@ -1105,7 +1092,9 @@ function RowIconMark({ icon }: { icon: RowIcon }) {
   switch (icon) {
     case 'folder':
       return (
-        <svg role="img" aria-label="folder" {...shared}>
+        // Filled pale blue inside its outline — save on the focused row's
+        // accent, where it is a white outline alone, as every mark there is.
+        <svg role="img" aria-label="folder" {...shared} fill={onAccent ? 'none' : COLOR.folderFill}>
           <path d={FOLDER_ICON_PATH} />
         </svg>
       );
@@ -1158,45 +1147,41 @@ function Chevron({ open }: { open: boolean }) {
  */
 function MenuCell({
   name,
-  offers,
   open,
   ink,
   onMenu,
 }: {
   name: string;
-  offers: boolean;
   open: boolean;
   /** The colour the mark is drawn in: the row's dim, or white on the focused row. */
   ink: string;
   onMenu: (at: MenuAt) => void;
 }) {
-  const stop = offers ? (event: MouseEvent) => event.stopPropagation() : undefined;
+  const stop = (event: MouseEvent) => event.stopPropagation();
   return (
     <td
       style={{ ...CELL, overflow: 'visible', textAlign: 'center', padding: '0 2px' }}
       onClick={stop}
       onDoubleClick={stop}
     >
-      {offers && (
-        <button
-          type="button"
-          className="row-actions"
-          aria-label={`actions for ${name}`}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          // The menu closes on a press outside it, which this is; the click
-          // below is what opens it, or closes it where it is open on this row.
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            const box = event.currentTarget.getBoundingClientRect();
-            // A click with no pointer behind it is `Enter` or Space on the "⋮".
-            onMenu({ x: box.right, y: box.bottom, side: 'end', byKeys: event.detail === 0 });
-          }}
-          style={{ ...MENU_BUTTON, color: ink }}
-        >
-          ⋮
-        </button>
-      )}
+      <button
+        type="button"
+        className="row-actions"
+        aria-label={`actions for ${name}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        // The menu closes on a press outside it, which this is; the click
+        // below is what opens it, or closes it where it is open on this row.
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          const box = event.currentTarget.getBoundingClientRect();
+          // A click with no pointer behind it is `Enter` or Space on the "⋮".
+          onMenu({ x: box.right, y: box.bottom, side: 'end', byKeys: event.detail === 0 });
+        }}
+        style={{ ...MENU_BUTTON, color: ink }}
+      >
+        ⋮
+      </button>
     </td>
   );
 }

@@ -106,10 +106,11 @@ export function Place({ path }: { path: string }) {
         width={14}
         height={14}
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
+        fill={COLOR.folderFill}
+        stroke={COLOR.folderStroke}
         strokeWidth={2}
-        style={{ flex: '0 0 auto', color: COLOR.dim }}
+        strokeLinejoin="round"
+        style={{ flex: '0 0 auto' }}
       >
         <path d={FOLDER_ICON_PATH} />
       </svg>
