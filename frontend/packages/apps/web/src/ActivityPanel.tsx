@@ -120,6 +120,7 @@ export function ActivityPanel({
   locked: UnlockOffer | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const listId = useId();
   const seen = useFirstSeen(running);
   const gestured = useLastGesture();
@@ -162,22 +163,17 @@ export function ActivityPanel({
           // that ran — what the panel keeps once a run is over.
           aria-label="Activity"
           title="Activity"
-          style={TOGGLE}
+          // The one control that opens and closes the panel: pressed in — a
+          // tint and the icon in the accent — while the panel is open, and
+          // tinted under the pointer, so no chevron stands beside it.
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            ...TOGGLE,
+            background: open || hovered ? COLOR.hover : 'transparent',
+            color: open ? COLOR.accent : COLOR.text,
+          }}
         >
-          <svg
-            aria-hidden="true"
-            width={12}
-            height={12}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ display: 'block', transform: open ? 'rotate(90deg)' : undefined }}
-          >
-            <path d="m9 6 6 6-6 6" />
-          </svg>
           <svg
             aria-hidden="true"
             width={16}
@@ -188,7 +184,7 @@ export function ActivityPanel({
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{ display: 'block', color: COLOR.text }}
+            style={{ display: 'block' }}
           >
             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
             <path d="M3 3v5h5" />
@@ -593,13 +589,17 @@ const ROW = {
   minWidth: 0,
 } as const;
 
+/** The panel's open and close: square, as wide as the icon buttons at the row's right end. */
 const TOGGLE = {
-  display: 'flex',
-  gap: 6,
+  flex: '0 0 auto',
+  display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
+  boxSizing: 'border-box',
+  width: 28,
+  height: 28,
   border: 'none',
-  background: 'none',
-  color: COLOR.dim,
+  borderRadius: 6,
   font: 'inherit',
   padding: 0,
   cursor: 'pointer',
