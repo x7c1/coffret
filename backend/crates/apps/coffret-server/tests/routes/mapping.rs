@@ -8,7 +8,7 @@ use crate::support::{files, fill, folders, folders_mapped, json as body_of, Serv
 
 // EP-9: a mapping is what makes a local path exist at all, so an Entry outside
 // every one of them is a fact about this device — which the explorer shows as
-// "this folder is not on this device".
+// "No folder chosen for … yet".
 #[tokio::test]
 async fn an_entry_no_folder_on_this_device_holds_is_declined() {
     let served = Served::mapping_only("albums").await;
@@ -30,10 +30,10 @@ async fn an_entry_no_folder_on_this_device_holds_is_declined() {
     );
 }
 
-// EP-9: the mappings answer "is this folder on this device" out of the catalog,
-// so the listing carries it and a browser never has to find out by being
-// declined. The children of the Library root are where two siblings differ,
-// since a mapping is made at the top level.
+// EP-9: the mappings answer "is a folder on this device chosen for it" out of
+// the catalog, so the listing carries it and a browser never has to find out
+// by being declined. The children of the Library root are where two siblings
+// differ, since a mapping is made at the top level.
 #[tokio::test]
 async fn a_listing_says_which_folders_this_device_has_one_for() {
     let served = Served::mapping_only("albums").await;

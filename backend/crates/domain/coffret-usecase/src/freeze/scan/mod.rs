@@ -393,6 +393,11 @@ async fn candidates(
 /// would need to fetch either before it could pack it, which is not a freeze's
 /// work (spec: EP-10).
 ///
+/// A path a drop in progress reserved is counted as receiving and nowhere else,
+/// whether its file has landed yet or not: no freeze selects it until the drop
+/// has finished receiving (spec: PK-17), and a count of nothing would read as a
+/// folder with no files in it.
+///
 /// What an operating system keeps beside the person's files under the folder —
 /// which the walk left out by name — is counted apart, files and unentered
 /// folders each, and an Entry carried in at such a path before that rule is not
@@ -473,9 +478,19 @@ pub(super) async fn preview(
         .filter(|location| {
             scope.covers(location.path())
                 && !found.contains_key(location.path())
+                && !waiting.contains(location.path())
                 && !unreachable(location.path())
                 && !left_out(location.path())
         })
+        .count();
+    // Every reserved path of a drop in progress, landed or not: the drop names
+    // each one before its file lands (spec: PK-17), so a folder whose only
+    // files are still on their way in is answered with them rather than with
+    // nothing at all. Not under a root the walk could not vouch for, where
+    // nothing was counted (spec: EP-12).
+    preview.receiving = waiting
+        .iter()
+        .filter(|&path| scope.covers(path) && !unreachable(path) && !left_out(path))
         .count();
     for left in system.iter().filter(|left| scope.covers(&left.path)) {
         if left.folder {
@@ -493,6 +508,7 @@ pub(super) async fn preview(
         in_pack = preview.in_pack,
         changed_in_pack = preview.changed_in_pack,
         not_here = preview.not_here,
+        receiving = preview.receiving,
         system_files = preview.system_files,
         system_folders = preview.system_folders,
         unavailable = preview.unavailable.len(),
@@ -584,5 +600,55 @@ mod tests {
                 .collect::<Vec<_>>(),
             [Some(albums)],
         );
+    }
+
+    // PK-17: the paths a drop in progress reserved are counted as on their way
+    // in — landed or not — and as nothing else, so a folder whose only files
+    // are such paths is not answered as one that holds no files. Once the drop
+    // has finished receiving they are the freeze's to select again.
+    #[tokio::test]
+    async fn a_preview_counts_the_paths_a_drop_in_progress_reserved_as_receiving() {
+        let fs = InMemoryFs::new();
+        fs.write_file(Path::new("/library/books/vol-1/page-001.jpg"), b"a page");
+        fs.write_file(Path::new("/library/books/vol-1/page-002.jpg"), b"another");
+        fs.write_file(Path::new("/library/books/vol-1/loose.jpg"), b"added alone");
+        let index = InMemoryIndex::new();
+        index
+            .set_mapping(Mapping::new(None, "/library".into()))
+            .await
+            .expect("a mapping is recorded");
+        let vol = entry_path("books/vol-1");
+        let reservation = index
+            .reserve(Some(&vol))
+            .await
+            .expect("a reservation is recorded");
+        // The third page is reserved and has not landed yet.
+        for page in ["page-001.jpg", "page-002.jpg", "page-003.jpg"] {
+            index
+                .extend_reservation(reservation, &entry_path(format!("books/vol-1/{page}")))
+                .await
+                .expect("a reservation is extended");
+        }
+        let scope = Scope {
+            prefix: Some(&vol),
+            only: None,
+        };
+
+        let landing = preview(&index, &fs, &NONE_PLACED, scope)
+            .await
+            .expect("the preview reads the folder");
+        assert_eq!(landing.receiving, 3);
+        assert_eq!(landing.files, 1, "only the file added on its own is packed");
+        assert_eq!(landing.not_here, 0);
+
+        index
+            .mark_received(reservation)
+            .await
+            .expect("the reservation is marked received");
+        let received = preview(&index, &fs, &NONE_PLACED, scope)
+            .await
+            .expect("the preview reads the folder");
+        assert_eq!(received.receiving, 0);
+        assert_eq!(received.files, 3);
     }
 }

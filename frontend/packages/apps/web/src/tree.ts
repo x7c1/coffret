@@ -488,3 +488,86 @@ export function shownFolders(expanded: ReadonlySet<string>): string[] {
     ...[...expanded].filter((path) => ancestry(path).every((folder) => expanded.has(folder))),
   ];
 }
+
+/**
+ * Where the focus goes back to once the tree is drawn again from scratch — as
+ * it is after an unlock, the lock having refused every listing it was drawn
+ * from: `focus` itself where its row is drawn again, and otherwise the nearest
+ * folder above it whose row is, or `null` where none is.
+ *
+ * `undefined` while that cannot be told yet: while the root's listing is not
+ * on hand, or a folder on the way down to the row is still being asked, the
+ * row may yet be drawn, and settling for a folder above it would lose it.
+ */
+export function refocused(
+  rows: readonly TreeRow[],
+  focus: string | null,
+  listing: (folder: string) => Asked<Listing> | undefined,
+): string | null | undefined {
+  if (focus === null) {
+    return null;
+  }
+  if (listing('')?.status !== 'ready') {
+    return undefined;
+  }
+  const drawn = (key: string) => rows.some((row) => row.kind !== 'note' && row.key === key);
+  if (drawn(focus)) {
+    return focus;
+  }
+  const above = ancestry(parentOf(pathOf(focus)));
+  if (above.some((folder) => listing(folder)?.status === 'loading')) {
+    return undefined;
+  }
+  const holder = above.reverse().find((folder) => drawn(folderKey(folder)));
+  return holder === undefined ? null : folderKey(holder);
+}
+
+/**
+ * `expanded` without the folders a listing shows are gone — a folder a
+ * deletion took away, or one another device removed — and without anything
+ * under them; `expanded` itself where none is.
+ *
+ * A folder is gone where the tree drew it, in `before`, as one the Library
+ * holds — named by the listing of the folder it stands in — and now the
+ * folder it stands in is on show — the root, or an open folder whose row is
+ * drawn — and that folder's listing is on hand and draws no row for it. Left
+ * open, it would be asked for once more and answer that the Library holds
+ * nothing there, and a folder of the same name made later would come back
+ * open. A listing still out or refused shows nothing gone: a lock refuses
+ * every listing, and the tree comes back as it was.
+ *
+ * Only a folder the Library held. One it never named — a stranded book's,
+ * a prepared path, an empty mapped prefix — can leave the rows for a moment
+ * with nothing gone: the folder of a book whose pages are image files is let
+ * go of as stranded the moment its freeze commits and the Library's folders
+ * name it, which may be before the listing it stands in is answered again. Closed
+ * there, it would not be asked for again, and its rows would go on saying
+ * what they said before the commit.
+ */
+export function standing(
+  expanded: ReadonlySet<string>,
+  rows: readonly TreeRow[],
+  listing: (folder: string) => Asked<Listing> | undefined,
+  before: readonly TreeRow[],
+): ReadonlySet<string> {
+  const drawn = new Set(rows.filter((row) => row.kind === 'folder').map((row) => row.path));
+  const held = new Set(
+    before
+      .filter(
+        (row): row is FolderRow =>
+          row.kind === 'folder' && row.in.folders.some((one) => one.path === row.path),
+      )
+      .map((row) => row.path),
+  );
+  const gone = [...expanded].filter((path) => {
+    const parent = parentOf(path);
+    const onShow = parent === '' || (drawn.has(parent) && expanded.has(parent));
+    return held.has(path) && onShow && listing(parent)?.status === 'ready' && !drawn.has(path);
+  });
+  if (gone.length === 0) {
+    return expanded;
+  }
+  return new Set(
+    [...expanded].filter((path) => !gone.some((left) => path === left || path.startsWith(`${left}/`))),
+  );
+}

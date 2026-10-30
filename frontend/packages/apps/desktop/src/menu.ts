@@ -10,7 +10,8 @@ export const RELOAD_THE_EXPLORER = 'Reload the explorer';
  * *Reload the explorer* (Cmd/Ctrl+R) in place of a page reload. *Quit* is in
  * it on every platform — the app menu's on macOS (Cmd+Q), a *File* menu's
  * elsewhere (Ctrl+Q) — since closing the explorer's window leaves the app
- * running.
+ * running. Off macOS the windows hide the bar it is drawn in until Alt is
+ * pressed (see `windows.ts`); the menu, and so its accelerators, stays.
  *
  * A plain reload would load the explorer's page again without a ticket, and a
  * page that lost its session would still have none. The item loads the

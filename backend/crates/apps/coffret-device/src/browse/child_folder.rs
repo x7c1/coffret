@@ -31,7 +31,7 @@ pub struct ChildFolder {
     /// of the Library always has an Entry under it (spec: EP-2), so `true` is
     /// never said of nothing.
     ///
-    /// Not what [`OpenLibrary::wholly_present`](crate::OpenLibrary::wholly_present)
+    /// Not what [`OpenLibrary::directly_present`](crate::OpenLibrary::directly_present)
     /// answers: that asks only of the Entries standing directly in a folder,
     /// which is what a fill needs, and says nothing of the folders below it.
     ///

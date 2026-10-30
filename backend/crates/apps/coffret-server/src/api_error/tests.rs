@@ -71,7 +71,7 @@ fn a_path_the_library_holds_nothing_at_is_not_found() {
 
 // EP-9: a mapping is what makes a local path exist, so an Entry outside
 // every one of them is a fact about this device — which is what the explorer
-// shows as "this folder is not on this device".
+// shows as "No folder chosen for … yet".
 #[test]
 fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
     assert_eq!(

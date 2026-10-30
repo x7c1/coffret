@@ -45,6 +45,18 @@ function shown(appearance: Appearance): BrowserWindowConstructorOptions {
   };
 }
 
+/**
+ * The menu bar, hidden on every platform but macOS: there the bar is the
+ * system's, not the window's, and its Edit menu is what carries Cmd+C, Cmd+V
+ * and Cmd+Z to the page's inputs. Elsewhere the window would draw a bar of
+ * File, Edit and Explorer the app hardly needs; hidden, it comes back on Alt,
+ * and the menu it belongs to stays the application's, so its accelerators —
+ * Ctrl+R to reload the explorer, Ctrl+Q to quit (see `menu.ts`) — keep working.
+ */
+function menuBar(platform: NodeJS.Platform): BrowserWindowConstructorOptions {
+  return platform === 'darwin' ? {} : { autoHideMenuBar: true };
+}
+
 /** What every page runs under: a renderer that reaches nothing but the web. */
 function confined(partition: string, preload?: string): WebPreferences {
   return {
@@ -63,31 +75,36 @@ function confined(partition: string, preload?: string): WebPreferences {
   };
 }
 
-/** The small window the Passphrase is typed into, served by the door. */
-export function passphraseWindowOptions(appearance: Appearance = INSTALLED): BrowserWindowConstructorOptions {
+/** The small window the Passphrase is typed into on `platform`, served by the door. */
+export function passphraseWindowOptions(
+  platform: NodeJS.Platform,
+  appearance: Appearance = INSTALLED,
+): BrowserWindowConstructorOptions {
   return {
     ...shown(appearance),
+    ...menuBar(platform),
     width: 380,
     height: 260,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    autoHideMenuBar: true,
     show: false,
     webPreferences: confined(PASSPHRASE_PARTITION),
   };
 }
 
 /**
- * The window the explorer runs in, served by the explorer host, with the
- * preload at `preload` that hands a drop over by path.
+ * The window the explorer runs in on `platform`, served by the explorer host,
+ * with the preload at `preload` that hands a drop over by path.
  */
 export function explorerWindowOptions(
   preload: string,
+  platform: NodeJS.Platform,
   appearance: Appearance = INSTALLED,
 ): BrowserWindowConstructorOptions {
   return {
     ...shown(appearance),
+    ...menuBar(platform),
     width: 1280,
     height: 820,
     minWidth: 640,

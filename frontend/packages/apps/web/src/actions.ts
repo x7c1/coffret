@@ -21,6 +21,12 @@
 // them is rebuilt once rather than once per row (see
 // [`deleteEntries`](./deleteEntries)).
 //
+// Rows that offer nothing at all — a selection of folders prepared and not in
+// the Library yet, a file only added here — still open the menu, holding one
+// item that cannot be chosen, `Nothing here to delete`: the right-click takes
+// the place of the browser's own menu, so a click that opened nothing would go
+// unanswered.
+//
 // No key deletes. Which key means delete differs between systems, and a key
 // that takes things out of a Library is one pressed by mistake.
 
@@ -43,10 +49,14 @@ export type Action =
   | { kind: 'addFiles' }
   | { kind: 'addFolder' };
 
+/** What the one item of a menu over rows that offer nothing says. */
+export const NOTHING_TO_DELETE = 'Nothing here to delete';
+
 /** One item of the menu. */
 export interface ActionItem {
   label: string;
-  action: Action;
+  /** What choosing it does, and `null` for an item drawn disabled, which cannot be chosen. */
+  action: Action | null;
   /** Drawn in red, and shaded in a tint of it: it takes something away. */
   destructive: boolean;
   /** Set apart from the items above it by a line. */
@@ -61,11 +71,21 @@ export interface ActionContext {
   prepared: readonly string[];
 }
 
-/** The items the menu offers for `rows`: one row's, or several rows' together. */
+/**
+ * The items the menu offers for `rows`: one row's, or several rows' together —
+ * and for rows that offer nothing, the one disabled `Nothing here to delete`.
+ * Empty only where there are no rows.
+ */
 export function actionsFor(rows: readonly Described[], context: ActionContext): ActionItem[] {
   if (rows.length === 0) {
     return [];
   }
+  const items = offeredFor(rows, context);
+  return items.length > 0 ? items : [disabled(NOTHING_TO_DELETE)];
+}
+
+/** What `rows` offer, which may be nothing. */
+function offeredFor(rows: readonly Described[], context: ActionContext): ActionItem[] {
   if (rows.length > 1) {
     const target = deleteTargetOf(rows);
     return target === null
@@ -127,4 +147,8 @@ function plain(label: string, action: Action): ActionItem {
 
 function destructive(label: string, action: Action, separated: boolean): ActionItem {
   return { label, action, destructive: true, separated };
+}
+
+function disabled(label: string): ActionItem {
+  return { label, action: null, destructive: false, separated: false };
 }
