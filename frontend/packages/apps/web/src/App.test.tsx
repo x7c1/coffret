@@ -857,6 +857,84 @@ function rootAsked(): number {
   return vi.mocked(getListing).mock.calls.filter(([path]) => path === '').length;
 }
 
+// A book whose pages are image files, dropped as a Pack, is a stranded folder
+// until its freeze commits: the Library has never named it. When the commit
+// lands, the Library's folders may name it before the listing it stands in is
+// answered again, and for that moment no row stands for it. That is not a
+// folder gone: it stays open, its listing is asked again, and its rows say
+// what the commit made of them.
+it('keeps a stranded book open across its commit, and asks for its rows again', async () => {
+  const book = 'comics/book';
+  const name = 'page-0000.jpg';
+  const freeze = (status: 'freezing' | 'done', packs: number): Work['freeze'] => ({
+    run: 1,
+    folder: book,
+    packs,
+    entries: packs,
+    findings: [],
+    step: null,
+    waits: false,
+    waiting: [],
+    discarded: [],
+    displaced: [],
+    status,
+    stopped: null,
+  });
+  const comicsFolder = { name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null };
+  const bookFolder = { name: 'book', path: book, mapped: true, present_throughout: true, files_total: 1, files_present: 1, size: 10, mtime: null };
+  let committed = false;
+  // The listing the book stands in, held back after the commit until the
+  // Library's folders have answered.
+  let releaseComics: (() => void) | null = null;
+  answers = (path) => {
+    if (path === '') {
+      return listing('', { folders: [comicsFolder] });
+    }
+    if (path === 'comics') {
+      return listing('comics', { held: true, folders: committed ? [bookFolder] : [] });
+    }
+    if (path === book) {
+      const one = page(`${book}/${name}`);
+      return listing(book, {
+        held: committed,
+        files: [committed ? one : { ...one, state: 'added', reserved: true }],
+      });
+    }
+    return listing(path);
+  };
+  vi.mocked(getListing).mockImplementation((path: string) => {
+    if (path === 'comics' && committed) {
+      return new Promise((resolve) => {
+        releaseComics = () => resolve(answers(path));
+      });
+    }
+    return Promise.resolve(answers(path));
+  });
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics'] });
+  vi.mocked(getWork).mockResolvedValue({ ...IDLE, freeze: freeze('freezing', 0) });
+  window.history.replaceState(null, '', toHash({ folder: book, open: null }));
+  render(<App />);
+  await waitFor(() => expect(tree().getByTitle(name)).toBeTruthy());
+  const bookAsked = () => vi.mocked(getListing).mock.calls.filter(([path]) => path === book).length;
+  const before = bookAsked();
+
+  committed = true;
+  vi.mocked(getFolders).mockResolvedValue({ folders: ['comics', book] });
+  vi.mocked(getWork).mockResolvedValue({ ...IDLE, freeze: freeze('done', 1) });
+  await waitFor(() => expect(releaseComics).not.toBeNull(), { timeout: 3000 });
+  await waitFor(() => expect(bookAsked()).toBeGreaterThan(before));
+  await act(async () => {
+    releaseComics?.();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  await waitFor(() =>
+    expect(
+      within(tree().getByTitle(name)).getByRole('img', { name: /^On this device$/ }),
+    ).toBeTruthy(),
+  );
+});
+
 describe('the end of a deletion', () => {
   // A mapped top-level folder whose last Entry left is an empty mapped prefix
   // now, which only the root's listing names: it is asked again, so the tree

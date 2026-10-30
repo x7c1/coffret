@@ -13,6 +13,7 @@ function preview(over: Partial<FreezePreview> = {}): FreezePreview {
     in_pack: 0,
     changed_in_pack: 0,
     not_here: 0,
+    receiving: 0,
     system_files: 0,
     system_folders: 0,
     unavailable: 0,
@@ -50,6 +51,20 @@ describe('questionOf', () => {
       '1 file in a Pack and changed here',
       '2 files not on this device',
     ]);
+  });
+
+  // PK-17: the files of a drop still landing, or of one cut off part way, are
+  // left for that drop's own freeze — named as on their way in, and the reason
+  // a folder holding nothing else has nothing to pack rather than "no files".
+  it('names the files a drop has not finished bringing in as not in the Library yet', () => {
+    expect(questionOf(preview({ in_pack: 2, receiving: 4 })).leftOut).toEqual([
+      '2 files already in a Pack',
+      '4 files not in the Library yet',
+    ]);
+    const landing = questionOf(preview({ files: 0, bytes: 0, receiving: 3 }));
+    expect(landing.packs).toBe(false);
+    expect(landing.line).toBe('Nothing to pack: 3 files not in the Library yet.');
+    expect(landing.line).not.toContain('holds no files');
   });
 
   // EP-17: what an operating system keeps beside the pages is one more group

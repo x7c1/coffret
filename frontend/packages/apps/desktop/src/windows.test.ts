@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { menuTemplate, RELOAD_THE_EXPLORER } from './menu.js';
+
 import {
   EXPLORER_PARTITION,
   explorerWindowOptions,
@@ -11,8 +13,8 @@ import {
 const PRELOAD = '/app/dist/preload.cjs';
 
 const windows = {
-  passphrase: passphraseWindowOptions(),
-  explorer: explorerWindowOptions(PRELOAD),
+  passphrase: passphraseWindowOptions('linux'),
+  explorer: explorerWindowOptions(PRELOAD, 'linux'),
 };
 
 describe.each(Object.entries(windows))('the %s window', (_name, options) => {
@@ -70,9 +72,35 @@ describe('appearance', () => {
 
   it('carries the title and icon it is given', () => {
     const appearance = { title: 'Coffret (dev)', icon: '/app/assets/icon-dev.png' };
-    for (const options of [passphraseWindowOptions(appearance), explorerWindowOptions(PRELOAD, appearance)]) {
+    for (const options of [passphraseWindowOptions('linux', appearance), explorerWindowOptions(PRELOAD, 'linux', appearance)]) {
       expect(options.title).toBe('Coffret (dev)');
       expect(options.icon).toBe('/app/assets/icon-dev.png');
     }
+  });
+});
+
+describe('the menu bar', () => {
+  // Hidden on Linux and Windows, where the window would draw it, and shown
+  // again on Alt.
+  it.each(['linux', 'win32'] as const)('is hidden on %s', (platform) => {
+    expect(passphraseWindowOptions(platform).autoHideMenuBar).toBe(true);
+    expect(explorerWindowOptions(PRELOAD, platform).autoHideMenuBar).toBe(true);
+  });
+
+  // macOS's bar is the system's, and its Edit menu carries Cmd+C, Cmd+V and
+  // Cmd+Z to the inputs: nothing of the window's to hide.
+  it('is left alone on macOS', () => {
+    expect(passphraseWindowOptions('darwin')).not.toHaveProperty('autoHideMenuBar');
+    expect(explorerWindowOptions(PRELOAD, 'darwin')).not.toHaveProperty('autoHideMenuBar');
+  });
+
+  // Hiding the bar hides no menu: the application's still carries Ctrl+R and
+  // Ctrl+Q on Linux.
+  it('still has a menu behind it on Linux, with Ctrl+R and Ctrl+Q', () => {
+    const items = (template: ReturnType<typeof menuTemplate>): ReturnType<typeof menuTemplate> =>
+      template.flatMap((item) => [item, ...(Array.isArray(item.submenu) ? items(item.submenu) : [])]);
+    const all = items(menuTemplate('linux', () => undefined));
+    expect(all.find((each) => each.label === RELOAD_THE_EXPLORER)?.accelerator).toBe('CmdOrCtrl+R');
+    expect(all.find((each) => each.role === 'quit')?.accelerator).toBe('Ctrl+Q');
   });
 });

@@ -43,3 +43,15 @@ describe('the explorer’s colours', () => {
     expect(literalsIn("&#123; a#fff 'M14 3H6'")).toEqual([]);
   });
 });
+
+// `index.html` repeats the values it paints, since a pseudo-element such as a
+// placeholder takes no inline style: the one a field's placeholder is drawn in
+// is the faint one, what stands in for a value.
+describe('the page’s own styles', () => {
+  it('draw a field’s placeholder in the faint colour', async () => {
+    const { COLOR } = await import('./theme');
+    const page = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
+    const rule = /input::placeholder[^{]*\{([^}]*)\}/.exec(page)?.[1] ?? '';
+    expect(rule).toContain(`color: ${COLOR.faint};`);
+  });
+});

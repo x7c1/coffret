@@ -1,4 +1,4 @@
-// Bringing a scanned book in: the book's folder dropped onto a folder of the
+// Bringing in a book whose pages are image files: the book's folder dropped onto a folder of the
 // Library, and added as a Pack.
 //
 // This is the daily gesture the explorer exists for. A book is one folder of

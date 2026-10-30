@@ -550,6 +550,7 @@ async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
             "in_pack": 2,
             "changed_in_pack": 1,
             "not_here": 2,
+            "receiving": 0,
             "system_files": 1,
             "system_folders": 1,
             "unavailable": 0,

@@ -45,6 +45,10 @@ export const COLOR = {
   picked: '#dbe6fd',
   /** A lighter tint of the accent: the row a drop lands in, and what a banner about files coming in stands on. */
   accentTint: '#e8effd',
+  /** Inside a folder's icon, wherever one is drawn on the light ground: a pale blue. */
+  folderFill: '#cddcfb',
+  /** A folder icon's outline around `folderFill`: a blue a step deeper, so the shape holds on white. */
+  folderStroke: '#5b8def',
   /** What the pointer is over: a menu's item, a row, a row's "⋮". */
   hover: '#eef1f5',
   /** A refusal, and a failure. */
