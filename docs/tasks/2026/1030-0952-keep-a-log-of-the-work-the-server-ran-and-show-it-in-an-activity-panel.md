@@ -83,5 +83,5 @@ The end-to-end journeys (`frontend/packages/apps/e2e/`, run by `make e2e-it` and
 
 ### Before merge (verified outside the check command)
 
-- [ ] On `make local`, the agent runs a sync and a failing operation, opens and
+- [x] On `make local`, the agent runs a sync and a failing operation, opens and
   closes the panel, retries the failure, and records in the PR what it saw.
