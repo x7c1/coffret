@@ -194,7 +194,9 @@ control for a sync, since a drop starts one.
   names each Entry it renames; one record may carry several such pairs of a
   path and its new one; no Container is written and no file's content is
   read or uploaded) — from the command line, by a sync that carries a local
-  rename into the Library, or by a move
+  rename into the Library, or by a move — which the explorer's "Rename…"
+  asks for (one pair, within its folder), as "Move to…" and a drag onto a
+  folder do
 - move (a selection of files and folders to another folder, as a person asks
   for it — the explorer's "Move to…", or a drag onto a folder — once they have
   seen its preview: carried out as one rename, in one Journal record, of every

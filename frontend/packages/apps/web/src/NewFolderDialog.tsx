@@ -1,7 +1,7 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import { placeOf } from './destination';
-import { BUTTON, Dialog, LINE, Place, PRIMARY } from './Dialog';
+import { BUTTON, Dialog, FIELD, LINE, Place, PRIMARY } from './Dialog';
 import { COLOR } from './theme';
 
 /**
@@ -94,12 +94,3 @@ export function NewFolderDialog({
 
 /** What the dialog says it does, and does not do. */
 export const CREATES_NOTHING_YET = 'Nothing is created until you add files to it.';
-
-const FIELD: CSSProperties = {
-  border: `1px solid ${COLOR.border}`,
-  background: COLOR.ground,
-  color: COLOR.text,
-  font: 'inherit',
-  padding: '5px 8px',
-  borderRadius: 4,
-};

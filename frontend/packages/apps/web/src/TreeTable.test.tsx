@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Fill, ListedFile, ListedFolder, Listing } from '@coffret/api';
 
+import type { Described } from './details';
 import { size, time } from './humanize';
 import { NOTHING_TO_DELETE } from './actions';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
@@ -107,6 +108,9 @@ function mount(shown: Listing, options: Options = {}) {
     onDelete: vi.fn(),
     onNewFolder: vi.fn(),
     onForget: vi.fn(),
+    onRename: vi.fn(),
+    onMoveTo: vi.fn(),
+    onMove: vi.fn(),
     onAskAgain: vi.fn(),
   };
   const start: TreeState = {
@@ -117,6 +121,7 @@ function mount(shown: Listing, options: Options = {}) {
   function Harness() {
     const [state, setState] = useState(start);
     const [selection, setSelection] = useState<Selection>(NOTHING_SELECTED);
+    const [moving, setMoving] = useState<readonly Described[] | null>(null);
     const rows = treeRows({
       listing: (path) => {
         const refusal = options.refused?.[path];
@@ -163,6 +168,11 @@ function mount(shown: Listing, options: Options = {}) {
         onDelete={calls.onDelete}
         onNewFolder={calls.onNewFolder}
         onForget={calls.onForget}
+        onRename={calls.onRename}
+        onMoveTo={calls.onMoveTo}
+        moving={moving}
+        onMoving={setMoving}
+        onMove={calls.onMove}
         onAskAgain={calls.onAskAgain}
         measure={(text, measured) => text.length * (measured === 'heading' ? 6 : 8)}
       />
@@ -628,7 +638,7 @@ describe('selecting rows with modifier keys', () => {
     const { onDelete } = mount(four(), { focus: fileKey('albums/a.png') });
     fireEvent.click(screen.getByTitle('c.png'), { shiftKey: true });
     fireEvent.contextMenu(screen.getByTitle('b.png'));
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Delete 3 items…']);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Move to…', 'Delete 3 items…']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete 3 items…' }));
     expect(onDelete).toHaveBeenLastCalledWith({
       folders: [],
@@ -756,6 +766,121 @@ describe('a drop on the tree', () => {
     fireEvent.doubleClick(screen.getByTitle('cover.png'));
     expect(onUnmapped).toHaveBeenCalledWith('open', true);
     expect(onOpenFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('a drag of rows onto a folder', () => {
+  /** What a drag of rows of the tree carries: no files, and room for what is set on it. */
+  function rowsInTheAir() {
+    const data = new Map<string, string>();
+    return {
+      dataTransfer: {
+        types: ['application/x-coffret-rows'],
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: (type: string, value: string) => data.set(type, value),
+        getData: (type: string) => data.get(type) ?? '',
+      },
+    };
+  }
+
+  // albums/ holds 2026/ and cover.png; the root holds albums/ and books/.
+  function mountAlbums() {
+    return mount(
+      listing({ path: '', folders: [folder('albums', {}, ''), folder('books', {}, '')] }),
+      {
+        more: [listing({ folders: [folder('2026')], files: [file('cover.png')] })],
+        open: ['albums'],
+      },
+    );
+  }
+
+  it('says where the rows move to, outlines the folder, and hands them over on release', () => {
+    const { tree, onMove } = mountAlbums();
+    const air = rowsInTheAir();
+    fireEvent.dragStart(screen.getByTitle('cover.png'), air);
+    fireEvent.dragEnter(tree, air);
+    fireEvent.dragOver(screen.getByTitle('books'), air);
+    expect(screen.getByRole('status').textContent).toBe('Move to books');
+    expect(screen.getByTitle('books').style.outline).toContain('solid');
+    expect(air.dataTransfer.dropEffect).toBe('move');
+    fireEvent.dragOver(screen.getByTitle('2026'), air);
+    expect(screen.getByRole('status').textContent).toBe('Move to albums/2026');
+    fireEvent.drop(screen.getByTitle('2026'), air);
+    expect(onMove).toHaveBeenCalledTimes(1);
+    expect(onMove.mock.calls[0][0].map((row: Described) => row.path)).toEqual(['albums/cover.png']);
+    expect(onMove.mock.calls[0][1]).toBe('albums/2026');
+    expect(said()).not.toContain('Move to');
+  });
+
+  it('lands over a file row in the folder that file stands in', () => {
+    const { tree, onMove } = mountAlbums();
+    const air = rowsInTheAir();
+    fireEvent.dragStart(screen.getByTitle('books'), air);
+    fireEvent.dragEnter(tree, air);
+    fireEvent.dragOver(screen.getByTitle('cover.png'), air);
+    expect(screen.getByRole('status').textContent).toBe('Move to albums');
+    expect(screen.getByTitle('albums').style.outline).toContain('solid');
+    expect(screen.getByTitle('cover.png').style.outline).toBe('none');
+    expect(air.dataTransfer.dropEffect).toBe('move');
+    fireEvent.drop(screen.getByTitle('cover.png'), air);
+    expect(onMove.mock.calls[0][0].map((row: Described) => row.path)).toEqual(['books']);
+    expect(onMove.mock.calls[0][1]).toBe('albums');
+  });
+
+  it('says nothing over the folder the rows are in, over a dragged row, or under a dragged folder', () => {
+    const { tree, onMove } = mountAlbums();
+    const air = rowsInTheAir();
+    fireEvent.dragStart(screen.getByTitle('albums'), air);
+    fireEvent.dragEnter(tree, air);
+    for (const over of ['albums', '2026', 'cover.png']) {
+      fireEvent.dragOver(screen.getByTitle(over), air);
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(screen.getByTitle(over).style.outline).toBe('none');
+      expect(air.dataTransfer.dropEffect).toBe('none');
+    }
+    fireEvent.drop(screen.getByTitle('cover.png'), air);
+    expect(onMove).not.toHaveBeenCalled();
+  });
+
+  it('takes rows into a folder prepared with New folder…', () => {
+    const { tree, onMove } = mount(
+      listing({ path: '', folders: [folder('albums', {}, ''), folder('books', {}, '')] }),
+      {
+        more: [listing({ folders: [folder('2026')], files: [file('cover.png')] })],
+        open: ['albums'],
+        prospective: ['albums/new'],
+      },
+    );
+    const air = rowsInTheAir();
+    fireEvent.dragStart(screen.getByTitle('cover.png'), air);
+    fireEvent.dragEnter(tree, air);
+    fireEvent.dragOver(screen.getByTitle('new'), air);
+    expect(screen.getByRole('status').textContent).toBe('Move to albums/new');
+    fireEvent.drop(screen.getByTitle('new'), air);
+    expect(onMove.mock.calls[0][1]).toBe('albums/new');
+  });
+
+  it('drags the selection when a row inside it is grabbed', () => {
+    const { tree, onMove } = mountAlbums();
+    fireEvent.click(screen.getByTitle('2026'));
+    fireEvent.click(screen.getByTitle('cover.png'), { metaKey: true });
+    const air = rowsInTheAir();
+    fireEvent.dragStart(screen.getByTitle('cover.png'), air);
+    fireEvent.dragEnter(tree, air);
+    fireEvent.dragOver(screen.getByTitle('books'), air);
+    fireEvent.drop(screen.getByTitle('books'), air);
+    expect(onMove.mock.calls[0][0].map((row: Described) => row.path)).toEqual(['albums/2026', 'albums/cover.png']);
+  });
+
+  it('offers Rename… and Move to… in the row’s menu', () => {
+    const { onRename, onMoveTo } = mountAlbums();
+    fireEvent.click(screen.getByLabelText('actions for cover.png'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename…' }));
+    expect(onRename.mock.calls[0][0].path).toBe('albums/cover.png');
+    fireEvent.click(screen.getByLabelText('actions for 2026'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to…' }));
+    expect(onMoveTo.mock.calls[0][0].map((row: Described) => row.path)).toEqual(['albums/2026']);
   });
 });
 
