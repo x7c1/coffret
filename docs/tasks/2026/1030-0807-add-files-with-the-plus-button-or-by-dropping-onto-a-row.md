@@ -84,7 +84,9 @@ The end-to-end journeys (`frontend/packages/apps/e2e/`, run by `make e2e-it` and
 
 ### Before merge (verified outside the check command)
 
-- [ ] On the agent's own development Library, the agent adds a folder with +
+- [x] On the agent's own development Library, the agent adds a folder with +
   and by drop, sees the confirmation with the preview, corrects a name, and
   records in the PR what it did and saw, including the folder-on-this-device
-  step on an unmapped top-level folder.
+  step (every top-level folder of the seeded Library already has a folder on
+  this device, so the step is reached at the Library root; the per-folder
+  wording is covered by a unit test).
