@@ -194,7 +194,9 @@ control for a sync, since a drop starts one.
   names each Entry it renames; one record may carry several such pairs of a
   path and its new one; no Container is written and no file's content is
   read or uploaded) — from the command line, by a sync that carries a local
-  rename into the Library, or by a move
+  rename into the Library, or by a move — which the explorer's "Rename…"
+  asks for (one pair, within its folder), as "Move to…" and a drag onto a
+  folder do
 - move (a selection of files and folders to another folder, as a person asks
   for it — the explorer's "Move to…", or a drag onto a folder — once they have
   seen its preview: carried out as one rename, in one Journal record, of every
@@ -762,8 +764,8 @@ A rename commits a change to the Catalog's names without replacing the
 affected Containers: replaying its record or adopting a Snapshot taken after it
 gives each Entry its new path, and a fetch finds an Entry in its Container by
 its entry number and places it at its current path (spec: FM-15, RV-5, EP-11).
-A person asks for a rename from the command line; the explorer does not offer
-one yet. Mappings continue to translate names to local paths; they do not make
+A person asks for a rename from the command line, or from the explorer, where
+Rename…, Move to… and a drag onto a folder each ask for a move (spec: LA-31). Mappings continue to translate names to local paths; they do not make
 local folders the authority for the namespace. A file renamed on disk is
 carried in as a rename only in the narrow case above, read within one sync's
 scan; every other local rename still reads to a sync as one file gone and

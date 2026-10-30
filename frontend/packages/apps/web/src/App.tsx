@@ -8,7 +8,9 @@ import {
   getLibrary,
   getListing,
   getRemoteHead,
+  moveEntries,
   previewDelete,
+  previewMove,
   previewFreeze,
   refreshCatalog,
   startDelete,
@@ -21,6 +23,8 @@ import {
   type ListedFile,
   type Listing,
   type Mapped,
+  type Move,
+  type MovePair,
   type ReconnectState,
 } from '@coffret/api';
 
@@ -34,7 +38,7 @@ import {
 import { ActivityPanel } from './ActivityPanel';
 import { earlier, inProgress, offeredNow, type Entry, type PageNotice } from './activity';
 import { DeleteConfirm } from './DeleteConfirm';
-import { firstImage, uploadStopped } from './details';
+import { firstImage, uploadStopped, type Described } from './details';
 import { DetailsPane } from './DetailsPane';
 import { Header } from './Header';
 import {
@@ -54,6 +58,20 @@ import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } 
 import { ChooseFolder } from './ChooseFolder';
 import { folderToChoose } from './mapping';
 import { NewFolderDialog } from './NewFolderDialog';
+import { MoveConfirm } from './MoveConfirm';
+import { MoveToDialog } from './MoveToDialog';
+import {
+  askToMove,
+  movedPath,
+  moveToTitle,
+  notMovedLine,
+  pairsOf,
+  renameDefect,
+  renamePair,
+  renameStepOf,
+  type MoveQuestion,
+} from './moving';
+import { RenameDialog, type RenameAnswer } from './RenameDialog';
 import {
   chooseAndAdd,
   heldIn,
@@ -82,6 +100,7 @@ import { useRunReloads } from './runReloads';
 import {
   ancestry,
   contextOf,
+  fileKey,
   folderKey,
   keyed,
   landedOn,
@@ -1113,6 +1132,161 @@ export function App() {
     }
   }, [known, moveTo]);
 
+  // Moving rows: dragged onto a folder of the tree or onto the Library's name
+  // in the header, or through "Move to…" in a row's menu — and renaming one,
+  // through "Rename…", which is a move of one row within its folder. Every one
+  // of them asks the server's preview first and shows what it said, and only
+  // Move writes anything (see [`askToMove`](./moving)); a refusal of either
+  // request is a notice of this page's own, since a move refused before its
+  // commit is not logged (spec: LA-31). Once the server answers, the rows are
+  // asked again, the tree is opened down to where they went with the focus on
+  // the first of them, and the server's log — where the move now is — is
+  // asked for once.
+  //
+  // The rows being dragged, while a drag of them is in the air: the tree's, and
+  // the header's for a move to the root.
+  const [moving, setMoving] = useState<readonly Described[] | null>(null);
+  // A drag whose row left the tree mid-way ends with no `dragend` to say so;
+  // the first move of the pointer after it is the drag being over.
+  useEffect(() => {
+    if (moving === null) {
+      return;
+    }
+    const over = () => setMoving(null);
+    window.addEventListener('mousemove', over);
+    return () => window.removeEventListener('mousemove', over);
+  }, [moving]);
+  const treeNow = useRef(tree);
+  treeNow.current = tree;
+  const viewNow = useRef(view);
+  viewNow.current = view;
+  const moveLanded = useCallback(
+    (rows: readonly Described[], landing: string, pairs: readonly MovePair[]) => {
+      setSelection(NOTHING_SELECTED);
+      recheckWork();
+      reloadListing();
+      reloadFolders();
+      reloadRoot();
+      // A folder prepared under one that moved goes with it, rather than
+      // standing at a path whose parent is no longer there.
+      setPrepared((before) => {
+        const after = before.map((path) => movedPath(path, pairs));
+        return after.some((path, at) => path !== before[at]) ? after : before;
+      });
+      const held = treeNow.current;
+      const expanded = new Set([...[...held.expanded].map((path) => movedPath(path, pairs)), ...ancestry(landing)]);
+      const before = viewNow.current;
+      if (sheetOpen(before)) {
+        // The reader's sheet stays on what it was open on, wherever that went,
+        // and the focus it follows with it.
+        const at = (key: string) => {
+          const row = keyed(key);
+          return (row.kind === 'folder' ? folderKey : fileKey)(movedPath(row.path, pairs));
+        };
+        setTree({ focus: held.focus === null ? null : at(held.focus), expanded });
+        const open = before.open === null ? null : movedPath(before.open, pairs);
+        go(
+          before.cover === undefined
+            ? { folder: movedPath(before.folder, pairs), open }
+            : { folder: movedPath(before.folder, pairs), open, cover: movedPath(before.cover, pairs) },
+          true,
+        );
+        return;
+      }
+      // Otherwise the focus goes to the first of the rows, where it went.
+      const first = rows[0];
+      const next: TreeState = {
+        focus:
+          first === undefined
+            ? held.focus
+            : (first.kind === 'folder' ? folderKey : fileKey)(movedPath(first.path, pairs)),
+        expanded,
+      };
+      setTree(next);
+      go({ folder: contextOf(next), open: null }, true);
+    },
+    [recheckWork, reloadListing, reloadFolders, reloadRoot, go],
+  );
+  const [moveAsking, setMoveAsking] = useState<{
+    question: MoveQuestion;
+    answer: (move: boolean) => void;
+  } | null>(null);
+  const askAboutMoving = useCallback(
+    (question: MoveQuestion) =>
+      new Promise<boolean>((resolve) => {
+        setMoveAsking({
+          question,
+          answer: (move) => {
+            setMoveAsking(null);
+            resolve(move);
+          },
+        });
+      }),
+    [],
+  );
+  const chooseMoving = useCallback((move: boolean) => moveAsking?.answer(move), [moveAsking]);
+  // A second drop while the first is still being asked about is dropped, for
+  // the reason a second "Delete…" is.
+  const movePressed = useRef(false);
+  const moveRows = useCallback(
+    (rows: readonly Described[], landing: string) => {
+      if (movePressed.current || rows.length === 0) {
+        return;
+      }
+      movePressed.current = true;
+      const names = rows.map((row) => row.name);
+      void askToMove({
+        pairs: pairsOf(rows, landing),
+        names,
+        landing,
+        preview: (asked) => previewMove(asked),
+        ask: askAboutMoving,
+        move: (asked) => moveEntries(asked),
+        moved: (run: Move) => moveLanded(rows, landing, run.pairs),
+        refuse: (cause) => setNotice(notMovedLine(names, said(cause))),
+      }).finally(() => {
+        movePressed.current = false;
+      });
+    },
+    [askAboutMoving, moveLanded, setNotice],
+  );
+  // "Move to…": where to, asked first, then the same confirmation.
+  const [movingTo, setMovingTo] = useState<readonly Described[] | null>(null);
+  const closeMovingTo = useCallback(() => setMovingTo(null), []);
+  // "Rename…": the one row, renamed through the same move route.
+  const [renaming, setRenaming] = useState<Described | null>(null);
+  const closeRenaming = useCallback(() => setRenaming(null), []);
+  const rename = useCallback(
+    async (typed: string, acknowledged: boolean): Promise<RenameAnswer> => {
+      const row = renaming;
+      if (row === null) {
+        return null;
+      }
+      const defect = renameDefect(typed, row, prospective);
+      if (defect !== null) {
+        return { refused: defect };
+      }
+      const pair = renamePair(row, typed);
+      if (pair === null) {
+        setRenaming(null);
+        return null;
+      }
+      try {
+        const step = renameStepOf(await previewMove([pair]), acknowledged);
+        if (step !== 'go') {
+          return step;
+        }
+        const run = await moveEntries([pair]);
+        setRenaming(null);
+        moveLanded([row], parentOf(row.path), run.pairs);
+        return null;
+      } catch (refused: unknown) {
+        return { blocked: said(refused) };
+      }
+    },
+    [renaming, prospective, moveLanded],
+  );
+
   // The Library, which a drop too large for this route names in the command
   // that can carry it in instead.
   const knownLibrary = library.state.status === 'ready' ? library.state.value : null;
@@ -1396,8 +1570,6 @@ export function App() {
   // server says which file that is, and the folders on the way down to it are
   // opened. An answer is let go of where the focus moved meanwhile, the sheet
   // closed, or the key was pressed again — the later press asks for itself.
-  const treeNow = useRef(tree);
-  treeNow.current = tree;
   const sheetedNow = useRef(sheeted);
   sheetedNow.current = sheeted;
   const readingOn = useRef(0);
@@ -1600,7 +1772,14 @@ export function App() {
   // Whether a dialog stands over the screen, whose `Escape` is its own and not
   // the sheet's.
   const dialogUp =
-    choosing !== null || namingIn !== null || asking !== null || packAsking !== null || deleteAsking !== null;
+    choosing !== null ||
+    namingIn !== null ||
+    asking !== null ||
+    packAsking !== null ||
+    deleteAsking !== null ||
+    moveAsking !== null ||
+    movingTo !== null ||
+    renaming !== null;
 
   // What the Activity panel lists: what is moving now, and what is over — the
   // server's log of its finished work beside this page's own notices.
@@ -1701,6 +1880,8 @@ export function App() {
           return held?.status === 'ready' && held.value.mapped;
         }}
         onNewFolder={openNaming}
+        moving={moving}
+        onMoveToRoot={() => moving !== null && moveRows(moving, '')}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -1789,6 +1970,11 @@ export function App() {
                   onDelete={deleteEntries}
                   onNewFolder={openNaming}
                   onForget={forget}
+                  onRename={setRenaming}
+                  onMoveTo={setMovingTo}
+                  moving={moving}
+                  onMoving={setMoving}
+                  onMove={moveRows}
                   onAskAgain={(folder) => reloadListings([folder])}
                   areaRef={treeArea}
                   escapeLetsGo={!sheeted}
@@ -1839,6 +2025,22 @@ export function App() {
           onChoose={choose}
         />
       )}
+      {renaming !== null && (
+        <RenameDialog name={renaming.name} onRename={rename} onClose={closeRenaming} />
+      )}
+      {movingTo !== null && (
+        <MoveToDialog
+          title={moveToTitle(movingTo.map((row) => row.name))}
+          folders={known === null ? null : [...known, ...prospective]}
+          moved={movingTo}
+          onChoose={(landing) => {
+            setMovingTo(null);
+            moveRows(movingTo, landing);
+          }}
+          onClose={closeMovingTo}
+        />
+      )}
+      {moveAsking !== null && <MoveConfirm question={moveAsking.question} onChoose={chooseMoving} />}
       {packAsking !== null && (
         <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
       )}

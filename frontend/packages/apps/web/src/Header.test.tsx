@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import type { Library } from '@coffret/api';
 
+import type { Described } from './details';
 import { Header } from './Header';
 import { LIBRARY_ROOT } from './location';
 import { fileKey, folderKey } from './tree';
@@ -136,4 +137,35 @@ it('hands the keys back to the tree when the menu is let go of by Escape', () =>
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
   expect(screen.queryByRole('menu')).toBeNull();
   expect(onKeysBack).toHaveBeenCalledTimes(1);
+});
+
+// The Library root has no row, so a move to it is let go of on the Library's
+// name — except for rows standing at the root already, where nothing happens.
+it('takes rows of the tree dragged onto the Library’s name, saying Move to Library while they are over it', () => {
+  const onMoveToRoot = vi.fn();
+  const moved = (path: string) => ({ kind: 'file', key: fileKey(path), path, name: path }) as unknown as Described;
+  const handlers = {
+    onAdd: vi.fn(),
+    onCollecting: vi.fn(),
+    onUnreadable: vi.fn(),
+    onKeysBack: vi.fn(),
+    makesFolderIn: () => false,
+    onNewFolder: vi.fn(),
+  };
+  const view = render(
+    <Header library={LIBRARY} focus={null} {...handlers} moving={[moved('albums/a.png')]} onMoveToRoot={onMoveToRoot} />,
+  );
+  const name = header().getByTestId('library');
+  const air = { dataTransfer: { types: ['application/x-coffret-rows'], dropEffect: 'none' } };
+  fireEvent.dragEnter(name, air);
+  expect(name.textContent).toBe('Move to Library');
+  expect(name.style.outline).toContain('solid');
+  fireEvent.drop(name, air);
+  expect(onMoveToRoot).toHaveBeenCalledTimes(1);
+
+  view.rerender(<Header library={LIBRARY} focus={null} {...handlers} moving={[moved('a.png')]} onMoveToRoot={onMoveToRoot} />);
+  fireEvent.dragEnter(name, air);
+  expect(name.textContent).toBe('books');
+  fireEvent.drop(name, air);
+  expect(onMoveToRoot).toHaveBeenCalledTimes(1);
 });

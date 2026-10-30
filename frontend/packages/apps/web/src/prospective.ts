@@ -79,8 +79,8 @@ const SHAPE: Record<ComponentDefect, string> = {
   relative: '“.” and “..” are not names',
 };
 
-/** What a name coffret keeps for itself is said as. */
-const RESERVED: Record<ReservedName, string> = {
+/** What a name coffret keeps for itself is said as, by "New folder…" and "Rename…" alike. */
+export const RESERVED: Record<ReservedName, string> = {
   scratch: 'names starting “.coffret-fetch-” are coffret’s own, for files half written',
   management_area: '“.coffret” is the folder coffret keeps its own records in',
   folds_to_management_area:

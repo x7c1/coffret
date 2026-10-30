@@ -37,11 +37,20 @@ export function Banner({
 /**
  * Said while files are dragged over the tree: a pill at the bottom of it,
  * naming the folder letting go of them there adds to (see `dropLine`), with
- * that folder's row outlined in the same colour. It stands over the rows
- * rather than among them, and takes no pointer, so the drag goes on reading
- * the row under it.
+ * that folder's row outlined in the same colour — or, for rows of the tree
+ * dragged onto a folder, `line` says where they move to instead (see
+ * [`moveLine`](./moving)). It stands over the rows rather than among them,
+ * and takes no pointer, so the drag goes on reading the row under it.
  */
-export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: string }) {
+export function DropPill({
+  outcome,
+  landing,
+  line = dropLine(outcome, landing),
+}: {
+  outcome: DropOutcome;
+  landing: string;
+  line?: string;
+}) {
   return (
     <div
       role="status"
@@ -71,7 +80,7 @@ export function DropPill({ outcome, landing }: { outcome: DropOutcome; landing: 
           whiteSpace: 'nowrap',
         }}
       >
-        {dropLine(outcome, landing)}
+        {line}
       </span>
     </div>
   );

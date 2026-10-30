@@ -27,6 +27,7 @@ import { dropOutcome, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, type RowFill } from './fill';
 import { size, time } from './humanize';
 import { CHOOSE_A_FOLDER, noFolderChosenLine } from './mapping';
+import { grabbed, moveLandingOver, moveLine } from './moving';
 import { parentOf, PROSPECTIVE } from './prospective';
 import { TRY_AGAIN } from './Region';
 import { ROWS_AHEAD, scrollAhead } from './scrollAhead';
@@ -130,6 +131,19 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * asks for a folder on this device where none is chosen yet and confirms
  * every add before anything is sent.
  *
+ * And the rows themselves are dragged onto a folder to move them there (see
+ * [`moving`](./moving)): a file, a folder, or the selection — grabbing a row
+ * inside a selection of several drags them all, and any other row drags
+ * alone, as a right-click acts. They land in a folder row, or in the folder a
+ * file row stands in; the Library root, which has no row, takes them on the
+ * Library's name in the header. While they are in the air the row they would
+ * land in is outlined as for an add and the pill says `Move to <path>`; over
+ * the folder they stand in already, over one of them, or under a folder among
+ * them nothing happens. A closed folder is not opened by resting over it.
+ * Letting go hands them to the screen, which confirms the move from the
+ * server's preview before anything is written. The menu offers the same as
+ * "Move to…", beside "Rename…".
+ *
  * The folders the Library does not hold yet (see [`prospective`](./prospective))
  * are rows too, marked as such, and so are the folders of books whose freeze
  * has not committed, dimmed. A prepared path's row offers "Forget this folder".
@@ -160,6 +174,11 @@ export function TreeTable({
   onDelete,
   onNewFolder,
   onForget,
+  onRename,
+  onMoveTo,
+  moving,
+  onMoving,
+  onMove,
   onAskAgain,
   measure,
   areaRef,
@@ -245,6 +264,20 @@ export function TreeTable({
   onNewFolder: (parent: string) => void;
   /** "Forget this folder" on a prepared path's row. */
   onForget: (path: string) => void;
+  /** "Rename…" from a row's actions menu. */
+  onRename: (row: Described) => void;
+  /** "Move to…" from the actions menu, for the rows a move gives a new path. */
+  onMoveTo: (rows: Described[]) => void;
+  /**
+   * The rows of the tree being dragged, while a drag of them is in the air,
+   * and `null` otherwise: the screen's, since the header's Library name takes
+   * a move to the root.
+   */
+  moving: readonly Described[] | null;
+  /** A drag of rows began, or ended. */
+  onMoving: (rows: Described[] | null) => void;
+  /** Rows were let go of over a folder they move into. */
+  onMove: (rows: readonly Described[], landing: string) => void;
   /**
    * "try again" on an open folder whose listing was refused: that folder's
    * listing asked for once more.
@@ -333,6 +366,12 @@ export function TreeTable({
       case 'forget':
         onForget(action.folder);
         break;
+      case 'rename':
+        onRename(action.row);
+        break;
+      case 'moveTo':
+        onMoveTo(action.rows);
+        break;
     }
   };
 
@@ -373,22 +412,60 @@ export function TreeTable({
   // device is chosen for takes it as any other — the screen asks for one —
   // and only a path the Library holds nothing at refuses it.
   const drag = useDragOver();
+  // The key of the row the drag is over.
   const [over, setOver] = useState<string | null>(null);
   useEffect(() => {
     if (!drag.dragged) {
       setOver(null);
     }
   }, [drag.dragged]);
-  const target = over ?? contextPath;
+  const target = over === null ? contextPath : landingOf(over);
+  // Where rows of the tree dragged over it would land, and `null` where
+  // nothing happens: over no row as much as over the folder they are in.
+  const moveLanding = moving !== null && drag.dragged ? moveLandingOver(over, moving) : null;
   const refusedHere = target === contextPath && nowhere;
   const outcome = dropOutcome({ held: !refusedHere, freezing: isFreezing(freeze) });
   // The row the drop lands in, outlined while the drag is over the tree; the
   // whole list where no row stands for it — the Library root.
-  const outlinedRow = rows.some((row) => row.kind === 'folder' && row.path === target);
+  const landingRow = moving === null ? target : moveLanding;
+  const landingOutcome: DropOutcome = moving === null ? outcome : 'taken';
+  const outlinedRow = rows.some((row) => row.kind === 'folder' && row.path === landingRow);
+  const listOutline =
+    outlinedRow || (moving !== null && moveLanding === null) ? 'none' : dropOutline(drag.dragged, landingOutcome);
+  // The row under the pointer, read off the element the event is at: a drag
+  // of rows over no row lands nowhere.
+  const rowAt = (event: DragEvent): string | null =>
+    event.target instanceof Element
+      ? (event.target.closest('tr[data-key]')?.getAttribute('data-key') ?? null)
+      : null;
+  const onDragOver = (event: DragEvent) => {
+    if (moving === null) {
+      drag.onDragOver(event);
+      return;
+    }
+    const key = rowAt(event);
+    setOver(key);
+    // Taken only where the move does something: elsewhere the pointer says a
+    // drop is not taken, and letting go there does nothing.
+    if (moveLandingOver(key, moving) !== null) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+    } else {
+      event.dataTransfer.dropEffect = 'none';
+    }
+  };
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
     drag.ended();
     setOver(null);
+    if (moving !== null) {
+      const landing = moveLandingOver(rowAt(event), moving);
+      onMoving(null);
+      if (landing !== null) {
+        onMove(moving, landing);
+      }
+      return;
+    }
     if (refusedHere) {
       // Said and not merely not done: a drop is a gesture with an outcome, and
       // a screen that goes on looking exactly as it did tells nobody that none
@@ -586,7 +663,7 @@ export function TreeTable({
           }
         }}
         onDragEnter={drag.onDragEnter}
-        onDragOver={drag.onDragOver}
+        onDragOver={onDragOver}
         onDragLeave={drag.onDragLeave}
         onDrop={onDrop}
         // The menu is fixed to the window and the rows it was opened on would
@@ -602,7 +679,7 @@ export function TreeTable({
           // The tree's own focus is drawn by the focused row, so the outline is a
           // drag's alone — around the row of the folder the drop lands in, and
           // around the whole list where no row stands for it (the Library root).
-          outline: outlinedRow ? 'none' : dropOutline(drag.dragged, outcome),
+          outline: listOutline,
           outlineOffset: -2,
         }}
       >
@@ -692,7 +769,7 @@ export function TreeTable({
                     // Taken out of the selection with ⌘/Ctrl+click, the focus
                     // is left on a row that is not selected.
                     focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
-                    drop={row.kind === 'folder' && row.path === target && drag.dragged ? outcome : null}
+                    drop={row.kind === 'folder' && row.path === landingRow && drag.dragged ? landingOutcome : null}
                     shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
                     menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
                     onPress={(how) => pick(clicked(rows, picked, row.key, how))}
@@ -702,7 +779,22 @@ export function TreeTable({
                       onChange(toggled(state, row.path));
                     }}
                     onOpen={() => openRow(row)}
-                    onDragOverRow={() => setOver(landingOf(row.key))}
+                    onDragOverRow={() => setOver(row.key)}
+                    onGrab={(event) => {
+                      const { picked: next, moved } = grabbed(rows, picked, row.key);
+                      if (moved.length === 0) {
+                        // Nothing of it in the Library to move.
+                        event.preventDefault();
+                        return;
+                      }
+                      if (next !== picked) {
+                        pick(next);
+                      }
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData(ROWS_TYPE, moved.map((one) => one.path).join('\n'));
+                      onMoving(moved);
+                    }}
+                    onLetGo={() => onMoving(null)}
                   />
                 ),
               )}
@@ -720,7 +812,8 @@ export function TreeTable({
           />
         )}
       </div>
-      {drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
+      {moving === null && drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
+      {moveLanding !== null && <DropPill outcome="taken" landing={moveLanding} line={moveLine(moveLanding)} />}
     </div>
   );
 }
@@ -775,6 +868,13 @@ export function opened(row: FolderRow | FileRow, openers: Openers): void {
   }
 }
 
+/**
+ * What a drag of rows carries, beside the screen's own record of them: their
+ * paths, one a line, under a type of this explorer's own, so that nothing
+ * else on the desktop reads them as files.
+ */
+const ROWS_TYPE = 'application/x-coffret-rows';
+
 /** The keys that move the focus. */
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
@@ -823,6 +923,8 @@ function Row({
   onToggle,
   onOpen,
   onDragOverRow,
+  onGrab,
+  onLetGo,
 }: {
   row: FolderRow | FileRow;
   rowRef: (element: HTMLTableRowElement | null) => void;
@@ -849,6 +951,10 @@ function Row({
   onToggle: () => void;
   onOpen: () => void;
   onDragOverRow: () => void;
+  /** The row was grabbed to drag it, and with it what it drags. */
+  onGrab: (event: DragEvent) => void;
+  /** The drag it began ended, wherever it was let go. */
+  onLetGo: () => void;
 }) {
   // How the last press on the row was made: a tap opens, a click from a mouse
   // or a pen focuses. Kept past the click, since the double-click a browser
@@ -895,6 +1001,10 @@ function Row({
         onMenu({ x: event.clientX, y: event.clientY, side: 'start' });
       }}
       onDragOver={onDragOverRow}
+      draggable
+      data-key={row.key}
+      onDragStart={onGrab}
+      onDragEnd={onLetGo}
       style={{
         background:
           drop !== null ? dropGround(drop) : onAccent ? COLOR.accent : selected ? COLOR.picked : undefined,

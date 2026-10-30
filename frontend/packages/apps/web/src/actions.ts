@@ -12,13 +12,17 @@
 // - **Pack this folder…**, on a folder under a top-level folder this device
 //   has a folder for (see [`packOffered`](./packFolder)), and not on one the
 //   Library does not hold yet, which has nothing to pack.
+// - **Rename…** and **Move to…**, on a folder or a file the Library holds
+//   (see [`moving`](./moving)) — not on a folder prepared with "New folder…",
+//   which has nothing in the Library to give a new path.
 // - then, set apart, **Delete…** — or, on a folder prepared with "New folder…"
 //   and not in the Library yet, **Forget this folder**, since there is nothing
 //   of it in the Library to delete.
 //
-// Several rows selected together offer one thing, `Delete <n> items…`, which
-// names every row the Library holds in one deletion: a Pack holding several of
-// them is rebuilt once rather than once per row (see
+// Several rows selected together offer two things: **Move to…**, which moves
+// every one of them the Library holds in one move, and `Delete <n> items…`,
+// which names every row the Library holds in one deletion: a Pack holding
+// several of them is rebuilt once rather than once per row (see
 // [`deleteEntries`](./deleteEntries)).
 //
 // Rows that offer nothing at all — a selection of folders prepared and not in
@@ -34,6 +38,7 @@ import type { DeleteTarget, Listing } from '@coffret/api';
 
 import { deleteItems, deleteOffered, DELETE } from './deleteEntries';
 import { opensInReader, type Described } from './details';
+import { movedOf, MOVE_TO, RENAME } from './moving';
 import { packOffered, PACK_THIS_FOLDER } from './packFolder';
 import { FORGET_FOLDER, NEW_FOLDER } from './prospective';
 
@@ -44,6 +49,9 @@ export type Action =
   | { kind: 'pack'; folder: string }
   | { kind: 'delete'; target: DeleteTarget }
   | { kind: 'forget'; folder: string }
+  | { kind: 'rename'; row: Described }
+  /** The rows a move gives a new path (see [`movedOf`](./moving)). */
+  | { kind: 'moveTo'; rows: Described[] }
   // The header's **+**, whose menu is the same popover: the operating
   // system's picker for files, or for one folder.
   | { kind: 'addFiles' }
@@ -87,10 +95,16 @@ export function actionsFor(rows: readonly Described[], context: ActionContext): 
 /** What `rows` offer, which may be nothing. */
 function offeredFor(rows: readonly Described[], context: ActionContext): ActionItem[] {
   if (rows.length > 1) {
+    const items: ActionItem[] = [];
+    const moved = movedOf(rows);
+    if (moved.length > 0) {
+      items.push(plain(MOVE_TO, { kind: 'moveTo', rows: moved }));
+    }
     const target = deleteTargetOf(rows);
-    return target === null
-      ? []
-      : [destructive(deleteItems(target), { kind: 'delete', target }, false)];
+    if (target !== null) {
+      items.push(destructive(deleteItems(target), { kind: 'delete', target }, items.length > 0));
+    }
+    return items;
   }
   const row = rows[0];
   const items: ActionItem[] = [];
@@ -102,6 +116,11 @@ function offeredFor(rows: readonly Described[], context: ActionContext): ActionI
   }
   if (row.kind === 'folder' && !row.prospective && packOffered({ path: row.path, mapped: row.folder.mapped })) {
     items.push(plain(PACK_THIS_FOLDER, { kind: 'pack', folder: row.path }));
+  }
+  const moved = movedOf([row]);
+  if (moved.length > 0) {
+    items.push(plain(RENAME, { kind: 'rename', row }));
+    items.push(plain(MOVE_TO, { kind: 'moveTo', rows: moved }));
   }
   const apart = items.length > 0;
   if (row.kind === 'folder' && row.prospective) {

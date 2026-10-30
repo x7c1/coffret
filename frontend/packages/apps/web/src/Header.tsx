@@ -1,12 +1,15 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 
 import type { Library } from '@coffret/api';
 
 import type { Action, ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
+import { dropGround, dropOutline } from './Banner';
+import type { Described } from './details';
 import { landingOf, placeOf } from './destination';
 import { pickedFiles, type Drop } from './drop';
 import { locationOf } from './location';
+import { moveLine, movesInto } from './moving';
 import { NEW_FOLDER } from './prospective';
 import { COLOR } from './theme';
 import type { Asked } from './useAsked';
@@ -22,7 +25,11 @@ import type { Asked } from './useAsked';
  *   Library there is nothing to switch to, so it opens nothing and draws no
  *   arrow promising that it would. A request for the Library that was refused
  *   is said here in its place, coloured like every other refusal, since it is
- *   why the screen below is empty.
+ *   why the screen below is empty. It is also where rows of the tree are
+ *   dragged to move them to the Library root, which has no row of its own:
+ *   while they are over it, it is outlined as a folder row is and says
+ *   `Move to Library` — unless they stand at the root already, where nothing
+ *   happens.
  * - **The location.** The focused row's containing folders and its own name
  *   (see [`locationOf`](./location)), following the focus as the details pane
  *   does, and cut short with an ellipsis where the row is too narrow for it —
@@ -51,6 +58,8 @@ export function Header({
   onKeysBack,
   makesFolderIn,
   onNewFolder,
+  moving = null,
+  onMoveToRoot = () => {},
 }: {
   /** The open Library, as the server last answered for it. */
   library: Asked<Library>;
@@ -71,6 +80,10 @@ export function Header({
   makesFolderIn: (folder: string) => boolean;
   /** "New folder…" was chosen for `parent`. */
   onNewFolder: (parent: string) => void;
+  /** The rows of the tree being dragged, while a drag of them is in the air. */
+  moving?: readonly Described[] | null;
+  /** They were let go of over the Library's name: moved to the root, once confirmed. */
+  onMoveToRoot?: () => void;
 }) {
   const location = locationOf(focus);
   const addInto = landingOf(focus);
@@ -90,6 +103,34 @@ export function Header({
     picking.current = into;
     (action.kind === 'addFolder' ? folderPicker : filesPicker).current?.click();
   };
+  // A drag of rows over the Library's name, counted as the tree counts one
+  // (see [`useDragOver`](./dragOver)), and let go of once the drag is over.
+  const [movingOver, setMovingOver] = useState(0);
+  const takesMove = moving !== null && movesInto('', moving);
+  useEffect(() => {
+    if (moving === null) {
+      setMovingOver(0);
+    }
+  }, [moving]);
+  const overLibrary = takesMove && movingOver > 0;
+  const moveHandlers = takesMove
+    ? {
+        onDragEnter: (event: DragEvent) => {
+          event.preventDefault();
+          setMovingOver((crossed) => crossed + 1);
+        },
+        onDragOver: (event: DragEvent) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        },
+        onDragLeave: () => setMovingOver((crossed) => Math.max(0, crossed - 1)),
+        onDrop: (event: DragEvent) => {
+          event.preventDefault();
+          setMovingOver(0);
+          onMoveToRoot();
+        },
+      }
+    : {};
   const pickedFrom = (input: HTMLInputElement) => {
     const files = Array.from(input.files ?? []);
     // Emptied, so that the same files picked again are a change the input
@@ -110,9 +151,16 @@ export function Header({
           data-testid="library"
           // The whole of it, for a name cut short.
           title={named(library)}
-          style={library.status === 'failed' ? { ...LIBRARY, color: COLOR.refused } : LIBRARY}
+          {...moveHandlers}
+          style={{
+            ...LIBRARY,
+            ...(library.status === 'failed' ? { color: COLOR.refused } : {}),
+            ...(overLibrary
+              ? { outline: dropOutline(true, 'taken'), outlineOffset: -2, background: dropGround('taken') }
+              : {}),
+          }}
         >
-          {named(library)}
+          {overLibrary ? moveLine('') : named(library)}
         </span>
         <span data-testid="location" title={location} style={LOCATION}>
           {location}

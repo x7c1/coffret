@@ -6,10 +6,11 @@ import { COLOR, SHADOW } from './theme';
 
 /**
  * The frame the explorer's questions stand in — "Delete…", "New folder…",
- * "Pack this folder…", the folder on this device chosen while adding, and the
- * confirmation of an add: a panel over the dimmed screen with the question as
- * its heading, what it has to say under it, and the answers in a row at the
- * bottom right, the one that goes ahead last.
+ * "Pack this folder…", "Rename…", "Move to…", the folder on this device
+ * chosen while adding, and the confirmations of an add and of a move: a panel
+ * over the dimmed screen with the question as its heading, what it has to say
+ * under it, and the answers in a row at the bottom right, the one that goes
+ * ahead last.
  *
  * The panel is never taller than the window less a margin: what it has to say
  * scrolls between the heading and the answers, which stay in view. With
@@ -135,6 +136,16 @@ const PLACE: CSSProperties = {
   background: COLOR.ground,
   fontSize: 14,
   fontWeight: 400,
+};
+
+/** A dialog's one text field: "New folder…"'s name, "Rename…"'s. */
+export const FIELD: CSSProperties = {
+  border: `1px solid ${COLOR.border}`,
+  background: COLOR.ground,
+  color: COLOR.text,
+  font: 'inherit',
+  padding: '5px 8px',
+  borderRadius: 4,
 };
 
 /** A line of the dialog's body. */

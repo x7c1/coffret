@@ -177,7 +177,8 @@ s3-store-it:
 # photograph that this one finds when the refresh control is pressed, another it
 # finds without pressing anything because the server was restarted in between,
 # a book's pages dropped into a folder made in the browser and packed
-# together, and the reader reading off the end of the album into the book.
+# together, the reader reading off the end of the album into the book, and the
+# book's folder dragged into the album and renamed there from its row's menu.
 #
 # What it needs: Docker, and a browser it downloads on the first run (a couple
 # of hundred megabytes, kept in Playwright's own cache and reused afterwards).

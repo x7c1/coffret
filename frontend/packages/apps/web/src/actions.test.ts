@@ -91,43 +91,61 @@ function labels(rows: Described[]): string[] {
 }
 
 describe('what the actions menu offers', () => {
-  it('offers an image Open and Delete…', () => {
-    expect(labels([fileRow(file('books/cover.jpg'))])).toEqual(['Open', '—', 'Delete…']);
+  it('offers an image Open, Rename…, Move to… and Delete…', () => {
+    expect(labels([fileRow(file('books/cover.jpg'))])).toEqual(['Open', 'Rename…', 'Move to…', '—', 'Delete…']);
   });
 
-  it('offers a non-image file Delete… alone, and a file only added here nothing', () => {
-    expect(labels([fileRow(file('books/manual.pdf'))])).toEqual(['Delete…']);
+  it('offers a non-image file no Open, and a file only added here nothing to rename, move or delete', () => {
+    expect(labels([fileRow(file('books/manual.pdf'))])).toEqual(['Rename…', 'Move to…', '—', 'Delete…']);
     expect(labels([fileRow(file('books/new.jpg', { state: 'added', container: null }))])).toEqual(['Open']);
     expect(labels([fileRow(file('books/new.pdf', { state: 'added', container: null }))])).toEqual([
       NOTHING_TO_DELETE,
     ]);
   });
 
-  it('offers a folder of images Open, New folder…, Pack this folder… and Delete…', () => {
+  it('offers a folder of images Open, New folder…, Pack this folder…, Rename…, Move to… and Delete…', () => {
     expect(labels([folderRow(folder('books/vol-1'))])).toEqual([
       'Open',
       'New folder…',
       'Pack this folder…',
+      'Rename…',
+      'Move to…',
       '—',
       'Delete…',
     ]);
     // Without images directly in it — or with its listing not on hand yet —
     // there is nothing for the reader to open on.
-    expect(labels([folderRow(folder('books/notes'))])).toEqual(['New folder…', 'Pack this folder…', '—', 'Delete…']);
+    expect(labels([folderRow(folder('books/notes'))])).toEqual([
+      'New folder…',
+      'Pack this folder…',
+      'Rename…',
+      'Move to…',
+      '—',
+      'Delete…',
+    ]);
     expect(labels([folderRow(folder('books/unasked'))])).toEqual([
       'New folder…',
       'Pack this folder…',
+      'Rename…',
+      'Move to…',
       '—',
       'Delete…',
     ]);
   });
 
   // EP-9: no folder of this device under its top-level folder, so nothing to
-  // put a new folder's files in and nothing for a freeze to read.
-  it('offers a folder under an unmapped top-level folder only Delete…', () => {
-    expect(labels([folderRow(folder('books/far', { mapped: false }))])).toEqual(['Delete…']);
+  // put a new folder's files in and nothing for a freeze to read — while a
+  // rename in the Library needs no folder of this device.
+  it('offers a folder under an unmapped top-level folder no New folder… and no Pack this folder…', () => {
+    expect(labels([folderRow(folder('books/far', { mapped: false }))])).toEqual([
+      'Rename…',
+      'Move to…',
+      '—',
+      'Delete…',
+    ]);
   });
 
+  // Nothing of a prepared folder is in the Library to rename or move.
   it('offers a prepared folder Forget this folder instead of Delete…, and an empty mapped one neither', () => {
     const prepared = folderRow(folder('books/new', { files_total: 0 }), { prospective: true, expandable: false });
     expect(labels([prepared])).toEqual(['New folder…', '—', 'Forget this folder']);
@@ -139,14 +157,16 @@ describe('what the actions menu offers', () => {
 
   it('draws Delete… as destructive', () => {
     const items = actionsFor([fileRow(file('books/cover.jpg'))], CONTEXT);
-    expect(items.map((item) => item.destructive)).toEqual([false, true]);
+    expect(items.map((item) => item.destructive)).toEqual([false, false, false, true]);
   });
 
-  it('offers several rows one deletion of all of them, named by count', () => {
+  it('offers several rows one move and one deletion of all of them, the deletion named by count', () => {
     const rows = [folderRow(folder('books/vol-1')), folderRow(folder('books/vol-2')), fileRow(file('books/cover.jpg'))];
     const items = actionsFor(rows, CONTEXT);
-    expect(items.map((item) => item.label)).toEqual(['Delete 3 items…']);
-    expect(items[0].action).toEqual({
+    expect(items.map((item) => item.label)).toEqual(['Move to…', 'Delete 3 items…']);
+    expect(items[0].action).toEqual({ kind: 'moveTo', rows });
+    expect(items[1].separated).toBe(true);
+    expect(items[1].action).toEqual({
       kind: 'delete',
       target: { folders: ['books/vol-1', 'books/vol-2'], paths: ['books/cover.jpg'] },
     });
@@ -163,7 +183,11 @@ describe('what the actions menu offers', () => {
       folders: [],
       paths: ['books/cover.jpg'],
     });
-    expect(labels([added, prepared, stranded, fileRow(file('books/cover.jpg'))])).toEqual(['Delete 1 item…']);
+    expect(labels([added, prepared, stranded, fileRow(file('books/cover.jpg'))])).toEqual([
+      'Move to…',
+      '—',
+      'Delete 1 item…',
+    ]);
     expect(labels([added, prepared])).toEqual([NOTHING_TO_DELETE]);
   });
 
