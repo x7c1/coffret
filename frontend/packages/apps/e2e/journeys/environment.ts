@@ -78,6 +78,11 @@ export interface Environment {
   uploaderLibrary: string;
   /** The folder it maps the Library's mapped prefix at (spec: EP-9). */
   uploaderRoot: string;
+  /**
+   * The folder the device the server serves maps that same prefix at: where
+   * a file dropped onto the album lands on this device's disk.
+   */
+  deviceRoot: string;
   /** A JPEG for the other device to commit while this one is looking. */
   refreshFile: string;
   /** And one for it to commit while this one's server is stopped. */
@@ -123,6 +128,7 @@ export function fromEnvironment(): Environment {
     uploaderStateDir: required('COFFRET_E2E_UPLOADER_STATE_DIR'),
     uploaderLibrary: required('COFFRET_E2E_UPLOADER_LIBRARY'),
     uploaderRoot: required('COFFRET_E2E_UPLOADER_ROOT'),
+    deviceRoot: required('COFFRET_E2E_DEVICE_ROOT'),
     refreshFile: required('COFFRET_E2E_REFRESH_FILE'),
     restartFile: required('COFFRET_E2E_RESTART_FILE'),
     minioContainer: required('COFFRET_E2E_MINIO_CONTAINER'),

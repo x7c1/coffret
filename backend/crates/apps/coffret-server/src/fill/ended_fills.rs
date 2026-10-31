@@ -39,7 +39,7 @@ impl EndedFills {
     /// Takes in `run` where it has ended: done, or stopped.
     pub(crate) fn note(&self, run: &FillRun) {
         match run.status {
-            FillStatus::Done | FillStatus::Stopped(_) => {}
+            FillStatus::Done | FillStatus::Stopped(_) | FillStatus::Cancelled => {}
             FillStatus::Filling | FillStatus::Superseded => return,
         }
         let mut folders = self.folders();

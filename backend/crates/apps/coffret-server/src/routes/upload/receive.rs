@@ -1,10 +1,17 @@
 use std::collections::BTreeSet;
 use std::future::Future;
+use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::multipart::Field;
-use coffret_device::{Btime, ContainerKind, EntryPath, Mtime, OpenLibrary, ReservationId};
+use coffret_device::{
+    Btime, ContainerKind, EntryPath, Mtime, OpenLibrary, Redacted, Replacing, ReservationId,
+};
+use tracing::warn;
 
+use crate::adds::{AddId, Adds, Replaced, Written};
 use crate::allowance::Allowance;
 use crate::api_error::ApiError;
 use crate::entry_query::shaped;
@@ -81,6 +88,19 @@ use super::under::under;
 /// (spec: PK-17). The path is noted in [`Reserving::paths`] as it is added,
 /// whether or not the rename then succeeds, because that is what the
 /// reservation names and so what the drop's freeze has to consider.
+///
+/// `adding` is the add the file is part of: what lands is noted on it — where
+/// on this device, the Entry the Library held at the path before, and the
+/// folders the descent made for it — so that the add can be undone if a person
+/// stops it (spec: LA-36). A file standing where this one lands is kept aside
+/// before the rename replaces it, so the undo can put it back; where this
+/// folder's filesystem will not keep it aside, the add is noted as one a stop
+/// cannot undo — unless a stop was asked already, which this file then
+/// answers as [`Cancelled`](Refusal::Cancelled) without replacing anything. And a
+/// stop asked while the file's bytes are arriving stops it between two of
+/// them, as [`Cancelled`](Refusal::Cancelled), leaving nothing but the scratch the
+/// incoming file removes as it is dropped (spec: EP-11).
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn receive<S: Incoming>(
     library: &OpenLibrary,
     allowance: &Allowance,
@@ -88,6 +108,7 @@ pub(super) async fn receive<S: Incoming>(
     folder: Option<&EntryPath>,
     name: &str,
     reserving: Option<Reserving<'_>>,
+    adding: &Adding<'_>,
     mut source: S,
 ) -> Result<Landed, Refusal> {
     let path = under(folder, &shaped(name)?);
@@ -95,6 +116,10 @@ pub(super) async fn receive<S: Incoming>(
     if library.container_of(&path).await? == Some(ContainerKind::Pack) {
         return Err(ApiError::pack_resident().into());
     }
+    let entry_before = library.entry_at(&path).await?;
+    // Asked before the descent makes them, which is the one moment the
+    // answer is still there to be read.
+    let made = folders_missing(library, &path).await;
 
     let mut incoming = library.add_file(&path).await?;
     // Asked once the destination is open and before a byte of the part is
@@ -107,6 +132,9 @@ pub(super) async fn receive<S: Incoming>(
 
     let ceiling = source.ceiling(allowance);
     while let Some(chunk) = source.next_chunk().await? {
+        if adding.stopping() {
+            return Err(Refusal::Cancelled);
+        }
         // Met before the bytes are written rather than after, so the file that is
         // refused is one this device never finished taking.
         //
@@ -129,12 +157,94 @@ pub(super) async fn receive<S: Incoming>(
         incoming.write(&chunk).await?;
     }
     let bytes = incoming.written();
+    // Kept aside once every byte is there and before the rename, the last
+    // moment what stands at the name is still what the rename would replace.
+    let replaced = match incoming.keep_aside()? {
+        Replacing::Nothing => Replaced::Nothing,
+        Replacing::Kept(kept) => Replaced::Kept(Arc::new(kept)),
+        Replacing::Unkept(refused) => {
+            if !adding.adds.writing_unkept(adding.id, &path) {
+                return Err(Refusal::Cancelled);
+            }
+            // The path stays out of the event (spec: EL-1); a stop asked of
+            // this add says which file it is.
+            warn!(
+                operation = S::OPERATION,
+                reason = %refused.redacted(),
+                "a file an add writes over could not be kept aside, so the add cannot be stopped",
+            );
+            Replaced::Unkept
+        }
+    };
     if let Some(reserving) = reserving {
-        library.extend_reservation(reserving.id, &path).await?;
+        if let Err(refused) = library.extend_reservation(reserving.id, &path).await {
+            unkept_not_written(adding, &replaced, &path);
+            return Err(refused.into());
+        }
         reserving.paths.insert(path.clone());
     }
-    incoming.keep_born(times.modified, times.born).await?;
+    let local = incoming.landing_path();
+    if let Err(refused) = incoming.keep_born(times.modified, times.born).await {
+        unkept_not_written(adding, &replaced, &path);
+        return Err(refused.into());
+    }
+    let identity = std::fs::symlink_metadata(&local)
+        .ok()
+        .map(|found| (found.dev(), found.ino()));
+    adding.adds.wrote(
+        adding.id,
+        Written {
+            path: path.clone(),
+            local,
+            identity,
+            replaced,
+            entry_before,
+        },
+        made,
+    );
     Ok(Landed { path, bytes })
+}
+
+/// Takes back the note that the add writes over a file it cannot put back,
+/// where the write did not happen after all: the file is still there.
+fn unkept_not_written(adding: &Adding<'_>, replaced: &Replaced, path: &EntryPath) {
+    if matches!(replaced, Replaced::Unkept) {
+        adding.adds.not_written_unkept(adding.id, path);
+    }
+}
+
+/// The folders on this device that do not stand yet on the way down to where
+/// the file at `path` goes, outermost first: the ones adding it makes.
+///
+/// Nothing where the place cannot be said, which [`OpenLibrary::add_file`]
+/// then refuses in words of its own.
+async fn folders_missing(library: &OpenLibrary, path: &EntryPath) -> Vec<PathBuf> {
+    let Ok(landing) = library.local_path_for(path).await else {
+        return Vec::new();
+    };
+    let mut missing: Vec<PathBuf> = landing
+        .ancestors()
+        .skip(1)
+        .take_while(|folder| std::fs::symlink_metadata(folder).is_err())
+        .map(PathBuf::from)
+        .collect();
+    missing.reverse();
+    missing
+}
+
+/// The add one file is part of (spec: LA-34).
+pub(super) struct Adding<'a> {
+    /// Where the server keeps its adds.
+    pub(super) adds: &'a Adds,
+    /// Which add this is.
+    pub(super) id: &'a AddId,
+}
+
+impl Adding<'_> {
+    /// Whether a person asked for the add to be stopped.
+    pub(super) fn stopping(&self) -> bool {
+        self.adds.stopping(self.id)
+    }
 }
 
 /// A drop's reservation, as one part of it is taken (spec: PK-17).

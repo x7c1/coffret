@@ -119,6 +119,10 @@ impl RootArrangement for Arrangement {
     fn refuse_locks(&self) -> bool {
         false
     }
+
+    fn refuse_links(&self) -> bool {
+        false
+    }
 }
 
 coffret_usecase::destinations_conformance!(fixture().await);

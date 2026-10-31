@@ -32,6 +32,7 @@ mod refresh;
 mod remembered;
 mod remote_head;
 mod resumed;
+mod stop;
 mod turns;
 mod upload;
 mod work;

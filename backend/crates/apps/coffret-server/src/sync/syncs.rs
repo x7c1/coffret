@@ -1,9 +1,11 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use coffret_device::Step;
 use tokio::sync::watch;
 
 use crate::activity_log::{ActivityLog, Ended};
+use crate::adds::AddId;
 
 use super::progress::Progress;
 use super::SyncRun;
@@ -67,10 +69,83 @@ impl Syncs {
 
     /// Asks for a sync, and says whether a worker has to be started for it. See
     /// [`Progress::arm`].
-    pub(super) fn arm(&self) -> bool {
+    pub(super) fn arm(&self, add: Option<AddId>) -> bool {
         let mut start = false;
-        self.progress.send_modify(|progress| start = progress.arm());
+        self.progress
+            .send_modify(|progress| start = progress.arm(add));
         start
+    }
+
+    /// Asks the sync on record to stop, where it is running and has not begun
+    /// committing (spec: LA-35).
+    ///
+    /// Asked for every add a person stops that a sync is to carry, whichever
+    /// run it is armed for: a sync walks every mapped folder, so the run under
+    /// way may be about to read the files being taken away. The adds such a
+    /// run carried that nobody stopped are armed again once it has stopped.
+    pub(crate) fn ask_stop(&self) {
+        self.progress.send_if_modified(|progress| {
+            progress.on_record.as_mut().is_some_and(|run| {
+                matches!(run.status, super::SyncStatus::Syncing) && run.stop.ask()
+            })
+        });
+    }
+
+    /// The adds run `run` carries, where it is the sync on record and still
+    /// running: what a Stop pressed on its line stops.
+    pub(crate) fn carried_by(&self, run: u64) -> Option<BTreeSet<AddId>> {
+        let progress = self.progress.borrow();
+        let on_record = progress.on_record.as_ref()?;
+        (on_record.run == run && matches!(on_record.status, super::SyncStatus::Syncing))
+            .then(|| on_record.adds.clone())
+    }
+
+    /// The adds the run on record carries, and whether it was requested too —
+    /// what the run just taken up reads as it starts.
+    pub(super) fn carried(&self) -> (BTreeSet<AddId>, bool) {
+        let progress = self.progress.borrow();
+        progress
+            .on_record
+            .as_ref()
+            .map(|run| (run.adds.clone(), run.requested))
+            .unwrap_or_default()
+    }
+
+    /// Whether the run on record was asked to stop and has not answered.
+    pub(super) fn asked(&self) -> bool {
+        self.progress
+            .borrow()
+            .on_record
+            .as_ref()
+            .is_some_and(|run| run.stop.asked())
+    }
+
+    /// Waits until the run on record is asked to stop, and for ever where it
+    /// is not: one arm of the race the run runs its flow in (see
+    /// [`run`](super::run)).
+    pub(super) async fn until_asked(&self) {
+        let mut watched = self.progress.subscribe();
+        let asked = watched
+            .wait_for(|progress| {
+                progress
+                    .on_record
+                    .as_ref()
+                    .is_some_and(|run| run.stop.asked())
+            })
+            .await
+            .is_ok();
+        if !asked {
+            // The sender is the state's own, so it outlives the run; a channel
+            // that closed anyway asks nothing of it.
+            std::future::pending::<()>().await;
+        }
+    }
+
+    /// Arms again what a stopped run carried that nobody stopped. See
+    /// [`Progress::rearm`].
+    pub(super) fn rearm(&self, adds: BTreeSet<AddId>, requested: bool) {
+        self.progress
+            .send_modify(|progress| progress.rearm(adds, requested));
     }
 
     /// Whether there is a run to take up — and where there is not, the worker is
@@ -116,8 +191,13 @@ impl Syncs {
                 ..run.clone()
             };
             // Logged under the same lock that publishes it, so no reader sees
-            // the run over before the log has it.
-            if !matches!(published.status, super::SyncStatus::Syncing) {
+            // the run over before the log has it. A run a person stopped is
+            // not: it is stopped only through the adds it carried, and each of
+            // those is logged as what it came to (spec: LA-12, LA-36).
+            if !matches!(
+                published.status,
+                super::SyncStatus::Syncing | super::SyncStatus::Cancelled
+            ) {
                 self.log.record(Ended::Sync(published.clone()));
             }
             progress.on_record = Some(published);
@@ -132,6 +212,9 @@ impl Syncs {
     pub(super) fn step(&self, step: Step) {
         self.progress.send_modify(|progress| {
             if let Some(run) = progress.on_record.as_mut() {
+                // Under the same lock a stop is asked under, so a run is never
+                // both committing and taking a stop (spec: LA-35).
+                run.stop.hear(&step);
                 run.step = Some(step);
             }
         });
@@ -153,7 +236,7 @@ mod tests {
     #[test]
     fn abandoning_a_sync_tells_whoever_is_waiting_on_it() {
         let syncs = Syncs::new();
-        assert!(syncs.arm());
+        assert!(syncs.arm(None));
         assert!(syncs.take_next());
 
         let mut watched = syncs.progress.subscribe();

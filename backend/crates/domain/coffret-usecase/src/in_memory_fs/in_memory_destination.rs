@@ -3,8 +3,10 @@ use std::sync::{Arc, Mutex};
 
 use crate::below_root_error::BelowRootError;
 use crate::destination::Destination;
+use crate::in_memory_fs::in_memory_kept_file::InMemoryKeptFile;
 use crate::in_memory_fs::in_memory_scratch_file::InMemoryScratchFile;
 use crate::in_memory_fs::state::{lock, State};
+use crate::kept_file::Aside;
 use crate::local_operation::LocalOperation;
 use crate::scratch_file::ScratchFile;
 
@@ -68,6 +70,27 @@ impl Destination for InMemoryDestination {
         // (spec: OC-8, EP-11), so nothing is checked before the removal.
         state.remove(&path);
         Ok(())
+    }
+
+    fn keep_aside(&self, kept_name: &str) -> Result<Aside, BelowRootError> {
+        let at = self.folder.join(&self.name);
+        let kept = self.folder.join(kept_name);
+        let mut state = lock(&self.state);
+        if !state.holds(&at) || state.is_dir(&at) {
+            return Ok(Aside::Empty);
+        }
+        // A scripted refusal is the fake's filesystem that makes no hard link:
+        // nothing is linked, and the file stays where it is.
+        if let Err(refused) = state.attempt(LocalOperation::Linking, &at) {
+            return Ok(Aside::Unkept(BelowRootError::Io(refused)));
+        }
+        state.link(&at, &kept)?;
+        drop(state);
+        Ok(Aside::Kept(Box::new(InMemoryKeptFile::new(
+            Arc::clone(&self.state),
+            kept,
+            at,
+        ))))
     }
 
     fn path_of(&self, name: &str) -> PathBuf {

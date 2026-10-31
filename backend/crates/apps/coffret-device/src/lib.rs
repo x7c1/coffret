@@ -196,7 +196,7 @@ mod account_settings;
 mod accounts;
 
 mod add;
-pub use add::{AddedFile, IncomingFile, LocalAdditions};
+pub use add::{AddedFile, IncomingFile, KeptAside, LocalAdditions, Replacing};
 
 // A drop of files and folders by their paths on this device, walked through the
 // scan's own confined listing and held under a one-time handle for the import

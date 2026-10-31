@@ -1,5 +1,6 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
+use crate::adds::AddId;
 use crate::displaced::Displaced;
 use crate::folder::Folder;
 use crate::reported::Reported;
@@ -34,6 +35,11 @@ pub(super) struct Progress {
     /// second book waits rather than taking the running one's place, and a third
     /// waits behind it rather than pushing the second off.
     waiting: VecDeque<Book>,
+    /// The folders of the books on [`waiting`](Self::waiting) a person asked
+    /// to stop and that still hold adds: the run that takes one up undoes
+    /// those adds before it reads anything (spec: LA-35, LA-36), so until
+    /// then the book waits, saying it is stopping.
+    stopping: Vec<Folder>,
     /// The books an ending worker threw away, and that nobody has asked for
     /// since.
     ///
@@ -109,7 +115,9 @@ impl Progress {
         }
         self.discarded.retain(|kept| kept.folder != folder);
         self.displaced.retain(|kept| kept.run.folder != folder);
-        if joins_running && self.is_pending(&book) {
+        // Not into a run asked to stop: that run packs nothing, and what a
+        // person asks for after pressing Stop is a request of its own.
+        if joins_running && self.is_pending(&book) && !self.is_stopping() {
             return false;
         }
         if let Some(waiting) = self
@@ -118,6 +126,9 @@ impl Progress {
             .find(|waiting| waiting.folder == folder)
         {
             waiting.join(book);
+            // What joined it is somebody asking for it again, so it offers a
+            // Stop again; the adds stopped before are undone all the same.
+            self.stopping.retain(|asked| asked != &folder);
             // The front of the queue is the book the run on record announces
             // until a worker takes it up, so what it announces is what it
             // will pack.
@@ -125,6 +136,7 @@ impl Progress {
                 if let Some(run) = self.on_record.as_mut() {
                     if run.folder == folder && matches!(run.status, FreezeStatus::Freezing) {
                         run.only = self.waiting[0].only.clone();
+                        run.adds = self.waiting[0].adds.clone();
                     }
                 }
             }
@@ -177,6 +189,12 @@ impl Progress {
             .map(|run| Book {
                 folder: run.folder.clone(),
                 only: run.only.clone(),
+                // A stopped run's adds ended with it: what is owed is its
+                // files, not its adds, and owed whatever becomes of the
+                // adds of a drop that joins it.
+                adds: Default::default(),
+                requested: true,
+                withdrawn: false,
             })
             .chain(
                 self.discarded
@@ -200,9 +218,20 @@ impl Progress {
         match self.waiting.pop_front() {
             Some(book) => {
                 self.runs += 1;
+                self.stopping.retain(|asked| asked != &book.folder);
+                // Announced already, and asked to stop meanwhile: taken up
+                // asked (spec: LA-35).
+                let asked = self
+                    .on_record
+                    .as_ref()
+                    .is_some_and(|run| run.run == self.runs && run.stop.asked());
                 self.current = Some(book.clone());
                 self.displace(&book.folder);
-                self.on_record = Some(self.announce(self.runs, book.clone()));
+                let mut taken = self.announce(self.runs, book.clone());
+                if asked {
+                    taken.stop.ask();
+                }
+                self.on_record = Some(taken);
                 Some(book)
             }
             None => {
@@ -237,6 +266,7 @@ impl Progress {
         }
         self.working = false;
         self.current = None;
+        self.stopping.clear();
         for book in self.waiting.drain(..) {
             match self
                 .discarded
@@ -323,7 +353,8 @@ impl Progress {
     /// Arming is synchronous and taking the book off the queue is the worker's
     /// first act, so between the two there is a window where the freeze on
     /// record names a book that is still on this queue. Reported as it stands
-    /// there, the line would read "packing this book, with this book after it".
+    /// there, the panel would draw the book twice: as the run packing it, and
+    /// as a book waiting behind that run.
     /// What the run on record names in that window is the front of the queue, which
     /// is what [`current`](Self::current) being empty distinguishes.
     pub(super) fn waiting(&self) -> Vec<Folder> {
@@ -333,6 +364,64 @@ impl Progress {
             .skip(announced)
             .map(|book| book.folder.clone())
             .collect()
+    }
+
+    /// Where the book of `folder` stands on [`waiting`](Self::waiting) as
+    /// [`waiting`](Self::waiting) reports it: never the front of the queue
+    /// while the run on record announces it, which is that run's to stop.
+    fn waiting_at(&self, folder: &str) -> Option<usize> {
+        let announced = usize::from(self.current.is_none());
+        self.waiting
+            .iter()
+            .enumerate()
+            .skip(announced)
+            .find(|(_, book)| book.folder.as_str() == folder)
+            .map(|(at, _)| at)
+    }
+
+    /// The adds the book of `folder` waiting its turn holds, and `None` where
+    /// no book of that folder waits.
+    pub(super) fn waiting_adds(&self, folder: &str) -> Option<BTreeSet<AddId>> {
+        self.waiting_at(folder)
+            .map(|at| self.waiting[at].adds.clone())
+    }
+
+    /// Takes the book of `folder` off the queue, where it waits holding no
+    /// add, and answers with it: a book stopped before its run began, which
+    /// nothing has walked and nothing is left to undo for (spec: LA-34).
+    pub(super) fn cancel_waiting(&mut self, folder: &str) -> Option<Book> {
+        let at = self.waiting_at(folder)?;
+        if !self.waiting[at].adds.is_empty() {
+            return None;
+        }
+        self.waiting.remove(at)
+    }
+
+    /// Marks the book of `folder` waiting its turn stopped, where it holds
+    /// adds, and says whether it did: it stays on the queue for the run that
+    /// takes it up to undo those adds under its turn (spec: LA-36), and
+    /// nothing else of it is to be packed.
+    pub(super) fn stop_waiting(&mut self, folder: &str) -> bool {
+        let Some(at) = self.waiting_at(folder) else {
+            return false;
+        };
+        let book = &mut self.waiting[at];
+        if book.adds.is_empty() {
+            return false;
+        }
+        book.only = Some(BTreeSet::new());
+        book.withdrawn |= book.requested;
+        book.requested = false;
+        if !self.stopping.contains(&book.folder) {
+            self.stopping.push(book.folder.clone());
+        }
+        true
+    }
+
+    /// The folders of the books waiting their turn that a person asked to
+    /// stop, whose run has not answered yet.
+    pub(super) fn stopping(&self) -> Vec<Folder> {
+        self.stopping.clone()
     }
 
     /// The books an ending worker threw away that nobody has asked for since.
@@ -367,6 +456,49 @@ impl Progress {
             .as_ref()
             .is_some_and(|current| current.covers(book))
             && self.is_freezing()
+    }
+
+    /// Takes the request of the book the run on record is of away, as a Stop
+    /// on that run's line does: what the book packs for its adds is stopped
+    /// through them, and what it packs for a request of its own is stopped
+    /// here (spec: LA-36). The book the run announces until a worker takes it
+    /// up is the front of the queue.
+    pub(super) fn withdraw(&mut self) {
+        let book = match self.current.as_mut() {
+            Some(current) => Some(current),
+            None => {
+                let folder = self.on_record.as_ref().map(|run| &run.folder);
+                self.waiting
+                    .front_mut()
+                    .filter(|front| Some(&front.folder) == folder)
+            }
+        };
+        if let Some(book) = book {
+            book.withdrawn |= book.requested;
+            book.requested = false;
+        }
+    }
+
+    /// Whether the book the worker is on had a request of its own taken away
+    /// by a Stop on its line, and nothing has asked for it since. See
+    /// [`Book::withdrawn`].
+    pub(super) fn withdrawn(&self) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|current| current.withdrawn && !current.requested)
+    }
+
+    /// Whether the book the worker is on is still asked for by something
+    /// besides its adds. See [`Book::requested`].
+    pub(super) fn requested(&self) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|current| current.requested)
+    }
+
+    /// Whether the run on record was asked to stop and has not answered.
+    fn is_stopping(&self) -> bool {
+        self.on_record.as_ref().is_some_and(|run| run.stop.asked())
     }
 
     pub(super) fn is_freezing(&self) -> bool {
@@ -419,6 +551,31 @@ mod tests {
         if let Some(run) = progress.on_record.as_mut() {
             run.step = Some(step);
         }
+    }
+
+    // LA-36: a folder asked for while the run of it is asked to stop is a
+    // request of its own, which that run will not pack, so it waits its turn
+    // rather than being taken into the run; and a Stop on the line takes the
+    // run's own request away, where a stop of its adds alone leaves it.
+    #[test]
+    fn a_folder_asked_for_while_its_run_is_stopping_waits_its_own_turn() {
+        let mut progress = Progress::default();
+        let mut first = dropped(&["books/vol-1/a.png"]);
+        first.join(book("books/vol-1"));
+        progress.arm(first);
+        progress.take_next();
+        assert!(progress.requested(), "the joined request stands");
+        assert!(!progress.arm(book("books/vol-1")), "taken into the run");
+        assert_eq!(progress.waiting(), Vec::<Folder>::new());
+
+        if let Some(run) = progress.on_record.as_mut() {
+            run.stop.ask();
+        }
+        progress.withdraw();
+        assert!(!progress.requested(), "a Stop on the line takes it away");
+        assert!(progress.withdrawn(), "and says it did, for the log");
+        progress.arm(book("books/vol-1"));
+        assert_eq!(progress.waiting(), vec![folder("books/vol-1")]);
     }
 
     // The failure two books in one session is enough to reach. `run::freeze`
@@ -821,7 +978,14 @@ mod tests {
         progress.take_next();
         stops(&mut progress);
 
-        assert_eq!(progress.again(folder("books/vol-1")), first);
+        assert_eq!(
+            progress.again(folder("books/vol-1")),
+            Book {
+                requested: true,
+                ..first
+            },
+            "asked for by the retry and not by the drop's adds, which ended",
+        );
         assert_eq!(
             progress.again(folder("books/vol-2")),
             book("books/vol-2"),
@@ -851,7 +1015,11 @@ mod tests {
         assert!(progress.displaced().is_empty());
         assert_eq!(
             progress.take_next(),
-            Some(dropped(&["books/vol-1/a.png", "books/vol-1/b.png"])),
+            Some(Book {
+                requested: true,
+                ..dropped(&["books/vol-1/a.png", "books/vol-1/b.png"])
+            }),
+            "the stopped book is owed whatever becomes of the drop",
         );
     }
 

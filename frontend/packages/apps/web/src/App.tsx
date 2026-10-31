@@ -8,6 +8,7 @@ import {
   getLibrary,
   getListing,
   getRemoteHead,
+  isRefusal,
   moveEntries,
   previewDelete,
   previewMove,
@@ -36,7 +37,15 @@ import {
   prospectiveFolders,
 } from './prospective';
 import { ActivityPanel } from './ActivityPanel';
-import { earlier, inProgress, offeredNow, type Entry, type PageNotice } from './activity';
+import {
+  earlier,
+  inProgress,
+  offeredNow,
+  type Entry,
+  type PageNotice,
+  type StopAsk,
+} from './activity';
+import { addName } from './addName';
 import { DeleteConfirm } from './DeleteConfirm';
 import { firstImage, uploadStopped, type Described } from './details';
 import { DetailsPane } from './DetailsPane';
@@ -156,7 +165,13 @@ export function App() {
   // left the tree leaves it too.
   const [selection, setSelection] = useState<Selection>(NOTHING_SELECTED);
   const [fetching, setFetching] = useState<string | null>(null);
+  // How many times the Stop on the reader's own fetch was pressed: the reader
+  // withdraws the request it is waiting on each time it changes.
+  const [fetchStops, setFetchStops] = useState(0);
   const [adding, setAdding] = useState<string | null>(null);
+  // The name the drop being sent goes by, so its Stop can name it, and whether
+  // that Stop was pressed (spec: LA-35).
+  const [addingAs, setAddingAs] = useState<{ name: string; stopping: boolean } | null>(null);
   // How far the drop in flight has been sent, from 0 to 1, where the browser
   // has said: the bar beside its line in the Activity panel.
   const [sent, setSent] = useState<number | null>(null);
@@ -718,11 +733,14 @@ export function App() {
     () => (known === null ? [] : strandedFolders(freeze, known)),
     [freeze, known],
   );
+  const stoppedBook = freeze?.status === 'cancelled' ? freeze.folder : null;
   useEffect(() => {
     if (known !== null) {
-      setStranded((held) => heldAfter(held, naming, known));
+      setStranded((held) =>
+        heldAfter(held, naming, known, stoppedBook === null ? [] : [stoppedBook]),
+      );
     }
-  }, [naming, known]);
+  }, [naming, known, stoppedBook]);
 
   // The root's listing, which the tree always holds: it says which top-level
   // folders have a folder of this device chosen for them — those the add flow
@@ -1347,6 +1365,8 @@ export function App() {
       const send = (sending: readonly Added[], freeze: boolean) => {
         setAdding(addingLine(sending.length, target));
         setSent(null);
+        const name = addName();
+        setAddingAs({ name, stopping: false });
         // The rows, at once, with every folder above them opened so they show.
         adds.current += 1;
         const id = adds.current;
@@ -1374,7 +1394,16 @@ export function App() {
           setSent(total > 0 ? gone / total : null);
         });
         return askToAdd({
-          ask: () => addFiles(target, sending, { freeze, onProgress }),
+          ask: async () => {
+            const upload = await addFiles(target, sending, { freeze, onProgress, add: name });
+            // Stopped while it was being sent: what it wrote is being taken
+            // away again (spec: LA-36), so its rows go now rather than wait
+            // for a listing to name them.
+            if (upload.cancelled) {
+              setIncoming((held) => held.filter((one) => one.id !== id));
+            }
+            return upload;
+          },
           notice: setNotice,
           reload: reloadListing,
           follow: work.follow,
@@ -1384,6 +1413,7 @@ export function App() {
           // asked for — so the rows hand over to the listing's own.
           const settled = listingNow.current(target);
           setIncoming((held) => held.map((one) => (one.id === id ? { ...one, settled } : one)));
+          setAddingAs((as) => (as?.name === name ? null : as));
         });
       };
       const unlisted = (refused: unknown): HeldFiles => {
@@ -1787,6 +1817,8 @@ export function App() {
     () =>
       inProgress({
         adding,
+        addingAs,
+        adds: work.adds,
         sent: adding === null ? null : sent,
         turn,
         freeze,
@@ -1795,7 +1827,40 @@ export function App() {
         fill,
         fetching,
       }),
-    [adding, sent, turn, freeze, sync, deletion, fill, fetching],
+    [adding, addingAs, work.adds, sent, turn, freeze, sync, deletion, fill, fetching],
+  );
+  // One line's Stop (spec: LA-35). The reader's own fetch is this page's to
+  // withdraw; everything else is asked of the server, whose answer says the
+  // run was asked — and a stop the server could not take is said where every
+  // other answer to a press on this page is.
+  const stopWork = work.stop;
+  const stopLine = useCallback(
+    (ask: StopAsk) => {
+      if ('reader' in ask) {
+        setFetchStops((pressed) => pressed + 1);
+        return;
+      }
+      const target = ask.server;
+      if ('add' in target) {
+        setAddingAs((as) => (as?.name === target.add ? { ...as, stopping: true } : as));
+      }
+      stopWork(target).catch((refused: unknown) => {
+        // Refused, the drop goes on being sent: its line offers the Stop
+        // again rather than say it is stopping when nothing was asked.
+        if ('add' in target) {
+          setAddingAs((as) => (as?.name === target.add ? { ...as, stopping: false } : as));
+        }
+        // The one stop the server refuses for what it is — an add whose
+        // replaced file cannot be put back (spec: LA-36) — already says what
+        // could not be stopped; anything else is said after the press.
+        setNotice(
+          isRefusal(refused) && refused.kind === 'conflict'
+            ? refused.message
+            : `could not stop it — ${said(refused)}`,
+        );
+      });
+    },
+    [stopWork],
   );
   const entries = useMemo(
     () => offeredNow(earlier(work.log, notices, custody === 'locked'), { fill, sync, freeze }),
@@ -1997,6 +2062,7 @@ export function App() {
                     escapable={!dialogUp}
                     onClose={closeSheet}
                     onFetching={setFetching}
+                    fetchStops={fetchStops}
                     onFetched={fetchedInto}
                     reconnect={offer}
                   />
@@ -2059,6 +2125,7 @@ export function App() {
         entries={entries}
         trouble={work.trouble}
         onRetry={retryEntry}
+        onStop={stopLine}
         refresh={{
           running: refreshing,
           waiting,

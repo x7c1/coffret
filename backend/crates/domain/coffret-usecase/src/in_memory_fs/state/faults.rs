@@ -69,5 +69,8 @@ fn code(operation: LocalOperation) -> u8 {
         LocalOperation::Locking => 9,
         LocalOperation::Discarding => 10,
         LocalOperation::Relocating => 11,
+        // A destination keeps aside the file an add is about to write over, so
+        // a case can script a filesystem that makes no hard link (spec: LA-36).
+        LocalOperation::Linking => 12,
     }
 }

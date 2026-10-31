@@ -52,7 +52,7 @@ pub(in crate::in_memory_fs) fn lock(state: &Mutex<State>) -> MutexGuard<'_, Stat
 /// The times are here rather than derived from a clock, because what every case
 /// about them is asking is whether a *particular* time reached a record: a fake
 /// that stamped "now" would make the assertion depend on when the case ran.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct FileNode {
     bytes: Vec<u8>,
     mtime: i64,

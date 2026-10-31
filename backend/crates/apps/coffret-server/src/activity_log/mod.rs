@@ -34,7 +34,7 @@ pub const CEILING: usize = 2 * KEPT;
 ///
 /// The work answer says what each flow is doing now and what its last run came
 /// to; this is the rest — every fill, sync, freeze, deletion and move that
-/// ended,
+/// ended, every add a person stopped,
 /// every folder a queue lost, every fetch a reader asked for and was refused
 /// (save the refusals [`Ended::Fetch`] leaves out) — newest first, so a page
 /// that was closed, reloaded, or looking elsewhere when one of them ended can

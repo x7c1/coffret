@@ -1,3 +1,4 @@
+use crate::adds::StoppedAdd;
 use crate::delete::{DeleteRun, DeleteStatus};
 use crate::fill::{FillRun, FillStatus};
 use crate::folder::Folder;
@@ -25,6 +26,13 @@ pub enum Ended {
     /// or the rename's own plan refuses it, an edited file or one still
     /// uploading — did nothing, and is answered rather than logged.
     Move(MoveRun),
+    /// An add a person stopped, and what undoing it on this device came to
+    /// (spec: LA-36). A sync or a freeze stopped through the adds it carried
+    /// is logged as those adds and not as itself, save a freeze whose book
+    /// somebody had also asked to have packed, or that was still owed a pack
+    /// since a run of it stopped, stopped on its line, which is logged
+    /// `cancelled` beside them (spec: LA-12).
+    Add(StoppedAdd),
     /// A folder a queue threw away when its worker ended without an answer.
     Discarded {
         /// Which queue lost it.
@@ -52,6 +60,7 @@ pub(super) enum Key {
     Delete(Vec<String>, Vec<String>),
     Move(Vec<(String, String)>),
     Fetch(String),
+    Add(Folder),
 }
 
 impl Ended {
@@ -65,6 +74,8 @@ impl Ended {
             Self::Delete(run) => matches!(run.status, DeleteStatus::Stopped(_)),
             Self::Move(run) => matches!(run.status, MoveStatus::Stopped(_)),
             Self::Discarded { .. } | Self::Fetch { .. } => true,
+            // What a person asked for, and so no failure of anything.
+            Self::Add(_) => false,
         }
     }
 
@@ -89,6 +100,7 @@ impl Ended {
             Self::Delete(run) => Key::Delete(run.target.folders_named(), run.target.paths_named()),
             Self::Move(run) => Key::Move(run.pairs_named()),
             Self::Fetch { path, .. } => Key::Fetch(path.clone()),
+            Self::Add(stopped) => Key::Add(stopped.folder.clone()),
         }
     }
 }

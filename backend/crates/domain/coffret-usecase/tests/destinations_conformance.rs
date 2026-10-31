@@ -74,6 +74,11 @@ impl RootArrangement for Arrangement {
         self.fs.fail_on(LocalOperation::Locking, 1);
         true
     }
+
+    fn refuse_links(&self) -> bool {
+        self.fs.fail_on(LocalOperation::Linking, 1);
+        true
+    }
 }
 
 coffret_usecase::destinations_conformance!(fixture().await);

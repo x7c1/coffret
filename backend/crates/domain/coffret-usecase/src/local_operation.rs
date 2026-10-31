@@ -90,6 +90,14 @@ pub enum LocalOperation {
     /// one made just now and exclusively whose lock somebody holds is a sync
     /// removing it in the instant since, and is not written.
     Locking,
+    /// A file standing where an add was about to write was being kept aside
+    /// under a scratch name in its own folder, by a second link to it, so that
+    /// stopping the add can put it back (spec: LA-36, OC-8).
+    ///
+    /// Not [`Creating`](Self::Creating): nothing new is made, and what refuses
+    /// it is mostly a filesystem that makes no such link — a person reading
+    /// which of the two refused has a different thing to look at.
+    Linking,
 }
 
 impl fmt::Display for LocalOperation {
@@ -107,6 +115,7 @@ impl fmt::Display for LocalOperation {
             Self::Discarding => "discarded into the trash",
             Self::Relocating => "relocated to follow its Entry's new path",
             Self::Locking => "locked",
+            Self::Linking => "kept aside",
         })
     }
 }

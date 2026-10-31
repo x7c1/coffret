@@ -63,13 +63,13 @@ mod tests {
     #[test]
     fn a_worker_leaving_the_ordinary_way_leaves_the_next_run_alone() {
         let syncs = Syncs::new();
-        assert!(syncs.arm());
+        assert!(syncs.arm(None));
         let leaving = Leaving(&syncs);
         assert!(syncs.take_next());
         assert!(!syncs.take_next());
 
         assert!(
-            syncs.arm(),
+            syncs.arm(None),
             "nothing is running, so the arming starts a worker of its own",
         );
         drop(leaving);
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn a_worker_that_panics_is_put_back() {
         let syncs = Syncs::new();
-        assert!(syncs.arm());
+        assert!(syncs.arm(None));
 
         let unwound = catch_unwind(AssertUnwindSafe(|| {
             let _leaving = Leaving(&syncs);
@@ -102,7 +102,7 @@ mod tests {
 
         let latest = syncs.reported().expect("an armed sync is on record");
         assert_eq!(latest.status, SyncStatus::Stopped(Reported::unfinished()));
-        assert!(syncs.arm(), "and the next arming starts a worker again");
+        assert!(syncs.arm(None), "and the next arming starts a worker again");
     }
 
     // The panic is in the log beside the run it put back, under the worker's
@@ -112,7 +112,7 @@ mod tests {
     fn a_worker_that_panics_says_so_in_the_log() {
         let logs = coffret_logging::testing::CapturedLogs::capture();
         let syncs = Syncs::new();
-        assert!(syncs.arm());
+        assert!(syncs.arm(None));
 
         let unwound = catch_unwind(AssertUnwindSafe(|| {
             let _leaving = Leaving(&syncs);

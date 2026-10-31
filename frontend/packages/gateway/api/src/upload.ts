@@ -185,6 +185,12 @@ export interface Upload {
   written: string[];
   /** The parts nothing was written for. */
   refused: RefusedPart[];
+  /**
+   * Whether a person stopped the add while it was being received
+   * (spec: LA-36). A stopped add names nothing in `written`: what it wrote is
+   * being taken away again, and the server's log says what that came to.
+   */
+  cancelled: boolean;
 }
 
 /** How one drop is being made, beyond which folder it is onto. */
@@ -203,6 +209,13 @@ export interface Adding {
    * the ordinary one and the server syncs it, one Container per file.
    */
   freeze?: boolean;
+  /**
+   * What this add is called, so that a Stop pressed while its files are still
+   * being sent can name it (spec: LA-35). One to sixty-four ASCII letters,
+   * digits, `-` or `_`; left out, the server draws a name of its own, and the
+   * add can be stopped only once its run is armed.
+   */
+  add?: string;
   signal?: AbortSignal;
   /**
    * Told how much of the request has gone as the browser sends it: `sent` of
@@ -303,6 +316,9 @@ export async function addFiles(
   if (adding.freeze === true) {
     params.freeze = 'true';
   }
+  if (adding.add !== undefined) {
+    params.add = adding.add;
+  }
   return uploadOf(
     await sentForJson<unknown>(apiUrl('upload', params), body, adding.signal, adding.onProgress),
   );
@@ -355,7 +371,15 @@ async function importHeld(
     named.push({ index: added.source.index, name: added.path });
   }
   const body = new Blob(
-    [JSON.stringify({ path: folder, freeze: adding.freeze === true, handle, files: named })],
+    [
+      JSON.stringify({
+        path: folder,
+        freeze: adding.freeze === true,
+        handle,
+        files: named,
+        ...(adding.add === undefined ? {} : { add: adding.add }),
+      }),
+    ],
     { type: 'application/json' },
   );
   return uploadOf(await askedForJson<unknown>(apiUrl('import'), adding.signal, 'POST', body));
@@ -367,8 +391,9 @@ async function importHeld(
  * client has not heard of lands where it lands there.
  */
 export function uploadOf(sent: unknown): Upload {
-  const upload = sent as { written: string[]; refused: unknown[] };
+  const upload = sent as { written: string[]; refused: unknown[]; cancelled?: boolean };
   return {
+    cancelled: upload.cancelled === true,
     written: upload.written,
     refused: upload.refused.map((part) => ({
       name: (part as { name: string }).name,

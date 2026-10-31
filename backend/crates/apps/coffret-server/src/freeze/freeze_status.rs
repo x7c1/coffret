@@ -2,7 +2,7 @@ use crate::reported::Reported;
 
 /// Where a freeze stands.
 ///
-/// Three states and the whole set is named here, because a browser writes a
+/// Four states and the whole set is named here, because a browser writes a
 /// branch per state and one it has never heard of is one it falls off the end
 /// of.
 ///
@@ -24,6 +24,9 @@ pub enum FreezeStatus {
     /// The refusal rides on the state rather than beside it, so a run cannot be
     /// stopped without saying why, nor say why without being stopped.
     Stopped(Reported),
+    /// A person stopped it before it began committing (spec: LA-35): it
+    /// committed nothing, so no Entry of its book is in a Pack it built.
+    Cancelled,
 }
 
 impl FreezeStatus {
@@ -33,6 +36,7 @@ impl FreezeStatus {
             Self::Freezing => "freezing",
             Self::Done => "done",
             Self::Stopped(_) => "stopped",
+            Self::Cancelled => "cancelled",
         }
     }
 

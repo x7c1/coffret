@@ -146,6 +146,14 @@ Concept background: [Journal](../../concepts/journal/),
     through or in place of a symbolic link (EP-8), and a name that merely
     carries the reserved prefix without that shape — the person's own file,
     or a folder — is left where it is.
+  - A file an add keeps aside before writing over it (LA-36) is kept under a
+    scratch name of the same shape, and held the way a scratch being written
+    is: its name by the add's process, and a lock on it for as long as it is
+    kept, so a sync leaves it alone while the add lasts. The add removes that
+    name itself when it ends, put back or not, with the removal's tolerance
+    of absence. One a server that ended left behind is stale: the add it was
+    kept for ended with that server (LA-12), so a sync removes it like any
+    other.
   - This is the posture CP-14 gives the Storage side, stated for the local one
     rather than borrowed from it. OC-6 says trashing an untrashed removal is
     idempotent, which is a claim about the Library's objects on Storage; a

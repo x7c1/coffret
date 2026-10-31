@@ -39,6 +39,8 @@ pub(crate) use refused_root::refused_root_said;
 
 mod server;
 
+mod stops;
+
 #[cfg(test)]
 mod tests;
 

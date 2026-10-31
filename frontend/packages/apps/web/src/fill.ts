@@ -11,6 +11,7 @@
 // calls `added` is a file in the folder that the Library does not have.
 
 import type {
+  AddUnderWay,
   Catalog,
   DeclinedEntry,
   Delete,
@@ -138,9 +139,11 @@ export function rowFill(
     case 'stopped':
       return { state: 'failed', message: fill.stopped.message };
     // A fill that finished or was left for another folder says nothing about a
-    // row it never reached: the row is what the listing calls it.
+    // row it never reached, and nor does one a person stopped: the row is
+    // what the listing calls it.
     case 'done':
     case 'superseded':
+    case 'cancelled':
       return { state: 'remote', message: null };
   }
 }
@@ -189,13 +192,9 @@ function declinedEntry(fill: Fill | DisplacedFill | null, path: string): Decline
  * left, and says why it left the first of them; the rows carry the rest, each
  * marked with what opening it would have said.
  *
- * The running line also names the folders waiting behind it, as the freeze's
- * does. A folder asked for by name queues rather than superseding the run, so
- * between the press and its turn the queue is the only thing about it there is
- * to say — the button that named it goes away as the server takes it up, and
- * the line names the folder being brought over. Only the running line: by the
- * time a run is over the queue has been taken up or thrown away, and a folder
- * thrown away has a notice of its own.
+ * The running line names the folder being brought over and nothing behind
+ * it: a folder waiting its turn has a line of its own in the panel, with its
+ * own Stop, so naming it here as well would list it twice.
  */
 export function fillLine(fill: Fill | DisplacedFill | null): string | null {
   if (fill === null) {
@@ -209,7 +208,7 @@ export function fillLine(fill: Fill | DisplacedFill | null): string | null {
         fill.total === 0
           ? `bringing over ${named(fill.folder)}`
           : `bringing over ${fill.done}/${fill.total} in ${named(fill.folder)}`;
-      return `${over}${queued(fill.waiting)}…`;
+      return `${over}…`;
     }
     case 'stopped':
       return `could not bring over ${named(fill.folder)} — ${fill.stopped.message}`;
@@ -217,6 +216,12 @@ export function fillLine(fill: Fill | DisplacedFill | null): string | null {
       return doneLine(fill);
     case 'superseded':
       return null;
+    // What it placed stays, each file whole; the rows say which.
+    // A folder stopped while it waited in the queue brought nothing over.
+    case 'cancelled':
+      return fill.done === 0
+        ? `stopped bringing over ${named(fill.folder)} — nothing was brought over`
+        : `stopped bringing over ${named(fill.folder)} — what was brought over stays`;
   }
 }
 
@@ -347,6 +352,10 @@ export function syncLine(sync: Sync | null, waits: WaitsFor = null): string | nu
         ? toBePacked(waiting)
         : `${addedLine(sync.added)}; ${toBePacked(waiting)}`;
     }
+    // Stopped only through the adds it carried, each of which says what it
+    // came to on a line of its own.
+    case 'cancelled':
+      return null;
   }
 }
 
@@ -402,7 +411,8 @@ const PACKING = 'packing';
  * found on the way after what stopped it, as a sync's does.
  *
  * A running one the server says is waiting its turn behind a sync or a
- * deletion says so, as a sync's line does.
+ * deletion says so, as a sync's line does. The books queued behind it are
+ * not named here: each has a line of its own in the panel.
  */
 export function freezeLine(
   freeze: Freeze | DisplacedFreeze | null,
@@ -414,10 +424,8 @@ export function freezeLine(
   switch (freeze.status) {
     case 'freezing':
       return freeze.step === null && waits !== null
-        ? `${PACKING} ${named(freeze.folder)}${waitingClause(waits)}${queued(freeze.waiting)}`
-        : `${PACKING} ${named(freeze.folder)}${phaseOf(freeze.step, PACKING)}${queued(
-            freeze.waiting,
-          )}…`;
+        ? `${PACKING} ${named(freeze.folder)}${waitingClause(waits)}`
+        : `${PACKING} ${named(freeze.folder)}${phaseOf(freeze.step, PACKING)}…`;
     case 'stopped':
       return besides(
         `could not pack ${named(freeze.folder)} — ${freeze.stopped.message}`,
@@ -425,6 +433,10 @@ export function freezeLine(
       );
     case 'done':
       return freeze.findings.length === 0 ? packed(freeze) : oneLine(freeze.findings);
+    // It commits one batch, so stopped before it, nothing of the folder is in
+    // a Pack (spec: PK-7).
+    case 'cancelled':
+      return `stopped packing ${named(freeze.folder)} — nothing was packed`;
   }
 }
 
@@ -493,22 +505,6 @@ const DOING: Record<Step['phase'], string> = {
   removing_copies: "discarding this device's copies into the trash",
   fetching: 'bringing over',
 };
-
-/**
- * What a run says about the folders behind it, where any are waiting.
- *
- * One clause for both queues, because they are the same news in the same
- * words: a book waiting to be packed and a folder waiting to be brought over
- * are each a person's press with nothing else on the screen about it.
- */
-function queued(waiting: readonly string[]): string {
-  if (waiting.length === 0) {
-    return '';
-  }
-  return waiting.length === 1
-    ? `, with ${named(waiting[0])} after it`
-    : `, with ${named(waiting[0])} and ${waiting.length - 1} more after it`;
-}
 
 /** What a freeze that packed something came to, as one line. */
 function packed(freeze: Freeze | DisplacedFreeze): string {
@@ -702,6 +698,10 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * A deletion running, or one waiting its turn, is about to take rows out of the
  * folder on the screen, and the press that armed it is owed the sentence
  * saying what left the Library.
+ *
+ * And an add the server is still carrying in or undoing (spec: LA-34): a page
+ * reloaded while a stop it asked for was being answered has nothing else
+ * running to follow, and is owed what the stop came to (spec: LA-36).
  */
 export function shouldPoll(
   readerOpen: boolean,
@@ -712,8 +712,10 @@ export function shouldPoll(
   reconnect: Reconnect | null = null,
   library: LibraryState | null = null,
   deletion: Delete | null = null,
+  adds: readonly AddUnderWay[] = [],
 ): boolean {
   return (
+    adds.length > 0 ||
     library === 'locked' ||
     deletion?.status === 'deleting' ||
     (deletion?.waiting ?? 0) > 0 ||

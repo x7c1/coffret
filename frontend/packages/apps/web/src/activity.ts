@@ -3,8 +3,8 @@
 // Two groups. **In progress** is what is moving now: a drop's files being
 // sent, and the runs the work answer reports as running, in the order of what
 // is happening now — the drop, the run holding the turn at this device's
-// pending work, the runs waiting for it, the fill, and the reader's own fetch
-// where nothing else is moving. **Earlier** is what is
+// pending work, the runs waiting for it, the fill, and the reader's own
+// fetch. **Earlier** is what is
 // over: the server's log of the work it finished (spec: LA-12), and the
 // notices only this page knows of — a row asked to open that did not, a drop
 // that came to nothing — merged into one list, newest first.
@@ -13,8 +13,31 @@
 // and a failure that asking again could help carries the Retry that takes the
 // work up again: at a fill, a sync or a freeze that stopped, at a folder a
 // queue lost, and at a deletion another device's commit got in front of.
+//
+// A line in progress that can be stopped carries a Stop (spec: LA-34): an add
+// — the drop being sent, or the sync or the freeze carrying one in — a freeze,
+// a fill, a book or a folder still waiting in its queue, and the reader's own
+// fetch. A stop is a request the run answers by
+// ending (spec: LA-35), so a line whose Stop was pressed says it is stopping
+// until the server's answer says the run has ended, and a run that has begun
+// committing says it is finishing and offers none. Both come from the server's
+// answer and not from this page's memory of the press, so a page reloaded
+// mid-stop says the same.
 
-import type { DeleteTarget, Fill, Logged, Move, Refused, Step, TurnTaker } from '@coffret/api';
+import type {
+  AddUnderWay,
+  DeleteTarget,
+  Fill,
+  Freeze,
+  Logged,
+  Move,
+  Refused,
+  Step,
+  StopOffer,
+  StoppedAdd,
+  StopTarget,
+  TurnTaker,
+} from '@coffret/api';
 
 import { deletedLine, deletingLine } from './deleteEntries';
 import { discardedBooksLine, discardedLine, fillLine, freezeLine, syncLine } from './fill';
@@ -32,6 +55,17 @@ export type Retry =
   | { flow: 'sync' }
   | { flow: 'delete'; target: DeleteTarget };
 
+/** What one line's Stop asks for. */
+export type StopAsk =
+  /** A stop the server answers: an add, a freeze or a fill (spec: LA-35). */
+  | { server: StopTarget }
+  /**
+   * The reader's own fetch of one file, which this page stops by withdrawing
+   * its request: the file being placed is placed whole, and nothing more is
+   * asked for it (spec: LA-37).
+   */
+  | { reader: true };
+
 /** One line of **In progress**. */
 export interface Running {
   /** Which work this is, stable across answers. */
@@ -40,7 +74,21 @@ export interface Running {
   text: string;
   /** How far it has got, from 0 to 1, and `null` where it cannot say. */
   progress: number | null;
+  /** The Stop the line offers, and `null` where it offers none. */
+  stop: StopAsk | null;
+  /**
+   * What the line says in place of a Stop: `stopping` once one was pressed
+   * and the run has not answered, `finishing` once the run has begun
+   * committing and so takes none — and `null` otherwise.
+   */
+  ending: 'stopping' | 'finishing' | null;
 }
+
+/** The words a line's `ending` is said in. */
+export const ENDING_SAID: Record<NonNullable<Running['ending']>, string> = {
+  stopping: 'Stopping…',
+  finishing: 'Finishing…',
+};
 
 /** One line of **Earlier**. */
 export interface Entry {
@@ -94,6 +142,13 @@ export interface PageNotice {
 export interface InFlight extends Turns {
   /** The drop whose files are still being sent, if one is, as its line says it. */
   adding: string | null;
+  /**
+   * The name that drop was sent under, so its Stop can name it, and whether
+   * that Stop has been pressed — `null` where no drop is being sent.
+   */
+  addingAs: { name: string; stopping: boolean } | null;
+  /** The adds the server says it is carrying in (spec: LA-34). */
+  adds: readonly AddUnderWay[];
   /** How far that drop has been sent, from 0 to 1, where that is known. */
   sent: number | null;
   fill: Fill | null;
@@ -106,14 +161,38 @@ const TIED: readonly TurnTaker[] = ['freeze', 'sync', 'delete'];
 
 /**
  * **In progress**, top to bottom: the drop's own line, then the run holding
- * the turn, then the runs waiting for it, then the fill — and the reader's own
- * fetch only where nothing else is moving, since a fill under way is that same
- * fetch's folder being brought over, and both would report one fetch twice.
+ * the turn, then the runs waiting for it, then the fill, then the reader's own
+ * fetch. The fetch keeps its own line even beside a fill bringing its folder
+ * over, since its Stop withdraws only the reader's request and the fill's Stop
+ * stops the fill: one line for both would leave one of them out of reach.
  */
 export function inProgress(flight: InFlight): Running[] {
   const running: Running[] = [];
+  const as = flight.addingAs;
   if (flight.adding !== null) {
-    running.push({ key: 'adding', text: flight.adding, progress: flight.sent });
+    const stopping =
+      as !== null &&
+      (as.stopping || flight.adds.some((add) => add.id === as.name && add.stopping));
+    running.push({
+      key: 'adding',
+      text: flight.adding,
+      progress: flight.sent,
+      stop: as === null || stopping ? null : { server: { add: as.name } },
+      ending: stopping ? 'stopping' : null,
+    });
+  }
+  // An add another page sent, or this one before it was reloaded, still being
+  // received while it is stopped: nothing else on this page says so.
+  for (const add of flight.adds) {
+    if (add.stage === 'receiving' && add.stopping && add.id !== as?.name) {
+      running.push({
+        key: `add:${add.id}`,
+        text: `adding to ${shownAs(add.folder)}`,
+        progress: null,
+        stop: null,
+        ending: 'stopping',
+      });
+    }
   }
   const order =
     flight.turn === null ? TIED : [flight.turn, ...TIED.filter((flow) => flow !== flight.turn)];
@@ -122,18 +201,83 @@ export function inProgress(flight: InFlight): Running[] {
     if (line !== null) {
       running.push(line);
     }
+    if (flow === 'freeze') {
+      running.push(...queuedBooks(flight.freeze));
+    }
   }
   if (flight.fill?.status === 'filling') {
     const text = fillLine(flight.fill);
     if (text !== null) {
       const { done, total } = flight.fill;
-      running.push({ key: 'fill', text, progress: total === 0 ? null : done / total });
+      running.push({
+        key: 'fill',
+        text,
+        progress: total === 0 ? null : done / total,
+        ...stopOf(flight.fill.stop, { fill: flight.fill.run }),
+      });
     }
   }
-  if (running.length === 0 && flight.fetching !== null) {
-    running.push({ key: 'fetching', text: `fetching ${flight.fetching}…`, progress: null });
+  running.push(...queuedFolders(flight.fill));
+  if (flight.fetching !== null) {
+    running.push({
+      key: 'fetching',
+      text: `fetching ${flight.fetching}…`,
+      progress: null,
+      stop: { reader: true },
+      ending: null,
+    });
   }
   return running;
+}
+
+/**
+ * What a run's line offers about stopping it, as the server says it: a Stop
+ * naming `target` where one is offered, and in its place what the run is doing
+ * about one asked, or about its commit.
+ */
+function stopOf(offer: StopOffer | null, target: StopTarget): Pick<Running, 'stop' | 'ending'> {
+  switch (offer) {
+    case 'offered':
+      return { stop: { server: target }, ending: null };
+    case 'asked':
+      return { stop: null, ending: 'stopping' };
+    case 'committing':
+      return { stop: null, ending: 'finishing' };
+    case null:
+      return { stop: null, ending: null };
+  }
+}
+
+/**
+ * A line for each book waiting in the freeze's queue, each with the Stop that
+ * takes it off before its run begins (spec: LA-34) — or, for one holding adds
+ * that was asked already, saying it is stopping until its run has undone them.
+ */
+function queuedBooks(freeze: Freeze | null): Running[] {
+  return (freeze?.waiting ?? []).map((folder) => {
+    const stopping = freeze?.stopping.includes(folder) ?? false;
+    return {
+      key: `queued-freeze:${folder}`,
+      text: `waiting to pack ${shownAs(folder)}`,
+      progress: null,
+      stop: stopping ? null : { server: { queued_freeze: folder } },
+      ending: stopping ? 'stopping' : null,
+    };
+  });
+}
+
+/**
+ * A line for each folder waiting in the fill's queue, each with the Stop that
+ * takes it off before its run begins (spec: LA-34).
+ */
+function queuedFolders(fill: Fill | null): Running[] {
+  return (fill?.waiting ?? []).map((folder) => ({
+    key: `queued-fill:${folder}`,
+    text: `waiting to bring over ${shownAs(folder)}`,
+    progress: null,
+    stop: { server: { queued_fill: folder } },
+    ending: null,
+  }));
 }
 
 /** The line of one turn-taking flow's run while it is running, and `null` otherwise. */
@@ -146,7 +290,14 @@ function runningLine(flow: TurnTaker, turns: Turns): Running | null {
         return null;
       }
       const text = freezeLine(run, waits);
-      return text === null ? null : { key: 'freeze', text, progress: stepped(run.step) };
+      return text === null
+        ? null
+        : {
+            key: 'freeze',
+            text,
+            progress: stepped(run.step),
+            ...stopOf(run.stop, { freeze: run.run }),
+          };
     }
     case 'sync': {
       const run = turns.sync;
@@ -154,14 +305,28 @@ function runningLine(flow: TurnTaker, turns: Turns): Running | null {
         return null;
       }
       const text = syncLine(run, waits);
-      return text === null ? null : { key: 'sync', text, progress: stepped(run.step) };
+      return text === null
+        ? null
+        : {
+            key: 'sync',
+            text,
+            progress: stepped(run.step),
+            ...stopOf(run.stop, { sync: run.run }),
+          };
     }
     case 'delete': {
       const run = turns.deletion;
       if (run?.status !== 'deleting') {
         return null;
       }
-      return { key: 'delete', text: deletingLine(run, waits), progress: stepped(run.step) };
+      // A deletion cannot be stopped (spec: LA-34).
+      return {
+        key: 'delete',
+        text: deletingLine(run, waits),
+        progress: stepped(run.step),
+        stop: null,
+        ending: null,
+      };
     }
     // A move is never on record as running: its request answers it.
     case 'move':
@@ -270,9 +435,11 @@ export function retryOf(logged: Logged, locked: boolean): Retry | null {
     }
     case 'discarded':
       return { flow: logged.queue, folder: logged.folder };
-    // A move is asked for again where it was made, not from the panel.
+    // A move is asked for again where it was made, not from the panel; and
+    // an add a person stopped is added again by dropping it again.
     case 'move':
     case 'fetch':
+    case 'add':
       return null;
   }
 }
@@ -389,6 +556,8 @@ function outcomeOf(logged: Logged): Outcome {
       const run = logged.run;
       return run.status === 'stopped'
         ? 'failure'
+        : run.status === 'cancelled'
+          ? 'notice'
         : run.declined.length + run.findings.length > 0
           ? 'notice'
           : 'success';
@@ -401,7 +570,7 @@ function outcomeOf(logged: Logged): Outcome {
     case 'freeze':
       return logged.run.status === 'stopped'
         ? 'failure'
-        : logged.run.findings.length > 0
+        : logged.run.status === 'cancelled' || logged.run.findings.length > 0
           ? 'notice'
           : 'success';
     case 'delete': {
@@ -428,6 +597,10 @@ function outcomeOf(logged: Logged): Outcome {
     case 'discarded':
     case 'fetch':
       return 'failure';
+    // What a person asked for, and so no failure; worth being told of all the
+    // same, since it is the answer to their Stop.
+    case 'add':
+      return 'notice';
   }
 }
 
@@ -443,6 +616,7 @@ function refusalOf(logged: Logged): Refused | null {
     case 'fetch':
       return logged.refused;
     case 'discarded':
+    case 'add':
       return null;
   }
 }
@@ -471,7 +645,37 @@ function textOf(logged: Logged): string {
       );
     case 'fetch':
       return `could not fetch ${logged.path} — ${logged.refused.message}`;
+    case 'add':
+      return stoppedLine(logged.add);
   }
+}
+
+/**
+ * What an add a person stopped came to (spec: LA-36), named by the folder it
+ * was made onto as every other line names its folder: that nothing of it is
+ * in the Library — or, where a run under way beside it had already carried
+ * some of it in, how much — and how many of its files could not be taken back
+ * out of the folder, where any could not. Every other file it wrote is gone,
+ * and a file it had written over is back as it was; one this device could not
+ * take away is the folder's like any copied there, so the next sync carries
+ * it in unless the person takes it away first. An add whose files could not
+ * be put back at all is never stopped: its stop is refused, and says why.
+ */
+export function stoppedLine(add: StoppedAdd): string {
+  const added =
+    add.committed === 0
+      ? 'nothing was added to the Library'
+      : `${files(add.committed)} had been added to the Library already`;
+  const left =
+    add.left === 0
+      ? ''
+      : `; ${files(add.left)} could not be taken back out of the folder, and the next sync adds ${add.left === 1 ? 'it' : 'them'}`;
+  return `stopped adding to ${shownAs(add.folder)} — ${added}${left}`;
+}
+
+/** A count of files, as a line says it. */
+function files(count: number): string {
+  return count === 1 ? '1 file' : `${count} files`;
 }
 
 /**

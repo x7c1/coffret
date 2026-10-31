@@ -398,6 +398,23 @@ impl Progress {
         self.queued.iter().skip(announced).cloned().collect()
     }
 
+    /// Takes `folder` off the queue, where it waits its turn as
+    /// [`waiting`](Self::waiting) reports it, and answers with it: a folder
+    /// stopped before its run began, of which nothing was brought over
+    /// (spec: LA-34). Never the front of the queue while the run on record
+    /// announces it, which is that run's to stop.
+    pub(super) fn cancel_waiting(&mut self, folder: &str) -> Option<Folder> {
+        let announced = usize::from(self.current.is_none() && self.next.is_none());
+        let at = self
+            .queued
+            .iter()
+            .enumerate()
+            .skip(announced)
+            .find(|(_, asked)| asked.as_str() == folder)
+            .map(|(at, _)| at)?;
+        self.queued.remove(at)
+    }
+
     /// The folders an ending worker threw away that nobody has taken up since.
     pub(super) fn discarded(&self) -> &[Folder] {
         &self.discarded

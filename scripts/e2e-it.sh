@@ -15,7 +15,7 @@
 #      routes are asked what a person would have clicked to find out.
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
-#      eight journeys through the built explorer and photographs each checkpoint.
+#      the journeys through the built explorer and photographs each checkpoint.
 #      The explorer is served by the development host, `coffret-explorer-dev`,
 #      which admits a browser only by a browser token, exactly as the desktop
 #      app's host does: each journey opens the launch file the host wrote, as a
@@ -753,6 +753,7 @@ COFFRET_E2E_SERVER_BIN="$SERVER" \
   COFFRET_E2E_UPLOADER_STATE_DIR="$UPLOADER_STATE" \
   COFFRET_E2E_UPLOADER_LIBRARY="$UPLOADER" \
   COFFRET_E2E_UPLOADER_ROOT="$UPLOADER_ROOT" \
+  COFFRET_E2E_DEVICE_ROOT="$JOINER_ROOT" \
   COFFRET_E2E_REFRESH_FILE="$REFRESH_FILE" \
   COFFRET_E2E_RESTART_FILE="$RESTART_FILE" \
   COFFRET_E2E_MINIO_CONTAINER="$CONTAINER" \

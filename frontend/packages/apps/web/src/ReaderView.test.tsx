@@ -15,6 +15,7 @@ import {
 import { size } from './humanize';
 import { ReaderView } from './ReaderView';
 import { NO_IMAGES, UNSUPPORTED, type Sheeted } from './sheet';
+import { SHEET_COLOR } from './theme';
 import { fileKey, folderKey, type FileRow, type FolderRow } from './tree';
 import type { Asked } from './useAsked';
 
@@ -155,7 +156,7 @@ it('shows a folder holding images by its cover, and what it holds', async () => 
 it("reads a folder's cover ahead, and reads a page", async () => {
   const { show } = sheet(folderRow('albums'), { status: 'ready', value: ALBUM });
   expect(await screen.findByAltText('cover of albums')).toBeTruthy();
-  expect(early).toHaveBeenCalledWith('albums/one.jpg');
+  expect(early).toHaveBeenCalledWith('albums/one.jpg', expect.anything());
   expect(fetched).not.toHaveBeenCalled();
   expect(beside).not.toHaveBeenCalled();
 
@@ -185,8 +186,56 @@ it('reads the first page after its cover was refused', async () => {
 
   show(fileRow(0));
   expect(await screen.findByAltText('one.jpg')).toBeTruthy();
-  expect(fetched).toHaveBeenCalledWith('albums/one.jpg');
+  expect(fetched).toHaveBeenCalledWith('albums/one.jpg', expect.anything());
 });
+
+// LA-37: a fetch the person stopped from the Activity panel is no failure: it
+// says it was stopped, in the sheet's quiet ink and not a refusal's, and the
+// try again beside it reads the file.
+it('says a fetch it was told to stop was stopped, not refused', async () => {
+  fetched.mockImplementation(
+    (_path: string, signal?: AbortSignal) =>
+      new Promise<Blob>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('withdrawn', 'AbortError')));
+      }),
+  );
+  const props = {
+    asked: undefined,
+    counter: { at: 1, of: 3 },
+    discarded: 0,
+    escapable: true,
+    onClose: () => undefined,
+    onFetching: () => undefined,
+    onFetched: () => undefined,
+    reconnect: null,
+    log: [],
+  };
+  const { rerender } = render(<ReaderView row={fileRow(0)} fetchStops={0} {...props} />);
+  expect(await screen.findByText('fetching one.jpg…')).toBeTruthy();
+
+  rerender(<ReaderView row={fileRow(0)} fetchStops={1} {...props} />);
+  const said = await screen.findByText('stopped fetching one.jpg');
+  expect(said.style.color).toBe(rgb(SHEET_COLOR.dim));
+  expect(said.style.color).not.toBe(rgb(SHEET_COLOR.refused));
+
+  fetched.mockImplementation((path: string) => Promise.resolve(new Blob([path])));
+  fireEvent.click(screen.getByRole('button', { name: 'try again' }));
+  expect(await screen.findByAltText('one.jpg')).toBeTruthy();
+});
+
+// A refusal is said in the refusal's ink.
+it('says a refused fetch in the ink of a refusal', async () => {
+  fetched.mockImplementation(storageGone);
+  sheet(fileRow(0));
+  const said = await screen.findByText('Storage did not answer');
+  expect(said.style.color).toBe(rgb(SHEET_COLOR.refused));
+});
+
+/** A `#rrggbb` colour as the DOM reports a style set to it. */
+function rgb(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
 
 // LA-33: within ten files of the end of its folder the reader asks
 // which file comes after the folder's last, lists that file's folder and reads
@@ -238,7 +287,7 @@ it('shows the next row it is handed, and keeps the pages around it ready', async
   const { show } = sheet(fileRow(0));
   await screen.findByAltText('one.jpg');
   // The page beside it was prefetched.
-  expect(fetched).toHaveBeenCalledWith('albums/two.jpg');
+  expect(fetched).toHaveBeenCalledWith('albums/two.jpg', expect.anything());
   show(fileRow(1));
   expect(await screen.findByAltText('two.jpg')).toBeTruthy();
   expect(screen.queryByAltText('one.jpg')).toBeNull();

@@ -4,7 +4,7 @@ use crate::pending_rows::TurnTaker;
 use crate::routes::RefusalDto;
 use crate::sync::{SyncRun, SyncStatus};
 
-use super::{waits, FindingDto, StepDto};
+use super::{stop_word, waits, FindingDto, StepDto};
 
 #[derive(Serialize)]
 pub(super) struct SyncDto {
@@ -31,6 +31,10 @@ pub(super) struct SyncDto {
     /// What stopped the sync, and `null` where nothing did — which is exactly
     /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
+    /// What the run's line offers about stopping it (spec: LA-34). A sync is
+    /// stopped only through the adds it carries, so one carrying none offers
+    /// nothing.
+    stop: Option<&'static str>,
 }
 
 impl SyncDto {
@@ -47,6 +51,11 @@ impl SyncDto {
                 turn,
             ),
             stopped: run.status.stopped().map(RefusalDto::of),
+            stop: stop_word(
+                matches!(run.status, SyncStatus::Syncing),
+                !run.adds.is_empty(),
+                run.stop,
+            ),
         }
     }
 }

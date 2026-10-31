@@ -228,7 +228,7 @@ it('sends a drop at exactly the part and parts budgets', async () => {
   const added = addFiles('books', files);
   FakeRequest.only().answer(200, JSON.stringify({ written: [], refused: [] }));
 
-  await expect(added).resolves.toEqual({ written: [], refused: [] });
+  await expect(added).resolves.toEqual({ written: [], refused: [], cancelled: false });
 });
 
 // The request budget is a boundary: files that come to exactly it are the
@@ -251,7 +251,7 @@ it('sends a drop whose files come to no more than the request budget', async () 
   const added = addFiles('books', files);
   FakeRequest.only().answer(200, JSON.stringify({ written: [], refused: [] }));
 
-  await expect(added).resolves.toEqual({ written: [], refused: [] });
+  await expect(added).resolves.toEqual({ written: [], refused: [], cancelled: false });
 });
 
 // The request is the one `fetch` made before it: the route with the folder and
@@ -283,7 +283,11 @@ it('sends the drop as it always did, and says how much of it has gone', async ()
   request.sent(400, 400);
   request.answer(200, JSON.stringify({ written: ['books/vol-1/page-001.jpg'], refused: [] }));
 
-  await expect(added).resolves.toEqual({ written: ['books/vol-1/page-001.jpg'], refused: [] });
+  await expect(added).resolves.toEqual({
+    written: ['books/vol-1/page-001.jpg'],
+    refused: [],
+    cancelled: false,
+  });
   expect(progress.mock.calls).toEqual([
     [100, 400],
     [400, 400],
@@ -415,6 +419,7 @@ it('narrows each refused part as a refused request is narrowed', () => {
       ],
     }),
   ).toEqual({
+    cancelled: false,
     written: ['books/one.jpg'],
     refused: [
       {
@@ -522,7 +527,11 @@ it('sends a drop held by path as an import naming the handle and indexes', async
 it('weighs a held drop by its count alone', async () => {
   const large = held('scan.tif', 0, uploadBudget.part_bytes + 1);
   fetched(() => Response.json({ written: ['scan.tif'], refused: [] }));
-  await expect(addFiles('', [large])).resolves.toEqual({ written: ['scan.tif'], refused: [] });
+  await expect(addFiles('', [large])).resolves.toEqual({
+    written: ['scan.tif'],
+    refused: [],
+    cancelled: false,
+  });
 
   const many = Array.from({ length: uploadBudget.parts + 1 }, (_, index) => held(`${index}.jpg`, index));
   const thrown = await addFiles('', many).catch((refusal: unknown) => refusal);

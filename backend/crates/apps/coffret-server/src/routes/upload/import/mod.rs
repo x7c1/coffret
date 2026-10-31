@@ -9,6 +9,7 @@ use axum::Json;
 
 use crate::api_error::ApiError;
 use crate::entry_query::folder_named;
+use crate::folder::Folder;
 use crate::reported::Reported;
 use crate::routes::RefusalDto;
 use crate::state::ServerState;
@@ -16,10 +17,11 @@ use crate::state::ServerState;
 use super::drop_reservation::DropReservation;
 use super::finish_drop::{finish_drop, FinishedDrop};
 use super::outran::outran;
-use super::receive::{receive, Reserving};
+use super::receive::{receive, Adding, Reserving};
 use super::refusal::Refusal;
 use super::refused_dto::RefusedDto;
 use super::release::release_stopped;
+use super::stop_receiving::stop_receiving;
 use super::UploadDto;
 
 use self::held_file::HeldFile;
@@ -106,13 +108,25 @@ pub async fn import(
     }
     // Taking over a drop onto this folder that was cut off part way, as the
     // upload does.
+    // An add a person can stop, as the upload's is (spec: LA-34).
+    let add = state.adds.begin(
+        request.add.as_deref(),
+        Folder::named(folder.clone()),
+        request.freeze,
+    )?;
     let (reservation, mut reserved) = match request.freeze {
-        true => {
-            let (held, received) =
-                DropReservation::hold(&library, folder.as_ref(), OPERATION).await?;
-            (Some(held), received)
-        }
+        true => match DropReservation::hold(&library, folder.as_ref(), OPERATION).await {
+            Ok((held, received)) => (Some(held), received),
+            Err(refused) => {
+                state.adds.end(&add);
+                return Err(refused);
+            }
+        },
         false => (None, BTreeSet::new()),
+    };
+    let adding = Adding {
+        adds: &state.adds,
+        id: &add,
     };
 
     let mut written = Vec::new();
@@ -121,8 +135,13 @@ pub async fn import(
     // What is still to come, for the room this device is asked to have: the
     // lengths the walk stated, less each one as it is taken.
     let mut coming: u64 = sources.iter().map(|(file, _)| file.size()).sum();
-    let taken: Result<(), ApiError> = async {
+    // Whether a person stopped the add, met between two files and between
+    // two pieces of one.
+    let taken: Result<bool, ApiError> = async {
         for (file, name) in &sources {
+            if adding.stopping() {
+                return Ok(true);
+            }
             let refuse = |refusal: ApiError, refused: &mut Vec<RefusedDto>| {
                 refused.push(RefusedDto {
                     name: (*name).to_owned(),
@@ -142,6 +161,7 @@ pub async fn import(
                         folder.as_ref(),
                         name,
                         reserving,
+                        &adding,
                         source,
                     )
                     .await
@@ -161,20 +181,45 @@ pub async fn import(
                 // No body is being read, so no stream can break under a file;
                 // were one to, it is the request that stops.
                 Err(Refusal::Interrupted(cause)) => return Err(ApiError::multipart(cause)),
+                Err(Refusal::Cancelled) => return Ok(true),
             }
         }
-        Ok(())
+        Ok(false)
     }
     .await;
-    if let Err(stopped) = taken {
-        release_stopped(&library, reservation, OPERATION).await;
-        return Err(stopped.having_written(written));
+    let cancelled = match taken {
+        Ok(cancelled) => cancelled,
+        Err(stopped) => {
+            release_stopped(&library, reservation, OPERATION).await;
+            state.adds.end(&add);
+            return Err(stopped.having_written(written));
+        }
+    };
+    if cancelled {
+        // The files the drop was walked from stay where they are: only the
+        // copies this add wrote into the folder are taken away (spec: LA-36).
+        stop_receiving(
+            &state,
+            &library,
+            add,
+            reservation,
+            !request.freeze,
+            !written.is_empty(),
+            OPERATION,
+        )
+        .await;
+        return Ok(Json(UploadDto {
+            written: Vec::new(),
+            refused,
+            cancelled: true,
+        }));
     }
     finish_drop(
         &state,
         &library,
         FinishedDrop {
             operation: OPERATION,
+            add,
             reservation,
             reserved,
             written: written.len(),
@@ -184,5 +229,9 @@ pub async fn import(
         },
     )
     .await;
-    Ok(Json(UploadDto { written, refused }))
+    Ok(Json(UploadDto {
+        written,
+        refused,
+        cancelled: false,
+    }))
 }

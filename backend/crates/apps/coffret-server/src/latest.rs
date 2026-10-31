@@ -34,6 +34,11 @@ pub struct Latest<A> {
     pub displaced: Vec<Displaced<A>>,
     /// The folders waiting their turn behind the run on record, oldest first.
     pub waiting: Vec<Folder>,
+    /// The folders of `waiting` a person asked to stop whose run has not
+    /// answered yet: a book holding adds, which the run that takes it up
+    /// undoes (spec: LA-36). A fill's queue holds no add, so a folder stopped
+    /// there leaves it at once and this is empty.
+    pub stopping: Vec<Folder>,
     /// The folders a worker that ended without an answer threw away, and that
     /// nobody has taken up since.
     pub discarded: Vec<Folder>,
@@ -48,6 +53,7 @@ impl<A> Latest<A> {
             on_record,
             displaced: Vec::new(),
             waiting: Vec::new(),
+            stopping: Vec::new(),
             discarded: Vec::new(),
         }
     }

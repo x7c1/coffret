@@ -8,6 +8,7 @@ use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::activity_log::ActivityLog;
+use crate::adds::Adds;
 use crate::allowance::Allowance;
 use crate::api_error::{ApiError, WayBack};
 use crate::delete::Deletes;
@@ -117,6 +118,13 @@ pub struct ServerState {
     /// end, and held in memory alone like the rest of this process's account
     /// of its work: a server started afterwards answers with an empty log.
     pub activity: Arc<ActivityLog>,
+    /// The adds this server is carrying in — a drop's or a **+**'s files and
+    /// the run armed for them — with what each wrote on this device, so one a
+    /// person stops can be undone (spec: LA-34, LA-36).
+    ///
+    /// The process's own, like the rest of its account of its work: a server
+    /// started afterwards holds none.
+    pub adds: Adds,
     /// How many reads of a listed folder's Container fronts are under way.
     ///
     /// State of this process in the sense [`fills`](Self::fills) is, and less:
@@ -230,6 +238,7 @@ impl ServerState {
             freezes: Freezes::logging_to(Arc::clone(&activity)),
             deletes: Deletes::logging_to(Arc::clone(&activity)),
             activity,
+            adds: Adds::new(),
             pending_rows: PendingRows::new(),
             allowance: Allowance::generous(),
             catalog: Catalog::new(),

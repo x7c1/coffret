@@ -4,7 +4,8 @@ use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 use super::{
-    CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, LoggedDto, ReconnectDto, SyncDto,
+    AddDto, CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, LoggedDto, ReconnectDto,
+    SyncDto,
 };
 
 /// What the server is doing on its own, which is four things — and the one
@@ -108,6 +109,10 @@ pub struct WorkDto {
     /// because every answer that can change it is one: a run ends while a page
     /// polls this, and the presses that start one answer with it.
     pub(super) log: Vec<LoggedDto>,
+    /// The adds this server is carrying in — receiving their files, or armed
+    /// for the run that carries them — each until its run has ended, or,
+    /// stopped, until it has been undone (spec: LA-34, LA-36).
+    pub(super) adds: Vec<AddDto>,
 }
 
 impl WorkDto {
@@ -170,6 +175,10 @@ impl WorkDto {
                 .as_ref()
                 .map(|report| DeleteDto::of(report, turn)),
             reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
+            // Before the log, for the log's own reason: an add is listed until
+            // it has been logged, so read first, one that has just been undone
+            // is in one or the other.
+            adds: state.adds.listed().iter().map(AddDto::of).collect(),
             log: state.activity.entries().iter().map(LoggedDto::of).collect(),
         }
     }

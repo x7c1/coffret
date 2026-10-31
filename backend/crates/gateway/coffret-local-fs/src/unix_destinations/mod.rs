@@ -63,6 +63,9 @@ mod unix_destination;
 
 mod unix_flushed_file;
 
+// What a placement keeps of the file it is about to write over (spec: LA-36).
+mod unix_kept_file;
+
 mod unix_scratch_file;
 
 // The same descent asked for a different write: discarding a file a deleted

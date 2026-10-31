@@ -53,7 +53,9 @@ Concept background: [Pack](../../concepts/pack/),
   Packs replace — newly imported files have no removal, and existing Packs
   never appear in removals. On an initial import, `freeze` builds Packs
   directly from local files without first uploading one-file Containers.
-  *(Form: test)*
+  So a `freeze` a person stops before it begins committing (LA-35) has put
+  none of its book into a Pack: there is no state in which part of it is in
+  the Library. *(Form: test)*
 - **PK-8.** Path ordering, adjacency, and segmentation are local to the
   Entries selected by one `freeze` invocation: Packs do not form one
   non-overlapping partition of the Library's Entry Path order, and path
@@ -216,7 +218,9 @@ Concept background: [Pack](../../concepts/pack/),
     mapping or a pending row (EP-9, OC-2) — never uploaded and in no Index
     Snapshot (CK-7) — and it is the drop's record, not folder state of `freeze`'s
     (PK-2). A drop that is refused as a whole, or that lands nothing, arms no
-    `freeze` and keeps no reservation it made.
+    `freeze` and keeps no reservation it made. Nor does a drop a person
+    stopped: its undo releases the reservation it made, and keeps one it took
+    over for the files the cut-off drop received (LA-36).
   - A reservation is **received** once its drop has stopped receiving with
     every file it brought: the drop marks it so before it arms its own
     `freeze`. Until then it is a **drop in progress** — one still being
@@ -340,6 +344,7 @@ Concept background: [Pack](../../concepts/pack/),
   - Cancelling a fetch and reading ahead happen on parcel boundaries only: a
     cancelled fetch asks for no further parcel and never cuts one short to stop
     at an Entry, and read-ahead asks for the next parcel, never the next Entry.
+    A fill a person stops is cancelled the same way (LA-37).
   - A parcel that did not arrive whole is not held, and it is asked for again
     whole rather than from where it stopped.
 - **PK-22.** An Entry taken out of parcels is verified by chunk authentication

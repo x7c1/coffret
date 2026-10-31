@@ -16,6 +16,7 @@ import {
   previewDelete,
   readAhead,
   startDelete,
+  stopWork,
   Refusal,
   type Delete,
   type ListedFile,
@@ -47,6 +48,7 @@ vi.mock('@coffret/api', async (actual) => ({
   previewDelete: vi.fn(),
   readAhead: vi.fn(),
   startDelete: vi.fn(),
+  stopWork: vi.fn(),
 }));
 
 const IDLE: Work = {
@@ -61,6 +63,7 @@ const IDLE: Work = {
   delete: null,
   reconnect: null,
   log: [],
+  adds: [],
 };
 
 function listing(path: string, over: Partial<Listing> = {}): Listing {
@@ -574,7 +577,7 @@ it('reads on from the end of one folder into the next with the sheet open', asyn
   render(<App />);
   const reader = within(await screen.findByRole('region', { name: 'Reader' }));
   expect(await reader.findByAltText('002.jpg')).toBeTruthy();
-  await waitFor(() => expect(readAhead).toHaveBeenCalledWith('series/vol-2/001.jpg'));
+  await waitFor(() => expect(readAhead).toHaveBeenCalledWith('series/vol-2/001.jpg', expect.anything()));
   expect(getFile).not.toHaveBeenCalledWith('series/vol-2/001.jpg');
   expect(tree().getByLabelText('expand vol-2')).toBeTruthy();
   const area = screen.getByRole('tree');
@@ -1176,4 +1179,44 @@ it('says a refusal of the Library’s folders over the tree, and asks again', as
   fireEvent.click(tree().getByRole('button', { name: 'try again' }));
   await waitFor(() => expect(tree().queryByText('the catalog could not be read')).toBeNull());
   expect(tree().getByTitle('comics')).toBeTruthy();
+});
+
+// LA-36: the one stop the server refuses for what it is, of an add whose
+// replaced file cannot be put back, already says what could not be stopped;
+// the panel says that sentence as it is, once, and offers the Stop again.
+it('says a refused stop in the server’s own words, and offers the Stop again', async () => {
+  answers = library({ '': ['books/'] });
+  vi.mocked(getWork).mockResolvedValue({
+    ...IDLE,
+    freeze: {
+      run: 2,
+      folder: 'books/vol-1',
+      packs: 0,
+      entries: 0,
+      findings: [],
+      step: null,
+      waits: false,
+      waiting: [],
+      stopping: [],
+      discarded: [],
+      displaced: [],
+      stop: 'offered',
+      status: 'freezing',
+      stopped: null,
+    },
+  });
+  const refusal =
+    'could not stop adding to books/vol-1 — books/vol-1/cover.png replaced a file that cannot be put back';
+  vi.mocked(stopWork).mockRejectedValue(new Refusal('conflict', 409, refusal));
+  render(<App />);
+  await tree().findByTitle('books');
+  fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+  const stop = await screen.findByRole('button', { name: /^Stop — packing books\/vol-1/ });
+  await act(async () => {
+    fireEvent.click(stop);
+  });
+  expect(stopWork).toHaveBeenCalledWith({ freeze: 2 });
+  await waitFor(() => expect(activitySaid()).toContain(refusal));
+  expect(activitySaid()).not.toContain('could not stop it');
+  expect(screen.getByRole('button', { name: /^Stop — packing books\/vol-1/ })).toBeTruthy();
 });

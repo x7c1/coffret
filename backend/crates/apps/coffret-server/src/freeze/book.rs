@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use coffret_device::{EntryPath, Reservation};
 
+use crate::adds::AddId;
 use crate::folder::Folder;
 
 /// What one freeze is asked to pack: a folder, and where a drop asked for it,
@@ -30,12 +31,44 @@ pub struct Book {
     pub folder: Folder,
     /// The Entry Paths to pack, or `None` for everything under the folder.
     pub only: Option<BTreeSet<EntryPath>>,
+    /// The adds whose files these are, where drops asked for the book
+    /// (spec: LA-34): each can be stopped while the run has not begun
+    /// committing.
+    pub adds: BTreeSet<AddId>,
+    /// Whether something besides its adds asks for the book: a folder
+    /// somebody asked to have packed, a retry, or a book still owed since a
+    /// run of it stopped.
+    ///
+    /// What decides whether a run stopped through its adds is armed again
+    /// once they are undone (spec: LA-36). Stopping every add a book carries
+    /// takes away what the drops asked for and nothing else, so a request of
+    /// the book's own still stands; a Stop on the run's line, or on the book
+    /// waiting its turn, stops that request too.
+    pub requested: bool,
+    /// Whether a Stop on the book's line took a request of its own away
+    /// (see [`requested`](Self::requested)): a run of it that ends cancelled
+    /// is then logged as a `cancelled` freeze of its folder beside the adds
+    /// it undoes, so whoever asked to have it packed sees what became of that
+    /// request (spec: LA-12).
+    pub withdrawn: bool,
 }
 
 impl Book {
     /// Every eligible file under `folder`.
     pub fn whole(folder: Folder) -> Self {
-        Self { folder, only: None }
+        Self {
+            folder,
+            only: None,
+            adds: BTreeSet::new(),
+            requested: true,
+            withdrawn: false,
+        }
+    }
+
+    /// The same book, as the add `add` asked for it.
+    pub(crate) fn carrying(mut self, add: AddId) -> Self {
+        self.adds.insert(add);
+        self
     }
 
     /// The files one drop wrote, packed and nothing beside them.
@@ -60,6 +93,9 @@ impl Book {
         Self {
             folder: Folder::named(holding),
             only: Some(written),
+            adds: BTreeSet::new(),
+            requested: false,
+            withdrawn: false,
         }
     }
 
@@ -76,6 +112,9 @@ impl Book {
             return Self {
                 folder: Folder::named(reservation.folder),
                 only: Some(BTreeSet::new()),
+                adds: BTreeSet::new(),
+                requested: true,
+                withdrawn: false,
             };
         }
         Self::dropped(reservation.paths)
@@ -100,6 +139,9 @@ impl Book {
     /// their turn are one book by the time either is taken up.
     pub(super) fn join(&mut self, other: Self) {
         debug_assert_eq!(self.folder, other.folder);
+        self.adds.extend(other.adds);
+        self.requested |= other.requested;
+        self.withdrawn |= other.withdrawn;
         match (&mut self.only, other.only) {
             (Some(mine), Some(theirs)) => mine.extend(theirs),
             (only, _) => *only = None,
@@ -183,7 +225,10 @@ mod tests {
             Some(paths(&["books/vol-1/a.png", "books/vol-1/b.png"]))
         );
 
+        assert!(!first.requested, "two drops ask for their files alone");
+
         first.join(Book::whole(folder("books/vol-1")));
         assert_eq!(first.only, None, "a whole folder takes every selection in");
+        assert!(first.requested, "and its request stands beside the drops");
     }
 }

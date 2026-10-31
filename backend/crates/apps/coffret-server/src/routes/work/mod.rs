@@ -9,6 +9,10 @@ use axum::Json;
 use crate::folder::Folder;
 use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
+use crate::stopping::Stop;
+
+mod add_dto;
+use add_dto::AddDto;
 
 mod catalog_dto;
 use catalog_dto::CatalogDto;
@@ -52,6 +56,9 @@ use reconnect_dto::ReconnectDto;
 mod step_dto;
 use step_dto::StepDto;
 
+mod stopped_add_dto;
+use stopped_add_dto::StoppedAddDto;
+
 mod sync_dto;
 use sync_dto::SyncDto;
 
@@ -78,6 +85,18 @@ fn named_folders(folders: &[Folder]) -> Vec<String> {
 /// one run on record running, so the holder's flow is the holder's run.
 fn waits(running: bool, flow: TurnTaker, turn: Option<TurnTaker>) -> bool {
     running && turn != Some(flow)
+}
+
+/// What a run's line offers about stopping it (spec: LA-34): `offered` where
+/// a Stop is drawn for it, `asked` where one was pressed and the run has not
+/// answered, `committing` where it has begun committing and so takes none —
+/// and `null` where the run is not running, or is not one a person can stop.
+fn stop_word(running: bool, stoppable: bool, stop: Stop) -> Option<&'static str> {
+    (running && stoppable).then_some(match stop {
+        Stop::Open => "offered",
+        Stop::Asked => "asked",
+        Stop::Committing => "committing",
+    })
 }
 
 /// `GET /api/work`

@@ -330,3 +330,26 @@ it('reads a page whose read ahead was refused, rather than answering with the re
   expect(reading.asked).toEqual(['albums/1.png']);
   expect(drawn.held('albums/1.png')).toBe(url);
 });
+
+// LA-37: the Stop on the reader's own fetch withdraws the read it waits on —
+// whoever waits is handed the abort — and the next load asks afresh.
+it('withdraws the read a Stop names, and asks afresh after it', async () => {
+  const asked: string[] = [];
+  const fetching: Fetching = (path, signal) => {
+    asked.push(path);
+    return new Promise((resolve, reject) => {
+      signal?.addEventListener('abort', () =>
+        reject(new DOMException('withdrawn', 'AbortError')),
+      );
+      if (asked.length > 1) {
+        resolve(bytes());
+      }
+    });
+  };
+  const drawn = drawnPages(fetching);
+  const waiting = drawn.load('albums/one.jpg');
+  drawn.stop('albums/one.jpg');
+  await expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
+  await expect(drawn.load('albums/one.jpg')).resolves.toBe('blob:1');
+  expect(asked).toEqual(['albums/one.jpg', 'albums/one.jpg']);
+});

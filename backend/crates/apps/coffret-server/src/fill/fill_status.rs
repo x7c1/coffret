@@ -22,6 +22,10 @@ pub enum FillStatus {
     /// The folder is not taken up again on its own: clicking back into it arms
     /// it afresh.
     Superseded,
+    /// A person stopped it (spec: LA-35): it went no further than the file
+    /// it was on, and what it had placed stays, each file whole and recorded
+    /// (spec: EP-10, EP-11).
+    Cancelled,
 }
 
 impl FillStatus {
@@ -32,6 +36,7 @@ impl FillStatus {
             Self::Done => "done",
             Self::Stopped(_) => "stopped",
             Self::Superseded => "superseded",
+            Self::Cancelled => "cancelled",
         }
     }
 

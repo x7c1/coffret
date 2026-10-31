@@ -5,6 +5,9 @@ import {
   startFill,
   startFreeze,
   startSync,
+  stopWork,
+  type AddUnderWay,
+  type StopTarget,
   type Work,
   type Catalog,
   type Delete,
@@ -122,6 +125,19 @@ export function useWork(readerOpen: boolean): {
    * and has no refusal of its own on the screen.
    */
   recheck: () => void;
+  /**
+   * The adds the server is carrying in, and empty until an answer has said
+   * (spec: LA-34).
+   */
+  adds: readonly AddUnderWay[];
+  /**
+   * Asks for an add, a freeze or a fill to be stopped (spec: LA-35), and
+   * takes the work answer it is met with as every press's is taken: the run's
+   * line says it was asked, and the run answers by ending. What refused the
+   * asking — a Library locked meanwhile, say — is what the promise rejects
+   * with, for the screen to say.
+   */
+  stop: (target: StopTarget) => Promise<void>;
 } {
   const [fill, setFill] = useState<Fill | null>(null);
   const [sync, setSync] = useState<Sync | null>(null);
@@ -133,6 +149,7 @@ export function useWork(readerOpen: boolean): {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [kept, setKept] = useState<KeptParcels | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
+  const [adds, setAdds] = useState<readonly AddUnderWay[]>([]);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
   // for the work answer since. A drop that broke mid-transfer turns this on too: it
@@ -143,7 +160,7 @@ export function useWork(readerOpen: boolean): {
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<Trouble | null>(null);
   const polling =
-    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion) ||
+    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion, adds) ||
     following;
   // Whether this page has ever asked *and been told*. In a ref rather than in
   // state because nothing on the screen is drawn from it: it is what turns the
@@ -170,6 +187,7 @@ export function useWork(readerOpen: boolean): {
     setCatalog(work.catalog);
     setKept(work.kept_parcels);
     setReconnect(work.reconnect);
+    setAdds(work.adds);
     // Whatever the answer says about the flows a press arms — the sync and the
     // freeze a drop arms, and a deletion — it is an answer: from here on they
     // decide for themselves whether there is anything to follow.
@@ -303,6 +321,18 @@ export function useWork(readerOpen: boolean): {
 
   const follow = useCallback(() => setFollowing(true), []);
 
+  // A stop is a request, answered at once with the work answer (spec: LA-35):
+  // taken as every press's answer is, so the line says it was asked from this
+  // moment rather than from the next tick, and the asking goes on until the
+  // run has ended and the log says what it came to.
+  const stop = useCallback(
+    async (target: StopTarget) => {
+      setFollowing(true);
+      answered(await stopWork(target));
+    },
+    [answered],
+  );
+
   // What a press was refused with, for as long as that press is still on offer.
   //
   // Read off the log on record rather than ended by whichever answer happens to
@@ -342,6 +372,8 @@ export function useWork(readerOpen: boolean): {
     retryFreeze,
     follow,
     recheck,
+    adds,
+    stop,
   };
 }
 

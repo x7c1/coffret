@@ -30,6 +30,8 @@ mod in_memory_destination;
 
 mod in_memory_flushed_file;
 
+mod in_memory_kept_file;
+
 mod in_memory_scratch_file;
 
 mod in_memory_source_reader;

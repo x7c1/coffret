@@ -25,6 +25,7 @@ use super::{
     CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, ReconnectDto, SyncDto, WorkDto,
 };
 use crate::activity_log::{Ended, Logged, Queue};
+use crate::adds::{Add, AddId, StoppedAdd};
 use crate::api_error::{held_to, ApiError};
 use crate::delete::{DeleteReport, DeleteRun, DeleteStatus, RefusedPack, Target};
 use crate::displaced::Displaced;
@@ -39,6 +40,7 @@ use crate::pending_rows::TurnTaker;
 use crate::reconnect::Reconnect;
 use crate::refresh::Standing;
 use crate::reported::Reported;
+use crate::stopping::Stop;
 use crate::sync::{SyncRun, SyncStatus};
 
 /// Where the explorer reads the work answers from, relative to this crate.
@@ -217,6 +219,7 @@ fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
         declined: Vec::new(),
         short: None,
         unheld: Vec::new(),
+        stop: Stop::Open,
     }
 }
 
@@ -230,6 +233,8 @@ fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeRun {
         entries: 0,
         findings: Vec::new(),
         step: None,
+        adds: BTreeSet::new(),
+        stop: Stop::Open,
     }
 }
 
@@ -240,7 +245,30 @@ fn sync(run: u64, status: SyncStatus) -> SyncRun {
         added: 0,
         findings: Vec::new(),
         step: None,
+        adds: BTreeSet::new(),
+        requested: false,
+        stop: Stop::Open,
     }
+}
+
+/// An add under way onto `path`, as the registry holds it.
+fn add(id: &str, path: &str, receiving: bool, stopping: bool) -> Add {
+    Add {
+        id: added(id),
+        folder: folder(path),
+        freeze: !receiving,
+        receiving,
+        stopping,
+        files: Vec::new(),
+        made: Vec::new(),
+        reservation: None,
+        reserved: BTreeSet::new(),
+        unkept: Vec::new(),
+    }
+}
+
+fn added(id: &str) -> AddId {
+    AddId::named(id).expect("a case names its adds as a page would")
 }
 
 fn answer(
@@ -279,6 +307,7 @@ fn answer(
         delete: None,
         reconnect: None,
         log: Vec::new(),
+        adds: Vec::new(),
     }
 }
 
@@ -425,6 +454,15 @@ fn logged() -> Vec<Logged> {
             added: 3,
             ..sync(1, SyncStatus::Done)
         }),
+        Ended::Add(StoppedAdd {
+            folder: folder("albums"),
+            files: 3,
+            removed: 2,
+            committed: 0,
+            left: 1,
+        }),
+        Ended::Freeze(freeze(3, "books/vol-3", FreezeStatus::Cancelled)),
+        Ended::Fill(fill(3, "books", FillStatus::Cancelled)),
         Ended::Fill(fill(2, "albums", FillStatus::Done)),
         Ended::Fill(fill(1, "albums", FillStatus::Stopped(storage()))),
     ];
@@ -450,6 +488,7 @@ fn alone<A>(run: A) -> Latest<A> {
         on_record: run,
         displaced: Vec::new(),
         waiting: Vec::new(),
+        stopping: Vec::new(),
         discarded: Vec::new(),
     }
 }
@@ -474,7 +513,10 @@ fn every_answer() -> Vec<WorkDto> {
             ..sync(1, SyncStatus::Syncing)
         }),
         Some(Latest {
-            waiting: vec![folder("books/vol-2")],
+            // The second book holds an add a person stopped, which its run
+            // undoes as it takes it up (spec: LA-36).
+            waiting: vec![folder("books/vol-2"), folder("books/vol-3")],
+            stopping: vec![folder("books/vol-3")],
             ..alone(FreezeRun {
                 step: Some(step(Phase::Packing, None)),
                 ..freeze(1, "books/vol-1", FreezeStatus::Freezing)
@@ -572,6 +614,7 @@ fn every_answer() -> Vec<WorkDto> {
                 stopped: storage(),
             }],
             waiting: Vec::new(),
+            stopping: Vec::new(),
             discarded: vec![folder("books")],
         }),
         // A sync whose commit failed after it had repaired the Keyring says the
@@ -591,6 +634,7 @@ fn every_answer() -> Vec<WorkDto> {
                 stopped: storage(),
             }],
             waiting: Vec::new(),
+            stopping: Vec::new(),
             discarded: vec![folder("books/vol-3")],
         }),
     );
@@ -720,7 +764,60 @@ fn every_answer() -> Vec<WorkDto> {
         }
     };
 
-    let mut every = vec![idle, running, sending, committing, logged, behind_a_move];
+    // Stops: a sync carrying a drop asked to stop, a freeze that has begun
+    // committing and so offers none, a fill offering one, and the adds under
+    // way — one still receiving that was asked to stop, one armed.
+    let stopping = {
+        let carrying = SyncRun {
+            adds: BTreeSet::from([added("drop-2")]),
+            stop: Stop::Asked,
+            step: Some(step(Phase::Uploading, Some(4))),
+            ..sync(5, SyncStatus::Syncing)
+        };
+        let finishing = FreezeRun {
+            adds: BTreeSet::from([added("drop-3")]),
+            stop: Stop::Committing,
+            step: Some(step(Phase::Committing, Some(4))),
+            ..freeze(4, "books/vol-4", FreezeStatus::Freezing)
+        };
+        let answered = answer(
+            "unlocked",
+            Standing::CaughtUp,
+            Some(alone(fill(4, "albums", FillStatus::Filling))),
+            Some(carrying),
+            Some(alone(finishing)),
+        );
+        WorkDto {
+            adds: [
+                add("drop-1", "albums", true, true),
+                add("drop-3", "books", false, false),
+            ]
+            .iter()
+            .map(super::AddDto::of)
+            .collect(),
+            ..answered
+        }
+    };
+
+    // A sync a person stopped through its add, on record once it has ended.
+    let cancelled = answer(
+        "unlocked",
+        Standing::CaughtUp,
+        None,
+        Some(sync(6, SyncStatus::Cancelled)),
+        None,
+    );
+
+    let mut every = vec![
+        idle,
+        running,
+        sending,
+        committing,
+        logged,
+        behind_a_move,
+        stopping,
+        cancelled,
+    ];
     every.extend(deletions);
     every.extend(phases);
     every.extend([finished, stopped, superseded]);

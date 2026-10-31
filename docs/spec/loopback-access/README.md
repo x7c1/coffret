@@ -25,7 +25,8 @@ one-time **drop handle**, and carried into the Library by a request that names
 the handle and never a path. LA-32 onwards are the server's again: how a
 **reader** — the explorer's sheet over the file the tree's focus is on — reads
 on from one folder into the next, and reads ahead of itself without setting a
-folder coming. The two credentials
+folder coming; and, from LA-34, how a person **stops** an add, a freeze or a
+fill before it commits, and what a stopped add leaves. The two credentials
 never cross: the server key is what the host shows the server, a browser token
 is what a browser shows the host, and neither of the two accepts the other's.
 Nor does the door's token stand for either.
@@ -150,8 +151,17 @@ Concept background: [Library](../../concepts/library/),
   the last run of each kind came to, and a **log** of the work it has finished
   — is the running process's own state. The log holds every fill, sync,
   freeze, and deletion that ended, every move that was not refused before its
-  commit (LA-31), every folder a queue threw away, and every file a reader
-  asked for and was refused, newest first. A move, answered by its own
+  commit (LA-31), every add a person stopped (LA-36), every folder a queue
+  threw away, and every file a reader asked for and was refused, newest
+  first. A sync or a freeze a person stopped through the adds it carried is
+  logged as those adds and not as itself; a freeze of a folder somebody asked
+  to have packed, and a fill, stopped by a person — a book or a folder
+  stopped while it waited in its queue among them — are logged as
+  `cancelled` (LA-35), and a book holding adds that somebody had also asked
+  to have packed, or that was still owed a pack since a run of it stopped
+  (LA-36), stopped on its line, is logged as its stopped adds and as
+  a `cancelled` freeze of its folder, so whoever asked sees what became of
+  that request. A move, answered by its own
   request, has no last run in the running state; it appears in the log and
   the turn only. A refused file is
   left out when it was a peek or a read ahead (LA-33), or when what refused it
@@ -199,10 +209,11 @@ Concept background: [Library](../../concepts/library/),
   files, honored by construction: the account is held in memory, in no
   serialized structure.)*
   - A run's reported status and its refusal go together: a fill, sync, or
-    freeze whose status is `stopped` carries the refusal that stopped it —
+    freeze whose status is `stopped` — it failed — carries the refusal that stopped it —
     whatever refused the run, be it Storage, a Library locked before the run
     began, this device's own disk, or the worker ending without an answer —
-    and a run in any other status carries none. The catalog answers the same
+    and a run in any other status carries none, `cancelled` — a person
+    stopped it (LA-35) — among them. The catalog answers the same
     way: it stands `behind` exactly when it carries the refusal that stopped
     the last catch-up. A run a later one displaced from the record is
     one that had stopped, so it is reported as `stopped` and always with its
@@ -582,3 +593,118 @@ Concept background: [Library](../../concepts/library/),
   ahead for the first pages of the folder its reader is about to read on into,
   and for the cover of a folder the reader is on, so that walking past a
   folder fetches one image and sets none of it coming. *(Form: test)*
+
+### Stopping work
+
+- **LA-34.** An **add** is one drop or one **+**: the files one upload or one
+  import (LA-26) writes into a mapped folder, and the run that carries them
+  into the Library — a sync, or a freeze where the person chose a Pack
+  (PK-17). The server holds every add it is carrying in, beside the rest of
+  its work (LA-12), and a run holds the adds it carries. An add, a freeze and
+  a fill pass through these **run states**, and a person can stop one in
+  either of the first two:
+  1. **queued** — armed, and waiting for a worker or for this device's turn
+     at its pending work (LA-12), or, a book or a folder, waiting in its
+     flow's queue behind the run on record; an add is queued from its first
+     file to the moment its run takes it up, and **receiving** while its
+     request is still taking files;
+  2. **running** — its flow under way, before its commit;
+  3. **committing** — from the moment its flow says it is committing
+     (CP-1): a sync's and a freeze's commit phase, and every phase after it;
+     a fill commits nothing, so it is never in this state;
+  4. **ended** — with a **result**: `done`, `stopped` (it failed, and says
+     what stopped it, LA-12), or `cancelled` (a person stopped it, LA-35).
+
+  The result is a separate question from whether the run's batch
+  **committed**: a run that failed after its commit landed committed all the
+  same (CP-1), and one cancelled never did. A deletion and a move can be
+  stopped in no state: neither offers a Stop. The work answer says, of each
+  running sync, freeze and fill, whether its line offers a Stop (`stop`):
+  `offered`, `asked` once one was pressed and not yet answered, `committing`
+  once it has begun committing, and `null` otherwise — a sync carrying no add
+  offers none, since a sync is stopped only through its adds. Every book and
+  folder its freeze's or fill's queue lists as waiting offers a Stop, save a
+  book already asked, which the freeze lists as stopping. It lists the
+  adds the server holds — each until its run has ended, or, stopped, until it
+  has been undone — and whether each was asked to stop. *(Form: test)*
+- **LA-35.** A stop (`POST /api/stop`) is keyed like every route (LA-2),
+  refused while the Library is locked as every keyed route is (DK-2), and
+  names what it stops: an add, by the name the page gave it in its request
+  (`?add=` on an upload, `add` on an import) or one the server drew; the
+  sync, freeze, or fill on record, by its run number; or a book or a folder
+  waiting in its flow's queue, by its folder as a listing spells it. An add's
+  name is one to sixty-four ASCII letters, digits, `-` or `_`; a request
+  naming one otherwise is refused as a bad request, and one naming an add
+  already under way by that name is refused as a conflict; an add with no
+  name is given one by the server. Stopping a sync is stopping every add it carries, and stopping a
+  freeze stops every add whose files it packs. A book or a folder stopped in
+  its queue, holding no add, leaves it at once and is logged `cancelled`
+  (LA-12); a book holding adds is stopped through them: it stays queued,
+  listed as stopping, until the run that takes it up undoes each (LA-36)
+  before it reads anything, nothing else of the book packed, and it is
+  logged as LA-12 says. A stop is a request: it is answered at once, `202`, with
+  the work answer, which says the run was asked — or `409` with nothing
+  asked, where an add it names could not be undone (LA-36); the run
+  answers it by ending. A run asked before it begins committing ends `cancelled`, having
+  committed nothing; one that has begun committing takes no stop, and one
+  asked all the same — or asked at the moment it began committing — ends with
+  its real result, `done` or `stopped`, never `cancelled`, because a batch
+  that may have landed must not be reported as cancelled (PK-7). The stage a
+  stop is decided by is read under the one lock the run's steps are written
+  under, so a run is never both committing and cancelled. A stop naming
+  nothing under way, or a run that is no longer the one on record, changes
+  nothing. An add stopped while receiving is answered by its own request,
+  before its next file or between two pieces of one, `cancelled` with nothing
+  in `written`; one queued is answered by its run as that run is taken up,
+  before it reads anything. A stop whose answer the page never reads — the
+  page reloaded — is still answered: the add is listed as stopping, and then
+  the log says what the stop came to (LA-12, LA-36). A run, an add, or a
+  book or folder stopped in its queue that ended `cancelled` offers no Retry:
+  what a person stopped is asked for again the way it was asked the first
+  time. *(Form: test)*
+- **LA-36.** Stopping an add **undoes** it on this device. Every file the add
+  wrote into the folder is taken away, and nothing else: one written where
+  nothing stood is removed, and one written over a file that stood at its
+  path is replaced by that file again — never another file put in its place
+  since it landed, never the file an import was made from, and never a file a
+  run committed meanwhile, which is the Library's. Before an add writes over
+  a file, it keeps that file aside by a second link to it under a scratch
+  name in the same folder (OC-8), and it lets that link go when it ends,
+  however it ends. Where the folder's filesystem makes no hard link, the file
+  cannot be put back, so a stop of that add — or of a run carrying it — is
+  refused, naming the file and saying it cannot be put back, and the add goes
+  on to its run; a stop asked before such a file is written over keeps it
+  from being written over at all. The folders the add made on the way are
+  removed where it left them empty, and the
+  reservation its drop made for its Pack (PK-17) is released; one it took
+  over from a drop cut off before it is kept, for the files that drop
+  received. The undo is made by the flow that carries the add, under its turn
+  at this device's pending work and before that flow scans again — or, for a
+  Pack drop still receiving, by its own request, whose live reservation keeps
+  every run off its files (PK-17) — so no run carries in a file being
+  removed. A run a stop cut short is an interrupted run, which the next run
+  settles (OC-2, OC-3), and what it sent to Storage without committing is
+  left to the cleanup of orphaned objects (OC-2). The adds a stopped run
+  carried that nobody stopped are armed again, and so is a folder somebody
+  asked to have packed, or one still owed a pack, that joined their book,
+  unless the stop was of the run itself or of its book in its queue; a book
+  that was only adds, every one of them stopped, is not armed again. A folder
+  asked for after a run of it was asked to stop waits its own turn. The log keeps one entry per
+  stopped add (LA-12), saying how many files it had written, how many were
+  taken away, how many a run had committed, and how many are still in the
+  folder; it offers no second attempt, since adding again is dropping again.
+  A file of the add's still in the folder — one this device would not remove
+  or put the earlier file back over — is one like any copied there, which the
+  next sync carries in unless the person takes it away first.
+  An add every file of which a run had committed is not logged as stopped:
+  that run's own entry answers the stop. *(Form: test)*
+- **LA-37.** A fill a person stops stops where a fill superseded by another
+  folder does: between two parcels, and between two Entries (PK-21). What it
+  placed stays, each file whole and recorded (EP-10), and nothing is left
+  half-written at a path (EP-11); the parcels it read stay held. A reader's
+  own fetch of one file is stopped by the page withdrawing its request: a
+  fetch already under way is carried to its end — the file placed whole and
+  recorded, every parcel it reads read to its end (PK-21) — one still
+  waiting its turn is never begun, and no fill is armed by it. *(Form: test for the fill; prose for the
+  reader's fetch, which is the page withdrawing a request this server answers
+  as any other.)*

@@ -77,6 +77,7 @@ impl Fills {
             on_record: run,
             displaced: progress.displaced().to_vec(),
             waiting: progress.waiting(),
+            stopping: Vec::new(),
             discarded: progress.discarded().to_vec(),
         })
     }
@@ -220,6 +221,45 @@ impl Fills {
         self.progress.borrow().superseded()
     }
 
+    /// Asks fill run `run` to stop, where it is the one on record and still
+    /// filling (spec: LA-35). It stops where a fill superseded by another
+    /// folder stops: between two parcels, and between two Entries
+    /// (spec: PK-21).
+    pub(crate) fn ask_stop(&self, run: u64) {
+        self.progress.send_if_modified(|progress| {
+            progress.on_record.as_mut().is_some_and(|on_record| {
+                on_record.run == run
+                    && matches!(on_record.status, FillStatus::Filling)
+                    && on_record.stop.ask()
+            })
+        });
+    }
+
+    /// Takes `folder` off the queue, where it waits behind the run on record,
+    /// and logs it `cancelled`, a run stopped before it began (spec: LA-12,
+    /// LA-34).
+    pub(crate) fn cancel_waiting(&self, folder: &str) {
+        self.progress.send_if_modified(|progress| {
+            let Some(folder) = progress.cancel_waiting(folder) else {
+                return false;
+            };
+            self.log.record(Ended::Fill(FillRun {
+                status: FillStatus::Cancelled,
+                ..FillRun::starting(folder)
+            }));
+            true
+        });
+    }
+
+    /// Whether the run on record was asked to stop.
+    pub(super) fn asked(&self) -> bool {
+        self.progress
+            .borrow()
+            .on_record
+            .as_ref()
+            .is_some_and(|run| run.stop.asked())
+    }
+
     /// Says where the fill in progress has got to.
     ///
     /// The run number is stamped on here rather than carried by the caller: the
@@ -241,14 +281,25 @@ impl Fills {
             }
             run.read_unheld(progress.hand_over_unheld());
             self.ended.note(run);
+            // A stop asked of the run on record stays asked across the run's
+            // own publishing, which it does after every file.
+            let stop = progress
+                .on_record
+                .as_ref()
+                .filter(|on_record| on_record.run == progress.run())
+                .map_or(run.stop, |on_record| on_record.stop);
             let published = FillRun {
                 run: progress.run(),
+                stop,
                 ..run.clone()
             };
             // Logged under the same lock that publishes it, so no reader sees
             // the run over before the log has it. A run superseded by another
             // folder did not end, and is not logged.
-            if matches!(published.status, FillStatus::Done | FillStatus::Stopped(_)) {
+            if matches!(
+                published.status,
+                FillStatus::Done | FillStatus::Stopped(_) | FillStatus::Cancelled
+            ) {
                 self.log.record(Ended::Fill(published.clone()));
             }
             progress.on_record = Some(published);

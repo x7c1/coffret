@@ -13,6 +13,7 @@ import {
   answering,
   clock,
   collapsed,
+  ENDING_SAID,
   failedBadge,
   firstStanding,
   retryKey,
@@ -20,6 +21,7 @@ import {
   type Outcome,
   type Row,
   type Running,
+  type StopAsk,
 } from './activity';
 import { size } from './humanize';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
@@ -47,11 +49,14 @@ import { COLOR, SHADOW } from './theme';
  * by nobody.
  *
  * **Expanded**, it lists **In progress** — when the page first saw each, what
- * it is, how far it has got — and **Earlier**: what the server finished, and
- * what this page answered a gesture with, newest first, each with a dot for
- * what it came to and, on a failure asking again could help, a Retry. There
- * is nothing to clear: the server forgets what is old on its own, and what a
- * person has read is still worth having to read again.
+ * it is, how far it has got, and a Stop on an add, a freeze, a fill or the
+ * reader's fetch, which says `Stopping…` once pressed and `Finishing…` in its
+ * place once the run has begun committing (spec: LA-35) — and **Earlier**:
+ * what the server finished, and what this page answered a gesture with,
+ * newest first, each with a dot for what it came to and, on a failure asking
+ * again could help, a Retry. There is nothing to clear: the server forgets
+ * what is old on its own, and what a person has read is still worth having to
+ * read again.
  *
  * The row also carries what there is to say about the Library itself: the
  * parcels this device keeps, and the sync icon that asks it what is new —
@@ -72,6 +77,7 @@ export function ActivityPanel({
   entries,
   trouble,
   onRetry,
+  onStop,
   refresh,
   reconnect,
   locked,
@@ -89,6 +95,8 @@ export function ActivityPanel({
   trouble: Trouble | null;
   /** Presses one entry's Retry. */
   onRetry: (entry: Entry) => void;
+  /** Presses one line's Stop (spec: LA-35). */
+  onStop: (ask: StopAsk) => void;
   /**
    * Asking the Library what is new, and what the last asking came to.
    *
@@ -262,6 +270,21 @@ export function ActivityPanel({
                     <span style={TIME}>{clock(seen.get(item.key) ?? '')}</span>
                     <span style={TEXT}>{item.text}</span>
                     {item.progress !== null && <Bar progress={item.progress} width={120} />}
+                    {/* In the Stop's place once there is no stop to take: a
+                        line asked to stop says so until its run has ended,
+                        and one that has begun committing says it is
+                        finishing (spec: LA-35). */}
+                    {item.ending !== null && <span style={ENDING}>{ENDING_SAID[item.ending]}</span>}
+                    {item.stop !== null && (
+                      <StopButton
+                        what={item.text}
+                        onPress={() => {
+                          if (item.stop !== null) {
+                            onStop(item.stop);
+                          }
+                        }}
+                      />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -287,6 +310,20 @@ export function ActivityPanel({
         </div>
       )}
     </footer>
+  );
+}
+
+/**
+ * The Stop one line in progress offers: a square, named by what it stops, so
+ * a screen reader hears which of several lines it is about.
+ */
+function StopButton({ what, onPress }: { what: string; onPress: () => void }) {
+  return (
+    <button onClick={onPress} aria-label={`Stop — ${what}`} title="Stop" style={ICON_BUTTON}>
+      <svg aria-hidden="true" width={12} height={12} viewBox="0 0 12 12" style={{ display: 'block' }}>
+        <rect x={2} y={2} width={8} height={8} rx={1} fill="currentColor" />
+      </svg>
+    </button>
   );
 }
 
@@ -707,6 +744,9 @@ const TIME = {
 } as const;
 
 const TEXT = { flex: 1, minWidth: 0, color: COLOR.text } as const;
+
+/** What a line says in its Stop's place: quieter than the line itself. */
+const ENDING = { color: COLOR.dim, whiteSpace: 'nowrap' } as const;
 
 /** The failure the badge was pressed to show, for the moment it is lit. */
 const SOUGHT = { background: COLOR.refusedGround, outline: 'none' } as const;

@@ -49,12 +49,14 @@ function panel({
   entries = [],
   trouble = null,
   onRetry = () => undefined,
+  onStop = () => undefined,
   locked = null,
 }: {
   running?: Running[];
   entries?: Entry[];
   trouble?: Trouble | null;
   onRetry?: (entry: Entry) => void;
+  onStop?: (ask: StopAsk) => void;
   locked?: UnlockOffer | null;
 } = {}) {
   return render(
@@ -64,6 +66,7 @@ function panel({
       entries={entries}
       trouble={trouble}
       onRetry={onRetry}
+      onStop={onStop}
       refresh={QUIET}
       reconnect={null}
       locked={locked}
@@ -80,8 +83,8 @@ function toggle(): HTMLElement {
 it('starts collapsed, as one row saying what is running', () => {
   panel({
     running: [
-      { key: 'adding', text: 'sending 188 files to Vol. 06', progress: 0.6 },
-      { key: 'sync', text: 'backing up what was added…', progress: null },
+      { key: 'adding', text: 'sending 188 files to Vol. 06', progress: 0.6, stop: null, ending: null },
+      { key: 'sync', text: 'backing up what was added…', progress: null, stop: null, ending: null },
     ],
   });
   expect(toggle().getAttribute('aria-expanded')).toBe('false');
@@ -147,7 +150,7 @@ it('says the answer to a gesture in place of what is running for a moment', () =
     text: 'preview of this format is not supported yet',
     answers: true,
   });
-  const running = [{ key: 'sync', text: 'backing up what was added…', progress: 0.5 }];
+  const running = [{ key: 'sync', text: 'backing up what was added…', progress: 0.5, stop: null, ending: null }];
   const entries = [unsupported, STOPPED_BOOK];
   const { unmount } = panel({ running, entries });
 
@@ -181,7 +184,7 @@ it('says the answer to a gesture in place of what is running for a moment', () =
 it('lists what is in progress and what is over once opened, with a Retry', () => {
   const onRetry = vi.fn();
   panel({
-    running: [{ key: 'sync', text: 'backing up what was added…', progress: null }],
+    running: [{ key: 'sync', text: 'backing up what was added…', progress: null, stop: null, ending: null }],
     entries: [STOPPED_BOOK, entry()],
     onRetry,
   });
@@ -231,7 +234,7 @@ it('offers no way to clear what is over', () => {
 it('says the Library is locked and offers the unlock in place of the summary', () => {
   const ask = vi.fn();
   panel({
-    running: [{ key: 'sync', text: 'backing up what was added…', progress: null }],
+    running: [{ key: 'sync', text: 'backing up what was added…', progress: null, stop: null, ending: null }],
     locked: { asking: false, said: null, refused: null, ask },
   });
   expect(screen.getByText(LOCKED)).toBeTruthy();
@@ -267,4 +270,105 @@ it('shows the keyboard shortcuts on ? and puts them away on the next key', () =>
   fireEvent.keyDown(field, { key: '?' });
   expect(screen.queryByRole('tooltip')).toBeNull();
   field.remove();
+});
+
+// LA-35: a line that can be stopped draws a Stop named by what it stops, and
+// pressing it asks for that; a line asked to stop, or one finishing its
+// commit, says so in the Stop's place and draws none.
+it('draws a Stop where a line offers one, and says stopping or finishing in its place', () => {
+  const onStop = vi.fn();
+  panel({
+    running: [
+      {
+        key: 'sync',
+        text: 'backing up what was added…',
+        progress: null,
+        stop: { server: { sync: 3 } },
+        ending: null,
+      },
+      { key: 'freeze', text: 'packing books/vol-1…', progress: null, stop: null, ending: 'finishing' },
+      { key: 'fill', text: 'bringing over albums…', progress: null, stop: null, ending: 'stopping' },
+    ],
+    onStop,
+  });
+  fireEvent.click(toggle());
+  const progress = within(screen.getByRole('region', { name: 'In progress' }));
+  fireEvent.click(progress.getByRole('button', { name: 'Stop — backing up what was added…' }));
+  expect(onStop).toHaveBeenCalledWith({ server: { sync: 3 } });
+  expect(progress.getAllByRole('button')).toHaveLength(1);
+  expect(progress.getByText('Finishing…')).toBeTruthy();
+  expect(progress.getByText('Stopping…')).toBeTruthy();
+});
+
+// LA-34: a book or a folder still waiting in its queue draws a Stop of its
+// own, and pressing it names that book or folder; one holding adds that was
+// asked already says it is stopping instead.
+it('draws a Stop on a book or a folder waiting in its queue', () => {
+  const onStop = vi.fn();
+  panel({
+    running: [
+      {
+        key: 'queued-freeze:books/vol-2',
+        text: 'waiting to pack books/vol-2',
+        progress: null,
+        stop: { server: { queued_freeze: 'books/vol-2' } },
+        ending: null,
+      },
+      {
+        key: 'queued-freeze:books/vol-3',
+        text: 'waiting to pack books/vol-3',
+        progress: null,
+        stop: null,
+        ending: 'stopping',
+      },
+      {
+        key: 'queued-fill:letters',
+        text: 'waiting to bring over letters',
+        progress: null,
+        stop: { server: { queued_fill: 'letters' } },
+        ending: null,
+      },
+    ],
+    onStop,
+  });
+  fireEvent.click(toggle());
+  const progress = within(screen.getByRole('region', { name: 'In progress' }));
+  fireEvent.click(progress.getByRole('button', { name: 'Stop — waiting to pack books/vol-2' }));
+  expect(onStop).toHaveBeenCalledWith({ server: { queued_freeze: 'books/vol-2' } });
+  fireEvent.click(progress.getByRole('button', { name: 'Stop — waiting to bring over letters' }));
+  expect(onStop).toHaveBeenCalledWith({ server: { queued_fill: 'letters' } });
+  expect(progress.getAllByRole('button')).toHaveLength(2);
+  expect(progress.getByText('Stopping…')).toBeTruthy();
+});
+
+// LA-37: the reader's fetch keeps its own line and Stop beside a fill bringing
+// its folder over, and each Stop asks only for its own line.
+it("draws the reader's fetch with its own Stop beside a fill", () => {
+  const onStop = vi.fn();
+  panel({
+    running: [
+      {
+        key: 'fill',
+        text: 'bringing over letters',
+        progress: 0.25,
+        stop: { server: { fill: 2 } },
+        ending: null,
+      },
+      {
+        key: 'fetching',
+        text: 'fetching letters/001.jpg…',
+        progress: null,
+        stop: { reader: true },
+        ending: null,
+      },
+    ],
+    onStop,
+  });
+  fireEvent.click(toggle());
+  const progress = within(screen.getByRole('region', { name: 'In progress' }));
+  fireEvent.click(progress.getByRole('button', { name: 'Stop — fetching letters/001.jpg…' }));
+  expect(onStop).toHaveBeenCalledWith({ reader: true });
+  fireEvent.click(progress.getByRole('button', { name: 'Stop — bringing over letters' }));
+  expect(onStop).toHaveBeenCalledWith({ server: { fill: 2 } });
+  expect(progress.getAllByRole('button')).toHaveLength(2);
 });

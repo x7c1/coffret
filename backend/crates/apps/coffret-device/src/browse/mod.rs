@@ -40,6 +40,10 @@ pub use child_folder::ChildFolder;
 // listing.
 mod container_of;
 
+// Which Entry stands at a path, for a caller telling whether a commit happened
+// there since it last asked.
+mod entry_at;
+
 mod entry_state;
 pub use entry_state::EntryState;
 
