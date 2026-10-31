@@ -1,5 +1,5 @@
 use coffret_model::Passphrase;
-use coffret_usecase::sync::{sync_folders, SyncOutcome, SyncRequest};
+use coffret_usecase::sync::{sync_folders, ScanScope, SyncOutcome, SyncRequest};
 use coffret_usecase::Progress;
 use tracing::info;
 
@@ -33,6 +33,19 @@ impl OpenLibrary {
     /// than acted on — so [`Findings`](crate::Findings) over what comes back is
     /// the other half of reading it (spec: PK-14, EP-12).
     pub async fn sync(&self, progress: &dyn Progress) -> Result<SyncOutcome> {
+        self.sync_within(progress, ScanScope::Mappings).await
+    }
+
+    /// The same run, walking only the mapped folders `scope` covers
+    /// (spec: EP-10): what a sync a drop armed walks, which is the folders
+    /// the drop wrote into. Everything else about the run — the catch-up, the
+    /// settling of what an interrupted run left, the relocations — is the
+    /// same as [`sync`](Self::sync)'s.
+    pub async fn sync_within(
+        &self,
+        progress: &dyn Progress,
+        scope: ScanScope,
+    ) -> Result<SyncOutcome> {
         let now = now();
         let batch = next_batch_id(now);
 
@@ -43,6 +56,9 @@ impl OpenLibrary {
             operation = "sync",
             library = %self.library_id,
             batch = %batch,
+            // Whether the walk is narrowed, and nothing about to what: the
+            // folders are Entry Paths (spec: EL-1).
+            narrowed = !scope.is_mappings(),
             "syncing the mapped folders"
         );
         let outcome = sync_folders(
@@ -59,7 +75,8 @@ impl OpenLibrary {
                 now,
             )
             .watched_by(progress)
-            .knowing(&self.births),
+            .knowing(&self.births)
+            .within(scope),
         )
         .await;
         self.fetch_memory.forget_key_table();

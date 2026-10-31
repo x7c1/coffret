@@ -502,7 +502,7 @@ pub use coffret_usecase::rename::{
 };
 pub use coffret_usecase::repack::{RepackError, RepackOutcome, RepackRefusal, RepackedPack};
 pub use coffret_usecase::sync::{
-    Disposal, RetainedKeyringReplicas, Settled, SyncError, SyncOutcome,
+    Disposal, RetainedKeyringReplicas, ScanScope, Settled, SyncError, SyncOutcome,
 };
 pub use coffret_usecase::{
     DescentError, LocalIoError, LocalOperation, Missing, RefusedRoot, Relocation,

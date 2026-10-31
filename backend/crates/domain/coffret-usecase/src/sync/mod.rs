@@ -40,7 +40,9 @@
 //!    relocated is left where it stands, reported, and asked about again by the
 //!    next run.
 //! 4. **Scan** (spec: EP-8, EP-9, EP-10). Walk each of the device's mappings
-//!    and translate the regular files under it into Entry Paths. A path the
+//!    — or, for a run narrowed to some folders ([`ScanScope`]), those folders
+//!    alone, looking nowhere else — and translate the regular files under it
+//!    into Entry Paths. A path the
 //!    Library holds no current Entry for is new. A path whose file no longer
 //!    matches the size and modification time this device last observed is a
 //!    *candidate*, decided by hashing the plaintext and comparing it with the
@@ -165,6 +167,8 @@ pub use sync_request::SyncRequest;
 // so it is one finding rather than one per flow (spec: EP-12).
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
+// Which mapped folders one run walks (spec: EP-10).
+pub use crate::local_scan::ScanScope;
 pub use crate::unavailable_root::{RootUnavailable, UnavailableRoot};
 // What became of a file that waited to follow a rename of its Entry, shared
 // with the fetch that relocates the same files (spec: EP-10).

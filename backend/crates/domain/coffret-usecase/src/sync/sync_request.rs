@@ -4,7 +4,7 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
-use crate::local_scan::{UnknownBirths, NONE_PLACED};
+use crate::local_scan::{ScanScope, UnknownBirths, NONE_PLACED};
 use crate::local_trash::LocalTrash;
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
@@ -22,7 +22,9 @@ use crate::spool::Spool;
 /// than derives: what it calls this batch and what its clock says. Which
 /// folders are scanned is not among them — that is the device's mappings, which
 /// the [`Index`] holds (spec: EP-9), so a caller cannot sync a folder the
-/// Library does not know it has.
+/// Library does not know it has. A caller can only narrow the walk to some of
+/// those folders ([`within`](Self::within)), which a sync a drop armed does
+/// (spec: EP-10).
 pub struct SyncRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,
@@ -89,6 +91,15 @@ pub struct SyncRequest<'a> {
     /// Only a drop onto the explorer records a file here. The default holds
     /// nothing.
     pub births: &'a UnknownBirths,
+    /// Which of the mapped folders the scan walks (spec: EP-10): every one
+    /// by default, and the folders a drop wrote into for a sync that drop
+    /// armed.
+    ///
+    /// The scan alone is narrowed. The catch-up, the settling of what an
+    /// interrupted run left and the relocation of files waiting to follow
+    /// their Entries run as they do for every sync (spec: CK-9, OC-2,
+    /// EP-10).
+    pub scope: ScanScope,
 }
 
 impl<'a> SyncRequest<'a> {
@@ -123,6 +134,7 @@ impl<'a> SyncRequest<'a> {
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
             births: &NONE_PLACED,
+            scope: ScanScope::Mappings,
         }
     }
 
@@ -142,6 +154,12 @@ impl<'a> SyncRequest<'a> {
     /// of their own.
     pub fn knowing(mut self, births: &'a UnknownBirths) -> Self {
         self.births = births;
+        self
+    }
+
+    /// The same request, walking only the folders `scope` covers.
+    pub fn within(mut self, scope: ScanScope) -> Self {
+        self.scope = scope;
         self
     }
 }

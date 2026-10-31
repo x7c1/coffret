@@ -16,6 +16,7 @@ mod beside;
 mod browse;
 mod contract;
 mod delete;
+mod drop_scope;
 mod fences;
 mod file;
 mod fill;

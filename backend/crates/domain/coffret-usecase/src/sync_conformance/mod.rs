@@ -194,7 +194,7 @@ pub use roots::{
 
 mod scope;
 pub use scope::{
-    a_file_deleted_locally_is_surfaced_and_untouched,
+    a_file_deleted_locally_is_surfaced_and_untouched, a_sync_within_some_folders_walks_those_alone,
     an_entry_this_device_never_materialized_is_left_alone,
 };
 
@@ -273,6 +273,7 @@ macro_rules! sync_conformance {
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,
             an_entry_this_device_never_materialized_is_left_alone,
+            a_sync_within_some_folders_walks_those_alone,
             an_unedited_file_this_device_deleted_goes_to_the_trash,
             an_unedited_file_another_device_deleted_goes_to_the_trash,
             an_edited_departed_file_is_kept_and_reported_every_run,

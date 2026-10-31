@@ -1,8 +1,11 @@
+use std::collections::BTreeSet;
+
 use coffret_model::{ContainerKind, Mtime};
 
 use crate::conformance_library::Library;
+use crate::device_state::Mapping;
 use crate::entry_paths::entry_path;
-use crate::sync::{sync_folders, Surfaced};
+use crate::sync::{sync_folders, ScanScope, Surfaced};
 use crate::sync_conformance::fixtures::{keys, map, plant, request, touch, write, NEWER, OLDER};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
@@ -144,5 +147,120 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
             .expect("asking the Index for a local row must succeed")
             .is_none(),
         "a sync that placed nothing invents no claim to have placed it",
+    );
+}
+
+/// A sync narrowed to some folders walks those alone, and a sync of the
+/// default request walks every mapping (spec: EP-10).
+///
+/// The narrowed one is what a sync a drop armed is: it carries in the files
+/// standing directly in the folders the drop wrote into, and looks nowhere
+/// else — not into a folder beside them, not into one below them, and not
+/// under a mapping that reaches none of them, whose root it does not even ask
+/// about. So a file this device placed and lost out there is not reported as
+/// deleted, and a new file out there is not carried in. The next sync of
+/// every mapping does both.
+pub async fn a_sync_within_some_folders_walks_those_alone(fixture: &SyncUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    let remainder = fixture.folder().join("everything");
+    let albums = fixture.folder().join("photographs");
+    for (prefix, local_root) in [
+        (None, remainder.clone()),
+        (Some(entry_path("albums")), albums.clone()),
+    ] {
+        index
+            .set_mapping(Mapping::new(prefix, local_root))
+            .await
+            .expect("recording a mapping must succeed");
+    }
+    let lost = write(
+        fixture.fs(),
+        &remainder,
+        "other/lost.jpg",
+        b"placed, then lost",
+    );
+    write(fixture.fs(), &albums, "spring.jpg", b"a photo");
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
+        .await
+        .expect("a first sync must succeed");
+    assert_eq!(first.added.len(), 2);
+
+    fixture.fs().remove_file(&lost);
+    write(fixture.fs(), &remainder, "dropped/a.jpg", b"dropped");
+    write(
+        fixture.fs(),
+        &remainder,
+        "dropped/below/b.jpg",
+        b"below the drop",
+    );
+    write(
+        fixture.fs(),
+        &remainder,
+        "other/new.jpg",
+        b"put there by hand",
+    );
+    write(fixture.fs(), &remainder, "top.jpg", b"at the top");
+    // The `albums` mapping's root goes, which a sync that asked about it would
+    // report (spec: EP-12).
+    fixture.fs().remove_dir_all(&albums);
+
+    let narrowed = sync_folders(request(store, index, &keys, fixture.fs(), 2).within(
+        ScanScope::Folders {
+            root: false,
+            folders: BTreeSet::from([entry_path("dropped")]),
+        },
+    ))
+    .await
+    .expect("a narrowed sync must succeed");
+
+    assert_eq!(narrowed.added.len(), 1, "{narrowed:?}");
+    assert!(index
+        .entry_at(&entry_path("dropped/a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .is_some());
+    for path in ["dropped/below/b.jpg", "other/new.jpg", "top.jpg"] {
+        assert!(
+            index
+                .entry_at(&entry_path(path))
+                .await
+                .expect("asking the Index for a path must succeed")
+                .is_none(),
+            "{path} stands outside the folders the sync covers",
+        );
+    }
+    assert!(
+        narrowed.surfaced.is_empty(),
+        "a file outside the folders is not read as deleted: {:?}",
+        narrowed.surfaced,
+    );
+    assert!(
+        narrowed.unavailable.is_empty(),
+        "a mapping that reaches none of the folders is not asked about",
+    );
+    assert_eq!(narrowed.mappings, 2, "the device still maps both");
+
+    let full = sync_folders(request(store, index, &keys, fixture.fs(), 3))
+        .await
+        .expect("a sync of every mapping must succeed");
+    assert_eq!(
+        full.added.len(),
+        3,
+        "everything the narrowed sync left: {full:?}"
+    );
+    assert!(
+        matches!(
+            full.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("other/lost.jpg")
+        ),
+        "{:?}",
+        full.surfaced,
+    );
+    assert_eq!(
+        full.unavailable.len(),
+        1,
+        "and the root that went is reported"
     );
 }

@@ -18,13 +18,15 @@ use super::release::release_stopped;
 /// the reservation is then let go as for any drop that armed nothing — one it
 /// took over from a drop cut off before it is kept, for that drop's files.
 ///
-/// A drop for a sync is not: a sync walks every mapped folder, and one under
-/// way may be about to read these very files. So the add is handed to the
-/// sync, stopped: the run carrying it undoes it under its turn at this
-/// device's pending work, before it scans anything (see
-/// [`sync`](crate::sync)), and a run already under way is asked to stop as
-/// well, so it does not commit what is being taken away. A drop that had
-/// written nothing has nothing to take away, and is answered here either way.
+/// A drop for a sync is not: a sync under way may walk the folders this drop
+/// wrote into — every sync not armed by a drop walks every mapped folder — and
+/// so be about to read these very files. So the add is handed to the sync,
+/// stopped: the run carrying it undoes it under its turn at this device's
+/// pending work, before it scans anything (see [`sync`](crate::sync)), and a
+/// run already under way is asked to stop as well, so it does not commit what
+/// is being taken away. The run it arms here walks the folders the drop wrote
+/// into, as for a drop that finished (spec: EP-10). A drop that had written
+/// nothing has nothing to take away, and is answered here either way.
 pub(super) async fn stop_receiving(
     state: &Arc<ServerState>,
     library: &OpenLibrary,

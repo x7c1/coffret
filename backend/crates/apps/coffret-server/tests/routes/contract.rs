@@ -170,8 +170,9 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     served.plant_locally("albums/blocked", b"a file in a folder's place");
     // And a folder the Library does not have, whose one file sits a level
     // further down: named in the listing's `folders_on_disk` and not among its
-    // `folders`. The sync below commits the file, so the later `/api/folders`
-    // and refresh answers count it as the Library's.
+    // `folders`. The sync of every mapped folder below commits the file — a
+    // drop's sync walks only the folder it wrote into (spec: EP-10) — so the
+    // later `/api/folders` and refresh answers count it as the Library's.
     served.plant_locally("albums/extras/page.jpg", b"a page in a subfolder");
 
     let root = answered_as_json(&served, "GET", "/api/list?path=").await;
@@ -197,6 +198,8 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         assert_eq!(status, 200, "{body}");
         body
     };
+    served.sync_idle().await;
+    assert_eq!(served.post("/api/sync").await.status(), 202);
     served.sync_idle().await;
 
     // The root of a device that maps one top-level folder and not the root,

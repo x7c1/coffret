@@ -80,9 +80,10 @@ impl Syncs {
     /// committing (spec: LA-35).
     ///
     /// Asked for every add a person stops that a sync is to carry, whichever
-    /// run it is armed for: a sync walks every mapped folder, so the run under
-    /// way may be about to read the files being taken away. The adds such a
-    /// run carried that nobody stopped are armed again once it has stopped.
+    /// run it is armed for: the run under way may walk the folder the add
+    /// wrote into, and so be about to read the files being taken away. The
+    /// adds such a run carried that nobody stopped are armed again once it has
+    /// stopped.
     pub(crate) fn ask_stop(&self) {
         self.progress.send_if_modified(|progress| {
             progress.on_record.as_mut().is_some_and(|run| {
@@ -109,6 +110,12 @@ impl Syncs {
             .as_ref()
             .map(|run| (run.adds.clone(), run.requested))
             .unwrap_or_default()
+    }
+
+    /// Takes into the run on record what was armed while it waited for its
+    /// turn. See [`Progress::absorb`].
+    pub(super) fn absorb(&self) {
+        self.progress.send_if_modified(Progress::absorb);
     }
 
     /// Whether the run on record was asked to stop and has not answered.

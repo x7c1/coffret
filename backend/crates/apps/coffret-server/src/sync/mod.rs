@@ -16,23 +16,37 @@
 //! One sync runs at a time, on one worker the server owns — a second
 //! beside the fill's, because the two are different work over one Library and
 //! neither waits on the other. A drop that arrives while a sync is running queues
-//! exactly one follow-up run, and a second drop queues no more than that: what
-//! the next run does is walk the mapped folders, and one walk finds both files.
-//! There is nothing to lose by collapsing them and a whole scan to spend by not.
+//! exactly one follow-up run, and a second drop queues no more than that: the
+//! next run walks the folders both drops wrote into, and one walk finds both
+//! files. There is nothing to lose by collapsing them and a scan to spend by
+//! not. What is armed while a run waits for its turn at this device's pending
+//! work is taken into that run, which has walked nothing yet.
 //!
 //! That is where this differs from the fill, and the difference is the shape of
 //! the work rather than a choice: a fill is *of a folder*, so arming another one
-//! replaces it, and a sync is of the device's mappings entire, so arming one
-//! twice asks for the same thing twice.
+//! replaces it, and a sync is of whatever was armed for it, so arming one twice
+//! asks for the union of the two.
+//!
+//! # What it walks
+//!
+//! A sync a drop armed walks the folders the drop wrote its files into, and
+//! nothing else (spec: EP-10): what a drop costs grows with what was dropped
+//! rather than with the Library, and a file put by hand into another folder
+//! waits for a sync that covers it. Every other sync — the retry
+//! (`POST /api/sync`), and anything else that arms one without a drop — walks
+//! every mapped folder, as the command line's does, and one wanted before a
+//! drop's has taken its turn covers the drop's rather than both running.
 //!
 //! # What it is not allowed to do
 //!
-//! It runs [`sync`](coffret_device::OpenLibrary::sync) and nothing else — no
-//! narrowing, no selection, no second reading of what a sync means. A run that
-//! returns `Ok` has still to be read for what it left alone (spec: PK-14,
-//! EP-12), and those findings reach the browser as [`Finding`] rather than being
-//! swallowed: somebody who dropped a file is owed the answer that it was not
-//! backed up, and they are not at a terminal to be told there.
+//! It runs [`sync_within`](coffret_device::OpenLibrary::sync_within) and
+//! nothing else — no selection of files, no second reading of what a sync
+//! means: the scope is the one narrowing, and it is the rule's (spec: EP-10)
+//! rather than this server's. A run that returns `Ok` has still to be read for
+//! what it left alone (spec: PK-14, EP-12), and those findings reach the
+//! browser as [`Finding`] rather than being swallowed: somebody who dropped a
+//! file is owed the answer that it was not backed up, and they are not at a
+//! terminal to be told there.
 
 mod arm_sync;
 pub use arm_sync::arm_sync;

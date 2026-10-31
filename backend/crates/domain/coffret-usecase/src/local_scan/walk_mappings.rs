@@ -8,6 +8,7 @@ use crate::folder_entry_kind::FolderEntryKind;
 use crate::local_error::LocalError;
 use crate::local_scan::assess_root::assess_root;
 use crate::local_scan::root_state::RootState;
+use crate::local_scan::scan_scope::ScanScope;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::stale_scratch::StaleScratch;
 use crate::local_scan::system_file::SystemFile;
@@ -66,6 +67,25 @@ pub(crate) async fn walk_mappings(
     mappings: &[Mapping],
     births: &UnknownBirths,
 ) -> Result<Walked, LocalError> {
+    walk_mappings_within(roots, mappings, births, &ScanScope::Mappings).await
+}
+
+/// The same walk, over the folders `scope` covers and nothing else
+/// (spec: EP-10).
+///
+/// A mapping that reaches no folder in scope is not asked about at all — its
+/// root is not assessed, and it is in [`Walked::roots`] neither as available
+/// nor as unavailable — and under one that does, the walk enters only the
+/// folders on the way to one in scope, and finds only the files standing
+/// directly in a folder in scope. A stale scratch is handed back from those
+/// folders alone, and so is a name an operating system keeps: what lies
+/// anywhere else is not looked at.
+pub(crate) async fn walk_mappings_within(
+    roots: &dyn MappedRoots,
+    mappings: &[Mapping],
+    births: &UnknownBirths,
+    scope: &ScanScope,
+) -> Result<Walked, LocalError> {
     // Every mapping's prefix, available or not, so the root mapping never walks
     // into the folder that stands where an unplugged subtree belongs.
     //
@@ -80,6 +100,9 @@ pub(crate) async fn walk_mappings(
     let mut stale = Vec::new();
     let mut system = Vec::new();
     for mapping in mappings {
+        if !scope.reaches(mapping.prefix.as_ref(), &represented_elsewhere) {
+            continue;
+        }
         let state = assess_root(roots, mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
         // nothing under it is walked (spec: EP-12).
@@ -99,6 +122,7 @@ pub(crate) async fn walk_mappings(
                 &mapping.local_root,
                 mapping.prefix.as_ref(),
                 &elsewhere,
+                scope,
             )
             .await?;
             // Only under a root with an identity to hold it to: a removal is a
@@ -171,11 +195,16 @@ struct RootWalk {
 /// Beside the files, the locations of the stale scratches it passed over
 /// ([`scratch::is_stale`]) and the names an operating system keeps that it left
 /// out (spec: EP-17).
+///
+/// `scope` bounds it further (spec: EP-10): it enters a folder only on the way
+/// to one in scope, and takes what stands in a folder only where that folder
+/// is in scope.
 async fn walk(
     roots: &dyn MappedRoots,
     root: &Path,
     prefix: Option<&EntryPath>,
     elsewhere: &BTreeSet<&str>,
+    scope: &ScanScope,
 ) -> Result<RootWalk, LocalError> {
     let mut found = Vec::new();
     let mut stale = Vec::new();
@@ -192,6 +221,14 @@ async fn walk(
         let Some(entries) = roots.list_folder(root, local_relative.as_ref()).await? else {
             continue;
         };
+        // Whether what stands directly in this folder is in scope, held to
+        // where the folder stands in the Library: the mapping's prefix itself
+        // at the top of the walk. Every folder is, for a walk of every mapping.
+        let in_scope = scope.is_mappings()
+            || match &relative {
+                None => scope.lists(prefix),
+                Some(relative) => scope.lists(Some(&entry_path(prefix, relative.clone()))),
+            };
 
         for entry in entries {
             let local_path = local_relative
@@ -224,6 +261,22 @@ async fn walk(
                 None => MappedRelativeLocation::from_component(entry.name.clone()),
                 Some(relative) => relative.below_component(entry.name.clone()),
             };
+            // A file, or anything else that is not a folder, standing in a
+            // folder out of scope is not looked at; nor is a folder no folder
+            // in scope lies under.
+            let below = match &relative {
+                None => name.clone(),
+                Some(relative) => relative.below(&name),
+            };
+            let looked_at = match entry.kind {
+                FolderEntryKind::Folder => {
+                    scope.is_mappings() || scope.enters(&entry_path(prefix, below.clone()))
+                }
+                _ => in_scope,
+            };
+            if !looked_at {
+                continue;
+            }
             match reserved_name(name.as_str()) {
                 // A scratch a fetch was killed in the middle of writing. It
                 // is coffret's own and not user data, so it is passed over
@@ -281,10 +334,6 @@ async fn walk(
                 Some(_) => Depth::Below,
             };
             let left_out = system_files::is_system_file(name.as_str(), depth);
-            let below = match &relative {
-                None => name,
-                Some(relative) => relative.below(&name),
-            };
             if left_out {
                 system.push(SystemFile {
                     path: entry_path(prefix, below),

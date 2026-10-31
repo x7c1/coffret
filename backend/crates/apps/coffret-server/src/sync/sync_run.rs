@@ -16,9 +16,10 @@ use super::SyncStatus;
 /// this says what a run of the flow did and what it left alone.
 ///
 /// There is no folder here, unlike a fill's account of itself, and no count of
-/// what a run set out to do. A sync covers the device's mappings entire and finds
-/// what there is to find by walking them, so there is no total to state until the
-/// walk is over; what is stated is what came of it.
+/// what a run set out to do. A sync covers the device's mappings, or the folders
+/// the drops it carries wrote into (spec: EP-10), and finds what there is to
+/// find by walking them, so there is no total to state until the walk is over;
+/// what is stated is what came of it.
 #[derive(Clone, Debug)]
 pub struct SyncRun {
     /// Which run of the sync this is, counted from the start of this process.

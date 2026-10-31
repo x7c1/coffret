@@ -181,6 +181,22 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     therefore holds a partial subtree without the rest counting as deleted;
     a device with no mapping under `books/` leaves it untouched the same way,
     while its Index still lists all of it.
+  - A sync's **scope** is the folders its scan walks. A sync covers every
+    mapped folder, unless a drop armed it (LA-34): then it covers the paths
+    the drop wrote, which is the folders the drop's files stand in — the
+    files standing directly in each, and no folder beside or below one.
+    Outside its scope a sync looks at nothing: no file there is carried in,
+    and none is reported as modified, deleted locally, or departed (EP-15),
+    whatever its record says; a mapping that reaches no folder in scope is
+    neither walked nor reported unavailable (EP-12). What it leaves waits, as
+    it is, for a sync whose scope covers it — the command line's, or a
+    server's sync armed without a drop. Where a sync of every mapped folder
+    is wanted beside a drop's still waiting for this device's turn at its
+    pending work (LA-12), the one sync covers every mapped folder and carries
+    the drop in, rather than both running; one wanted once the drop's has
+    taken its turn runs after it. Narrowing touches the scan alone: the
+    catch-up (CK-9), the settling of what an interrupted run left (OC-2), and
+    the relocations below run before it as they run for every sync.
   - A materialization record names the Entry it is a copy of by
     `(Container ID, entry number)` (FM-9), never by the path its file stands
     at, and the device keeps that name current. A record of an Entry that a

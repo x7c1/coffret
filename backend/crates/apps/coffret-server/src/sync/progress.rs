@@ -26,7 +26,7 @@ pub(super) struct Progress {
     ///
     /// A flag and not a count, which is the whole of the collapsing rule: two
     /// drops during one sync queue one follow-up, because the next run walks the
-    /// mapped folders and one walk finds both files.
+    /// folders both wrote into and one walk finds both files.
     armed: bool,
     /// The adds the next run carries, armed since the run under way was
     /// taken up (spec: LA-34).
@@ -149,6 +149,27 @@ impl Progress {
         }
     }
 
+    /// Takes into the run on record what was armed while it waited for its
+    /// turn, and says whether there was anything: a run that has not begun
+    /// its walk can still walk for it, which spares a second run over the
+    /// same folders — and a sync requested of its own covers every mapped
+    /// folder, so the drops it absorbs are walked by it (spec: EP-10).
+    ///
+    /// Called by the worker once it holds the turn and before it walks
+    /// anything; what is armed after that waits for the next run.
+    pub(super) fn absorb(&mut self) -> bool {
+        if !self.armed {
+            return false;
+        }
+        let Some(run) = self.on_record.as_mut() else {
+            return false;
+        };
+        run.adds.append(&mut self.pending);
+        run.requested |= std::mem::take(&mut self.requested);
+        self.armed = false;
+        true
+    }
+
     /// Arms the adds a run that was stopped still carried, and its own
     /// request, for the next run (spec: LA-36). Called from inside the worker,
     /// which is running and so takes the next run up itself.
@@ -230,6 +251,25 @@ mod tests {
             "and there is not a second follow-up behind it",
         );
         assert!(progress.idle());
+    }
+
+    // A sync requested while a drop's sync waits for its turn is taken into
+    // that run rather than run after it: the run has walked nothing yet, and
+    // walking every mapped folder covers the drop's.
+    #[test]
+    fn a_sync_armed_while_one_waits_for_its_turn_is_taken_into_it() {
+        let mut progress = Progress::default();
+        let drop = crate::adds::AddId::drawn(1);
+        progress.arm(Some(drop.clone()));
+        assert!(progress.take_next());
+
+        progress.arm(None);
+        assert!(progress.absorb());
+        let run = progress.on_record.as_ref().expect("the run is on record");
+        assert!(run.requested, "the run now walks every mapped folder");
+        assert!(run.adds.contains(&drop), "and still carries the drop");
+        assert!(!progress.take_next(), "and nothing runs after it");
+        assert!(!progress.absorb(), "nothing armed is nothing to take in");
     }
 
     // A sync that stopped is not a sync that is running: the retry after a
