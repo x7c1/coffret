@@ -179,3 +179,29 @@ it('takes rows of the tree dragged onto the Library’s name, saying Move to Lib
   fireEvent.drop(name, air);
   expect(onMoveToRoot).toHaveBeenCalledTimes(1);
 });
+
+// A locked Library has nothing to add to: the **+** is drawn disabled and
+// opens nothing, and the refusal that kept the name from the page is not said
+// here in red — the main area says the lock.
+it('draws the + disabled while the Library is locked, and says no refusal for the name', () => {
+  const refused: Asked<Library> = { status: 'failed', message: 'the Library is locked', locked: true };
+  render(
+    <Header
+      library={refused}
+      focus={null}
+      onAdd={vi.fn()}
+      onCollecting={vi.fn()}
+      onUnreadable={vi.fn()}
+      onKeysBack={vi.fn()}
+      makesFolderIn={() => true}
+      onNewFolder={vi.fn()}
+      locked
+    />,
+  );
+  const add = screen.getByRole('button', { name: 'Add files' }) as HTMLButtonElement;
+  expect(add.disabled).toBe(true);
+  fireEvent.click(add);
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect(screen.queryByTestId('library')).toBeNull();
+  expect(screen.queryByText('the Library is locked')).toBeNull();
+});

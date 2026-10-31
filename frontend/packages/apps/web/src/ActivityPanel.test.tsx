@@ -1,15 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 
-import {
-  ActivityPanel,
-  LOCKED,
-  SHORTCUTS,
-  SHOW_FAILURES,
-  UNLOCK,
-  type UnlockOffer,
-} from './ActivityPanel';
+import { ActivityPanel, SHORTCUTS, SHOW_FAILURES } from './ActivityPanel';
 import { ANSWER_HOLDS, type Entry, type Running } from './activity';
+import { LOCKED, UNLOCK, type UnlockOffer } from './Locked';
+import { CHECKING } from './refresh';
+import { COLOR } from './theme';
 import type { Trouble } from './retry';
 
 afterEach(() => {
@@ -229,18 +225,28 @@ it('offers no way to clear what is over', () => {
   expect(screen.queryByRole('button', { name: /clear|dismiss/i })).toBeNull();
 });
 
-// While the Library is locked the row says so, with the unlock, in place of
-// the summary.
-it('says the Library is locked and offers the unlock in place of the summary', () => {
+// While the Library is locked the row says Locked, quietly, with an Unlock,
+// in place of the summary; looking for what is new is drawn disabled, and
+// what the last press came to is said once, in the main area, not here.
+it('says Locked and offers Unlock in place of the summary, with the sync icon disabled', () => {
   const ask = vi.fn();
   panel({
     running: [{ key: 'sync', text: 'backing up what was added…', progress: null, stop: null, ending: null }],
-    locked: { asking: false, said: null, refused: null, ask },
+    locked: { asking: false, said: 'asking in the app', refused: null, ask },
   });
-  expect(screen.getByText(LOCKED)).toBeTruthy();
+  const locked = screen.getByText(LOCKED);
+  expect(locked.style.color).toBe(COLOR.dim);
+  expect(locked.querySelector('svg')).toBeTruthy();
   expect(screen.queryByText('backing up what was added…')).toBeNull();
+  expect(screen.queryByText('asking in the app')).toBeNull();
+  expect((screen.getByRole('button', { name: CHECKING }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: UNLOCK }));
   expect(ask).toHaveBeenCalled();
+  cleanup();
+
+  panel();
+  expect((screen.getByRole('button', { name: CHECKING }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.queryByRole('button', { name: UNLOCK })).toBeNull();
 });
 
 // `?` shows the tree's keyboard shortcuts, and the next key or press puts them

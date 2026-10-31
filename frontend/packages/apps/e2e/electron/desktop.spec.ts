@@ -43,7 +43,7 @@ const LOCK_MS = setting.idleMinutes * 60_000 * 2;
 
 /**
  * How long the explorer is given to ask for the Passphrase window by itself,
- * once it has seen the lock, before the journey presses *unlock* for it. The
+ * once it has seen the lock, before the journey presses *Unlock* for it. The
  * page asks on its own only while it has the focus, which a window on a
  * virtual display may never be given.
  */
@@ -342,11 +342,11 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     // Left alone for the idle interval, the server locks the Library. The next
     // thing the explorer asks is refused as locked, and the Passphrase window
     // comes back to take the Passphrase: asked for by the page itself, or by
-    // *unlock* where the page did not have the focus to ask.
+    // *Unlock* where the page did not have the focus to ask.
     // The mapped folder closed and then focused is the folder the details pane
     // describes, its listing asked for afresh: the next thing the explorer
     // asks. The refusal is the lock heard, and the tree gives way to the
-    // refusal at once, so nothing more is pressed in it until the unlock.
+    // locked state at once, so nothing more is pressed in it until the unlock.
     // The quiet begins once the explorer has had every answer it asked for
     // after the drop committed, and has stopped asking; from there nothing
     // may put the lock off, and whatever does is said as it happens.
@@ -357,15 +357,23 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     asked.stop();
     await explorer.getByRole('button', { name: `collapse ${setting.mapped}`, exact: true }).click();
     await row(explorer, setting.mapped).click();
+    // The explorer draws its locked state in the tree's place: the heading
+    // and an Unlock, with the Activity row saying Locked beside its own.
+    const lockedState = explorer.getByRole('main');
+    await expect(lockedState.getByRole('heading', { name: 'The Library is locked', exact: true })).toBeVisible();
+    await expect(lockedState.getByRole('button', { name: 'Unlock', exact: true })).toBeVisible();
+    await expect(explorer.getByRole('contentinfo', { name: 'Activity' }).getByText('Locked', { exact: true })).toBeVisible();
+    await expect(row(explorer, setting.mapped)).toHaveCount(0);
+    await shot(explorer, '04-locked');
     try {
       await expect.poll(() => shown(doorWindow), { timeout: OWN_ASK_MS }).toBe(true);
     } catch {
-      await explorer.getByRole('button', { name: 'unlock', exact: true }).first().click();
+      await lockedState.getByRole('button', { name: 'Unlock', exact: true }).click();
       await expect.poll(() => shown(doorWindow)).toBe(true);
     }
     // The one Library served, listed under its name and chosen by its ID.
     await expect(door.locator('#library option:checked')).toHaveText(setting.library);
-    await shot(door, '04-unlock');
+    await shot(door, '05-unlock');
 
     // Unlocked in place: the window goes, and the explorer that was open is
     // the one that answers again, without being loaded afresh — the mapped
@@ -377,7 +385,7 @@ test('open a Library, drop a file onto it, unlock it in place after the idle loc
     await expect(row(explorer, leaf(setting.album))).toBeVisible();
     await expand(explorer, leaf(setting.album));
     await expect(stateIcon(explorer, dropped)).toHaveAccessibleName(ON_THIS_DEVICE);
-    await shot(explorer, '05-unlocked');
+    await shot(explorer, '06-unlocked');
 
     // Quitting ends the app, and with it everything it started.
     const child = app.process();

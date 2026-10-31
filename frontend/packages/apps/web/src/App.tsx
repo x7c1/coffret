@@ -47,7 +47,7 @@ import {
 } from './activity';
 import { addName } from './addName';
 import { DeleteConfirm } from './DeleteConfirm';
-import { firstImage, uploadStopped, type Described } from './details';
+import { uploadStopped, type Described } from './details';
 import { DetailsPane } from './DetailsPane';
 import { Header } from './Header';
 import {
@@ -102,6 +102,7 @@ import type { Edits, Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
 import { counterOf, sheetKey, sheetOn } from './sheet';
+import { LockedScreen } from './Locked';
 import { Region } from './Region';
 import { heldAfter, strandedFolders } from './stranded';
 import { COLOR } from './theme';
@@ -380,7 +381,7 @@ export function App() {
   // so the tree and the listing come back without anybody pressing *try
   // again* — and with the listing, the row the reader was on, since the reader
   // is drawn from it and the URL still names the row. What the last press of
-  // *unlock* came to goes too: it was about a locked Library.
+  // *Unlock* came to goes too: it was about a locked Library.
   const [discarded, setDiscarded] = useState(0);
   // Whether the focus is to be put back on the tree once it is drawn again
   // after an unlock (below, where the rows are).
@@ -452,14 +453,19 @@ export function App() {
       setUnlockAsking(false);
     });
   }, [prompting, recheckWork]);
-  // The one unlock the screen offers, wherever it is offered: the panel's
-  // while the work answer says the Library is locked, and a region's wherever
-  // its own request was refused by the lock — whether or not that answer has
-  // been heard yet, so the two can stand at once and share one press.
+  // The one unlock the screen offers, in the two places its locked state
+  // offers it — the main area's and the Activity row's — sharing one press.
   const unlockOffer = useMemo(
     () => ({ asking: unlockAsking, said: unlockSaid, refused: unlockRefused, ask: unlock }),
     [unlockAsking, unlockSaid, unlockRefused, unlock],
   );
+  // Whether the screen is drawn in its locked state: the work answer says the
+  // Library is locked, or a question was refused as locked — behind the
+  // explorer host the only way the lock is heard, since the host refuses the
+  // work answer too (spec: LA-14). Nothing is drawn of the tree meanwhile,
+  // and it comes back of itself once the unlock lands and the questions are
+  // asked again.
+  const locked = custody === 'locked' || refusedLocked;
   useEffect(() => {
     if (custody !== null && prompting.heard(custody, inFront())) {
       unlock();
@@ -1636,23 +1642,16 @@ export function App() {
   );
 
   // A folder row opened: the reader's sheet, on the folder's cover, with the
-  // focus left on the folder's row and the folder left open or closed as it
-  // was — and where it has no image directly in it, or is not on this device,
-  // the sentence saying why nothing opened. The same test as the details
-  // pane's Open ([`opensInReader`](./details)), asked of the folder's own
-  // listing: the sheet opens only where it has a picture to start on. Once
-  // open, it follows the focus onto such a folder all the same, and says there
-  // that it holds none.
+  // focus left on the folder's row — and where the folder is not on this
+  // device, the sentence saying why nothing opened. A folder with no image
+  // directly in it opens all the same: the sheet says it holds none, which is
+  // an answer to the gesture, as it says once it follows the focus onto one.
   const openFolder = useCallback(
     (path: string) => {
       const name = path.slice(path.lastIndexOf('/') + 1);
       const show = (where: Listing) => {
         if (!where.mapped) {
           setNotice(unmappedLine('open', true));
-          return;
-        }
-        if (firstImage(where) === null) {
-          setNotice(`${name} holds nothing the reader can show — open a folder of pages, or a file`);
           return;
         }
         // The folder the screen's actions are about stays the one it was:
@@ -1774,6 +1773,20 @@ export function App() {
 
   // Closing the sheet leaves the focus and the folder where they are.
   const closeSheet = useCallback(() => go({ folder: view.folder, open: null }), [go, view.folder]);
+  // A row opened again closes the sheet (see `openRow` in
+  // [`TreeTable`](./TreeTable)): the tree as the gesture left it — a folder
+  // closed, where it was one — and the URL on the folder the focus is in, with
+  // the sheet shut.
+  const closeSheetWith = useCallback(
+    (next: TreeState) => {
+      setTree(next);
+      go({ folder: contextOf(next), open: null });
+    },
+    [go],
+  );
+  // The row the sheet shows, by its path, or `null` while it is shut: what
+  // tells the tree that opening a row again closes it.
+  const readerOn = view.open ?? view.cover ?? null;
   // A picture the sheet fetched is on this device now: the listing it stands
   // in, and the ones above it, which answer for whether it is here whole.
   const fetchedInto = useCallback((path: string) => reloadAbove(parentOf(path)), [reloadAbove]);
@@ -1864,8 +1877,8 @@ export function App() {
     [stopWork],
   );
   const entries = useMemo(
-    () => offeredNow(earlier(work.log, notices, custody === 'locked'), { fill, sync, freeze }),
-    [work.log, notices, custody, fill, sync, freeze],
+    () => offeredNow(earlier(work.log, notices, locked), { fill, sync, freeze }),
+    [work.log, notices, locked, fill, sync, freeze],
   );
   // One entry's Retry: the second attempt at the work that entry is about. A deletion's goes through the
   // confirmation again, since what it would take out of the Library may have
@@ -1948,129 +1961,138 @@ export function App() {
         onNewFolder={openNaming}
         moving={moving}
         onMoveToRoot={() => moving !== null && moveRows(moving, '')}
+        locked={locked}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Why the rows below may not be the Library. Every listing comes out
-              of this device's catalog, and the catalog holds what this device
-              has replayed — so a device fresh from `join` whose catch-up did
-              not land shows an empty tree, and shows it in exactly the
-              way a Library with nothing in it does. It stands above the notice
-              because it is the older and larger fact: a gesture that came to
-              nothing is about one click, and this is about everything on the
-              screen. */}
-          {catalogSaid !== null && (
-            <p
-              style={{
-                margin: 0,
-                padding: '8px 12px',
-                borderBottom: `1px solid ${COLOR.border}`,
-                background: COLOR.warnGround,
-                color: COLOR.warn,
-                fontSize: 13,
-              }}
-            >
-              {catalogSaid}
-              {catalogRanOut && offer !== null && (
-                <>
-                  {' — '}
-                  <ReconnectOffer offer={offer} />
-                </>
+          {locked ? (
+            <LockedScreen unlock={unlockOffer} />
+          ) : (
+            <>
+              {/* Why the rows below may not be the Library. Every listing comes out
+                  of this device's catalog, and the catalog holds what this device
+                  has replayed — so a device fresh from `join` whose catch-up did
+                  not land shows an empty tree, and shows it in exactly the
+                  way a Library with nothing in it does. It stands above the notice
+                  because it is the older and larger fact: a gesture that came to
+                  nothing is about one click, and this is about everything on the
+                  screen. */}
+              {catalogSaid !== null && (
+                <p
+                  style={{
+                    margin: 0,
+                    padding: '8px 12px',
+                    borderBottom: `1px solid ${COLOR.border}`,
+                    background: COLOR.warnGround,
+                    color: COLOR.warn,
+                    fontSize: 13,
+                  }}
+                >
+                  {catalogSaid}
+                  {catalogRanOut && offer !== null && (
+                    <>
+                      {' — '}
+                      <ReconnectOffer offer={offer} />
+                    </>
+                  )}
+                </p>
               )}
-            </p>
-          )}
-          {/* The folder the focus is in, where its own listing was refused
-              and the root's was not: the tree stands, and the refusal over it
-              is about the one folder. */}
-          {view.folder !== '' && listing.state.status === 'failed' && rootState.status === 'ready' && (
-            <Region state={listing.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
-              {() => null}
-            </Region>
-          )}
-          {/* The Library's folders, where they were refused and the root's
-              listing was not. The tree draws without them, but the stranded
-              folders, the prepared paths the Library has come to name, and
-              the way out of a folder a deletion took away are all read off
-              that answer, so its refusal is said and offered again rather
-              than left to look like a Library with none of those. */}
-          {folders.state.status === 'failed' && rootState.status === 'ready' && (
-            <Region state={folders.state} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
-              {() => null}
-            </Region>
-          )}
-          <Region state={rootState} onRetry={retry} reconnect={offer} unlock={unlockOffer}>
-            {() => (
-              // The tree, and the details pane on its right following the
-              // focused row — and the reader's sheet over both but a strip of
-              // the tree on the left, covering the tree's height and no more:
-              // the catalog's sentence above it and the Activity panel below,
-              // which says what the sheet is fetching, stay uncovered, and
-              // opening the panel shrinks all three rather than covering them.
-              <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-                <TreeTable
-                  rows={rows}
-                  state={tree}
-                  onChange={changeTree}
-                  selection={selection}
-                  onSelect={setSelection}
-                  listingOf={readyListing}
-                  context={listed}
-                  prospectiveHere={prospective.includes(view.folder)}
-                  prepared={prepared}
-                  fillOf={fillOf}
-                  freeze={freeze}
-                  stranded={strandedHere}
-                  // The stranded folders are read off the Library's folders, and
-                  // `stranded` is false until that answer lands whether or not
-                  // this folder is one of them.
-                  strandedKnown={known !== null}
-                  onOpenFolder={openFolder}
-                  onOpenFile={openFile}
-                  onUnsupported={unsupported}
-                  onAdd={add}
-                  onCollecting={collecting}
-                  onUnreadable={unreadable}
-                  onUnmapped={unmapped}
-                  onMap={openChoosing}
-                  onPack={packFolder}
-                  onDelete={deleteEntries}
-                  onNewFolder={openNaming}
-                  onForget={forget}
-                  onRename={setRenaming}
-                  onMoveTo={setMovingTo}
-                  moving={moving}
-                  onMoving={setMoving}
-                  onMove={moveRows}
-                  onAskAgain={(folder) => reloadListings([folder])}
-                  areaRef={treeArea}
-                  escapeLetsGo={!sheeted}
-                  onReadOn={sheeted ? readOnward : undefined}
-                />
-                <DetailsPane
-                  selected={selected}
-                  listingOf={heldListing}
-                  shownOf={shownOf}
-                  uploadStoppedOf={uploadStoppedOf}
-                  onOpen={openFromPane}
-                  onDelete={deleteEntries}
-                />
-                {sheetRow !== undefined && (
-                  <ReaderView
-                    row={sheetRow}
-                    asked={sheetRow.kind === 'folder' ? heldListing(sheetRow.path) : undefined}
-                    counter={counter}
-                    discarded={discarded}
-                    escapable={!dialogUp}
-                    onClose={closeSheet}
-                    onFetching={setFetching}
-                    fetchStops={fetchStops}
-                    onFetched={fetchedInto}
-                    reconnect={offer}
-                  />
+              {/* The folder the focus is in, where its own listing was refused
+                  and the root's was not: the tree stands, and the refusal over it
+                  is about the one folder. */}
+              {view.folder !== '' && listing.state.status === 'failed' && rootState.status === 'ready' && (
+                <Region state={listing.state} onRetry={retry} reconnect={offer}>
+                  {() => null}
+                </Region>
+              )}
+              {/* The Library's folders, where they were refused and the root's
+                  listing was not. The tree draws without them, but the stranded
+                  folders, the prepared paths the Library has come to name, and
+                  the way out of a folder a deletion took away are all read off
+                  that answer, so its refusal is said and offered again rather
+                  than left to look like a Library with none of those. */}
+              {folders.state.status === 'failed' && rootState.status === 'ready' && (
+                <Region state={folders.state} onRetry={retry} reconnect={offer}>
+                  {() => null}
+                </Region>
+              )}
+              <Region state={rootState} onRetry={retry} reconnect={offer}>
+                {() => (
+                  // The tree, and the details pane on its right following the
+                  // focused row — and the reader's sheet over both but a strip of
+                  // the tree on the left, covering the tree's height and no more:
+                  // the catalog's sentence above it and the Activity panel below,
+                  // which says what the sheet is fetching, stay uncovered, and
+                  // opening the panel shrinks all three rather than covering them.
+                  <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+                    <TreeTable
+                      rows={rows}
+                      state={tree}
+                      onChange={changeTree}
+                      selection={selection}
+                      onSelect={setSelection}
+                      listingOf={readyListing}
+                      context={listed}
+                      prospectiveHere={prospective.includes(view.folder)}
+                      prepared={prepared}
+                      fillOf={fillOf}
+                      freeze={freeze}
+                      stranded={strandedHere}
+                      // The stranded folders are read off the Library's folders, and
+                      // `stranded` is false until that answer lands whether or not
+                      // this folder is one of them.
+                      strandedKnown={known !== null}
+                      onOpenFolder={openFolder}
+                      onOpenFile={openFile}
+                      readerOn={readerOn}
+                      onCloseReader={closeSheetWith}
+                      onUnsupported={unsupported}
+                      onAdd={add}
+                      onCollecting={collecting}
+                      onUnreadable={unreadable}
+                      onUnmapped={unmapped}
+                      onMap={openChoosing}
+                      onPack={packFolder}
+                      onDelete={deleteEntries}
+                      onNewFolder={openNaming}
+                      onForget={forget}
+                      onRename={setRenaming}
+                      onMoveTo={setMovingTo}
+                      moving={moving}
+                      onMoving={setMoving}
+                      onMove={moveRows}
+                      onAskAgain={(folder) => reloadListings([folder])}
+                      areaRef={treeArea}
+                      escapeLetsGo={!sheeted}
+                      onReadOn={sheeted ? readOnward : undefined}
+                    />
+                    <DetailsPane
+                      selected={selected}
+                      listingOf={heldListing}
+                      shownOf={shownOf}
+                      uploadStoppedOf={uploadStoppedOf}
+                      onOpen={openFromPane}
+                      onDelete={deleteEntries}
+                    />
+                    {sheetRow !== undefined && (
+                      <ReaderView
+                        row={sheetRow}
+                        asked={sheetRow.kind === 'folder' ? heldListing(sheetRow.path) : undefined}
+                        counter={counter}
+                        discarded={discarded}
+                        escapable={!dialogUp}
+                        onClose={closeSheet}
+                        onFetching={setFetching}
+                        fetchStops={fetchStops}
+                        onFetched={fetchedInto}
+                        reconnect={offer}
+                      />
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </Region>
+              </Region>
+            </>
+          )}
         </main>
       </div>
       {choosing !== null && (
@@ -2135,7 +2157,7 @@ export function App() {
           ask: refresh,
         }}
         reconnect={offer}
-        locked={custody === 'locked' ? unlockOffer : null}
+        locked={locked ? unlockOffer : null}
       />
     </div>
   );

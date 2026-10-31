@@ -26,7 +26,7 @@ pub(crate) async fn open_library(
     passphrase: Passphrase,
 ) -> Result<()> {
     // The server's way of asking for the Passphrase again once it has locked:
-    // the explorer's *unlock* reaches the shell through it (spec: DK-1).
+    // the explorer's *Unlock* reaches the shell through it (spec: DK-1).
     let (prompt, asked) = UnlockPrompt::channel();
     let launch = Launch {
         library: LibraryRef::Id(library_id),

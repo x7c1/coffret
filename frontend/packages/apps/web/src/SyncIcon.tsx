@@ -16,16 +16,22 @@ import { COLOR } from './theme';
  *
  * Drawn in `currentColor`, so the plain icon is whatever colour the bar's text
  * is and nothing here has to know which.
+ *
+ * While the Library is locked there is nothing it can be asked, so the icon is
+ * drawn faint and cannot be pressed.
  */
 export function SyncIcon({
   running,
   waiting,
+  disabled = false,
   onPress,
 }: {
   /** Whether the catch-up a press started is still running. */
   running: boolean;
   /** Whether the last look said there are changes this device has not taken in. */
   waiting: boolean;
+  /** Whether it cannot be pressed at all: the Library is locked. */
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const label = running ? LOOKING : waiting ? CHANGES_WAITING : CHECKING;
@@ -33,13 +39,13 @@ export function SyncIcon({
     <button
       type="button"
       onClick={onPress}
-      disabled={running}
+      disabled={running || disabled}
       title={label}
       aria-label={label}
       style={{
         ...BUTTON,
-        color: waiting && !running ? COLOR.accent : 'inherit',
-        cursor: running ? 'default' : 'pointer',
+        color: disabled ? COLOR.faint : waiting && !running ? COLOR.accent : 'inherit',
+        cursor: running || disabled ? 'default' : 'pointer',
       }}
     >
       <svg

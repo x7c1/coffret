@@ -94,10 +94,10 @@ export function firstImage(listing: Listing): ListedFile | null {
 
 /**
  * Whether the pane offers Open for one row: an image, or a folder holding
- * images directly — the two things `Enter` and a double-click open the
- * reader's sheet on (see [`opened`](./TreeTable)). Elsewhere opening says why
- * nothing opened instead; the sheet reaches such a row only by following the
- * focus once it is open.
+ * images directly — the rows the reader's sheet has a picture to start on.
+ * `Enter` and a double-click open the sheet on any folder as well, which then
+ * says it holds no image (see [`opened`](./TreeTable)); a file the reader
+ * cannot show is not opened, and the sentence says why.
  *
  * A folder's answer needs its own listing, `null` while it is not on hand, and
  * a folder not known to hold an image offers nothing yet rather than a button

@@ -235,7 +235,8 @@ file at all.
 
 What the development host cannot see is whether the server's Library is locked,
 since the server is another process: it forwards as though it were unlocked,
-and the server's own locked refusal is what the explorer shows.
+and the server's own answers are how the explorer hears the lock and draws
+its locked state.
 
 ## The desktop app
 
@@ -246,7 +247,7 @@ browser. The Passphrase is typed into a second, small window,
 served by the app's Passphrase door: the page there submits to the door
 directly, and no page of the app reaches the app's own process. Once the
 Library is open that window goes and the explorer's comes. When the explorer
-asks for the Library to be unlocked — a press of *unlock*, or the idle lock
+asks for the Library to be unlocked — a press of *Unlock*, or the idle lock
 seen — the Passphrase window comes back to take the Passphrase, and goes again
 once the Library is unlocked; the explorer comes back in place. A page that
 has lost its session gets a fresh one from *Reload the explorer* in the app's
@@ -281,7 +282,7 @@ Windows always have a tray.
 
 A Passphrase window that says it can no longer take the Passphrase, after five
 refused tries, is spent: the app is told so, and loads it afresh the next time
-it is brought forward, so pressing *unlock* again, or the tray's *Unlock…*,
+it is brought forward, so pressing *Unlock* again, or the tray's *Unlock…*,
 gives a window that takes the Passphrase. Before a Library is open, a second
 launch, the Dock or the tray's *Open the explorer* brings it back fresh in the
 same way, as does closing it, which quits the app, and starting the app again.
@@ -290,7 +291,7 @@ The Library also locks itself after the idle interval
 (`COFFRET_IDLE_MINUTES`, 30 minutes unless set), as the server's does, and is
 unlocked in place as above. The Passphrase is typed only in the Passphrase
 window, never in the explorer's page. The server `make dev` starts has no such
-window, so its *unlock* says to start it again.
+window, so its *Unlock* says to start it again.
 
 There are two of it, told apart by their identifier, which the app takes from
 how it is run:

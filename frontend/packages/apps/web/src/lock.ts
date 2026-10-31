@@ -9,9 +9,9 @@
 //
 // Nothing in this sequence invents a locked state. The screen has no opinion
 // about whether the Library is open: the server is the one that knows, it is
-// asked, and what it answers with — its own sentence about the Passphrase
-// (spec: DK-2) — is what the regions show, each in the place every other
-// refusal is shown.
+// asked, and what it answers — the work answer's state, or a question refused
+// with its sentence about the Passphrase (spec: DK-2) — is what turns the
+// screen to its locked state.
 //
 // The lock arrives by one road. It happens on the server's own clock and nobody
 // is told, so it arrives as a change in the answer to the question the screen
@@ -28,7 +28,7 @@
 // questions again, so a page that was refused comes back by itself.
 //
 // The page also asks on its own, once for each lock, and only while somebody is
-// looking at it ([`UnlockPrompting`]): the ask is the press of *unlock* made
+// looking at it ([`UnlockPrompting`]): the ask is the press of *Unlock* made
 // for the person who came back, and nothing more.
 //
 // Kept free of DOM and of React so it is unit testable, the way the refresh
@@ -62,7 +62,7 @@ export function lockLanded(before: LibraryState | null, now: LibraryState): bool
  * not the state. A page that was told `locked` and is now told `unlocked` has
  * been refused everything since, and asks it all again — the listing, the tree,
  * and the page the reader was on — on the answer alone, without anybody
- * asking for the page again: the locked page's one control is *unlock*, and
+ * asking for the page again: the locked page's one control is *Unlock*, and
  * the page does not wait on it.
  *
  * A first answer of `unlocked` is not news. The page came up to an open
@@ -82,7 +82,7 @@ export function unlockLanded(before: LibraryState | null, now: LibraryState): bo
  * heard as the listing or the tree refused with the locked refusal. Where the
  * page still believes the Library open, that refusal is news the work answer
  * has not brought yet: reading it once turns the page's state to locked, and
- * what follows a lock — the discard and the *unlock* button — follows from
+ * what follows a lock — the discard and the *Unlock* button — follows from
  * there. The ask {@link UnlockPrompting} makes on its own does not wait for
  * it: the refusal is a lock heard already. Where the page already knows it is
  * locked, or has not been told anything yet, the work answer is already on its
@@ -92,7 +92,7 @@ export function lockUnheard(believed: LibraryState | null, refusedLocked: boolea
   return refusedLocked && believed === 'unlocked';
 }
 
-/** What a press of *unlock* is wired to. */
+/** What a press of *Unlock* is wired to. */
 export interface UnlockPressing {
   /** Asks the server to have the Library unlocked. */
   ask: () => Promise<Unlocking>;
@@ -134,7 +134,7 @@ export async function askForUnlock(pressing: UnlockPressing): Promise<void> {
 }
 
 /**
- * When the page asks for the unlock without anybody pressing *unlock*.
+ * When the page asks for the unlock without anybody pressing *Unlock*.
  *
  * Coming back to an explorer that locked while the person was away should bring
  * the desktop app's Passphrase window forward by itself. The ask is the very
@@ -147,7 +147,7 @@ export async function askForUnlock(pressing: UnlockPressing): Promise<void> {
  *   whatever they are doing elsewhere. A lock seen while the page is hidden or
  *   unfocused is owed an ask, paid the next time the page is in front.
  * - **Once for each lock.** A window closed without the Passphrase is an
- *   answer, and asking again would be nagging; the *unlock* button and the
+ *   answer, and asking again would be nagging; the *Unlock* button and the
  *   tray's *Unlock…* stay where they were. A lock is owed again only after an
  *   unlock, and a press of the button pays what is owed as well as an
  *   automatic ask would.
@@ -194,7 +194,7 @@ export class UnlockPrompting {
     return this.due(inFront);
   }
 
-  /** Hears a press of *unlock*, which is the ask this lock was owed. */
+  /** Hears a press of *Unlock*, which is the ask this lock was owed. */
   pressed(): void {
     this.owed = false;
   }

@@ -52,8 +52,9 @@ export interface Trouble {
  * a terminal; `library_predates_format` is a Library written before this app's
  * format, which is made again rather than read; `locked` is a server that needs
  * the Passphrase, given in the desktop app's own window or by starting a
- * command-line server again, and while the Library is locked the Activity panel's
- * *unlock* stands in for every one of these buttons. In each case the same
+ * command-line server again, and while the Library is locked the *Unlock* of
+ * the screen's locked state — in the main area and in the Activity panel's row
+ * — stands in for every one of these buttons. In each case the same
  * request meets the same refusal, and the sentence already says the one thing
  * that remedies it — so a button beside it would be offering a press that
  * cannot change the answer, and a refusal of that press would repeat the line

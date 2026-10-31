@@ -74,6 +74,8 @@ interface Options {
   focus?: string | null;
   /** Folders whose listing was refused, with the refusal's sentence. */
   refused?: Record<string, string>;
+  /** The path the reader's sheet shows, where it is open. */
+  readerOn?: string | null;
 }
 
 /**
@@ -112,6 +114,7 @@ function mount(shown: Listing, options: Options = {}) {
     onMoveTo: vi.fn(),
     onMove: vi.fn(),
     onAskAgain: vi.fn(),
+    onCloseReader: vi.fn(),
   };
   const start: TreeState = {
     focus:
@@ -158,6 +161,11 @@ function mount(shown: Listing, options: Options = {}) {
         strandedKnown={options.strandedKnown ?? true}
         onOpenFolder={calls.onOpenFolder}
         onOpenFile={calls.onOpenFile}
+        readerOn={options.readerOn ?? null}
+        onCloseReader={(next) => {
+          calls.onCloseReader(next);
+          setState(next);
+        }}
         onUnsupported={calls.onUnsupported}
         onAdd={calls.onAdd}
         onCollecting={() => undefined}
@@ -380,6 +388,47 @@ describe('the mouse on the tree', () => {
     expect([...last.expanded]).toContain('albums/2026');
   });
 
+  // Opening is a toggle: an open folder closes, and the reader with it where
+  // it shows the folder or anything under it; a reader elsewhere is left
+  // alone. The file the reader shows closes it.
+  it('closes an open folder on a double-click, and the reader only where it shows something in it', () => {
+    const shown = listing({ folders: [folder('2026')], files: [file('cover.png')] });
+    const more = [listing({ path: 'albums/2026', files: [file('a.jpg', {}, 'albums/2026')] })];
+    for (const [readerOn, closes] of [
+      ['albums/2026/a.jpg', true],
+      ['albums/2026', true],
+      ['albums/cover.png', false],
+      ['albums/2026-other', false],
+      [null, false],
+    ] as const) {
+      const { onChange, onCloseReader, onOpenFolder } = mount(shown, { more, open: ['albums/2026'], readerOn });
+      const row = screen.getByTitle('2026');
+      fireEvent.click(row);
+      fireEvent.doubleClick(row);
+      expect(onOpenFolder).not.toHaveBeenCalled();
+      expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+      const next = (closes ? onCloseReader : onChange).mock.calls.at(-1)?.[0];
+      expect(next.focus).toBe(folderKey('albums/2026'));
+      expect([...next.expanded]).not.toContain('albums/2026');
+      expect(onCloseReader).toHaveBeenCalledTimes(closes ? 1 : 0);
+      cleanup();
+    }
+  });
+
+  it('closes the reader on a double-click of the file it shows, and opens any other', () => {
+    const shown = listing({ files: [file('a.png'), file('b.png')] });
+    const { onOpenFile, onCloseReader } = mount(shown, { readerOn: 'albums/a.png' });
+    fireEvent.click(screen.getByTitle('b.png'));
+    fireEvent.doubleClick(screen.getByTitle('b.png'));
+    expect(onOpenFile).toHaveBeenCalledWith('albums/b.png');
+    expect(onCloseReader).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTitle('a.png'));
+    fireEvent.doubleClick(screen.getByTitle('a.png'));
+    expect(onCloseReader).toHaveBeenCalledWith(expect.objectContaining({ focus: fileKey('albums/a.png') }));
+    expect(onOpenFile).toHaveBeenCalledTimes(1);
+  });
+
   it('opens and closes a folder from its disclosure button without moving the focus', () => {
     const { onChange } = mount(listing({ folders: [folder('2026')], files: [file('cover.png')] }), {
       more: [listing({ path: 'albums/2026', files: [file('a.jpg', {}, 'albums/2026')] })],
@@ -431,6 +480,27 @@ describe('the keys on the tree', () => {
     expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
     fireEvent.keyDown(tree, { key: 'Enter' });
     expect(onOpenFolder).toHaveBeenCalledWith('albums/2026');
+  });
+
+  // `Enter` is the double-click's toggle.
+  it('closes the focused open folder on Enter, and the reader on the file it shows', () => {
+    const more = [listing({ path: 'albums/2026', files: [file('a.jpg', {}, 'albums/2026')] })];
+    const shown = listing({ folders: [folder('2026')], files: [file('cover.png')] });
+    const folderMount = mount(shown, { more, open: ['albums/2026'], focus: folderKey('albums/2026'), readerOn: 'albums/2026' });
+    fireEvent.keyDown(folderMount.tree, { key: 'Enter' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    expect(folderMount.onCloseReader).toHaveBeenCalledTimes(1);
+    expect(folderMount.onOpenFolder).not.toHaveBeenCalled();
+    // And opens it again, the reader on it.
+    fireEvent.keyDown(folderMount.tree, { key: 'Enter' });
+    expect(rowNames()).toEqual(['albums', '2026', 'a.jpg', 'cover.png']);
+    expect(folderMount.onOpenFolder).toHaveBeenCalledWith('albums/2026');
+    cleanup();
+
+    const fileMount = mount(shown, { focus: fileKey('albums/cover.png'), readerOn: 'albums/cover.png' });
+    fireEvent.keyDown(fileMount.tree, { key: 'Enter' });
+    expect(fileMount.onCloseReader).toHaveBeenCalledTimes(1);
+    expect(fileMount.onOpenFile).not.toHaveBeenCalled();
   });
 
   it('focuses the first row when the keyboard gives the tree the focus', () => {
