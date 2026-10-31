@@ -10,7 +10,7 @@ use coffret_logging::testing::CapturedLogs;
 use serde_json::{json, Value};
 use tracing::Level;
 
-use crate::support::{fill, json as body_of, Served};
+use crate::support::{bytes, fill, json as body_of, Served};
 
 /// The entries of one work answer's log.
 fn log(work: &Value) -> &Vec<Value> {
@@ -107,13 +107,42 @@ async fn a_read_ahead_does_not_replace_the_fill_running() {
     );
 }
 
-// LA-33, KL-15: what a read ahead's fetch read of the committed Keyring goes
-// to the next fill published, since the read armed none to carry it. `books`
-// holds the one file read ahead, so the fill asked for it afterwards fetches
-// nothing and reads nothing — and its line still says what the read ahead
-// stepped over, which is the only line a person who only opens files reads.
+/// The findings the work answer carries beside its runs: what reads that
+/// armed no fill found (spec: LA-33).
+fn found(work: &Value) -> &Vec<Value> {
+    work["findings"]
+        .as_array()
+        .expect("the work answer carries the findings of reads")
+}
+
+/// One of `found`, without the number and the moment it was heard under.
+fn said(finding: &Value) -> Value {
+    let mut finding = finding.clone();
+    let fields = finding.as_object_mut().expect("a finding is an object");
+    assert!(
+        fields.remove("id").is_some_and(|id| id.is_u64()),
+        "numbered"
+    );
+    assert!(
+        fields.remove("at").is_some_and(|at| at.is_string()),
+        "stamped"
+    );
+    finding
+}
+
+const KEYRING_DEGRADED: &str = "the Library's Keyring is degraded: some of its replicas are \
+                                missing or unreadable. Files still open, and the next run that \
+                                writes to the Library repairs it";
+
+const PARCEL_UNHELD: &str = "a part of a Container kept on this device was gone or damaged and \
+                             was read from Storage again";
+
+// LA-33, KL-15: what a read ahead's fetch read of the committed Keyring is
+// said in the work answer's own findings, since the read armed no fill to
+// carry it — and said there whether or not a fill ever follows. Read ahead
+// again, it is said once.
 #[tokio::test]
-async fn what_a_read_ahead_found_of_the_keyring_is_said_by_the_next_fill() {
+async fn what_a_read_ahead_found_of_the_keyring_is_said_in_the_work_answer() {
     let served = Served::library().await;
     served.degrade_the_keyring().await;
 
@@ -121,103 +150,129 @@ async fn what_a_read_ahead_found_of_the_keyring_is_said_by_the_next_fill() {
         .get("/api/file?path=books/page-001.png&fill=false")
         .await;
     assert_eq!(answer.status(), 200, "the file still opens (spec: RV-2)");
-    served.fill_idle().await;
-    let (_, before) = body_of(served.get("/api/work").await).await;
-    assert_eq!(before["fill"], Value::Null, "nothing armed: {before}");
-
-    served.arm_fill("books");
-    served.fill_idle().await;
-    let (_, work) = body_of(served.get("/api/work").await).await;
-    let fill = fill(&work);
-    assert_eq!(fill["folder"], "books");
-    assert_eq!(fill["status"], "done");
-    assert_eq!(
-        fill["total"], 0,
-        "nothing left in the folder to fetch: {work}"
-    );
-    assert_eq!(
-        fill["findings"],
-        json!([{
-            "path": null,
-            "message": "the Library's Keyring is degraded: some of its replicas are missing or \
-                        unreadable. Files still open, and the next run that writes to the Library \
-                        repairs it",
-            "reason": "keyring_degraded",
-        }]),
-        "{work}",
-    );
-}
-
-// LA-33, PK-21: the kept parcels a read ahead's fetch found not held go to the
-// next fill published, as what it read of the Keyring does. The first book's
-// page leaves the parcel the second book's page lies in held; that parcel's
-// file is damaged, and the read ahead of the second book's page reads it again
-// from Storage. The fill asked for afterwards has nothing left to fetch, and
-// its line still says it.
-#[tokio::test]
-async fn what_a_read_ahead_found_not_held_is_said_by_the_next_fill() {
-    let served = Served::library().await;
-    let logs = CapturedLogs::capture();
-    served
-        .commit_elsewhere("scans/vol1/000.jpg", &[0x41; 300 * 1024])
-        .await;
-    served
-        .commit_elsewhere("scans/vol2/000.jpg", &[0x42; 1536 * 1024])
-        .await;
-    served.pack_elsewhere("scans").await;
-    served.start_up().await;
-
     assert_eq!(
         served
-            .get("/api/file?path=scans/vol1/000.jpg")
+            .get("/api/file?path=albums/cover.png&fill=false")
             .await
             .status(),
         200
     );
+    served.fill_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["fill"], Value::Null, "nothing armed: {work}");
+    assert!(log(&work).is_empty(), "and nothing logged: {work}");
+    assert_eq!(
+        found(&work).iter().map(said).collect::<Vec<_>>(),
+        [json!({
+            "path": null,
+            "message": KEYRING_DEGRADED,
+            "reason": "keyring_degraded",
+        })],
+        "said once, for both reads: {work}",
+    );
+
+    // A fill asked for afterwards is a run of its own, and says what its own
+    // fetches find: the read ahead's finding is not handed to it.
+    served.arm_fill("books");
+    served.fill_idle().await;
+    let (_, after) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&after)["total"], 0, "nothing left to fetch: {after}");
+    assert_eq!(fill(&after)["findings"], json!([]), "{after}");
+    assert_eq!(found(&after).len(), 1, "still said: {after}");
+}
+
+// LA-33, PK-19, PK-21: a read ahead is one file fetched without a fill. Its
+// bytes come back; the parcel it read that holds the start of a file it did
+// not place is held as any read's is; no fill is recorded or started; and
+// when that kept parcel is damaged, the read ahead of that file reads it from
+// Storage again and the work answer says so in its own findings.
+#[tokio::test]
+async fn a_read_ahead_holds_its_parcels_and_says_what_it_found_not_held() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    let first = vec![0x41; 300 * 1024];
+    served.commit_elsewhere("scans/vol1/000.jpg", &first).await;
+    served
+        .commit_elsewhere("scans/vol2/000.jpg", &[0x42; 1536 * 1024])
+        .await;
+    served
+        .commit_elsewhere("scans/vol3/000.jpg", &[0x43; 100 * 1024])
+        .await;
+    served.pack_elsewhere("scans").await;
+    served.start_up().await;
+
+    let answer = served
+        .get("/api/file?path=scans/vol1/000.jpg&fill=false")
+        .await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(bytes(answer).await, first, "the bytes come back");
     strokes_finished(&logs, 1).await;
     served.fill_idle().await;
     let held = served.held_parcels().await;
     assert_eq!(
         held.len(),
         1,
-        "a parcel is held for the second book: {held:?}"
+        "the parcel the next book starts in is held: {held:?}"
     );
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["fill"],
+        Value::Null,
+        "no fill recorded or started: {work}"
+    );
+    assert!(log(&work).is_empty(), "{work}");
+    assert!(found(&work).is_empty(), "nothing found yet: {work}");
+    assert!(!served.holds("scans/vol2/000.jpg"));
+    assert!(!served.holds("scans/vol3/000.jpg"), "nothing else placed");
+
     std::fs::write(&held[0].path, b"not the parcel any more")
         .expect("the kept parcel's file can be overwritten");
-
     let answer = served
         .get("/api/file?path=scans/vol2/000.jpg&fill=false")
         .await;
     assert_eq!(answer.status(), 200, "the page opens all the same");
     strokes_finished(&logs, 2).await;
     served.fill_idle().await;
-    let (_, before) = body_of(served.get("/api/work").await).await;
-    assert_eq!(
-        fill(&before)["folder"],
-        "scans/vol1",
-        "nothing armed: {before}"
-    );
 
-    served.arm_fill("scans/vol2");
-    served.fill_idle().await;
     let (_, work) = body_of(served.get("/api/work").await).await;
-    let fill = fill(&work);
-    assert_eq!(fill["folder"], "scans/vol2");
-    assert_eq!(fill["status"], "done");
+    assert_eq!(work["fill"], Value::Null, "still no fill: {work}");
     assert_eq!(
-        fill["total"], 0,
-        "nothing left in the folder to fetch: {work}"
-    );
-    assert_eq!(
-        fill["findings"],
-        json!([{
+        found(&work).iter().map(said).collect::<Vec<_>>(),
+        [json!({
             "path": null,
-            "message": "a part of a Container kept on this device was gone or damaged and was \
-                        read from Storage again",
+            "message": PARCEL_UNHELD,
             "reason": "parcel_unheld",
-        }]),
+        })],
         "{work}",
     );
+}
+
+// EP-9, LA-33: a read ahead of a file in a folder this device has not mapped
+// is refused as a read of it is — there is no folder here to place it in —
+// and sets nothing going.
+#[tokio::test]
+async fn a_read_ahead_of_an_unmapped_file_is_refused() {
+    let served = Served::mapping_only("albums").await;
+
+    let (status, refusal) = body_of(
+        served
+            .get("/api/file?path=books/page-001.png&fill=false")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 409, "{refusal}");
+    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["reason"], "unmapped");
+
+    served.fill_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["fill"], Value::Null, "{work}");
+    assert!(
+        log(&work).is_empty(),
+        "a read ahead's refusal is not logged: {work}"
+    );
+    assert!(found(&work).is_empty(), "{work}");
 }
 
 /// Waits for `strokes` partial fetches to have finished: the rest of a

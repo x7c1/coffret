@@ -138,29 +138,6 @@ impl Fills {
             .send_modify(|progress| progress.hear_unheld(unheld));
     }
 
-    /// Takes in what a read ahead's fetch found of the committed Keyring and
-    /// the kept parcels it found not held, arming nothing (spec: LA-33).
-    ///
-    /// A read ahead arms no fill, so there is no arming for these to go with;
-    /// they go where [`hear_unheld`](Self::hear_unheld)'s go, to the next run
-    /// published — the fill of the folder being read, in the ordinary case, or
-    /// the one the reader arms on stepping into the folder read ahead of. A
-    /// run's line is where a person who only opens files hears of either, and
-    /// a finding about the Keyring is about the whole Library rather than one
-    /// folder of it, as a parcel is part of a Container rather than of a
-    /// folder.
-    pub(crate) fn hear(&self, heard: Option<ShortKeyring>, unheld: Vec<UnheldParcel>) {
-        if heard.is_none() && unheld.is_empty() {
-            return;
-        }
-        self.progress.send_modify(|progress| {
-            if let Some(found) = heard {
-                progress.hear(found);
-            }
-            progress.hear_unheld(unheld);
-        });
-    }
-
     /// Puts `folder` at the back of the queue, and says whether a worker has to
     /// be started for it. See [`Progress::queue`].
     pub(super) fn queue(&self, folder: Folder) -> bool {

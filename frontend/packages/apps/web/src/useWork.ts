@@ -13,6 +13,7 @@ import {
   type Delete,
   type Fill,
   type Freeze,
+  type FoundByRead,
   type KeptParcels,
   type LibraryState,
   type Logged,
@@ -65,6 +66,11 @@ export function useWork(readerOpen: boolean): {
    * until an answer has said.
    */
   log: readonly Logged[];
+  /**
+   * What the server's reads that armed no fill found, newest first, and empty
+   * until an answer has said (spec: LA-33).
+   */
+  findings: readonly FoundByRead[];
   /**
    * Whether this device still holds the Library open, and `null` until an
    * answer has said.
@@ -145,6 +151,7 @@ export function useWork(readerOpen: boolean): {
   const [deletion, setDeletion] = useState<Delete | null>(null);
   const [turn, setTurn] = useState<TurnTaker | null>(null);
   const [log, setLog] = useState<readonly Logged[]>([]);
+  const [findings, setFindings] = useState<readonly FoundByRead[]>([]);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [kept, setKept] = useState<KeptParcels | null>(null);
@@ -183,6 +190,7 @@ export function useWork(readerOpen: boolean): {
     setDeletion(work.delete);
     setTurn(work.turn);
     setLog(work.log);
+    setFindings(work.findings);
     setLibrary(work.library);
     setCatalog(work.catalog);
     setKept(work.kept_parcels);
@@ -362,6 +370,7 @@ export function useWork(readerOpen: boolean): {
     deletion,
     turn,
     log,
+    findings,
     library,
     catalog,
     kept,

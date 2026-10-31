@@ -102,7 +102,7 @@ impl EndedDto {
 /// A clock set before 1970 or past what a calendar states is said as the
 /// epoch rather than refused: the moment is decoration beside the entry, and
 /// the entry is what a page needs.
-fn iso8601(at: SystemTime) -> String {
+pub(super) fn iso8601(at: SystemTime) -> String {
     let seconds = at
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |since| since.as_secs());

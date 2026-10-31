@@ -40,6 +40,7 @@ import type {
   Fill,
   FillStatus,
   Finding,
+  FoundByRead,
   FindingReason,
   Freeze,
   FreezePreview,
@@ -681,6 +682,7 @@ function work(value: unknown, where: string): Work {
     'reconnect',
     'log',
     'adds',
+    'findings',
   ]);
   return {
     server: string(fields.server, `${where}.server`),
@@ -697,6 +699,16 @@ function work(value: unknown, where: string): Work {
     reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
     log: list(fields.log, `${where}.log`, logged),
     adds: list(fields.adds, `${where}.adds`, addUnderWay),
+    findings: list(fields.findings, `${where}.findings`, foundByRead),
+  };
+}
+
+function foundByRead(value: unknown, where: string): FoundByRead {
+  const { id, at, ...rest } = object(value, where, ['id', 'at', 'path', 'message', 'reason'], ['surfaced']);
+  return {
+    id: number(id, `${where}.id`),
+    at: string(at, `${where}.at`),
+    ...finding(rest, where),
   };
 }
 
@@ -980,6 +992,10 @@ it('reads every work answer the server sends through the Work type', () => {
   expect(
     read.some((answer) => answer.freeze?.step?.bytes != null),
     'a freeze sending a Pack, with how many bytes of it have gone',
+  ).toBe(true);
+  expect(
+    read.some((answer) => answer.findings.length > 0),
+    'findings of reads that armed no fill',
   ).toBe(true);
   expect(
     read.some((answer) => answer.turn === null),

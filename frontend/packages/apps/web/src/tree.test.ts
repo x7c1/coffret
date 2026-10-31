@@ -292,15 +292,66 @@ describe('reading on with the reader open', () => {
     expect(read(state(fileKey('readme.txt'), open), 'ArrowUp').state.focus).toBe(fileKey('books/vol-1/p2.png'));
   });
 
-  it('reads into a closed folder the focus is on, and out of an open one', () => {
-    const into = read(state(folderKey('books')), 'ArrowDown');
-    expect(into.asked).toBe(true);
-    expect(into.state.focus).toBe(fileKey('books/vol-1/p1.png'));
+  // From a closed folder the sheet shows its cover, and the arrows page
+  // through the rows drawn beside it rather than into it.
+  it('moves from a closed folder to the row drawn beside it, never into it', () => {
+    // `albums` and `books` side by side, both closed: `↓` pages from one cover
+    // to the next, and on to the file drawn after the folders.
+    const toSibling = read(state(folderKey('albums')), 'ArrowDown');
+    expect(toSibling).toEqual({ state: state(folderKey('books')), asked: false });
+    expect(read(toSibling.state, 'ArrowDown')).toEqual({ state: state(fileKey('readme.txt')), asked: false });
+    expect(read(toSibling.state, 'ArrowUp')).toEqual({ state: state(folderKey('albums')), asked: false });
+    // With an open folder above, `↑` lands on the last row it draws.
+    const open = ['albums', 'albums/2026'];
+    expect(read(state(folderKey('books'), open), 'ArrowUp')).toEqual({
+      state: state(fileKey('albums/cover.png'), open),
+      asked: false,
+    });
+    // A closed folder inside an open one: `↓` to the row after it, a file of
+    // the folder above, and `↑` to the open folder's own row.
+    expect(read(state(folderKey('albums/2026'), ['albums']), 'ArrowDown')).toEqual({
+      state: state(fileKey('albums/cover.png'), ['albums']),
+      asked: false,
+    });
+    expect(read(state(folderKey('albums/2026'), ['albums']), 'ArrowUp')).toEqual({
+      state: state(folderKey('albums'), ['albums']),
+      asked: false,
+    });
+  });
+
+  it('pages through a run of closed folders, and stops at either end', () => {
+    const series: Record<string, Listing> = {
+      '': listing('', ['vol-1', 'vol-2', 'vol-3'], []),
+      'vol-1': listing('vol-1', [], ['vol-1/001.png']),
+      'vol-2': listing('vol-2', [], ['vol-2/001.png']),
+      'vol-3': listing('vol-3', [], ['vol-3/001.png']),
+    };
+    const rows = treeRows({
+      listing: (path) => (series[path] === undefined ? undefined : { status: 'ready', value: series[path] }),
+      expanded: new Set(),
+      prospective: [],
+      stranded: [],
+    });
+    const on = (path: string) => state(folderKey(path));
+    expect(readOn(rows, on('vol-1'), 'ArrowDown')).toEqual({ kind: 'focus', state: on('vol-2') });
+    expect(readOn(rows, on('vol-2'), 'ArrowDown')).toEqual({ kind: 'focus', state: on('vol-3') });
+    expect(readOn(rows, on('vol-3'), 'ArrowDown')).toEqual({ kind: 'stay' });
+    expect(readOn(rows, on('vol-1'), 'ArrowUp')).toEqual({ kind: 'stay' });
+    expect(readOn(rows, on('vol-3'), 'ArrowUp')).toEqual({ kind: 'focus', state: on('vol-2') });
+  });
+
+  it('keeps reading on from a file and from an open folder as before', () => {
+    // From a file, past a closed folder: the server says what is in it.
+    const fromFile = read(state(fileKey('albums/cover.png'), ['albums']), 'ArrowDown');
+    expect(fromFile.asked).toBe(true);
+    expect(fromFile.state.focus).toBe(fileKey('books/vol-1/p1.png'));
+    // From an open folder, into its first file.
     const open = ['albums', 'albums/2026'];
     expect(read(state(folderKey('albums'), open), 'ArrowDown')).toEqual({
       state: state(fileKey('albums/2026/a.jpg'), open),
       asked: false,
     });
+    expect(read(state(folderKey('albums/2026'), open), 'ArrowUp').state).toEqual(state(folderKey('albums/2026'), open));
   });
 
   it('asks the server where an open folder’s rows are not on hand', () => {

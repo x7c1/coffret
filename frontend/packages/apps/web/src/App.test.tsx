@@ -26,6 +26,7 @@ import {
 } from '@coffret/api';
 
 import { App } from './App';
+import { COVER_LOADING } from './DetailsPane';
 import { parseHash, toHash } from './hash';
 import { size, time } from './humanize';
 import { ADD } from './packChoice';
@@ -72,6 +73,7 @@ const IDLE: Work = {
   reconnect: null,
   log: [],
   adds: [],
+  findings: [],
 };
 
 function listing(path: string, over: Partial<Listing> = {}): Listing {
@@ -760,6 +762,45 @@ it('describes the focused row in the details pane, and opens it from there', asy
   );
   // And hands the focus to the tree, whose keys the sheet follows.
   expect(document.activeElement).toBe(area);
+});
+
+// LA-33: a folder whose cover this device does not have shows it all the
+// same: the cover is read ahead — that one image, and none of the folder set
+// coming — and while it is on its way the pane says it is loading rather than
+// drawing the folder as having none.
+it('reads ahead the cover of a folder this device does not have, and says it is loading', async () => {
+  const base = library({ '': ['Series/'], Series: ['001.jpg', '002.jpg'] });
+  answers = (path) => {
+    const one = base(path);
+    return { ...one, files: one.files.map((file) => ({ ...file, state: 'remote' })) };
+  };
+  let land: (blob: Blob) => void = () => undefined;
+  vi.mocked(readAhead).mockImplementation(() => new Promise<Blob>((resolve) => (land = resolve)));
+  render(<App />);
+  await tree().findByTitle('Series');
+  const area = screen.getByRole('tree');
+  const pane = within(screen.getByRole('complementary', { name: 'Details' }));
+
+  fireEvent.keyDown(area, { key: 'ArrowDown' });
+  expect(await pane.findByRole('heading', { name: 'Series' })).toBeTruthy();
+  expect(await pane.findByText(COVER_LOADING)).toBeTruthy();
+  expect(readAhead).toHaveBeenCalledWith('Series/001.jpg', expect.anything());
+  expect(peekFile).not.toHaveBeenCalled();
+  expect(getFile).not.toHaveBeenCalled();
+
+  const asked = () => vi.mocked(getListing).mock.calls.filter(([path]) => path === 'Series').length;
+  const before = asked();
+  const worked = vi.mocked(getWork).mock.calls.length;
+  act(() => land(new Blob(['cover'])));
+  await waitFor(() => expect(pane.queryByText(COVER_LOADING)).toBeNull());
+  expect(document.querySelector('.details img')?.getAttribute('src')).toBe('blob:page');
+  expect(getFile).not.toHaveBeenCalled();
+  // The cover is on this device now, so the listing saying it is not is
+  // asked again.
+  await waitFor(() => expect(asked()).toBeGreaterThan(before));
+  // And what its fetch found is in the work answer's findings, which nothing
+  // else would ask for with the sheet shut and no run under way.
+  await waitFor(() => expect(vi.mocked(getWork).mock.calls.length).toBeGreaterThan(worked));
 });
 
 // Rows selected together with modifier keys are what the details pane

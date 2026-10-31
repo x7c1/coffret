@@ -15,11 +15,13 @@ import {
   inTree,
   leaf,
   libraryName,
+  ON_THIS_DEVICE,
   openInTree,
   row,
   rowsNamed,
   setting,
   shot,
+  stateIcon,
   test,
   top,
 } from './journey';
@@ -40,11 +42,16 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await openInTree(page, leaf(setting.book));
   await expect(page).toHaveURL(new RegExp(`#path=${setting.book}$`));
 
-  // Every page of the book is in the Library and none of them is on this device
-  // yet: this device joined and caught its Index up, and has fetched nothing.
-  // Every page is a row of its own, under the book's.
-  await expectRemote(page, bookPage(0));
+  // Every page of the book is in the Library, and of them only the cover is on
+  // this device: this device joined and caught its Index up, and the details
+  // pane fetched the focused book's first page to show it (spec: LA-33) — that
+  // one page and no fill of the rest. Every page is a row of its own, under the
+  // book's.
+  await expect(stateIcon(page, bookPage(0))).toHaveAccessibleName(ON_THIS_DEVICE);
   const pages = Array.from({ length: setting.pages }, (_, index) => bookPage(index));
+  for (const name of pages.slice(1)) {
+    await expectRemote(page, name);
+  }
   await expect(rowsNamed(page, pages)).toHaveCount(setting.pages);
   await shot(page, '02-book-folder');
 

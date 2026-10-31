@@ -587,14 +587,22 @@ Concept background: [Library](../../concepts/library/),
   fetch that places it (EP-11), and it arms no fill — neither the one a fetch
   arms nor the one a page answered from disk in a folder not wholly here arms
   — so the fill running when it lands goes on running and nothing waits
-  behind it. What its fetch read of the committed Keyring (KL-15) and the kept
-  parcels it found not held (PK-21) go to the next fill the server publishes,
-  which reports them as its own: in the ordinary case the fill of the folder
-  being read, or the one armed when a page of the folder read ahead of is read
-  the ordinary way. Its refusal is not logged (LA-12). The explorer reads
-  ahead for the first pages of the folder its reader is about to read on into,
-  and for the cover of a folder the reader is on, so that walking past a
-  folder fetches one image and sets none of it coming. *(Form: test)*
+  behind it, and none is recorded for it. The parcels its fetch reads are held
+  as any fetch's are (PK-19, PK-21), so a later fill or read of the same pages
+  asks Storage for nothing more of them. A file in a folder this device has
+  not mapped is refused as a read of it is (EP-9). What its fetch read of the
+  committed Keyring (KL-15) and the kept parcels it found not held (PK-21),
+  which a fill's fetch would have said in that fill's findings, are said in
+  the work answer's own `findings`, beside the runs, rather than handed to a
+  fill that may never follow: each numbered and stamped with when it was
+  heard, newest first, each said once in the process however many reads find
+  it, the oldest dropped past a fixed count, and gone with the process as the
+  log is (LA-12). Its refusal is not logged (LA-12). The explorer reads ahead
+  for the first pages of the folder its reader is about to read on into, and
+  for the cover of a folder its reader's sheet or its details pane is on
+  where this device does not have it, so that walking past a folder fetches
+  one image and sets none of it coming. A peek (`&peek=true`), which the
+  details pane asks for a file's own picture, never fetches. *(Form: test)*
 
 ### Stopping work
 

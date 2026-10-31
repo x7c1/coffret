@@ -73,12 +73,14 @@ fn arms_a_fill() -> bool {
 /// the file is here, and through a fetch from Storage where it is not — and
 /// arms no fill, of either kind (spec: LA-33). It is what the explorer asks
 /// for to read ahead of a reader: the first pages of the folder the reader is
-/// about to step into, and the cover of a folder the focus is on. A fill of a
+/// about to step into, and the cover of a folder the reader's sheet or the
+/// details pane is on, where this device does not have it. A fill of a
 /// second folder supersedes the one running, so reading ahead into the next
 /// folder the ordinary way would stop the fill of the folder still being
-/// read. What its fetch found goes to the next fill published (see
-/// `Fills::hear`). Once the reader steps into the folder its pages are read
-/// the ordinary way, and that arms the fill there.
+/// read. What its fetch found goes into the work answer's own `findings`
+/// (see [`ReadFindings`](crate::ReadFindings)), there being no fill to carry
+/// it. Once the reader steps into the folder its pages are read the ordinary
+/// way, and that arms the fill there.
 ///
 /// Served whole. A range request is not honoured, because nothing asks for one —
 /// a browser's `<img>` sends none — and honouring one would mean a second way of
@@ -203,14 +205,21 @@ async fn answer(
 
     // Answered the moment the Entry is on disk, while the rest of the parcel it
     // came out of is still arriving (spec: PK-16). What that rest finds of kept
-    // parcels not held goes to whichever fill takes it in.
+    // parcels not held goes to whichever fill takes it in — or, for a read
+    // ahead, which arms none, to the work answer's own findings (spec: LA-33).
     //
     // A stale catalog is caught up once and the Entry asked for again, which is
     // the one catch-up a fetch here ever makes.
     let fetched = fetch_caught_up_if_stale(&state, || {
         state.fetches.fetch(library.shared(), path.clone(), {
             let state = Arc::clone(&state);
-            move |unheld| state.fills.hear_unheld(unheld)
+            move |unheld| {
+                if arms {
+                    state.fills.hear_unheld(unheld);
+                } else {
+                    state.read_findings.hear(None, unheld);
+                }
+            }
         })
     })
     .await??;
@@ -230,15 +239,17 @@ async fn answer(
         // files hears of them (spec: KL-15, PK-21). A fetch another caller had
         // already made read nothing, and has nothing to carry.
         //
-        // A read ahead arms nothing, and what its fetch found is handed to
-        // the next fill published all the same (spec: LA-33).
+        // A read ahead arms nothing, so no fill's line is there to say what
+        // its fetch found: the work answer says it in its own findings
+        // instead, where it is said whether or not a fill ever follows
+        // (spec: LA-33).
         EntryFetch::Placed if arms => fill_folder(
             Arc::clone(&state),
             Folder::holding(&path),
             fetched.short,
             fetched.unheld,
         ),
-        EntryFetch::Placed => state.fills.hear(fetched.short, fetched.unheld),
+        EntryFetch::Placed => state.read_findings.hear(fetched.short, fetched.unheld),
         EntryFetch::AlreadyPresent => {}
         // A declined Entry arms nothing, and what its fetch read of the Keyring
         // stays in the line the run wrote to the log. Only a locked one read it

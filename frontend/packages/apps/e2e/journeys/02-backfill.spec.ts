@@ -33,10 +33,12 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   await page.goto(`/#path=${setting.album}`);
 
   // The album as this device has never seen it: every row is in the Library and
-  // none of the files is here.
+  // none of the files is here but the first — the cover the details pane
+  // fetched for the focused folder (spec: LA-33), alone, with no fill set going.
   const first = photo(0);
   const last = photo(setting.photos - 1);
-  await expectRemote(page, first);
+  await expect(stateIcon(page, first)).toHaveAccessibleName(ON_THIS_DEVICE);
+  await expectRemote(page, photo(1));
   await expectRemote(page, last);
   await shot(page, '01-nothing-here-yet');
 

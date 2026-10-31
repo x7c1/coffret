@@ -43,7 +43,9 @@ type Shown =
  * reading order (see [`readOn`](./tree)): down the pages of a folder is
  * paging, and off the end of it is the first file of the next folder — a
  * file the reader cannot draw included, which the sheet says it cannot show.
- * A folder is shown where the focus is put on its row. It binds no keys to paging:
+ * A folder is shown where the focus is put on its row, and from a closed one
+ * `↑`/`↓` go to the row drawn beside it — the next closed folder's cover, say
+ * — rather than into it. It binds no keys to paging:
  * `←`/`→` are the tree's, opening and closing folders, and a book bound
  * right-to-left pages the other way from one bound left-to-right, which is
  * what made arrows that turned pages confusing. What it shows (see

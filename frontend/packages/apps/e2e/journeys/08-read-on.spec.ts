@@ -8,13 +8,14 @@
 // the next one's first pages ahead, so the page is there when the key is
 // pressed.
 //
-// The album is read into the book: by now the backfill journey has brought
-// the whole album over, and the book is the folder after it.
+// The album is read into the book, which is the folder after it. Its last file
+// is the one the restart journey had another device commit, named to sort after
+// the photographs; reading it fetches it, as opening any file does.
 
-import { bookPage, expect, inTree, leaf, photo, row, setting, shot, test, tree } from './journey';
+import { ARRIVED_WHILE_DOWN, bookPage, expect, inTree, leaf, row, setting, shot, test, tree } from './journey';
 
 test('read off the end of one folder into the first page of the next, and back', async ({ page }) => {
-  const last = photo(setting.photos - 1);
+  const last = ARRIVED_WHILE_DOWN;
   await page.goto(`/#path=${setting.album}&open=${setting.album}/${last}`);
   const reader = page.getByRole('region', { name: 'Reader' });
   await expect(reader.getByRole('img', { name: last })).toBeVisible();

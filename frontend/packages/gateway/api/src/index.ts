@@ -64,6 +64,7 @@ export type {
   FillStatus,
   Finding,
   FindingReason,
+  FoundByRead,
   Freeze,
   FreezePreview,
   FreezeStatus,

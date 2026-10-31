@@ -214,6 +214,9 @@ pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Stan
 mod reconnect;
 pub use reconnect::{Consent, ConsentFlow, DriveConsent, Reconnect, Reconnects};
 
+mod read_findings;
+pub use read_findings::{Found, ReadFindings};
+
 mod reported;
 pub use reported::Reported;
 

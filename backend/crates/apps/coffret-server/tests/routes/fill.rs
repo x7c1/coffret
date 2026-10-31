@@ -457,6 +457,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
             "delete": null,
             "log": [],
             "adds": [],
+            "findings": [],
         })
     );
 }

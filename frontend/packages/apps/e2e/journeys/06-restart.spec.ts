@@ -17,6 +17,7 @@
 // of a startup catch-up.
 
 import {
+  ARRIVED_WHILE_DOWN,
   expect,
   expectRemote,
   libraryName,
@@ -29,7 +30,7 @@ import {
 import { commitElsewhere } from './uploader';
 
 /** What the other device commits while nothing here is listening. */
-const ADDED = 'arrived-while-the-server-was-down.jpg';
+const ADDED = ARRIVED_WHILE_DOWN;
 
 test('come back to a Library another device has moved on', async ({ page, coffret }) => {
   await page.goto(`/#path=${setting.album}`);
@@ -51,5 +52,7 @@ test('come back to a Library another device has moved on', async ({ page, coffre
   await expect(row(page, ADDED)).toHaveCount(1);
   await expectRemote(page, ADDED);
   await expect(libraryName(page)).toBeVisible();
+  // Below the album's photographs, so brought on to the screen for the picture.
+  await row(page, ADDED).scrollIntoViewIfNeeded();
   await shot(page, '02-the-row-was-there-on-the-first-listing');
 });
