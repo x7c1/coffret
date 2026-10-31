@@ -192,6 +192,16 @@ impl Adds {
             .collect()
     }
 
+    /// Where every file the adds of `ids` wrote stands in the Library: what
+    /// a sync carrying them walks for (spec: EP-10).
+    pub(crate) fn written_paths(&self, ids: &BTreeSet<AddId>) -> Vec<EntryPath> {
+        let inner = self.lock();
+        ids.iter()
+            .filter_map(|id| inner.adds.get(id))
+            .flat_map(|add| add.files.iter().map(|written| written.path.clone()))
+            .collect()
+    }
+
     /// The add as it stands, for its undo: it stays listed until the undo has
     /// been logged and [`end`](Self::end) takes it out, so a page reading the
     /// work answer finds it in one or the other.

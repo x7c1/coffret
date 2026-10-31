@@ -41,6 +41,11 @@ pub(crate) use root_refused::RootRefused;
 mod root_state;
 pub(crate) use root_state::RootState;
 
+// Which of the mapped folders one sync walks: every one, or the folders a
+// drop wrote into (spec: EP-10, LA-34).
+mod scan_scope;
+pub use scan_scope::ScanScope;
+
 mod source_file;
 pub(crate) use source_file::SourceFile;
 
@@ -59,7 +64,7 @@ pub use unknown_births::UnknownBirths;
 pub(crate) use unknown_births::NONE_PLACED;
 
 mod walk_mappings;
-pub(crate) use walk_mappings::walk_mappings;
+pub(crate) use walk_mappings::{walk_mappings, walk_mappings_within};
 
 mod walked;
 pub(crate) use walked::{unavailable_roots, Walked};

@@ -85,10 +85,12 @@ async fn a_book_whose_server_stopped_is_packed_by_the_next_one() {
     );
 }
 
-/// A sync that runs before the book is taken up — one an unrelated drop arms,
-/// say — carries in what was dropped beside the book and leaves the book's
-/// pages alone, saying each waits for its Pack; and the listing marks them as
-/// waiting rather than as files the next run takes in (spec: PK-17).
+/// A sync of every mapped folder that runs before the book is taken up — the
+/// retry, asked for beside an unrelated drop, say — carries in what was
+/// dropped beside the book and leaves the book's pages alone, saying each
+/// waits for its Pack; and the listing marks them as waiting rather than as
+/// files the next run takes in (spec: PK-17). A drop's sync alone would not
+/// walk the book's folder at all (spec: EP-10).
 #[tokio::test]
 async fn a_sync_before_the_book_is_taken_up_leaves_its_pages_alone() {
     let mut served = Served::library().await;
@@ -106,6 +108,7 @@ async fn a_sync_before_the_book_is_taken_up_leaves_its_pages_alone() {
     )
     .await;
     assert_eq!(status, 200);
+    assert_eq!(served.post("/api/sync").await.status(), 202);
     served.sync_idle().await;
 
     let (_, work) = body_of(served.get("/api/work").await).await;

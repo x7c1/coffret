@@ -18,7 +18,8 @@ use crate::sync::{scan, settle, spool, stale_scratches};
 use crate::upload;
 
 /// Carries every changed file under this device's mapped folders into the
-/// Library.
+/// Library — or under the folders the request narrows the scan to
+/// ([`SyncRequest::within`]), and nothing outside them (spec: EP-10).
 ///
 /// The whole path, in the order it has to happen in: catch the Index up to the
 /// Library's head (spec: CK-9), settle the pending rows an interrupted run left
@@ -120,6 +121,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         progress,
         policy,
         births,
+        scope,
     } = request;
 
     let _pending_owner = index.own_pending_rows().await?;
@@ -174,7 +176,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         },
     )
     .await?;
-    let mut survey = scan::scan(index, roots, births, now).await?;
+    let mut survey = scan::scan(index, roots, births, now, &scope).await?;
 
     // Only now, with the scan over: every departed file stands under a root the
     // walk could read (spec: EP-12), and the discard holds that root against its

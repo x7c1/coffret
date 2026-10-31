@@ -7,8 +7,9 @@ use crate::reported::Reported;
 /// of.
 ///
 /// There is no `superseded` among them, and there is nothing to add one for: a
-/// sync covers the device's mappings entire, so a second one asks for what the
-/// first is already doing rather than for somewhere else.
+/// second sync is taken into the first where that one is still waiting for its
+/// turn at this device's pending work, and runs after it otherwise, so no sync
+/// ever replaces another.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SyncStatus {
     /// Armed, or walking the mapped folders.

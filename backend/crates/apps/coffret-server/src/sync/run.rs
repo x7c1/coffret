@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use coffret_device::Findings;
+use coffret_device::{Findings, ScanScope};
 use tracing::info;
 
 use crate::adds::{log_undone, undo};
@@ -15,12 +15,12 @@ use super::{SyncRun, SyncStatus};
 
 /// Carries the device's mapped folders into the Library, once.
 ///
-/// [`sync`](coffret_device::OpenLibrary::sync) and nothing around it. Which
-/// folders are walked is not an argument and cannot be — that is the device's
-/// mappings (spec: EP-9) — and neither is what a change means: a file that is
-/// new becomes an Entry, a file that changed replaces one where its Entry lives
-/// in a Container of its own (spec: PK-12, PK-15), and everything else is
-/// reported (spec: PK-14).
+/// [`sync_within`](coffret_device::OpenLibrary::sync_within) and nothing
+/// around it. Which folders are walked is the device's mappings (spec: EP-9),
+/// or the ones [`scope_of`] narrows them to (spec: EP-10) — and what a change
+/// means is not an argument at all: a file that is new becomes an Entry, a
+/// file that changed replaces one where its Entry lives in a Container of its
+/// own (spec: PK-12, PK-15), and everything else is reported (spec: PK-14).
 ///
 /// The run is this function's own value, published once at the end — and
 /// while it runs, what the flow says of itself is written onto the run on
@@ -59,6 +59,16 @@ pub(super) async fn sync(state: &ServerState) {
     // wait is not counted as somebody being here (spec: DK-4) and a lock that
     // lands meanwhile stops this run below.
     let _turn = state.pending_rows.take(TurnTaker::Sync).await;
+    // What was armed while this run waited for the turn is this run's to
+    // walk for, since it has walked nothing yet: a sync requested meanwhile
+    // covers the drops this one carries, rather than both running. An add
+    // taken in that was stopped meanwhile asks the run to stop, as above.
+    state.syncs.absorb();
+    (run.adds, run.requested) = state.syncs.carried();
+    if !state.adds.stopping_of(&run.adds).is_empty() {
+        state.syncs.ask_stop();
+    }
+    let scope = scope_of(state, &run);
 
     // The keys, once, for the whole run, as the fill takes them: a lock that
     // lands mid-walk leaves this holding what it took and the run finishes,
@@ -84,7 +94,7 @@ pub(super) async fn sync(state: &ServerState) {
             // committing, since saying so is what turns an ask away.
             biased;
             () = state.syncs.until_asked() => None,
-            ran = library.sync(&watched) => Some(ran),
+            ran = library.sync_within(&watched, scope) => Some(ran),
         };
         if let Some(ran) = ran {
             match ran {
@@ -126,6 +136,20 @@ pub(super) async fn sync(state: &ServerState) {
     run.status = SyncStatus::Cancelled;
     finish(state, run, started);
     state.syncs.rearm(rest, requested);
+}
+
+/// Which mapped folders the run walks (spec: EP-10).
+///
+/// Every one where the run was requested of its own — the retry, or anything
+/// else that arms a sync without a drop — and otherwise the folders the
+/// drops it carries wrote their files into, and nothing else: a drop's cost
+/// grows with what was dropped rather than with the Library, and a file put
+/// in another folder meanwhile waits for a sync that covers it.
+fn scope_of(state: &ServerState, run: &SyncRun) -> ScanScope {
+    if run.requested {
+        return ScanScope::Mappings;
+    }
+    ScanScope::folders_of(&state.adds.written_paths(&run.adds))
 }
 
 /// Publishes what the sync came to, and records it.

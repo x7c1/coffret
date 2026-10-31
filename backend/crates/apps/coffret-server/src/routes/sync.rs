@@ -21,9 +21,12 @@ use super::work::WorkDto;
 /// sitting in the folder with nothing left to drop — where the alternative is
 /// telling somebody to add a file they have already added.
 ///
-/// It takes no path. Which folders a sync walks is the device's mappings
-/// (spec: EP-9) and never an argument, here as on the command line: a route that
-/// narrowed it would be a second reading of what a sync covers.
+/// It takes no path, and the sync it arms walks every mapped folder
+/// (spec: EP-9, EP-10), as the command line's does: what it retries may be any
+/// drop's, and a file waiting in a folder no drop's sync walked is carried in
+/// by this. A sync a drop armed covers that drop's folders alone; one armed
+/// here while such a sync waits for its turn is taken into it, and covers
+/// both.
 ///
 /// It answers with the work answer as it stands the moment the sync is armed, rather
 /// than waiting for it: the work runs in the background and the browser polls for

@@ -64,7 +64,7 @@ fn paths(paths: &[&str]) -> BTreeSet<EntryPath> {
 /// (spec: PK-17, PK-7).
 ///
 /// This is the shape a restart produces: the process that took the drop is
-/// gone, a sync another drop armed walks the mapped folder first, and the
+/// gone, a sync whose scope covers the book's folder walks it first, and the
 /// reservation is the only thing that tells the pages from loose files.
 pub async fn a_sync_leaves_reserved_files_for_their_pack(fixture: &FreezeUnderTest) {
     let keys = keys();

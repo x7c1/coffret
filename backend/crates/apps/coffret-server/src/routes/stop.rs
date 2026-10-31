@@ -107,8 +107,8 @@ pub async fn stop(
 /// files. One armed for a freeze is answered by the run packing it, where that
 /// run is the one on record, and otherwise by its book's run as that starts.
 /// One for a sync — receiving or armed — asks the sync on record as well,
-/// whichever run carries the add: a sync walks every mapped folder, so the run
-/// under way may be about to read what is being taken away.
+/// whichever run carries the add: the run under way may walk the folder the
+/// add wrote into, and so be about to read what is being taken away.
 ///
 /// Refused, asking nothing, for an add that wrote over a file this device
 /// could not keep aside (spec: LA-36).

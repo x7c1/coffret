@@ -179,9 +179,9 @@ async fn a_sync_and_a_book_armed_while_a_deletion_runs_follow_it_in_turn() {
 
     let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(deletion(&work)["entries"], 1, "{work}");
-    // The drop, and the book's page beside it: a sync walks every mapping, and
-    // it ran before the book did.
-    assert_eq!(sync(&work)["added"], 2, "{work}");
+    // The drop alone: a drop's sync walks the folder it wrote into, so the
+    // book's page beside it is left to the book (spec: EP-10).
+    assert_eq!(sync(&work)["added"], 1, "{work}");
     assert_eq!(freeze(&work)["entries"], 1, "{work}");
     assert_eq!(ended(&logs), all_done(&["delete", "sync", "freeze"]));
 }

@@ -240,7 +240,7 @@ const OPERATION: &str = "upload";
 /// its turn behind it, which is [`freeze_dropped`]'s doing — a freeze commits
 /// one batch (spec: PK-7), so a book put aside half way is one that was never
 /// brought in at all — and a second sync collapses into the one walk of the
-/// mappings that would have found both drops anyway. A queue in front of this
+/// folders both drops wrote into, which finds both. A queue in front of this
 /// route would add nothing to either and would make a person dropping a
 /// photograph wait behind somebody's book.
 ///

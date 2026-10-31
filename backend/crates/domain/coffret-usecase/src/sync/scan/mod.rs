@@ -5,7 +5,9 @@ use tracing::debug;
 
 use crate::device_state::DeviceTime;
 use crate::index::Index;
-use crate::local_scan::{unavailable_roots, walk_mappings, RootState, UnknownBirths, Walked};
+use crate::local_scan::{
+    unavailable_roots, walk_mappings_within, RootState, ScanScope, UnknownBirths, Walked,
+};
 use crate::mapped_roots::MappedRoots;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
@@ -55,12 +57,19 @@ use renames::pair_renames;
 /// still a file the walk found, so a file this device placed is not read as
 /// deleted for standing there reserved.
 ///
+/// And it is bounded by `scope` (spec: EP-10): a sync a drop armed walks the
+/// folders the drop wrote into and nothing else, so a file anywhere else is
+/// neither carried in nor read as deleted or departed, and a mapping that
+/// reaches none of them is neither walked nor reported unavailable. Every
+/// other sync walks every mapping.
+///
 /// [`LocalError`]: crate::local_error::LocalError
 pub(super) async fn scan(
     index: &dyn Index,
     roots: &dyn MappedRoots,
     births: &UnknownBirths,
     now: DeviceTime,
+    scope: &ScanScope,
 ) -> SyncResult<Survey> {
     let mappings = index.mappings().await?;
     let Walked {
@@ -70,7 +79,7 @@ pub(super) async fn scan(
         // A sync says nothing of what an operating system keeps: it is no
         // file of the person's to carry in, nor to report (spec: EP-17).
         system: _,
-    } = walk_mappings(roots, &mappings, births).await?;
+    } = walk_mappings_within(roots, &mappings, births, scope).await?;
 
     for root in &walked {
         if let RootState::Stamp(identity) = &root.state {
@@ -113,7 +122,7 @@ pub(super) async fn scan(
             .and_then(|root| root.mapping.expected_root_id);
         examine(index, roots, &kinds, now, source, expected, &mut survey).await?;
     }
-    let deletions = deletions(index, &walked, &found, &mut survey).await?;
+    let deletions = deletions(index, &mappings, &walked, &found, scope, &mut survey).await?;
     // Once both halves are known: what is gone, and what appeared (spec: EP-10).
     pair_renames(index, roots, deletions, &mut survey).await?;
     survey.unavailable = unavailable_roots(&walked);

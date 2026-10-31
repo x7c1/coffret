@@ -908,8 +908,10 @@ export async function getWork(signal?: AbortSignal): Promise<Work> {
  * stopped, whose files are sitting in the folder with nothing left to drop —
  * where the alternative is telling somebody to add a file they have added.
  *
- * It takes no folder. Which folders a sync walks is the device's mappings and
- * never an argument, here as on the command line.
+ * It takes no folder, and the sync it arms walks every mapped folder, here as
+ * on the command line — so it also carries in a file waiting in a folder no
+ * drop's sync walked, since a drop's walks only the folders that drop wrote
+ * into (spec: EP-10).
  */
 export async function startSync(signal?: AbortSignal): Promise<Work> {
   return workOf(await askedForJson<unknown>(apiUrl('sync'), signal, 'POST'));

@@ -5,7 +5,7 @@ use coffret_model::{EntryLocation, EntryPath};
 
 use crate::device_state::{LocalEntry, Mapping};
 use crate::index::Index;
-use crate::local_scan::{kept_by_system, RootState, SourceFile, WalkedRoot};
+use crate::local_scan::{kept_by_system, RootState, ScanScope, SourceFile, WalkedRoot};
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -68,16 +68,21 @@ pub(super) struct Deletions {
 /// once the files that appeared are known (spec: EP-10). The records whose
 /// files are still there are handed back too, because a file holding the same
 /// content as a gone one makes the pair ambiguous.
+///
+/// A row standing in a folder out of `scope` is neither (spec: EP-10): the
+/// walk did not look there, so its file's absence from `found` says nothing
+/// about it.
 pub(super) async fn deletions(
     index: &dyn Index,
+    mappings: &[Mapping],
     roots: &[WalkedRoot],
     found: &BTreeMap<EntryPath, SourceFile>,
+    scope: &ScanScope,
     survey: &mut Survey,
 ) -> SyncResult<Deletions> {
-    // Every mapping's prefix, available or not: the same set the walk holds its
-    // root mapping to (spec: EP-9, EP-12).
-    let represented_elsewhere =
-        Mapping::represented_prefixes(roots.iter().map(|root| &root.mapping));
+    // Every mapping's prefix, available or not, and walked or not: the same
+    // set the walk holds its root mapping to (spec: EP-9, EP-12).
+    let represented_elsewhere = Mapping::represented_prefixes(mappings);
 
     let mut gone: BTreeMap<EntryPath, (LocalEntry, PathBuf)> = BTreeMap::new();
     let mut kept: BTreeMap<EntryPath, LocalEntry> = BTreeMap::new();
@@ -99,6 +104,11 @@ pub(super) async fn deletions(
             // name: its file is never found, so its absence is no deletion,
             // and the record stays as it is (spec: EP-17).
             if kept_by_system(prefix, &local.observation.path) {
+                continue;
+            }
+            // A row in a folder the walk did not look in is no evidence of
+            // anything (spec: EP-10).
+            if !scope.covers(&local.observation.path) {
                 continue;
             }
             let path = local.observation.path.clone();
