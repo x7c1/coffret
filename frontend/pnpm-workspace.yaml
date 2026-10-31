@@ -18,7 +18,17 @@ allowBuilds:
 # its GHSA id, and only when no release clears it or the release that does is a
 # major that cannot be adopted yet. Each id carries a comment naming the input
 # path and the mode it would need (say, "needs Vitest's UI server listening")
-# and why that does not hold here. There are none today.
+# and why that does not hold here.
+auditConfig:
+  ignoreGhsas:
+    # minimatch < 11.0.1, globparts amplification (a pattern crafted to blow up
+    # its expansion). Only 11 clears it, and every copy here is an older major
+    # pinned by dev tooling: ESLint and typescript-eslint, and electron-builder
+    # with its asar, glob and jake. None is a production dependency (`pnpm why
+    # minimatch --prod` names nothing), and each matches only patterns written
+    # in this repository's own configs and build scripts, never input from
+    # outside it. Drop the entry once those tools move to minimatch 11.
+    - GHSA-g3hv-75wg-m249
 
 # global-agent 3, which the Electron download inside electron-builder asks for
 # (and calls only behind a proxy, ELECTRON_GET_USE_PROXY), carries roarr 2 and
