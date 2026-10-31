@@ -7,8 +7,6 @@ import {
   type ReactNode,
 } from 'react';
 
-import type { KeptParcels } from '@coffret/api';
-
 import {
   answering,
   clock,
@@ -23,7 +21,6 @@ import {
   type Running,
   type StopAsk,
 } from './activity';
-import { size } from './humanize';
 import { LOCKED, LockIcon, UNLOCK, type UnlockOffer } from './Locked';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
@@ -59,14 +56,12 @@ import { COLOR, SHADOW } from './theme';
  * what is old on its own, and what a person has read is still worth having to
  * read again.
  *
- * The row also carries what there is to say about the Library itself: the
- * parcels this device keeps, and the sync icon that asks it what is new —
- * always there, unlike everything above, which
- * comes and goes with the work. While the Library is locked the row says
- * **Locked**, quietly and beside a padlock, in place of the summary, with the
- * button that unlocks it; the sync icon is drawn disabled, since looking for
- * what is new needs the Library open, and every Retry goes, since each would
- * meet the same locked refusal.
+ * The row also carries the sync icon that asks the Library what is new —
+ * always there, unlike everything above, which comes and goes with the work.
+ * While the Library is locked the row says **Locked**, quietly and beside a
+ * padlock, in place of the summary, with the button that unlocks it; the sync
+ * icon is drawn disabled, since looking for what is new needs the Library
+ * open, and every Retry goes, since each would meet the same locked refusal.
  *
  * The tree's keyboard shortcuts are listed over its right end while the `?`
  * key is pressed; nothing on the screen marks them (see `Shortcuts`).
@@ -75,7 +70,6 @@ import { COLOR, SHADOW } from './theme';
  * opening it shrinks them rather than covering what they show.
  */
 export function ActivityPanel({
-  kept,
   running,
   entries,
   trouble,
@@ -85,11 +79,6 @@ export function ActivityPanel({
   reconnect,
   locked,
 }: {
-  /**
-   * The parcels this device keeps for the Library, and `null` where the
-   * server has not said — before its first answer, and while it is locked.
-   */
-  kept: KeptParcels | null;
   /** **In progress**, top to bottom (see [`inProgress`](./activity)). */
   running: readonly Running[];
   /** **Earlier**, newest first (see [`earlier`](./activity)). */
@@ -243,10 +232,6 @@ export function ActivityPanel({
         )}
         {expired && reconnect !== null && <ReconnectOffer offer={reconnect} />}
         <span style={END}>
-          {/* The parcels a reader's fetches read and kept, which nothing else
-              on this page would ever mention, and which grow by a parcel or
-              two for every book opened. */}
-          {kept !== null && kept.count > 0 && <span>{keptLine(kept)}</span>}
           {/* What the sync icon's last asking came to, beside it rather than
               in the summary: a refresh that is over has nothing to stop
               saying, and in the summary it would sit over the next run's
@@ -607,12 +592,6 @@ const DOT_COLOUR: Record<Outcome, string> = {
   failure: COLOR.refused,
   notice: COLOR.warn,
 };
-
-/** The parcels kept, as the row says them: `3 parcels kept, 96.0 MB`. */
-function keptLine(kept: KeptParcels): string {
-  const parcels = kept.count === 1 ? 'parcel' : 'parcels';
-  return `${kept.count} ${parcels} kept, ${size(kept.bytes)}`;
-}
 
 const PANEL = {
   flex: '0 0 auto',

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { peekFile, readAhead, type DeleteTarget, type ListedFile, type Listing } from '@coffret/api';
+import {
+  peekFile,
+  readAhead,
+  type DeleteTarget,
+  type Library,
+  type LibraryTotals,
+  type ListedFile,
+  type Listing,
+} from '@coffret/api';
 
 import { deleteTargetOf } from './actions';
 import { deleteItems } from './deleteEntries';
@@ -8,20 +16,24 @@ import {
   counted,
   extensionOf,
   fileOnDevice,
+  filesOnDevice,
   firstImage,
   folderOnDevice,
   FOLDER,
   itemsIn,
   kindOf,
+  LIBRARY,
+  nameless,
   NOT_IN_LIBRARY_YET,
   NOT_PACKED_YET,
   opensInReader,
   selectedHeading,
+  storedOn,
   summaryOf,
   type Described,
 } from './details';
 import type { RowFill } from './fill';
-import { size, time } from './humanize';
+import { grouped, size, time } from './humanize';
 import { LIBRARY_ROOT } from './location';
 import { parentOf } from './prospective';
 import { COLOR } from './theme';
@@ -33,10 +45,11 @@ import type { Asked } from './useAsked';
  * in full where the tree has a line for it.
  *
  * It follows the selection — the focused row, or the rows selected together
- * with modifier keys (see [`selection`](./selection)). With several, it says
- * what they come to together (see [`summaryOf`](./details)) and offers
- * `Delete <n> items…`, the same deletion as the actions menu's. For one row,
- * from the top:
+ * with modifier keys (see [`selection`](./selection)). With none, it describes
+ * the Library itself, laid out as a folder is (see [`TheLibrary`](#TheLibrary)).
+ * With several, it says what they come to together (see
+ * [`summaryOf`](./details)) and offers `Delete <n> items…`, the same deletion
+ * as the actions menu's. For one row, from the top:
  *
  * - a preview: an image file's picture; for a folder holding images, its first
  *   one — for a scanned book, nearly always the cover; and otherwise a plain
@@ -63,6 +76,7 @@ import type { Asked } from './useAsked';
  */
 export function DetailsPane({
   selected,
+  library,
   listingOf,
   shownOf,
   uploadStoppedOf,
@@ -72,6 +86,8 @@ export function DetailsPane({
 }: {
   /** The rows selected, top to bottom; the focused row alone where nothing else is. */
   selected: readonly Described[];
+  /** What the pane says of the Library where no row is selected. */
+  library: LibraryShown;
   /** A folder's own listing as far as it has been asked; `undefined` where it has not. */
   listingOf: (folder: string) => Asked<Listing> | undefined;
   /** What a file row shows, the listing's state and the fill's together. */
@@ -92,7 +108,7 @@ export function DetailsPane({
   return (
     <aside className="details" aria-label="Details" style={PANE}>
       {selected.length === 0 ? (
-        <p style={{ margin: 0, padding: PAD, color: COLOR.dim, fontSize: 13 }}>Nothing selected</p>
+        <TheLibrary shown={library} />
       ) : selected.length === 1 ? (
         <One
           row={selected[0]}
@@ -106,6 +122,67 @@ export function DetailsPane({
         <Several rows={selected} onDelete={onDelete} />
       )}
     </aside>
+  );
+}
+
+/** What the pane is told of the Library, each as far as it has been asked. */
+export interface LibraryShown {
+  /** Which Library this is: its name and its provider. */
+  library: Asked<Library>;
+  /** What the whole of it comes to (spec: LA-39). */
+  totals: Asked<LibraryTotals>;
+  /** The root's listing, whose rows are the Library's items. */
+  root: Asked<Listing>;
+}
+
+/**
+ * The Library itself, where no row is focused: drawn as a folder's details
+ * are, with a box in place of a folder's mark, its name with no location
+ * above it — it is the top, and stands nowhere — and the facts a folder has,
+ * over the whole Library, with three of its own: which Storage it is kept on,
+ * how many objects it keeps there, and how much this device holds of it for
+ * reading again.
+ *
+ * Each fact is `…` while what it is read from is out, and `—` where that was
+ * refused, as a folder's Items is: a count that will not come is not drawn as
+ * one still coming.
+ */
+function TheLibrary({ shown }: { shown: LibraryShown }) {
+  const library = shown.library.status === 'ready' ? shown.library.value : null;
+  const totals = shown.totals.status === 'ready' ? shown.totals.value : null;
+  const root = shown.root.status === 'ready' ? shown.root.value : null;
+  const awaited = (asked: Asked<unknown>) => (asked.status === 'failed' ? '—' : '…');
+  const fromLibrary = (say: (library: Library) => string) =>
+    library !== null ? say(library) : awaited(shown.library);
+  const fromTotals = (say: (totals: LibraryTotals) => string) =>
+    totals !== null ? say(totals) : awaited(shown.totals);
+
+  const facts: [string, ReactNode][] = [
+    ['Kind', LIBRARY],
+    ['Stored on', fromLibrary((one) => storedOn(one.provider))],
+    ['Objects on Storage', fromTotals((all) => grouped(all.objects))],
+    ['Items', root !== null ? grouped(itemsIn(root)) : awaited(shown.root)],
+    ['Files', fromTotals((all) => grouped(all.files_total))],
+    ['Size', fromTotals((all) => size(all.size))],
+    ['Modified', fromTotals((all) => time(all.mtime))],
+    ['On this device', fromTotals((all) => filesOnDevice(all.files_present, all.files_total))],
+    ['Cached for reading', fromTotals((all) => (all.held_parcels === null ? '—' : size(all.held_parcels.bytes)))],
+  ];
+
+  return (
+    <div style={BLOCKS}>
+      <div style={PREVIEW}>
+        <Placeholder mark={<BoxMark />} label={root === null ? '' : counted(itemsIn(root), 'item', 'items')} />
+      </div>
+      {library === null ? (
+        <h2 style={{ ...TITLE, color: COLOR.dim }}>{shown.library.status === 'failed' ? shown.library.message : '…'}</h2>
+      ) : library.name === null ? (
+        <h2 style={{ ...TITLE, color: COLOR.dim }}>{nameless(library)}</h2>
+      ) : (
+        <h2 style={TITLE}>{library.name}</h2>
+      )}
+      <Facts facts={facts} />
+    </div>
   );
 }
 
@@ -337,6 +414,22 @@ function SheetMark() {
     <svg aria-hidden width={56} height={56} viewBox="0 0 24 24">
       <path d="M6 2.5h8l4 4v15H6z" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
       <path d="M14 2.5v4h4" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** A box with its lid on: the Library, which holds everything the tree lists. */
+function BoxMark() {
+  return (
+    <svg aria-hidden width={64} height={64} viewBox="0 0 16 16">
+      <path
+        d="M1.5 4.5h13v2h-13zM2.5 6.5v6.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-6.5M6.5 9h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={0.8}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

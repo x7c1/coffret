@@ -26,11 +26,13 @@ the handle and never a path. LA-32 onwards are the server's again: how a
 **reader** — the explorer's sheet over the file the tree's focus is on — reads
 on from one folder into the next, and reads ahead of itself without setting a
 folder coming; from LA-34, how a person **stops** an add, a freeze or a
-fill before it commits, and what a stopped add leaves; and which set of
+fill before it commits, and what a stopped add leaves; which set of
 colours this device's explorer is drawn in, which the server keeps as the
-device's own state (LA-38). The two credentials
-never cross: the server key is what the host shows the server, a browser token
-is what a browser shows the host, and neither of the two accepts the other's.
+device's own state (LA-38); and what the whole Library comes to, counted out
+of the catalog for the explorer's details of the Library itself (LA-39). The
+two credentials never cross: the server key is what the host shows the server,
+a browser token is what a browser shows the host, and neither of the two
+accepts the other's.
 Nor does the door's token stand for either.
 
 Concept background: [Library](../../concepts/library/),
@@ -739,3 +741,36 @@ Concept background: [Library](../../concepts/library/),
   (LA-13), so the page's origin, and the storage the browser keys by it, is new
   at every launch.
   *(Form: test)*
+
+### What the Library comes to
+
+- **LA-39.** The server answers what the whole Library comes to
+  (`GET /api/library/totals`), out of the Index and, for the held parcels, a
+  stat of each one's file on this device's disk: it reads nothing of
+  Storage, and it is refused while the Library is locked, as every route that
+  reads the catalog is (DK-2), where `GET /api/library` beside it is not. The
+  answer carries:
+  - `objects` — how many objects the Library's current state rests on, as
+    Storage counts objects, one per name (FM-12, FM-18): each current
+    Container once, a one-file Container and a Pack alike (FM-3); the control
+    head; and each replica of the committed Keyring the head names (KL-14). A
+    catalog that stands at no committed state counts its Containers alone.
+    Journal records behind the head, ordinary checkpoints, and Keyring
+    generations a `prune` has yet to dispose of (CK-6) are not counted:
+    whether each is still on Storage is something only a listing of Storage
+    could say, and this reads none;
+  - `files_total` and `files_present` — how many current Entries the Library
+    holds at every depth, and how many of them are present on this device
+    (EP-10): a folder's two counts in a listing, over the whole Library;
+  - `size` — the plaintext bytes of every current Entry together, whether
+    this device has it or not, as a folder's `size` counts its own;
+  - `mtime` — the newest modification time among every current Entry, as a
+    folder's `mtime` is its newest file's, and `null` for a Library holding no
+    Entry or where that time is a count of seconds no calendar reaches;
+  - `held_parcels` — how many parcels this device holds (PK-21) whose file is
+    on its disk, and how many bytes those files take there, or `null` where
+    they could not be counted, which the server says in its log.
+
+  It is a count and changes nothing: it arms no work and writes nothing, so
+  the explorer asks for it again each time what it shows of the Library
+  changes. *(Form: test)*

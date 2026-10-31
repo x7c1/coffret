@@ -78,7 +78,6 @@ async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
         json!({
             "library": "unlocked",
             "catalog": { "state": "caught_up", "stopped": null },
-            "kept_parcels": { "count": 0, "bytes": 0 },
             "turn": null,
             "fill": null,
             "sync": null,

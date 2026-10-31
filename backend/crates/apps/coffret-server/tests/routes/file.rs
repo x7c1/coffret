@@ -3,6 +3,7 @@
 //! is refused before anything is looked up.
 
 use coffret_logging::testing::CapturedLogs;
+use serde_json::json;
 use tracing::Level;
 
 use crate::support::{bytes, header, json as body_of, Served};
@@ -807,13 +808,15 @@ async fn the_rest_of_a_stroke_that_panics_after_the_answer_is_logged_and_let_go(
     logs.assert_free_of(&["scans", "vol1"]);
 }
 
-// PK-21: the work answer counts the parcels this device keeps and the bytes
-// their files take, from the rows and a stat of each file — nothing before a
-// fetch, and what a fetch left behind after it. Starting up again sweeps a
-// parcel file no row names out of the directory, and the count is unchanged
-// by it, since it was never counted.
+// LA-39, PK-21: the totals count the whole Library out of the catalog — the
+// objects its current state rests on, its files at every depth and how many of
+// them this device has, what they come to, and the parcels this device holds
+// with the bytes their files take, from the rows and a stat of each file. They
+// move as a fetch places files and leaves parcels behind. Starting up again
+// sweeps a parcel file no row names out of the directory, and the count is
+// unchanged by it, since it was never counted.
 #[tokio::test]
-async fn the_work_answer_counts_the_kept_parcels_and_startup_sweeps_strays() {
+async fn the_totals_count_the_library_and_the_parcels_it_holds() {
     let served = Served::library().await;
     let logs = CapturedLogs::capture();
     served
@@ -828,20 +831,46 @@ async fn the_work_answer_counts_the_kept_parcels_and_startup_sweeps_strays() {
     served.pack_elsewhere("scans").await;
     served.start_up().await;
 
-    let (_, work) = body_of(served.get("/api/work").await).await;
+    let (status, totals) = body_of(served.get("/api/library/totals").await).await;
+    assert_eq!(status, 200, "{totals}");
+    // Six loose files in one-file Containers and one Pack of three, beside the
+    // head and the committed Keyring's replicas: what a listing of Storage
+    // holds of the current state, the Journal behind the head left out.
+    let names = served.stored_names().await;
+    let containers = names
+        .iter()
+        .filter(|name| {
+            !["head-", "idx-", "key-"]
+                .iter()
+                .any(|role| name.starts_with(role))
+        })
+        .count();
+    assert_eq!(containers, 7, "{names:?}");
     assert_eq!(
-        work["kept_parcels"],
-        serde_json::json!({ "count": 0, "bytes": 0 }),
-        "nothing is kept before anything is fetched: {work}",
+        totals["objects"],
+        json!(containers + 1 + newest_keyring_replicas(&names)),
+        "{names:?}",
+    );
+    assert_eq!(totals["files_total"], 9);
+    assert_eq!(
+        totals["files_present"], 0,
+        "nothing is fetched yet: {totals}"
+    );
+    let root = root_counts(&served).await;
+    assert_eq!(totals["size"], json!(root.size));
+    assert_eq!(totals["mtime"], json!(root.mtime));
+    assert_eq!(
+        totals["held_parcels"],
+        json!({ "count": 0, "bytes": 0 }),
+        "nothing is held before anything is fetched: {totals}",
     );
 
-    assert_eq!(
-        served
-            .get("/api/file?path=scans/vol2/000.jpg")
-            .await
-            .status(),
-        200
-    );
+    for path in ["scans/vol2/000.jpg", "albums/cover.png"] {
+        assert_eq!(
+            served.get(&format!("/api/file?path={path}")).await.status(),
+            200
+        );
+    }
     strokes_finished(&logs, 1).await;
     served.fill_idle().await;
     let held = served.held_parcels().await;
@@ -854,10 +883,24 @@ async fn the_work_answer_counts_the_kept_parcels_and_startup_sweeps_strays() {
                 .len()
         })
         .sum();
-    let (_, work) = body_of(served.get("/api/work").await).await;
+    let (_, totals) = body_of(served.get("/api/library/totals").await).await;
     assert_eq!(
-        work["kept_parcels"],
-        serde_json::json!({ "count": held.len(), "bytes": bytes }),
+        totals["held_parcels"],
+        json!({ "count": held.len(), "bytes": bytes }),
+    );
+    // The files a fetch placed — a page of the Pack and a loose file, and
+    // whatever the fills they armed brought with them — counted as the root's
+    // listing counts its folders.
+    let root = root_counts(&served).await;
+    assert!(root.present >= 2, "both fetched files are here");
+    assert_eq!(totals["files_present"], json!(root.present), "{totals}");
+    assert_eq!(
+        totals["files_total"], 9,
+        "a fetch adds no file to the Library"
+    );
+    assert_eq!(
+        totals["objects"],
+        json!(containers + 1 + newest_keyring_replicas(&names))
     );
 
     let dir = held[0]
@@ -875,7 +918,62 @@ async fn the_work_answer_counts_the_kept_parcels_and_startup_sweeps_strays() {
         .find(|event| event.message().starts_with("discarded the parcel files"))
         .expect("the sweep says what it discarded");
     assert_eq!(swept.number("parcels"), 1);
-    let (_, again) = body_of(served.get("/api/work").await).await;
-    assert_eq!(again["kept_parcels"], work["kept_parcels"]);
+    let (_, again) = body_of(served.get("/api/library/totals").await).await;
+    assert_eq!(again["held_parcels"], totals["held_parcels"]);
     logs.assert_free_of(&["deadbeef", "scans"]);
+}
+
+/// What the root's listing says its folders come to together: the Library holds
+/// no file at its root in these cases, so this is the whole of it.
+struct RootCounts {
+    present: u64,
+    size: u64,
+    mtime: Option<String>,
+}
+
+async fn root_counts(served: &Served) -> RootCounts {
+    let (_, root) = body_of(served.get("/api/list").await).await;
+    assert_eq!(root["files"], json!([]), "{root}");
+    let folders = root["folders"]
+        .as_array()
+        .expect("the root lists its folders");
+    RootCounts {
+        present: folders
+            .iter()
+            .map(|folder| folder["files_present"].as_u64().expect("a count"))
+            .sum(),
+        size: folders
+            .iter()
+            .map(|folder| folder["size"].as_u64().expect("a size"))
+            .sum(),
+        mtime: folders
+            .iter()
+            .filter_map(|folder| folder["mtime"].as_str().map(str::to_owned))
+            .max(),
+    }
+}
+
+/// How many replicas the newest Keyring generation on Storage declares, read
+/// off its replicas' names: `key-<generation>-<digest>-r<position>-of-<count>`
+/// (spec: FM-12).
+fn newest_keyring_replicas(names: &[String]) -> usize {
+    let replicas: Vec<(u64, usize)> = names
+        .iter()
+        .filter_map(|name| {
+            let rest = name.strip_prefix("key-")?.strip_suffix(".cfrt")?;
+            let generation = rest.split('-').next()?.parse().ok()?;
+            let count = rest.rsplit("-of-").next()?.parse().ok()?;
+            Some((generation, count))
+        })
+        .collect();
+    let newest = replicas
+        .iter()
+        .map(|(generation, _)| *generation)
+        .max()
+        .expect("the Library has a Keyring on Storage");
+    replicas
+        .iter()
+        .find(|(generation, _)| *generation == newest)
+        .map(|(_, count)| *count)
+        .expect("the newest generation has a replica")
 }

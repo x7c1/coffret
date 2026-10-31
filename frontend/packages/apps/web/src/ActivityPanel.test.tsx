@@ -57,7 +57,6 @@ function panel({
 } = {}) {
   return render(
     <ActivityPanel
-      kept={null}
       running={running}
       entries={entries}
       trouble={trouble}

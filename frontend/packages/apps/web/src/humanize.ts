@@ -25,6 +25,17 @@ export function size(bytes: number): string {
 }
 
 /**
+ * A count, its thousands grouped with commas: `12,480`.
+ *
+ * One spelling on every device, as [`time`](#time) has, rather than the
+ * browser's locale: a count read beside a size is read the same way on every
+ * desk.
+ */
+export function grouped(count: number): string {
+  return count.toLocaleString('en-US');
+}
+
+/**
  * One Entry's modification time, in the reader's own zone, to the minute:
  * `2016-04-11 20:12`.
  *

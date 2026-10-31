@@ -14,7 +14,6 @@ import {
   type Fill,
   type Freeze,
   type FoundByRead,
-  type KeptParcels,
   type LibraryState,
   type Logged,
   type Reconnect,
@@ -90,11 +89,6 @@ export function useWork(readerOpen: boolean): {
    */
   catalog: Catalog | null;
   /**
-   * The parcels this device keeps for the Library, and `null` until an answer
-   * has said or while the Library is locked.
-   */
-  kept: KeptParcels | null;
-  /**
    * How the last reconnect stands, and `null` until an answer has said one
    * ran.
    */
@@ -154,7 +148,6 @@ export function useWork(readerOpen: boolean): {
   const [findings, setFindings] = useState<readonly FoundByRead[]>([]);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [kept, setKept] = useState<KeptParcels | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
   const [adds, setAdds] = useState<readonly AddUnderWay[]>([]);
   // A drop arms its flow before it answers, so the server is already running one
@@ -193,7 +186,6 @@ export function useWork(readerOpen: boolean): {
     setFindings(work.findings);
     setLibrary(work.library);
     setCatalog(work.catalog);
-    setKept(work.kept_parcels);
     setReconnect(work.reconnect);
     setAdds(work.adds);
     // Whatever the answer says about the flows a press arms — the sync and the
@@ -373,7 +365,6 @@ export function useWork(readerOpen: boolean): {
     findings,
     library,
     catalog,
-    kept,
     reconnect,
     trouble: standing,
     retry,

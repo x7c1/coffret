@@ -1,17 +1,18 @@
-//! The twenty-four things a browser may ask of a Library.
+//! The twenty-five things a browser may ask of a Library.
 //!
-//! Four of them are about what the Library holds and answer out of the
-//! catalog alone — which Library this is, every folder in it, what one folder
-//! holds, and which files stand either side of one row in reading order, so a
-//! reader at the end of one folder can read on into the next (spec: LA-32);
-//! the fifth is the only one that reaches Storage for bytes,
+//! Five of them are about what the Library holds and answer out of the
+//! catalog alone — which Library this is, what the whole of it comes to
+//! (spec: LA-39), every folder in it, what one folder holds, and which files
+//! stand either side of one row in reading order, so a reader at the end of
+//! one folder can read on into the next (spec: LA-32);
+//! the sixth is the only one that reaches Storage for bytes,
 //! and it reaches it for one Entry at a time. There is deliberately no route
 //! that hands Storage's listing out, and none that hands anything encrypted
 //! out: what crosses this boundary is plaintext the device already has, or is
 //! about to place, and nothing else — the one route that walks the listing
 //! answers with a single word about it.
 //!
-//! The refresh is the sixth, and the one that reaches Storage for no bytes at
+//! The refresh is the seventh, and the one that reaches Storage for no bytes at
 //! all: it replays what the Journal holds into the catalog (spec: CK-9) and says
 //! what changed. It is how a device that has just joined, or one another device
 //! has committed past, learns there is anything to show — and it hands over
@@ -95,7 +96,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Five of the twenty-four go on answering once the Library is locked — which
+//! Five of the twenty-five go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, the unlock,
 //! and the two about the explorer's colours — because none of them needs a key
 //! and a locked server is still one a person should be able to read the name
@@ -115,7 +116,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the twenty-four are two answers that are not routes at all: one for a
+//! Beside the twenty-five are two answers that are not routes at all: one for a
 //! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -178,6 +179,9 @@ pub use stop::stop;
 
 mod sync;
 pub use sync::sync;
+
+mod totals;
+pub use totals::totals;
 
 mod unlock;
 pub use unlock::unlock;

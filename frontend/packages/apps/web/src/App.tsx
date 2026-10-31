@@ -6,6 +6,7 @@ import {
   getBeside,
   getFolders,
   getLibrary,
+  getLibraryTotals,
   getListing,
   getRemoteHead,
   isRefusal,
@@ -280,6 +281,9 @@ export function App() {
   const recheckWork = work.recheck;
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
+  // What the whole Library comes to, which the details pane says where no row
+  // is focused (spec: LA-39).
+  const totals = useAsked((signal) => getLibraryTotals(signal), 'totals');
   const folders = useAsked((signal) => getFolders(signal), 'folders');
   // The listing of every folder the tree shows — the root's, each open
   // folder's — of the folder the URL names, which is one of them once the
@@ -309,6 +313,7 @@ export function App() {
   // [`useAsked`](./useAsked) — so anything holding one holds it for the life of
   // the screen.
   const reloadLibrary = library.reload;
+  const reloadTotals = totals.reload;
   const reloadFolders = folders.reload;
   // Every listing the tree holds, since what changed one row's state can
   // change the folders above it too: a folder is on this device whole only
@@ -337,10 +342,11 @@ export function App() {
   // recovers this.
   const retry = useCallback(() => {
     reloadLibrary();
+    reloadTotals();
     reloadFolders();
     reloadListing();
     recheckWork();
-  }, [reloadLibrary, reloadFolders, reloadListing, recheckWork]);
+  }, [reloadLibrary, reloadTotals, reloadFolders, reloadListing, recheckWork]);
 
   // The idle lock, arriving as news. The keys were derived when the server was
   // started or last unlocked, and they live until the interval the server goes
@@ -754,6 +760,21 @@ export function App() {
   // nothing under them yet, which are drawn to add into.
   const reloadRoot = useCallback(() => reloadListings(['']), [reloadListings]);
   const rootKnown: Listing | null = rootState.status === 'ready' ? rootState.value : null;
+  // The Library's totals follow its root: every change to the Library — an
+  // add, a deletion, a move, a fetch, a catch-up — has the root's listing
+  // asked again, since what is below it is counted in its rows, and a new
+  // answer of it is when the totals are asked again too. Not at the first
+  // answer: the totals are already being asked for beside it.
+  const rootSeen = useRef<Listing | null>(null);
+  useEffect(() => {
+    if (rootKnown === null) {
+      return;
+    }
+    if (rootSeen.current !== null && rootSeen.current !== rootKnown) {
+      reloadTotals();
+    }
+    rootSeen.current = rootKnown;
+  }, [rootKnown, reloadTotals]);
   // A folder's listing as the tree holds it, or asked for where it holds none.
   const listingOf = useCallback(
     (path: string): Promise<Listing> => {
@@ -2079,6 +2100,7 @@ export function App() {
                     />
                     <DetailsPane
                       selected={selected}
+                      library={{ library: library.state, totals: totals.state, root: rootState }}
                       listingOf={heldListing}
                       shownOf={shownOf}
                       uploadStoppedOf={uploadStoppedOf}
@@ -2155,7 +2177,6 @@ export function App() {
         />
       )}
       <ActivityPanel
-        kept={work.kept}
         running={running}
         entries={entries}
         trouble={work.trouble}

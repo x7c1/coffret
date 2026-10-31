@@ -75,5 +75,9 @@ mod state_of;
 // Whether this device has every Entry standing directly in one folder.
 mod directly_present;
 
+// What the whole Library comes to, for the details of the Library itself.
+mod totals;
+pub use totals::LibraryTotals;
+
 #[cfg(test)]
 mod tests;

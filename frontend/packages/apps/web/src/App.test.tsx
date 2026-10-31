@@ -9,6 +9,7 @@ import {
   getFile,
   getFolders,
   getLibrary,
+  getLibraryTotals,
   getListing,
   getRemoteHead,
   getWork,
@@ -20,6 +21,7 @@ import {
   stopWork,
   Refusal,
   type Delete,
+  type LibraryTotals,
   type ListedFile,
   type Listing,
   type Work,
@@ -49,6 +51,7 @@ vi.mock('@coffret/api', async (actual) => ({
   getAppearance: vi.fn(() => Promise.resolve('system')),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
+  getLibraryTotals: vi.fn(),
   getListing: vi.fn(),
   getRemoteHead: vi.fn(),
   getWork: vi.fn(),
@@ -64,7 +67,6 @@ const IDLE: Work = {
   server: 'one-process',
   library: 'unlocked',
   catalog: { state: 'caught_up', stopped: null },
-  kept_parcels: null,
   turn: null,
   fill: null,
   sync: null,
@@ -74,6 +76,16 @@ const IDLE: Work = {
   log: [],
   adds: [],
   findings: [],
+};
+
+/** What a Library of five top-level rows comes to, as the server counts it. */
+const TOTALS: LibraryTotals = {
+  objects: 214,
+  files_total: 12_480,
+  files_present: 3_210,
+  size: 5_480_000_000,
+  mtime: '2026-10-28T12:14:00Z',
+  held_parcels: { count: 3, bytes: 1_400_000_000 },
 };
 
 function listing(path: string, over: Partial<Listing> = {}): Listing {
@@ -138,6 +150,7 @@ beforeEach(() => {
   window.history.replaceState(null, '', '#');
   Element.prototype.scrollIntoView = () => undefined;
   vi.mocked(getLibrary).mockResolvedValue({ name: 'main', library_id: '1', provider: 's3' });
+  vi.mocked(getLibraryTotals).mockResolvedValue(TOTALS);
   vi.mocked(getFolders).mockResolvedValue({ folders: [] });
   vi.mocked(getRemoteHead).mockResolvedValue({ head: 'same' } as never);
   vi.mocked(getWork).mockResolvedValue(IDLE);
@@ -726,7 +739,7 @@ it('describes the focused row in the details pane, and opens it from there', asy
   await tree().findByTitle('comics');
   const area = screen.getByRole('tree');
   const pane = within(screen.getByRole('complementary', { name: 'Details' }));
-  expect(pane.getByText('Nothing selected')).toBeTruthy();
+  expect(await pane.findByRole('heading', { name: 'main' })).toBeTruthy();
 
   // A folder holding a folder and no images: its items, and no Open.
   fireEvent.keyDown(area, { key: 'ArrowDown' });
@@ -1082,6 +1095,130 @@ it('keeps a stranded book open across its commit, and asks for its rows again', 
   );
 });
 
+describe('the details of the Library', () => {
+  /** The facts the pane lists, in order, each as its name and what it says. */
+  function facts(pane: ReturnType<typeof within>): [string, string][] {
+    return pane
+      .getAllByRole('term')
+      .map((term) => [term.textContent ?? '', term.nextElementSibling?.textContent ?? '']);
+  }
+
+  // With no row focused the pane is the Library's: a box over its items, its
+  // name, and the facts a folder has over the whole Library, with where it is
+  // kept, what it keeps there, and what this device holds of it to read again.
+  it('describes the Library where no row is focused, every fact in order', async () => {
+    vi.mocked(getLibrary).mockResolvedValue({ name: 'books', library_id: 'abc', provider: 'drive' });
+    answers = library({ '': ['comics/', 'papers/', 'photos/', 'a.jpg', 'b.pdf'] });
+    render(<App />);
+    const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
+    expect(await pane.findByRole('heading', { name: 'books' })).toBeTruthy();
+    expect(await pane.findByText('5 items')).toBeTruthy();
+    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,480'));
+    expect(facts(pane)).toEqual([
+      ['Kind', 'Library'],
+      ['Stored on', 'Google Drive'],
+      ['Objects on Storage', '214'],
+      ['Items', '5'],
+      ['Files', '12,480'],
+      ['Size', size(5_480_000_000)],
+      ['Modified', time('2026-10-28T12:14:00Z')],
+      ['On this device', '3,210 of 12,480 files'],
+      ['Cached for reading', size(1_400_000_000)],
+    ]);
+    // It stands nowhere, so no location is drawn over its name.
+    expect(pane.queryByText('Library', { selector: 'p' })).toBeNull();
+
+    // A row focused is that row's; let go of, the Library's again.
+    const area = screen.getByRole('tree');
+    fireEvent.keyDown(area, { key: 'ArrowDown' });
+    expect(await pane.findByRole('heading', { name: 'comics' })).toBeTruthy();
+    fireEvent.click(area);
+    expect(await pane.findByRole('heading', { name: 'books' })).toBeTruthy();
+  });
+
+  // A Library nothing has named yet says so in the header's words, dimmed, and
+  // one on S3 is said to be stored there.
+  it('says a Library with no name yet in the header’s words, and where it is stored', async () => {
+    vi.mocked(getLibrary).mockResolvedValue({ name: null, library_id: 'abc', provider: 's3' });
+    vi.mocked(getLibraryTotals).mockResolvedValue({
+      ...TOTALS,
+      files_present: TOTALS.files_total,
+      held_parcels: null,
+    });
+    answers = library({ '': ['comics/'] });
+    render(<App />);
+    const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
+    const heading = await pane.findByRole('heading', { name: 'a Library with no name yet (ID abc)' });
+    expect(heading.style.color).not.toBe('');
+    expect(within(screen.getByRole('banner')).getByTestId('library').textContent).toBe(
+      'a Library with no name yet (ID abc)',
+    );
+    await waitFor(() => expect(definition(pane, 'Stored on')).toBe('S3'));
+    expect(await pane.findByText('1 item')).toBeTruthy();
+    expect(definition(pane, 'Items')).toBe('1');
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('All files'));
+    // Parcels that could not be counted are not drawn as none.
+    expect(definition(pane, 'Cached for reading')).toBe('—');
+  });
+
+  // The facts that will not come are said so, and not drawn as still coming.
+  it('says a refused count as refused', async () => {
+    vi.mocked(getLibraryTotals).mockRejectedValue(new Refusal('server', 500, 'the catalog could not be read'));
+    answers = library({ '': ['comics/'] });
+    render(<App />);
+    const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
+    await waitFor(() => expect(definition(pane, 'Files')).toBe('—'));
+    expect(definition(pane, 'Kind')).toBe('Library');
+    await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
+  });
+
+  // What this device holds to read again is the pane's to say now: the
+  // Activity row says nothing of it.
+  it('leaves the parcels this device holds out of the Activity row', async () => {
+    answers = library({ '': ['comics/'] });
+    render(<App />);
+    const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
+    await waitFor(() => expect(definition(pane, 'Cached for reading')).toBe(size(1_400_000_000)));
+    expect(activitySaid()).not.toMatch(/parcel/);
+    expect(activitySaid()).not.toContain(size(1_400_000_000));
+  });
+
+  // The facts follow the Library: a change to it has the root asked again,
+  // and the totals with it.
+  it('follows a change to the Library', async () => {
+    let deleted = false;
+    answers = (path) =>
+      path === ''
+        ? listing('', {
+            folders: [
+              { name: 'albums', path: 'albums', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null },
+              ...(deleted
+                ? []
+                : [{ name: 'comics', path: 'comics', mapped: true, present_throughout: false, files_total: 1, files_present: 0, size: 0, mtime: null }]),
+            ],
+          })
+        : listing(path, { held: true, files: [page(`${path}/1.jpg`)] });
+    vi.mocked(getFolders).mockResolvedValue({ folders: ['albums', 'comics'] });
+    render(<App />);
+    const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
+    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,480'));
+    await waitFor(() => expect(definition(pane, 'Items')).toBe('2'));
+
+    await deleteFromTree('comics', 'comics', () => {
+      deleted = true;
+      vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
+      vi.mocked(getLibraryTotals).mockResolvedValue({ ...TOTALS, objects: 213, files_total: 12_477, files_present: 3_207 });
+    });
+    // Delete focused the row it was pressed on; let go of, the pane is the
+    // Library's again.
+    fireEvent.click(screen.getByRole('tree'));
+    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,477'), { timeout: 3000 });
+    expect(definition(pane, 'Objects on Storage')).toBe('213');
+    expect(definition(pane, 'On this device')).toBe('3,207 of 12,477 files');
+    await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
+  });
+});
+
 describe('the end of a deletion', () => {
   // A mapped top-level folder whose last Entry left is an empty mapped prefix
   // now, which only the root's listing names: it is asked again, so the tree
@@ -1277,6 +1414,7 @@ describe('the locked Library', () => {
     const refusal = () => Promise.reject(new Refusal('locked', 423, 'the Library is locked'));
     vi.mocked(getWork).mockResolvedValue({ ...IDLE, library: 'locked' });
     vi.mocked(getLibrary).mockImplementation(refusal);
+    vi.mocked(getLibraryTotals).mockImplementation(refusal);
     vi.mocked(getFolders).mockImplementation(refusal);
     vi.mocked(getListing).mockImplementation(refusal);
     // The page asks for the unlock on its own too; the app is asked, and the
@@ -1288,6 +1426,7 @@ describe('the locked Library', () => {
   function unlockedServer() {
     vi.mocked(getWork).mockResolvedValue(IDLE);
     vi.mocked(getLibrary).mockResolvedValue({ name: 'main', library_id: '1', provider: 's3' });
+    vi.mocked(getLibraryTotals).mockResolvedValue(TOTALS);
     vi.mocked(getFolders).mockResolvedValue({ folders: [] });
     vi.mocked(getListing).mockImplementation((path: string) => Promise.resolve(answers(path)));
     vi.mocked(askToUnlock).mockResolvedValue({ library: 'unlocked', message: 'the Library is open' });

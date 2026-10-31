@@ -4,8 +4,7 @@ use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 use super::{
-    AddDto, CatalogDto, DeleteDto, FillDto, FoundDto, FreezeDto, KeptParcelsDto, LoggedDto,
-    ReconnectDto, SyncDto,
+    AddDto, CatalogDto, DeleteDto, FillDto, FoundDto, FreezeDto, LoggedDto, ReconnectDto, SyncDto,
 };
 
 /// What the server is doing on its own, which is four things — and the one
@@ -61,15 +60,6 @@ pub struct WorkDto {
     pub(super) library: &'static str,
     /// How this device's catalog stands with the Library.
     pub(super) catalog: CatalogDto,
-    /// The parcels this device keeps for the Library, and `null` while it is
-    /// locked or when they could not be counted: they are counted from the
-    /// Index's held-parcel rows, which a locked server does not hold open, and
-    /// a failed count is said in the server's log.
-    ///
-    /// Not work either, and here for the reason the catalog's standing is: it
-    /// is device state nothing else tells a person about, and this is the
-    /// question an open explorer is already asking (spec: PK-21).
-    pub(super) kept_parcels: Option<KeptParcelsDto>,
     /// Which flow's run holds this device's pending rows right now — `sync`,
     /// `freeze` or `delete` — and `null` where nobody does.
     ///
@@ -141,17 +131,12 @@ impl WorkDto {
     /// measured against that one reading: read per run, a turn handed over
     /// between two reads could leave two runs each saying the other holds it.
     ///
-    /// The kept parcels are counted first, because that is the one part of the
-    /// answer that waits on anything: everything else is read in one go after
-    /// it, so the runs and the turn they are measured against stay one reading.
-    ///
     /// The log is read last. A flow logs a run under the same lock that
     /// publishes its end, so a run this answer reads as over is in the log it
     /// reads after it; read first, the one answer that says a run is over could
     /// leave its entry for a poll that never comes, since a page stops asking
     /// once nothing is running.
     pub async fn of(state: &ServerState) -> Self {
-        let kept_parcels = state.kept_tally().await.map(KeptParcelsDto::of);
         let turn = state.pending_rows.holder();
         Self {
             server: state.server().to_owned(),
@@ -161,7 +146,6 @@ impl WorkDto {
                 "locked"
             },
             catalog: CatalogDto::of(&state.catalog.standing()),
-            kept_parcels,
             turn: turn.map(TurnTaker::as_str),
             fill: state.fills.reported().as_ref().map(FillDto::of),
             sync: state

@@ -227,7 +227,7 @@ pub use authorize::{authorize, AuthorizeRequest};
 mod batch_id;
 
 mod browse;
-pub use browse::{ChildFolder, EntryState, FileRow, FilesBeside, FolderListing};
+pub use browse::{ChildFolder, EntryState, FileRow, FilesBeside, FolderListing, LibraryTotals};
 
 mod change_passphrase;
 pub use change_passphrase::change_passphrase;
