@@ -11,6 +11,7 @@
 mod support;
 
 mod activity;
+mod appearance;
 mod beside;
 mod browse;
 mod contract;

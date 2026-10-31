@@ -34,7 +34,7 @@
 // No key deletes. Which key means delete differs between systems, and a key
 // that takes things out of a Library is one pressed by mistake.
 
-import type { DeleteTarget, Listing } from '@coffret/api';
+import type { Appearance, DeleteTarget, Listing } from '@coffret/api';
 
 import { deleteItems, deleteOffered, DELETE } from './deleteEntries';
 import { opensInReader, type Described } from './details';
@@ -55,7 +55,10 @@ export type Action =
   // The header's **+**, whose menu is the same popover: the operating
   // system's picker for files, or for one folder.
   | { kind: 'addFiles' }
-  | { kind: 'addFolder' };
+  | { kind: 'addFolder' }
+  // The header's appearance switch, whose menu is the same popover too: the
+  // set the explorer is drawn in.
+  | { kind: 'appearance'; appearance: Appearance };
 
 /** What the one item of a menu over rows that offer nothing says. */
 export const NOTHING_TO_DELETE = 'Nothing here to delete';
@@ -69,6 +72,12 @@ export interface ActionItem {
   destructive: boolean;
   /** Set apart from the items above it by a line. */
   separated: boolean;
+  /**
+   * One of a set of which one is chosen, and whether it is that one: drawn
+   * with a check mark where it is, and read out as checked. Left out of an
+   * item that is an action rather than a choice.
+   */
+  checked?: boolean;
 }
 
 /** What the menu needs to know beyond the rows themselves. */

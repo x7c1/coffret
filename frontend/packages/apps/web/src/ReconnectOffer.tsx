@@ -47,7 +47,7 @@ export interface Offer {
  * one another window started, whose page this one was never handed, and then
  * the line says so instead.
  *
- * Its words and its button are drawn in `ink` — the light screen's colours, or
+ * Its words and its button are drawn in `ink` — the screen's colours, or
  * the reader's sheet's where it stands on the sheet's dark ground, so the
  * button reads as the sheet's Retry beside it does.
  */
@@ -87,7 +87,7 @@ interface Ink {
   raised: string;
 }
 
-/** The light screen's colours, where every offer but the reader's stands. */
+/** The screen's colours, where every offer but the reader's stands. */
 const SCREEN_INK: Ink = { text: COLOR.text, refused: COLOR.refused, border: COLOR.border, raised: COLOR.panel };
 
 const BUTTON = {

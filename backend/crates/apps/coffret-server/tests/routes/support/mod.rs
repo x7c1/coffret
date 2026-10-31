@@ -19,7 +19,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
-use coffret_device::{EntryPath, OpenLibrary};
+use coffret_device::{AppearanceFile, EntryPath, OpenLibrary};
 use coffret_local_fs::UnixFs;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
@@ -114,6 +114,14 @@ const PLANTED: [(&str, &[u8]); 6] = [
     ("albums/notes.txt", b"a note about the albums"),
     ("books/page-001.png", b"page one"),
 ];
+
+/// Where the served device keeps its explorer's appearance: in the fixture's
+/// own directory, beside the two devices' spools, so that a server started
+/// afresh over the same device reads what the one before it kept — and no case
+/// reaches the state directory of whoever runs it.
+fn appearance_file(device: &Path) -> AppearanceFile {
+    AppearanceFile::at(device.join("explorer.json"))
+}
 
 /// One server over a Library another device filled.
 pub struct Served {
@@ -401,7 +409,8 @@ impl Served {
         let consent = Arc::new(ScriptedConsent::default());
         let state = ServerState::new(Some("served".to_owned()), library)
             .within(allowance)
-            .consenting_through(Arc::clone(&consent) as _);
+            .consenting_through(Arc::clone(&consent) as _)
+            .keeping_appearance_in(appearance_file(spools.path()));
         let (state, prompted) = if prompting {
             let (prompt, asked) = UnlockPrompt::channel();
             (
@@ -510,7 +519,8 @@ impl Served {
         let state = Arc::new(
             ServerState::new(self.name.clone(), library)
                 .within(self.allowance)
-                .consenting_through(Arc::clone(&self.consent) as _),
+                .consenting_through(Arc::clone(&self.consent) as _)
+                .keeping_appearance_in(appearance_file(self.spools.path())),
         );
         self.router = router(
             Arc::clone(&state),

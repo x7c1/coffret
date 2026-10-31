@@ -44,7 +44,7 @@ import { resourcesFor } from './resources.js';
 import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { trayMenuTemplate } from './tray.js';
 import { trayHostLine, trayHostOn } from './tray-host.js';
-import { type Appearance, explorerWindowOptions, PARTITIONS, passphraseWindowOptions } from './windows.js';
+import { type WindowLook, explorerWindowOptions, PARTITIONS, passphraseWindowOptions } from './windows.js';
 
 const STARTUP_FAILED = 'Coffret could not start';
 
@@ -137,11 +137,11 @@ function assemble(
     denyEveryPermission(session.fromPartition(partition));
   }
 
-  const appearance: Appearance = {
+  const look: WindowLook = {
     title: identity.title,
     ...(identity.windowIcon === null ? {} : { icon: join(ASSETS, identity.windowIcon) }),
   };
-  const passphraseWindow = new BrowserWindow(passphraseWindowOptions(process.platform, appearance));
+  const passphraseWindow = new BrowserWindow(passphraseWindowOptions(process.platform, look));
   keepTitle(passphraseWindow);
   // The door's origin, fixed for the run, once its first URL is known.
   let doorOrigin: string | null = null;
@@ -209,7 +209,7 @@ function assemble(
       }
       const origin = explorerOrigin(address);
       explorerServed = origin;
-      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD, process.platform, appearance));
+      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD, process.platform, look));
       keepTitle(window);
       guardNavigation(window.webContents, 'explorer', () => origin, warn);
       window.webContents.setWindowOpenHandler(explorerWindowOpener((url) => shell.openExternal(url), warn));

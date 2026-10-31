@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Either set: the browser draws its own ground in the system's until the
+         explorer has painted the one shown (src/appearance.ts). -->
+    <meta name="color-scheme" content="light dark" />
     <title>coffret</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" media="(prefers-color-scheme: light)" />
@@ -13,9 +16,11 @@
       #root {
         margin: 0;
         height: 100%;
-        /* COLOR.ground and COLOR.text of src/theme.ts, and its FONT. */
-        background: #f7f8fa;
-        color: #16181d;
+        /* COLOR.ground and COLOR.text of src/theme.ts, and its FONT. The
+           colours are the custom properties the page's root holds the values
+           of the set shown in, as every colour of the explorer is. */
+        background: var(--color-ground);
+        color: var(--color-text);
         font-family: Inter, system-ui, sans-serif;
         font-size: 14px;
       }
@@ -30,7 +35,7 @@
         cursor: pointer;
       }
       tr.row.activatable:hover {
-        background: #eef1f5;
+        background: var(--color-hover);
       }
 
       /* A row's "⋮" shows on the row under the pointer and on the focused
@@ -44,12 +49,12 @@
         visibility: visible;
       }
       tr.row .row-actions:hover {
-        background: #eef1f5;
+        background: var(--color-hover);
       }
-      /* On the focused row's accent, a darker shade of it (COLOR.accentDeep):
-         the light hover would put the white mark on white. */
+      /* On the focused row's accent, a darker shade of it (COLOR.accentHover):
+         the ground's hover would take the accent from under the white mark. */
       tr.row[data-focused][aria-selected='true'] .row-actions:hover {
-        background: #1d4ed8;
+        background: var(--color-accentHover);
       }
 
       /* The details pane gives its width back to the tree on a narrow
@@ -83,7 +88,7 @@
          the dimming some browsers lay over the colour on their own. */
       input::placeholder,
       textarea::placeholder {
-        color: #8a919c;
+        color: var(--color-faint);
         opacity: 1;
       }
 

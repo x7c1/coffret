@@ -1,4 +1,4 @@
-//! The twenty-two things a browser may ask of a Library.
+//! The twenty-four things a browser may ask of a Library.
 //!
 //! Four of them are about what the Library holds and answer out of the
 //! catalog alone — which Library this is, every folder in it, what one folder
@@ -78,6 +78,12 @@
 //! (spec: CK-7) — and both are still refused while the Library is locked,
 //! because the gesture they serve is only ever offered over a listing.
 //!
+//! And two are about this device's explorer rather than the Library or the
+//! disk: which set of colours it is drawn in, read and kept (spec: LA-38). The
+//! choice is kept in a file of the device's own rather than in the page's
+//! storage, because the desktop app serves the page on a port chosen at each
+//! launch, and so on an origin whose storage the next launch does not have.
+//!
 //! None of them locks the Library. It locks after the idle interval (spec:
 //! DK-4), and stopping the server ends its hold on the keys as well; a route
 //! that did the same thing would be a third way to arrive at a state two ways
@@ -89,10 +95,13 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the twenty-two go on answering once the Library is locked — which
-//! Library this is, this server's account of what it was doing, and the unlock —
-//! because none of them needs a key and a locked server is still one a person
-//! should be able to read the name of, and ask to have opened. Every other one
+//! Five of the twenty-four go on answering once the Library is locked — which
+//! Library this is, this server's account of what it was doing, the unlock,
+//! and the two about the explorer's colours — because none of them needs a key
+//! and a locked server is still one a person should be able to read the name
+//! of and ask to have opened. (The explorer host's fence still refuses the two
+//! about the colours while the Library is locked, as it does every request
+//! but the unlock and the minimal status: spec: LA-14.) Every other one
 //! meets a locked server with the same refusal, which says the Passphrase is
 //! required and where it is entered (spec: DK-2): the browse and the map among
 //! them, for the reason given above.
@@ -106,10 +115,13 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the twenty-two are two answers that are not routes at all: one for a
+//! Beside the twenty-four are two answers that are not routes at all: one for a
 //! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
+
+mod appearance;
+pub use appearance::{appearance, choose_appearance};
 
 mod beside;
 pub use beside::beside;

@@ -36,8 +36,9 @@ export interface MenuAt {
  * The item under the pointer or the keyboard's focus is shaded; `↑`/`↓`
  * move that focus and `Enter` chooses, so the menu works from the keyboard
  * as a menu does. A destructive item is drawn in red, and shaded in a tint of
- * it. An item with no action is drawn faint and disabled: the pointer and the
- * keys pass over it, and nothing chooses it.
+ * it. An item of a choice — the header's appearance switch — is a radio item,
+ * the chosen one checked. An item with no action is drawn faint and disabled:
+ * the pointer and the keys pass over it, and nothing chooses it.
  *
  * Kept on the screen: where it would run past the bottom of the window it opens
  * upward from the point instead, and where past the right edge, leftward.
@@ -180,7 +181,8 @@ export function ActionsMenu({
             {item.separated && <div role="separator" style={SEPARATOR} />}
             <button
               type="button"
-              role="menuitem"
+              role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+              aria-checked={item.checked}
               tabIndex={-1}
               onMouseEnter={() => setActive(index)}
               onMouseLeave={() => setActive((was) => (was === index ? -1 : was))}
@@ -191,12 +193,36 @@ export function ActionsMenu({
                 background: shaded ? (item.destructive ? COLOR.refusedGround : COLOR.hover) : 'transparent',
               }}
             >
+              {item.checked !== undefined && <Check shown={item.checked} />}
               {item.label}
             </button>
           </div>
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The mark before an item of a choice: a check where it is the one chosen, and
+ * the same room left empty where it is not, so the labels stand in one column.
+ */
+function Check({ shown }: { shown: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flex: '0 0 auto', marginRight: 8, visibility: shown ? 'visible' : 'hidden' }}
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
   );
 }
 

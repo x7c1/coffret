@@ -1,7 +1,7 @@
 /**
  * What the explorer reads a Library through.
  *
- * The twenty-one routes `coffret-server` answers, as typed calls: which Library
+ * The twenty-three routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, which files stand either
  * side of one row in reading order, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
@@ -13,8 +13,9 @@
  * and the question of what it would take out, the move of files and folders
  * and the question of what it would do to this device's files, the one that renews the grant
  * Storage stopped taking, the one that asks for a locked Library to be
- * unlocked, and the two that choose a folder on this device and map part of
- * the Library to it. The types are this package's word
+ * unlocked, the two that choose a folder on this device and map part of
+ * the Library to it, and the two that read and keep which set of colours this
+ * device's explorer is drawn in. The types are this package's word
  * for the server's serialization — written by hand, one file per route, so that
  * a field the server gains has one obvious place to land here — and every
  * refusal arrives as one shape a screen can branch on.
@@ -83,6 +84,8 @@ export type {
   SyncStatus,
   TurnTaker,
 } from './work';
+export { getAppearance, setAppearance } from './appearance';
+export type { Appearance } from './appearance';
 export { checkSession, launch } from './auth';
 export type { Launched, SessionStanding } from './auth';
 export {

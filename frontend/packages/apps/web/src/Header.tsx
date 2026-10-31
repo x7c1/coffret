@@ -4,6 +4,7 @@ import type { Library } from '@coffret/api';
 
 import type { Action, ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
+import { AppearanceSwitch } from './AppearanceSwitch';
 import { dropGround, dropOutline } from './Banner';
 import type { Described } from './details';
 import { landingOf, placeOf } from './destination';
@@ -16,8 +17,8 @@ import type { Asked } from './useAsked';
 
 /**
  * The one row over the tree and the details pane: which Library is open on
- * the left, where the focus stands in the middle, and **+** (Add files) on the
- * right.
+ * the left, where the focus stands in the middle, and the appearance switch
+ * and **+** (Add files) on the right.
  *
  * - **The Library.** Its name, drawn like a button with no icon in front of it
  *   — a padlock there would read as "locked", which an open Library is not.
@@ -44,6 +45,11 @@ import type { Asked } from './useAsked';
  *   where a mapping reaches it: making a place for files is part of adding
  *   them, and it is how a folder is made at the Library root, which has no row
  *   and so no row menu.
+ *
+ * - **Appearance.** Beside the **+**, the switch between the sets of colours
+ *   the explorer is drawn in — the system's, light or dark (see
+ *   [`AppearanceSwitch`](./AppearanceSwitch)). Here rather than in a menu bar,
+ *   which the desktop app hides, or on a settings page, which there is not.
  *
  * One row on a wide window; on a narrow one it wraps rather than scrolling
  * sideways, the location taking a line of its own before anything is cut off
@@ -72,8 +78,9 @@ export function Header({
   /** They came to no files: the walk could not be finished, or the desktop app took nothing of them. */
   onUnreadable: (cause: unknown) => void;
   /**
-   * The menu was let go of by `Escape`: the keys go back to the tree, whose
-   * focused row the files would have landed by.
+   * A menu of the header's was let go of by `Escape`, or the appearance
+   * switch's by a choice: the keys go back to the tree — whose focused row, for
+   * the **+**'s, the files would have landed by.
    */
   onKeysBack: () => void;
   /** Whether "New folder…" can be offered in `folder`: a mapping reaches it. */
@@ -166,6 +173,7 @@ export function Header({
           {location}
         </span>
       </div>
+      <AppearanceSwitch onKeysBack={onKeysBack} />
       <button
         type="button"
         aria-label="Add files"
@@ -277,8 +285,8 @@ function named(library: Asked<Library>): string {
 }
 
 /**
- * The Library and the location on the left, wrapping; the **+** beside them on
- * the right, never wrapped onto a line of its own.
+ * The Library and the location on the left, wrapping; the appearance switch
+ * and the **+** beside them on the right, never wrapped onto a line of its own.
  */
 const HEADER: CSSProperties = {
   display: 'flex',

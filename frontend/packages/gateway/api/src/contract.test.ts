@@ -65,6 +65,7 @@ import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
 import hostRefusals from './contract/host-refusals.json';
+import type { Appearance } from './appearance';
 import type { Beside } from './beside';
 import type { Browsed } from './browse';
 import type { Folders } from './folders';
@@ -239,6 +240,7 @@ const RECONNECT_STATES: Literals<ReconnectState> = {
 };
 const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, added: true };
 const HEAD_STATES: Literals<HeadState> = { newer: true, current: true };
+const APPEARANCES: Literals<Appearance> = { system: true, light: true, dark: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
 const MARKERS: Literals<MappedMarker> = { written: true, adopted: true, reset: true };
 
@@ -1022,6 +1024,11 @@ it('reads every other answer the server sends through its type', () => {
       provider: string(fields.provider, 'library.provider'),
     };
   })();
+  const appearance: Appearance = one(
+    APPEARANCES,
+    object(answers.appearance, 'appearance', ['appearance']).appearance,
+    'appearance.appearance',
+  );
   const listed: Folders = {
     folders: folders(object(answers.folders, 'folders', ['folders']).folders, 'folders'),
   };
@@ -1182,6 +1189,7 @@ it('reads every other answer the server sends through its type', () => {
   expect(uploadOf(answers.uploads.refused)).toEqual(uploads.refused);
 
   expect(library.provider).toBe('drive');
+  expect(appearance).toBe('system');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(beside.next).toBe('books/page-001.png');
   expect(refreshed.entries).toBeGreaterThan(0);

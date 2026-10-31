@@ -9,6 +9,14 @@ import { LIBRARY_ROOT } from './location';
 import { fileKey, folderKey } from './tree';
 import type { Asked } from './useAsked';
 
+// The appearance switch in the header reads what this device kept as it is
+// drawn: answered here as a device that never chose.
+vi.mock('@coffret/api', async (actual) => ({
+  ...(await actual<typeof import('@coffret/api')>()),
+  getAppearance: vi.fn(() => Promise.resolve('system')),
+  setAppearance: vi.fn((appearance: string) => Promise.resolve(appearance)),
+}));
+
 afterEach(cleanup);
 
 const LIBRARY: Asked<Library> = {
@@ -43,9 +51,11 @@ it('names the Library first in the header, with no icon before it', () => {
   expect(name.children).toHaveLength(0);
   expect(name.previousElementSibling).toBeNull();
   expect(name.tagName).not.toBe('BUTTON');
-  // The one icon in the header is the **+**'s plus, at the other end.
+  // The icons in the header are the appearance switch's and the **+**'s
+  // plus, at the other end.
   expect(name.parentElement?.querySelector('svg, img')).toBeNull();
   expect([...screen.getByRole('banner').querySelectorAll('svg, img')]).toEqual([
+    screen.getByRole('button', { name: /^Appearance/ }).querySelector('svg'),
     screen.getByRole('button', { name: 'Add files' }).querySelector('svg'),
   ]);
 });
