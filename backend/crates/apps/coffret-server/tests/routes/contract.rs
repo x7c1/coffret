@@ -14,7 +14,8 @@
 //! time the fixture's batch stamped it, both differ every run, so each is
 //! written as one fixed instant wherever it is not `null`. A folder's `mtime`
 //! is the latest of its planted files', so it is written as the planted
-//! instant too.
+//! instant too, and so is the Library's own in its totals, for the same
+//! reason.
 
 use std::path::Path;
 
@@ -275,8 +276,15 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let move_preview = answered_as_json(&mover, "GET", moving).await;
     let moved = answered_as_json(&mover, "POST", moving).await;
 
+    // What the whole Library comes to, its newest time the planted instant as
+    // a folder's is.
+    let mut totals = answered_as_json(&served, "GET", "/api/library/totals").await;
+    assert!(!totals["mtime"].is_null(), "{totals}");
+    totals["mtime"] = Value::from(PLANTED_AT);
+
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
+        "totals": totals,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
         // The set this device's explorer is drawn in, on a device that never
         // chose one.

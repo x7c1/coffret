@@ -32,7 +32,8 @@ use crate::support::{bytes, json as body_of, route, Served};
 /// no listing (see `routes`). So does the look at the remote head, which reads
 /// names alone: the Storage it asks is reached through the open Library, and
 /// that goes with the keys.
-const KEYED_ROUTES: [(&str, &str); 12] = [
+const KEYED_ROUTES: [(&str, &str); 13] = [
+    ("GET", "/api/library/totals"),
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),
     ("GET", "/api/file?path=albums/cover.png"),

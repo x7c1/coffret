@@ -16,14 +16,12 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use coffret_device::{
-    ByteCount, FindingReason, Generation, KeptTally, Phase, RootRefused, RootUnavailable,
-    ShortKeyring, Step, Surfaced as DeviceSurfaced, UnheldParcel, UnheldReason,
+    ByteCount, FindingReason, Generation, Phase, RootRefused, RootUnavailable, ShortKeyring, Step,
+    Surfaced as DeviceSurfaced, UnheldParcel, UnheldReason,
 };
 use coffret_model::ContainerId;
 
-use super::{
-    CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, ReconnectDto, SyncDto, WorkDto,
-};
+use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, ReconnectDto, SyncDto, WorkDto};
 use crate::activity_log::{Ended, Logged, Queue};
 use crate::adds::{Add, AddId, StoppedAdd};
 use crate::api_error::{held_to, ApiError};
@@ -298,9 +296,6 @@ fn answer(
         server: SERVER.to_owned(),
         library,
         catalog: CatalogDto::of(&catalog),
-        // Counted only while the Library is open, and nothing kept until a
-        // case says otherwise.
-        kept_parcels: (library == "unlocked").then(|| KeptParcelsDto::of(KeptTally::default())),
         turn: turn.map(TurnTaker::as_str),
         fill: fill.as_ref().map(FillDto::of),
         sync: sync.as_ref().map(|run| SyncDto::of(run, turn)),
@@ -587,15 +582,6 @@ fn every_answer() -> Vec<WorkDto> {
             ..freeze(2, "books/vol-1", FreezeStatus::Done)
         })),
     );
-
-    // A reader's fetches left parcels behind, which the Activity panel counts.
-    let finished = WorkDto {
-        kept_parcels: Some(KeptParcelsDto::of(KeptTally {
-            count: 3,
-            bytes: 96_000_000,
-        })),
-        ..finished
-    };
 
     // Every run stopped, a catalog left behind, and what the queues lost and
     // the runs a later one took the record from beside them.

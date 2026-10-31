@@ -6,9 +6,10 @@
 // a desktop file manager's inspector does — a kind, a size, a time — rather
 // than in pages and volumes.
 
-import type { Freeze, ListedFile, ListedFolder, Listing, Sync } from '@coffret/api';
+import type { Freeze, Library, ListedFile, ListedFolder, Listing, Sync } from '@coffret/api';
 
 import type { RowFill } from './fill';
+import { grouped } from './humanize';
 import type { FileRow, FolderRow } from './tree';
 
 /** A row the pane can describe: a folder or a file, never a note. */
@@ -169,14 +170,48 @@ export function uploadStopped(file: ListedFile, sync: Sync | null, freeze: Freez
  * the listings it asked for and not every descendant.
  */
 export function folderOnDevice(folder: ListedFolder): string {
-  const { files_present: present, files_total: total } = folder;
+  return filesOnDevice(folder.files_present, folder.files_total);
+}
+
+/**
+ * How many of `total` files are on this device, as a folder's details and the
+ * Library's say it: `All files`, `3,210 of 12,480 files`, or `No`.
+ */
+export function filesOnDevice(present: number, total: number): string {
   if (total > 0 && present >= total) {
     return 'All files';
   }
   if (present === 0) {
     return 'No';
   }
-  return `${present} of ${total} files`;
+  return `${grouped(present)} of ${grouped(total)} files`;
+}
+
+/** What the Library itself is called among the kinds, where nothing is focused. */
+export const LIBRARY = 'Library';
+
+/**
+ * What a Library nothing has named yet is called where its name would go: said
+ * to have no name, and its ID given as its ID rather than in the name's place.
+ */
+export function nameless(library: Library): string {
+  return `a Library with no name yet (ID ${library.library_id})`;
+}
+
+/**
+ * The Storage a Library is kept on, by the server's word for its provider, in
+ * the words a person knows the service by. A word this page does not know is
+ * shown as the server sent it, rather than dropped.
+ */
+export function storedOn(provider: string): string {
+  switch (provider) {
+    case 'drive':
+      return 'Google Drive';
+    case 's3':
+      return 'S3';
+    default:
+      return provider;
+  }
 }
 
 /**

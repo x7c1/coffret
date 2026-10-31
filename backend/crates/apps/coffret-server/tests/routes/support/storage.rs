@@ -95,6 +95,25 @@ impl Served {
         self.reads.forget();
     }
 
+    /// The name of every live object on Storage, as a listing of it walks
+    /// them: what a case counts the objects a Library keeps there against.
+    pub async fn stored_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        let mut page = None;
+        loop {
+            let listed = self
+                .store
+                .list(page.as_ref())
+                .await
+                .expect("listing the fixture's Storage must succeed");
+            names.extend(listed.objects.into_iter().map(|object| object.name));
+            match listed.next {
+                Some(next) => page = Some(next),
+                None => return names,
+            }
+        }
+    }
+
     /// The parcels the served device holds (spec: PK-21).
     pub async fn held_parcels(&self) -> Vec<coffret_usecase::device_state::HeldParcel> {
         self.catalog

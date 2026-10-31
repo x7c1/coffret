@@ -29,6 +29,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
     let allowance = state.allowance;
     Router::new()
         .route("/api/library", get(routes::library))
+        .route("/api/library/totals", get(routes::totals))
         .route("/api/folders", get(routes::folders))
         .route("/api/list", get(routes::list))
         .route("/api/beside", get(routes::beside))

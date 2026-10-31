@@ -6,7 +6,7 @@ import type { Action, ActionItem } from './actions';
 import { ActionsMenu, type MenuAt } from './ActionsMenu';
 import { AppearanceSwitch } from './AppearanceSwitch';
 import { dropGround, dropOutline } from './Banner';
-import type { Described } from './details';
+import { nameless, type Described } from './details';
 import { landingOf, placeOf } from './destination';
 import { pickedFiles, type Drop } from './drop';
 import { locationOf } from './location';
@@ -288,7 +288,7 @@ function named(library: Asked<Library>): string {
     case 'loading':
       return 'opening the Library…';
     case 'ready':
-      return library.value.name ?? `a Library with no name yet (ID ${library.value.library_id})`;
+      return library.value.name ?? nameless(library.value);
     case 'failed':
       return library.message;
   }

@@ -45,7 +45,6 @@ import type {
   Freeze,
   FreezePreview,
   FreezeStatus,
-  KeptParcels,
   LibraryState,
   Phase,
   Reconnect,
@@ -70,7 +69,7 @@ import type { Appearance } from './appearance';
 import type { Beside } from './beside';
 import type { Browsed } from './browse';
 import type { Folders } from './folders';
-import type { Library } from './library';
+import type { HeldParcels, Library, LibraryTotals } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
 import type { Mapped, MappedMarker } from './map';
 import type { Reconnecting } from './reconnect';
@@ -646,7 +645,7 @@ function catalog(value: unknown, where: string): Catalog {
   return { state, stopped: null };
 }
 
-function keptParcels(value: unknown, where: string): KeptParcels {
+function heldParcels(value: unknown, where: string): HeldParcels {
   const fields = object(value, where, ['count', 'bytes']);
   return {
     count: number(fields.count, `${where}.count`),
@@ -673,7 +672,6 @@ function work(value: unknown, where: string): Work {
     'server',
     'library',
     'catalog',
-    'kept_parcels',
     'turn',
     'fill',
     'sync',
@@ -688,9 +686,6 @@ function work(value: unknown, where: string): Work {
     server: string(fields.server, `${where}.server`),
     library: one(LIBRARY_STATES, fields.library, `${where}.library`),
     catalog: catalog(fields.catalog, `${where}.catalog`),
-    kept_parcels: nullable(fields.kept_parcels, (value) =>
-      keptParcels(value, `${where}.kept_parcels`),
-    ),
     turn: nullable(fields.turn, (value) => one(TURN_TAKERS, value, `${where}.turn`)),
     fill: nullable(fields.fill, (value) => fill(value, `${where}.fill`)),
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),
@@ -1040,6 +1035,24 @@ it('reads every other answer the server sends through its type', () => {
       provider: string(fields.provider, 'library.provider'),
     };
   })();
+  const totals: LibraryTotals = (() => {
+    const fields = object(answers.totals, 'totals', [
+      'objects',
+      'files_total',
+      'files_present',
+      'size',
+      'mtime',
+      'held_parcels',
+    ]);
+    return {
+      objects: number(fields.objects, 'totals.objects'),
+      files_total: number(fields.files_total, 'totals.files_total'),
+      files_present: number(fields.files_present, 'totals.files_present'),
+      size: number(fields.size, 'totals.size'),
+      mtime: nullable(fields.mtime, (value) => string(value, 'totals.mtime')),
+      held_parcels: nullable(fields.held_parcels, (value) => heldParcels(value, 'totals.held_parcels')),
+    };
+  })();
   const appearance: Appearance = one(
     APPEARANCES,
     object(answers.appearance, 'appearance', ['appearance']).appearance,
@@ -1205,6 +1218,8 @@ it('reads every other answer the server sends through its type', () => {
   expect(uploadOf(answers.uploads.refused)).toEqual(uploads.refused);
 
   expect(library.provider).toBe('drive');
+  expect(totals.files_present).toBeLessThanOrEqual(totals.files_total);
+  expect(totals.objects).toBeGreaterThan(0);
   expect(appearance).toBe('system');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(beside.next).toBe('books/page-001.png');

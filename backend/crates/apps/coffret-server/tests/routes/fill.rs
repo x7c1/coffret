@@ -448,7 +448,6 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
         json!({
             "library": "unlocked",
             "catalog": { "state": "caught_up", "stopped": null },
-            "kept_parcels": { "count": 0, "bytes": 0 },
             "turn": null,
             "fill": null,
             "sync": null,

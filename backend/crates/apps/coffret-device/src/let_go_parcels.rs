@@ -53,8 +53,8 @@ impl OpenLibrary {
     /// A failure is said here and not returned: a count is no fetch, so this
     /// crate's [`Fetch`](crate::Error::Fetch) would put "the fetch did not
     /// finish" over a refusal of a stat, and no other variant of it is this
-    /// gesture. What it would have shown is a count
-    /// beside the Library's name, and a screen has nothing to do about it.
+    /// gesture. What it would have shown is one fact among the Library's
+    /// details, and a screen has nothing to do about it.
     pub async fn kept_tally(&self) -> Option<KeptTally> {
         match tally_kept_parcels(self.index.as_ref(), self.local_fs.as_ref()).await {
             Ok(tally) => Some(tally),

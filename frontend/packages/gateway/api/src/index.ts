@@ -68,7 +68,6 @@ export type {
   Freeze,
   FreezePreview,
   FreezeStatus,
-  KeptParcels,
   LibraryState,
   NotStopped,
   PackRefusalReason,
@@ -104,8 +103,8 @@ export type { Beside } from './beside';
 export { getFile, peekFile, readAhead } from './file';
 export { getFolders } from './folders';
 export type { Folders } from './folders';
-export { getLibrary } from './library';
-export type { Library } from './library';
+export { getLibrary, getLibraryTotals } from './library';
+export type { HeldParcels, Library, LibraryTotals } from './library';
 export { getListing } from './list';
 export type { ContainerKind, EntryState, Listing, ListedFile, ListedFolder } from './list';
 export { mapFolder } from './map';
