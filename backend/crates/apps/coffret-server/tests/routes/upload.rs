@@ -839,7 +839,7 @@ async fn a_part_past_the_part_budget_says_which_file_was_over_it() {
 // file appears under a final name, not that a refused request unwinds. The one it
 // stopped at is not there under any name.
 #[tokio::test]
-async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
+async fn a_drop_of_more_parts_than_one_request_carries_is_stopped() {
     let served = Served::within(Allowance {
         parts: 2,
         ..Allowance::generous()
@@ -876,6 +876,51 @@ async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
     // Recorded as the request it refused: an upload, not an import.
     let event = logs.only(Level::WARN);
     assert_eq!(event.field("operation"), "upload");
+}
+
+// The numbers the binary serves within (spec: LA-9). The count is 65,536, so a
+// drop of several volumes, or of a photo library, is one request, while the byte
+// budgets that guard the loopback socket stay where they were: 64 GiB in all and
+// 1 GiB a part.
+#[test]
+fn the_binary_takes_a_request_of_65536_parts_within_the_same_byte_budgets() {
+    let served = Allowance::generous();
+    assert_eq!(served.parts, 65_536);
+    assert_eq!(served.request_bytes, 64 * 1024 * 1024 * 1024);
+    assert_eq!(served.part_bytes, 1024 * 1024 * 1024);
+}
+
+// And the count is met where the binary's numbers put it: a request of exactly
+// 65,536 parts is taken, and one of 65,537 is stopped. The parts past the one
+// file name no file, which the count weighs as it weighs a file (spec: LA-9), so
+// the case reaches the budget without landing tens of thousands of files.
+#[tokio::test]
+async fn a_drop_of_65536_parts_is_taken_and_one_more_is_stopped() {
+    let served = Served::within(Allowance::generous()).await;
+    let most = Allowance::generous().parts;
+
+    let (status, answer) = body_of(
+        served
+            .upload_padded("albums", &[("one.jpg", b"one")], most - 1)
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(written(&answer), ["albums/one.jpg"]);
+
+    let (status, refusal) = body_of(
+        served
+            .upload_padded("albums", &[("two.jpg", b"two")], most)
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413, "{refusal}");
+    assert_eq!(refusal["error"], "bad_request");
+    assert_eq!(
+        refusal["written"],
+        json!(["albums/two.jpg"]),
+        "the file before the budget landed, and the request stopped at the part past it",
+    );
 }
 
 // The room question beside the budgets (spec: LA-11): a drop far larger than the

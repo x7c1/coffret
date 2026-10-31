@@ -90,8 +90,8 @@ pub async fn import(
     if request.files.len() > state.allowance.parts {
         return Err(outran(
             OPERATION,
-            "one drop is one gesture, and this names more files than one gesture takes — \
-             the same files in two drops are taken",
+            "this names more files than one request takes — the same files in two drops \
+             are taken",
         ));
     }
     let mut sources = Vec::with_capacity(request.files.len());

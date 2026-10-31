@@ -396,7 +396,7 @@ async fn an_import_onto_a_locked_server_leaves_the_drop_held() {
 // LA-28: one import names at most as many files as an upload may carry parts,
 // and one past that is refused as a whole, before any of them lands.
 #[tokio::test]
-async fn an_import_of_more_files_than_one_gesture_carries_is_refused() {
+async fn an_import_of_more_files_than_one_request_carries_is_refused() {
     let served = Served::within(Allowance {
         parts: 2,
         ..Allowance::generous()
@@ -421,6 +421,79 @@ async fn an_import_of_more_files_than_one_gesture_carries_is_refused() {
     // Recorded as the request it refused: an import, not an upload.
     let event = logs.only(Level::WARN);
     assert_eq!(event.field("operation"), "import");
+}
+
+// LA-28: the count an import is held to is the binary's own, 65,536. A request
+// naming exactly that many files passes it — and is refused for something else
+// instead, an index outside the held set, which shows the count let it through
+// without the case landing tens of thousands of files — and one naming 65,537 is
+// refused for the count, before any file is looked up. The names are as long as
+// a series' pages are, so the body is megabytes, and the route has room to read
+// it: what bounds an import is the count, not the length of its names.
+#[tokio::test]
+async fn an_import_of_65536_files_passes_the_count_and_one_more_is_refused() {
+    let served = Served::within(Allowance::generous()).await;
+    let most = Allowance::generous().parts;
+    assert_eq!(most, 65_536);
+    let source = Source::new();
+    let page = source.file("page.jpg", b"a page", 1_444_000_000);
+    let naming = |count: usize| -> Vec<serde_json::Value> {
+        (0..count)
+            .map(|at| match at {
+                0 => json!({ "index": 0, "name": "page.jpg" }),
+                // Past the held set, so the request is refused once the count
+                // has let it through.
+                _ => json!({
+                    "index": 1,
+                    "name": format!("A series of some length/volume {at:05}/page {at:05}.jpg"),
+                }),
+            })
+            .collect()
+    };
+
+    let dropped = served.hold_drop(&[&page]).await;
+    let (status, refusal) = body_of(
+        served
+            .import(&json!({
+                "path": "albums",
+                "handle": dropped.handle,
+                "files": naming(most),
+            }))
+            .await,
+    )
+    .await;
+    assert_eq!(
+        status, 400,
+        "past the count, and refused for the index: {refusal}"
+    );
+    assert_eq!(
+        refusal["message"], "the request names a file the drop does not hold",
+        "refused for the index, not for the count",
+    );
+    assert!(!served.holds("albums/page.jpg"), "nothing landed");
+
+    let dropped = served.hold_drop(&[&page]).await;
+    let (status, refusal) = body_of(
+        served
+            .import(&json!({
+                "path": "albums",
+                "handle": dropped.handle,
+                "files": naming(most + 1),
+            }))
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413, "{refusal}");
+    assert_eq!(refusal["error"], "bad_request");
+    // The count's own sentence, and not the body limit's: the names come to
+    // megabytes, short of the room the route reads them into.
+    assert!(
+        refusal["message"]
+            .as_str()
+            .is_some_and(|said| said.contains("names more files than one request takes")),
+        "refused for the count: {refusal}",
+    );
+    assert!(!served.holds("albums/page.jpg"), "nothing landed");
 }
 
 // LA-27: a file is addressed by its index in the held set alone, and an index

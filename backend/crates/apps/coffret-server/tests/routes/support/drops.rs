@@ -56,10 +56,39 @@ impl Served {
             .await
     }
 
+    /// Drops files onto one folder with `fields` parts that name no file
+    /// after them, as a request padded out to a number of parts without
+    /// writing that many files.
+    ///
+    /// Every part counts toward the budget on how many one request may carry
+    /// (spec: LA-9), and a part with no filename is read and skipped, so this
+    /// is how a case reaches that budget at the number the server is mounted
+    /// with without landing tens of thousands of files.
+    pub async fn upload_padded(
+        &self,
+        folder: &str,
+        parts: &[(&str, &[u8])],
+        fields: usize,
+    ) -> Response<Body> {
+        self.sent(folder, &unnamed(parts), fields, false, Declares::Length)
+            .await
+    }
+
     async fn dropped(
         &self,
         folder: &str,
         parts: &[(String, &str, &[u8])],
+        freeze: bool,
+        declares: Declares,
+    ) -> Response<Body> {
+        self.sent(folder, parts, 0, freeze, declares).await
+    }
+
+    async fn sent(
+        &self,
+        folder: &str,
+        parts: &[(String, &str, &[u8])],
+        fields: usize,
         freeze: bool,
         declares: Declares,
     ) -> Response<Body> {
@@ -74,6 +103,14 @@ impl Served {
             );
             body.extend_from_slice(content);
             body.extend_from_slice(b"\r\n");
+        }
+        for _ in 0..fields {
+            body.extend_from_slice(
+                format!(
+                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\n\r\n"
+                )
+                .as_bytes(),
+            );
         }
         body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
 

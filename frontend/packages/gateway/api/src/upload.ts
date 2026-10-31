@@ -237,9 +237,10 @@ export interface Adding {
  * server makes them. A part's field name is the file's modification time
  * ({@link modifiedOf}).
  *
- * The body is a `FormData`, so the browser streams the files rather than this
+ * The body is one `Blob` made of the files and their framing
+ * ({@link multipartOf}), so the browser streams the files rather than this
  * client reading them into memory — a drop of a hundred photographs is a
- * hundred file handles and not a hundred copies.
+ * hundred file references and not a hundred copies.
  *
  * And it says how much of that body has gone, through `onProgress`, which is
  * why this one request is made with an `XMLHttpRequest` rather than `fetch`:
@@ -296,19 +297,7 @@ export async function addFiles(
   if (files.length > 0 && files.every(isHeld)) {
     return importHeld(folder, files, adding);
   }
-  const body = new FormData();
-  for (const added of files) {
-    if (added.source.kind !== 'file') {
-      // One drop is one of the two, and never both: a page holding a drop by
-      // path has no bytes to send for it.
-      throw new Error('a drop holds its files either as bytes or by path, never both');
-    }
-    // The filename is where the file goes, and the field name is the file's
-    // own modification time: a browser hands over a file's bytes and name and
-    // nothing of its times but this one, and the server stamps the file it
-    // writes with it rather than with the moment of the drop.
-    body.append(modifiedOf(added.mtime), added.source.file, added.path);
-  }
+  const { body, contentType } = multipartOf(files);
   const params: Record<string, string> = {};
   if (folder !== '') {
     params.path = folder;
@@ -320,8 +309,76 @@ export async function addFiles(
     params.add = adding.add;
   }
   return uploadOf(
-    await sentForJson<unknown>(apiUrl('upload', params), body, adding.signal, adding.onProgress),
+    await sentForJson<unknown>(
+      apiUrl('upload', params),
+      body,
+      adding.signal,
+      adding.onProgress,
+      contentType,
+    ),
   );
+}
+
+/**
+ * One drop's files as the `multipart/form-data` body of its request: one part
+ * per file, framed the way a browser frames a `FormData`, and held as a single
+ * `Blob` with the boundary it was framed with.
+ *
+ * Framed here rather than handed to the browser as a `FormData` because a
+ * browser sends a `FormData` as one body element per file, and Chrome does not
+ * send a request of that many elements: past about 8,000 files it fails the
+ * request before any of it reaches the host, which the page sees as a transfer
+ * that broke. A `Blob` made of the files is one element however many files it
+ * holds, and still refers to each file rather than copying it, so the browser
+ * streams the files from where they are as it would have.
+ *
+ * Each part says what a browser's would: the field name is the file's own
+ * modification time — a browser hands over a file's bytes and name and nothing
+ * of its times but this one, and the server stamps the file it writes with it
+ * rather than with the moment of the drop — the filename is where the file goes,
+ * and the type is the file's, or `application/octet-stream` where it has none.
+ * Both names are escaped as the HTML standard has a browser escape them.
+ */
+function multipartOf(files: readonly Added[]): { body: Blob; contentType: string } {
+  const boundary = `----coffret${boundaryNonce()}`;
+  const parts: BlobPart[] = [];
+  for (const added of files) {
+    if (added.source.kind !== 'file') {
+      // One drop is one of the two, and never both: a page holding a drop by
+      // path has no bytes to send for it.
+      throw new Error('a drop holds its files either as bytes or by path, never both');
+    }
+    const file = added.source.file;
+    const type = file.type === '' ? 'application/octet-stream' : file.type;
+    parts.push(
+      `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="${escapedName(modifiedOf(added.mtime))}"; ` +
+        `filename="${escapedName(added.path)}"\r\n` +
+        `Content-Type: ${type}\r\n\r\n`,
+      file,
+      '\r\n',
+    );
+  }
+  parts.push(`--${boundary}--\r\n`);
+  return { body: new Blob(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
+/**
+ * Thirty-two hexadecimal digits drawn at random, which is what keeps the
+ * boundary out of every file's bytes: as unlikely there as a browser's own.
+ */
+function boundaryNonce(): string {
+  const drawn = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(drawn, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * A field name or filename as a browser writes it into a part's
+ * `Content-Disposition`: a line feed, a carriage return and a double quote
+ * percent-encoded, and everything else as it is.
+ */
+function escapedName(name: string): string {
+  return name.replace(/\n/g, '%0A').replace(/\r/g, '%0D').replace(/"/g, '%22');
 }
 
 /**

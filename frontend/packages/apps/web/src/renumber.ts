@@ -545,12 +545,13 @@ function judgePages(names: readonly string[], others: readonly string[]): Judged
   }
 
   const members = new Set(sequence.members.map((member) => member.name));
+  const spreadOf = spreadsIn(sequence.frame);
   const spreads = names.flatMap((name) => {
     if (members.has(name)) {
       return [];
     }
     const [stem, kept] = splitExtension(name);
-    const spread = spreadOf(stem, sequence.frame);
+    const spread = spreadOf(stem);
     return spread === null ? [] : [{ name, kept, ...spread }];
   });
 
@@ -661,8 +662,9 @@ function putAfter(
 }
 
 /**
- * The two numbers of a spread — two pages scanned as one image — and what
- * joins them, or null where `stem` is not one.
+ * What reads the two numbers of a spread — two pages scanned as one image —
+ * and what joins them out of a stem, for the sequence whose frame is given:
+ * null where the stem is not one.
  *
  * A spread is two numbers of the sequence joined by `+` or `-`. The first
  * carries the frame's text around it; the second carries it too, or drops the
@@ -680,23 +682,26 @@ function putAfter(
  * and read as a spread it would carry 18 twice. One written with the full
  * frame says it is a page of the sequence, and is taken as it is.
  */
-function spreadOf(
+function spreadsIn([before, after]: [string, string]): (
   stem: string,
-  [before, after]: [string, string],
-): { first: string; joint: string; last: string } | null {
+) => { first: string; joint: string; last: string } | null {
+  // Built once for the frame rather than once for each name it is asked of.
   const framed = `${escaped(before)}(\\d+)${escaped(after)}`;
   const second = `(${escaped(before)})?(\\d+)${escaped(after)}`;
-  const found = new RegExp(`^${framed}([+-])${second}$`).exec(stem);
-  if (found === null) {
-    return null;
-  }
-  const first = valueOf(found[1]);
-  const last = valueOf(found[4]);
-  const bare = before === '' || found[3] === undefined;
-  if (bare && BigInt(last) !== BigInt(first) + 1n) {
-    return null;
-  }
-  return { first, joint: found[2], last };
+  const shape = new RegExp(`^${framed}([+-])${second}$`);
+  return (stem) => {
+    const found = shape.exec(stem);
+    if (found === null) {
+      return null;
+    }
+    const first = valueOf(found[1]);
+    const last = valueOf(found[4]);
+    const bare = before === '' || found[3] === undefined;
+    if (bare && BigInt(last) !== BigInt(first) + 1n) {
+      return null;
+    }
+    return { first, joint: found[2], last };
+  };
 }
 
 /** `text` matched as itself inside a regular expression. */
@@ -743,7 +748,12 @@ function isPage(name: string): boolean {
 
 /** A value padded to the width of the widest of `values`, three at least. */
 function padding(values: readonly string[]): (value: string) => string {
-  const width = Math.max(WIDTH, ...values.map((value) => value.length));
+  // A loop rather than `Math.max(...)`, which takes every value as an argument
+  // and a drop's tens of thousands of pages are more than a call takes.
+  let width = WIDTH;
+  for (const value of values) {
+    width = Math.max(width, value.length);
+  }
   return (value) => value.padStart(width, '0');
 }
 
@@ -960,7 +970,15 @@ export type Folded = { line: Line; irregular: boolean } | { more: number };
  */
 export function folded(group: Group, all: boolean): Folded[] {
   const lines = linesOf(group);
-  const marks = lines.map((line) => irregular(line, group));
+  return foldedLines(
+    lines,
+    lines.map((line) => irregular(line, group)),
+    all,
+  );
+}
+
+/** {@link folded}, of a group's lines and their marks worked out once. */
+function foldedLines(lines: readonly Line[], marks: readonly boolean[], all: boolean): Folded[] {
   if (all) {
     return lines.map((line, at) => ({ line, irregular: marks[at] }));
   }
@@ -988,23 +1006,78 @@ export function folded(group: Group, all: boolean): Folded[] {
   return shown;
 }
 
-/** Whether showing everything would show more than the preview does now. */
-export function hasHidden(groups: readonly Group[]): boolean {
-  return groups.some((group) => folded(group, false).some((entry) => 'more' in entry));
+/**
+ * One row the preview may draw: a group's heading, with why it was left whole
+ * where it was, or one entry of its folded lines.
+ */
+export type PreviewRow =
+  | { group: Group; heading: true }
+  | { group: Group; entry: Folded };
+
+/** The preview of a drop's groups, worked out once for a numbering and a fold. */
+export interface PreviewPlan {
+  /** Every row there is to draw, group by group, each group's heading first. */
+  rows: PreviewRow[];
+  /**
+   * The preview's header line: how many names the drop renames, and how many
+   * lines do not follow the rule and are worth a look — `80 renamed · 2 to check`.
+   */
+  tally: string;
+  /** Whether showing everything would show more than the folded preview does. */
+  hidden: boolean;
 }
 
 /**
- * The preview's header line: how many names the drop renames, and how many
- * lines do not follow the rule and are worth a look — `80 renamed · 2 to check`.
+ * What the preview draws from: the rows of every group folded as `all` says,
+ * the tally and whether anything is folded — each group's lines sorted and
+ * judged once for all three, since a drop may carry tens of thousands of
+ * them. The preview draws a bounded part of `rows` (see
+ * {@link notDrawn}), so how long the plan is says nothing about how much is on
+ * the screen.
  */
-export function tallyLine(groups: readonly Group[]): string {
+export function previewOf(groups: readonly Group[], all: boolean): PreviewPlan {
+  const rows: PreviewRow[] = [];
   let renamed = 0;
   let check = 0;
+  let hidden = false;
   for (const group of groups) {
+    const lines = linesOf(group);
+    const marks = lines.map((line) => irregular(line, group));
     renamed += group.renamed.length;
-    check += linesOf(group).filter((line) => irregular(line, group)).length;
+    check += marks.filter(Boolean).length;
+    const shown = foldedLines(lines, marks, all);
+    const folds = all ? foldedLines(lines, marks, false) : shown;
+    hidden ||= folds.some((entry) => 'more' in entry);
+    rows.push({ group, heading: true });
+    for (const entry of shown) {
+      rows.push({ group, entry });
+    }
   }
-  return `${renamed} renamed · ${check} to check`;
+  return { rows, tally: `${renamed} renamed · ${check} to check`, hidden };
+}
+
+/**
+ * How many rows of the preview are drawn before the rest is counted, and how
+ * many more each press of its button draws: enough for a book's irregular
+ * lines, and few enough that a drop of tens of thousands of files opens at
+ * once.
+ */
+export const LINES_DRAWN = 200;
+
+/**
+ * How many lines the rows past the first `drawn` of `rows` hold — each line
+ * counted once, a folded run by the lines it folds — which the preview says in
+ * place of drawing them.
+ */
+export function notDrawn(rows: readonly PreviewRow[], drawn: number): number {
+  let lines = 0;
+  for (let at = drawn; at < rows.length; at += 1) {
+    const row = rows[at];
+    if ('entry' in row) {
+      lines += 'more' in row.entry ? row.entry.more : 1;
+    }
+  }
+  return lines;
 }
 
 /** The heading over one group: `Pages in BookX/vol1`, `Volume folders in BookX`. */

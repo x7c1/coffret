@@ -6,7 +6,7 @@ import { addedFile, type Added } from '@coffret/api';
 import { destinationsOf, type Destination } from './destination';
 import { DropConfirm } from './DropConfirm';
 import { NOTHING_HELD, summarize, type DropSummary, type HeldFiles } from './packChoice';
-import { NO_EDITS, NO_NUMBERING } from './renumber';
+import { LINES_DRAWN, NO_EDITS, NO_NUMBERING } from './renumber';
 import { COLOR } from './theme';
 
 afterEach(() => {
@@ -621,5 +621,82 @@ describe('correcting a new name in the preview', () => {
       { pages: false, volumes: true },
       new Map([['BookX/vol1', 'first']]),
     );
+  });
+});
+
+// A drop of tens of thousands of files — a series of a hundred volumes added
+// at once — opens at once: the incoming items and the preview draw a bounded
+// part of what the drop holds and count the rest, while the totals above them
+// count every file and every rename.
+describe('a drop of ten thousand files', () => {
+  const volumes = 100;
+  const pages = 100;
+  const files: Added[] = Array.from({ length: volumes * pages }, (_, at) =>
+    addedFile(`Series/vol ${Math.floor(at / pages) + 1}/p${(at % pages) + 1}.jpg`, {
+      size: 1000,
+      lastModified: 0,
+    } as File),
+  );
+  const summary = summarize(files, []);
+  const into = destinationsOf('comics', summary, (path) => path === 'comics');
+
+  /** The lines the preview draws, folded runs included. */
+  function linesDrawn(): number {
+    return screen.getByRole('region', { name: 'what is renamed' }).querySelectorAll('li').length;
+  }
+
+  it('counts every file and every rename while drawing a bounded part of them', () => {
+    window.localStorage.setItem('coffret.drop.number-pages', 'true');
+    window.localStorage.setItem('coffret.drop.number-volumes', 'true');
+    render(
+      <DropConfirm landing="comics" summary={summary} files={files} destinations={into} onChoose={() => undefined} />,
+    );
+    const said = screen.getByRole('dialog', { name: 'Add to comics' });
+    expect(said.textContent).toContain('10000 files, 10.0 MB');
+    expect(said.textContent).toContain('📁 Series — 10000 files, 10.0 MB');
+    // Every page and every volume renamed, and nothing irregular among them.
+    expect(said.textContent).toContain('10100 renamed · 0 to check');
+
+    // Folded, a hundred and one groups still come to more rows than are drawn.
+    expect(linesDrawn()).toBeLessThanOrEqual(LINES_DRAWN);
+    expect(said.textContent).toMatch(/… and \d+ more lines not drawn/);
+
+    // Unfolded, every line is one to draw, and no more than the bound are.
+    fireEvent.click(screen.getByText('Show all'));
+    const first = linesDrawn();
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThanOrEqual(LINES_DRAWN);
+    expect(said.textContent).toContain(`… and ${10100 - first} more lines not drawn`);
+
+    // Each press draws the next part, bounded the same way.
+    fireEvent.click(screen.getByRole('button', { name: `Show ${LINES_DRAWN} more` }));
+    const second = linesDrawn();
+    expect(second).toBeGreaterThan(first);
+    expect(second).toBeLessThanOrEqual(2 * LINES_DRAWN);
+    expect(said.textContent).toContain(`… and ${10100 - second} more lines not drawn`);
+    // The tally still counts all of them.
+    expect(said.textContent).toContain('10100 renamed · 0 to check');
+
+    // The incoming items stay one folder, however much it holds.
+    expect(screen.getByRole('list', { name: 'incoming' }).querySelectorAll('li')).toHaveLength(1);
+  });
+
+  it('names a bounded part of ten thousand loose files and counts the rest', () => {
+    const loose = files.map((added, at) => ({ ...added, path: `photo ${at}.jpg` }));
+    const looseSummary = summarize(loose, []);
+    render(
+      <DropConfirm
+        landing="comics"
+        summary={looseSummary}
+        files={loose}
+        destinations={destinationsOf('comics', looseSummary, (path) => path === 'comics')}
+        onChoose={() => undefined}
+      />,
+    );
+    const said = screen.getByRole('dialog', { name: 'Add to comics' });
+    expect(said.textContent).toContain('10000 files, 10.0 MB');
+    const items = screen.getByRole('list', { name: 'incoming' }).querySelectorAll('li');
+    expect(items.length).toBeLessThanOrEqual(10);
+    expect(items[items.length - 1].textContent).toBe(`… and ${10000 - (items.length - 1)} more`);
   });
 });
