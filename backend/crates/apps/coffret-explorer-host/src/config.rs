@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use coffret_device::LibraryDir;
+use coffret_device::{AppearanceFile, LibraryDir};
 use coffret_server::ServerState;
 
 use crate::{HostKind, KeyFile, KeySource, LibraryLock, PageSource};
@@ -21,12 +21,16 @@ pub struct Config {
     pub page: PageSource,
     /// Whether this is a development host, which serves the badged favicon.
     pub kind: HostKind,
+    /// Where this device keeps the set of colours its explorer is drawn in,
+    /// which the page is served in (spec: LA-38).
+    pub appearance: AppearanceFile,
 }
 
 impl Config {
     /// The host for the server serving `library` at `server`, reading the key
     /// from where that server publishes it and the lock from what it serves,
-    /// and serving the page compiled into the binary, as a host of `kind`.
+    /// and serving the page compiled into the binary, as a host of `kind`, in
+    /// the set of colours that server keeps.
     pub fn for_library(
         server: SocketAddr,
         library: &LibraryDir,
@@ -36,6 +40,7 @@ impl Config {
         Self {
             server,
             key: Arc::new(KeyFile(library.server_key_file())),
+            appearance: state.appearance.clone(),
             lock: state,
             page: PageSource::Embedded,
             kind,

@@ -7,7 +7,7 @@ use tracing::error;
 use crate::freeze::resume_reserved;
 use crate::state::ServerState;
 
-use super::run;
+use super::run::{self, Logging};
 
 /// How long the catch-up may keep the socket unbound.
 ///
@@ -108,7 +108,7 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// because the freeze each one arms makes its own and reads its eligibility
 /// against that (spec: CK-9).
 pub async fn catch_up_at_startup(state: &Arc<ServerState>) {
-    match timeout(DEADLINE, run::catch_up(state, "startup")).await {
+    match timeout(DEADLINE, run::catch_up(state, "startup", Logging::Not)).await {
         Ok(Ok(_outcome)) => {}
         Ok(Err(refusal)) => refusal.record("startup"),
         // The deadline drops the replay where it stood, and how the catalog is

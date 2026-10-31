@@ -62,3 +62,31 @@ it('reads a system it cannot ask as light', () => {
   new ShownAppearance(null, root).start();
   expect(root.dataset.scheme).toBe('light');
 });
+
+// LA-38: the host writes the set this device chose onto the page it serves, so
+// the explorer starts in it and its first paint keeps what the browser's first
+// frame was drawn in, whatever the system says; a page served for System, or
+// with a word this page does not know, starts on System.
+it('starts in the set the host served the page in', () => {
+  const served = (appearance: string | null) => {
+    const root = document.createElement('div');
+    if (appearance !== null) {
+      root.dataset.appearance = appearance;
+    }
+    const shown = new ShownAppearance(fakeSystem(false), root);
+    shown.start();
+    return { appearance: shown.appearance, scheme: root.dataset.scheme };
+  };
+  expect(served('dark')).toEqual({ appearance: 'dark', scheme: 'dark' });
+  expect(served('light')).toEqual({ appearance: 'light', scheme: 'light' });
+  expect(served(null)).toEqual({ appearance: 'system', scheme: 'light' });
+  expect(served('sepia')).toEqual({ appearance: 'system', scheme: 'light' });
+
+  // What was kept, arriving later, is still taken up over it.
+  const root = document.createElement('div');
+  root.dataset.appearance = 'dark';
+  const shown = new ShownAppearance(fakeSystem(false), root);
+  shown.start();
+  shown.adopt('system');
+  expect(root.dataset.scheme).toBe('light');
+});

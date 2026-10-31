@@ -12,6 +12,10 @@
 //! A development host answers the favicon's paths with the badged favicon
 //! from the same build ([`favicon`]); every other path is served the same
 //! whichever host serves it.
+//!
+//! The index is served in the set of colours this device chose, read from
+//! where the server keeps it, so that the page's first frame is drawn in it
+//! ([`scheme`]).
 
 mod asset_name;
 use asset_name::asset_name;
@@ -32,12 +36,15 @@ use lookup::Lookup;
 
 mod policy;
 
+mod scheme;
+
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
+use coffret_device::{Appearance, AppearanceFile};
 
 use crate::host::Host;
 use crate::{HostKind, PageSource};
@@ -71,6 +78,9 @@ const NOT_HERE: &str = "There is nothing here.\n";
 pub(crate) struct Page {
     build: Build,
     kind: HostKind,
+    /// Where this device keeps the set of colours its explorer is drawn in,
+    /// read each time the index is served.
+    appearance: AppearanceFile,
 }
 
 /// Where the build being served is.
@@ -80,19 +90,24 @@ enum Build {
 }
 
 impl Page {
-    pub(crate) fn new(source: &PageSource, kind: HostKind) -> Self {
+    pub(crate) fn new(source: &PageSource, kind: HostKind, appearance: AppearanceFile) -> Self {
         let build = match source {
             PageSource::Embedded => Build::Embedded,
             PageSource::Directory(root) => Build::Directory(DistDir::new(root.clone())),
         };
-        Self { build, kind }
+        Self {
+            build,
+            kind,
+            appearance,
+        }
     }
 
     /// Answers `path`.
     fn respond(&self, path: &str) -> Response {
+        let chosen = || self.appearance.read();
         match &self.build {
-            Build::Embedded => respond_embedded(path, self.kind),
-            Build::Directory(dist) => respond_from(dist, path, self.kind),
+            Build::Embedded => respond_embedded(path, self.kind, chosen),
+            Build::Directory(dist) => respond_from(dist, path, self.kind, chosen),
         }
     }
 
@@ -122,12 +137,12 @@ pub(crate) async fn serve(State(host): State<Arc<Host>>, request: Request) -> Re
 }
 
 #[cfg(feature = "embed-web")]
-fn respond_embedded(path: &str, kind: HostKind) -> Response {
-    respond_from(&BUILT, path, kind)
+fn respond_embedded(path: &str, kind: HostKind, chosen: impl FnOnce() -> Appearance) -> Response {
+    respond_from(&BUILT, path, kind, chosen)
 }
 
 #[cfg(not(feature = "embed-web"))]
-fn respond_embedded(path: &str, _kind: HostKind) -> Response {
+fn respond_embedded(path: &str, _kind: HostKind, _chosen: impl FnOnce() -> Appearance) -> Response {
     if asset_name(path).is_none() {
         return not_here();
     }
@@ -144,8 +159,14 @@ fn respond_embedded(path: &str, _kind: HostKind) -> Response {
 /// for a favicon's name on a development host, the badged one, with the
 /// content type and cache header of the name asked for), the index for a path
 /// naming none, and a fixed `404` for a path that is not a name at all or that
-/// reaches outside the build.
-fn respond_from(assets: &impl Assets, path: &str, kind: HostKind) -> Response {
+/// reaches outside the build. The index is served in the set `chosen` answers,
+/// which is asked for it alone.
+fn respond_from(
+    assets: &impl Assets,
+    path: &str,
+    kind: HostKind,
+    chosen: impl FnOnce() -> Appearance,
+) -> Response {
     let Some(relative) = asset_name(path) else {
         return not_here();
     };
@@ -164,6 +185,11 @@ fn respond_from(assets: &impl Assets, path: &str, kind: HostKind) -> Response {
                     .into_response()
             }
         },
+    };
+    let contents = if name == INDEX {
+        scheme::in_scheme(contents, chosen())
+    } else {
+        contents
     };
     let cache = if name.starts_with("assets/") {
         IMMUTABLE

@@ -7,7 +7,7 @@ use crate::moves::{MoveRun, MoveStatus};
 use crate::reported::Reported;
 use crate::sync::{SyncRun, SyncStatus};
 
-use super::Queue;
+use super::{CaughtUp, Queue};
 
 /// What one entry is about.
 #[derive(Clone, Debug)]
@@ -33,6 +33,12 @@ pub enum Ended {
     /// since a run of it stopped, stopped on its line, which is logged
     /// `cancelled` beside them (spec: LA-12).
     Add(StoppedAdd),
+    /// A catch-up the explorer asked for (`POST /api/refresh`: *Check for
+    /// changes*), and what it came to: the numbers it landed with, or what
+    /// stopped it. One the server made on its own — as it starts, after a
+    /// reconnect, or for a fetch that met a stale catalog — is not logged, and
+    /// neither is one a locked Library refused before it began (spec: LA-12).
+    CatchUp(Result<CaughtUp, Reported>),
     /// A folder a queue threw away when its worker ended without an answer.
     Discarded {
         /// Which queue lost it.
@@ -57,6 +63,7 @@ pub(super) enum Key {
     Fill(Folder),
     Freeze(Folder),
     Sync,
+    CatchUp,
     Delete(Vec<String>, Vec<String>),
     Move(Vec<(String, String)>),
     Fetch(String),
@@ -65,7 +72,7 @@ pub(super) enum Key {
 
 impl Ended {
     /// Whether this is a failure: a run that stopped, a folder that never
-    /// started, a fetch that was refused.
+    /// started, a fetch or a catch-up that was refused.
     pub fn failed(&self) -> bool {
         match self {
             Self::Fill(run) => matches!(run.status, FillStatus::Stopped(_)),
@@ -73,6 +80,7 @@ impl Ended {
             Self::Freeze(run) => matches!(run.status, FreezeStatus::Stopped(_)),
             Self::Delete(run) => matches!(run.status, DeleteStatus::Stopped(_)),
             Self::Move(run) => matches!(run.status, MoveStatus::Stopped(_)),
+            Self::CatchUp(outcome) => outcome.is_err(),
             Self::Discarded { .. } | Self::Fetch { .. } => true,
             // What a person asked for, and so no failure of anything.
             Self::Add(_) => false,
@@ -97,6 +105,7 @@ impl Ended {
                 folder,
             } => Key::Freeze(folder.clone()),
             Self::Sync(_) => Key::Sync,
+            Self::CatchUp(_) => Key::CatchUp,
             Self::Delete(run) => Key::Delete(run.target.folders_named(), run.target.paths_named()),
             Self::Move(run) => Key::Move(run.pairs_named()),
             Self::Fetch { path, .. } => Key::Fetch(path.clone()),

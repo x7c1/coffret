@@ -22,7 +22,7 @@ use coffret_device::{
 use coffret_model::ContainerId;
 
 use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, ReconnectDto, SyncDto, WorkDto};
-use crate::activity_log::{Ended, Logged, Queue};
+use crate::activity_log::{CaughtUp, Ended, Logged, Queue};
 use crate::adds::{Add, AddId, StoppedAdd};
 use crate::api_error::{held_to, ApiError};
 use crate::delete::{DeleteReport, DeleteRun, DeleteStatus, RefusedPack, Target};
@@ -446,6 +446,12 @@ fn logged() -> Vec<Logged> {
             entries: 188,
             ..freeze(1, "books/vol-1", FreezeStatus::Done)
         }),
+        Ended::CatchUp(Err(storage())),
+        Ended::CatchUp(Ok(CaughtUp {
+            advanced: true,
+            gained: 3,
+            entries: 120,
+        })),
         Ended::Sync(sync(2, SyncStatus::Stopped(storage()))),
         Ended::Sync(SyncRun {
             added: 3,

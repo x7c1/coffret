@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 import type { Resources } from './resources.js';
+import type { Appearance } from './windows.js';
 
 /** What a Passphrase window is opened to do. */
 export type DoorMode = 'Open' | 'Unlock';
@@ -86,6 +87,11 @@ export interface Addon {
   start(identifier: string, idleMinutes?: string | null): void;
   /** The Libraries on this device, each by its ID and the name it is listed under. */
   libraries(): ListedLibrary[];
+  /**
+   * Which set of colours this device's explorer is drawn in, as the server
+   * keeps it: `system` where nothing was kept or it cannot be read.
+   */
+  appearance(): Appearance;
   /**
    * The URL to load one Passphrase window from, opened in `mode`, with a fresh
    * door token in its fragment: for the window and nothing else, a log

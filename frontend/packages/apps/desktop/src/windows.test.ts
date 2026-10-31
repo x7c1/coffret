@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import { readFileSync } from 'node:fs';
+
 import { menuTemplate, RELOAD_THE_EXPLORER } from './menu.js';
 
 import {
   EXPLORER_PARTITION,
   explorerWindowOptions,
+  GROUND,
+  groundOf,
   PARTITIONS,
   PASSPHRASE_PARTITION,
   passphraseWindowOptions,
@@ -102,5 +106,40 @@ describe('the menu bar', () => {
     const all = items(menuTemplate('linux', () => undefined));
     expect(all.find((each) => each.label === RELOAD_THE_EXPLORER)?.accelerator).toBe('CmdOrCtrl+R');
     expect(all.find((each) => each.role === 'quit')?.accelerator).toBe('Ctrl+Q');
+  });
+});
+
+describe('the explorer window’s ground', () => {
+  it('is the ground of the set chosen, whatever the system asks for', () => {
+    for (const systemDark of [false, true]) {
+      expect(groundOf('dark', systemDark)).toBe(GROUND.dark);
+      expect(groundOf('light', systemDark)).toBe(GROUND.light);
+    }
+  });
+
+  it('is the system’s set on System', () => {
+    expect(groundOf('system', true)).toBe(GROUND.dark);
+    expect(groundOf('system', false)).toBe(GROUND.light);
+  });
+
+  it('fills the explorer’s window until its page draws', () => {
+    for (const [appearance, systemDark, ground] of [
+      ['dark', false, GROUND.dark],
+      ['light', true, GROUND.light],
+      ['system', true, GROUND.dark],
+      ['system', false, GROUND.light],
+    ] as const) {
+      const options = explorerWindowOptions(PRELOAD, 'linux', undefined, groundOf(appearance, systemDark));
+      expect(options.backgroundColor).toBe(ground);
+    }
+  });
+
+  // The page's own grounds, which the window stands in for until it draws.
+  it('is the explorer’s own ground in each set', () => {
+    const theme = readFileSync(new URL('../../web/src/theme.ts', import.meta.url), 'utf8');
+    const groundIn = (set: string) =>
+      new RegExp(`export const ${set}[^=]*= \\{[^}]*?ground: '(#[0-9a-f]{6})'`, 's').exec(theme)?.[1];
+    expect(groundIn('LIGHT')).toBe(GROUND.light);
+    expect(groundIn('DARK')).toBe(GROUND.dark);
   });
 });

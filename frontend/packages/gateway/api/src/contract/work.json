@@ -180,8 +180,8 @@
     "library": "unlocked",
     "log": [
       {
-        "at": "2026-10-26T07:48:20Z",
-        "id": 15,
+        "at": "2026-10-26T07:50:20Z",
+        "id": 17,
         "kind": "fetch",
         "path": "albums/cover.png",
         "refused": {
@@ -192,24 +192,24 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:47:20Z",
+        "at": "2026-10-26T07:49:20Z",
         "folder": "books/vol-2",
-        "id": 14,
+        "id": 16,
         "kind": "discarded",
         "queue": "freeze",
         "settled": false
       },
       {
-        "at": "2026-10-26T07:46:20Z",
+        "at": "2026-10-26T07:48:20Z",
         "folder": "books",
-        "id": 13,
+        "id": 15,
         "kind": "discarded",
         "queue": "fill",
         "settled": false
       },
       {
-        "at": "2026-10-26T07:45:20Z",
-        "id": 12,
+        "at": "2026-10-26T07:47:20Z",
+        "id": 14,
         "kind": "move",
         "run": {
           "entries": 0,
@@ -233,8 +233,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:44:20Z",
-        "id": 11,
+        "at": "2026-10-26T07:46:20Z",
+        "id": 13,
         "kind": "move",
         "run": {
           "entries": 2,
@@ -257,8 +257,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:43:20Z",
-        "id": 10,
+        "at": "2026-10-26T07:45:20Z",
+        "id": 12,
         "kind": "move",
         "run": {
           "entries": 2,
@@ -285,8 +285,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:42:20Z",
-        "id": 9,
+        "at": "2026-10-26T07:44:20Z",
+        "id": 11,
         "kind": "delete",
         "run": {
           "bytes": 8200000,
@@ -312,8 +312,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:41:20Z",
-        "id": 8,
+        "at": "2026-10-26T07:43:20Z",
+        "id": 10,
         "kind": "freeze",
         "run": {
           "discarded": [],
@@ -331,6 +331,30 @@
           "waiting": [],
           "waits": false
         },
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:42:20Z",
+        "id": 9,
+        "kind": "catch_up",
+        "refreshed": null,
+        "refused": {
+          "error": "storage",
+          "message": "the Library's Storage no longer accepts this device's grant",
+          "reason": "unauthenticated"
+        },
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:41:20Z",
+        "id": 8,
+        "kind": "catch_up",
+        "refreshed": {
+          "advanced": true,
+          "entries": 120,
+          "gained": 3
+        },
+        "refused": null,
         "settled": false
       },
       {

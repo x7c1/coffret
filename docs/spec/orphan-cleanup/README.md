@@ -153,7 +153,14 @@ Concept background: [Journal](../../concepts/journal/),
     name itself when it ends, put back or not, with the removal's tolerance
     of absence. One a server that ended left behind is stale: the add it was
     kept for ended with that server (LA-12), so a sync removes it like any
-    other.
+    other. A sync removes only what its walk meets, though, and the sync a
+    drop arms walks only the folders that drop wrote into (EP-10), so a
+    server also removes every stale scratch under the mapped roots it can
+    vouch for as it opens the Library, before it serves anything: a kept file
+    whose lock nothing holds, and with it any other scratch a writer that is
+    gone left. Nothing is put back — what stands at the file's name is what a
+    person has seen there since the server ended — and one whose lock is held,
+    by a writer in another process, is left where it is.
   - This is the posture CP-14 gives the Storage side, stated for the local one
     rather than borrowed from it. OC-6 says trashing an untrashed removal is
     idempotent, which is a claim about the Library's objects on Storage; a

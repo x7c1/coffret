@@ -3,7 +3,7 @@ use coffret_device::CatchUpOutcome;
 use crate::api_error::ApiError;
 use crate::state::ServerState;
 
-use super::run;
+use super::run::{self, Logging};
 
 /// Catches the catalog up because somebody asked what is new.
 ///
@@ -13,9 +13,11 @@ use super::run;
 ///
 /// The outcome is this function's own value and goes back to whoever asked,
 /// unlike a fill's or a sync's: a refresh is over when the replay is, and there
-/// is no progress to publish along the way.
+/// is no progress to publish along the way. It is also put in the server's log
+/// of finished work, landed or refused, so a page reads it there as it reads a
+/// fill or a sync that ended (spec: LA-12).
 pub async fn refresh_catalog(state: &ServerState) -> Result<CatchUpOutcome, ApiError> {
-    run::catch_up(state, "refresh").await
+    run::catch_up(state, "refresh", Logging::InTheLog).await
 }
 
 /// Catches the catalog up because the grant Storage had stopped taking was
@@ -27,5 +29,5 @@ pub async fn refresh_catalog(state: &ServerState) -> Result<CatchUpOutcome, ApiE
 pub(crate) async fn catch_up_after_reconnect(
     state: &ServerState,
 ) -> Result<CatchUpOutcome, ApiError> {
-    run::catch_up(state, "reconnect").await
+    run::catch_up(state, "reconnect", Logging::Not).await
 }

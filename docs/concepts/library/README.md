@@ -575,10 +575,11 @@ control for a sync, since a drop starts one.
   idempotent: one already gone is a successful removal, absence being the
   outcome sought (spec: EP-11, OC-8).
   - A writer removes its own scratch when its write fails. One a killed writer
-    left is removed by the next sync that walks its mapped root: a sync removes
-    every scratch no live writer still holds, and leaves alone a name that
-    merely carries the reserved prefix without the shape the writers give their
-    scratches — the person's own file, or a folder (spec: OC-8, EP-11).
+    left is removed by the next sync that walks its mapped root,
+    or by a server as it opens the Library: a sync removes every scratch no
+    live writer still holds, and leaves alone a name that merely carries the
+    reserved prefix without the shape the writers give their scratches — the
+    person's own file, or a folder (spec: OC-8, EP-11).
   - A writer locks its scratch for as long as it writes it, which is how a sync
     tells a live writer's scratch from a killed one's, so a mapped folder is
     expected on a local disk. On a filesystem that gives no file lock — a

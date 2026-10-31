@@ -24,7 +24,19 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell, Tray } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  nativeTheme,
+  powerMonitor,
+  session,
+  shell,
+  Tray,
+} from 'electron';
 
 import { loadAddon, type Addon } from './addon.js';
 import { Desktop, explorerCloses, message, type PassphraseWindow, type Shell } from './desktop.js';
@@ -44,7 +56,14 @@ import { resourcesFor } from './resources.js';
 import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { trayMenuTemplate } from './tray.js';
 import { trayHostLine, trayHostOn } from './tray-host.js';
-import { type WindowLook, explorerWindowOptions, PARTITIONS, passphraseWindowOptions } from './windows.js';
+import {
+  type Appearance,
+  type WindowLook,
+  explorerWindowOptions,
+  groundOf,
+  PARTITIONS,
+  passphraseWindowOptions,
+} from './windows.js';
 
 const STARTUP_FAILED = 'Coffret could not start';
 
@@ -182,8 +201,23 @@ function assemble(
     ),
   );
 
+  /**
+   * The ground the explorer will be drawn on, read afresh each time: the
+   * person may have chosen another set since the window was made.
+   */
+  const explorerGround = () => {
+    let appearance: Appearance = 'system';
+    try {
+      appearance = addon.appearance();
+    } catch (error) {
+      warn(`the explorer's appearance could not be read; it follows the system: ${message(error)}`);
+    }
+    return groundOf(appearance, nativeTheme.shouldUseDarkColors);
+  };
+
   /** Loads the explorer into its window from a fresh launch ticket. */
   const launchExplorer = (window: BrowserWindow, address: string) => {
+    window.setBackgroundColor(explorerGround());
     let ticket: string;
     try {
       ticket = addon.issueTicket();
@@ -209,7 +243,9 @@ function assemble(
       }
       const origin = explorerOrigin(address);
       explorerServed = origin;
-      const window = new BrowserWindow(explorerWindowOptions(EXPLORER_PRELOAD, process.platform, look));
+      const window = new BrowserWindow(
+        explorerWindowOptions(EXPLORER_PRELOAD, process.platform, look, explorerGround()),
+      );
       keepTitle(window);
       guardNavigation(window.webContents, 'explorer', () => origin, warn);
       window.webContents.setWindowOpenHandler(explorerWindowOpener((url) => shell.openExternal(url), warn));

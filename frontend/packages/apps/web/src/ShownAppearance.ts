@@ -12,14 +12,16 @@ type SystemQuery = Pick<MediaQueryList, 'matches' | 'addEventListener' | 'remove
 /**
  * The appearance this page is drawn in, and the page drawn in it.
  *
- * It starts at `system`, which is also what it stays at where nothing was kept
- * or what was kept cannot be read: how the explorer looks is never a reason
- * for it not to open. What the server kept for this device arrives later and
- * is taken up then ([`adopt`](#adopt)) — unless the person chose on this page
- * meanwhile, which is the newer word.
+ * It starts at what the host served the page in ([`servedIn`](#servedIn)),
+ * so the explorer's first paint keeps the set the browser's first frame was
+ * drawn in; that is `system` where nothing was kept or what was kept cannot be
+ * read: how the explorer looks is never a reason for it not to open. What the
+ * server kept for this device arrives later and is taken up then
+ * ([`adopt`](#adopt)) — unless the person chose on this page meanwhile, which
+ * is the newer word.
  */
 export class ShownAppearance {
-  private shown: Appearance = 'system';
+  private shown: Appearance;
   private chosen = false;
   private readonly listeners = new Set<() => void>();
 
@@ -28,7 +30,9 @@ export class ShownAppearance {
     private readonly system: SystemQuery | null,
     /** The element the colours are painted onto: the page's root. */
     private readonly root: HTMLElement,
-  ) {}
+  ) {
+    this.shown = servedIn(root);
+  }
 
   /**
    * Paints the page in what is shown, and follows the system's choice from
@@ -96,6 +100,16 @@ export class ShownAppearance {
   private paint(): void {
     paintScheme(this.scheme, this.root);
   }
+}
+
+/**
+ * The appearance the host served the page in: the `data-appearance` it wrote
+ * onto the root for a set this device chose, and `system` where it wrote none
+ * or one this page does not know.
+ */
+export function servedIn(root: HTMLElement): Appearance {
+  const served = root.dataset.appearance;
+  return served === 'light' || served === 'dark' ? served : 'system';
 }
 
 /**

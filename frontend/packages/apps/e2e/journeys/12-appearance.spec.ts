@@ -3,7 +3,8 @@
 // The switch at the header's right end, beside the +, opens a menu of three —
 // System, Light and Dark — and the page is drawn in the one chosen at once:
 // the ground, the header and the rows alike. The choice is this device's, kept
-// by the server rather than in the tab, so a reload draws the page in it again.
+// by the server rather than in the tab, so a reload draws the page in it again,
+// and the host serves the page in it, so the reload's first frame is in it too.
 // On System the page follows the system's own choice, as it switches. The
 // journey ends on System, which is where it began.
 
@@ -31,8 +32,11 @@ test('switch the explorer to Dark and back to System', async ({ page }) => {
   expect(await ground()).not.toBe(light);
   await shot(page, '01-dark');
 
-  // Kept for the device, not the tab's page: a reload is drawn dark again.
+  // Kept for the device, not the tab's page: a reload is drawn dark again —
+  // from its first frame, since the host serves the page in the set chosen.
   await page.reload();
+  await expect(root).toHaveAttribute('data-appearance', 'dark');
+  await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute('content', 'dark');
   await expect(tree(page)).toBeVisible();
   await expect(button).toHaveAccessibleName('Appearance: Dark');
   await expect(root).toHaveAttribute('data-scheme', 'dark');
@@ -53,4 +57,6 @@ test('switch the explorer to Dark and back to System', async ({ page }) => {
   await page.reload();
   await expect(tree(page)).toBeVisible();
   await expect(button).toHaveAccessibleName('Appearance: System');
+  await expect(root).not.toHaveAttribute('data-appearance');
+  await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute('content', 'light dark');
 });

@@ -44,6 +44,7 @@ import type {
 import { deletedLine, deletingLine } from './deleteEntries';
 import { discardedBooksLine, discardedLine, fillLine, freezeLine, syncLine } from './fill';
 import { ranOut } from './ranOut';
+import { refreshedLine } from './refresh';
 import { retryable, type Trouble } from './retry';
 import { waitsFor, type Turns } from './turns';
 
@@ -443,7 +444,8 @@ function noticeEntry(notice: PageNotice, locked: boolean): Entry {
  * never started, so asking for it is always worth it. A deletion is offered one
  * only where another device's commit got in front of it, which is the one
  * refusal whose own sentence says to run it again. A refused fetch is the
- * reader's, and is asked again by opening the page.
+ * reader's, and is asked again by opening the page; a refused catch-up is
+ * asked again by the control that asked it, *Check for changes*.
  */
 export function retryOf(logged: Logged, locked: boolean): Retry | null {
   if (locked || logged.settled) {
@@ -462,9 +464,11 @@ export function retryOf(logged: Logged, locked: boolean): Retry | null {
     }
     case 'discarded':
       return { flow: logged.queue, folder: logged.folder };
-    // A move is asked for again where it was made, not from the panel; and
-    // an add a person stopped is added again by dropping it again.
+    // A move is asked for again where it was made, not from the panel; an
+    // add a person stopped is added again by dropping it again; and a
+    // catch-up by the control that asked for it.
     case 'move':
+    case 'catch_up':
     case 'fetch':
     case 'add':
       return null;
@@ -621,6 +625,8 @@ function outcomeOf(logged: Logged): Outcome {
           ? 'notice'
           : 'success';
     }
+    case 'catch_up':
+      return logged.refused === null ? 'success' : 'failure';
     case 'discarded':
     case 'fetch':
       return 'failure';
@@ -641,6 +647,7 @@ function refusalOf(logged: Logged): Refused | null {
     case 'move':
       return logged.run.stopped;
     case 'fetch':
+    case 'catch_up':
       return logged.refused;
     case 'discarded':
     case 'add':
@@ -672,6 +679,10 @@ function textOf(logged: Logged): string {
       );
     case 'fetch':
       return `could not fetch ${logged.path} — ${logged.refused.message}`;
+    case 'catch_up':
+      return logged.refused === null
+        ? `checked for changes — ${refreshedLine(logged.refreshed)}`
+        : `could not check for changes — ${logged.refused.message}`;
     case 'add':
       return stoppedLine(logged.add);
   }
@@ -684,8 +695,10 @@ function textOf(logged: Logged): string {
  * some of it in, how much — and how many of its files could not be taken back
  * out of the folder, where any could not. Every other file it wrote is gone,
  * and a file it had written over is back as it was; one this device could not
- * take away is the folder's like any copied there, so the next sync carries
- * it in unless the person takes it away first. An add whose files could not
+ * take away is the folder's like any copied there, so a sync whose scope
+ * covers it carries it in — a full sync, or a later drop into that folder,
+ * since a drop's own sync walks only the folders it wrote into (spec: EP-10)
+ * — unless the person takes it away first. An add whose files could not
  * be put back at all is never stopped: its stop is refused, and says why.
  */
 export function stoppedLine(add: StoppedAdd): string {
@@ -696,7 +709,7 @@ export function stoppedLine(add: StoppedAdd): string {
   const left =
     add.left === 0
       ? ''
-      : `; ${files(add.left)} could not be taken back out of the folder, and the next sync adds ${add.left === 1 ? 'it' : 'them'}`;
+      : `; ${files(add.left)} could not be taken back out of the folder, and a sync that covers ${add.left === 1 ? 'it' : 'them'} adds ${add.left === 1 ? 'it' : 'them'} — a full sync, or a later drop into that folder`;
   return `stopped adding to ${shownAs(add.folder)} — ${added}${left}`;
 }
 

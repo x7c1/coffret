@@ -24,8 +24,8 @@ use coffret_local_fs::UnixFs;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, router, Admission, Allowance, ServerState, UnlockPrompt, Unlocked,
-    SERVER_KEY_HEADER,
+    catch_up_at_startup, remove_left_behind, router, Admission, Allowance, ServerState,
+    UnlockPrompt, Unlocked, SERVER_KEY_HEADER,
 };
 use coffret_usecase::delete::{delete_entries, DeleteRequest, DeleteSelection};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
@@ -491,8 +491,10 @@ impl Served {
         })
     }
 
-    /// Catches the catalog up the way starting the server does.
+    /// Opens up the way starting the server does: what a server that is gone
+    /// left in the mapped folder is removed, and the catalog is caught up.
     pub async fn start_up(&self) {
+        remove_left_behind(&self.state).await;
         catch_up_at_startup(&self.state).await;
     }
 

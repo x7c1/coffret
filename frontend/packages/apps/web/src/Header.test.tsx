@@ -205,3 +205,24 @@ it('draws the + disabled while the Library is locked, and says no refusal for th
   expect(screen.queryByTestId('library')).toBeNull();
   expect(screen.queryByText('the Library is locked')).toBeNull();
 });
+
+// The focus a locked page restored from its address names a row of the
+// Library, and the locked screen says the Library's files stay hidden: the
+// header says no location then, as it says no name it could not read.
+it('shows no location while the Library is locked', () => {
+  const props = {
+    focus: fileKey('comics/vol 1'),
+    onAdd: vi.fn(),
+    onCollecting: vi.fn(),
+    onUnreadable: vi.fn(),
+    onKeysBack: vi.fn(),
+    makesFolderIn: () => true,
+    onNewFolder: vi.fn(),
+  };
+  const { rerender } = render(<Header library={LIBRARY} {...props} />);
+  expect(header().getByTestId('location').textContent).toContain('vol 1');
+
+  rerender(<Header library={LIBRARY} {...props} locked />);
+  expect(header().queryByTestId('location')).toBeNull();
+  expect(screen.queryByText(/vol 1/)).toBeNull();
+});

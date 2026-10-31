@@ -165,6 +165,7 @@ pub use reconnect::reconnect;
 
 mod refresh;
 pub use refresh::refresh;
+pub(crate) use refresh::RefreshedDto;
 
 mod remote_head;
 pub use remote_head::remote_head;
