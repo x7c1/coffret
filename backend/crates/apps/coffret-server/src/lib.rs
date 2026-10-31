@@ -150,6 +150,9 @@
 mod activity_log;
 pub use activity_log::{ActivityLog, Ended, Logged, Queue};
 
+mod adds;
+pub use adds::{AddId, Adds, StoppedAdd};
+
 mod allowance;
 pub use allowance::Allowance;
 
@@ -225,6 +228,9 @@ mod server_id;
 
 mod state;
 pub use state::ServerState;
+
+mod stopping;
+pub use stopping::Stop;
 
 mod sync;
 pub use sync::{arm_sync, SyncRun, SyncStatus, Syncs};

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use coffret_model::EntryPath;
-use coffret_usecase::fetch::local_path_of;
+use coffret_usecase::fetch::{local_path_for, local_path_of};
 
 use crate::error::{Error, Result};
 use crate::open_library::OpenLibrary;
@@ -39,6 +39,29 @@ impl OpenLibrary {
     /// sentence about the question it actually asked.
     pub async fn local_path_of(&self, path: &EntryPath) -> Result<PathBuf> {
         local_path_of(self.index.as_ref(), path)
+            .await
+            .map_err(Error::local_path_not_resolved)
+    }
+
+    /// Where on this device a file standing at `path` would go, whether or not
+    /// the Library holds an Entry there (spec: EP-9).
+    ///
+    /// [`local_path_of`](Self::local_path_of) asks this of an Entry, and this
+    /// asks it of a path: the question a shell adding a file has, before the
+    /// file is there. Like that call it is for reporting and bookkeeping and
+    /// never for reaching the file — writes go through
+    /// [`add_file`](Self::add_file), which descends the mapped root without
+    /// following a link (spec: EP-4, EP-11).
+    ///
+    /// # Errors
+    ///
+    /// [`Error::LocalPathNotResolved`](crate::Error::LocalPathNotResolved)
+    /// carrying `UnmappedEntryPath` or `UnmaterializablePath`, as
+    /// [`local_path_of`](Self::local_path_of) does; never `EntryNotCurrent`,
+    /// since nothing need stand at the path. [`Error::Index`](crate::Error::Index)
+    /// where the mappings could not be read.
+    pub async fn local_path_for(&self, path: &EntryPath) -> Result<PathBuf> {
+        local_path_for(self.index.as_ref(), path)
             .await
             .map_err(Error::local_path_not_resolved)
     }

@@ -121,6 +121,22 @@ impl Served {
     }
 
     /// Lets the held read go.
+    pub fn hold_uploads(&self) {
+        self.storage.hold_uploads();
+    }
+
+    pub fn held_uploads(&self) -> usize {
+        self.storage.held_uploads()
+    }
+
+    pub fn hold_commits(&self) {
+        self.storage.hold_commits();
+    }
+
+    pub fn held_commits(&self) -> usize {
+        self.storage.held_commits()
+    }
+
     pub fn release_storage(&self) {
         self.storage.release();
     }

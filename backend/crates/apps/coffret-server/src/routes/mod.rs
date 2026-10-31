@@ -1,4 +1,4 @@
-//! The twenty-one things a browser may ask of a Library.
+//! The twenty-two things a browser may ask of a Library.
 //!
 //! Four of them are about what the Library holds and answer out of the
 //! catalog alone — which Library this is, every folder in it, what one folder
@@ -52,6 +52,11 @@
 //! it is how the explorer shows somebody what "Pack this folder…" will do
 //! before they say yes.
 //!
+//! Beside them is the stop, which asks for an add, a freeze or a fill to be
+//! stopped before it begins committing (spec: LA-35). It is answered at once
+//! with the work answer, and the run answers it by ending: an add it stops is
+//! undone on this device, every file it wrote taken away again (spec: LA-36).
+//!
 //! And one moves things inside the Library: the move, which renames files and
 //! folders in one Journal record and uploads nothing (spec: FM-15), then has
 //! this device's files of them follow — or leave this device where they cannot
@@ -84,7 +89,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the twenty-one go on answering once the Library is locked — which
+//! Three of the twenty-two go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -101,7 +106,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the twenty-one are two answers that are not routes at all: one for a
+//! Beside the twenty-two are two answers that are not routes at all: one for a
 //! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -155,6 +160,9 @@ mod refusal_dto;
 use refusal_dto::RefusalDto;
 
 use delete::RefusedPackDto;
+
+mod stop;
+pub use stop::stop;
 
 mod sync;
 pub use sync::sync;

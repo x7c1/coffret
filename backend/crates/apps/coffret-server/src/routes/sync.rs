@@ -34,6 +34,6 @@ pub async fn sync(
     // Asked and thrown away, exactly as the fill's route asks and for the
     // reason it gives (spec: DK-2).
     state.unlocked()?;
-    arm_sync(Arc::clone(&state));
+    arm_sync(Arc::clone(&state), None);
     Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state).await)))
 }

@@ -132,8 +132,59 @@ impl State {
         self.files.insert(to.to_path_buf(), node);
     }
 
+    /// Puts a second name on the file — or the planted "other" — at `from`,
+    /// refusing a name anything already stands at.
+    ///
+    /// What a hard link is, as near as a fake without inodes comes to one: the
+    /// two names carry the same bytes and times from here on, and since
+    /// nothing writes to a published file in place, a copy is the same thing
+    /// for every case that reads either back (spec: LA-36).
+    pub(in crate::in_memory_fs) fn link(
+        &mut self,
+        from: &Path,
+        to: &Path,
+    ) -> Result<(), BelowRootError> {
+        if self.holds(to) {
+            return Err(BelowRootError::Io(LocalIoError::new(
+                LocalOperation::Linking,
+                to,
+                io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "something already stands at this name",
+                ),
+            )));
+        }
+        if let Some(node) = self.files.get(from).cloned() {
+            self.files.insert(to.to_path_buf(), node);
+        } else if self.others.contains(from) {
+            self.others.insert(to.to_path_buf());
+        }
+        Ok(())
+    }
+
+    /// Moves the file — or the planted "other" — at `from` onto `to`,
+    /// replacing whatever file or "other" stood there.
+    ///
+    /// [`rename`](Self::rename), for a name kept aside by
+    /// [`link`](Self::link), which may be either.
+    pub(in crate::in_memory_fs) fn move_back(&mut self, from: &Path, to: &Path) {
+        if self.others.remove(from) {
+            self.files.remove(to);
+            self.others.insert(to.to_path_buf());
+            return;
+        }
+        self.rename(from, to);
+    }
+
     /// Removes one file, absence being the same outcome (spec: OC-8).
     pub(in crate::in_memory_fs) fn remove(&mut self, path: &Path) {
         self.files.remove(path);
+    }
+
+    /// Removes one name a file was kept aside under, whichever kind it is,
+    /// absence being the same outcome (spec: OC-8).
+    pub(in crate::in_memory_fs) fn remove_kept(&mut self, path: &Path) {
+        self.files.remove(path);
+        self.others.remove(path);
     }
 }

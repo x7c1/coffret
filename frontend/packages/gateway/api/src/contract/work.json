@@ -1,5 +1,6 @@
 [
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -16,6 +17,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "catching_up",
       "stopped": null
@@ -30,6 +32,7 @@
       "folder": "albums",
       "run": 2,
       "status": "filling",
+      "stop": "offered",
       "stopped": null,
       "total": 3,
       "waiting": [
@@ -51,9 +54,14 @@
         "phase": "packing",
         "total": null
       },
+      "stop": "offered",
       "stopped": null,
+      "stopping": [
+        "books/vol-3"
+      ],
       "waiting": [
-        "books/vol-2"
+        "books/vol-2",
+        "books/vol-3"
       ],
       "waits": true
     },
@@ -79,12 +87,14 @@
         "phase": "uploading",
         "total": 4
       },
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": "sync"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -109,7 +119,9 @@
         "phase": "uploading",
         "total": 1
       },
+      "stop": "offered",
       "stopped": null,
+      "stopping": [],
       "waiting": [],
       "waits": false
     },
@@ -125,6 +137,7 @@
     "turn": "freeze"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -146,7 +159,9 @@
         "phase": "committing",
         "total": 4
       },
+      "stop": "offered",
       "stopped": null,
+      "stopping": [],
       "waiting": [],
       "waits": false
     },
@@ -162,6 +177,7 @@
     "turn": "freeze"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -176,8 +192,8 @@
     "library": "unlocked",
     "log": [
       {
-        "at": "2026-10-26T07:45:20Z",
-        "id": 12,
+        "at": "2026-10-26T07:48:20Z",
+        "id": 15,
         "kind": "fetch",
         "path": "albums/cover.png",
         "refused": {
@@ -188,24 +204,24 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:44:20Z",
+        "at": "2026-10-26T07:47:20Z",
         "folder": "books/vol-2",
-        "id": 11,
+        "id": 14,
         "kind": "discarded",
         "queue": "freeze",
         "settled": false
       },
       {
-        "at": "2026-10-26T07:43:20Z",
+        "at": "2026-10-26T07:46:20Z",
         "folder": "books",
-        "id": 10,
+        "id": 13,
         "kind": "discarded",
         "queue": "fill",
         "settled": false
       },
       {
-        "at": "2026-10-26T07:42:20Z",
-        "id": 9,
+        "at": "2026-10-26T07:45:20Z",
+        "id": 12,
         "kind": "move",
         "run": {
           "entries": 0,
@@ -229,8 +245,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:41:20Z",
-        "id": 8,
+        "at": "2026-10-26T07:44:20Z",
+        "id": 11,
         "kind": "move",
         "run": {
           "entries": 2,
@@ -253,8 +269,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:40:20Z",
-        "id": 7,
+        "at": "2026-10-26T07:43:20Z",
+        "id": 10,
         "kind": "move",
         "run": {
           "entries": 2,
@@ -281,8 +297,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:39:20Z",
-        "id": 6,
+        "at": "2026-10-26T07:42:20Z",
+        "id": 9,
         "kind": "delete",
         "run": {
           "bytes": 8200000,
@@ -308,8 +324,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:38:20Z",
-        "id": 5,
+        "at": "2026-10-26T07:41:20Z",
+        "id": 8,
         "kind": "freeze",
         "run": {
           "discarded": [],
@@ -321,15 +337,17 @@
           "run": 1,
           "status": "done",
           "step": null,
+          "stop": null,
           "stopped": null,
+          "stopping": [],
           "waiting": [],
           "waits": false
         },
         "settled": false
       },
       {
-        "at": "2026-10-26T07:37:20Z",
-        "id": 4,
+        "at": "2026-10-26T07:40:20Z",
+        "id": 7,
         "kind": "sync",
         "run": {
           "added": 0,
@@ -337,6 +355,7 @@
           "run": 2,
           "status": "stopped",
           "step": null,
+          "stop": null,
           "stopped": {
             "error": "storage",
             "message": "the Library's Storage no longer accepts this device's grant",
@@ -347,8 +366,8 @@
         "settled": false
       },
       {
-        "at": "2026-10-26T07:36:20Z",
-        "id": 3,
+        "at": "2026-10-26T07:39:20Z",
+        "id": 6,
         "kind": "sync",
         "run": {
           "added": 3,
@@ -356,8 +375,64 @@
           "run": 1,
           "status": "done",
           "step": null,
+          "stop": null,
           "stopped": null,
           "waits": false
+        },
+        "settled": false
+      },
+      {
+        "add": {
+          "committed": 0,
+          "files": 3,
+          "folder": "albums",
+          "left": 1,
+          "removed": 2
+        },
+        "at": "2026-10-26T07:38:20Z",
+        "id": 5,
+        "kind": "add",
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:37:20Z",
+        "id": 4,
+        "kind": "freeze",
+        "run": {
+          "discarded": [],
+          "displaced": [],
+          "entries": 0,
+          "findings": [],
+          "folder": "books/vol-3",
+          "packs": 0,
+          "run": 3,
+          "status": "cancelled",
+          "step": null,
+          "stop": null,
+          "stopped": null,
+          "stopping": [],
+          "waiting": [],
+          "waits": false
+        },
+        "settled": false
+      },
+      {
+        "at": "2026-10-26T07:36:20Z",
+        "id": 3,
+        "kind": "fill",
+        "run": {
+          "declined": [],
+          "discarded": [],
+          "displaced": [],
+          "done": 1,
+          "findings": [],
+          "folder": "books",
+          "run": 3,
+          "status": "cancelled",
+          "stop": null,
+          "stopped": null,
+          "total": 3,
+          "waiting": []
         },
         "settled": false
       },
@@ -374,6 +449,7 @@
           "folder": "albums",
           "run": 2,
           "status": "done",
+          "stop": null,
           "stopped": null,
           "total": 3,
           "waiting": []
@@ -393,6 +469,7 @@
           "folder": "albums",
           "run": 1,
           "status": "stopped",
+          "stop": null,
           "stopped": {
             "error": "storage",
             "message": "the Library's Storage no longer accepts this device's grant",
@@ -410,6 +487,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -431,12 +509,126 @@
       "run": 4,
       "status": "syncing",
       "step": null,
+      "stop": null,
       "stopped": null,
       "waits": true
     },
     "turn": "move"
   },
   {
+    "adds": [
+      {
+        "folder": "albums",
+        "id": "drop-1",
+        "stage": "receiving",
+        "stopping": true
+      },
+      {
+        "folder": "books",
+        "id": "drop-3",
+        "stage": "armed",
+        "stopping": false
+      }
+    ],
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
+    "fill": {
+      "declined": [],
+      "discarded": [],
+      "displaced": [],
+      "done": 1,
+      "findings": [],
+      "folder": "albums",
+      "run": 4,
+      "status": "filling",
+      "stop": "offered",
+      "stopped": null,
+      "total": 3,
+      "waiting": []
+    },
+    "freeze": {
+      "discarded": [],
+      "displaced": [],
+      "entries": 0,
+      "findings": [],
+      "folder": "books/vol-4",
+      "packs": 0,
+      "run": 4,
+      "status": "freezing",
+      "step": {
+        "bytes": null,
+        "done": 1,
+        "phase": "committing",
+        "total": 4
+      },
+      "stop": "committing",
+      "stopped": null,
+      "stopping": [],
+      "waiting": [],
+      "waits": true
+    },
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
+    "library": "unlocked",
+    "log": [],
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 5,
+      "status": "syncing",
+      "step": {
+        "bytes": {
+          "done": 23000000,
+          "total": 60000000
+        },
+        "done": 1,
+        "phase": "uploading",
+        "total": 4
+      },
+      "stop": "asked",
+      "stopped": null,
+      "waits": false
+    },
+    "turn": "sync"
+  },
+  {
+    "adds": [],
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
+    "fill": null,
+    "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
+    "library": "unlocked",
+    "log": [],
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 6,
+      "status": "cancelled",
+      "step": null,
+      "stop": null,
+      "stopped": null,
+      "waits": false
+    },
+    "turn": null
+  },
+  {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -481,6 +673,7 @@
     "turn": "delete"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -546,6 +739,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -588,6 +782,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -632,6 +827,7 @@
     "turn": "delete"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -658,12 +854,14 @@
         "phase": "catching_up",
         "total": 2
       },
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": "sync"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -690,12 +888,14 @@
         "phase": "settling",
         "total": 2
       },
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": "sync"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -722,12 +922,14 @@
         "phase": "scanning",
         "total": 2
       },
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": "sync"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -754,12 +956,14 @@
         "phase": "fetching",
         "total": 2
       },
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": "sync"
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -800,6 +1004,7 @@
       "folder": "albums",
       "run": 3,
       "status": "done",
+      "stop": null,
       "stopped": null,
       "total": 3,
       "waiting": []
@@ -964,7 +1169,9 @@
       "run": 2,
       "status": "done",
       "step": null,
+      "stop": null,
       "stopped": null,
+      "stopping": [],
       "waiting": [],
       "waits": false
     },
@@ -1132,12 +1339,14 @@
       "run": 2,
       "status": "done",
       "step": null,
+      "stop": null,
       "stopped": null,
       "waits": false
     },
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {
@@ -1193,6 +1402,7 @@
       "folder": "letters",
       "run": 5,
       "status": "stopped",
+      "stop": null,
       "stopped": {
         "error": "storage",
         "message": "the Library's Storage no longer accepts this device's grant",
@@ -1228,10 +1438,12 @@
       "run": 4,
       "status": "stopped",
       "step": null,
+      "stop": null,
       "stopped": {
         "error": "server",
         "message": "the server did not finish, and did not say why"
       },
+      "stopping": [],
       "waiting": [],
       "waits": false
     },
@@ -1255,6 +1467,7 @@
       "run": 3,
       "status": "stopped",
       "step": null,
+      "stop": null,
       "stopped": {
         "error": "storage",
         "message": "the Library's Storage no longer accepts this device's grant",
@@ -1265,6 +1478,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "caught_up",
       "stopped": null
@@ -1279,6 +1493,7 @@
       "folder": "",
       "run": 6,
       "status": "superseded",
+      "stop": null,
       "stopped": null,
       "total": 3,
       "waiting": []
@@ -1296,6 +1511,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {
@@ -1323,6 +1539,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {
@@ -1349,6 +1566,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {
@@ -1375,6 +1593,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {
@@ -1401,6 +1620,7 @@
     "turn": null
   },
   {
+    "adds": [],
     "catalog": {
       "state": "behind",
       "stopped": {

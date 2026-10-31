@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use coffret_model::{Btime, EntryPath, Mtime, Redacted};
 use coffret_usecase::scratch::{self, ScratchName};
-use coffret_usecase::{Destination, ScratchFile, UnknownBirths};
+use coffret_usecase::{Aside, Destination, ScratchFile, UnknownBirths};
 use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
+
+use super::kept_aside::{KeptAside, Replacing};
 
 /// One file on its way into a mapped folder.
 ///
@@ -203,6 +205,54 @@ impl IncomingFile {
             "added a file to a mapped folder",
         );
         Ok(())
+    }
+
+    /// Keeps aside the file standing at this file's name, before
+    /// [`keep`](Self::keep) replaces it, so that stopping the add this file is
+    /// part of can put that file back (spec: LA-36).
+    ///
+    /// By a second link to it in the same folder, under a scratch name of its
+    /// own drawn from coffret's reserved prefix, so a scan passes over it
+    /// (spec: EP-8) and a sync leaves it alone while the value handed back
+    /// holds it (spec: OC-8). Made against the folder the descent left open,
+    /// like every other call here, and never through a path (spec: EP-4).
+    ///
+    /// Asked once the bytes are all there and before the rename, which is the
+    /// last moment what stands at the name is still the file that would be
+    /// replaced. What answers [`Replacing::Unkept`] is a filesystem that makes no
+    /// hard link: the file stays where it is until the rename, and nothing here
+    /// copies it instead.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Local`](crate::Error::Local) where what stands at the name could
+    /// not be stated, or the link or its lock was refused for any other reason;
+    /// nothing is left under a scratch name then, and the file is the caller's
+    /// to refuse.
+    pub fn keep_aside(&self) -> Result<Replacing> {
+        let name = scratch::incoming_name();
+        match self.directory.keep_aside(name.as_str()) {
+            Ok(Aside::Empty) => Ok(Replacing::Nothing),
+            Ok(Aside::Kept(file)) => Ok(Replacing::Kept(KeptAside::new(
+                self.path.clone(),
+                file,
+                name,
+            ))),
+            Ok(Aside::Unkept(refused)) => {
+                Ok(Replacing::Unkept(Error::below_root(refused, &self.path)))
+            }
+            Err(refused) => Err(Error::below_root(refused, &self.path)),
+        }
+    }
+
+    /// Where the file will stand on this device once it is kept: its own name
+    /// in the folder the descent arrived at.
+    ///
+    /// For a caller keeping account of what it wrote, so it can find the file
+    /// again; like [`scratch_path`](Self::scratch_path) it is a path to ask
+    /// about, and nothing is written through it.
+    pub fn landing_path(&self) -> PathBuf {
+        self.directory.path_of(self.path.name())
     }
 
     /// How many bytes have been written so far.

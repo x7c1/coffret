@@ -34,6 +34,11 @@ pub(super) enum Refusal {
     /// and the loop says it the one way it says its own. A refusal of this part
     /// would be recorded as a part somebody refused, which nobody did.
     Interrupted(MultipartError),
+    /// Not a refusal either: a person asked for the add to be stopped while
+    /// this part was arriving (spec: LA-36). What the part had written went to
+    /// a scratch that is removed with it (spec: EP-11), and the route stops
+    /// the add as a whole.
+    Cancelled,
 }
 
 impl Refusal {

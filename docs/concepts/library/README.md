@@ -294,6 +294,19 @@ control for a sync, since a drop starts one.
   fill of the folder being read goes on (spec: LA-33))
 - arm (a run on this device: ask for it, so the server starts it as soon as
   the runs ahead of it allow)
+- stop (an add — one drop's or one **+**'s files and the run carrying them
+  in — a freeze, a fill, or a reader's fetch of one file, on this device, as
+  a person asks from the Activity panel: a request the run answers by
+  ending, **cancelled** where it had not begun committing and with its real
+  result where it had; a deletion and a move are never stopped
+  (spec: LA-34, LA-35, LA-37))
+- undo (an add a person stopped, on this device: remove every file it wrote
+  into the folder and the folders it made for them, put back each file it
+  wrote over, and release the reservation its drop made
+  — and nothing else: not the file an import was made from, not one a run
+  committed meanwhile; an add that wrote over a file this device could not
+  keep aside is not stopped, since nothing could put that file back
+  (spec: LA-36))
 - supersede (a fill, by arming one for another folder: the earlier fill stops
   between one parcel and the next and is not taken up again on its own)
 - displace (a stopped run from the server's record of the last run of its
@@ -547,6 +560,12 @@ control for a sync, since a drop starts one.
   the command line, whichever comes second is refused at once, as a conflict,
   and goes through when it is run again after the other finishes
   (spec: LA-12).
+- An **add** is the files one drop or one **+** brought into a mapped folder,
+  together with the run that carries them into the Library — a sync, or a
+  freeze where the person chose a Pack. The server holds each add, by the name
+  the page gave it or one it drew, until that run has ended — or, stopped,
+  until it has been undone — so a person stops it as one thing however many
+  files it brought (spec: LA-34, LA-35, LA-36).
 - A local writer writes its **scratch** — the file it fills before the rename
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a
@@ -566,6 +585,12 @@ control for a sync, since a drop starts one.
     network share, mostly — the writer removes the scratch it just made and
     refuses the write, so every placement into that folder is refused, and the
     remedy is keeping the folder on a local disk (spec: OC-8).
+  - A file an add keeps aside before writing over it is kept under a scratch
+    name of the same shape and locked for as long as the add keeps it, so a
+    sync's cleanup leaves it alone while the add lasts. A stop puts it back at
+    its path, and the add removes the name once it ends, put back or not; one
+    a server that ended left behind is stale, removed by a sync like any other
+    (spec: OC-8, LA-36).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
@@ -635,6 +660,14 @@ control for a sync, since a drop starts one.
   a Container whose key was lost — because silently skipping one would make
   the user believe stale or unrecoverable content is backed up
   (spec: PK-14, PK-11).
+- A run served on this device ends with one **result**: **done**,
+  **stopped** — it failed, and says what stopped it (below) — or
+  **cancelled**, a person having stopped it before it began committing. The
+  result is a separate question from whether the run's batch **committed**:
+  a run that failed after its commit landed committed all the same, a
+  cancelled run never committed, and a run that has begun committing is never
+  cancelled, so a stop that comes too late is answered by the real result
+  (spec: LA-34, LA-35, CP-1).
 - A run served on this device that **stopped** says what stopped it: the
   account of its work carries the refusal that stopped it — whatever refused
   the run, be it Storage, a Library locked before the run began, this device's

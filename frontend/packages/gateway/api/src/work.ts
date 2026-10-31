@@ -12,7 +12,9 @@ export type FillStatus =
   /** It stopped short, and `stopped` says what stopped it. */
   | 'stopped'
   /** A fetch landed in another folder and the fill followed it there. */
-  | 'superseded';
+  | 'superseded'
+  /** A person stopped it; what it had placed stays, each file whole. */
+  | 'cancelled';
 
 /** One Entry a fill did not bring over, and what it found instead. */
 export interface DeclinedEntry extends Refused {
@@ -41,6 +43,15 @@ export interface NotStopped<Status extends string> {
 
 /** A run's status and its refusal, in the only pairs they come in. */
 type Standing<Status extends string> = NotStopped<Exclude<Status, 'stopped'>> | Stopped;
+
+/**
+ * What a running run's line offers about stopping it (spec: LA-34):
+ * `offered` where a Stop is drawn for it, `asked` where one was pressed and
+ * the run has not answered yet, and `committing` where it has begun
+ * committing and so takes no stop. `null` where the run is not running, or is
+ * not one a person can stop — a sync carrying no add.
+ */
+export type StopOffer = 'offered' | 'asked' | 'committing';
 
 /**
  * Which phase of a flow a run is in.
@@ -149,6 +160,11 @@ interface FillOfItsOwn {
 /** The fill's queue, which is the flow's rather than any one run's. */
 interface FillQueue {
   /**
+   * What the run on record's line offers about stopping it. The run on
+   * record's alone: a displaced run is over.
+   */
+  stop: StopOffer | null;
+  /**
    * The folders asked for by name that are waiting their turn behind this one,
    * oldest first.
    *
@@ -226,7 +242,12 @@ export type SyncStatus =
   /** It finished, whatever it found. */
   | 'done'
   /** It stopped short, and `stopped` says what stopped it. */
-  | 'stopped';
+  | 'stopped'
+  /**
+   * A person stopped it, through the adds it carried, before it began
+   * committing: it committed nothing.
+   */
+  | 'cancelled';
 
 /**
  * Which way a run left something alone, in a refusal's own words.
@@ -349,6 +370,11 @@ interface SyncOfItsOwn {
    * has taken the turn and not said how far it has got yet.
    */
   waits: boolean;
+  /**
+   * What its line offers about stopping it. A sync is stopped only through
+   * the adds it carries, so one carrying none offers nothing.
+   */
+  stop: StopOffer | null;
 }
 
 /** Where a freeze of one folder stands. */
@@ -358,7 +384,9 @@ export type FreezeStatus =
   /** It finished, whatever it found. */
   | 'done'
   /** It stopped short, and `stopped` says what stopped it. */
-  | 'stopped';
+  | 'stopped'
+  /** A person stopped it before it began committing: it packed nothing. */
+  | 'cancelled';
 
 /**
  * What the server is packing into the Library on its own.
@@ -410,6 +438,11 @@ interface FreezeOfItsOwn {
 /** The freeze's queue, which is the flow's rather than any one run's. */
 interface FreezeQueue {
   /**
+   * What the run on record's line offers about stopping it. The run on
+   * record's alone: a displaced run is over.
+   */
+  stop: StopOffer | null;
+  /**
    * Whether the run on record is waiting for its turn at this device's pending
    * work, behind a sync or a deletion: true from the moment it is on record
    * until it holds the turn, and false once it does and once it is over.
@@ -424,8 +457,18 @@ interface FreezeQueue {
    *
    * The names and not a count: a person who dropped a second book wants to know
    * that theirs is queued, and a bare number says only that somebody's is.
+   *
+   * Each can be stopped before its run begins, by `{ queued_freeze: folder }`
+   * (spec: LA-34): one in `stopping` was asked already, and every other offers
+   * a Stop.
    */
   waiting: string[];
+  /**
+   * The books of `waiting` a person asked to stop whose run has not answered
+   * yet: books holding adds, which the run that takes one up undoes
+   * (spec: LA-36). A book holding none leaves the queue as it is stopped.
+   */
+  stopping: string[];
   /** The books thrown away when the work ended without an answer. */
   discarded: string[];
   /**
@@ -706,7 +749,49 @@ export type LoggedWork =
   /** A folder a queue threw away when its worker ended without an answer. */
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   /** A file a reader asked for and was refused. */
-  | { kind: 'fetch'; path: string; refused: Refused };
+  | { kind: 'fetch'; path: string; refused: Refused }
+  /** An add a person stopped, and what undoing it came to. */
+  | { kind: 'add'; add: StoppedAdd };
+
+/**
+ * An add a person stopped, and what undoing it on this device came to
+ * (spec: LA-36).
+ */
+export interface StoppedAdd {
+  /** The folder it was made onto; the Library root is the empty string. */
+  folder: string;
+  /** How many files it had written. */
+  files: number;
+  /**
+   * How many of them were taken away from the folder again: removed, or
+   * replaced by the file they had been written over.
+   */
+  removed: number;
+  /** How many a run had committed before the stop was answered. */
+  committed: number;
+  /**
+   * How many are still in the folder for any other reason: one another file
+   * was put in the place of since it landed, or one this device would not
+   * remove or put the earlier file back over.
+   */
+  left: number;
+}
+
+/**
+ * One add the server is carrying in (spec: LA-34): one drop's or one **+**'s
+ * files and the run armed for them, listed until that run has ended or, where
+ * a person stopped it, until it has been undone.
+ */
+export interface AddUnderWay {
+  /** What it is called: the name its page gave it, or one the server drew. */
+  id: string;
+  /** The folder it was made onto. */
+  folder: string;
+  /** Whether its request is still taking files, or its run is armed. */
+  stage: 'receiving' | 'armed';
+  /** Whether a person asked for it to be stopped. */
+  stopping: boolean;
+}
 
 /** Which kinds of entry the log keeps. */
 export type LoggedKind = LoggedWork['kind'];
@@ -810,6 +895,12 @@ export interface Work {
    * afterwards answers with none of it.
    */
   log: Logged[];
+  /**
+   * The adds the server is carrying in, each until its run has ended or,
+   * stopped, until it has been undone. What a page reloaded while a stop it
+   * asked for was being answered reads to know it is still being answered.
+   */
+  adds: AddUnderWay[];
 }
 
 /** Asks what the server is doing on its own. */
@@ -830,6 +921,39 @@ export async function getWork(signal?: AbortSignal): Promise<Work> {
  */
 export async function startSync(signal?: AbortSignal): Promise<Work> {
   return workOf(await askedForJson<unknown>(apiUrl('sync'), signal, 'POST'));
+}
+
+/**
+ * What a Stop names (spec: LA-35): an add, by the name its page gave it, or
+ * the sync, freeze or fill on record, by the run number its line was drawn
+ * from. A deletion and a move are not among them: neither can be stopped.
+ */
+export type StopTarget =
+  | { add: string }
+  | { sync: number }
+  | { freeze: number }
+  | { fill: number }
+  /** A book waiting in the freeze's queue, by its folder (spec: LA-34). */
+  | { queued_freeze: string }
+  /** A folder waiting in the fill's queue (spec: LA-34). */
+  | { queued_fill: string };
+
+/**
+ * Asks for an add, a freeze or a fill to be stopped — `POST /api/stop`.
+ *
+ * A request and not the stop itself: it answers at once with the work answer,
+ * whose line for the run says it was asked, and the run answers by ending —
+ * `cancelled`, or an add undone on this device, where it had not begun
+ * committing, and its real result where it had. So the caller goes on
+ * polling, and reads what the stop came to off the log. A stop of an add that
+ * wrote over a file this device could not keep aside — or of a run carrying
+ * one — is refused instead, `409 conflict`, naming that file: nothing could
+ * put it back, so nothing was asked.
+ */
+export async function stopWork(target: StopTarget, signal?: AbortSignal): Promise<Work> {
+  // A `Blob` that says it is JSON, for the reason `mapFolder` gives.
+  const body = new Blob([JSON.stringify(target)], { type: 'application/json' });
+  return workOf(await askedForJson<unknown>(apiUrl('stop'), signal, 'POST', body));
 }
 
 /**
@@ -1063,6 +1187,7 @@ interface WorkSent {
   delete: DeleteSent | null;
   reconnect: Reconnect | null;
   log?: LoggedSent[];
+  adds?: AddUnderWay[];
 }
 
 /** One entry of the log as sent: its run or its refusal not read yet. */
@@ -1074,6 +1199,7 @@ type LoggedSent = { id: number; at: string; settled: boolean } & (
   | { kind: 'move'; run: MoveSent }
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   | { kind: 'fetch'; path: string; refused: unknown }
+  | { kind: 'add'; add: StoppedAdd }
 );
 
 /** A run as sent: its refusal and its findings not read yet. */
@@ -1120,6 +1246,7 @@ export function workOf(sent: unknown): Work {
     delete: work.delete === null ? null : deleteOf(work.delete),
     reconnect: work.reconnect,
     log: (work.log ?? []).map(loggedOf),
+    adds: work.adds ?? [],
   };
 }
 
@@ -1141,6 +1268,8 @@ function loggedOf(sent: LoggedSent): Logged {
       return { id, at, settled, kind: 'discarded', queue: sent.queue, folder: sent.folder };
     case 'fetch':
       return { id, at, settled, kind: 'fetch', path: sent.path, refused: refusedOf(sent.refused) };
+    case 'add':
+      return { id, at, settled, kind: 'add', add: sent.add };
   }
 }
 
@@ -1165,6 +1294,7 @@ function fillOf(fill: FillSent): Fill {
     ...fillOfItsOwn(fill),
     waiting: fill.waiting,
     discarded: fill.discarded,
+    stop: fill.stop ?? null,
     displaced: (fill.displaced ?? []).map((run) => displacedFillOf(run as FillSent)),
     ...standingOf<FillStatus>(fill),
   };
@@ -1196,6 +1326,7 @@ function syncOf(sync: SyncSent): Sync {
     findings: (sync.findings ?? []).map(findingOf),
     step: sync.step,
     waits: sync.waits,
+    stop: sync.stop ?? null,
     ...standingOf<SyncStatus>(sync),
   };
 }
@@ -1205,7 +1336,9 @@ function freezeOf(freeze: FreezeSent): Freeze {
     ...freezeOfItsOwn(freeze),
     waits: freeze.waits,
     waiting: freeze.waiting,
+    stopping: freeze.stopping,
     discarded: freeze.discarded,
+    stop: freeze.stop ?? null,
     displaced: (freeze.displaced ?? []).map((run) => displacedFreezeOf(run as FreezeSent)),
     ...standingOf<FreezeStatus>(freeze),
   };

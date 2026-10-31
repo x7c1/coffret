@@ -80,6 +80,17 @@ pub struct HaltingStore {
     /// Whether that read is waiting, and what wakes it — apart from
     /// [`held`](Self::held), so every other read goes on being answered.
     whole_held: watch::Sender<bool>,
+    /// Whether a commit slot claimed from now on waits, and what wakes it —
+    /// which is how a case holds a run inside its commit, past the point a
+    /// stop is taken at.
+    commits_held: watch::Sender<bool>,
+    /// How many commit slots have been held.
+    held_commits: AtomicUsize,
+    /// Whether an upload from now on waits, and what wakes it — which is how
+    /// a case holds a run inside its upload, before its commit.
+    uploads_held: watch::Sender<bool>,
+    /// How many uploads have been held.
+    held_uploads: AtomicUsize,
 }
 
 /// A ranged read longer than this is a parcel; the front of an object is a
@@ -106,7 +117,32 @@ impl HaltingStore {
             tail_held: watch::channel(false).0,
             hold_whole: AtomicBool::new(false),
             whole_held: watch::channel(false).0,
+            commits_held: watch::channel(false).0,
+            held_commits: AtomicUsize::new(0),
+            uploads_held: watch::channel(false).0,
+            held_uploads: AtomicUsize::new(0),
         }
+    }
+
+    /// Holds every upload from now on until [`release`](Self::release).
+    pub fn hold_uploads(&self) {
+        self.uploads_held.send_replace(true);
+    }
+
+    /// How many uploads are being, or have been, held.
+    pub fn held_uploads(&self) -> usize {
+        self.held_uploads.load(Ordering::SeqCst)
+    }
+
+    /// Holds every commit slot claimed from now on until
+    /// [`release`](Self::release), and answers everything else as usual.
+    pub fn hold_commits(&self) {
+        self.commits_held.send_replace(true);
+    }
+
+    /// How many commit slots are being, or have been, held.
+    pub fn held_commits(&self) -> usize {
+        self.held_commits.load(Ordering::SeqCst)
     }
 
     /// Refuses every read from now on.
@@ -176,6 +212,8 @@ impl HaltingStore {
         self.held.send_replace(false);
         self.tail_held.send_replace(false);
         self.whole_held.send_replace(false);
+        self.commits_held.send_replace(false);
+        self.uploads_held.send_replace(false);
     }
 
     /// Holds the next whole-object read until [`release`](Self::release), and
@@ -240,6 +278,15 @@ impl HaltingStore {
 #[async_trait]
 impl ObjectStore for HaltingStore {
     async fn put(&self, name: &str, body: ByteStream) -> StoreResult<UploadedObject> {
+        let mut waiting = self.uploads_held.subscribe();
+        if *waiting.borrow_and_update() {
+            self.held_uploads.fetch_add(1, Ordering::SeqCst);
+            while *waiting.borrow_and_update() {
+                if waiting.changed().await.is_err() {
+                    break;
+                }
+            }
+        }
         self.inner.put(name, body).await
     }
 
@@ -249,6 +296,15 @@ impl ObjectStore for HaltingStore {
                 detail: "these credentials may not claim a commit slot".to_owned(),
                 source: None,
             });
+        }
+        let mut waiting = self.commits_held.subscribe();
+        if *waiting.borrow_and_update() {
+            self.held_commits.fetch_add(1, Ordering::SeqCst);
+            while *waiting.borrow_and_update() {
+                if waiting.changed().await.is_err() {
+                    break;
+                }
+            }
         }
         self.inner.reserve_create(name).await
     }

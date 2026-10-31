@@ -2,6 +2,7 @@ use coffret_device::{ShortKeyring, UnheldParcel};
 
 use crate::finding::Finding;
 use crate::folder::Folder;
+use crate::stopping::Stop;
 
 use super::{Declined, FillStatus};
 
@@ -53,6 +54,9 @@ pub struct FillRun {
     /// The kept parcels the run's reads — and the reader's fetch that armed it —
     /// found not held, each read again from Storage (spec: PK-21).
     pub unheld: Vec<UnheldParcel>,
+    /// Where the run stands with a person's asking it to stop (spec: LA-35).
+    /// A fill commits nothing, so it takes a stop for as long as it runs.
+    pub stop: Stop,
 }
 
 impl FillRun {
@@ -67,6 +71,7 @@ impl FillRun {
             declined: Vec::new(),
             short: None,
             unheld: Vec::new(),
+            stop: Stop::Open,
         }
     }
 

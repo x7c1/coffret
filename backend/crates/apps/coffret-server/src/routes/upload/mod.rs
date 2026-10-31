@@ -16,6 +16,7 @@ use axum::Json;
 
 use crate::api_error::ApiError;
 use crate::entry_query::folder_named;
+use crate::folder::Folder;
 use crate::reported::Reported;
 use crate::state::ServerState;
 
@@ -25,10 +26,11 @@ use self::declared_length::declared_length;
 use self::drop_reservation::DropReservation;
 use self::finish_drop::{finish_drop, FinishedDrop};
 use self::outran::outran;
-use self::receive::{receive, Reserving};
+use self::receive::{receive, Adding, Reserving};
 use self::refusal::Refusal;
 use self::refused_dto::RefusedDto;
 use self::release::release_stopped;
+use self::stop_receiving::stop_receiving;
 
 mod declared_length;
 
@@ -56,6 +58,8 @@ mod refused_dto;
 mod release;
 
 mod room_for;
+
+mod stop_receiving;
 
 mod under;
 
@@ -239,6 +243,18 @@ const OPERATION: &str = "upload";
 /// mappings that would have found both drops anyway. A queue in front of this
 /// route would add nothing to either and would make a person dropping a
 /// photograph wait behind somebody's book.
+///
+/// # An add, which a person can stop
+///
+/// The drop is one **add** (spec: LA-34), named by `?add=` where the page gave
+/// it a name — the page does, so that its Stop can name it while the files
+/// are still being sent — and by one drawn here where it did not. A stop
+/// asked while the drop is receiving is met before the next part, or between
+/// two pieces of the one arriving, and the drop is answered `cancelled` with
+/// nothing in `written`: what it wrote is undone on this device
+/// ([`stop_receiving`]), and what that came to is logged with the server's
+/// finished work (spec: LA-36). A stop asked once the drop has armed its run
+/// is that run's to answer.
 pub async fn upload(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<UploadQuery>,
@@ -278,13 +294,24 @@ pub async fn upload(
     // (`DropReservation::hold`). `reserved` is the paths it names as Entry
     // Paths, for the freeze's selection: what the reservation names is what
     // the drop asked to pack, and nothing else in the folder is.
+    let add = state.adds.begin(
+        query.add.as_deref(),
+        Folder::named(folder.clone()),
+        query.freeze,
+    )?;
     let (reservation, mut reserved) = match query.freeze {
-        true => {
-            let (held, received) =
-                DropReservation::hold(&library, folder.as_ref(), OPERATION).await?;
-            (Some(held), received)
-        }
+        true => match DropReservation::hold(&library, folder.as_ref(), OPERATION).await {
+            Ok((held, received)) => (Some(held), received),
+            Err(refused) => {
+                state.adds.end(&add);
+                return Err(refused);
+            }
+        },
         false => (None, BTreeSet::new()),
+    };
+    let adding = Adding {
+        adds: &state.adds,
+        id: &add,
     };
 
     let mut written = Vec::new();
@@ -293,9 +320,16 @@ pub async fn upload(
     let mut seen = 0usize;
     // Every way the loop below stops the drop comes out of this one block, so
     // that every one of them — a budget passed, no room, a refused root, a
-    // stream that broke — is answered with what had landed by then.
-    let taken: Result<(), ApiError> = async {
-        while let Some(part) = parts.next_field().await.map_err(ApiError::multipart)? {
+    // stream that broke — is answered with what had landed by then. What it
+    // answers with is whether a person stopped the add.
+    let taken: Result<bool, ApiError> = async {
+        loop {
+            if adding.stopping() {
+                return Ok(true);
+            }
+            let Some(part) = parts.next_field().await.map_err(ApiError::multipart)? else {
+                return Ok(false);
+            };
             // Counted before it is looked at, and every part counts — one with no
             // filename included. What this budget is about is the request, and a
             // request made of a million parts this route would skip is still a
@@ -329,6 +363,7 @@ pub async fn upload(
                 folder.as_ref(),
                 &name,
                 reserving,
+                &adding,
                 part,
             )
             .await
@@ -358,23 +393,50 @@ pub async fn upload(
                 // scratch name that was removed with it (spec: EP-11), and nothing is
                 // armed for what landed before it, for the reason the arm above gives.
                 Err(Refusal::Interrupted(cause)) => return Err(ApiError::multipart(cause)),
+                Err(Refusal::Cancelled) => return Ok(true),
             }
         }
-        Ok(())
     }
     .await;
-    if let Err(stopped) = taken {
-        // Nothing is armed for a drop that was stopped, so nothing is to wait
-        // for a Pack either — save the files of a drop cut off earlier that
-        // this one took over, which still do (spec: PK-17).
-        release_stopped(&library, reservation, OPERATION).await;
-        return Err(stopped.having_written(written));
+    let cancelled = match taken {
+        Ok(cancelled) => cancelled,
+        // A request whose page went away mid-stop — it was reloaded, say — is
+        // still the stop it asked for, and is answered as one in the log.
+        Err(_) if adding.stopping() => true,
+        Err(stopped) => {
+            // Nothing is armed for a drop that was stopped, so nothing is to wait
+            // for a Pack either — save the files of a drop cut off earlier that
+            // this one took over, which still do (spec: PK-17). What landed
+            // waits in the folder as anything copied there does, and the add
+            // is over.
+            release_stopped(&library, reservation, OPERATION).await;
+            state.adds.end(&add);
+            return Err(stopped.having_written(written));
+        }
+    };
+    if cancelled {
+        stop_receiving(
+            &state,
+            &library,
+            add,
+            reservation,
+            !query.freeze,
+            !written.is_empty(),
+            OPERATION,
+        )
+        .await;
+        return Ok(Json(UploadDto {
+            written: Vec::new(),
+            refused,
+            cancelled: true,
+        }));
     }
     finish_drop(
         &state,
         &library,
         FinishedDrop {
             operation: OPERATION,
+            add,
             reservation,
             reserved,
             written: written.len(),
@@ -384,5 +446,9 @@ pub async fn upload(
         },
     )
     .await;
-    Ok(Json(UploadDto { written, refused }))
+    Ok(Json(UploadDto {
+        written,
+        refused,
+        cancelled: false,
+    }))
 }

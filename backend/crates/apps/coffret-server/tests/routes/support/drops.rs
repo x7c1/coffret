@@ -117,11 +117,39 @@ impl Served {
     /// [`StreamedDrop::finish`] ends the body and answers with what the route
     /// said. No `Content-Length`, since a body still being written has none.
     pub fn upload_book_streamed(&self, folder: &str) -> StreamedDrop {
+        self.upload_streamed(&format!("/api/upload?path={folder}&freeze=true"), folder)
+    }
+
+    /// A drop onto `folder` named `add`, for a Pack where `freeze` says so,
+    /// whose request stays open while the case acts on the server.
+    pub fn add_streamed(&self, folder: &str, add: &str, freeze: bool) -> StreamedDrop {
+        self.upload_streamed(
+            &format!("/api/upload?path={folder}&freeze={freeze}&add={add}"),
+            folder,
+        )
+    }
+
+    /// A drop onto `folder` named `add`, sent whole.
+    pub async fn add_named(
+        &self,
+        folder: &str,
+        add: &str,
+        freeze: bool,
+        parts: &[(&str, &[u8])],
+    ) -> Response<Body> {
+        let streamed = self.add_streamed(folder, add, freeze);
+        for (name, content) in parts {
+            streamed.send(name, content);
+        }
+        streamed.finish().await
+    }
+
+    fn upload_streamed(&self, uri: &str, folder: &str) -> StreamedDrop {
         let (parts, received) = mpsc::unbounded_channel::<Result<Bytes, std::io::Error>>();
         let body = futures_util::stream::unfold(received, |mut received| async move {
             received.recv().await.map(|part| (part, received))
         });
-        let request = asking("POST", &format!("/api/upload?path={folder}&freeze=true"))
+        let request = asking("POST", uri)
             .header(
                 "content-type",
                 format!("multipart/form-data; boundary={BOUNDARY}"),

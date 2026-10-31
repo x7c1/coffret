@@ -37,9 +37,11 @@ export {
   startFill,
   startFreeze,
   startSync,
+  stopWork,
 } from './work';
 export type {
   Work,
+  AddUnderWay,
   Logged,
   LoggedKind,
   Move,
@@ -74,6 +76,9 @@ export type {
   RefusedPack,
   Step,
   Stopped,
+  StopOffer,
+  StoppedAdd,
+  StopTarget,
   Sync,
   SyncStatus,
   TurnTaker,

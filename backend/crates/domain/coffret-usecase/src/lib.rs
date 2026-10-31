@@ -361,6 +361,11 @@ pub use scratch_file::ScratchFile;
 mod flushed_file;
 pub use flushed_file::FlushedFile;
 
+// What a placement keeps of the file it is about to write over, so that
+// stopping the add it is part of can put that file back (spec: LA-36).
+mod kept_file;
+pub use kept_file::{Aside, KeptFile};
+
 mod descent_error;
 pub use descent_error::DescentError;
 

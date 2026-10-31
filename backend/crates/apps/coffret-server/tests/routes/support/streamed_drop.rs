@@ -59,6 +59,14 @@ impl StreamedDrop {
 
     /// Stops the request where it stands, as a process ending mid-drop does:
     /// nothing after it runs, the release of the reservation included.
+    /// Stops sending without ending the body, and waits for the answer: what
+    /// a request a page stopped looks like from the server, whose parts stop
+    /// arriving.
+    pub async fn answered(self) -> Response<Body> {
+        drop(self.parts);
+        self.answer.await.expect("the request does not panic")
+    }
+
     pub fn abandon(self) {
         self.answer.abort();
     }

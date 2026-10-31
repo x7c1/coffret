@@ -20,4 +20,8 @@ pub struct UploadQuery {
     pub(super) path: Option<String>,
     #[serde(default)]
     pub(super) freeze: bool,
+    /// What the page calls this add, so it can ask for it to be stopped
+    /// while the files are still being sent (spec: LA-35); one is drawn where
+    /// it says nothing.
+    pub(super) add: Option<String>,
 }

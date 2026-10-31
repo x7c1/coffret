@@ -18,6 +18,11 @@ pub struct ImportRequest {
     pub(super) freeze: bool,
     /// The one-time handle the drop was held under.
     pub(super) handle: String,
+    /// What the page calls this add, so it can ask for it to be stopped
+    /// while the files are still being taken (spec: LA-35); one is drawn
+    /// where it says nothing.
+    #[serde(default)]
+    pub(super) add: Option<String>,
     /// The files to add, in the order they are added.
     pub(super) files: Vec<ImportedFile>,
 }

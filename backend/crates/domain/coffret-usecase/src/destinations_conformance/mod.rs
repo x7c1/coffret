@@ -85,6 +85,14 @@ pub use blocking::{
 mod destinations_under_test;
 pub use destinations_under_test::DestinationsUnderTest;
 
+mod keeping_aside;
+pub use keeping_aside::{
+    a_file_kept_aside_and_let_go_leaves_only_what_was_published,
+    a_file_kept_aside_is_put_back_over_what_replaced_it,
+    a_link_the_filesystem_cannot_make_leaves_the_file_unkept,
+    an_empty_place_has_nothing_to_keep_aside,
+};
+
 mod looking;
 pub use looking::{
     a_look_at_a_file_reports_its_size_and_time, a_look_at_an_empty_place_finds_nothing,
@@ -137,6 +145,10 @@ macro_rules! destinations_conformance {
             a_scratch_name_that_is_taken_is_refused,
             a_lock_the_filesystem_cannot_give_leaves_no_scratch,
             a_removal_of_a_name_that_is_already_gone_succeeds,
+            a_file_kept_aside_is_put_back_over_what_replaced_it,
+            a_file_kept_aside_and_let_go_leaves_only_what_was_published,
+            an_empty_place_has_nothing_to_keep_aside,
+            a_link_the_filesystem_cannot_make_leaves_the_file_unkept,
             a_symlink_on_the_way_blocks_the_reach_and_names_it,
             a_file_where_a_folder_must_be_blocks_the_reach,
             a_look_at_an_empty_place_finds_nothing,

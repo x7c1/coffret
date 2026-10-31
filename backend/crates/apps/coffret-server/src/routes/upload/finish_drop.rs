@@ -4,6 +4,7 @@ use std::sync::Arc;
 use coffret_device::{EntryPath, OpenLibrary, Redacted};
 use tracing::{info, warn};
 
+use crate::adds::AddId;
 use crate::freeze::{freeze_dropped, Book};
 use crate::state::ServerState;
 use crate::sync::arm_sync;
@@ -16,6 +17,8 @@ use super::release::release;
 pub(super) struct FinishedDrop {
     /// Which route took it, for the event.
     pub(super) operation: &'static str,
+    /// The add the drop is, which the run it arms carries (spec: LA-34).
+    pub(super) add: AddId,
     /// The drop's reservation, where it asked for a Pack (spec: PK-17).
     pub(super) reservation: Option<DropReservation>,
     /// The Entry Paths that reservation names: the ones this drop added to
@@ -48,6 +51,7 @@ pub(super) async fn finish_drop(
 ) {
     let FinishedDrop {
         operation,
+        add,
         reservation,
         reserved,
         written,
@@ -64,14 +68,27 @@ pub(super) async fn finish_drop(
         // decides it is armed: a run of its own, never the one under way, which
         // read the reservations while this drop was still landing
         // (spec: PK-17).
+        let held = reservation
+            .as_ref()
+            .map(|held| (held.id(), held.taken_over));
         if let Some(held) = reservation {
             mark_received(library, &held, operation).await;
         }
-        freeze_dropped(Arc::clone(state), Book::dropped(reserved));
+        state.adds.armed(&add, held, reserved.clone());
+        freeze_dropped(Arc::clone(state), Book::dropped(reserved).carrying(add));
     } else if written == 0 {
         release(library, reservation, operation).await;
+        state.adds.end(&add);
     } else {
-        arm_sync(Arc::clone(state));
+        state.adds.armed(&add, None, BTreeSet::new());
+        // A stop that came while the last file was landing is the sync's to
+        // answer now, and a run under way is asked to stop for it too: it
+        // may be about to read these files (see `stop_receiving`).
+        let stopping = state.adds.stopping(&add);
+        arm_sync(Arc::clone(state), Some(add));
+        if stopping {
+            state.syncs.ask_stop();
+        }
     }
 
     // Counts and sizes, and which of the two flows was armed. No name of anything

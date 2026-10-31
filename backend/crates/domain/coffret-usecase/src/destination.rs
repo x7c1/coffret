@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::below_root_error::BelowRootError;
+use crate::kept_file::Aside;
 use crate::scratch_file::ScratchFile;
 
 /// The folder one file belongs in, held open, reached without passing through
@@ -52,6 +53,31 @@ pub trait Destination: Send {
     /// file removes it in `Drop`, and a `Drop` cannot await. It is one call
     /// against a folder that is already open.
     fn remove(&self, name: &str) -> Result<(), BelowRootError>;
+
+    /// Keeps the file standing at the file's own name aside under
+    /// `kept_name`, a scratch name ([`scratch`](crate::scratch)), by a second
+    /// link to it in this folder, before a publish replaces it (spec: LA-36).
+    ///
+    /// What stands there is stated without following a link (spec: EP-8): a
+    /// symbolic link is kept aside as the link it is. A folder is
+    /// [`Aside::Empty`], since a publish does not replace one. A file the
+    /// filesystem will not link is [`Aside::Unkept`], carrying
+    /// [`Linking`](crate::LocalOperation::Linking): what a caller does about a
+    /// file it cannot put back is its own to decide, and nothing here copies
+    /// it instead. A regular file kept aside is locked for as long as the
+    /// value handed back lives, the way a scratch being written is, so a sync
+    /// in another process that meets it under its scratch name leaves it
+    /// alone (spec: OC-8).
+    ///
+    /// Synchronous, for the reason [`create`](Self::create) is.
+    ///
+    /// # Errors
+    ///
+    /// [`BelowRootError::Io`] where what stands at the name could not be
+    /// stated, or the link was refused for a reason other than the filesystem
+    /// not making one — the folder not writable, the disk full — or the kept
+    /// file could not be locked; nothing is left under `kept_name` then.
+    fn keep_aside(&self, kept_name: &str) -> Result<Aside, BelowRootError>;
 
     /// Where one of this folder's files stands, for a message to name.
     ///

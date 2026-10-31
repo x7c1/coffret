@@ -15,7 +15,7 @@
  * How the bytes of one page are asked for: [`getFile`](@coffret/api) to read
  * it, [`readAhead`](@coffret/api) to read it ahead of the reader.
  */
-export type Fetching = (path: string) => Promise<Blob>;
+export type Fetching = (path: string, signal?: AbortSignal) => Promise<Blob>;
 
 /** The pages a reader is holding, and every way one of them goes. */
 export interface Drawn {
@@ -60,6 +60,14 @@ export interface Drawn {
    * That request is the one whose refusal the reader shows.
    */
   discard: () => void;
+  /**
+   * Withdraws the read running for `path`, where one is: the Stop on the
+   * reader's own fetch of one file (spec: LA-37). Whoever waits on it is
+   * handed the abort, and the next caller asking for the page asks afresh. A
+   * read ahead is not withdrawn: nobody is waiting on it, and its folder is
+   * not set coming by it.
+   */
+  stop: (path: string) => void;
   /** The reader went. Every page it held goes, and so does what arrives after. */
   closed: () => void;
   /** The reader is here again, and keeps what it fetches from now on. */
@@ -78,7 +86,10 @@ export function drawnPages(fetching: Fetching, readingAhead: Fetching = fetching
   const held = new Map<string, { url: string; read: boolean }>();
   // The request running for each path, and whether it is a read ahead — which
   // only another read ahead may wait on.
-  const running = new Map<string, { fetched: Promise<string | undefined>; ahead: boolean }>();
+  const running = new Map<
+    string,
+    { fetched: Promise<string | undefined>; ahead: boolean; aborter: AbortController }
+  >();
   let closed = false;
   // Which round of holding a page belongs to. A discard opens a new one, and
   // what a request of an older round brings back is nobody's: the key it was
@@ -113,7 +124,11 @@ export function drawnPages(fetching: Fetching, readingAhead: Fetching = fetching
         return started.fetched;
       }
       const asked = round;
-      const fetched: Promise<string | undefined> = (ahead ? readingAhead : fetching)(path).then(
+      const aborter = new AbortController();
+      const fetched: Promise<string | undefined> = (ahead ? readingAhead : fetching)(
+        path,
+        aborter.signal,
+      ).then(
         (blob) => {
           const url = URL.createObjectURL(blob);
           // Only where this is still the request that is running: a discard
@@ -150,8 +165,17 @@ export function drawnPages(fetching: Fetching, readingAhead: Fetching = fetching
           throw refused;
         },
       );
-      running.set(path, { fetched, ahead });
+      running.set(path, { fetched, ahead, aborter });
       return fetched;
+    },
+
+    stop(path) {
+      const started = running.get(path);
+      if (started === undefined || started.ahead) {
+        return;
+      }
+      running.delete(path);
+      started.aborter.abort();
     },
 
     keepOnly(wanted) {

@@ -54,6 +54,10 @@ export function foldersWith(
  * committed — the tree is asked again after a commit, and a folder that
  * vanished in the moment between would be a row gone from under the pointer.
  *
+ * One leaves as well where its freeze is one a person stopped (`stopped`):
+ * what a drop wrote there was taken away again (spec: LA-36), so there is
+ * nothing left on the disk for the row to stand for.
+ *
  * `held` comes back as it was where nothing changed, so a caller keeping it in
  * state renders nothing for an answer that moved nothing.
  */
@@ -61,8 +65,9 @@ export function heldAfter(
   held: readonly string[],
   stranded: readonly string[],
   folders: readonly string[],
+  stopped: readonly string[] = [],
 ): readonly string[] {
-  const named = new Set(folders);
+  const named = new Set([...folders, ...stopped]);
   const kept = held.filter((path) => !named.has(path));
   const back = stranded.filter((path) => !named.has(path) && !kept.includes(path));
   if (back.length === 0 && kept.length === held.length) {
@@ -126,7 +131,14 @@ export function strandedFolders(
   // is held on the same terms the one on record is: the pages are sitting on the
   // disk and out of the Library, and the folder stands here until somebody packs
   // it again.
-  const held = freeze.status !== 'done' || freeze.packs === 0 ? [freeze.folder] : [];
+  //
+  // One a person stopped holds nothing either: a drop's pages were taken away
+  // again (spec: LA-36), and a folder somebody asked to have packed is the
+  // Library's own already.
+  const held =
+    freeze.status === 'cancelled' || (freeze.status === 'done' && freeze.packs > 0)
+      ? []
+      : [freeze.folder];
   const stopped = freeze.displaced.map((run) => run.folder);
   const named = [...held, ...stopped, ...freeze.waiting, ...freeze.discarded];
   return named.filter(

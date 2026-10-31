@@ -2,12 +2,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_model::Redacted;
-use coffret_usecase::{BelowRootError, Destination, LocalOperation, ScratchFile};
-use rustix::fs::{AtFlags, FlockOperation, Mode, OFlags};
+use coffret_usecase::{Aside, BelowRootError, Destination, LocalOperation, ScratchFile};
+use rustix::fs::{AtFlags, FileType, FlockOperation, Mode, OFlags};
 use rustix::io::Errno;
 use tracing::warn;
 
 use crate::unix_destinations::open_folder::OpenFolder;
+use crate::unix_destinations::unix_kept_file::UnixKeptFile;
 use crate::unix_destinations::unix_scratch_file::UnixScratchFile;
 
 /// One destination folder on this device's disk, held open from the descent
@@ -98,6 +99,103 @@ impl Destination for UnixDestination {
             Err(gone) if gone == Errno::NOENT => Ok(()),
             Err(cause) => Err(self.folder.refused(name, LocalOperation::Removing, cause)),
         }
+    }
+
+    fn keep_aside(&self, kept_name: &str) -> Result<Aside, BelowRootError> {
+        let name = self.folder.name();
+        // Stated without following a link, so a symbolic link at the name is
+        // kept aside as the link it is (spec: EP-8).
+        let standing =
+            match rustix::fs::statat(self.folder.directory(), name, AtFlags::SYMLINK_NOFOLLOW) {
+                Ok(standing) => standing,
+                Err(gone) if gone == Errno::NOENT => return Ok(Aside::Empty),
+                Err(cause) => {
+                    return Err(self.folder.refused(name, LocalOperation::Stating, cause))
+                }
+            };
+        let kind = FileType::from_raw_mode(standing.st_mode);
+        // A folder is not replaced by the rename that publishes a file, so
+        // there is nothing to put back — and linking one is refused with the
+        // errno a filesystem without links answers, which would be misread
+        // below.
+        if kind == FileType::Directory {
+            return Ok(Aside::Empty);
+        }
+        // `linkat` without `AT_SYMLINK_FOLLOW` links the name itself rather
+        // than whatever a link there points at.
+        match rustix::fs::linkat(
+            self.folder.directory(),
+            name,
+            self.folder.directory(),
+            kept_name,
+            AtFlags::empty(),
+        ) {
+            Ok(()) => {}
+            // Gone since the stat: nothing stands there for a publish to
+            // replace.
+            Err(gone) if gone == Errno::NOENT => return Ok(Aside::Empty),
+            // The filesystem makes no hard link (FAT, exFAT and many network
+            // shares answer one of these), or no more of them to this file.
+            Err(cause)
+                if cause == Errno::PERM
+                    || cause == Errno::OPNOTSUPP
+                    || cause == Errno::MLINK
+                    || cause == Errno::XDEV =>
+            {
+                return Ok(Aside::Unkept(self.folder.refused(
+                    name,
+                    LocalOperation::Linking,
+                    cause,
+                )));
+            }
+            Err(cause) => return Err(self.folder.refused(name, LocalOperation::Linking, cause)),
+        }
+        // A regular file under a scratch name is what a sync in another
+        // process removes where no lock is held on it, so one is held for as
+        // long as the file is kept (spec: OC-8). Shared, which still keeps
+        // the removal's exclusive lock out. A link kept aside as a link is
+        // never removed by that sync, and is not opened at all.
+        let lock = if kind == FileType::RegularFile {
+            let locked = rustix::fs::openat(
+                self.folder.directory(),
+                kept_name,
+                OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+                Mode::empty(),
+            )
+            .and_then(|opened| {
+                rustix::fs::flock(&opened, FlockOperation::NonBlockingLockShared)?;
+                Ok(opened)
+            });
+            match locked {
+                Ok(locked) => Some(locked),
+                Err(cause) => {
+                    // The second link is this call's own and nothing else would
+                    // ever claim it, so it goes before the refusal is answered.
+                    if let Err(unlinked) =
+                        rustix::fs::unlinkat(self.folder.directory(), kept_name, AtFlags::empty())
+                    {
+                        warn!(
+                            reason = %self
+                                .folder
+                                .refused(kept_name, LocalOperation::Removing, unlinked)
+                                .redacted(),
+                            "a file kept aside whose lock failed could not be let go; a later \
+                             sync removes it",
+                        );
+                    }
+                    return Err(self
+                        .folder
+                        .refused(kept_name, LocalOperation::Locking, cause));
+                }
+            }
+        } else {
+            None
+        };
+        Ok(Aside::Kept(Box::new(UnixKeptFile::new(
+            Arc::clone(&self.folder),
+            kept_name.to_owned(),
+            lock,
+        ))))
     }
 
     fn path_of(&self, name: &str) -> PathBuf {

@@ -89,14 +89,15 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     // Asked by the fetch between parcels, and by this loop between Entries:
     // someone opened a file in another folder, and the fill follows them there
     // rather than finishing the one they have left.
-    let superseded = || state.fills.superseded();
+    // And by a person stopping it, which the same two places hear.
+    let superseded = || state.fills.superseded() || state.fills.asked();
 
     for path in &wanted {
         if placed_alongside.contains(path) {
             continue;
         }
         if superseded() {
-            run.status = FillStatus::Superseded;
+            run.status = given_up(state);
             return finish(state, run, started);
         }
         // The verdict about the Entry, and beside it what the fetch knew of the
@@ -136,7 +137,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             // Superseded between two parcels of this Entry: the parcels read so
             // far stay held, and what they covered is already counted.
             Ok(EntryFetch::Cancelled) => {
-                run.status = FillStatus::Superseded;
+                run.status = given_up(state);
                 return finish(state, run, started);
             }
             Ok(EntryFetch::Surfaced(surfaced)) => {
@@ -160,6 +161,15 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
 
     run.status = FillStatus::Done;
     finish(state, run, started)
+}
+
+/// What a fill that gave up between two parcels came to: stopped by a person,
+/// where one asked, and superseded by another folder otherwise.
+fn given_up(state: &ServerState) -> FillStatus {
+    match state.fills.asked() {
+        true => FillStatus::Cancelled,
+        false => FillStatus::Superseded,
+    }
 }
 
 /// Whether a failure is about the one Entry that met it, rather than something

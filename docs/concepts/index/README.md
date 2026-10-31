@@ -147,9 +147,10 @@ Precise spool transitions and cleanup conditions belong to the
   first of them lands)
 - take up (every reservation, as a freeze over its paths, once a server has
   caught up or the Library is unlocked)
-- release (a reservation, with the commit that packs any of its paths, or once
-  a freeze finds none of them eligible) — never *delete*, which is the
-  Library's verb for Entries
+- release (a reservation, with the commit that packs any of its paths, once
+  a freeze finds none of them eligible, or with the undo of an add a person
+  stopped (spec: LA-36)) — never *delete*, which is the Library's verb for
+  Entries
 - rebuild (the cached Catalog in an Index from Storage)
 - refresh (the Index after a commit, including this device's local records)
 - catch up (a stale Index to the available committed head)

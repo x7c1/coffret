@@ -57,4 +57,12 @@ pub trait RootArrangement: Send + Sync {
     /// every lock asked of it, so a backend on one answers `false` and the
     /// case that needs the refusal is skipped there.
     fn refuse_locks(&self) -> bool;
+
+    /// Makes the next hard link the capability makes fail, as on a filesystem
+    /// that makes none, and answers whether it could.
+    ///
+    /// The fake scripts the refusal; the filesystem a test makes its temporary
+    /// directory on makes links, so a backend on one answers `false` and the
+    /// case that needs the refusal is skipped there (spec: LA-36).
+    fn refuse_links(&self) -> bool;
 }

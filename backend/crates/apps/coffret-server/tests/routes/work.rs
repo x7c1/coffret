@@ -86,6 +86,7 @@ async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
             "freeze": null,
             "delete": null,
             "log": [],
+            "adds": [],
         })
     );
 }

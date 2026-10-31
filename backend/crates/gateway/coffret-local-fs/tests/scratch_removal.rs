@@ -4,7 +4,8 @@
 //! A scratch nobody holds goes; one a writer is still writing — through a
 //! handle of its own, which is how a writer in another process looks from here
 //! — stays, because the writer holds its lock; and a symbolic link at the name
-//! is neither followed nor removed.
+//! is neither followed nor removed. A file kept aside for an add that wrote
+//! over it is held the same way, by its lock, for as long as it is kept.
 
 #![cfg(unix)]
 
@@ -15,7 +16,9 @@ use coffret_local_fs::UnixFs;
 use coffret_model::EntryPath;
 use coffret_usecase::device_state::RootMarkerId;
 use coffret_usecase::root_marker::{self, MANAGEMENT_AREA, MARKER_FILE};
-use coffret_usecase::{scratch, DescentError, Destinations, LocalTrash, MappedRelativeLocation};
+use coffret_usecase::{
+    scratch, Aside, DescentError, Destinations, LocalTrash, MappedRelativeLocation,
+};
 
 /// Writes the marker a registration would have written into `root`, and hands
 /// back the identity its mapping records (spec: EP-13).
@@ -94,6 +97,48 @@ async fn a_scratch_a_writer_still_holds_stays() {
     assert!(!removed);
     flushed.publish().expect("the rename must succeed");
     assert!(root.path().join("a.jpg").is_file());
+}
+
+// OC-8, LA-36: a file kept aside under a scratch name for an add that wrote
+// over it stays while it is kept — its lock says so to a sync in another
+// process — and once it is let go, nothing is left under that name.
+#[tokio::test]
+async fn a_file_kept_aside_stays_while_it_is_kept() {
+    let root = tempfile::tempdir().expect("a temporary directory must be available");
+    let id = register_root(root.path());
+    std::fs::write(root.path().join("a.jpg"), b"the person's own")
+        .expect("the file must be writable");
+    let fs = UnixFs::new();
+    let destination = fs
+        .reach(root.path(), Some(&id), &["a.jpg".to_owned()])
+        .await
+        .expect("the destination must be reachable");
+    // Not held in this process's set, as for a writer in another process.
+    let name = scratch::incoming_name().as_str().to_owned();
+    let Aside::Kept(kept) = destination
+        .keep_aside(&name)
+        .expect("the file must be kept aside")
+    else {
+        panic!("a file stands at the name");
+    };
+
+    let removed = fs
+        .remove_scratch(root.path(), Some(&id), &below(&name))
+        .await
+        .expect("a kept file is an answer, not a refusal");
+    assert!(!removed, "a file kept aside stays while it is kept");
+    assert_eq!(
+        std::fs::read(root.path().join(&name)).expect("the kept file is there"),
+        b"the person's own",
+    );
+
+    kept.remove().expect("letting it go must succeed");
+    drop(kept);
+    assert!(!root.path().join(&name).exists());
+    assert_eq!(
+        std::fs::read(root.path().join("a.jpg")).expect("the file is still at its name"),
+        b"the person's own",
+    );
 }
 
 #[tokio::test]

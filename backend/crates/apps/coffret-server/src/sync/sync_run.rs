@@ -1,6 +1,10 @@
+use std::collections::BTreeSet;
+
 use coffret_device::Step;
 
+use crate::adds::AddId;
 use crate::finding::Finding;
+use crate::stopping::Stop;
 
 use super::SyncStatus;
 
@@ -54,6 +58,15 @@ pub struct SyncRun {
     /// anything — which is why a browser and a terminal watching one Library
     /// cannot disagree about it.
     pub step: Option<Step>,
+    /// The adds the run carries in (spec: LA-34): the drops armed for it,
+    /// each of which a person can stop while the run has not begun
+    /// committing.
+    pub adds: BTreeSet<AddId>,
+    /// Whether the run was asked for by a request of its own — a retry —
+    /// rather than only by the adds it carries.
+    pub requested: bool,
+    /// Where the run stands with a person's asking it to stop (spec: LA-35).
+    pub stop: Stop,
 }
 
 impl SyncRun {
@@ -65,6 +78,9 @@ impl SyncRun {
             added: 0,
             findings: Vec::new(),
             step: None,
+            adds: BTreeSet::new(),
+            requested: false,
+            stop: Stop::Open,
         }
     }
 }

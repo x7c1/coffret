@@ -5,7 +5,7 @@ use crate::latest::Latest;
 use crate::pending_rows::TurnTaker;
 use crate::routes::RefusalDto;
 
-use super::{named_folders, waits, DisplacedFreezeDto, FindingDto, StepDto};
+use super::{named_folders, stop_word, waits, DisplacedFreezeDto, FindingDto, StepDto};
 
 #[derive(Serialize)]
 pub(super) struct FreezeDto {
@@ -50,7 +50,16 @@ pub(super) struct FreezeDto {
     /// queued, and a bare `1` says only that somebody's is. A freeze commits one
     /// batch (spec: PK-7), so a second one waits rather than superseding the
     /// first, and until it starts there is nothing else on the screen about it.
+    ///
+    /// Each can be stopped before its run begins, by
+    /// `{"queued_freeze": "<folder>"}` (spec: LA-34): one in `stopping` was
+    /// asked already, and every other offers a Stop.
     waiting: Vec<String>,
+    /// The books of `waiting` a person asked to stop whose run has not
+    /// answered yet: books holding adds, which the run that takes one up
+    /// undoes before it reads anything (spec: LA-36). A book holding none
+    /// leaves the queue as it is stopped, so it is never here.
+    stopping: Vec<String>,
     /// The books thrown away when the work ended without an answer, and that
     /// nobody has asked for since.
     discarded: Vec<String>,
@@ -75,6 +84,8 @@ pub(super) struct FreezeDto {
     /// What stopped the freeze, and `null` where nothing did — which is exactly
     /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
+    /// What the run's line offers about stopping it (spec: LA-34).
+    stop: Option<&'static str>,
 }
 
 impl FreezeDto {
@@ -96,6 +107,7 @@ impl FreezeDto {
                 turn,
             ),
             waiting: named_folders(&latest.waiting),
+            stopping: named_folders(&latest.stopping),
             discarded: named_folders(&latest.discarded),
             displaced: latest
                 .displaced
@@ -103,6 +115,7 @@ impl FreezeDto {
                 .map(DisplacedFreezeDto::of)
                 .collect(),
             stopped: run.status.stopped().map(RefusalDto::of),
+            stop: stop_word(matches!(run.status, FreezeStatus::Freezing), true, run.stop),
         }
     }
 }

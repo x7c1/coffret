@@ -326,6 +326,7 @@
   },
   "uploads": {
     "refused": {
+      "cancelled": false,
       "refused": [
         {
           "error": "declined",
@@ -337,6 +338,7 @@
       "written": []
     },
     "written": {
+      "cancelled": false,
       "refused": [],
       "written": [
         "albums/dropped.jpg"

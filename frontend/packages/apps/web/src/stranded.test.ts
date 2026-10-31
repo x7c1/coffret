@@ -31,6 +31,7 @@ function stoppedFreeze(
     waiting: [],
     discarded: [],
     displaced: [],
+    stop: null,
     ...rest,
   };
   return status === 'stopped'
@@ -244,4 +245,16 @@ it('names a folder once however many lists hold it', () => {
 // the Library a book import.
 it('never takes back the Library root', () => {
   expect(strandedFolders(stoppedFreeze({ folder: '' }), [])).toEqual([]);
+});
+
+// LA-36: a freeze a person stopped holds no folder: a drop's pages were taken
+// away again, so there is nothing on the disk for the folder to stand for.
+it('lets go of the folder of a freeze a person stopped', () => {
+  expect(strandedFolders(stoppedFreeze({ status: 'cancelled' }), ['albums', 'books'])).toEqual([]);
+});
+
+// LA-36: a folder held from an earlier answer goes once its freeze is one a
+// person stopped.
+it('lets go of a held folder whose freeze a person stopped', () => {
+  expect(heldAfter(['books/vol-1'], [], ['albums'], ['books/vol-1'])).toEqual([]);
 });

@@ -1,10 +1,10 @@
 use serde::Serialize;
 
-use crate::fill::FillRun;
+use crate::fill::{FillRun, FillStatus};
 use crate::latest::Latest;
 use crate::routes::RefusalDto;
 
-use super::{named_folders, DeclinedDto, DisplacedFillDto, FindingDto};
+use super::{named_folders, stop_word, DeclinedDto, DisplacedFillDto, FindingDto};
 
 #[derive(Serialize)]
 pub(super) struct FillDto {
@@ -45,6 +45,10 @@ pub(super) struct FillDto {
     /// the fill in progress, and between the press and the run this is the only
     /// thing on the wire about it — the line names the folder being brought over,
     /// and the button that named this one is gone the moment the queue takes it.
+    ///
+    /// Each offers a Stop before its run begins, by
+    /// `{"queued_fill": "<folder>"}`, which takes it off the queue at once
+    /// (spec: LA-34).
     waiting: Vec<String>,
     /// The folders that were queued behind a fill and thrown away when the work
     /// ended without an answer, and that nobody has taken up since.
@@ -73,6 +77,8 @@ pub(super) struct FillDto {
     /// What stopped the fill, and `null` where nothing did — which is exactly
     /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
+    /// What the run's line offers about stopping it (spec: LA-34).
+    stop: Option<&'static str>,
 }
 
 impl FillDto {
@@ -92,6 +98,7 @@ impl FillDto {
             discarded: named_folders(&latest.discarded),
             displaced: latest.displaced.iter().map(DisplacedFillDto::of).collect(),
             stopped: run.status.stopped().map(RefusalDto::of),
+            stop: stop_word(matches!(run.status, FillStatus::Filling), true, run.stop),
         }
     }
 }

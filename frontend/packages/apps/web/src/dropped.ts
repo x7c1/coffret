@@ -78,7 +78,10 @@ export async function askToAdd(dropping: Dropping): Promise<void> {
     if (upload.refused.length > 0) {
       dropping.notice(refusedLine(upload.refused));
     }
-    if (upload.written.length > 0) {
+    // A drop a person stopped names nothing written, and is still being
+    // answered: what it wrote is being taken away, and the log says what that
+    // came to (spec: LA-36).
+    if (upload.written.length > 0 || upload.cancelled) {
       dropping.follow();
     }
     dropping.reload();

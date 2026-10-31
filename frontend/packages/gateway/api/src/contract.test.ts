@@ -22,6 +22,7 @@ import { expect, it } from 'vitest';
 
 import type {
   Work,
+  AddUnderWay,
   Logged,
   LoggedKind,
   Move,
@@ -52,6 +53,8 @@ import type {
   PackRefusalReason,
   Step,
   Stopped,
+  StopOffer,
+  StoppedAdd,
   Sync,
   SyncStatus,
   TurnTaker,
@@ -180,9 +183,22 @@ const FILL_STATUSES: Literals<FillStatus> = {
   done: true,
   stopped: true,
   superseded: true,
+  cancelled: true,
 };
-const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped: true };
-const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
+const SYNC_STATUSES: Literals<SyncStatus> = {
+  syncing: true,
+  done: true,
+  stopped: true,
+  cancelled: true,
+};
+const FREEZE_STATUSES: Literals<FreezeStatus> = {
+  freezing: true,
+  done: true,
+  stopped: true,
+  cancelled: true,
+};
+const STOP_OFFERS: Literals<StopOffer> = { offered: true, asked: true, committing: true };
+const ADD_STAGES: Literals<AddUnderWay['stage']> = { receiving: true, armed: true };
 const DELETE_STATUSES: Literals<DeleteStatus> = { deleting: true, done: true, stopped: true };
 const MOVE_STATUSES: Literals<MoveStatus> = { done: true, stopped: true };
 const TURN_TAKERS: Literals<TurnTaker> = { sync: true, freeze: true, delete: true, move: true };
@@ -194,6 +210,7 @@ const LOGGED_KINDS: Literals<LoggedKind> = {
   move: true,
   discarded: true,
   fetch: true,
+  add: true,
 };
 const QUEUE_FLOWS: Literals<QueueFlow> = { fill: true, freeze: true };
 const PACK_REFUSAL_REASONS: Literals<PackRefusalReason> = { key_lost: true, unverified: true };
@@ -398,10 +415,12 @@ function fill(value: unknown, where: string): Fill {
     'discarded',
     'displaced',
     'stopped',
+    'stop',
   ]);
   return {
     run: number(fields.run, `${where}.run`),
     folder: string(fields.folder, `${where}.folder`),
+    stop: stopOffer(fields.stop, `${where}.stop`),
     total: number(fields.total, `${where}.total`),
     done: number(fields.done, `${where}.done`),
     declined: list(fields.declined, `${where}.declined`, declinedEntry),
@@ -442,6 +461,11 @@ function displacedFill(value: unknown, where: string): DisplacedFill {
   };
 }
 
+/** What a run's line offers about stopping it, or `null`. */
+function stopOffer(value: unknown, where: string): StopOffer | null {
+  return nullable(value, (offer) => one(STOP_OFFERS, offer, where));
+}
+
 function sync(value: unknown, where: string): Sync {
   const fields = object(value, where, [
     'run',
@@ -451,9 +475,11 @@ function sync(value: unknown, where: string): Sync {
     'step',
     'waits',
     'stopped',
+    'stop',
   ]);
   return {
     run: number(fields.run, `${where}.run`),
+    stop: stopOffer(fields.stop, `${where}.stop`),
     added: number(fields.added, `${where}.added`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
@@ -473,19 +499,23 @@ function freeze(value: unknown, where: string): Freeze {
     'step',
     'waits',
     'waiting',
+    'stopping',
     'discarded',
     'displaced',
     'stopped',
+    'stop',
   ]);
   return {
     run: number(fields.run, `${where}.run`),
     folder: string(fields.folder, `${where}.folder`),
+    stop: stopOffer(fields.stop, `${where}.stop`),
     packs: number(fields.packs, `${where}.packs`),
     entries: number(fields.entries, `${where}.entries`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
     waits: boolean(fields.waits, `${where}.waits`),
     waiting: folders(fields.waiting, `${where}.waiting`),
+    stopping: folders(fields.stopping, `${where}.stopping`),
     discarded: folders(fields.discarded, `${where}.discarded`),
     displaced: list(fields.displaced, `${where}.displaced`, displacedFreeze),
     ...standing(FREEZE_STATUSES, fields, where),
@@ -648,6 +678,7 @@ function work(value: unknown, where: string): Work {
     'delete',
     'reconnect',
     'log',
+    'adds',
   ]);
   return {
     server: string(fields.server, `${where}.server`),
@@ -663,6 +694,28 @@ function work(value: unknown, where: string): Work {
     delete: nullable(fields.delete, (value) => deletion(value, `${where}.delete`)),
     reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
     log: list(fields.log, `${where}.log`, logged),
+    adds: list(fields.adds, `${where}.adds`, addUnderWay),
+  };
+}
+
+function addUnderWay(value: unknown, where: string): AddUnderWay {
+  const fields = object(value, where, ['id', 'folder', 'stage', 'stopping']);
+  return {
+    id: string(fields.id, `${where}.id`),
+    folder: string(fields.folder, `${where}.folder`),
+    stage: one(ADD_STAGES, fields.stage, `${where}.stage`),
+    stopping: boolean(fields.stopping, `${where}.stopping`),
+  };
+}
+
+function stoppedAdd(value: unknown, where: string): StoppedAdd {
+  const fields = object(value, where, ['folder', 'files', 'removed', 'committed', 'left']);
+  return {
+    folder: string(fields.folder, `${where}.folder`),
+    files: number(fields.files, `${where}.files`),
+    removed: number(fields.removed, `${where}.removed`),
+    committed: number(fields.committed, `${where}.committed`),
+    left: number(fields.left, `${where}.left`),
   };
 }
 
@@ -673,6 +726,7 @@ function logged(value: unknown, where: string): Logged {
     'folder',
     'path',
     'refused',
+    'add',
   ]);
   const id = number(head.id, `${where}.id`);
   const at = string(head.at, `${where}.at`);
@@ -712,6 +766,8 @@ function logged(value: unknown, where: string): Logged {
         refused: refused(fields.refused, `${where}.refused`),
       };
     }
+    case 'add':
+      return { id, at, settled, kind, add: stoppedAdd(only('add').add, `${where}.add`) };
   }
 }
 
@@ -795,8 +851,9 @@ function refusedPart(value: unknown, where: string): RefusedPart {
 }
 
 function upload(value: unknown, where: string): Upload {
-  const fields = object(value, where, ['written', 'refused']);
+  const fields = object(value, where, ['written', 'refused', 'cancelled']);
   return {
+    cancelled: boolean(fields.cancelled, `${where}.cancelled`),
     written: folders(fields.written, `${where}.written`),
     refused: list(fields.refused, `${where}.refused`, refusedPart),
   };
@@ -1189,7 +1246,7 @@ it('says the unmapped sentence in the server’s words', () => {
 // catalog.
 it('rejects a status and a refusal that do not go together', () => {
   const storage = { error: 'storage', message: 'the Library’s Storage did not answer' };
-  const run = { run: 1, added: 0, findings: [], step: null, waits: false };
+  const run = { run: 1, added: 0, findings: [], step: null, waits: false, stop: null };
 
   expect(() => sync({ ...run, status: 'stopped', stopped: null }, 'sync')).toThrow(
     /says nothing about what stopped it/,

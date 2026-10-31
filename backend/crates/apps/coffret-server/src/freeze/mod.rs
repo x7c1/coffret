@@ -111,7 +111,8 @@ mod worker;
 /// promise a run after the current one that the `POST` would not arm. The run
 /// on record counts only while it is freezing and only where it covers the
 /// book: a drop's run packs only the files the drop carried, so the whole
-/// folder asked for beside it is queued as a book of its own. A waiting book
+/// folder asked for beside it is queued as a book of its own — and so is a
+/// folder asked for while the run is asked to stop, which packs nothing. A waiting book
 /// counts by its folder alone, because the queue names no more than that and
 /// the `POST` joins the book waiting there rather than queueing a second.
 /// Where that waiting book is a drop's, the `POST` would have widened it to
@@ -122,9 +123,13 @@ pub fn packs_already(freezes: &Freezes, book: &Book) -> bool {
     };
     let run = &latest.on_record;
     let under_way = matches!(run.status, FreezeStatus::Freezing)
+        && !run.stop.asked()
         && Book {
             folder: run.folder.clone(),
             only: run.only.clone(),
+            adds: run.adds.clone(),
+            requested: true,
+            withdrawn: false,
         }
         .covers(book);
     under_way || latest.waiting.contains(&book.folder)

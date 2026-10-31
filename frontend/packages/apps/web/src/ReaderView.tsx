@@ -27,7 +27,12 @@ const PREFETCH_RADIUS = 3;
 type Shown =
   | { status: 'loading' }
   | { status: 'ready'; url: string }
-  | { status: 'failed'; message: string; ranOut: boolean };
+  /**
+   * A read that came to nothing: `cancelled` where the person's Stop withdrew
+   * it, which is no failure and is said as plainly as a wait is, and otherwise
+   * refused.
+   */
+  | { status: 'failed'; message: string; ranOut: boolean; cancelled: boolean };
 
 /**
  * The reader: a dark sheet over the right of the tree, showing the row the
@@ -77,6 +82,7 @@ export function ReaderView({
   escapable,
   onClose,
   onFetching,
+  fetchStops = 0,
   onFetched,
   reconnect,
 }: {
@@ -94,6 +100,12 @@ export function ReaderView({
   escapable: boolean;
   onClose: () => void;
   onFetching: (name: string | null) => void;
+  /**
+   * How many times the Stop on this reader's fetch was pressed in the
+   * Activity panel: each change withdraws the read the sheet is waiting on
+   * (spec: LA-37).
+   */
+  fetchStops?: number;
   /** A file this device did not have was fetched, and the rows naming it are stale. */
   onFetched: (path: string) => void;
   /**
@@ -161,10 +173,14 @@ export function ReaderView({
       (refused: unknown) => {
         if (live) {
           onFetching(null);
+          // A read the panel's Stop withdrew: the file being placed is placed
+          // whole all the same, and the try again beside it reads it.
+          const cancelled = isAbort(refused);
           setShown({
             status: 'failed',
-            message: said(refused),
+            message: cancelled ? `stopped fetching ${name}` : said(refused),
             ranOut: refusedAsRanOut(refused),
+            cancelled,
           });
         }
       },
@@ -174,6 +190,20 @@ export function ReaderView({
       onFetching(null);
     };
   }, [path, name, remote, ahead, attempt, drawn, onFetching, onFetched]);
+
+  // The panel's Stop on this reader's own fetch of one file (spec: LA-37): the
+  // read the sheet is waiting on is withdrawn, and the wait above hears the
+  // abort.
+  const stops = useRef(fetchStops);
+  useEffect(() => {
+    if (stops.current === fetchStops) {
+      return;
+    }
+    stops.current = fetchStops;
+    if (path !== undefined) {
+      drawn.stop(path);
+    }
+  }, [fetchStops, path, drawn]);
 
   // Near the end of a folder, the first pages of the next one, read ahead (see
   // the comment on `ReaderView`). Asked once per folder end rather than once
@@ -464,7 +494,7 @@ function Picture({
     case 'failed':
       return (
         <div style={{ textAlign: 'center', maxWidth: 520, padding: 16 }}>
-          <p style={{ color: SHEET_COLOR.refused }}>{shown.message}</p>
+          <p style={{ color: shown.cancelled ? SHEET_COLOR.dim : SHEET_COLOR.refused }}>{shown.message}</p>
           {/* A picture refused because the permission ran out is one no retry
               brings back: the reconnect is offered above it, and the retry
               stays for once the permission is renewed. */}
@@ -591,3 +621,8 @@ const STACK_SHEET: CSSProperties = {
   border: `1px solid ${SHEET_COLOR.border}`,
   background: SHEET_COLOR.raised,
 };
+
+/** Whether a read failed because it was withdrawn, rather than refused. */
+function isAbort(refused: unknown): boolean {
+  return refused instanceof DOMException && refused.name === 'AbortError';
+}

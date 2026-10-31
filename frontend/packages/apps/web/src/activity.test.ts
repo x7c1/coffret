@@ -14,6 +14,7 @@ import {
   offeredNow,
   retryOf,
   stillStanding,
+  stoppedLine,
   type Entry,
   type InFlight,
   type PageNotice,
@@ -47,6 +48,7 @@ function aFill(stopped: Refused | null, over: Partial<Fill> = {}): Fill {
     waiting: [],
     discarded: [],
     displaced: [],
+    stop: null,
   };
   const standing =
     stopped === null
@@ -56,7 +58,7 @@ function aFill(stopped: Refused | null, over: Partial<Fill> = {}): Fill {
 }
 
 function aSync(stopped: Refused | null): Sync {
-  const own = { run: 1, added: 2, findings: [], step: null, waits: false };
+  const own = { run: 1, added: 2, findings: [], step: null, waits: false, stop: null };
   return stopped === null
     ? { ...own, status: 'done', stopped: null }
     : { ...own, status: 'stopped', stopped };
@@ -72,8 +74,10 @@ function aFreeze(stopped: Refused | null, status: 'done' | 'freezing' = 'done'):
     step: null,
     waits: false,
     waiting: [],
+    stopping: [],
     discarded: [],
     displaced: [],
+    stop: null,
   };
   return stopped === null
     ? { ...own, status, stopped: null }
@@ -110,7 +114,7 @@ function logged(work: LoggedWork, id = 1, settled = false, minute = id): Logged 
 }
 
 function running(text: string, progress: number | null = null): Running {
-  return { key: text, text, progress };
+  return { key: text, text, progress, stop: null, ending: null };
 }
 
 /** An entry as the panel draws it, failed and standing where `standing` says. */
@@ -131,6 +135,8 @@ function anEntry(text: string, standing = false): Entry {
 
 const NOTHING: InFlight = {
   adding: null,
+  addingAs: null,
+  adds: [],
   sent: null,
   turn: null,
   fill: null,
@@ -331,8 +337,8 @@ it('says what a deletion removed', () => {
 });
 
 // In progress, in the order it is happening: the drop, the run
-// holding the turn, the ones waiting for it, the fill — and the reader's own
-// fetch only where nothing else moves.
+// holding the turn, the ones waiting for it, the fill, and the reader's own
+// fetch with its own Stop beside them.
 it('lists what is in progress in the order it is happening', () => {
   const freezing = aFreeze(null, 'freezing');
   const syncing: Sync = { ...aSync(null), status: 'syncing', stopped: null, waits: true };
@@ -347,13 +353,20 @@ it('lists what is in progress in the order it is happening', () => {
     fill: filling,
     fetching: 'cover.png',
   });
-  expect(listed.map((item) => item.key)).toEqual(['adding', 'freeze', 'sync', 'fill']);
+  expect(listed.map((item) => item.key)).toEqual(['adding', 'freeze', 'sync', 'fill', 'fetching']);
+  expect(listed[4].stop).toEqual({ reader: true });
   expect(listed[0].progress).toBe(0.5);
   expect(listed[2].text).toContain('waiting for the packing under way to finish');
   expect(listed[3].progress).toBe(0.25);
 
   expect(inProgress({ ...NOTHING, fetching: 'cover.png' })).toEqual([
-    { key: 'fetching', text: 'fetching cover.png…', progress: null },
+    {
+      key: 'fetching',
+      text: 'fetching cover.png…',
+      progress: null,
+      stop: { reader: true },
+      ending: null,
+    },
   ]);
   expect(inProgress(NOTHING)).toEqual([]);
 });
@@ -423,4 +436,167 @@ it('finds the first failure standing for the badge', () => {
   const standing = anEntry('could not pack', true);
   expect(firstStanding([anEntry('done'), settled, standing, anEntry('older', true)])).toBe(standing);
   expect(firstStanding([anEntry('done')])).toBeNull();
+});
+
+// LA-34, LA-35: the lines a person can stop carry a Stop naming what it
+// stops — the drop being sent by its name, a run by its number — and a
+// deletion carries none.
+it('offers a Stop on an add, a freeze and a fill, and none on a deletion', () => {
+  const listed = inProgress({
+    ...NOTHING,
+    adding: 'sending 3 files to albums',
+    addingAs: { name: 'drop-1', stopping: false },
+    turn: 'sync',
+    sync: { ...aSync(null), run: 4, status: 'syncing', stopped: null, stop: 'offered' },
+    freeze: { ...aFreeze(null, 'freezing'), run: 2, stop: 'offered' },
+    fill: { ...aFill(null, { done: 1 }), run: 7, status: 'filling', stopped: null, stop: 'offered' },
+    deletion: { ...aDeletion(null), status: 'deleting', stopped: null },
+  });
+  const stops = Object.fromEntries(listed.map((item) => [item.key, item.stop]));
+  expect(stops).toEqual({
+    adding: { server: { add: 'drop-1' } },
+    sync: { server: { sync: 4 } },
+    freeze: { server: { freeze: 2 } },
+    fill: { server: { fill: 7 } },
+    delete: null,
+  });
+  expect(listed.every((item) => item.ending === null)).toBe(true);
+});
+
+// LA-34: a book waiting in the freeze's queue and a folder waiting in the
+// fill's each draw a line of their own under their run, with the Stop that
+// names them; a book holding adds a person asked to stop says it is stopping.
+it('offers a Stop on a book or a folder waiting in its queue', () => {
+  const listed = inProgress({
+    ...NOTHING,
+    freeze: {
+      ...aFreeze(null, 'freezing'),
+      run: 2,
+      stop: 'offered',
+      waiting: ['books/vol-2', 'books/vol-3'],
+      stopping: ['books/vol-3'],
+    },
+    fill: {
+      ...aFill(null, { done: 1, waiting: ['letters'] }),
+      run: 7,
+      status: 'filling',
+      stopped: null,
+      stop: 'offered',
+    },
+  });
+  expect(listed.map((item) => [item.key, item.text, item.stop, item.ending])).toEqual([
+    ['freeze', 'packing books/vol-1…', { server: { freeze: 2 } }, null],
+    ['queued-freeze:books/vol-2', 'waiting to pack books/vol-2', { server: { queued_freeze: 'books/vol-2' } }, null],
+    ['queued-freeze:books/vol-3', 'waiting to pack books/vol-3', null, 'stopping'],
+    ['fill', 'bringing over 1/4 in albums…', { server: { fill: 7 } }, null],
+    ['queued-fill:letters', 'waiting to bring over letters', { server: { queued_fill: 'letters' } }, null],
+  ]);
+});
+
+// LA-35, LA-12: a folder stopped while it waited in the fill's queue is
+// logged cancelled, having brought nothing over, and offers no Retry.
+it('says a fill stopped in its queue brought nothing over', () => {
+  const run = { ...aFill(null, { run: 0, total: 0, done: 0 }), status: 'cancelled', stopped: null } as Fill;
+  const [entry] = earlier([logged({ kind: 'fill', run })], [], false);
+  expect([entry.text, entry.outcome, entry.retry]).toEqual([
+    'stopped bringing over albums — nothing was brought over',
+    'notice',
+    null,
+  ]);
+});
+
+// LA-35: once the run has begun committing, its line says it is finishing
+// and offers no Stop; a stop asked then is answered by the run's real end,
+// which is the sync's own entry and no stopped add.
+it('says a run is finishing once it commits, and is answered by its real end', () => {
+  const committing = inProgress({
+    ...NOTHING,
+    sync: { ...aSync(null), status: 'syncing', stopped: null, stop: 'committing' },
+  });
+  expect(committing).toMatchObject([{ key: 'sync', stop: null, ending: 'finishing' }]);
+
+  const ended = earlier([logged({ kind: 'sync', run: { ...aSync(null), added: 1 } })], [], false);
+  expect(ended.map((entry) => entry.text)).toEqual(['added 1 file to the Library']);
+});
+
+// LA-35, LA-36: a stop whose answer this page never read — it was reloaded
+// mid-stop — is still shown being answered, from the server's own account:
+// the run asked to stop, or the add still being received, says it is
+// stopping; and once it has ended the log says what the stop came to, with no
+// Retry, since adding again is dropping again.
+it('shows a stop being answered after a reload, and then what it came to', () => {
+  const asked = inProgress({
+    ...NOTHING,
+    sync: { ...aSync(null), status: 'syncing', stopped: null, stop: 'asked' },
+  });
+  expect(asked).toMatchObject([{ key: 'sync', stop: null, ending: 'stopping' }]);
+
+  const receiving = inProgress({
+    ...NOTHING,
+    adds: [{ id: 'drop-1', folder: 'albums', stage: 'receiving', stopping: true }],
+  });
+  expect(receiving).toMatchObject([{ text: 'adding to albums', stop: null, ending: 'stopping' }]);
+
+  const after = inProgress({ ...NOTHING, sync: { ...aSync(null), status: 'cancelled', stopped: null } });
+  expect(after).toEqual([]);
+  const stopped = logged({
+    kind: 'add',
+    add: { folder: 'albums', files: 3, removed: 3, committed: 0, left: 0 },
+  });
+  const [entry] = earlier([stopped], [], false);
+  expect(entry.text).toBe('stopped adding to albums — nothing was added to the Library');
+  expect(entry.outcome).toBe('notice');
+  expect(entry.retry).toBeNull();
+  expect(entry.standing).toBe(false);
+});
+
+// The page's own Stop on the drop being sent says it is stopping at once,
+// and so does one the server says another page asked.
+it('says the drop being sent is stopping once its Stop is pressed', () => {
+  const pressed = inProgress({
+    ...NOTHING,
+    adding: 'sending 3 files to albums',
+    addingAs: { name: 'drop-1', stopping: true },
+  });
+  expect(pressed).toMatchObject([{ key: 'adding', stop: null, ending: 'stopping' }]);
+  const elsewhere = inProgress({
+    ...NOTHING,
+    adding: 'sending 3 files to albums',
+    addingAs: { name: 'drop-1', stopping: false },
+    adds: [{ id: 'drop-1', folder: 'albums', stage: 'receiving', stopping: true }],
+  });
+  expect(elsewhere).toMatchObject([{ key: 'adding', stop: null, ending: 'stopping' }]);
+});
+
+// LA-36: what a stopped add says — nothing more where every file it wrote was
+// taken away, a file it wrote over put back among them; how much a run beside
+// it had carried in already; and how many this device could not take back out
+// of the folder, for the next sync to carry in.
+it('says what a stopped add left behind', () => {
+  expect(stoppedLine({ folder: 'albums', files: 3, removed: 3, committed: 0, left: 0 })).toBe(
+    'stopped adding to albums — nothing was added to the Library',
+  );
+  expect(stoppedLine({ folder: 'albums', files: 4, removed: 2, committed: 1, left: 1 })).toBe(
+    'stopped adding to albums — 1 file had been added to the Library already; 1 file could not be taken back out of the folder, and the next sync adds it',
+  );
+  expect(stoppedLine({ folder: 'albums', files: 2, removed: 0, committed: 0, left: 2 })).toBe(
+    'stopped adding to albums — nothing was added to the Library; 2 files could not be taken back out of the folder, and the next sync adds them',
+  );
+  expect(stoppedLine({ folder: '', files: 1, removed: 1, committed: 0, left: 0 })).toBe(
+    'stopped adding to the Library root — nothing was added to the Library',
+  );
+});
+
+// LA-35, LA-37: a fill and a freeze a person stopped say so, and offer no Retry.
+it('says a stopped fill and freeze stopped, and offers nothing again', () => {
+  const fill = logged({ kind: 'fill', run: { ...aFill(null), status: 'cancelled', stopped: null } }, 1);
+  const freeze = logged(
+    { kind: 'freeze', run: { ...aFreeze(null), status: 'cancelled', stopped: null } },
+    2,
+  );
+  const entries = earlier([freeze, fill], [], false);
+  expect(entries.map((entry) => [entry.text, entry.outcome, entry.retry])).toEqual([
+    ['stopped packing books/vol-1 — nothing was packed', 'notice', null],
+    ['stopped bringing over albums — what was brought over stays', 'notice', null],
+  ]);
 });

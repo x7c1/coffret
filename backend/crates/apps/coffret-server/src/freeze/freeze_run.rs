@@ -2,8 +2,10 @@ use std::collections::BTreeSet;
 
 use coffret_device::{EntryPath, Step};
 
+use crate::adds::AddId;
 use crate::finding::Finding;
 use crate::folder::Folder;
+use crate::stopping::Stop;
 
 use super::{Book, FreezeStatus};
 
@@ -75,6 +77,11 @@ pub struct FreezeRun {
     /// many units of it are done — so that a browser and a terminal watching one
     /// Library cannot disagree about where a run has got to.
     pub step: Option<Step>,
+    /// The adds whose files the run packs (spec: LA-34), and none for a
+    /// folder somebody asked to have packed.
+    pub adds: BTreeSet<AddId>,
+    /// Where the run stands with a person's asking it to stop (spec: LA-35).
+    pub stop: Stop,
 }
 
 impl FreezeRun {
@@ -84,6 +91,8 @@ impl FreezeRun {
             run: 0,
             folder: book.folder,
             only: book.only,
+            adds: book.adds,
+            stop: Stop::Open,
             status: FreezeStatus::Freezing,
             packs: 0,
             entries: 0,

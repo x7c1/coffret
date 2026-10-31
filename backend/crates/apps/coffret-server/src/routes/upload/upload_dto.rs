@@ -18,4 +18,9 @@ pub struct UploadDto {
     pub(super) written: Vec<String>,
     /// The parts nothing was written for, each with the refusal it met.
     pub(super) refused: Vec<RefusedDto>,
+    /// Whether a person stopped the add while it was being received
+    /// (spec: LA-36). A stopped add names nothing in `written`: what it wrote
+    /// is being taken away again, and what that came to is in the server's
+    /// log of finished work once it has been.
+    pub(super) cancelled: bool,
 }

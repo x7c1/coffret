@@ -1,3 +1,6 @@
+use std::collections::BTreeSet;
+
+use crate::adds::AddId;
 use crate::reported::Reported;
 
 use super::{SyncRun, SyncStatus};
@@ -25,6 +28,11 @@ pub(super) struct Progress {
     /// drops during one sync queue one follow-up, because the next run walks the
     /// mapped folders and one walk finds both files.
     armed: bool,
+    /// The adds the next run carries, armed since the run under way was
+    /// taken up (spec: LA-34).
+    pending: BTreeSet<AddId>,
+    /// Whether the next run was asked for by a request of its own as well.
+    requested: bool,
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one run's account of itself from the next's. It is
@@ -44,7 +52,13 @@ impl Progress {
     /// the one running because the person has moved on, and there is no such
     /// thing here — a sync asked for during a sync is asking about files the
     /// running one may already have walked past.
-    pub(super) fn arm(&mut self) -> bool {
+    pub(super) fn arm(&mut self, add: Option<AddId>) -> bool {
+        match add {
+            Some(add) => {
+                self.pending.insert(add);
+            }
+            None => self.requested = true,
+        }
         let start = !self.working;
         if start {
             // Nothing is running, so nothing else is writing the run on record: the
@@ -63,11 +77,25 @@ impl Progress {
 
     /// Whether there is a run to take up, in which case the worker takes it — and
     /// otherwise the worker is done and stops.
+    ///
+    /// The run taken carries the adds armed for it. Where it was announced
+    /// already and somebody asked it to stop meanwhile, it is taken up asked
+    /// (spec: LA-35).
     pub(super) fn take_next(&mut self) -> bool {
         if self.armed {
             self.armed = false;
             self.runs += 1;
-            self.on_record = Some(self.announce(self.runs));
+            let asked = self
+                .on_record
+                .as_ref()
+                .is_some_and(|run| run.run == self.runs && run.stop.asked());
+            let mut taken = self.announce(self.runs);
+            if asked {
+                taken.stop.ask();
+            }
+            self.pending.clear();
+            self.requested = false;
+            self.on_record = Some(taken);
             return true;
         }
         self.working = false;
@@ -94,6 +122,8 @@ impl Progress {
         }
         self.working = false;
         self.armed = false;
+        self.pending.clear();
+        self.requested = false;
         if self.is_syncing() {
             if let Some(run) = self.on_record.as_mut() {
                 run.status = SyncStatus::Stopped(Reported::unfinished());
@@ -113,8 +143,22 @@ impl Progress {
     fn announce(&self, run: u64) -> SyncRun {
         SyncRun {
             run,
+            adds: self.pending.clone(),
+            requested: self.requested,
             ..SyncRun::starting()
         }
+    }
+
+    /// Arms the adds a run that was stopped still carried, and its own
+    /// request, for the next run (spec: LA-36). Called from inside the worker,
+    /// which is running and so takes the next run up itself.
+    pub(super) fn rearm(&mut self, adds: BTreeSet<AddId>, requested: bool) {
+        if adds.is_empty() && !requested {
+            return;
+        }
+        self.pending.extend(adds);
+        self.requested |= requested;
+        self.armed = true;
     }
 
     /// Which run the one on record is, for stamping a published one with.
@@ -165,8 +209,8 @@ mod tests {
     #[test]
     fn the_first_arming_starts_a_worker_and_the_second_does_not() {
         let mut progress = Progress::default();
-        assert!(progress.arm());
-        assert!(!progress.arm());
+        assert!(progress.arm(None));
+        assert!(!progress.arm(None));
     }
 
     // The rule the whole module turns on: what a drop during a running sync buys
@@ -175,11 +219,11 @@ mod tests {
     #[test]
     fn two_drops_during_one_sync_queue_exactly_one_run() {
         let mut progress = Progress::default();
-        progress.arm();
+        progress.arm(None);
         assert!(progress.take_next(), "the first run is taken up");
 
-        progress.arm();
-        progress.arm();
+        progress.arm(None);
+        progress.arm(None);
         assert!(progress.take_next(), "the follow-up run is taken up");
         assert!(
             !progress.take_next(),
@@ -194,11 +238,11 @@ mod tests {
     #[test]
     fn a_stopped_sync_can_be_armed_again() {
         let mut progress = Progress::default();
-        progress.arm();
+        progress.arm(None);
         progress.take_next();
         stops(&mut progress);
 
-        assert!(!progress.arm(), "a worker is still running the loop");
+        assert!(!progress.arm(None), "a worker is still running the loop");
         assert!(
             progress.take_next(),
             "the retry is armed rather than dropped"
@@ -212,7 +256,7 @@ mod tests {
     #[test]
     fn a_worker_that_ends_without_taking_its_leave_leaves_nothing_running() {
         let mut progress = Progress::default();
-        progress.arm();
+        progress.arm(None);
         progress.take_next();
         reports(&mut progress, Step::new(Phase::Uploading, 2, 5));
 
@@ -232,7 +276,7 @@ mod tests {
             "a run that is over is in no phase, whichever way it ended",
         );
         assert!(
-            progress.arm(),
+            progress.arm(None),
             "a sync can be asked for again, and starts a worker",
         );
     }
@@ -242,7 +286,7 @@ mod tests {
     #[test]
     fn a_worker_that_took_its_leave_leaves_what_it_finished_alone() {
         let mut progress = Progress::default();
-        progress.arm();
+        progress.arm(None);
         progress.take_next();
         finishes(&mut progress, SyncStatus::Done);
         progress.take_next();

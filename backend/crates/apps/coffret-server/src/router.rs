@@ -51,6 +51,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // sends, the second files the desktop app's window dropped by path.
         .route("/api/fill", post(routes::fill))
         .route("/api/sync", post(routes::sync))
+        .route("/api/stop", post(routes::stop))
         // The freeze is also read: a `GET` of it counts what the `POST` would
         // pack, which the explorer asks before it offers to arm one.
         .route(

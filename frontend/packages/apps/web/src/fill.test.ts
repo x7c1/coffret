@@ -274,6 +274,13 @@ it('shows what a refused mapped root says, on the line a stopped fill already ha
 // minutes a fill takes, not for a tab left open on a folder.
 it('polls while the reader is open or work is running, and not otherwise', () => {
   expect(shouldPoll(false, null, null)).toBe(false);
+  // LA-35: an add the server is carrying in or undoing is followed, so a page
+  // reloaded mid-stop hears what the stop came to.
+  expect(
+    shouldPoll(false, null, null, null, null, null, null, null, [
+      { id: 'drop-1', folder: 'albums', stage: 'armed', stopping: true },
+    ]),
+  ).toBe(true);
   expect(shouldPoll(true, null, null)).toBe(true);
   expect(shouldPoll(false, filling(), null)).toBe(true);
   expect(shouldPoll(false, filling({ status: 'done' }), null)).toBe(false);
@@ -913,7 +920,7 @@ it('says how far a Pack has gone while it is sent', () => {
         waiting: ['test-04'],
       }),
     ),
-  ).toBe('packing test-03 — sending 1/1 — 60.0 MB of 60.0 MB, with test-04 after it…');
+  ).toBe('packing test-03 — sending 1/1 — 60.0 MB of 60.0 MB…');
   // A sync's upload counts them the same way, and says them the same way.
   expect(
     syncLine(
@@ -951,7 +958,7 @@ it('says when a run is committing and how far the commit has got', () => {
         waiting: ['test-04'],
       }),
     ),
-  ).toBe('packing test-03 — committing to the Library 0/4, with test-04 after it…');
+  ).toBe('packing test-03 — committing to the Library 0/4…');
   expect(
     syncLine(syncing({ step: { phase: 'committing', done: 3, total: 3, bytes: null } })),
   ).toBe('backing up what was added — committing to the Library 3/3…');
@@ -969,7 +976,7 @@ it('says what a freeze is doing once rather than twice', () => {
     freezeLine(
       freezing({ step: { phase: 'packing', done: 12, total: 300, bytes: null }, waiting: ['books/vol-2'] }),
     ),
-  ).toBe('packing books/vol-1 — 12/300, with books/vol-2 after it…');
+  ).toBe('packing books/vol-1 — 12/300…');
   // And a packing phase that cannot count its work says nothing rather than the
   // word a second time.
   expect(freezeLine(freezing({ step: { phase: 'packing', done: 0, total: null, bytes: null } }))).toBe(
@@ -987,29 +994,18 @@ it('shows a phase that cannot count its work without numbers', () => {
   );
 });
 
-// A person who dropped a second book wants to know that theirs is queued, which
-// a count of one cannot tell them: the line names it.
-it('names the books waiting behind the one being packed', () => {
-  expect(freezeLine(freezing({ waiting: ['books/vol-2'] }))).toBe(
-    'packing books/vol-1, with books/vol-2 after it…',
-  );
+// A book waiting behind the one being packed, and a folder waiting behind the
+// one being brought over, each have a line of their own in the panel, with
+// their own Stop (spec: LA-34): the running line names only its own run, so
+// nothing waiting is listed twice.
+it('names only its own run, leaving what waits behind it to its own lines', () => {
   expect(freezeLine(freezing({ waiting: ['books/vol-2', 'books/vol-3'] }))).toBe(
-    'packing books/vol-1, with books/vol-2 and 1 more after it…',
+    'packing books/vol-1…',
   );
-});
-
-// And the same for a folder somebody asked for by name while a fill was
-// running. The press takes the button that named it away and the line names the
-// folder being brought over, so without this the press leaves no trace at all —
-// which is the whole of what queueing rather than superseding was for.
-it('names the folders waiting behind the one being brought over', () => {
-  expect(fillLine(filling({ waiting: ['letters'] }))).toBe(
-    'bringing over 1/3 in books/vol-1, with letters after it…',
-  );
+  expect(fillLine(filling({ waiting: ['letters'] }))).toBe('bringing over 1/3 in books/vol-1…');
   expect(fillLine(filling({ total: 0, waiting: ['letters', 'albums'] }))).toBe(
-    'bringing over books/vol-1, with letters and 1 more after it…',
+    'bringing over books/vol-1…',
   );
-  expect(fillLine(filling())).toBe('bringing over 1/3 in books/vol-1…');
 });
 
 // The seconds between a drop being let go of and there being anything to send.
@@ -1063,8 +1059,7 @@ it('says what a sync or a freeze waiting its turn is waiting for', () => {
     'packing books/vol-1 — waiting for the backup under way to finish',
   );
   expect(freezeLine(freezing({ waiting: ['books/vol-2'] }), 'deletion')).toBe(
-    'packing books/vol-1 — waiting for the deletion under way to finish, ' +
-      'with books/vol-2 after it',
+    'packing books/vol-1 — waiting for the deletion under way to finish',
   );
 
   // A run with nothing to wait for, or one already moving, says what it says
