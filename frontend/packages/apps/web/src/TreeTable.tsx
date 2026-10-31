@@ -164,6 +164,8 @@ export function TreeTable({
   strandedKnown,
   onOpenFolder,
   onOpenFile,
+  readerOn = null,
+  onCloseReader = () => undefined,
   onUnsupported,
   onAdd,
   onCollecting,
@@ -227,13 +229,18 @@ export function TreeTable({
    * means "not known to be one" rather than "not one".
    */
   strandedKnown: boolean;
-  /**
-   * A folder row opened: the reader's sheet, on the folder's cover — where it
-   * holds images, which only its listing can say.
-   */
+  /** A folder row opened: the reader's sheet, on the folder's cover. */
   onOpenFolder: (path: string) => void;
   /** A file row opened that the reader can show: the reader's sheet, on the file. */
   onOpenFile: (path: string) => void;
+  /**
+   * The path of the row the reader's sheet shows, a file or a folder, and
+   * `null` while it is shut: opening that row again, or a folder it stands
+   * under, closes it.
+   */
+  readerOn?: string | null;
+  /** A row opened again: the sheet closes, the tree left as `next` says. */
+  onCloseReader?: (next: TreeState) => void;
   /** A file row opened that the reader cannot show. */
   onUnsupported: (file: ListedFile) => void;
   /**
@@ -352,7 +359,7 @@ export function TreeTable({
     scroller.current?.focus();
     switch (action.kind) {
       case 'open':
-        openRow(action.row);
+        openNamed(action.row);
         break;
       case 'newFolder':
         onNewFolder(action.folder);
@@ -480,14 +487,45 @@ export function TreeTable({
     void droppedFiles(event.dataTransfer).then((drop) => onAdd(target, drop), onUnreadable);
   };
 
-  // Opening a folder also opens it in the tree, so that the arrows go on
-  // straight into its files and the sheet, where it opened, follows them.
-  const openRow = (row: FolderRow | FileRow) => {
+  // Opening a row is a toggle. A closed folder opens, in the tree — so that
+  // the arrows go on straight into its files and the sheet follows them — and
+  // in the reader; an open one closes, and closes the reader with it where the
+  // reader shows the folder or anything under it. The file the reader shows
+  // closes it; any other row opens as `opened` says.
+  //
+  // `shown` is the row the reader showed when the gesture began: the first
+  // click of a double-click focuses the row, and the sheet follows the focus
+  // onto it before the double-click arrives, so asked then the reader would
+  // always be showing the row double-clicked.
+  const openRow = (row: FolderRow | FileRow, shown: string | null) => {
+    if (row.kind === 'folder') {
+      const next = toggled({ ...state, focus: row.key }, row.path);
+      if (state.expanded.has(row.path)) {
+        if (shown !== null && (shown === row.path || shown.startsWith(`${row.path}/`))) {
+          onCloseReader(next);
+        } else {
+          onChange(next);
+        }
+        return;
+      }
+      onChange(next);
+    } else if (shown === row.path) {
+      onCloseReader({ ...state, focus: row.key });
+      return;
+    }
+    opened(row, { onOpenFolder, onOpenFile, onUnsupported, onUnmapped });
+  };
+  // The actions menu's Open, which says what it does and so is not a toggle:
+  // a closed folder opens in the tree as well, and an open one stays open.
+  const openNamed = (row: FolderRow | FileRow) => {
     if (row.kind === 'folder' && !state.expanded.has(row.path)) {
       onChange(toggled({ ...state, focus: row.key }, row.path));
     }
     opened(row, { onOpenFolder, onOpenFile, onUnsupported, onUnmapped });
   };
+  // What the reader showed as the press that may begin a double-click was
+  // made (see `openRow`).
+  const shownAtPress = useRef<string | null>(null);
   // `Escape` climbs: the focus goes to the folder the focused row stands in, and
   // from a top-level row, which stands in the root, it is let go of.
   const climbOrLetGo = (focus: string) => {
@@ -529,7 +567,7 @@ export function TreeTable({
     if (event.key === 'Enter') {
       if (focused !== undefined) {
         event.preventDefault();
-        openRow(focused);
+        openRow(focused, readerOn);
       }
       return;
     }
@@ -772,13 +810,18 @@ export function TreeTable({
                     drop={row.kind === 'folder' && row.path === landingRow && drag.dragged ? landingOutcome : null}
                     shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
                     menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
-                    onPress={(how) => pick(clicked(rows, picked, row.key, how))}
+                    onPress={(how, first) => {
+                      if (first) {
+                        shownAtPress.current = readerOn;
+                      }
+                      pick(clicked(rows, picked, row.key, how));
+                    }}
                     onMenu={(at) => openMenu(row.key, at)}
                     onToggle={() => {
                       scroller.current?.focus();
                       onChange(toggled(state, row.path));
                     }}
-                    onOpen={() => openRow(row)}
+                    onOpen={() => openRow(row, shownAtPress.current)}
                     onDragOverRow={() => setOver(row.key)}
                     onGrab={(event) => {
                       const { picked: next, moved } = grabbed(rows, picked, row.key);
@@ -825,10 +868,7 @@ function menuTitle(rows: readonly Described[]): string {
 
 /** What opening a row can come to, as [`opened`](#opened) hands it on. */
 export interface Openers {
-  /**
-   * A folder row opened: the reader's sheet, on the folder's cover — where it
-   * holds images, which only its listing can say.
-   */
+  /** A folder row opened: the reader's sheet, on the folder's cover. */
   onOpenFolder: (path: string) => void;
   /** A file row opened that the reader can show: the reader's sheet, on the file. */
   onOpenFile: (path: string) => void;
@@ -842,17 +882,15 @@ export interface Openers {
  * What opening a row does: what a double-click, a tap, `Enter`, and the
  * details pane's Open all reach, so that the four are one gesture. A folder no
  * mapping reaches has nowhere on this device to put a file, so a file there is
- * not opened and the sentence says why instead. The sheet opens only on a row
- * the reader can show — an image, or a folder holding images (the details
- * pane's [`opensInReader`](./details), which is why the pane offers Open only
- * there); a file it cannot show is not opened and the sentence says so. Once
- * the sheet is open it follows the focus onto any row, and says there what it
- * cannot draw.
+ * not opened and the sentence says why instead. A file the reader cannot show
+ * is not opened either, and the sentence says so. Once the sheet is open it
+ * follows the focus onto any row, and says there what it cannot draw.
  *
- * A folder opened is shown in the sheet, its cover, with the focus left on its
- * row; the tree's `Enter`, double-click and Open also open the folder in the
- * tree (see `openRow`), so the arrows go on into its files. Opening never
- * closes a folder.
+ * A folder opened is shown in the sheet, its cover — or, where it holds no
+ * image, the sheet saying so — with the focus left on its row. The tree's own
+ * gestures make opening a toggle (see `openRow`): they open a closed folder in
+ * the tree as well, so the arrows go on into its files, and an open folder, or
+ * the file the sheet shows, is closed instead of opened.
  */
 export function opened(row: FolderRow | FileRow, openers: Openers): void {
   if (row.kind === 'folder') {
@@ -944,8 +982,12 @@ function Row({
   shown: RowFill | null;
   /** Whether the actions menu is open on this row, which keeps its "⋮" on show. */
   menuOpen: boolean;
-  /** A click on the row, with what the keys held with it ask for (see [`clickOf`](./selection)). */
-  onPress: (how: Click) => void;
+  /**
+   * A click on the row, with what the keys held with it ask for (see
+   * [`clickOf`](./selection)), and whether it is the first click of what may
+   * become a double-click.
+   */
+  onPress: (how: Click, first: boolean) => void;
   /** The actions menu asked for: by a right-click at the pointer, or by the "⋮". */
   onMenu: (at: MenuAt) => void;
   onToggle: () => void;
@@ -986,7 +1028,7 @@ function Row({
       }}
       onClick={(event) => {
         const how = clickOf(event);
-        onPress(how);
+        onPress(how, event.detail <= 1);
         if (how === 'plain' && pointer.current === 'touch') {
           onOpen();
         }

@@ -89,13 +89,16 @@ type ColorName = keyof typeof LIGHT;
  * playing the same part on a dark ground.
  *
  * Text keeps 4.5:1 or better on the ground, on the panel and on the rows it is
- * drawn over, and the accent drawn as a mark — an icon, a ring, an outline —
- * keeps 3:1 on each of them. The rows a person tells apart stand on grounds of
- * different lightness and not only of different hue: the ground darkest, a drop
- * target a step above it (and ringed in the accent), a selected row above that,
- * and the focused row on the accent itself. Where the light set darkens the
- * accent for text — `accentDeep` on a tint of it — this one lightens it, which
- * is what the same part asks for on a dark ground.
+ * drawn over — all but `faint`, which keeps 4.5:1 on the ground and 3:1 on the
+ * rest, so that it stands far enough below `dim` to be told from it: a
+ * folder's size is drawn in it beside a file's in `dim`. The accent drawn as a
+ * mark — an icon, a ring, an outline — keeps 3:1 on each of them. The rows a
+ * person tells apart stand on grounds of different lightness and not only of
+ * different hue: the ground darkest, a drop target a step above it (and ringed
+ * in the accent), a selected row above that, and the focused row on the accent
+ * itself. Where the light set darkens the accent for text — `accentDeep` on a
+ * tint of it — this one lightens it, which is what the same part asks for on a
+ * dark ground.
  */
 export const DARK: Readonly<Record<ColorName, string>> = {
   ground: '#15171c',
@@ -104,7 +107,7 @@ export const DARK: Readonly<Record<ColorName, string>> = {
   rowRule: '#262a31',
   text: '#e6e8eb',
   dim: '#a6acb8',
-  faint: '#959ca8',
+  faint: '#7c838e',
   accent: '#3271e3',
   accentDeep: '#93b8fb',
   accentHover: '#2559bb',

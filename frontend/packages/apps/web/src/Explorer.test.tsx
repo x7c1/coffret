@@ -15,6 +15,7 @@ import {
 } from '@coffret/api';
 
 import { Explorer, HOW_TO_OPEN, LOCKED_POLL_MS, NO_SESSION } from './Explorer';
+import { LOCKED_HEADING } from './Locked';
 import { ReaderView } from './ReaderView';
 import { establish, shelf, type Opened } from './session';
 import { fileKey, type FileRow } from './tree';
@@ -151,7 +152,6 @@ it('shows the locked state on a 423 and asks the host, not the server, until unl
   render(<Explorer opened={held()} shelved={shelf()} screen={Asking} />);
 
   expect(await screen.findByText('refused library_locked')).toBeTruthy();
-  expect(await screen.findByText(/waits for it to be unlocked/)).toBeTruthy();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(LOCKED_POLL_MS * 3);
   });
@@ -170,7 +170,6 @@ it('shows the locked state on a 423 and asks the host, not the server, until unl
     await vi.advanceTimersByTimeAsync(LOCKED_POLL_MS);
   });
   expect(await screen.findByText('library main')).toBeTruthy();
-  expect(screen.queryByText(/waits for it to be unlocked/)).toBeNull();
 });
 
 // A launch file whose ticket was spent already is answered by the host as a
@@ -360,7 +359,9 @@ it('asks for the unlock on its own once the host refuses the screen as locked', 
   });
   render(<Explorer opened={held()} shelved={shelf()} />);
 
-  expect(await screen.findByText(/waits for it to be unlocked/)).toBeTruthy();
+  // The screen's own locked state, said once, and nothing about the tab.
+  expect(await screen.findByRole('heading', { name: LOCKED_HEADING })).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/\btab\b/i);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(LOCKED_POLL_MS * 3);
   });

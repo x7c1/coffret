@@ -88,12 +88,15 @@ type Name = keyof typeof LIGHT;
 /**
  * Text, and what it is drawn on, in the dark set: every pair a person reads.
  * The light set is not held here to the same, since its faint colour — what
- * stands in for a value — stands at about 3:1 on its ground.
+ * stands in for a value — stands at about 3:1 on its ground. The dark set's
+ * faint colour is held to 4.5:1 on the ground it mostly stands on, and to
+ * 3:1 on the rest (below): it has to stand far enough below `dim` to be told
+ * from it.
  */
 const READ: readonly (readonly [Name, readonly Name[]])[] = [
   ['text', ['ground', 'panel', 'hover', 'picked', 'accentTint', 'refusedGround', 'warnGround']],
   ['dim', ['ground', 'panel', 'hover', 'picked', 'accentTint']],
-  ['faint', ['ground', 'panel', 'hover', 'picked']],
+  ['faint', ['ground']],
   ['onAccent', ['accent', 'accentHover']],
   ['accentDeep', ['accentTint', 'ground', 'panel', 'picked']],
   ['refused', ['ground', 'panel', 'refusedGround', 'hover']],
@@ -126,6 +129,23 @@ describe('the two sets', () => {
         .filter(([, ratio]) => ratio < 4.5),
     );
     expect(short).toEqual([]);
+  });
+
+  // A folder's size is drawn in `faint` and a file's in `dim`, side by side in
+  // one column: the two have to be told apart, which the dark set's first
+  // faint colour (1.21 from `dim`) was not. So it is darker, by enough to read
+  // as another colour, and still read on the ground at 4.5:1 and on the panel
+  // and the rows it is drawn over at 3:1.
+  it('keep the dark faint colour apart from dim, and readable where it is drawn', () => {
+    expect(DARK.faint).toBe('#7c838e');
+    expect(contrast(DARK.dim, DARK.faint)).toBeGreaterThanOrEqual(1.6);
+    expect(contrast(DARK.faint, DARK.ground)).toBeGreaterThanOrEqual(4.5);
+    const short = (['panel', 'hover', 'picked', 'accentTint'] as const)
+      .map((ground) => [`faint on ${ground}`, contrast(DARK.faint, DARK[ground])] as const)
+      .filter(([, ratio]) => ratio < 3);
+    expect(short).toEqual([]);
+    // And the light set left as it was.
+    expect([LIGHT.dim, LIGHT.faint, DARK.dim]).toEqual(['#5b616e', '#8a919c', '#a6acb8']);
   });
 
   // The accent drawn as a mark rather than as text — a file's icon, the ring

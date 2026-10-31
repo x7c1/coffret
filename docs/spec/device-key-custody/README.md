@@ -36,7 +36,7 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     that takes the Passphrase. That window is a window of the app's own that
     loads the page from the app's Passphrase door (LA-22, LA-23). The prompt
     is that window, not the explorer's page.
-    Whatever brings the window forward — a press of *unlock*, the tray, or
+    Whatever brings the window forward — a press of *Unlock*, the tray, or
     the explorer asking on its own once it sees the Library locked — decides
     only when it is shown; the Passphrase's path from the window to the
     unlock is the same. A server started from the command line has no such

@@ -60,7 +60,8 @@ type Standing =
  * - **locked** — the Library locked under a session that still stands. The
  *   screen is drawn afresh, which drops the listing, what the server was doing
  *   and every page the reader held, and what it asks is refused as locked,
- *   which is the locked state each region already shows. Meanwhile the host's
+ *   which the screen draws as its locked state (see
+ *   [`LockedScreen`](./Locked)). Meanwhile the host's
  *   session route is asked, and never the server, until the Library is
  *   unlocked (spec: DK-4); then the screen is drawn afresh again.
  *
@@ -203,14 +204,7 @@ export function Explorer({
   if (standing.kind === 'none') {
     return <Notice lines={[NO_SESSION, HOW_TO_OPEN]} said={standing.said} />;
   }
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <Screen key={standing.round} />
-      </div>
-      {standing.locked && <LockedBar />}
-    </div>
-  );
+  return <Screen key={standing.round} />;
 }
 
 /** What a refusal that ended the session is said as. */
@@ -241,23 +235,5 @@ function Notice({ lines, said = null }: { lines: string[]; said?: string | null 
         </p>
       ))}
     </main>
-  );
-}
-
-/** The line under the screen while the Library is locked under this tab's session. */
-function LockedBar() {
-  return (
-    <div
-      style={{
-        padding: '2px 12px',
-        fontSize: 12,
-        textAlign: 'right',
-        color: COLOR.dim,
-        background: COLOR.panel,
-        borderTop: `1px solid ${COLOR.border}`,
-      }}
-    >
-      the Library is locked; this tab waits for it to be unlocked
-    </div>
   );
 }

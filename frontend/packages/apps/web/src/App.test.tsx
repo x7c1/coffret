@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   addFiles,
+  askToUnlock,
   browseFolders,
   getBeside,
   getFile,
@@ -29,12 +30,17 @@ import { parseHash, toHash } from './hash';
 import { size, time } from './humanize';
 import { ADD } from './packChoice';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
+import { LOCKED, LOCKED_HEADING, LOCKED_LINES, UNLOCK } from './Locked';
+import { CHECKING } from './refresh';
+import { NO_IMAGES } from './sheet';
+import { unmappedLine } from './unmapped';
 
 // The server, as the screen reaches it. Everything else the package exports is
 // the real thing.
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   addFiles: vi.fn(),
+  askToUnlock: vi.fn(),
   browseFolders: vi.fn(),
   getBeside: vi.fn(),
   getFile: vi.fn(),
@@ -729,14 +735,15 @@ it('describes the focused row in the details pane, and opens it from there', asy
   expect(definition(pane, 'Modified')).toBe(time(modified));
   expect(definition(pane, 'On this device')).toBe('No');
   expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
-  // And `Enter` on it opens no sheet, and says why.
+  // `Enter` on it opens the sheet all the same, which says it holds no image.
   fireEvent.keyDown(area, { key: 'Enter' });
-  expect(
-    await screen.findByText('comics holds nothing the reader can show — open a folder of pages, or a file'),
-  ).toBeTruthy();
-  expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull();
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  expect(await reader.findByText(NO_IMAGES)).toBeTruthy();
+  expect(screen.queryByText(/holds nothing the reader can show/)).toBeNull();
+  fireEvent.keyDown(area, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
 
-  // `Enter` opened it in the tree, though: a folder of pages inside, closed —
+  // `Enter` opened it in the tree too: a folder of pages inside, closed —
   // its cover, peeked and never fetched, and Open.
   await tree().findByTitle('Series');
   fireEvent.keyDown(area, { key: 'ArrowDown' });
@@ -1222,3 +1229,192 @@ it('says a refused stop in the server’s own words, and offers the Stop again',
   expect(activitySaid()).not.toContain('could not stop it');
   expect(screen.getByRole('button', { name: /^Stop — packing books\/vol-1/ })).toBeTruthy();
 });
+
+describe('the locked Library', () => {
+  /** A Library locked on the server: every question refused as locked, the work answer saying so. */
+  function lockedServer() {
+    const refusal = () => Promise.reject(new Refusal('locked', 423, 'the Library is locked'));
+    vi.mocked(getWork).mockResolvedValue({ ...IDLE, library: 'locked' });
+    vi.mocked(getLibrary).mockImplementation(refusal);
+    vi.mocked(getFolders).mockImplementation(refusal);
+    vi.mocked(getListing).mockImplementation(refusal);
+    // The page asks for the unlock on its own too; the app is asked, and the
+    // Passphrase is not typed yet.
+    vi.mocked(askToUnlock).mockResolvedValue({ library: 'locked', message: 'asking in the app' });
+  }
+
+  /** The Passphrase typed in the app's own window: the server answers again. */
+  function unlockedServer() {
+    vi.mocked(getWork).mockResolvedValue(IDLE);
+    vi.mocked(getLibrary).mockResolvedValue({ name: 'main', library_id: '1', provider: 's3' });
+    vi.mocked(getFolders).mockResolvedValue({ folders: [] });
+    vi.mocked(getListing).mockImplementation((path: string) => Promise.resolve(answers(path)));
+    vi.mocked(askToUnlock).mockResolvedValue({ library: 'unlocked', message: 'the Library is open' });
+  }
+
+  /** The Activity row along the bottom. */
+  function activity() {
+    return within(screen.getByRole('contentinfo', { name: 'Activity' }));
+  }
+
+  // One locked state, in the main area and the Activity row, and nothing in
+  // a refusal's words: no "try again", no tab, no bar under the screen.
+  it('draws one locked state in place of the tree, with Unlock in the main area and the Activity row', async () => {
+    answers = library({ '': ['comics/'] });
+    lockedServer();
+    render(<App />);
+
+    expect(await tree().findByRole('heading', { name: LOCKED_HEADING })).toBeTruthy();
+    for (const line of LOCKED_LINES) {
+      expect(tree().getByText(line)).toBeTruthy();
+    }
+    expect(tree().getByRole('button', { name: UNLOCK })).toBeTruthy();
+    expect(tree().queryByTitle('comics')).toBeNull();
+    expect(screen.queryByRole('tree')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'try again' })).toBeNull();
+
+    expect(activity().getByText(LOCKED)).toBeTruthy();
+    expect(activity().getByRole('button', { name: UNLOCK })).toBeTruthy();
+    expect((activity().getByRole('button', { name: CHECKING }) as HTMLButtonElement).disabled).toBe(true);
+    const add = within(screen.getByRole('banner')).getByRole('button', { name: 'Add files' }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+
+    expect(screen.queryAllByText(/the Library is locked/)).toEqual([]);
+    expect(document.body.textContent).not.toMatch(/\btab\b/i);
+  });
+
+  // Either Unlock asks the server for the unlock; once the server holds the
+  // Library again the screen asks its questions again by itself, and the tree
+  // is back without a reload.
+  for (const where of ['main area', 'Activity row'] as const) {
+    it(`comes back to the tree once unlocked from the ${where}'s Unlock`, async () => {
+      answers = library({ '': ['comics/'] });
+      lockedServer();
+      render(<App />);
+      const main = await tree().findByRole('button', { name: UNLOCK });
+      await waitFor(() => expect(main.hasAttribute('disabled')).toBe(false));
+      const asked = vi.mocked(askToUnlock).mock.calls.length;
+
+      unlockedServer();
+      fireEvent.click(where === 'main area' ? main : activity().getByRole('button', { name: UNLOCK }));
+      await waitFor(() => expect(askToUnlock).toHaveBeenCalledTimes(asked + 1));
+
+      expect(await tree().findByTitle('comics')).toBeTruthy();
+      expect(screen.queryByRole('heading', { name: LOCKED_HEADING })).toBeNull();
+      expect(screen.queryByText(LOCKED)).toBeNull();
+      expect((activity().getByRole('button', { name: CHECKING }) as HTMLButtonElement).disabled).toBe(false);
+      const add = within(screen.getByRole('banner')).getByRole('button', { name: 'Add files' }) as HTMLButtonElement;
+      expect(add.disabled).toBe(false);
+      expect(within(screen.getByRole('banner')).getByTestId('library').textContent).toBe('main');
+    });
+  }
+});
+
+// Opening a row is a toggle, the same from a double-click and from `Enter`.
+describe('opening a row again', () => {
+  /** The reader's sheet, where it is open. */
+  function reader() {
+    return screen.queryByRole('region', { name: 'Reader' });
+  }
+
+  for (const how of ['double-click', 'Enter'] as const) {
+    /** Opens the row named, by `how`: a double-click on it, or `Enter` with the focus on it. */
+    const open = (name: string) => {
+      const row = tree().getByTitle(name);
+      fireEvent.click(row);
+      if (how === 'double-click') {
+        fireEvent.doubleClick(row);
+      } else {
+        fireEvent.keyDown(screen.getByRole('tree'), { key: 'Enter' });
+      }
+    };
+
+    it(`opens a closed folder and the reader on it, with images or without, by ${how}`, async () => {
+      answers = library({ '': ['comics/', 'empty/'], comics: ['001.jpg'], empty: ['notes/'], 'empty/notes': [] });
+      render(<App />);
+      await tree().findByTitle('comics');
+
+      open('comics');
+      expect(await within((await screen.findByRole('region', { name: 'Reader' }))).findByAltText('cover of comics')).toBeTruthy();
+      expect(tree().getByLabelText('collapse comics')).toBeTruthy();
+      expect(parseHash(window.location.hash).cover).toBe('comics');
+
+      open('empty');
+      await waitFor(() => expect(parseHash(window.location.hash).cover).toBe('empty'));
+      expect(await within(reader() as HTMLElement).findByText(NO_IMAGES)).toBeTruthy();
+      expect(tree().getByLabelText('collapse empty')).toBeTruthy();
+      expect(screen.queryByText(/holds nothing the reader can show/)).toBeNull();
+    });
+
+    it(`closes an open folder, and the reader showing it or anything in it, by ${how}`, async () => {
+      answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg', '002.jpg'] });
+      render(<App />);
+      await tree().findByTitle('comics');
+
+      // The reader on the folder itself.
+      open('comics');
+      await waitFor(() => expect(parseHash(window.location.hash).cover).toBe('comics'));
+      await tree().findByTitle('Series');
+      open('comics');
+      await waitFor(() => expect(reader()).toBeNull());
+      expect(tree().getByLabelText('expand comics')).toBeTruthy();
+      expect(tree().queryByTitle('Series')).toBeNull();
+      expect(parseHash(window.location.hash)).toEqual({ folder: '', open: null });
+
+      // The reader on a file inside it, two levels down: opened on the
+      // folder, and following the focus onto the file.
+      open('comics');
+      await tree().findByTitle('Series');
+      open('Series');
+      fireEvent.click(await tree().findByTitle('001.jpg'));
+      await waitFor(() => expect(parseHash(window.location.hash).open).toBe('comics/Series/001.jpg'));
+      expect(reader()).toBeTruthy();
+      // By `Enter` the reader has followed the click's focus onto the folder
+      // by then, and a folder is under itself: it closes all the same.
+      open('comics');
+      await waitFor(() => expect(reader()).toBeNull());
+      expect(tree().queryByTitle('Series')).toBeNull();
+    });
+
+    it(`closes the reader on the file it shows, and opens any other, by ${how}`, async () => {
+      answers = library({ '': ['comics/'], comics: ['001.jpg', '002.jpg'] });
+      render(<App />);
+      await tree().findByTitle('comics');
+      open('comics');
+      await tree().findByTitle('001.jpg');
+
+      // The reader on one file, following the focus onto it.
+      fireEvent.click(tree().getByTitle('001.jpg'));
+      await waitFor(() => expect(parseHash(window.location.hash).open).toBe('comics/001.jpg'));
+      if (how === 'Enter') {
+        // `Enter` opens the focused row, which the open sheet already shows:
+        // another file is opened by it from a shut sheet.
+        fireEvent.keyDown(screen.getByRole('tree'), { key: 'Escape' });
+        await waitFor(() => expect(reader()).toBeNull());
+      }
+      open('002.jpg');
+      await waitFor(() => expect(parseHash(window.location.hash).open).toBe('comics/002.jpg'));
+      expect(reader()).toBeTruthy();
+
+      open('002.jpg');
+      await waitFor(() => expect(reader()).toBeNull());
+      expect(parseHash(window.location.hash)).toEqual({ folder: 'comics', open: null });
+      // The folder stays open, and the focus where the reading stopped.
+      expect(tree().getByTitle('002.jpg').getAttribute('aria-selected')).toBe('true');
+    });
+  }
+
+  // A folder this device has not mapped is not opened in the reader, and
+  // says why, as before.
+  it('says why a folder this device has not mapped does not open', async () => {
+    const base = library({ '': ['away/'], away: ['001.jpg'] });
+    answers = (path) => (path === 'away' ? { ...base(path), mapped: false } : base(path));
+    render(<App />);
+    await tree().findByTitle('away');
+    fireEvent.click(tree().getByTitle('away'));
+    fireEvent.doubleClick(tree().getByTitle('away'));
+    expect(await screen.findByText(unmappedLine('open', true))).toBeTruthy();
+    expect(reader()).toBeNull();
+  });
+});
+

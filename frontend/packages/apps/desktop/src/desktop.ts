@@ -88,7 +88,7 @@ export interface Residency {
  * - Once one is served, the explorer has a window of its own and the
  *   Passphrase window is hidden, not closed. It comes back in *unlock* mode
  *   when the explorer asks for the Library to be unlocked — a press of
- *   *unlock*, or the page seeing the idle lock — or the tray's *Unlock…* is
+ *   *Unlock*, or the page seeing the idle lock — or the tray's *Unlock…* is
  *   chosen, and goes again once the Library is unlocked. Closing it only
  *   hides it. Closing the explorer's window hides it too, where the app stays
  *   resident ({@link explorerCloses}).

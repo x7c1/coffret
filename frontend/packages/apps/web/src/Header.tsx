@@ -51,6 +51,10 @@ import type { Asked } from './useAsked';
  *   [`AppearanceSwitch`](./AppearanceSwitch)). Here rather than in a menu bar,
  *   which the desktop app hides, or on a settings page, which there is not.
  *
+ * While the Library is locked the **+** is drawn disabled, since nothing can be
+ * added to a locked Library, and a name the lock kept the page from reading is
+ * left out rather than said as a refusal: the main area says the lock.
+ *
  * One row on a wide window; on a narrow one it wraps rather than scrolling
  * sideways, the location taking a line of its own before anything is cut off
  * the Library's name or the **+**.
@@ -66,6 +70,7 @@ export function Header({
   onNewFolder,
   moving = null,
   onMoveToRoot = () => {},
+  locked = false,
 }: {
   /** The open Library, as the server last answered for it. */
   library: Asked<Library>;
@@ -91,6 +96,8 @@ export function Header({
   moving?: readonly Described[] | null;
   /** They were let go of over the Library's name: moved to the root, once confirmed. */
   onMoveToRoot?: () => void;
+  /** Whether the Library is locked, which leaves nothing to add to. */
+  locked?: boolean;
 }) {
   const location = locationOf(focus);
   const addInto = landingOf(focus);
@@ -154,21 +161,23 @@ export function Header({
   return (
     <header style={HEADER}>
       <div style={WHERE}>
-        <span
-          data-testid="library"
-          // The whole of it, for a name cut short.
-          title={named(library)}
-          {...moveHandlers}
-          style={{
-            ...LIBRARY,
-            ...(library.status === 'failed' ? { color: COLOR.refused } : {}),
-            ...(overLibrary
-              ? { outline: dropOutline(true, 'taken'), outlineOffset: -2, background: dropGround('taken') }
-              : {}),
-          }}
-        >
-          {overLibrary ? moveLine('') : named(library)}
-        </span>
+        {!(locked && library.status !== 'ready') && (
+          <span
+            data-testid="library"
+            // The whole of it, for a name cut short.
+            title={named(library)}
+            {...moveHandlers}
+            style={{
+              ...LIBRARY,
+              ...(library.status === 'failed' ? { color: COLOR.refused } : {}),
+              ...(overLibrary
+                ? { outline: dropOutline(true, 'taken'), outlineOffset: -2, background: dropGround('taken') }
+                : {}),
+            }}
+          >
+            {overLibrary ? moveLine('') : named(library)}
+          </span>
+        )}
         <span data-testid="location" title={location} style={LOCATION}>
           {location}
         </span>
@@ -180,6 +189,7 @@ export function Header({
         title={`Add to ${placeOf(addInto)}`}
         aria-haspopup="menu"
         aria-expanded={adding !== null}
+        disabled={locked}
         // The menu closes on a press outside it, which this is; the click
         // below opens it, or closes it where it is open.
         onMouseDown={(event) => event.stopPropagation()}
@@ -196,7 +206,7 @@ export function Header({
             into: addInto,
           });
         }}
-        style={ADD_BUTTON}
+        style={locked ? { ...ADD_BUTTON, ...ADD_DISABLED } : ADD_BUTTON}
       >
         <svg
           aria-hidden
@@ -212,7 +222,7 @@ export function Header({
           <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
-      {adding !== null && (
+      {adding !== null && !locked && (
         <ActionsMenu
           title={`Add to ${placeOf(adding.into)}`}
           label={`add to ${placeOf(adding.into)}`}
@@ -364,4 +374,11 @@ const ADD_BUTTON: CSSProperties = {
   padding: 0,
   borderRadius: 8,
   cursor: 'pointer',
+};
+
+/** The **+** while the Library is locked: faint, on a ground of no colour, and not pressed. */
+const ADD_DISABLED: CSSProperties = {
+  background: COLOR.hover,
+  color: COLOR.faint,
+  cursor: 'default',
 };

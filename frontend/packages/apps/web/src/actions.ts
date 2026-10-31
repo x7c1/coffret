@@ -6,7 +6,9 @@
 // one way. What it holds depends on the rows:
 //
 // - **Open**, where the reader can show the row ([`opensInReader`](./details)):
-//   what `Enter`, a double-click and the details pane's Open do.
+//   what the details pane's Open does, and what `Enter` and a double-click do
+//   on a row not open already — those close a row opened again (see `openRow`
+//   in [`TreeTable`](./TreeTable)), and Open does not.
 // - **New folder…**, on a folder a mapping of this device reaches: where a
 //   drop into it would be taken (see [`prospective`](./prospective)).
 // - **Pack this folder…**, on a folder under a top-level folder this device

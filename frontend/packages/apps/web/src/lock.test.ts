@@ -104,7 +104,7 @@ function returning() {
 // refused, and the Passphrase was given in the desktop app's own window. The
 // answer turning back to unlocked is where the tab asks everything again, so a
 // page that was refused comes back without anybody asking for it again — the
-// locked page's one control is *unlock*, and the page does not wait on it.
+// locked page's one control is *Unlock*, and the page does not wait on it.
 it('asks again when the answer turns from locked to unlocked', () => {
   expect(unlockLanded('locked', 'unlocked')).toBe(true);
 
@@ -140,7 +140,7 @@ it('asks again when a page that came up locked is unlocked', () => {
   expect(unlockLanded('locked', 'locked')).toBe(false);
 });
 
-/** A press of *unlock*, recording what the screen was told. */
+/** A press of *Unlock*, recording what the screen was told. */
 function press(ask: () => Promise<Unlocking>) {
   const told = { line: null as string | null, trouble: null as string | null, rechecks: 0 };
   return {
@@ -289,7 +289,7 @@ it('asks nothing more for a lock already asked about, and again for the next', (
   expect(page.asks).toBe(2);
 });
 
-// A press of *unlock* pays the ask a lock is owed, so a page that comes back
+// A press of *Unlock* pays the ask a lock is owed, so a page that comes back
 // in front after one does not ask again.
 it('asks nothing on its own for a lock the button was pressed for', () => {
   const page = prompted(false);

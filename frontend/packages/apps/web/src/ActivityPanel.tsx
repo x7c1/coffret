@@ -24,6 +24,7 @@ import {
   type StopAsk,
 } from './activity';
 import { size } from './humanize';
+import { LOCKED, LockIcon, UNLOCK, type UnlockOffer } from './Locked';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { SyncIcon } from './SyncIcon';
@@ -61,12 +62,14 @@ import { COLOR, SHADOW } from './theme';
  * The row also carries what there is to say about the Library itself: the
  * parcels this device keeps, and the sync icon that asks it what is new —
  * always there, unlike everything above, which
- * comes and goes with the work. While the Library is locked the row says so
- * in place of the summary, with the one button that unlocks it; every Retry
- * goes, since each would meet the same locked refusal.
+ * comes and goes with the work. While the Library is locked the row says
+ * **Locked**, quietly and beside a padlock, in place of the summary, with the
+ * button that unlocks it; the sync icon is drawn disabled, since looking for
+ * what is new needs the Library open, and every Retry goes, since each would
+ * meet the same locked refusal.
  *
- * At its right end a **?** shows the tree's keyboard shortcuts while it is
- * hovered or focused.
+ * The tree's keyboard shortcuts are listed over its right end while the `?`
+ * key is pressed; nothing on the screen marks them (see `Shortcuts`).
  *
  * It is drawn below the tree and the reader's sheet and not over them, so
  * opening it shrinks them rather than covering what they show.
@@ -209,21 +212,22 @@ export function ActivityPanel({
             </span>
           )}
         </span>
+        {/* What the last press came to is said under the main area's
+            Unlock, which stands over the same lock: said once, there. */}
         {locked !== null && (
           <>
-            <span style={{ color: COLOR.refused }}>{LOCKED}</span>
+            <span style={LOCKED_MARK}>
+              <LockIcon size={14} />
+              {LOCKED}
+            </span>
             <button
+              type="button"
               onClick={locked.ask}
               disabled={locked.asking}
               style={{ ...BUTTON, cursor: locked.asking ? 'default' : 'pointer' }}
             >
               {UNLOCK}
             </button>
-            {locked.refused !== null ? (
-              <span style={{ color: COLOR.refused }}>{locked.refused}</span>
-            ) : (
-              locked.said !== null && <span style={{ color: COLOR.text }}>{locked.said}</span>
-            )}
           </>
         )}
         {locked === null && !open && row.progress !== null && <Bar progress={row.progress} width={96} />}
@@ -253,7 +257,12 @@ export function ActivityPanel({
             ) : (
               refresh.said !== null && <span>{refresh.said}</span>
             )}
-            <SyncIcon running={refresh.running} waiting={refresh.waiting} onPress={refresh.ask} />
+            <SyncIcon
+              running={refresh.running}
+              waiting={refresh.waiting}
+              disabled={locked !== null}
+              onPress={refresh.ask}
+            />
           </span>
           <Shortcuts />
         </span>
@@ -544,7 +553,7 @@ export const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['↑ ↓', 'move'],
   ['→', 'expand, or go in'],
   ['←', 'collapse, or go to the parent'],
-  ['Enter', 'open in the reader'],
+  ['Enter', 'open in the reader, or close again'],
   ['Esc', 'close the reader, or go to the parent'],
   ['Shift ↑ ↓, Shift / ⌘ (Ctrl) click', 'select several'],
   ['Right-click', 'actions'],
@@ -573,12 +582,6 @@ function useFirstSeen(running: readonly Running[]): ReadonlyMap<string, string> 
   return seen.current;
 }
 
-/** What the row says while the Library is locked, in place of the summary. */
-export const LOCKED = 'the Library is locked';
-
-/** The one button the row offers while it is. */
-export const UNLOCK = 'unlock';
-
 /** What the badge's press does, which is what it is named by. */
 export const SHOW_FAILURES = 'Show the failures';
 
@@ -590,21 +593,6 @@ export const NOTHING_IN_PROGRESS = 'Nothing is running.';
 
 /** What **Earlier** says where nothing has ended. */
 export const NOTHING_EARLIER = 'Nothing has finished since the server started.';
-
-/**
- * The unlock the panel offers while the Library is locked: the button, whether
- * a press is still waiting for its answer, and what the last one came to.
- */
-export interface UnlockOffer {
-  /** Whether a press is waiting for the server's answer. */
-  asking: boolean;
-  /** What the server answered the last press with, and `null` before any. */
-  said: string | null;
-  /** What refused the last press, and `null` where none was. */
-  refused: string | null;
-  /** Presses the button. */
-  ask: () => void;
-}
 
 /** What each outcome's dot is called, for a reader that cannot see its colour. */
 const OUTCOME: Record<Outcome, string> = {
@@ -760,7 +748,10 @@ const DOT = {
 
 const EMPTY = { margin: '2px 0' } as const;
 
-/** The unlock, drawn as every framed button on this screen is. */
+/** **Locked**, beside its padlock: quiet, since a lock is not a failure. */
+const LOCKED_MARK = { display: 'inline-flex', alignItems: 'center', gap: 6, color: COLOR.dim } as const;
+
+/** The unlock, outlined as every framed button on this screen is. */
 const BUTTON = {
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,
