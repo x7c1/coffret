@@ -38,6 +38,13 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // A look at which heads the Library has, by name, and nothing more:
         // a `GET` because it moves nothing, the catalog included.
         .route("/api/remote-head", get(routes::remote_head))
+        // How this device's explorer is drawn: read with a `GET`, and kept for
+        // the next launch with a `POST`, as a preference of the device's own
+        // rather than anything about the Library.
+        .route(
+            "/api/appearance",
+            get(routes::appearance).post(routes::choose_appearance),
+        )
         // The eleven that are not a `GET`, because they are the ones that ask
         // the server to go and do something rather than to say what it knows.
         // Four of them arm background work and answer at once — the fill, the

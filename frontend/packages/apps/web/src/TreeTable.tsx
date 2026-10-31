@@ -967,7 +967,7 @@ function Row({
   const ring = drop !== null ? dropOutline(true, drop) : focused && focusOutside ? `1px solid ${COLOR.accent}` : 'none';
   // Whether the row is drawn on the accent: the focused row, unless a drag over
   // it has it tinted as the drop target instead — white words would vanish on
-  // the light tint.
+  // the light set's tint.
   const onAccent = highlighted && drop === null;
   // What is drawn on the accent of the focused row is drawn in white, the
   // name, the values and the icons alike; elsewhere each keeps its own colour.

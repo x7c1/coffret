@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use anyhow::ensure;
 use coffret_device::{
-    Drops, EntryFetches, KeptTally, LibraryId, LibraryRef, LiveReservations, OpenLibrary,
+    AppearanceFile, Drops, EntryFetches, KeptTally, LibraryId, LibraryRef, LiveReservations,
+    OpenLibrary,
 };
 use tokio::sync::watch;
 use tokio::time::Instant;
@@ -214,6 +215,13 @@ pub struct ServerState {
     /// before a lock stays live to the freezes and the resumption the next
     /// unlock runs.
     live: Arc<LiveReservations>,
+    /// Where this device keeps which set of colours its explorer is drawn in.
+    ///
+    /// The device's and not the Library's, and not this process's either: it
+    /// is read from and written to the file each time it is asked about, so
+    /// the next server — the desktop app's next launch — answers with the same
+    /// choice.
+    pub appearance: AppearanceFile,
 }
 
 impl ServerState {
@@ -247,7 +255,18 @@ impl ServerState {
             drops: Drops::new(),
             consent: Arc::new(DriveConsent),
             live,
+            appearance: AppearanceFile::of_this_device(),
         }
+    }
+
+    /// Serves the same Library, keeping the explorer's appearance in `file`.
+    ///
+    /// The binary never calls it: what it keeps the choice in is the file in
+    /// this device's state directory. It exists so a case keeps the choice in
+    /// a directory of its own rather than in the state of whoever runs it.
+    pub fn keeping_appearance_in(mut self, file: AppearanceFile) -> Self {
+        self.appearance = file;
+        self
     }
 
     /// Serves the same Library, asking for consent through `consent`.

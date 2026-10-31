@@ -195,6 +195,14 @@ mod account_name;
 mod account_settings;
 mod accounts;
 
+// Which set of colours this device's explorer is drawn in, and the file it is
+// kept in beside the Libraries.
+mod appearance;
+pub use appearance::Appearance;
+
+mod appearance_file;
+pub use appearance_file::AppearanceFile;
+
 mod add;
 pub use add::{AddedFile, IncomingFile, KeptAside, LocalAdditions, Replacing};
 

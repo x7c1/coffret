@@ -1767,8 +1767,9 @@ export function App() {
     }
   }, [refocusing, rows, tree, heldListing, changeTree]);
 
-  // The header's Add files menu let go of by `Escape`: the keys go back to the
-  // tree, as they do out of any menu opened over it.
+  // The header's Add files menu let go of by `Escape`, or the appearance switch
+  // let go of by `Escape` or by a choice: the keys go back to the tree, as they
+  // do out of any menu opened over it.
   const keysBack = useCallback(() => treeArea.current?.focus(), []);
 
   // Closing the sheet leaves the focus and the folder where they are.

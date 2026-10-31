@@ -38,6 +38,8 @@ vi.mock('@coffret/api', async (actual) => ({
   browseFolders: vi.fn(),
   getBeside: vi.fn(),
   getFile: vi.fn(),
+  // A device that never chose how the explorer is drawn.
+  getAppearance: vi.fn(() => Promise.resolve('system')),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
   getListing: vi.fn(),

@@ -27,7 +27,7 @@ export const EXPLORER_PARTITION = 'persist:coffret-explorer';
 export const PARTITIONS = [PASSPHRASE_PARTITION, EXPLORER_PARTITION] as const;
 
 /** What every window shows of the app: its title, and its icon where it has one of its own. */
-export interface Appearance {
+export interface WindowLook {
   /** The window's title, kept whatever the page's own says. */
   title: string;
   /** The icon file's path (Linux), or `undefined` for the platform's default. */
@@ -35,13 +35,13 @@ export interface Appearance {
 }
 
 /** The installed app's windows: titled Coffret, with no icon of their own. */
-export const INSTALLED: Appearance = { title: 'Coffret' };
+export const INSTALLED: WindowLook = { title: 'Coffret' };
 
-/** `appearance`, as window options: the icon left out where there is none. */
-function shown(appearance: Appearance): BrowserWindowConstructorOptions {
+/** `look`, as window options: the icon left out where there is none. */
+function shown(look: WindowLook): BrowserWindowConstructorOptions {
   return {
-    title: appearance.title,
-    ...(appearance.icon === undefined ? {} : { icon: appearance.icon }),
+    title: look.title,
+    ...(look.icon === undefined ? {} : { icon: look.icon }),
   };
 }
 
@@ -78,10 +78,10 @@ function confined(partition: string, preload?: string): WebPreferences {
 /** The small window the Passphrase is typed into on `platform`, served by the door. */
 export function passphraseWindowOptions(
   platform: NodeJS.Platform,
-  appearance: Appearance = INSTALLED,
+  look: WindowLook = INSTALLED,
 ): BrowserWindowConstructorOptions {
   return {
-    ...shown(appearance),
+    ...shown(look),
     ...menuBar(platform),
     width: 380,
     height: 260,
@@ -100,10 +100,10 @@ export function passphraseWindowOptions(
 export function explorerWindowOptions(
   preload: string,
   platform: NodeJS.Platform,
-  appearance: Appearance = INSTALLED,
+  look: WindowLook = INSTALLED,
 ): BrowserWindowConstructorOptions {
   return {
-    ...shown(appearance),
+    ...shown(look),
     ...menuBar(platform),
     width: 1280,
     height: 820,

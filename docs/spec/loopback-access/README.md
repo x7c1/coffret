@@ -25,8 +25,10 @@ one-time **drop handle**, and carried into the Library by a request that names
 the handle and never a path. LA-32 onwards are the server's again: how a
 **reader** — the explorer's sheet over the file the tree's focus is on — reads
 on from one folder into the next, and reads ahead of itself without setting a
-folder coming; and, from LA-34, how a person **stops** an add, a freeze or a
-fill before it commits, and what a stopped add leaves. The two credentials
+folder coming; from LA-34, how a person **stops** an add, a freeze or a
+fill before it commits, and what a stopped add leaves; and which set of
+colours this device's explorer is drawn in, which the server keeps as the
+device's own state (LA-38). The two credentials
 never cross: the server key is what the host shows the server, a browser token
 is what a browser shows the host, and neither of the two accepts the other's.
 Nor does the door's token stand for either.
@@ -708,3 +710,24 @@ Concept background: [Library](../../concepts/library/),
   waiting its turn is never begun, and no fill is armed by it. *(Form: test for the fill; prose for the
   reader's fetch, which is the page withdrawing a request this server answers
   as any other.)*
+
+### The explorer's appearance
+
+- **LA-38.** Which set of colours this device's explorer is drawn in —
+  `system`, the one the browser reports the system as asking for, followed as
+  it changes; `light`; or `dark` — is this device's own state, kept by the
+  server in a file of the state directory beside the Libraries and not in any
+  Library, so it is the same whichever Library the device opens and nothing of
+  it is ever uploaded. The server answers it (`GET /api/appearance`, as
+  `{"appearance": …}`) and keeps a new one (`POST /api/appearance` with the
+  same body, answered as the `GET` is). A device that never chose, or whose
+  file cannot be read, is answered `system`; a body naming anything but the
+  three is refused as `400` and leaves the kept choice as it was. It needs no
+  key, so a locked server answers both, and neither records anybody being
+  here (DK-4); the explorer host's fence (LA-14) still refuses them while
+  the Library is locked, as it does every request but the unlock and the
+  minimal status. It is kept by the server rather than in the page's storage
+  because the desktop app serves the explorer on a port chosen at each launch
+  (LA-13), so the page's origin, and the storage the browser keys by it, is new
+  at every launch.
+  *(Form: test)*

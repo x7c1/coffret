@@ -278,6 +278,9 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
+        // The set this device's explorer is drawn in, on a device that never
+        // chose one.
+        "appearance": answered_as_json(&served, "GET", "/api/appearance").await,
         // The files either side of a row: the last file of `albums` reads on
         // into the first of `books`.
         "beside": answered_as_json(&served, "GET", "/api/beside?path=albums/notes.txt").await,

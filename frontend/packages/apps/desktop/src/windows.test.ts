@@ -62,7 +62,7 @@ describe('the Passphrase window', () => {
   });
 });
 
-describe('appearance', () => {
+describe('the windows’ look', () => {
   it('titles every window Coffret, with no icon of its own, by default', () => {
     for (const options of Object.values(windows)) {
       expect(options.title).toBe('Coffret');
@@ -71,8 +71,8 @@ describe('appearance', () => {
   });
 
   it('carries the title and icon it is given', () => {
-    const appearance = { title: 'Coffret (dev)', icon: '/app/assets/icon-dev.png' };
-    for (const options of [passphraseWindowOptions('linux', appearance), explorerWindowOptions(PRELOAD, 'linux', appearance)]) {
+    const look = { title: 'Coffret (dev)', icon: '/app/assets/icon-dev.png' };
+    for (const options of [passphraseWindowOptions('linux', look), explorerWindowOptions(PRELOAD, 'linux', look)]) {
       expect(options.title).toBe('Coffret (dev)');
       expect(options.icon).toBe('/app/assets/icon-dev.png');
     }
