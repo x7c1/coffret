@@ -28,8 +28,14 @@ import {
 } from './journey';
 import { commitElsewhere } from './uploader';
 
-/** What the other device commits, named so that it sorts to the top of the album. */
-const ADDED = 'committed-elsewhere.jpg';
+/**
+ * What the other device commits, named so that it sorts after the album's
+ * photographs. The album is the focused folder, and the details pane fetches a
+ * focused folder's cover — its first image — where this device does not have
+ * it (spec: LA-33). Named to sort first, this file would be that cover, and on
+ * this device before anybody opened it.
+ */
+const ADDED = 'then-committed-elsewhere.jpg';
 
 /** What the sync icon is called, plain and while changes are waiting. */
 const CHECKING = 'Check for changes';
@@ -55,6 +61,8 @@ test('ask what is new and find what another device committed', async ({ page }) 
 
   await expect(row(page, ADDED)).toHaveCount(1);
   await expectRemote(page, ADDED);
+  // Below the album's photographs, so brought on to the screen for the picture.
+  await row(page, ADDED).scrollIntoViewIfNeeded();
   await expect(page.getByText('1 new file')).toBeVisible();
   await expect(page.getByRole('button', { name: CHECKING, exact: true })).toBeVisible();
   await shot(page, '02-the-catalog-caught-up');

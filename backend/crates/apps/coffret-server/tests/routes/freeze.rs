@@ -94,6 +94,7 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
             "delete": null,
             "log": [],
             "adds": [],
+            "findings": [],
         }),
         "nothing landed, so there is nothing to pack",
     );

@@ -321,6 +321,30 @@ it('lists the log and the page’s notices together, newest first', () => {
   ]);
 });
 
+// LA-33: what a read that armed no fill found is said among the rest, as a
+// notice with nothing to retry: the read was answered.
+it('lists what reads that armed no fill found among the rest, as notices', () => {
+  const entries = earlier(
+    [logged({ kind: 'sync', run: aSync(null) }, 2, false, 2)],
+    [],
+    false,
+    [
+      {
+        id: 1,
+        at: '2026-10-30T09:05:00Z',
+        path: null,
+        message: 'the Library’s Keyring is degraded',
+        reason: 'keyring_degraded',
+        surfaced: null,
+      },
+    ],
+  );
+  expect(entries.map((entry) => [entry.key, entry.text, entry.outcome, entry.retry, entry.standing])).toEqual([
+    ['found:1', 'the Library’s Keyring is degraded', 'notice', null, false],
+    ['server:2', 'added 2 files to the Library', 'success', null, false],
+  ]);
+});
+
 // A fill that brought everything over has nothing on its running line to say,
 // but an entry of what happened says what it was.
 it('says what a quiet fill brought over', () => {

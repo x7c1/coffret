@@ -199,6 +199,19 @@ export async function expectRemote(page: Page, name: string): Promise<void> {
   await expect(stateIcon(page, name)).toHaveCount(0);
 }
 
+/**
+ * What another device commits into the album while this device's server is
+ * down, for the restart journey to find on its first listing.
+ *
+ * Named to sort after the album's photographs: the album is the folder the
+ * journeys focus, and the details pane fetches a focused folder's cover — its
+ * first image — where this device does not have it (spec: LA-33), so a name
+ * sorting first would be on this device before anybody opened it. Named here
+ * rather than in that journey because sorting last makes it the album's last
+ * file, which the read-on journey reads off the end of.
+ */
+export const ARRIVED_WHILE_DOWN = 'while-the-server-was-down.jpg';
+
 /** The last component of an Entry Path, which is what a folder is called. */
 export function leaf(entry: string): string {
   return entry.slice(entry.lastIndexOf('/') + 1);

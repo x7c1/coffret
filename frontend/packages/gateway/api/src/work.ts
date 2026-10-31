@@ -901,6 +901,22 @@ export interface Work {
    * asked for was being answered reads to know it is still being answered.
    */
   adds: AddUnderWay[];
+  /**
+   * What the reads that armed no fill found — a read ahead's fetch finding the
+   * Library's Keyring short, or a kept part of a Container gone and read from
+   * Storage again — newest first, each said once by the process that answered
+   * (spec: LA-33). A fill's fetch says these in the fill's own `findings`; a
+   * read ahead has no run to say them, so the answer says them here.
+   */
+  findings: FoundByRead[];
+}
+
+/** One thing a read that armed no fill found, numbered and stamped as a log entry is (spec: LA-33). */
+export interface FoundByRead extends Finding {
+  /** Which finding this is, counted from 1 by the process that answered. */
+  id: number;
+  /** When the server heard it, as ISO 8601 in UTC. */
+  at: string;
 }
 
 /** Asks what the server is doing on its own. */
@@ -1188,6 +1204,7 @@ interface WorkSent {
   reconnect: Reconnect | null;
   log?: LoggedSent[];
   adds?: AddUnderWay[];
+  findings?: ({ id: number; at: string } & Record<string, unknown>)[];
 }
 
 /** One entry of the log as sent: its run or its refusal not read yet. */
@@ -1247,6 +1264,7 @@ export function workOf(sent: unknown): Work {
     reconnect: work.reconnect,
     log: (work.log ?? []).map(loggedOf),
     adds: work.adds ?? [],
+    findings: (work.findings ?? []).map((found) => ({ id: found.id, at: found.at, ...findingOf(found) })),
   };
 }
 

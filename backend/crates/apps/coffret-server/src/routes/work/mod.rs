@@ -35,6 +35,9 @@ use fill_dto::FillDto;
 mod finding_dto;
 use finding_dto::FindingDto;
 
+mod found_dto;
+use found_dto::FoundDto;
+
 mod freeze_dto;
 use freeze_dto::FreezeDto;
 

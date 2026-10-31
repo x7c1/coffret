@@ -81,7 +81,9 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * `↓` goes on into its files with the sheet following. While the sheet is
  * open, `↑`/`↓` go from file to file in reading order rather than row to row
  * (see [`readOn`](./tree)): off the end of one folder into the first file of
- * the next, opening it. The list scrolls ahead
+ * the next, opening it — save from a closed folder, where they go to the row
+ * drawn beside it, so closed folders are paged through by their covers. The
+ * list scrolls ahead
  * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
  * double-click opens it as `Enter` does, and a press on the disclosure button
  * opens or closes the folder without moving the focus — except out of a folder

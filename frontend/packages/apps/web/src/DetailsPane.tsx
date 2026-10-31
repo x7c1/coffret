@@ -1,6 +1,6 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import { peekFile, type DeleteTarget, type ListedFile, type Listing } from '@coffret/api';
+import { peekFile, readAhead, type DeleteTarget, type ListedFile, type Listing } from '@coffret/api';
 
 import { deleteTargetOf } from './actions';
 import { deleteItems } from './deleteEntries';
@@ -40,11 +40,17 @@ import type { Asked } from './useAsked';
  *
  * - a preview: an image file's picture; for a folder holding images, its first
  *   one — for a scanned book, nearly always the cover; and otherwise a plain
- *   placeholder, the extension of a file or the item count of a folder. The
- *   picture is drawn only where its bytes are on this device already, asked
- *   for as a peek (see [`peekFile`](../../../gateway/api/src/file.ts)): moving
- *   the focus down a list is not opening anything, so it fetches nothing from
- *   Storage and sets no folder coming;
+ *   placeholder, the extension of a file or the item count of a folder. A
+ *   file's picture is drawn only where its bytes are on this device already,
+ *   asked for as a peek (see [`peekFile`](../../../gateway/api/src/file.ts)):
+ *   moving the focus down a list is not opening anything, so it fetches
+ *   nothing from Storage and sets no folder coming. A folder's cover this
+ *   device does not have is read ahead (see
+ *   [`readAhead`](../../../gateway/api/src/file.ts), spec: LA-33): that one
+ *   image is fetched and none of the folder is set coming, so walking past a
+ *   shelf of folders shows each cover and fetches nothing more — and while it
+ *   is on its way the preview says it is loading rather than drawing the
+ *   folder as having no cover;
  * - where the row stands, its name, and Open where the reader can show the row
  *   ([`opensInReader`](./details)) — what `Enter` does there: the reader's
  *   sheet on the row;
@@ -62,6 +68,7 @@ export function DetailsPane({
   uploadStoppedOf,
   onOpen,
   onDelete,
+  onFetched,
 }: {
   /** The rows selected, top to bottom; the focused row alone where nothing else is. */
   selected: readonly Described[];
@@ -75,6 +82,12 @@ export function DetailsPane({
   onOpen: (row: Described) => void;
   /** `Delete <n> items…` over several rows: the deletion the actions menu asks for. */
   onDelete: (target: DeleteTarget) => void;
+  /**
+   * A folder's cover read ahead has landed: the file is on this device now, so
+   * the rows still saying `remote` are stale and asked again, as the reader's
+   * sheet has them asked once it fetches.
+   */
+  onFetched: (path: string) => void;
 }) {
   return (
     <aside className="details" aria-label="Details" style={PANE}>
@@ -87,6 +100,7 @@ export function DetailsPane({
           shownOf={shownOf}
           uploadStoppedOf={uploadStoppedOf}
           onOpen={onOpen}
+          onFetched={onFetched}
         />
       ) : (
         <Several rows={selected} onDelete={onDelete} />
@@ -102,6 +116,7 @@ function One({
   shownOf,
   uploadStoppedOf,
   onOpen,
+  onFetched,
 }: {
   row: Described;
   /** The folder's own listing as far as it has been asked, for a folder row. */
@@ -109,13 +124,17 @@ function One({
   shownOf: (row: FileRow) => RowFill;
   uploadStoppedOf: (file: ListedFile) => boolean;
   onOpen: (row: Described) => void;
+  onFetched: (path: string) => void;
 }) {
   const listing = asked?.status === 'ready' ? asked.value : null;
   // The picture to draw, if any: the file itself, or a folder's first image.
   const image = row.kind === 'file' ? (row.file.openable ? row.file : null) : listing === null ? null : firstImage(listing);
-  // Only from the bytes this device has: a peek never fetches.
-  const here = image !== null && image.state !== 'remote';
-  const url = usePeek(here ? image.path : null);
+  // A file's from the bytes this device has alone, since a peek never
+  // fetches; a folder's cover read ahead where this device does not have it.
+  const remote = image !== null && image.state === 'remote';
+  const ahead = remote && row.kind === 'folder';
+  const picture = usePicture(image !== null && (!remote || ahead) ? image.path : null, ahead, onFetched);
+  const url = picture.status === 'ready' ? picture.url : null;
   const folder = row.kind === 'folder' ? row : null;
   const where = parentOf(row.path);
 
@@ -145,7 +164,16 @@ function One({
         {url !== null ? (
           <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
         ) : folder !== null ? (
-          <Placeholder mark={<FolderMark />} label={listing === null ? '' : counted(itemsIn(listing), 'item', 'items')} />
+          <Placeholder
+            mark={<FolderMark />}
+            label={
+              picture.status === 'loading' && ahead
+                ? COVER_LOADING
+                : listing === null
+                  ? ''
+                  : counted(itemsIn(listing), 'item', 'items')
+            }
+          />
         ) : (
           <Placeholder mark={<SheetMark />} label={extensionOf(row.name)?.toUpperCase() ?? ''} />
         )}
@@ -216,8 +244,24 @@ function Facts({ facts }: { facts: readonly [string, ReactNode][] }) {
 }
 
 /**
- * The picture at `path`, peeked, as a URL an `<img>` draws; `null` while it is
- * out, where it was refused, and where there is no path.
+ * What the preview says over a folder whose cover is on its way from Storage,
+ * in the word the reader's sheet and the Activity panel use for it.
+ */
+export const COVER_LOADING = 'fetching cover…';
+
+/** Where the preview's picture stands. */
+type Picture =
+  /** No picture is asked for, or the one asked for was refused. */
+  | { status: 'none' }
+  /** It is on its way. */
+  | { status: 'loading' }
+  /** It is here, as a URL an `<img>` draws. */
+  | { status: 'ready'; url: string };
+
+/**
+ * The picture at `path` as a URL an `<img>` draws: peeked, or read ahead where
+ * `ahead` says — a folder's cover this device does not have — and `none`
+ * where there is no path or it was refused.
  *
  * Asked for rather than pointed at, as the reader's pages are: the request
  * carries the tab's session, which an `<img src>` would not. Let go of when the
@@ -225,27 +269,40 @@ function Facts({ facts }: { facts: readonly [string, ReactNode][] }) {
  * keeps only the last — and the URL revoked with it. A refusal draws the
  * placeholder: the pane has nothing to say about a preview that did not come
  * that the row does not already say.
+ *
+ * Asked again only when the path changes, and not when `ahead` does: a cover
+ * read ahead that lands is handed to `fetched`, which has the listing asked
+ * again, and that listing says the cover is on this device now — the picture
+ * already drawn is that file.
  */
-function usePeek(path: string | null): string | null {
-  const [peeked, setPeeked] = useState<{ path: string; url: string } | null>(null);
+function usePicture(path: string | null, ahead: boolean, fetched: (path: string) => void): Picture {
+  const [picture, setPicture] = useState<{ path: string; url: string | null } | null>(null);
+  const asksAhead = useRef(ahead);
+  asksAhead.current = ahead;
+  const landed = useRef(fetched);
+  landed.current = fetched;
   useEffect(() => {
     if (path === null) {
-      setPeeked(null);
+      setPicture(null);
       return;
     }
     const aborter = new AbortController();
     let url: string | null = null;
-    peekFile(path, aborter.signal).then(
+    const fetches = asksAhead.current;
+    (fetches ? readAhead : peekFile)(path, aborter.signal).then(
       (blob) => {
         if (aborter.signal.aborted) {
           return;
         }
         url = URL.createObjectURL(blob);
-        setPeeked({ path, url });
+        setPicture({ path, url });
+        if (fetches) {
+          landed.current(path);
+        }
       },
       () => {
         if (!aborter.signal.aborted) {
-          setPeeked(null);
+          setPicture({ path, url: null });
         }
       },
     );
@@ -256,7 +313,13 @@ function usePeek(path: string | null): string | null {
       }
     };
   }, [path]);
-  return peeked !== null && peeked.path === path ? peeked.url : null;
+  if (path === null) {
+    return { status: 'none' };
+  }
+  if (picture === null || picture.path !== path) {
+    return { status: 'loading' };
+  }
+  return picture.url === null ? { status: 'none' } : { status: 'ready', url: picture.url };
 }
 
 /** A large mark and a word under it, where there is no picture to draw. */

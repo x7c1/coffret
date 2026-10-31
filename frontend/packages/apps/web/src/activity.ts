@@ -5,9 +5,10 @@
 // is happening now — the drop, the run holding the turn at this device's
 // pending work, the runs waiting for it, the fill, and the reader's own
 // fetch. **Earlier** is what is
-// over: the server's log of the work it finished (spec: LA-12), and the
-// notices only this page knows of — a row asked to open that did not, a drop
-// that came to nothing — merged into one list, newest first.
+// over: the server's log of the work it finished (spec: LA-12), what the
+// server's reads that armed no fill found (spec: LA-33), and the notices only
+// this page knows of — a row asked to open that did not, a drop that came to
+// nothing — merged into one list, newest first.
 //
 // Each finished entry says its outcome as a dot — success, failure, notice —
 // and a failure that asking again could help carries the Retry that takes the
@@ -28,6 +29,7 @@ import type {
   AddUnderWay,
   DeleteTarget,
   Fill,
+  FoundByRead,
   Freeze,
   Logged,
   Move,
@@ -346,7 +348,8 @@ function stepped(step: Step | null): number | null {
 }
 
 /**
- * **Earlier**: the server's log and this page's own notices, newest first.
+ * **Earlier**: the server's log, what its reads that armed no fill found, and
+ * this page's own notices, newest first.
  *
  * Nothing is offered a second attempt while the Library is locked: each would
  * meet the same locked refusal until the Passphrase is given, and the panel
@@ -356,9 +359,11 @@ export function earlier(
   log: readonly Logged[],
   notices: readonly PageNotice[],
   locked: boolean,
+  found: readonly FoundByRead[] = [],
 ): Entry[] {
   const entries = [
     ...log.map((logged) => entryOf(logged, locked)),
+    ...found.map(foundEntry),
     ...notices.map((notice) => noticeEntry(notice, locked)),
   ];
   // ISO 8601 in UTC compares as text; a page's notices are stamped in the
@@ -381,6 +386,28 @@ export function entryOf(logged: Logged, locked: boolean): Entry {
     standing: !logged.settled && outcomeOf(logged) === 'failure',
     settled: logged.settled,
     ranOut: ranOut(refused),
+    answers: false,
+  };
+}
+
+/**
+ * One thing a read that armed no fill found — the cover or the first pages
+ * read ahead of the reader meeting the Library's Keyring short, or a kept
+ * part of a Container gone — as the panel draws it: a notice, as a fill's
+ * line that found the same would be, with nothing to retry, since the read
+ * was answered (spec: LA-33).
+ */
+function foundEntry(found: FoundByRead): Entry {
+  return {
+    key: `found:${found.id}`,
+    at: found.at,
+    outcome: 'notice',
+    text: found.path === null ? found.message : `${found.path} — ${found.message}`,
+    retry: null,
+    retryAs: null,
+    standing: false,
+    settled: false,
+    ranOut: false,
     answers: false,
   };
 }

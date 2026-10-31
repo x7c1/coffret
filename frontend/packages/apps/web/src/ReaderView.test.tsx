@@ -177,6 +177,23 @@ it('fetches a cover this device does not have, and says it is being brought over
   expect(fetched).not.toHaveBeenCalled();
 });
 
+// LA-33: the cover of a folder whose first image is not on this device is
+// read ahead and drawn once it lands; until then the stack says it is being
+// brought over, and nothing is read the way a page is.
+it('draws a cover read ahead once it lands, after saying it is on its way', async () => {
+  let land: (blob: Blob) => void = () => undefined;
+  early.mockImplementation(() => new Promise<Blob>((resolve) => (land = resolve)));
+  const away: Listing = { ...ALBUM, files: ALBUM.files.map((one) => ({ ...one, state: 'remote' })) };
+  sheet(folderRow('albums'), { status: 'ready', value: away });
+  expect(await screen.findByText('fetching one.jpg…', { exact: false })).toBeTruthy();
+  expect(screen.queryByAltText('cover of albums')).toBeNull();
+
+  land(new Blob(['cover']));
+  expect(await screen.findByAltText('cover of albums')).toBeTruthy();
+  expect(early).toHaveBeenCalledWith('albums/one.jpg', expect.anything());
+  expect(fetched).not.toHaveBeenCalled();
+});
+
 // Stepping into the book from a cover whose read ahead was refused reads its
 // first page: the refusal is no answer to that.
 it('reads the first page after its cover was refused', async () => {

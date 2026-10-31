@@ -4,8 +4,8 @@ use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 use super::{
-    AddDto, CatalogDto, DeleteDto, FillDto, FreezeDto, KeptParcelsDto, LoggedDto, ReconnectDto,
-    SyncDto,
+    AddDto, CatalogDto, DeleteDto, FillDto, FoundDto, FreezeDto, KeptParcelsDto, LoggedDto,
+    ReconnectDto, SyncDto,
 };
 
 /// What the server is doing on its own, which is four things — and the one
@@ -113,6 +113,11 @@ pub struct WorkDto {
     /// for the run that carries them — each until its run has ended, or,
     /// stopped, until it has been undone (spec: LA-34, LA-36).
     pub(super) adds: Vec<AddDto>,
+    /// What the reads that armed no fill found, newest first, each said once
+    /// in this process: a read ahead's fetch finding the committed Keyring
+    /// short (spec: KL-15) or a kept parcel not held (spec: PK-21), which a
+    /// fill's fetch would have said in the fill's own `findings` (spec: LA-33).
+    pub(super) findings: Vec<FoundDto>,
 }
 
 impl WorkDto {
@@ -180,6 +185,12 @@ impl WorkDto {
             // is in one or the other.
             adds: state.adds.listed().iter().map(AddDto::of).collect(),
             log: state.activity.entries().iter().map(LoggedDto::of).collect(),
+            findings: state
+                .read_findings
+                .listed()
+                .iter()
+                .map(FoundDto::of)
+                .collect(),
         }
     }
 }

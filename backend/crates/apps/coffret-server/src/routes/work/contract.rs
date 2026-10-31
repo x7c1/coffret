@@ -37,6 +37,7 @@ use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
 use crate::moves::{MoveRun, MoveStatus};
 use crate::pending_rows::TurnTaker;
+use crate::read_findings::Found;
 use crate::reconnect::Reconnect;
 use crate::refresh::Standing;
 use crate::reported::Reported;
@@ -308,6 +309,7 @@ fn answer(
         reconnect: None,
         log: Vec::new(),
         adds: Vec::new(),
+        findings: Vec::new(),
     }
 }
 
@@ -753,6 +755,31 @@ fn every_answer() -> Vec<WorkDto> {
         ..quiet()
     };
 
+    // What reads that armed no fill found: the committed Keyring short and a
+    // kept parcel not held, newest first (spec: LA-33).
+    let found = {
+        let at = SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_100);
+        let short = ShortKeyring::new(Generation::FIRST, 3, 1, 0);
+        let unheld = UnheldParcel {
+            container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+            index: 0,
+            reason: UnheldReason::Missing,
+        };
+        let findings = [
+            coffret_device::Finding::from(&unheld),
+            coffret_device::Finding::from(&short),
+        ];
+        WorkDto {
+            findings: findings
+                .iter()
+                .filter_map(Finding::of)
+                .zip([2, 1])
+                .map(|(finding, id)| super::FoundDto::of(&Found { id, at, finding }))
+                .collect(),
+            ..quiet()
+        }
+    };
+
     // A sync waiting for its turn while a move holds it: a move takes the
     // same turn and answers its own request, so the sync is the one on record.
     let behind_a_move = {
@@ -814,6 +841,7 @@ fn every_answer() -> Vec<WorkDto> {
         sending,
         committing,
         logged,
+        found,
         behind_a_move,
         stopping,
         cancelled,

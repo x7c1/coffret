@@ -7,6 +7,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": null,
     "library": "locked",
@@ -39,6 +40,7 @@
         "books"
       ]
     },
+    "findings": [],
     "freeze": {
       "discarded": [],
       "displaced": [],
@@ -101,6 +103,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": {
       "discarded": [],
       "displaced": [],
@@ -144,6 +147,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": {
       "discarded": [],
       "displaced": [],
@@ -184,6 +188,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -494,6 +499,43 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [
+      {
+        "at": "2026-09-21T14:15:00Z",
+        "id": 2,
+        "message": "a part of a Container kept on this device was gone or damaged and was read from Storage again",
+        "path": null,
+        "reason": "parcel_unheld"
+      },
+      {
+        "at": "2026-09-21T14:15:00Z",
+        "id": 1,
+        "message": "the Library's Keyring is degraded: some of its replicas are missing or unreadable. Files still open, and the next run that writes to the Library repairs it",
+        "path": null,
+        "reason": "keyring_degraded"
+      }
+    ],
+    "freeze": null,
+    "kept_parcels": {
+      "bytes": 0,
+      "count": 0
+    },
+    "library": "unlocked",
+    "log": [],
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null,
+    "turn": null
+  },
+  {
+    "adds": [],
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
+    "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -549,6 +591,7 @@
       "total": 3,
       "waiting": []
     },
+    "findings": [],
     "freeze": {
       "discarded": [],
       "displaced": [],
@@ -606,6 +649,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -660,6 +704,7 @@
       "waits": false
     },
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -726,6 +771,7 @@
       "waits": false
     },
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -769,6 +815,7 @@
       "waits": false
     },
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -814,6 +861,7 @@
       "waits": false
     },
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -834,6 +882,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -868,6 +917,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -902,6 +952,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -936,6 +987,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1009,6 +1061,7 @@
       "total": 3,
       "waiting": []
     },
+    "findings": [],
     "freeze": {
       "discarded": [],
       "displaced": [],
@@ -1411,6 +1464,7 @@
       "total": 3,
       "waiting": []
     },
+    "findings": [],
     "freeze": {
       "discarded": [
         "books/vol-3"
@@ -1498,6 +1552,7 @@
       "total": 3,
       "waiting": []
     },
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1522,6 +1577,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1550,6 +1606,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1577,6 +1634,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1604,6 +1662,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,
@@ -1631,6 +1690,7 @@
     },
     "delete": null,
     "fill": null,
+    "findings": [],
     "freeze": null,
     "kept_parcels": {
       "bytes": 0,

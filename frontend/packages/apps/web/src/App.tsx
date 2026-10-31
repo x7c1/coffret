@@ -1601,11 +1601,12 @@ export function App() {
   );
 
   // `↑`/`↓` while the sheet is open: on to the file before or after the focus
-  // in reading order, folder rows passed over (see [`readOn`](./tree)). Where a
-  // closed folder stands in the way the rows cannot say what is in it, so the
-  // server says which file that is, and the folders on the way down to it are
-  // opened. An answer is let go of where the focus moved meanwhile, the sheet
-  // closed, or the key was pressed again — the later press asks for itself.
+  // in reading order, folder rows passed over — or, from a closed folder, to the
+  // row drawn beside it (see [`readOn`](./tree)). Where a closed folder stands
+  // in the way the rows cannot say what is in it, so the server says which file
+  // that is, and the folders on the way down to it are opened. An answer is let
+  // go of where the focus moved meanwhile, the sheet closed, or the key was
+  // pressed again — the later press asks for itself.
   const sheetedNow = useRef(sheeted);
   sheetedNow.current = sheeted;
   const readingOn = useRef(0);
@@ -1790,6 +1791,16 @@ export function App() {
   // A picture the sheet fetched is on this device now: the listing it stands
   // in, and the ones above it, which answer for whether it is here whole.
   const fetchedInto = useCallback((path: string) => reloadAbove(parentOf(path)), [reloadAbove]);
+  // A cover the details pane read ahead is on this device now, as above — and
+  // what its fetch found is in the work answer's findings (spec: LA-33), which
+  // nothing else asks for while the sheet is shut and no run is under way.
+  const paneFetched = useCallback(
+    (path: string) => {
+      fetchedInto(path);
+      recheckWork();
+    },
+    [fetchedInto, recheckWork],
+  );
 
   // What the reader's sheet stands on: the row the URL has it open on, once
   // that row is drawn — a sheet restored from the URL waits for the listings
@@ -1877,8 +1888,8 @@ export function App() {
     [stopWork],
   );
   const entries = useMemo(
-    () => offeredNow(earlier(work.log, notices, locked), { fill, sync, freeze }),
-    [work.log, notices, locked, fill, sync, freeze],
+    () => offeredNow(earlier(work.log, notices, locked, work.findings), { fill, sync, freeze }),
+    [work.log, notices, locked, work.findings, fill, sync, freeze],
   );
   // One entry's Retry: the second attempt at the work that entry is about. A deletion's goes through the
   // confirmation again, since what it would take out of the Library may have
@@ -2073,6 +2084,7 @@ export function App() {
                       uploadStoppedOf={uploadStoppedOf}
                       onOpen={openFromPane}
                       onDelete={deleteEntries}
+                      onFetched={paneFetched}
                     />
                     {sheetRow !== undefined && (
                       <ReaderView

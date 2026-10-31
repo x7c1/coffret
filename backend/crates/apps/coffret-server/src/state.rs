@@ -18,6 +18,7 @@ use crate::freeze::Freezes;
 use crate::fronts_ahead::FrontsAhead;
 use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
 use crate::pending_rows::PendingRows;
+use crate::read_findings::ReadFindings;
 use crate::reconnect::{Consent, DriveConsent, Reconnects};
 use crate::refresh::{Catalog, Refreshes};
 use crate::server_id::ServerId;
@@ -119,6 +120,11 @@ pub struct ServerState {
     /// end, and held in memory alone like the rest of this process's account
     /// of its work: a server started afterwards answers with an empty log.
     pub activity: Arc<ActivityLog>,
+    /// What the reads that arm no fill found — a read ahead's fetch finding the
+    /// committed Keyring short, or a kept parcel not held — which no run's line
+    /// carries, so the work answer carries it in its own `findings`
+    /// (spec: LA-33).
+    pub read_findings: ReadFindings,
     /// The adds this server is carrying in — a drop's or a **+**'s files and
     /// the run armed for them — with what each wrote on this device, so one a
     /// person stops can be undone (spec: LA-34, LA-36).
@@ -246,6 +252,7 @@ impl ServerState {
             freezes: Freezes::logging_to(Arc::clone(&activity)),
             deletes: Deletes::logging_to(Arc::clone(&activity)),
             activity,
+            read_findings: ReadFindings::new(),
             adds: Adds::new(),
             pending_rows: PendingRows::new(),
             allowance: Allowance::generous(),
