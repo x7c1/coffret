@@ -209,6 +209,7 @@ const LOGGED_KINDS: Literals<LoggedKind> = {
   freeze: true,
   delete: true,
   move: true,
+  catch_up: true,
   discarded: true,
   fetch: true,
   add: true,
@@ -728,6 +729,15 @@ function stoppedAdd(value: unknown, where: string): StoppedAdd {
   };
 }
 
+function refreshed(value: unknown, where: string): Refreshed {
+  const fields = object(value, where, ['advanced', 'gained', 'entries']);
+  return {
+    advanced: boolean(fields.advanced, `${where}.advanced`),
+    gained: number(fields.gained, `${where}.gained`),
+    entries: number(fields.entries, `${where}.entries`),
+  };
+}
+
 function logged(value: unknown, where: string): Logged {
   const head = object(value, where, ['id', 'at', 'settled', 'kind'], [
     'run',
@@ -736,6 +746,7 @@ function logged(value: unknown, where: string): Logged {
     'path',
     'refused',
     'add',
+    'refreshed',
   ]);
   const id = number(head.id, `${where}.id`);
   const at = string(head.at, `${where}.at`);
@@ -753,6 +764,17 @@ function logged(value: unknown, where: string): Logged {
       return { id, at, settled, kind, run: deletion(only('run').run, `${where}.run`) };
     case 'move':
       return { id, at, settled, kind, run: moved(only('run').run, `${where}.run`) };
+    case 'catch_up': {
+      const fields = only('refreshed', 'refused');
+      // Exactly one of the two, as the types pair them.
+      if (fields.refreshed === null) {
+        return { id, at, settled, kind, refreshed: null, refused: refused(fields.refused, `${where}.refused`) };
+      }
+      if (fields.refused !== null) {
+        throw new Error(`${where}: a catch-up that landed carries no refusal`);
+      }
+      return { id, at, settled, kind, refreshed: refreshed(fields.refreshed, `${where}.refreshed`), refused: null };
+    }
     case 'discarded': {
       const fields = only('queue', 'folder');
       return {

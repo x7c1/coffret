@@ -249,6 +249,52 @@ async fn a_refresh_that_storage_refuses_leaves_the_catalog_behind() {
     );
 }
 
+// LA-12: a catch-up the explorer asked for is in the log of finished work,
+// refused or landed, as a fill or a sync that ended is: the refusal stands as a
+// failure until the next press settles it, and the press that landed is logged
+// with what it came to. The one the server made as it started is not.
+#[tokio::test]
+async fn a_refresh_is_logged_refused_and_then_landed() {
+    let served = Served::joined().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        work["log"],
+        json!([]),
+        "the start-up catch-up is the server's own and is not logged",
+    );
+
+    served.halt_storage();
+    let (status, _) = body_of(served.post("/api/refresh").await).await;
+    assert_ne!(status, 200, "the refresh is refused");
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let log = work["log"]
+        .as_array()
+        .expect("the work answer carries the log");
+    assert_eq!(log.len(), 1, "{log:?}");
+    assert_eq!(log[0]["kind"], "catch_up");
+    assert_eq!(log[0]["settled"], false);
+    assert_eq!(log[0]["refreshed"], serde_json::Value::Null);
+    assert_eq!(log[0]["refused"]["error"], "storage", "{}", log[0]);
+
+    served.resume_storage();
+    let (status, refreshed) = body_of(served.post("/api/refresh").await).await;
+    assert_eq!(status, 200);
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let log = work["log"]
+        .as_array()
+        .expect("the work answer carries the log");
+    assert_eq!(log.len(), 2, "{log:?}");
+    assert_eq!(log[0]["kind"], "catch_up");
+    assert_eq!(log[0]["refused"], serde_json::Value::Null);
+    assert_eq!(log[0]["refreshed"], refreshed, "logged as it was answered");
+    assert_eq!(
+        log[1]["settled"], true,
+        "the press that landed settles the one refused before it",
+    );
+}
+
 // What the refresh is for. Another device commits while this server is up, and
 // pressing refresh is how the person looking at the folder finds out — the row
 // appears, `remote`, and the bytes stay where they are until it is opened.

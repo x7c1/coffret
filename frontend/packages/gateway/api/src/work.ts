@@ -1,6 +1,7 @@
 import findingReasons from './finding-reasons.json';
 import type { PlacementReason, Refused, SurfacedFinding } from './refusal';
 import { refusedOf, surfacedOf } from './refusal';
+import type { Refreshed } from './refresh';
 import { apiUrl, askedForJson } from './request';
 
 /** Where a fill of one folder stands. */
@@ -729,6 +730,12 @@ export type LoggedWork =
   | { kind: 'freeze'; run: Freeze }
   | { kind: 'delete'; run: Delete }
   | { kind: 'move'; run: Move }
+  /**
+   * A catch-up the explorer asked for (*Check for changes*): what it landed
+   * with, or what refused it. One the server made on its own is not logged.
+   */
+  | { kind: 'catch_up'; refreshed: Refreshed; refused: null }
+  | { kind: 'catch_up'; refreshed: null; refused: Refused }
   /** A folder a queue threw away when its worker ended without an answer. */
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   /** A file a reader asked for and was refused. */
@@ -1191,6 +1198,7 @@ type LoggedSent = { id: number; at: string; settled: boolean } & (
   | { kind: 'freeze'; run: FreezeSent }
   | { kind: 'delete'; run: DeleteSent }
   | { kind: 'move'; run: MoveSent }
+  | { kind: 'catch_up'; refreshed: Refreshed | null; refused: unknown }
   | { kind: 'discarded'; queue: QueueFlow; folder: string }
   | { kind: 'fetch'; path: string; refused: unknown }
   | { kind: 'add'; add: StoppedAdd }
@@ -1258,6 +1266,12 @@ function loggedOf(sent: LoggedSent): Logged {
       return { id, at, settled, kind: 'delete', run: deleteOf(sent.run) };
     case 'move':
       return { id, at, settled, kind: 'move', run: moveOf(sent.run) };
+    case 'catch_up':
+      // Paired as the types pair them: the server sends a refusal exactly
+      // where the catch-up did not land.
+      return sent.refreshed === null
+        ? { id, at, settled, kind: 'catch_up', refreshed: null, refused: refusedOf(sent.refused) }
+        : { id, at, settled, kind: 'catch_up', refreshed: sent.refreshed, refused: null };
     case 'discarded':
       return { id, at, settled, kind: 'discarded', queue: sent.queue, folder: sent.folder };
     case 'fetch':

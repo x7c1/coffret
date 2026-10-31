@@ -57,6 +57,7 @@ pub fn host(listener: &TcpListener, settings: &Settings) -> anyhow::Result<(Rout
         lock: Arc::new(InAnotherProcess),
         page: PageSource::Directory(settings.dist.clone()),
         kind: HostKind::Development,
+        appearance: settings.appearance.clone(),
     };
     let router = router(listener, config, credentials.gate())?;
     Ok((router, credentials))

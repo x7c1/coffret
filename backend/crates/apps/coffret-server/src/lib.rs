@@ -202,6 +202,9 @@ pub use latest::Latest;
 mod launch;
 pub use launch::{Launch, Serving};
 
+mod left_behind;
+pub use left_behind::remove_left_behind;
+
 mod lock;
 pub use lock::{lock_when_idle, UnlockPrompt};
 

@@ -131,6 +131,8 @@ async fn a_server_in_the_app_asks_the_app_for_the_passphrase() {
         .expect("a refusal carries one sentence");
     assert!(said.contains("Passphrase"), "{said}");
     assert!(said.contains("the Coffret app's own window"), "{said}");
+    // The explorer's button, named as it reads.
+    assert!(said.contains("press Unlock,"), "{said}");
     assert!(!said.contains("starting it again"), "{said}");
 }
 

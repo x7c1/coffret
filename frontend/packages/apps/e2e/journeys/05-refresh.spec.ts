@@ -63,7 +63,10 @@ test('ask what is new and find what another device committed', async ({ page }) 
   await expectRemote(page, ADDED);
   // Below the album's photographs, so brought on to the screen for the picture.
   await row(page, ADDED).scrollIntoViewIfNeeded();
-  await expect(page.getByText('1 new file')).toBeVisible();
+  await expect(page.getByText('1 new file', { exact: true })).toBeVisible();
+  // And the Activity row says it as the newest thing that ended, since a
+  // catch-up the explorer asked for is in the server's log like other work.
+  await expect(page.getByText('checked for changes — 1 new file')).toBeVisible();
   await expect(page.getByRole('button', { name: CHECKING, exact: true })).toBeVisible();
   await shot(page, '02-the-catalog-caught-up');
 

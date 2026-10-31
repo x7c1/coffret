@@ -80,6 +80,14 @@ pub fn libraries() -> Result<Vec<ListedLibrary>> {
         .collect())
 }
 
+/// Which set of colours this device's explorer is drawn in: `system`,
+/// `light` or `dark`, as the server keeps it. Readable before the core has
+/// started, as the Libraries are.
+#[napi(catch_unwind)]
+pub fn appearance() -> String {
+    core::appearance().to_owned()
+}
+
 /// A fresh token for one Passphrase window opened in `mode`, as the URL to
 /// load that window from. The token is in the URL's fragment, which the page
 /// takes out of the address as it loads; the URL is for the window and for

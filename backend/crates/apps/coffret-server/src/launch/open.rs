@@ -5,7 +5,7 @@ use coffret_device::{move_to_its_id, open_library, LibraryDir, Passphrase, Serve
 use tokio::net::TcpListener;
 
 use super::{Launch, Serving};
-use crate::{catch_up_at_startup, Admission, ServerState};
+use crate::{catch_up_at_startup, remove_left_behind, Admission, ServerState};
 
 impl Launch {
     /// Opens the Library and binds a socket for it, without serving anything
@@ -16,9 +16,10 @@ impl Launch {
     /// this device, or one another server is already serving, costs nobody a
     /// prompt.
     ///
-    /// Every step but the catch-up is fatal where it fails, and the error is
-    /// the sentence a person is shown: the whole chain, `{:#}`, is what says
-    /// what failed and why.
+    /// Every step but the removal of what a server that is gone left and the
+    /// catch-up is fatal where it fails, and the error is the sentence a
+    /// person is shown: the whole chain, `{:#}`, is what says what failed and
+    /// why.
     pub async fn open<P>(self, enter_passphrase: P) -> anyhow::Result<Serving>
     where
         P: FnOnce() -> coffret_device::Result<Passphrase> + Send,
@@ -62,6 +63,12 @@ impl Launch {
             Some(prompt) => state.prompting_through(prompt),
             None => state,
         });
+
+        // Before the socket, so before any add of this server holds a name:
+        // what a server that died left under coffret's scratch names — a file
+        // an add kept aside to put back, above all — is nobody's now, and goes
+        // before anything is served (spec: OC-8, LA-36).
+        remove_left_behind(&state).await;
 
         // Before the socket as well, and for a different reason than the unlock
         // above: not because the refusal has to come before anything is bound,

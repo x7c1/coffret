@@ -359,6 +359,10 @@ pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 mod run_prune;
 pub use run_prune::run_prune;
 
+// What the writers of a process that is gone left in the mapped folders, which
+// a server removes as it opens the Library (spec: OC-8).
+mod left_behind;
+
 mod run_repack;
 pub use run_repack::run_repack;
 

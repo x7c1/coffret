@@ -34,6 +34,27 @@ export interface WindowLook {
   icon?: string;
 }
 
+/** Which set of colours the explorer is drawn in, as the addon reads what the server kept. */
+export type Appearance = 'system' | 'light' | 'dark';
+
+/**
+ * The explorer's ground in each of its two sets: `LIGHT.ground` and
+ * `DARK.ground` of the explorer's own colours (`apps/web/src/theme.ts`).
+ */
+export const GROUND = { light: '#f7f8fa', dark: '#15171c' } as const;
+
+/**
+ * What the explorer's window is filled with before its page has drawn
+ * anything: the ground of the set the page will be drawn in — the one this
+ * device chose, or for `system` the one the system asks for, which is
+ * `systemDark` (`nativeTheme.shouldUseDarkColors`). Without it the window
+ * opens white, and a dark explorer flashes white before it is drawn.
+ */
+export function groundOf(appearance: Appearance, systemDark: boolean): string {
+  const scheme = appearance === 'system' ? (systemDark ? 'dark' : 'light') : appearance;
+  return GROUND[scheme];
+}
+
 /** The installed app's windows: titled Coffret, with no icon of their own. */
 export const INSTALLED: WindowLook = { title: 'Coffret' };
 
@@ -95,16 +116,19 @@ export function passphraseWindowOptions(
 
 /**
  * The window the explorer runs in on `platform`, served by the explorer host,
- * with the preload at `preload` that hands a drop over by path.
+ * with the preload at `preload` that hands a drop over by path, filled with
+ * `ground` until the page draws (see [`groundOf`](#groundOf)).
  */
 export function explorerWindowOptions(
   preload: string,
   platform: NodeJS.Platform,
   look: WindowLook = INSTALLED,
+  ground: string = GROUND.light,
 ): BrowserWindowConstructorOptions {
   return {
     ...shown(look),
     ...menuBar(platform),
+    backgroundColor: ground,
     width: 1280,
     height: 820,
     minWidth: 640,

@@ -3,6 +3,7 @@ use std::time::Instant;
 use coffret_device::CatchUpOutcome;
 use tracing::info;
 
+use crate::activity_log::{ActivityLog, CaughtUp, Ended};
 use crate::api_error::ApiError;
 use crate::refresh::Catalog;
 use crate::reported::Reported;
@@ -20,9 +21,16 @@ use crate::state::ServerState;
 /// the failure: the refusal goes back to whoever asked and is logged on its way
 /// out, which is why it is kept through
 /// [`Reported::of`](crate::reported::Reported::of) rather than recorded again.
+///
+/// Where `logged` is [`Logging::InTheLog`] — a catch-up the explorer asked for —
+/// how it ended is also put in the server's log of finished work, before the
+/// catalog says it ended, so no page reads it as over that the log does not
+/// yet hold (spec: LA-12). One a locked Library refuses is refused before it
+/// begins, and is not logged.
 pub(super) async fn catch_up(
     state: &ServerState,
     operation: &'static str,
+    logged: Logging,
 ) -> Result<CatchUpOutcome, ApiError> {
     let started = Instant::now();
     // Before the turn is taken, so that a locked server refuses at once rather
@@ -34,7 +42,11 @@ pub(super) async fn catch_up(
     // After the turn, so that a caller queued behind a replay is not shown as
     // the replay: what this says is that the catalog is being caught up, and
     // between the two it is exactly as current as the last one left it.
-    let mut replaying = Replaying::started(&state.catalog);
+    let log = match logged {
+        Logging::InTheLog => Some(&*state.activity),
+        Logging::Not => None,
+    };
+    let mut replaying = Replaying::started(&state.catalog, log);
     let outcome = match library.catch_up().await {
         Ok(outcome) => outcome,
         Err(error) => {
@@ -43,7 +55,7 @@ pub(super) async fn catch_up(
             return Err(refusal);
         }
     };
-    replaying.landed();
+    replaying.landed(CaughtUp::of(&outcome));
     // What it came to, and how long the caller waited — the wait for whoever was
     // replaying first included, since that is the time the request took. The
     // generations the catalog moved between are in the flow's own line and not
@@ -60,6 +72,15 @@ pub(super) async fn catch_up(
     Ok(outcome)
 }
 
+/// Whether a catch-up is put in the server's log of finished work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Logging {
+    /// Logged, as one the explorer asked for is (spec: LA-12).
+    InTheLog,
+    /// Not logged: one the server made on its own.
+    Not,
+}
+
 /// A catch-up in flight, and what the catalog is left saying however it ends.
 ///
 /// A guard rather than three lines in [`catch_up`], because one of the ways a
@@ -73,38 +94,55 @@ pub(super) async fn catch_up(
 /// So what a dropped replay leaves is what a refused one leaves: a catalog that
 /// is behind, with the one thing there is to say about a call that never came
 /// back.
+///
+/// Where it is one the log keeps, the log is told first, whichever way it
+/// ended — a dropped one included, as what stopped it.
 struct Replaying<'a> {
     catalog: &'a Catalog,
+    /// The log it is put in as it ends, if it is one the log keeps.
+    log: Option<&'a ActivityLog>,
     /// Whether the run said how it ended.
     ended: bool,
 }
 
 impl<'a> Replaying<'a> {
     /// Marks the catalog as being caught up, from now until this is dropped.
-    fn started(catalog: &'a Catalog) -> Self {
+    fn started(catalog: &'a Catalog, log: Option<&'a ActivityLog>) -> Self {
         catalog.catching_up();
         Self {
             catalog,
+            log,
             ended: false,
         }
     }
 
-    /// The replay finished, so the catalog stands at the Library's head.
-    fn landed(&mut self) {
+    /// The replay finished, so the catalog stands at the Library's head, and
+    /// `caught_up` is what it came to.
+    fn landed(&mut self, caught_up: CaughtUp) {
+        self.log(Ok(caught_up));
         self.catalog.caught_up();
         self.ended = true;
     }
 
     /// The replay was refused, and `trouble` says what refused it.
     fn stopped(&mut self, trouble: Reported) {
+        self.log(Err(trouble.clone()));
         self.catalog.behind(trouble);
         self.ended = true;
+    }
+
+    /// Puts how it ended in the log, if it is one the log keeps.
+    fn log(&self, ended: Result<CaughtUp, Reported>) {
+        if let Some(log) = self.log {
+            log.record(Ended::CatchUp(ended));
+        }
     }
 }
 
 impl Drop for Replaying<'_> {
     fn drop(&mut self) {
         if !self.ended {
+            self.log(Err(Reported::gave_up()));
             self.catalog.behind(Reported::gave_up());
         }
     }

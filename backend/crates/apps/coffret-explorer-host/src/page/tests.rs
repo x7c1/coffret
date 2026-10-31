@@ -8,6 +8,7 @@ use sha2::{Digest as _, Sha256};
 
 use super::policy::policy_for;
 use super::*;
+use crate::PageSource;
 
 /// A build of the case's own, holding what a real one should never answer
 /// beside what it should.
@@ -53,12 +54,14 @@ fn a_file_is_served_as_its_extension_says() {
 #[tokio::test]
 async fn a_file_in_the_build_is_served_and_a_path_naming_none_is_the_index() {
     let build = build();
-    let asset = respond_from(&build, "/assets/app-3f2a.js", HostKind::Production);
+    let asset = respond_from(&build, "/assets/app-3f2a.js", HostKind::Production, || {
+        Appearance::System
+    });
     assert_eq!(asset.status(), StatusCode::OK);
     assert_eq!(body(asset).await, "console.log(1)");
 
     for path in ["/", "/folders/somewhere/deep"] {
-        let page = respond_from(&build, path, HostKind::Production);
+        let page = respond_from(&build, path, HostKind::Production, || Appearance::System);
         assert_eq!(page.status(), StatusCode::OK, "{path}");
         assert!(body(page).await.contains("<title>index"), "{path}");
     }
@@ -85,7 +88,7 @@ async fn a_dotfile_or_a_traversal_is_not_served() {
         "/%00",
         "/%zz",
     ] {
-        let answer = respond_from(&build, path, HostKind::Production);
+        let answer = respond_from(&build, path, HostKind::Production, || Appearance::System);
         assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{path}");
         assert_eq!(body(answer).await, NOT_HERE, "{path}");
     }
@@ -180,24 +183,36 @@ async fn a_build_on_disk_is_read_at_each_request() {
         body(respond_from(
             &build.dist,
             "/assets/app-3f2a.js",
-            HostKind::Production
+            HostKind::Production,
+            || Appearance::System,
         ))
         .await,
         "console.log(1)"
     );
-    assert!(body(respond_from(&build.dist, "/", HostKind::Production))
-        .await
-        .contains("<title>index"));
     assert!(
-        body(respond_from(&build.dist, "/assets", HostKind::Production))
-            .await
-            .contains("<title>index")
+        body(respond_from(&build.dist, "/", HostKind::Production, || {
+            Appearance::System
+        }))
+        .await
+        .contains("<title>index")
     );
+    assert!(body(respond_from(
+        &build.dist,
+        "/assets",
+        HostKind::Production,
+        || Appearance::System
+    ))
+    .await
+    .contains("<title>index"));
 
     std::fs::write(build.dist.root().join(INDEX), "<title>rebuilt</title>").unwrap();
-    assert!(body(respond_from(&build.dist, "/", HostKind::Production))
+    assert!(
+        body(respond_from(&build.dist, "/", HostKind::Production, || {
+            Appearance::System
+        }))
         .await
-        .contains("rebuilt"));
+        .contains("rebuilt")
+    );
 }
 
 // LA-16: a build on disk serves nothing outside it: no dotfile, no traversal,
@@ -215,7 +230,9 @@ async fn a_build_on_disk_serves_nothing_outside_it() {
         "/up/secret.txt",
         "/up/dist/index.html",
     ] {
-        let answer = respond_from(&build.dist, path, HostKind::Production);
+        let answer = respond_from(&build.dist, path, HostKind::Production, || {
+            Appearance::System
+        });
         assert_eq!(answer.status(), StatusCode::NOT_FOUND, "{path}");
         let said = body(answer).await;
         assert_eq!(said, NOT_HERE, "{path}");
@@ -233,6 +250,7 @@ async fn a_build_on_disk_with_no_index_says_so() {
         &DistDir::new(empty.path().to_path_buf()),
         "/",
         HostKind::Production,
+        || Appearance::System,
     );
     assert_eq!(answer.status(), StatusCode::INTERNAL_SERVER_ERROR);
     assert!(body(answer).await.contains("no index.html"));
@@ -271,14 +289,24 @@ fn with_favicons() -> OnDisk {
 async fn a_development_host_answers_the_favicon_with_the_badged_one() {
     let build = with_favicons();
     for (plain, badged, media) in FAVICONS {
-        let answer = respond_from(&build.dist, &format!("/{plain}"), HostKind::Development);
+        let answer = respond_from(
+            &build.dist,
+            &format!("/{plain}"),
+            HostKind::Development,
+            || Appearance::System,
+        );
         assert_eq!(answer.status(), StatusCode::OK, "{plain}");
         assert_eq!(answer.headers()[CONTENT_TYPE], media, "{plain}");
         assert_eq!(answer.headers()[CACHE_CONTROL], NO_CACHE, "{plain}");
         assert_eq!(body(answer).await, badged, "{plain}");
 
         // The badged file asked for by its own name is served as it is.
-        let own = respond_from(&build.dist, &format!("/{badged}"), HostKind::Development);
+        let own = respond_from(
+            &build.dist,
+            &format!("/{badged}"),
+            HostKind::Development,
+            || Appearance::System,
+        );
         assert_eq!(body(own).await, badged, "{badged}");
     }
     // Everything else is served as a production host serves it.
@@ -286,7 +314,8 @@ async fn a_development_host_answers_the_favicon_with_the_badged_one() {
         body(respond_from(
             &build.dist,
             "/assets/app-3f2a.js",
-            HostKind::Development
+            HostKind::Development,
+            || Appearance::System,
         ))
         .await,
         "console.log(1)"
@@ -299,10 +328,101 @@ async fn a_development_host_answers_the_favicon_with_the_badged_one() {
 async fn a_production_host_answers_the_favicon_with_the_plain_one() {
     let build = with_favicons();
     for (plain, _, media) in FAVICONS {
-        let answer = respond_from(&build.dist, &format!("/{plain}"), HostKind::Production);
+        let answer = respond_from(
+            &build.dist,
+            &format!("/{plain}"),
+            HostKind::Production,
+            || Appearance::System,
+        );
         assert_eq!(answer.status(), StatusCode::OK, "{plain}");
         assert_eq!(answer.headers()[CONTENT_TYPE], media, "{plain}");
         assert_eq!(answer.headers()[CACHE_CONTROL], NO_CACHE, "{plain}");
         assert_eq!(body(answer).await, plain, "{plain}");
     }
+}
+
+/// A build on disk whose index says what the explorer's does about colours, and
+/// the file the choice is kept in, both in a directory of the case's own.
+fn chosen_on_disk() -> (tempfile::TempDir, Page, AppearanceFile) {
+    let directory = tempfile::tempdir().expect("a temporary directory");
+    let dist = directory.path().join("dist");
+    std::fs::create_dir(&dist).expect("the build's directory is made");
+    std::fs::write(
+        dist.join(INDEX),
+        r#"<!doctype html><html lang="en"><head><meta name="color-scheme" content="light dark" /></head></html>"#,
+    )
+    .expect("the index is written");
+    let appearance = AppearanceFile::at(directory.path().join("explorer.json"));
+    let page = Page::new(
+        &PageSource::Directory(dist),
+        HostKind::Production,
+        appearance.clone(),
+    );
+    (directory, page, appearance)
+}
+
+// LA-38: the page is served in the set this device chose, read as it is
+// served — dark, light, or the build's own either-set for the system's — so
+// the browser's first frame is already drawn in it. Every path the explorer
+// reads itself is the same index, served the same way.
+#[tokio::test]
+async fn the_index_is_served_in_the_set_this_device_chose() {
+    let (_directory, page, appearance) = chosen_on_disk();
+
+    let system = body(page.respond("/")).await;
+    assert!(system.contains(r#"content="light dark""#), "{system}");
+    assert!(!system.contains("data-appearance"), "{system}");
+
+    appearance
+        .write(Appearance::Dark)
+        .expect("the choice is kept");
+    for path in ["/", "/index.html", "/folders/somewhere"] {
+        let dark = body(page.respond(path)).await;
+        assert!(
+            dark.contains(r#"<meta name="color-scheme" content="dark" />"#),
+            "{path}: {dark}"
+        );
+        assert!(
+            dark.contains(r#"<html data-appearance="dark" lang="en">"#),
+            "{path}: {dark}"
+        );
+    }
+
+    appearance
+        .write(Appearance::Light)
+        .expect("the choice is kept");
+    let light = body(page.respond("/")).await;
+    assert!(
+        light.contains(r#"<meta name="color-scheme" content="light" />"#),
+        "{light}"
+    );
+    assert!(
+        light.contains(r#"<html data-appearance="light" lang="en">"#),
+        "{light}"
+    );
+
+    appearance
+        .write(Appearance::System)
+        .expect("the choice is kept");
+    let system = body(page.respond("/")).await;
+    assert!(system.contains(r#"content="light dark""#), "{system}");
+    assert!(!system.contains("data-appearance"), "{system}");
+}
+
+// Only the index: an asset is served exactly as built, whatever was chosen.
+#[tokio::test]
+async fn an_asset_is_served_as_built_whatever_was_chosen() {
+    let mut files = build().0;
+    files.insert(
+        "assets/app-3f2a.css",
+        &b"html { color-scheme: light dark; }"[..],
+    );
+    let assets = Build(files);
+    let css = respond_from(
+        &assets,
+        "/assets/app-3f2a.css",
+        HostKind::Production,
+        || Appearance::Dark,
+    );
+    assert_eq!(body(css).await, "html { color-scheme: light dark; }");
 }

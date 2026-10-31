@@ -5,6 +5,7 @@ use axum::extract::Request;
 use axum::http::{Method, StatusCode};
 use axum::response::Response;
 use axum::Router;
+use coffret_device::AppearanceFile;
 use coffret_explorer_host::credentials::{Credentials, SystemClock};
 use coffret_explorer_host::{router, Config, HostKind, KeySource, PageSource};
 use tokio::net::TcpListener;
@@ -60,6 +61,14 @@ impl Harness {
                 lock: lock.clone(),
                 page: PageSource::Embedded,
                 kind: HostKind::Production,
+                // A file nobody writes, so the page is served as a device
+                // that never chose, and no case reaches the state directory
+                // of whoever runs it.
+                appearance: AppearanceFile::at(
+                    std::env::temp_dir()
+                        .join("coffret-host-harness-never-written")
+                        .join("explorer.json"),
+                ),
             },
             credentials.gate(),
         )

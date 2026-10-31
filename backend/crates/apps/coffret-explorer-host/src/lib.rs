@@ -127,7 +127,7 @@ pub fn router(listener: &TcpListener, config: Config, gate: Gate) -> Result<Rout
         gate,
         lock: config.lock,
         forwarder,
-        page: Page::new(&config.page, config.kind),
+        page: Page::new(&config.page, config.kind, config.appearance),
     });
 
     // `/api/` as well as the wildcard, which matches no empty rest: every path

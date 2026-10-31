@@ -360,6 +360,28 @@ it('says what a deletion removed', () => {
   expect(entry.outcome).toBe('success');
 });
 
+// LA-12: a catch-up the explorer asked for is in the list like the rest of the
+// log — a refused one a failure standing until the next press settles it, with
+// nothing offered again here, and one that landed said as its answer was.
+it('lists a refused Check for changes as a failure, and a landed one as its answer', () => {
+  const refused = entryOf(logged({ kind: 'catch_up', refreshed: null, refused: STORAGE }), false);
+  expect(refused.text).toBe("could not check for changes — the Library's Storage did not answer");
+  expect(refused.outcome).toBe('failure');
+  expect(refused.standing).toBe(true);
+  expect(refused.retry).toBeNull();
+
+  const landed = entryOf(
+    logged({ kind: 'catch_up', refreshed: { advanced: true, gained: 3, entries: 120 }, refused: null }),
+    false,
+  );
+  expect(landed.text).toBe('checked for changes — 3 new files');
+  expect(landed.outcome).toBe('success');
+  expect(landed.standing).toBe(false);
+
+  const settled = entryOf(logged({ kind: 'catch_up', refreshed: null, refused: STORAGE }, 1, true), false);
+  expect(settled.standing).toBe(false);
+});
+
 // In progress, in the order it is happening: the drop, the run
 // holding the turn, the ones waiting for it, the fill, and the reader's own
 // fetch with its own Stop beside them.
@@ -595,16 +617,16 @@ it('says the drop being sent is stopping once its Stop is pressed', () => {
 // LA-36: what a stopped add says — nothing more where every file it wrote was
 // taken away, a file it wrote over put back among them; how much a run beside
 // it had carried in already; and how many this device could not take back out
-// of the folder, for the next sync to carry in.
+// of the folder, for a sync whose scope covers them to carry in (spec: EP-10).
 it('says what a stopped add left behind', () => {
   expect(stoppedLine({ folder: 'albums', files: 3, removed: 3, committed: 0, left: 0 })).toBe(
     'stopped adding to albums — nothing was added to the Library',
   );
   expect(stoppedLine({ folder: 'albums', files: 4, removed: 2, committed: 1, left: 1 })).toBe(
-    'stopped adding to albums — 1 file had been added to the Library already; 1 file could not be taken back out of the folder, and the next sync adds it',
+    'stopped adding to albums — 1 file had been added to the Library already; 1 file could not be taken back out of the folder, and a sync that covers it adds it — a full sync, or a later drop into that folder',
   );
   expect(stoppedLine({ folder: 'albums', files: 2, removed: 0, committed: 0, left: 2 })).toBe(
-    'stopped adding to albums — nothing was added to the Library; 2 files could not be taken back out of the folder, and the next sync adds them',
+    'stopped adding to albums — nothing was added to the Library; 2 files could not be taken back out of the folder, and a sync that covers them adds them — a full sync, or a later drop into that folder',
   );
   expect(stoppedLine({ folder: '', files: 1, removed: 1, committed: 0, left: 0 })).toBe(
     'stopped adding to the Library root — nothing was added to the Library',

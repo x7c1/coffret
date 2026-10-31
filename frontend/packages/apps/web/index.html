@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Either set: the browser draws its own ground in the system's until the
-         explorer has painted the one shown (src/appearance.ts). -->
+         explorer has painted the one shown (src/appearance.ts). The host
+         serving this page narrows it to the set this device chose, and writes
+         the choice onto the root as data-appearance, so that a page drawn in
+         a chosen set is drawn in it from its first frame. -->
     <meta name="color-scheme" content="light dark" />
     <title>coffret</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -18,9 +21,12 @@
         height: 100%;
         /* COLOR.ground and COLOR.text of src/theme.ts, and its FONT. The
            colours are the custom properties the page's root holds the values
-           of the set shown in, as every colour of the explorer is. */
-        background: var(--color-ground);
-        color: var(--color-text);
+           of the set shown in, as every colour of the explorer is. Until the
+           explorer has set them, the browser's own ground and text, which
+           follow the color-scheme above: the set the host served the page
+           in. */
+        background: var(--color-ground, Canvas);
+        color: var(--color-text, CanvasText);
         font-family: Inter, system-ui, sans-serif;
         font-size: 14px;
       }

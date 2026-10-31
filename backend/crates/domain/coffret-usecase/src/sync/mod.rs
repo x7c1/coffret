@@ -143,6 +143,7 @@ mod scan;
 mod spool;
 
 mod stale_scratches;
+pub use stale_scratches::remove_stale_scratches;
 
 mod surfaced;
 pub use surfaced::Surfaced;

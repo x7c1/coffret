@@ -73,6 +73,7 @@ async fn started(checkout: &Checkout, server: SocketAddr) -> (Router, String, Tc
         server,
         key_file: checkout.key_file(),
         dist: checkout.dist(),
+        appearance: coffret_device::AppearanceFile::at(checkout.root.path().join("explorer.json")),
     };
     let (router, _) = host(&listener, &settings).expect("the host starts");
     let authority = listener.local_addr().unwrap().to_string();

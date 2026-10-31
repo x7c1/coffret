@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::Json;
-use coffret_device::CatchUpOutcome;
 use serde::Serialize;
 
+use crate::activity_log::CaughtUp;
 use crate::api_error::ApiError;
 use crate::refresh::refresh_catalog;
 use crate::state::ServerState;
@@ -17,7 +17,7 @@ use crate::state::ServerState;
 /// Library's own bookkeeping (spec: CK-1), a browser can do nothing with them,
 /// and the log already carries them for whoever is keeping the Library.
 #[derive(Serialize)]
-pub struct RefreshedDto {
+pub(crate) struct RefreshedDto {
     /// Whether the Library had a head this device had not seen.
     ///
     /// Kept apart from [`gained`](Self::gained) being zero, because they are not
@@ -33,11 +33,12 @@ pub struct RefreshedDto {
 }
 
 impl RefreshedDto {
-    fn of(outcome: &CatchUpOutcome) -> Self {
+    /// The answer, and the log's entry for it, in the same three fields.
+    pub(crate) fn of(caught_up: &CaughtUp) -> Self {
         Self {
-            advanced: outcome.advanced(),
-            gained: outcome.gained(),
-            entries: outcome.entries_after,
+            advanced: caught_up.advanced,
+            gained: caught_up.gained,
+            entries: caught_up.entries,
         }
     }
 }
@@ -67,5 +68,6 @@ impl RefreshedDto {
 pub async fn refresh(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<RefreshedDto>, ApiError> {
-    Ok(Json(RefreshedDto::of(&refresh_catalog(&state).await?)))
+    let outcome = refresh_catalog(&state).await?;
+    Ok(Json(RefreshedDto::of(&CaughtUp::of(&outcome))))
 }

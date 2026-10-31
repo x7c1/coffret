@@ -6,7 +6,7 @@ use tracing::info;
 use crate::api_error::ApiError;
 use crate::state::ServerState;
 
-use super::run;
+use super::run::{self, Logging};
 
 /// One Entry fetch over the catalog as it stands, and one more after catching
 /// the catalog up where what the first met says the catalog may be stale.
@@ -50,7 +50,7 @@ where
         "the Container the catalog names is out of this device's reach, so the catalog is \
          caught up once and the Entry asked for again",
     );
-    run::catch_up(state, "fetch").await?;
+    run::catch_up(state, "fetch", Logging::Not).await?;
     Ok(fetch().await)
 }
 

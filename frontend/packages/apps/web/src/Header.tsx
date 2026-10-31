@@ -53,7 +53,9 @@ import type { Asked } from './useAsked';
  *
  * While the Library is locked the **+** is drawn disabled, since nothing can be
  * added to a locked Library, and a name the lock kept the page from reading is
- * left out rather than said as a refusal: the main area says the lock.
+ * left out rather than said as a refusal: the main area says the lock. So is
+ * the location, which the focus restored from the address would otherwise
+ * still name beside a screen saying the Library's files stay hidden.
  *
  * One row on a wide window; on a narrow one it wraps rather than scrolling
  * sideways, the location taking a line of its own before anything is cut off
@@ -178,9 +180,11 @@ export function Header({
             {overLibrary ? moveLine('') : named(library)}
           </span>
         )}
-        <span data-testid="location" title={location} style={LOCATION}>
-          {location}
-        </span>
+        {!locked && (
+          <span data-testid="location" title={location} style={LOCATION}>
+            {location}
+          </span>
+        )}
       </div>
       <AppearanceSwitch onKeysBack={onKeysBack} />
       <button

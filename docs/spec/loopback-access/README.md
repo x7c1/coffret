@@ -161,9 +161,13 @@ Concept background: [Library](../../concepts/library/),
   the last run of each kind came to, and a **log** of the work it has finished
   — is the running process's own state. The log holds every fill, sync,
   freeze, and deletion that ended, every move that was not refused before its
-  commit (LA-31), every add a person stopped (LA-36), every folder a queue
-  threw away, and every file a reader asked for and was refused, newest
-  first. A sync or a freeze a person stopped through the adds it carried is
+  commit (LA-31), every catch-up the explorer asked for (CK-9) — landed, with
+  what it came to, or refused, with what refused it — every add a person
+  stopped (LA-36), every folder a queue threw away, and every file a reader
+  asked for and was refused, newest first. A catch-up the server makes on its
+  own — as it starts, after a reconnect, or for a fetch that met a stale
+  catalog — is not logged, and neither is one refused before it began because
+  the Library is locked. A sync or a freeze a person stopped through the adds it carried is
   logged as those adds and not as itself; a freeze of a folder somebody asked
   to have packed, and a fill, stopped by a person — a book or a folder
   stopped while it waited in its queue among them — are logged as
@@ -178,8 +182,8 @@ Concept background: [Library](../../concepts/library/),
   was the Library being locked or the catalog holding no such Entry. The log drops the oldest entry
   past a fixed count, but keeps a failure past that count until a later run of
   the same work ends and settles it — for a refused file, the same file asked
-  for again — and never holds more than a fixed ceiling, the oldest going
-  first past it. A run is in the log by the time any answer reports it over:
+  for again; for a refused catch-up, the next one the explorer asks for —
+  and never holds more than a fixed ceiling, the oldest going first past it. A run is in the log by the time any answer reports it over:
   a server logs a run as it publishes the run's end, so no page reads a run as
   ended that the log does not yet hold. The server serves the log, beside the
   work running now and how far it has got, to an authorized page alone
@@ -716,8 +720,10 @@ Concept background: [Library](../../concepts/library/),
   taken away, how many a run had committed, and how many are still in the
   folder; it offers no second attempt, since adding again is dropping again.
   A file of the add's still in the folder — one this device would not remove
-  or put the earlier file back over — is one like any copied there, which the
-  next sync carries in unless the person takes it away first.
+  or put the earlier file back over — is one like any copied there, which a
+  sync whose scope covers it carries in — a full sync, or a later drop into
+  that folder, since the sync a drop arms walks only the folders that drop
+  wrote into (EP-10) — unless the person takes it away first.
   An add every file of which a run had committed is not logged as stopped:
   that run's own entry answers the stop. *(Form: test)*
 - **LA-37.** A fill a person stops stops where a fill superseded by another
@@ -749,7 +755,11 @@ Concept background: [Library](../../concepts/library/),
   minimal status. It is kept by the server rather than in the page's storage
   because the desktop app serves the explorer on a port chosen at each launch
   (LA-13), so the page's origin, and the storage the browser keys by it, is new
-  at every launch.
+  at every launch. The explorer host serves the explorer's page in the set
+  kept, read as it serves the page: `light` or `dark` is written into the page
+  itself — its `<meta name="color-scheme">` and its root element — so the
+  page's first frame is drawn in that set before `GET /api/appearance` is
+  answered, and `system` serves the page as it was built.
   *(Form: test)*
 
 ### What the Library comes to

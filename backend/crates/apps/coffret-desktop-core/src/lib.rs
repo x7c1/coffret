@@ -80,7 +80,7 @@ mod testing;
 mod listed_library;
 pub use listed_library::ListedLibrary;
 
-use coffret_device::LibraryDir;
+use coffret_device::{Appearance, AppearanceFile, LibraryDir};
 
 /// The Libraries on this device, for a Passphrase window to choose between:
 /// each one's ID, and the name it is listed under.
@@ -94,4 +94,43 @@ pub fn libraries() -> Result<Vec<ListedLibrary>> {
         .into_iter()
         .map(ListedLibrary::from)
         .collect())
+}
+
+/// Which set of colours this device's explorer is drawn in, as the server
+/// keeps it in the state directory (spec: LA-38): `system`, `light` or
+/// `dark`, and `system` where nothing was kept or what was kept cannot be
+/// read.
+///
+/// For the shell, which paints the explorer's window in the ground of that set
+/// before the page has drawn anything, so a dark explorer does not open on a
+/// white window.
+pub fn appearance() -> &'static str {
+    word_for(AppearanceFile::of_this_device().read())
+}
+
+/// The word `appearance` is said in to the shell: the one the server's route
+/// answers with.
+fn word_for(appearance: Appearance) -> &'static str {
+    match appearance {
+        Appearance::System => "system",
+        Appearance::Light => "light",
+        Appearance::Dark => "dark",
+    }
+}
+
+#[cfg(test)]
+mod appearance_tests {
+    use super::*;
+
+    // The words are the route's own, so the shell and the page read one
+    // vocabulary.
+    #[test]
+    fn each_choice_is_said_as_the_route_says_it() {
+        for appearance in [Appearance::System, Appearance::Light, Appearance::Dark] {
+            assert_eq!(
+                serde_json::to_value(appearance).expect("an appearance serializes"),
+                word_for(appearance),
+            );
+        }
+    }
 }

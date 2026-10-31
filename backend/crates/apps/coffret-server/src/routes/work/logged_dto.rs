@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 use crate::activity_log::{Ended, Logged};
 use crate::delete::DeleteReport;
 use crate::latest::Latest;
-use crate::routes::RefusalDto;
+use crate::routes::{RefreshedDto, RefusalDto};
 
 use super::{DeleteDto, FillDto, FreezeDto, MoveDto, StoppedAddDto, SyncDto};
 
@@ -35,14 +35,38 @@ pub(super) struct LoggedDto {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum EndedDto {
-    Fill { run: FillDto },
-    Sync { run: SyncDto },
-    Freeze { run: FreezeDto },
-    Delete { run: DeleteDto },
-    Move { run: MoveDto },
-    Discarded { queue: &'static str, folder: String },
-    Add { add: StoppedAddDto },
-    Fetch { path: String, refused: RefusalDto },
+    Fill {
+        run: FillDto,
+    },
+    Sync {
+        run: SyncDto,
+    },
+    Freeze {
+        run: FreezeDto,
+    },
+    Delete {
+        run: DeleteDto,
+    },
+    Move {
+        run: MoveDto,
+    },
+    /// A catch-up the explorer asked for: what it landed with, or what
+    /// refused it, and the other `null`.
+    CatchUp {
+        refreshed: Option<RefreshedDto>,
+        refused: Option<RefusalDto>,
+    },
+    Discarded {
+        queue: &'static str,
+        folder: String,
+    },
+    Add {
+        add: StoppedAddDto,
+    },
+    Fetch {
+        path: String,
+        refused: RefusalDto,
+    },
 }
 
 impl LoggedDto {
@@ -81,6 +105,14 @@ impl EndedDto {
             },
             Ended::Move(run) => Self::Move {
                 run: MoveDto::of(run),
+            },
+            Ended::CatchUp(Ok(caught_up)) => Self::CatchUp {
+                refreshed: Some(RefreshedDto::of(caught_up)),
+                refused: None,
+            },
+            Ended::CatchUp(Err(refusal)) => Self::CatchUp {
+                refreshed: None,
+                refused: Some(RefusalDto::of(refusal)),
             },
             Ended::Add(stopped) => Self::Add {
                 add: StoppedAddDto::of(stopped),
