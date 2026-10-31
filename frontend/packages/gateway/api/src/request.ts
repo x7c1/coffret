@@ -286,9 +286,11 @@ export type Progress = (sent: number, total: number) => void;
  * kept by handing the answer to the same readers rather than by restating them:
  *
  * - the same URL, held to the same origin and paths, and the same headers:
- *   the browser token and nothing else — no `Content-Type`, for the reason
- *   {@link requested} gives about a `FormData` boundary, and no cookie; the
- *   server's key is added by the host that serves the page, never by the page;
+ *   the browser token, `Content-Type` only where the caller states one — a
+ *   body the caller framed itself names its own boundary, and a `FormData`
+ *   is left to the browser for the reason {@link requested} gives — and no
+ *   cookie; the server's key is added by the host that serves the page, never
+ *   by the page;
  * - a refusal that ends the session is told about as {@link requested} tells
  *   it, and an answer to an ended round is `withdrawn`;
  * - a non-2xx answer becomes the refusal its body describes, read by
@@ -307,6 +309,7 @@ export function sentForJson<T>(
   body: XMLHttpRequestBodyInit,
   signal?: AbortSignal,
   onProgress?: Progress,
+  contentType?: string,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     if (signal?.aborted === true) {
@@ -326,6 +329,9 @@ export function sentForJson<T>(
     request.open('POST', url);
     request.withCredentials = false;
     request.setRequestHeader('Authorization', authorization);
+    if (contentType !== undefined) {
+      request.setRequestHeader('Content-Type', contentType);
+    }
     request.responseType = 'text';
     if (onProgress !== undefined) {
       request.upload.addEventListener('progress', (event) => {

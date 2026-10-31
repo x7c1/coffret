@@ -30,19 +30,20 @@ import {
   corrected,
   EDITED,
   editedPath,
-  folded,
   groupHeading,
-  hasHidden,
   leftWholeLine,
+  LINES_DRAWN,
   misorderedLine,
   NO_EDITS,
   NO_NUMBERING,
+  notDrawn,
+  previewOf,
   refusalLine,
   renumber,
-  tallyLine,
   UNDO,
   unchangedLine,
   type Edits,
+  type Folded,
   type Group,
   type Numbering,
   type Refusal,
@@ -99,8 +100,11 @@ const ITEMS_SHOWN = 8;
  * always shown and tinted, and the regular ones between them fold into
  * `… <n> more …` (see [`folded`](./renumber)). **Show all** lists every line,
  * and grows the dialog to the window's height less a margin, the preview
- * taking the height that is left and scrolling inside it. Files dropped alone
- * are no folder's pages, and are sent under the names they were dropped with.
+ * taking the height that is left and scrolling inside it. Folded or not, the
+ * preview draws a bounded number of rows and counts the rest, with a button
+ * that draws more, so that a drop of tens of thousands of files opens at once.
+ * Files dropped alone are no folder's pages, and are sent under the names they
+ * were dropped with.
  *
  * Where the rule read a name otherwise than the person meant, they correct it
  * here: clicking a new name opens it for editing — the last component only,
@@ -404,6 +408,11 @@ function Making({ levels }: { levels: readonly Level[] }) {
  * between them folded (see `folded`). A new name shown is one the person can
  * correct, through `correct`.
  *
+ * A drop may carry tens of thousands of files, and a line drawn is a control
+ * of its own, so no more than {@link LINES_DRAWN} rows are drawn at first —
+ * folded or not — and what is past them is counted, with a button that draws
+ * that many more. The tally above counts every line all the same.
+ *
  * With `all` the box takes the height the dialog has left and scrolls inside.
  */
 function Preview({
@@ -418,8 +427,28 @@ function Preview({
   /** Corrects the new name of a dropped path, or puts it back where null, or says why not. */
   correct: (path: string, name: string | null) => Refusal | null;
 }) {
+  const plan = useMemo(() => previewOf(groups, all), [groups, all]);
+  // How many of the plan's rows are drawn: a bound, which Show all and Show
+  // less put back, so that unfolding a long drop does not draw all of it.
+  const [drawn, setDrawn] = useState(LINES_DRAWN);
+  const unfold = (to: boolean) => {
+    setDrawn(LINES_DRAWN);
+    onAll(to);
+  };
   if (groups.length === 0) {
     return <p style={{ ...LINE, color: COLOR.dim }}>nothing in this drop is renamed</p>;
+  }
+  const shown = plan.rows.slice(0, drawn);
+  const rest = notDrawn(plan.rows, shown.length);
+  // The rows drawn, put back under the group each is of: a group's heading
+  // always comes before its lines, so a new group starts at each heading.
+  const blocks: { group: Group; entries: Folded[] }[] = [];
+  for (const row of shown) {
+    if ('heading' in row) {
+      blocks.push({ group: row.group, entries: [] });
+    } else {
+      blocks[blocks.length - 1].entries.push(row.entry);
+    }
   }
   return (
     <section
@@ -436,21 +465,21 @@ function Preview({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: COLOR.dim, marginRight: 'auto' }}>{tallyLine(groups)}</span>
-        {(all || hasHidden(groups)) && (
-          <button type="button" onClick={() => onAll(!all)} style={SMALL}>
+        <span style={{ color: COLOR.dim, marginRight: 'auto' }}>{plan.tally}</span>
+        {(all || plan.hidden) && (
+          <button type="button" onClick={() => unfold(!all)} style={SMALL}>
             {all ? 'Show less' : 'Show all'}
           </button>
         )}
       </div>
-      {groups.map((group) => (
+      {blocks.map(({ group, entries }) => (
         <div key={`${group.kind}:${group.folder}`}>
           <p style={{ ...LINE, color: COLOR.dim }}>{groupHeading(group)}</p>
           {group.leftWhole !== null && (
             <p style={{ ...LINE, color: COLOR.warn }}>{leftWholeLine(group.leftWhole)}</p>
           )}
           <ul style={{ margin: 0, paddingLeft: 16 }}>
-            {folded(group, all).map((entry, at) => {
+            {entries.map((entry, at) => {
               if ('more' in entry) {
                 return (
                   <li key={`more:${at}`} style={{ color: COLOR.dim, listStyle: 'none' }}>
@@ -479,8 +508,21 @@ function Preview({
           </ul>
         </div>
       ))}
+      {shown.length < plan.rows.length && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: COLOR.dim, marginRight: 'auto' }}>{notDrawnLine(rest)}</span>
+          <button type="button" onClick={() => setDrawn((before) => before + LINES_DRAWN)} style={SMALL}>
+            {`Show ${LINES_DRAWN} more`}
+          </button>
+        </div>
+      )}
     </section>
   );
+}
+
+/** What stands in for the preview's lines that are not drawn. */
+function notDrawnLine(lines: number): string {
+  return `… and ${lines} more ${lines === 1 ? 'line' : 'lines'} not drawn`;
 }
 
 /**

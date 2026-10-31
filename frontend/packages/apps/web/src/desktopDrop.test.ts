@@ -260,7 +260,7 @@ describe('a drop the app took only part of', () => {
     vi.stubGlobal('coffretDesktop', { takeDrop: async () => PHOTOS_AND_A_LINK });
     const { files, notTaken } = await droppedFiles(transfer([new File([''], 'a.jpg')]));
     // More files than one request may name: refused without a question.
-    const many = Array.from({ length: 10_001 }, () => files[0]);
+    const many = Array.from({ length: 70_001 }, () => files[0]);
     const said: string[] = [];
 
     const chosen = await chooseAndAdd({
@@ -278,7 +278,7 @@ describe('a drop the app took only part of', () => {
 
     expect(chosen).toBe('refused');
     expect(said).toHaveLength(1);
-    expect(said[0]).toMatch(/^these are 10001 files, more than the \d+ that can be added at once\. /);
+    expect(said[0]).toMatch(/^these are 70001 files, more than the \d+ that can be added at once\. /);
     // A sentence of its own, after the advice the refusal ends on rather than
     // part of it.
     expect(said[0].endsWith(`main\`. ${LINK_LINE}.`)).toBe(true);

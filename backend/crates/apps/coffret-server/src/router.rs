@@ -4,6 +4,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::Router;
 
+use crate::allowance::MOST_PER_IMPORT;
 use crate::authorize::{admit, Admission};
 use crate::routes;
 use crate::state::ServerState;
@@ -101,10 +102,15 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         )
         // The same gesture made by path from the desktop app's window: a JSON
         // body naming files a drop holds on this device, which the route reads
-        // off the disk itself. Mounted with axum's own body limit, which is far
-        // past the largest body the explorer sends — a handle and an index and
-        // a name per file — since no file's bytes travel in it (spec: LA-27).
-        .route("/api/import", post(routes::import))
+        // off the disk itself. No file's bytes travel in it — a handle and an
+        // index and a name per file (spec: LA-27) — but a drop of tens of
+        // thousands of files is more than axum's default of a couple of
+        // megabytes, so it is mounted with room for a long name for every file
+        // one import may name (spec: LA-28).
+        .route(
+            "/api/import",
+            post(routes::import).layer(DefaultBodyLimit::max(MOST_PER_IMPORT)),
+        )
         // What is asked of none of the routes above is still answered in the one
         // shape a refusal takes, rather than by axum's empty-bodied `404` and
         // `405` — answers no code here writes, which a page can only read as

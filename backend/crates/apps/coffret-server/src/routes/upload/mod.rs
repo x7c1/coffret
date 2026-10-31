@@ -231,7 +231,7 @@ const OPERATION: &str = "upload";
 ///
 /// # One drop at a time, and why nothing here enforces it
 ///
-/// The explorer drops one book and waits for the answer, and nothing on this
+/// The explorer sends one drop and waits for the answer, and nothing on this
 /// route serialises anything. That is deliberate rather than missing. Two drops
 /// arriving at once write into different files and refuse each other nothing —
 /// each part goes to a scratch name of its own and is renamed onto its
@@ -338,8 +338,8 @@ pub async fn upload(
             if seen > state.allowance.parts {
                 return Err(outran(
                     OPERATION,
-                    "one drop is one gesture, and this carries more files than one gesture \
-                     takes — the same files in two drops are taken",
+                    "this carries more files than one request takes — the same files in \
+                     two drops are taken",
                 ));
             }
             // A part with no filename is not a file. Nothing this route serves sends

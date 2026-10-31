@@ -201,8 +201,8 @@ it('says which file is too large to drop and how to add it instead', async () =>
 // LA-9, LA-10: more files than one drop may carry is refused before it is
 // sent, and the sentence names both ways past it.
 it('says how many files are too many to drop and both ways to add them instead', () => {
-  expect(overBudgetLine({ budget: 'parts', count: 5210, limit: 4096 }, FAMILY)).toBe(
-    'these are 5210 files, more than the 4096 that can be added at once. Add fewer files at ' +
+  expect(overBudgetLine({ budget: 'parts', count: 70210, limit: 65536 }, FAMILY)).toBe(
+    'these are 70210 files, more than the 65536 that can be added at once. Add fewer files at ' +
       'a time, or copy them to where this folder is on this device and run ' +
       '`coffret sync --library family`.',
   );
@@ -232,7 +232,7 @@ it('gives sizes in bytes where the size and the budget would read the same', () 
 // the `<library>` placeholder the server's own sentences use where the name
 // goes.
 it('leaves the Library to name where the page does not know it', () => {
-  expect(overBudgetLine({ budget: 'parts', count: 5000, limit: 4096 }, null)).toContain(
+  expect(overBudgetLine({ budget: 'parts', count: 70000, limit: 65536 }, null)).toContain(
     '`coffret sync --library <library>`',
   );
 });
@@ -240,7 +240,7 @@ it('leaves the Library to name where the page does not know it', () => {
 // A Library nothing has named yet is named by its ID with `--library-id`, which
 // finds it, and not with `--library`, which would not.
 it('names a Library with no name yet by its ID', () => {
-  const line = overBudgetLine({ budget: 'parts', count: 5000, limit: 4096 }, named(null));
+  const line = overBudgetLine({ budget: 'parts', count: 70000, limit: 65536 }, named(null));
   expect(line).toContain('`coffret sync --library-id 0123456789abcdef`');
   expect(line).not.toContain('--library 0123');
 });
@@ -248,7 +248,7 @@ it('names a Library with no name yet by its ID', () => {
 // A Library's name may hold a space or a quote, and the command it is named in
 // is there to be pasted: such a name is quoted so it stays one argument.
 it('quotes a Library name a shell would split', () => {
-  const parts = { budget: 'parts', count: 5000, limit: 4096 } as const;
+  const parts = { budget: 'parts', count: 70000, limit: 65536 } as const;
 
   expect(overBudgetLine(parts, named('My Books'))).toContain("`coffret sync --library 'My Books'`");
   expect(overBudgetLine(parts, named("Bob's"))).toContain("`coffret sync --library 'Bob'\\''s'`");

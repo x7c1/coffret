@@ -6,16 +6,16 @@ import {
   corrected,
   editedPath,
   folded,
-  hasHidden,
   irregular,
   leftWholeLine,
   linesOf,
   misorderedLine,
   NO_EDITS,
   NO_NUMBERING,
+  notDrawn,
+  previewOf,
   refusalLine,
   renumber,
-  tallyLine,
   unchangedLine,
   type Edits,
   type Folded,
@@ -701,9 +701,38 @@ describe('the folded preview', () => {
       // A file that is no page, left unnumbered: irregular.
       '!ComicInfo.xml',
     ]);
-    expect(hasHidden([group])).toBe(true);
+    expect(previewOf([group], false).hidden).toBe(true);
     expect(written(folded(group, true))).toHaveLength(linesOf(group).length);
-    expect(tallyLine([group])).toBe('20 renamed · 3 to check');
+    expect(previewOf([group], false).tally).toBe('20 renamed · 3 to check');
+  });
+
+  it('lays the preview out once: every group folded, the tally and whether anything is folded', () => {
+    const group = renumber(BOOK, PAGES).groups[0];
+    for (const all of [false, true]) {
+      const plan = previewOf([group, group], all);
+      // Both groups counted, whichever way the preview is folded.
+      expect(plan.tally).toBe('40 renamed · 6 to check');
+      expect(plan.hidden).toBe(true);
+      // Each group's heading, then its entries as `folded` gives them.
+      expect(plan.rows).toEqual(
+        [group, group].flatMap((one) => [
+          { group: one, heading: true },
+          ...folded(one, all).map((entry) => ({ group: one, entry })),
+        ]),
+      );
+    }
+  });
+
+  it('counts the lines of the rows past the ones drawn, a folded run by what it folds', () => {
+    const group = renumber(BOOK, PAGES).groups[0];
+    const { rows } = previewOf([group], false);
+    // Nothing drawn: every line of the group, folded or not.
+    expect(notDrawn(rows, 0)).toBe(linesOf(group).length);
+    // Everything drawn: nothing left to count.
+    expect(notDrawn(rows, rows.length)).toBe(0);
+    // Past the heading, `cover.jpg` and `p1.jpg`: the first `… 8 more …` and
+    // what comes after it.
+    expect(notDrawn(rows, 3)).toBe(linesOf(group).length - 2);
   });
 
   it('shows a run of one regular line rather than counting it', () => {
@@ -716,7 +745,7 @@ describe('the folded preview', () => {
       '!p3.jpg',
       '… 6 more …',
     ]);
-    expect(tallyLine([group])).toBe('20 renamed · 4 to check');
+    expect(previewOf([group], false).tally).toBe('20 renamed · 4 to check');
   });
 
   it('marks a corrected name as irregular, and a group left whole as regular', () => {

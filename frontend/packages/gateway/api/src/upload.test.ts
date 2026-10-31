@@ -111,7 +111,7 @@ function settled<T>(promise: Promise<T>): Promise<T | unknown> {
  * had to hold 64 GiB to say so would be the case that could not be run.
  */
 function claiming(path: string, size: number): Added {
-  return addedFile(path, { size, name: path, lastModified: 0 } as File);
+  return addedFile(path, { size, name: path, type: '', lastModified: 0 } as File);
 }
 
 /** What `addFiles` threw, or the answer it resolved to where it threw nothing. */
@@ -214,12 +214,6 @@ it('names the file past the part budget before the count past the parts budget',
 // is the server's to take.
 it('sends a drop at exactly the part and parts budgets', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeRequest);
-  vi.stubGlobal(
-    'FormData',
-    class {
-      append() {}
-    },
-  );
 
   const files = Array.from({ length: uploadBudget.parts - 1 }, (_, at) =>
     claiming(`page-${at}.jpg`, 1),
@@ -237,12 +231,6 @@ it('sends a drop at exactly the part and parts budgets', async () => {
 // may be, so it is the request budget alone being weighed.
 it('sends a drop whose files come to no more than the request budget', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeRequest);
-  vi.stubGlobal(
-    'FormData',
-    class {
-      append() {}
-    },
-  );
 
   const files = Array.from(
     { length: uploadBudget.request_bytes / uploadBudget.part_bytes },
@@ -254,9 +242,19 @@ it('sends a drop whose files come to no more than the request budget', async () 
   await expect(added).resolves.toEqual({ written: [], refused: [], cancelled: false });
 });
 
+/** The body a request was sent, read back by a multipart parser of its own. */
+async function partsOf(request: FakeRequest): Promise<[string, File][]> {
+  const body = new Response(request.body as Blob, {
+    headers: { 'Content-Type': request.headers['Content-Type'] },
+  });
+  const form = await body.formData();
+  return [...form.entries()].map(([field, part]) => [field, part as File]);
+}
+
 // The request is the one `fetch` made before it: the route with the folder and
-// the freeze in the query, the files as a multipart body, and no header of the
-// page's own — the server's key is added by whatever serves the page.
+// the freeze in the query, the files as a multipart body under the boundary
+// its `Content-Type` names, and no other header of the page's own — the
+// server's key is added by whatever serves the page.
 it('sends the drop as it always did, and says how much of it has gone', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeRequest);
   const progress = vi.fn();
@@ -265,15 +263,23 @@ it('sends the drop as it always did, and says how much of it has gone', async ()
   const request = FakeRequest.only();
   expect(request.method).toBe('POST');
   expect(request.url).toBe('/api/upload?path=books%2Fvol-1&freeze=true');
-  expect(request.headers).toEqual({ Authorization: `Bearer ${TOKEN}` });
+  expect(Object.keys(request.headers).sort()).toEqual(['Authorization', 'Content-Type']);
+  expect(request.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+  expect(request.headers['Content-Type']).toMatch(
+    /^multipart\/form-data; boundary=----coffret[0-9a-f]{32}$/,
+  );
   expect(request.withCredentials).toBe(false);
-  expect(request.body).toBeInstanceOf(FormData);
-  const body = request.body as FormData;
   // Each file under its own modification time, which the server stamps the
-  // file it writes with — negative before 1970.
-  expect([...body.entries()].map(([field, part]) => [field, (part as File).name])).toEqual([
-    ['1444000000999', 'page-001.jpg'],
-    ['-1500', 'page-002.jpg'],
+  // file it writes with — negative before 1970 — named by where it goes and
+  // holding its own bytes.
+  const parts = await partsOf(request);
+  expect(
+    await Promise.all(
+      parts.map(async ([field, part]) => [field, part.name, part.type, await part.text()]),
+    ),
+  ).toEqual([
+    ['1444000000999', 'page-001.jpg', 'application/octet-stream', 'one'],
+    ['-1500', 'page-002.jpg', 'application/octet-stream', 'two'],
   ]);
 
   request.sent(100, 400);
@@ -292,6 +298,81 @@ it('sends the drop as it always did, and says how much of it has gone', async ()
     [100, 400],
     [400, 400],
   ]);
+});
+
+// Chrome does not send a `FormData` of more than about 8,000 files: it fails the
+// request before any of it reaches the host, and the page sees a transfer that
+// broke. So a drop goes as one `Blob` however many files it holds, framed here,
+// and a drop of more files than that is one body of every one of them.
+it('sends a drop of more than ten thousand files as one framed body', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const files = Array.from({ length: 10_001 }, (_, at) =>
+    addedFile(
+      `vol-1/p-${String(at).padStart(5, '0')}.png`,
+      new File([`page ${at}`], 'p.png', { type: 'image/png', lastModified: at }),
+    ),
+  );
+  const added = addFiles('Albums', files, { freeze: true, add: 'big-drop' });
+  const request = FakeRequest.only();
+  expect(request.body).toBeInstanceOf(Blob);
+  expect(request.body).not.toBeInstanceOf(FormData);
+
+  const parts = await partsOf(request);
+  expect(parts).toHaveLength(10_001);
+  expect(parts[10_000][0]).toBe('10000');
+  expect(parts[10_000][1].name).toBe('vol-1/p-10000.png');
+  expect(parts[10_000][1].type).toBe('image/png');
+  expect(await parts[10_000][1].text()).toBe('page 10000');
+
+  request.answer(200, JSON.stringify({ written: [], refused: [] }));
+  await expect(added).resolves.toEqual({ written: [], refused: [], cancelled: false });
+});
+
+// A name is written into the part's header as a browser writes it, so that a
+// double quote or a line break in a path cannot end the header early: the
+// server meets the same bytes a `FormData` would have sent.
+it('escapes a path in the part header as a browser does', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const added = addFiles('books', [
+    addedFile('say "hi"\r\n.txt', new File(['x'], 'x.txt', { lastModified: 7 })),
+  ]);
+  const request = FakeRequest.only();
+  const text = await (request.body as Blob).text();
+  expect(text).toContain('Content-Disposition: form-data; name="7"; filename="say %22hi%22%0D%0A.txt"\r\n');
+
+  request.answer(200, JSON.stringify({ written: [], refused: [] }));
+  await added;
+});
+
+// A path outside ASCII goes as its UTF-8 bytes, as a browser sends it, and a
+// file of no bytes is still a part of its own — not the end of the body.
+it('frames a path outside ASCII and a file of no bytes as a browser does', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const added = addFiles('books', [
+    addedFile('第1巻/表紙.jpg', new File([], 'x.jpg', { type: 'image/jpeg', lastModified: 1 })),
+    addedFile('第1巻/p-002.jpg', new File(['two'], 'y.jpg', { lastModified: 2 })),
+  ]);
+  const request = FakeRequest.only();
+  const bytes = await (request.body as Blob).arrayBuffer();
+  expect(new TextDecoder('utf-8', { fatal: true }).decode(bytes)).toContain(
+    'filename="第1巻/表紙.jpg"\r\n',
+  );
+
+  const parts = await partsOf(request);
+  expect(
+    await Promise.all(
+      parts.map(async ([field, part]) => [field, part.name, part.size, await part.text()]),
+    ),
+  ).toEqual([
+    ['1', '第1巻/表紙.jpg', 0, ''],
+    ['2', '第1巻/p-002.jpg', 3, 'two'],
+  ]);
+
+  request.answer(200, JSON.stringify({ written: [], refused: [] }));
+  await added;
 });
 
 // The Library root is the route with no `path` at all, as before.

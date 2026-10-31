@@ -105,10 +105,16 @@ Concept background: [Library](../../concepts/library/),
   files into the Library in — is taken within three
   budgets of this server's own: at most 64 GiB across the whole request,
   framing included; at most 1 GiB of file content in any one **part** — one
-  field of the multipart body such a request carries; and at most 4096
+  field of the multipart body such a request carries; and at most 65,536
   parts, counting every part the request carries and not only the ones
   that name a file. What they bound is one HTTP request arriving on this
-  device's loopback socket, and nothing beyond it. They put no number on
+  device's loopback socket, and nothing beyond it: not what one drop should
+  be, since one gesture in the explorer — a book, several volumes added at
+  once, a folder of photographs — is one request however many files it
+  carries. The two byte budgets carry most of that bound; the count guards
+  against what they cannot see, a request of countless tiny parts, each a
+  name to check and a file to land and none bringing enough bytes to pass
+  either. They put no number on
   how large a file may be, and no rule elsewhere puts one there: an Entry
   larger than a Pack's size target is a Pack of its own rather than a file
   refused (PK-3). What the format bounds instead is how much a Container's
@@ -544,8 +550,12 @@ Concept background: [Library](../../concepts/library/),
   has for what is still coming, asked of each file before it is taken as LA-11
   asks it of an upload's part, what is still coming being the lengths the walk
   stated less what has been taken; at most as many files per request as LA-9
-  allows an upload parts, refused as LA-10 refuses an upload past it; and the
-  held set, which no request adds to. A file is held to the length the walk
+  allows an upload parts — 65,536, which guards against a request naming
+  countless tiny files, as the count does an upload, while the room carries
+  the rest — refused as LA-10 refuses an upload past it; and the held set,
+  which no request adds to. The body is read with room for a long name for
+  each file it may name, so that the count, and not the length of the names,
+  is what refuses an import. A file is held to the length the walk
   stated: one that grew since it was dropped is refused part way through, as a
   `conflict`, and leaves neither a file under its final name nor its scratch
   (EP-11). *(Form: test)*

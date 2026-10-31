@@ -12,11 +12,14 @@ import type { DropAnswer } from './addon.js';
 export const TAKE_DROP = 'coffret:take-drop';
 
 /**
- * The most items one drop may name. A drop is one gesture — a handful of
- * photographs, a book or two — and the walk under each dropped folder is the
- * addon's; this bounds only what a page can hand over in one call.
+ * The most items one drop may name: as many as one import may name files, since
+ * every item dropped is a file or a folder of at least one. A drop is not held
+ * to a size — several volumes, or a folder of photographs years deep, are one
+ * gesture all the same — and the walk under each dropped folder is the
+ * addon's; this bounds only what a page can hand over in one call, against a
+ * call of countless paths.
  */
-export const MOST_DROPPED_ITEMS = 4096;
+export const MOST_DROPPED_ITEMS = 65_536;
 
 /** The part of an `ipcMain.handle` event this answers by. */
 export interface DropAsking {

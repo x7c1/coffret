@@ -1,5 +1,5 @@
 {
   "request_bytes": 68719476736,
   "part_bytes": 1073741824,
-  "parts": 4096
+  "parts": 65536
 }
