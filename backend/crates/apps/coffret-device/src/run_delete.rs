@@ -60,7 +60,7 @@ impl OpenLibrary {
             now,
         )
         .watched_by(progress)
-        .with_mapped_copies(self.local_fs.as_ref(), self.local_fs.as_ref());
+        .with_mapped_copies(self.local_fs.as_ref(), self.trash.as_ref());
         let outcome = delete_entries(request).await;
         self.fetch_memory.forget_key_table();
         let outcome = outcome?;

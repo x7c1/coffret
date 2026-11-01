@@ -3,7 +3,8 @@
 //!
 //! Every case here is one the discard turns away, and that is deliberate: a
 //! case that let the discard through would put a file into the trash of the
-//! desktop the tests run on. What the discard does once it is through is the
+//! desktop the tests run on; the one case that does, `desktop_trash.rs`, runs
+//! only when asked. What the discard does once it is through is the
 //! platform trash's, and what a sync does with either answer is held to the
 //! in-memory fake by the sync conformance suite. These are the refusals this
 //! gateway owns — a root that does not vouch for itself, a folder on the way

@@ -103,10 +103,14 @@ where
         epoch = unlocked.epoch.get(),
         "opened a Library"
     );
+    // One disk for every capability, the trash among them: a Library opened
+    // for a person discards into the desktop's own trash (spec: EP-15).
+    let local_fs = Arc::new(UnixFs::new());
     Ok(OpenLibrary {
         store,
         index: Arc::new(index),
-        local_fs: Arc::new(UnixFs::new()),
+        local_fs: Arc::clone(&local_fs),
+        trash: local_fs,
         keys,
         spool: dir.spool_dir(),
         parcel_dir: dir.parcel_dir(),

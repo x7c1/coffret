@@ -499,6 +499,7 @@ mod tests {
             store: Arc::new(InMemoryStore::new(64)),
             index: Arc::new(InMemoryIndex::new()),
             local_fs: Arc::new(UnixFs::new()),
+            trash: Arc::new(UnixFs::new()),
             keys: LibraryKeys::derive(
                 &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
                 MasterKeyEpoch::FIRST,

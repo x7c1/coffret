@@ -56,7 +56,7 @@ impl OpenLibrary {
             self.local_fs.as_ref(),
             self.local_fs.as_ref(),
             self.local_fs.as_ref(),
-            self.local_fs.as_ref(),
+            self.trash.as_ref(),
             self.local_fs.as_ref(),
             self.kept_parcels(),
             now(),

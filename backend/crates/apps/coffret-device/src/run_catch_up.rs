@@ -132,6 +132,7 @@ mod tests {
             store: Arc::clone(store),
             index,
             local_fs: local_fs(),
+            trash: local_fs(),
             keys: keys(),
             spool: std::env::temp_dir().join("coffret-a-catch-up-never-spools"),
             parcel_dir: std::env::temp_dir().join("coffret-a-catch-up-keeps-no-parcel"),
