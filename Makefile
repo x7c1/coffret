@@ -225,12 +225,22 @@ e2e-it:
 # one-minute idle interval, so it takes a few minutes.
 #
 # It needs Docker and the frontend's dependencies; the first run fetches the
-# Electron binary. Everything lives under .tmp/e2e-electron/ — a state
-# directory and a browser-data directory of its own, so it touches neither the
-# development state directory nor an installed app — and is made again on every
-# run. It is out of `check` for the reason `e2e-it` is; CI runs it in the `e2e`
-# job, under xvfb-run. scripts/e2e-electron.sh says why Linux starts it with
-# --no-sandbox, which nothing else does.
+# Electron binary. A run lives under .tmp/e2e-electron/ — a state directory and
+# a browser-data directory of its own, so it touches neither the development
+# state directory nor an installed app — which is made again on every run; a
+# run that failed also leaves its logs, traces and pictures under
+# .tmp/e2e-electron-failed/<when>/, which no run removes. It is out of `check`
+# for the reason `e2e-it` is; CI runs it in the `e2e` job, under xvfb-run.
+# scripts/e2e-electron.sh says why Linux starts it with --no-sandbox, which
+# nothing else does.
+#
+# On Linux the app is shown on the current display where there is one and the
+# login session does not report the screen blanked (a blanked screen stops the
+# journey at its first screenshot); otherwise on a headless weston the run
+# starts and stops itself, where weston is installed; otherwise the run refuses
+# and says why. COFFRET_E2E_ELECTRON_DISPLAY=current or =weston takes that
+# choice instead, and the run says which it took. `e2e-electron-display-test`
+# shows the choice.
 #
 # COFFRET_E2E_ELECTRON_MINIO_PORT moves the port MinIO is published on.
 .PHONY: e2e-electron
@@ -894,6 +904,15 @@ check-version-change-test:
 desktop-dev-sandbox-test:
 	./scripts/desktop-dev-sandbox-test.sh
 
+## e2e-electron-display-test: show e2e-electron choosing the current display, choosing a headless weston where there is none or the screen is blanked, and refusing, saying why, where weston is not installed
+#
+# scripts/e2e-electron.sh makes that choice before it builds anything; this
+# runs the choice alone, never weston or Electron, with a stand-in weston and a
+# stand-in loginctl, so it answers the same on any host.
+.PHONY: e2e-electron-display-test
+e2e-electron-display-test:
+	./scripts/e2e-electron-display-test.sh
+
 ## desktop-addon-test: show that napi-addon places the addon as a new file each time, so a running development app keeps the one it loaded
 #
 # scripts/desktop.sh place-addon renames a fresh copy of the library over
@@ -946,7 +965,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + desktop-addon-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + e2e-electron-display-test + desktop-addon-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -969,8 +988,8 @@ audit:
 #   - `e2e-it`: the explorer's journeys in a real browser against MinIO. It
 #     needs a container runtime and Chromium; CI runs it as the `e2e` job.
 #   - `e2e-electron`: the desktop app's journey in the Electron app against
-#     MinIO. It needs a container runtime and a display; CI runs it in the `e2e`
-#     job too.
+#     MinIO. It needs a container runtime and a display that draws, or weston
+#     to start a headless one; CI runs it in the `e2e` job too, under xvfb-run.
 #   - `drive-store-it`, `drive-round-trip-it`, `drive-index-layout-it`: the
 #     same contracts and journeys against a real Google Drive account. They need
 #     a person's OAuth consent and an account to spend, so nothing runs them
@@ -1015,6 +1034,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test desktop-addon-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test e2e-electron-display-test desktop-addon-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
