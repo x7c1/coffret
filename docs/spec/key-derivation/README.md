@@ -61,9 +61,13 @@ Concept background: [Master Key](../../concepts/master-key/),
   constant: initial values are chosen from the OWASP-recommended band
   current at release, and strengthening them later re-derives the
   protection key and re-protects only that device's stored Master Key — no
-  Storage Object changes, like a Passphrase change (DK-6). *(Form: test
-  for the parameter mechanism; the value choice itself is a design
-  decision recorded outside this register)*
+  Storage Object changes, like a Passphrase change (DK-6). Strengthening
+  stays within the ceilings KD-9 sets on what a reader accepts: a device
+  never writes a stored form a reader would refuse, and raising a ceiling
+  is a change to this specification, not to a device's policy. *(Form:
+  test for the parameter mechanism and for the initial values lying within
+  the ceilings; the value choice itself is a design decision recorded
+  outside this register)*
 - **KD-7.** The stored form encrypts the Master Key and its
   `master_key_epoch` with XChaCha20-Poly1305 under the Passphrase-derived
   key, with the recorded Argon2id parameters bound as associated data, so
@@ -101,6 +105,25 @@ Concept background: [Master Key](../../concepts/master-key/),
   length rather than its own build's policy, and rejects an unknown magic
   or version, a non-zero reserved byte, or a total length that disagrees
   with S. *(Form: test)*
+  - A reader rejects, before any derivation, a stored form whose recorded
+    Argon2id cost exceeds any of these ceilings (inclusive):
+
+    | parameter | ceiling |
+    | --- | --- |
+    | memory cost | 262,144 KiB (256 MiB) |
+    | iterations | 8 |
+    | parallelism | 4 |
+
+    The recorded cost is authenticated (KD-7), but only after the
+    derivation it asks for has run, so a form edited to an enormous cost
+    would exhaust memory or never finish before the Passphrase is judged;
+    the ceilings bound that work to 256 MiB over 8 passes. They bound what
+    is accepted, not what is used: a form within them unlocks under its
+    recorded cost. The refusal is its own, distinct from a failed
+    authentication — the Passphrase was never checked — and a reader never
+    retries at a lower cost. Because the largest salt length is 255, no
+    valid form is longer than 355 bytes, and a reader of a file need read
+    no more than that and one byte to refuse a longer one. *(Form: test)*
   - The Argon2id version is 0x13 (v1.3). The stored form records no Argon2
     version field, so the version is a format constant, not a recorded
     parameter: an implementation using a different version would derive a

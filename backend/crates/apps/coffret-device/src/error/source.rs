@@ -49,7 +49,9 @@ impl error::Error for Error {
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
             }
-            Self::MasterKeyNotUnlocked { cause, .. } | Self::KeyMaterial { cause } => Some(cause),
+            Self::MasterKeyNotUnlocked { cause, .. }
+            | Self::MasterKeyCostAboveCeiling { cause, .. }
+            | Self::KeyMaterial { cause } => Some(cause),
             Self::MalformedStoragePrefix { cause } => Some(cause),
             // The model's refusal where the prefix is no Entry Path, and nothing
             // underneath where it is one and names more than one component.

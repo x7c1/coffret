@@ -302,6 +302,15 @@ impl fmt::Display for Error {
                 f,
                 "the epoch {epoch} sealed beside a stored Master Key numbers no epoch"
             ),
+            Self::Argon2CostAboveCeiling {
+                parameter,
+                value,
+                ceiling,
+            } => write!(
+                f,
+                "an Argon2id {parameter} of {value} is above the {ceiling} a stored Master Key \
+                 may ask for"
+            ),
             Self::UnknownTokenCacheMagic { actual } => {
                 write!(f, "unknown magic {actual:?}, not a token cache")
             }

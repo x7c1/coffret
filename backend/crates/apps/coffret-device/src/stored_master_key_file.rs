@@ -1,7 +1,7 @@
-use std::fs;
-use std::io::ErrorKind;
+use std::fs::File;
+use std::io::{self, ErrorKind, Read};
 
-use coffret_format::{StoredMasterKey, UnlockedMasterKey};
+use coffret_format::{Error as FormatError, StoredMasterKey, UnlockedMasterKey};
 use coffret_model::Passphrase;
 use coffret_usecase::{LocalIoError, LocalOperation};
 
@@ -27,10 +27,22 @@ impl StoredMasterKeyFile {
     }
 
     /// Reads the stored form back, without opening it.
+    ///
+    /// No more of the file is read than the longest valid form and one byte:
+    /// a file longer than that is no stored form, and is refused without the
+    /// rest of it being read (spec: KD-9). A form recording a cost above what
+    /// a reader accepts is refused here too, before any Passphrase is asked
+    /// for or checked.
     pub fn read(dir: &LibraryDir) -> Result<StoredMasterKey> {
         let path = dir.master_key_file();
-        let bytes = match fs::read(&path) {
-            Ok(bytes) => bytes,
+        let bytes = match File::open(&path).and_then(read_bounded) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) => {
+                return Err(Error::MasterKeyNotUnlocked {
+                    path,
+                    cause: FormatError::StoredMasterKeyLengthMismatch,
+                })
+            }
             Err(cause) if cause.kind() == ErrorKind::NotFound => {
                 return Err(Error::NoSuchLibrary {
                     library: dir.which(),
@@ -42,8 +54,12 @@ impl StoredMasterKeyFile {
             }
         };
 
-        StoredMasterKey::from_bytes(bytes)
-            .map_err(|cause| Error::MasterKeyNotUnlocked { path, cause })
+        StoredMasterKey::from_bytes(bytes).map_err(|cause| match cause {
+            FormatError::Argon2CostAboveCeiling { .. } => {
+                Error::MasterKeyCostAboveCeiling { path, cause }
+            }
+            cause => Error::MasterKeyNotUnlocked { path, cause },
+        })
     }
 
     /// Opens the Library's Master Key with the Passphrase that protects it.
@@ -83,3 +99,17 @@ impl StoredMasterKeyFile {
             })
     }
 }
+
+/// Everything `reader` holds, if that is no longer than the longest valid
+/// stored form; `None`, after reading one byte past that, if it is longer.
+fn read_bounded(reader: impl Read) -> io::Result<Option<Vec<u8>>> {
+    let limit = StoredMasterKey::MAX_LEN;
+    let mut bytes = Vec::with_capacity(limit + 1);
+    reader
+        .take(u64::try_from(limit + 1).expect("the bound is a few hundred bytes"))
+        .read_to_end(&mut bytes)?;
+    Ok((bytes.len() <= limit).then_some(bytes))
+}
+
+#[cfg(test)]
+mod tests;

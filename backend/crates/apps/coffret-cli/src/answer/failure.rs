@@ -287,6 +287,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::UnsupportedSettingsVersion { .. } => "unsupported_settings_version",
         Error::UnencodableSettings { .. } => "unencodable_settings",
         Error::MasterKeyNotUnlocked { .. } => "master_key_not_unlocked",
+        Error::MasterKeyCostAboveCeiling { .. } => "master_key_cost_above_ceiling",
         Error::KeyMaterial { .. } => "key_material",
         Error::ServerKeyNotDrawn { .. } => "server_key_not_drawn",
         Error::LibraryAlreadyServed { .. } => "library_already_served",

@@ -141,6 +141,7 @@ export {
 } from './control/objectName.js';
 
 export {
+  ARGON2_PARAMS_CEILING,
   INITIAL_ARGON2_PARAMS,
   requireArgon2Params,
   type Argon2Params,

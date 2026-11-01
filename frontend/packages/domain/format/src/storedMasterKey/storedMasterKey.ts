@@ -33,6 +33,7 @@ import {
   INITIAL_ARGON2_PARAMS,
   deriveProtectionKey,
   requireArgon2Params,
+  requireWithinCeiling,
   type Argon2Params,
 } from './argon2Params.js';
 
@@ -107,7 +108,11 @@ export class StoredMasterKey {
    * supplies one.
    */
   static async create(request: StoredMasterKeyCreateRequest): Promise<StoredMasterKey> {
-    const params = requireArgon2Params(request.params ?? INITIAL_ARGON2_PARAMS);
+    // A form a reader would refuse is not written, and the refusal comes before
+    // the derivation rather than after it (spec: KD-6, KD-9).
+    const params = requireWithinCeiling(
+      requireArgon2Params(request.params ?? INITIAL_ARGON2_PARAMS),
+    );
     const salt = request.salt ?? drawBytes(STORED_MASTER_KEY_SALT_LENGTH);
     const nonce = takeExactly(request.nonce ?? randomNonce(), NONCE_LENGTH, 'a nonce');
     if (salt.length === 0 || salt.length > 0xff) {
@@ -135,7 +140,12 @@ export class StoredMasterKey {
     return StoredMasterKey.fromBytes(concatBytes(associatedData, message));
   }
 
-  /** Takes stored bytes, checking that they are this form at all. */
+  /**
+   * Takes stored bytes, checking that they are this form at all, and that the
+   * cost they record is within the ceiling — so nothing holding a
+   * `StoredMasterKey` can be asked for more work than a reader accepts
+   * (spec: KD-9).
+   */
   static fromBytes(bytes: Uint8Array): StoredMasterKey {
     return new StoredMasterKey(Uint8Array.from(bytes), parseLayout(bytes));
   }
@@ -181,8 +191,9 @@ export class StoredMasterKey {
  * Reads the plaintext part of a stored form.
  *
  * A reader follows the recorded salt length rather than its own build's policy,
- * and rejects an unknown magic or version, a non-zero reserved byte, or a total
- * length that disagrees with the recorded salt length (spec: KD-9).
+ * and rejects an unknown magic or version, a non-zero reserved byte, a total
+ * length that disagrees with the recorded salt length, or a recorded cost above
+ * the ceiling — here, before any derivation (spec: KD-9).
  */
 function parseLayout(bytes: Uint8Array): Layout {
   if (bytes.length < SALT_OFFSET) {
@@ -215,11 +226,11 @@ function parseLayout(bytes: Uint8Array): Layout {
     );
   }
   return {
-    params: {
+    params: requireWithinCeiling({
       memoryKib: readU32BE(bytes, MEMORY_KIB_OFFSET),
       iterations: readU32BE(bytes, ITERATIONS_OFFSET),
       parallelism: readU32BE(bytes, PARALLELISM_OFFSET),
-    },
+    }),
     saltEnd,
     nonceEnd,
     messageEnd,

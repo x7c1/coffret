@@ -34,7 +34,10 @@ impl Layout {
             read_u32(fixed, offset::MEMORY_KIB),
             read_u32(fixed, offset::ITERATIONS),
             read_u32(fixed, offset::PARALLELISM),
-        );
+        )
+        // Refused here, at parsing, so that no caller holds a form whose cost
+        // could reach a derivation it should never run (spec: KD-9).
+        .within_ceiling()?;
 
         let salt = offset::SALT..offset::SALT + usize::from(fixed[offset::SALT_LEN]);
         let nonce = salt.end..salt.end + nonce::LEN;

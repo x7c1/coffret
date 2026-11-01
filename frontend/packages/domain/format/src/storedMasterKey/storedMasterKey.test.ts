@@ -2,13 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import { asyncErrorCode, errorCode } from '../errors.testing.js';
 import { seal } from '../internal/aead.js';
-import { MAX_FORMAT_INTEGER, asciiBytes, concatBytes, readU32BE } from '../internal/bytes.js';
+import {
+  MAX_FORMAT_INTEGER,
+  asciiBytes,
+  concatBytes,
+  readU32BE,
+  writeU32BE,
+} from '../internal/bytes.js';
 import { MasterKey } from '../model/masterKey.js';
 import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import {
+  ARGON2_PARAMS_CEILING,
   INITIAL_ARGON2_PARAMS,
   deriveProtectionKey,
   requireArgon2Params,
+  requireWithinCeiling,
   type Argon2Params,
 } from './argon2Params.js';
 import {
@@ -67,6 +75,20 @@ async function resealedWithEpochBytes(epoch: bigint): Promise<StoredMasterKey> {
       seal(protectionKey, stored.subarray(saltEnd, nonceEnd), associatedData, plaintext),
     ),
   );
+}
+
+/**
+ * The bytes of a {@link CHEAP} form with its recorded cost replaced by `params`.
+ *
+ * Only the parsing is under test where this is used, so the tag no longer
+ * matching the edited associated data is beside the point.
+ */
+async function withRecordedCost(params: Argon2Params): Promise<Uint8Array> {
+  const bytes = (await create()).bytes();
+  writeU32BE(bytes, 8, params.memoryKib);
+  writeU32BE(bytes, 12, params.iterations);
+  writeU32BE(bytes, 16, params.parallelism);
+  return bytes;
 }
 
 /** The stored bytes with one of them flipped. */
@@ -268,5 +290,69 @@ describe('the stored Master Key', () => {
     expect(errorCode(() => requireArgon2Params({ memoryKib: 8, iterations: 1, parallelism: 2 }))).toBe(
       'invalid_argon2_params',
     );
+  });
+
+  // KD-9: the ceilings are pinned here, so a change to them is a deliberate edit
+  // to the specification as well — and they are the ones the Rust reader holds.
+  it('ships the specified ceiling', () => {
+    expect(ARGON2_PARAMS_CEILING).toEqual({ memoryKib: 262_144, iterations: 8, parallelism: 4 });
+  });
+
+  // KD-6: the initial values lie within the ceilings KD-9 sets on what a reader
+  // accepts, so every form a device writes is one it can read back.
+  it('writes its initial cost within the ceiling', () => {
+    expect(requireWithinCeiling(INITIAL_ARGON2_PARAMS)).toEqual(INITIAL_ARGON2_PARAMS);
+  });
+
+  // KD-9: a form recording a cost at each ceiling is accepted. The memory
+  // ceiling is checked by parsing alone, since deriving at 256 MiB would dominate
+  // the test run; iterations and parallelism at their ceilings are cheap enough
+  // to round trip over a small memory cost.
+  it('accepts a form at each ceiling', async () => {
+    const ceiling = ARGON2_PARAMS_CEILING;
+    for (const params of [
+      ceiling,
+      { memoryKib: ceiling.memoryKib, iterations: 1, parallelism: 1 },
+      { memoryKib: 8, iterations: ceiling.iterations, parallelism: 1 },
+      { memoryKib: 32, iterations: 1, parallelism: ceiling.parallelism },
+    ]) {
+      expect(StoredMasterKey.fromBytes(await withRecordedCost(params)).params).toEqual(params);
+    }
+
+    const atTheCeilings = { memoryKib: 32, iterations: ceiling.iterations, parallelism: ceiling.parallelism };
+    const stored = StoredMasterKey.fromBytes((await create({ params: atTheCeilings })).bytes());
+    const unlocked = await stored.unlock(PASSPHRASE);
+    expect(Array.from(unlocked.masterKey.bytes())).toEqual(Array.from(MASTER_KEY.bytes()));
+  });
+
+  // KD-9: one past each ceiling, and the values of a form edited to exhaust a
+  // reader, are refused by `fromBytes` itself. No `StoredMasterKey` exists to
+  // unlock, so no derivation runs — the refusal is the parse's, not the
+  // derivation's, and it is not an authentication failure.
+  it('refuses a form above a ceiling before any derivation', async () => {
+    const cases: [Argon2Params, string][] = [
+      [{ memoryKib: 262_145, iterations: 1, parallelism: 1 }, 'memory cost in KiB'],
+      [{ memoryKib: 8, iterations: 9, parallelism: 1 }, 'iterations'],
+      [{ memoryKib: 40, iterations: 1, parallelism: 5 }, 'parallelism'],
+      [{ memoryKib: 4_194_304, iterations: 0xffff_ffff, parallelism: 1 }, 'memory cost in KiB'],
+      [{ memoryKib: 19_456, iterations: 0xffff_ffff, parallelism: 1 }, 'iterations'],
+    ];
+    for (const [params, parameter] of cases) {
+      const bytes = await withRecordedCost(params);
+      expect(errorCode(() => StoredMasterKey.fromBytes(bytes)), parameter).toBe(
+        'argon2_cost_above_ceiling',
+      );
+      expect(() => StoredMasterKey.fromBytes(bytes)).toThrow(`Argon2id ${parameter} of`);
+    }
+  });
+
+  // KD-6: a writer never produces a form a reader refuses, and says so before it
+  // derives anything.
+  it('does not write a cost above a ceiling', async () => {
+    expect(
+      await asyncErrorCode(() =>
+        create({ params: { memoryKib: 4_194_304, iterations: 0xffff_ffff, parallelism: 1 } }),
+      ),
+    ).toBe('argon2_cost_above_ceiling');
   });
 });

@@ -35,6 +35,51 @@ export const INITIAL_ARGON2_PARAMS: Argon2Params = {
   parallelism: 1,
 };
 
+/**
+ * The most a stored form may ask for, each parameter inclusive (spec: KD-9).
+ *
+ * A ceiling on what a reader accepts, not a cost anything derives at: a form
+ * within it unlocks under the cost it records. The recorded cost is
+ * authenticated only once the derivation it asks for has run, so without a
+ * ceiling a form edited to an enormous cost would exhaust memory or never finish
+ * before the Passphrase is judged. A device strengthening its cost stays within
+ * it (spec: KD-6).
+ */
+export const ARGON2_PARAMS_CEILING: Argon2Params = {
+  memoryKib: 262_144,
+  iterations: 8,
+  parallelism: 4,
+};
+
+/** The parameters in the order of KD-9's ceiling table, named as its layout table names them. */
+const CEILING_CHECKS: readonly [keyof Argon2Params, string][] = [
+  ['memoryKib', 'memory cost in KiB'],
+  ['iterations', 'iterations'],
+  ['parallelism', 'parallelism'],
+];
+
+/**
+ * Insists that no parameter of a cost exceeds {@link ARGON2_PARAMS_CEILING}
+ * (spec: KD-9).
+ *
+ * The refusal names the first parameter over its ceiling, and nothing is retried
+ * at a lower cost: a form that asks for more than a reader accepts is refused,
+ * never opened under a cost it does not record.
+ */
+export function requireWithinCeiling(params: Argon2Params): Argon2Params {
+  for (const [field, parameter] of CEILING_CHECKS) {
+    const value = params[field];
+    const ceiling = ARGON2_PARAMS_CEILING[field];
+    if (value > ceiling) {
+      fail(
+        'argon2_cost_above_ceiling',
+        `an Argon2id ${parameter} of ${value} is above the ${ceiling} a stored Master Key may ask for`,
+      );
+    }
+  }
+  return params;
+}
+
 /** Insists that a cost is one Argon2id accepts and a `u32` field can record. */
 export function requireArgon2Params(params: Argon2Params): Argon2Params {
   const { memoryKib, iterations, parallelism } = params;

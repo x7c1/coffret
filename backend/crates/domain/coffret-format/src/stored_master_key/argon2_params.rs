@@ -31,7 +31,25 @@ impl Argon2Params {
         parallelism: 1,
     };
 
+    /// The most a stored form may ask for, each parameter inclusive
+    /// (spec: KD-9).
+    ///
+    /// A ceiling on what a reader accepts, not a cost anything derives at: a
+    /// form within it unlocks under the cost it records. The recorded cost is
+    /// authenticated only once the derivation it asks for has run, so without
+    /// a ceiling a form edited to an enormous cost would exhaust memory or
+    /// never finish before the Passphrase is judged. A device strengthening
+    /// its cost stays within it (spec: KD-6).
+    pub const CEILING: Self = Self {
+        memory_kib: 262_144,
+        iterations: 8,
+        parallelism: 4,
+    };
+
     /// Takes a cost, whatever Argon2id will accept.
+    ///
+    /// Nothing is checked here: a cost above [`CEILING`](Self::CEILING) is
+    /// refused where it would be written or read, before any derivation.
     pub const fn new(memory_kib: u32, iterations: u32, parallelism: u32) -> Self {
         Self {
             memory_kib,
@@ -53,6 +71,35 @@ impl Argon2Params {
     /// How many lanes the passes are spread across.
     pub const fn parallelism(self) -> u32 {
         self.parallelism
+    }
+
+    /// This cost, if no parameter of it exceeds [`CEILING`](Self::CEILING)
+    /// (spec: KD-9).
+    ///
+    /// The refusal names the first parameter over its ceiling, and nothing is
+    /// retried at a lower cost: a form that asks for more than a reader
+    /// accepts is refused, never opened under a cost it does not record.
+    pub(super) fn within_ceiling(self) -> Result<Self> {
+        let checks = [
+            (
+                "memory cost in KiB",
+                self.memory_kib,
+                Self::CEILING.memory_kib,
+            ),
+            ("iterations", self.iterations, Self::CEILING.iterations),
+            ("parallelism", self.parallelism, Self::CEILING.parallelism),
+        ];
+        match checks
+            .into_iter()
+            .find(|(_, value, ceiling)| value > ceiling)
+        {
+            Some((parameter, value, ceiling)) => Err(Error::Argon2CostAboveCeiling {
+                parameter,
+                value,
+                ceiling,
+            }),
+            None => Ok(self),
+        }
     }
 
     /// Stretches a Passphrase into the key that protects a stored Master Key.
@@ -83,6 +130,14 @@ impl Argon2Params {
     }
 }
 
+// The writer must never produce a form the reader refuses (spec: KD-6), so the
+// build does not compile if the initial cost exceeds the ceiling.
+const _: () = assert!(
+    Argon2Params::INITIAL.memory_kib <= Argon2Params::CEILING.memory_kib
+        && Argon2Params::INITIAL.iterations <= Argon2Params::CEILING.iterations
+        && Argon2Params::INITIAL.parallelism <= Argon2Params::CEILING.parallelism
+);
+
 /// A cost cheap enough to run in a test, and unlike the initial values.
 #[cfg(test)]
 pub(super) const CHEAP: Argon2Params = Argon2Params::new(8, 1, 1);
@@ -103,6 +158,62 @@ mod tests {
         assert_eq!(Argon2Params::INITIAL.memory_kib(), 19_456);
         assert_eq!(Argon2Params::INITIAL.iterations(), 2);
         assert_eq!(Argon2Params::INITIAL.parallelism(), 1);
+    }
+
+    // KD-6: the initial values lie within the ceilings KD-9 sets on what a
+    // reader accepts, so every form a device writes is one it can read back.
+    #[test]
+    fn initial_values_are_within_the_ceiling() {
+        assert!(matches!(
+            Argon2Params::INITIAL.within_ceiling(),
+            Ok(params) if params == Argon2Params::INITIAL
+        ));
+    }
+
+    // KD-9: the ceilings are pinned here, so a change to them is a deliberate
+    // edit to the specification as well.
+    #[test]
+    fn the_ceiling_is_the_specified_one() {
+        assert_eq!(Argon2Params::CEILING.memory_kib(), 262_144);
+        assert_eq!(Argon2Params::CEILING.iterations(), 8);
+        assert_eq!(Argon2Params::CEILING.parallelism(), 4);
+    }
+
+    // KD-9: each ceiling is inclusive, and one past it is refused, naming the
+    // parameter and the ceiling.
+    #[test]
+    fn a_cost_above_a_ceiling_is_refused_and_named() {
+        let ceiling = Argon2Params::CEILING;
+        assert!(matches!(ceiling.within_ceiling(), Ok(params) if params == ceiling));
+
+        let cases = [
+            (
+                Argon2Params::new(262_145, 1, 1),
+                "memory cost in KiB",
+                262_145,
+                262_144,
+            ),
+            (Argon2Params::new(8, 9, 1), "iterations", 9, 8),
+            (Argon2Params::new(40, 1, 5), "parallelism", 5, 4),
+            (
+                Argon2Params::new(4_194_304, u32::MAX, 1),
+                "memory cost in KiB",
+                4_194_304,
+                262_144,
+            ),
+            (Argon2Params::new(8, u32::MAX, 1), "iterations", u32::MAX, 8),
+        ];
+        for (params, parameter, value, ceiling) in cases {
+            let result = params.within_ceiling();
+            assert!(
+                matches!(
+                    result,
+                    Err(Error::Argon2CostAboveCeiling { parameter: p, value: v, ceiling: c })
+                        if p == parameter && v == value && c == ceiling
+                ),
+                "{params:?} gave {result:?}"
+            );
+        }
     }
 
     // KD-5: the Passphrase is stretched with Argon2id, so the same Passphrase

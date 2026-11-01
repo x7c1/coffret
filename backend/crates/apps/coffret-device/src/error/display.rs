@@ -115,6 +115,12 @@ impl fmt::Display for Error {
                  written under",
                 path.display()
             ),
+            Self::MasterKeyCostAboveCeiling { path, .. } => write!(
+                f,
+                "the stored Master Key at {} asks for more work than coffret allows; the \
+                 Passphrase was not checked",
+                path.display()
+            ),
             Self::KeyMaterial { .. } => {
                 f.write_str("key material could not be produced; nothing was written")
             }
