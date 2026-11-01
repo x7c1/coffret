@@ -266,6 +266,12 @@ jobs:
       - name: Development addon placement test
         run: make desktop-addon-test
 
+      # Where the desktop app's journey shows the app: the current display, a
+      # headless weston, or a refusal, chosen over stand-ins
+      # (scripts/e2e-electron.sh choose-display).
+      - name: Desktop journey display choice test
+        run: make e2e-electron-display-test
+
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to
   # either one can only be shown not to break the other by running both.

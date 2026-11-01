@@ -23,7 +23,26 @@
 # Electron binary of the npm package carries a `chrome-sandbox` that is not
 # setuid root, and Ubuntu 24.04 refuses the unprivileged user namespaces that
 # would stand in for it. Nothing in the app or its bundle turns the sandbox off.
-# On a Linux machine with no display, run this under `xvfb-run`, as CI does.
+#
+# The app needs a display, and on Linux one that draws: where a GNOME session
+# has blanked its screen, Chromium's `Page.captureScreenshot` never returns and
+# the journey stops at its first picture. So on Linux the run picks where the
+# app is shown before it builds anything:
+#
+# - the current display (DISPLAY, or WAYLAND_DISPLAY naming a socket that is
+#   there) where there is one and the login session does not report itself
+#   idle (`loginctl show-session <session> -p IdleHint`, the session being
+#   XDG_SESSION_ID or else the user's graphical one), which is what a blanked
+#   screen reports. `xvfb-run`, as CI runs this, gives it such a display;
+# - otherwise a headless weston of its own (`weston --backend=headless`, on a
+#   socket named after this run), with the app on Wayland
+#   (`--ozone-platform=wayland`) and DISPLAY unset, where weston is on the
+#   PATH. It is stopped on the way out, and what it said is in its log;
+# - otherwise it refuses, saying why, rather than hang.
+#
+# COFFRET_E2E_ELECTRON_DISPLAY=current or =weston takes that choice instead;
+# `scripts/e2e-electron.sh choose-display` makes the choice alone and prints
+# it, which scripts/e2e-electron-display-test.sh runs over stand-ins.
 #
 # Nothing is left behind but the pictures under .tmp/e2e-electron/screenshots/
 # and, for a run that failed, its logs, traces and pictures under
@@ -76,12 +95,100 @@ fail() {
   exit 1
 }
 
+# ---------------------------------------------------------------------------
+# Where the app is shown.
+# ---------------------------------------------------------------------------
+
+# What the choice reads, each replaceable for the display test: the weston to
+# start ("" for none) and the loginctl to ask.
+WESTON="${COFFRET_E2E_WESTON-$(command -v weston || true)}"
+LOGINCTL="${COFFRET_E2E_LOGINCTL:-loginctl}"
+
+# Whether DISPLAY or WAYLAND_DISPLAY names a display this run can reach.
+display_usable() {
+  [ -n "${DISPLAY:-}" ] && return 0
+  local wayland="${WAYLAND_DISPLAY:-}"
+  [ -n "$wayland" ] || return 1
+  case "$wayland" in
+    /*) [ -S "$wayland" ] ;;
+    *) [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/$wayland" ] ;;
+  esac
+}
+
+# Whether the login session reports itself idle, which is what a blanked
+# screen reports. A session that cannot be asked about (no loginctl, no
+# session, a CI runner) is not taken as blanked.
+screen_blanked() {
+  local session="${XDG_SESSION_ID:-}" idle
+  if [ -z "$session" ]; then
+    session="$("$LOGINCTL" show-user "$(id -un)" -p Display --value 2>/dev/null)" || return 1
+  fi
+  [ -n "$session" ] || return 1
+  idle="$("$LOGINCTL" show-session "$session" -p IdleHint --value 2>/dev/null)" || return 1
+  [ "$idle" = yes ]
+}
+
+# Prints `current` or `weston`, and says why on standard error; refuses, saying
+# why, where neither will do.
+choose_display() {
+  case "${COFFRET_E2E_ELECTRON_DISPLAY:-}" in
+    current | weston)
+      echo "the display is $COFFRET_E2E_ELECTRON_DISPLAY, as COFFRET_E2E_ELECTRON_DISPLAY says" >&2
+      echo "$COFFRET_E2E_ELECTRON_DISPLAY"
+      return
+      ;;
+    "") ;;
+    *) fail "COFFRET_E2E_ELECTRON_DISPLAY is $COFFRET_E2E_ELECTRON_DISPLAY; it takes current or weston." ;;
+  esac
+  if [ "$(uname -s)" != Linux ]; then
+    echo current
+    return
+  fi
+  local why instead
+  if ! display_usable; then
+    why="there is no display (neither DISPLAY nor a WAYLAND_DISPLAY socket)"
+    instead="install weston, or run this under xvfb-run as CI does"
+  elif screen_blanked; then
+    why="the login session reports the screen blanked (IdleHint=yes), where the app's screenshots never return"
+    instead="install weston, wake the screen, or run this under xvfb-run with COFFRET_E2E_ELECTRON_DISPLAY=current"
+  else
+    echo "the app is shown on the current display" >&2
+    echo current
+    return
+  fi
+  if [ -n "$WESTON" ]; then
+    echo "$why, so the app is shown on a headless weston of its own" >&2
+    echo weston
+    return
+  fi
+  fail "the desktop app's journey cannot run here: $why, and weston, which it would" \
+    "show the app on instead, is not installed; $instead."
+}
+
+case "${1:-}" in
+  choose-display)
+    choose_display
+    exit 0
+    ;;
+  "") ;;
+  *) fail "usage: scripts/e2e-electron.sh [choose-display]" ;;
+esac
+
+SHOWN_ON="$(choose_display)"
+readonly SHOWN_ON
+
 for tool in docker curl jq pnpm cargo node; do
   command -v "$tool" >/dev/null 2>&1 ||
     fail "$tool is needed to run the desktop app's journey and is not on this PATH."
 done
 
+WESTON_PID=""
+
 teardown() {
+  if [ -n "$WESTON_PID" ]; then
+    kill "$WESTON_PID" 2>/dev/null || true
+    wait "$WESTON_PID" 2>/dev/null || true
+  fi
   docker rm --force --volumes "$CONTAINER" >/dev/null 2>&1 || true
 }
 
@@ -103,6 +210,7 @@ echo
 echo "Working directory:  $WORK"
 echo "Screenshots:        $SCREENSHOTS"
 echo "Logs:               $LOG_DIR"
+echo "Shown on:           $SHOWN_ON"
 echo
 
 # ---------------------------------------------------------------------------
@@ -127,11 +235,42 @@ ELECTRON_BIN="$(cd "$APP_DIR" && node -p "require('electron')")" ||
 [ -x "$ELECTRON_BIN" ] || fail "the Electron binary is not at $ELECTRON_BIN."
 readonly ELECTRON_BIN
 
+# One switch a line, as the suite reads them.
 ELECTRON_SWITCHES=""
 if [ "$(uname -s)" = Linux ]; then
   ELECTRON_SWITCHES="--no-sandbox"
 fi
+if [ "$SHOWN_ON" = weston ]; then
+  ELECTRON_SWITCHES="$ELECTRON_SWITCHES"$'\n'"--ozone-platform=wayland"
+fi
 readonly ELECTRON_SWITCHES
+
+# ---------------------------------------------------------------------------
+# A headless weston, where the app is shown on one.
+# ---------------------------------------------------------------------------
+
+if [ "$SHOWN_ON" = weston ]; then
+  [ -n "$WESTON" ] || fail "COFFRET_E2E_ELECTRON_DISPLAY is weston, and weston is not installed."
+  [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ] ||
+    fail "weston needs XDG_RUNTIME_DIR to name a directory to put its socket in, and it does not."
+  readonly WESTON_SOCKET="coffret-e2e-electron-$$"
+  echo
+  echo "--- starting a headless weston on $WESTON_SOCKET ---"
+  "$WESTON" --backend=headless --no-config --socket="$WESTON_SOCKET" --width=1600 --height=1000 \
+    --idle-time=0 >"$LOG_DIR/weston.log" 2>&1 &
+  WESTON_PID=$!
+  waited=0
+  until [ -S "$XDG_RUNTIME_DIR/$WESTON_SOCKET" ]; do
+    kill -0 "$WESTON_PID" 2>/dev/null ||
+      fail "weston ended before it listened; what it said is in $LOG_DIR/weston.log"
+    [ "$waited" -lt $((STARTUP_TIMEOUT_SECONDS * 10)) ] ||
+      fail "weston did not listen on $WESTON_SOCKET within ${STARTUP_TIMEOUT_SECONDS}s; what it said is in $LOG_DIR/weston.log"
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  unset DISPLAY
+  export WAYLAND_DISPLAY="$WESTON_SOCKET"
+fi
 
 # ---------------------------------------------------------------------------
 # MinIO, as scripts/e2e-it.sh starts it.

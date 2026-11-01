@@ -13,7 +13,7 @@ import path from 'node:path';
 import { expect, test as base, type Locator, type Page } from '@playwright/test';
 
 import { fromEnvironment, type Environment } from './environment';
-import { openLaunchFile } from './launch';
+import { openLaunchFile, serverStarting } from './launch';
 import { CoffretServer } from './server';
 
 /** What the run built, read once and shared by every journey. */
@@ -61,6 +61,10 @@ export const test = base.extend<object, { coffret: CoffretServer }>({
     // eslint-disable-next-line no-empty-pattern
     async ({}, use) => {
       const server = new CoffretServer(setting);
+      // A worker started after a journey failed finds the launch file of the
+      // last worker's server still standing, its ticket spent with that server;
+      // this notes it, so that no journey opens it.
+      await serverStarting(setting.launchDir);
       await server.start();
       await use(server);
       await server.stop();

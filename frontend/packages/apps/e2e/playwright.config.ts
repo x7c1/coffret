@@ -3,8 +3,9 @@
 // Never by `pnpm -r test`, and that is the reason the script is called
 // `test:e2e`: this suite needs Docker, a Library on MinIO, two binaries and a
 // browser, none of which a package's own test run has any business requiring.
-// What starts it is `scripts/e2e-it.sh`, which builds all of that first and
-// hands it over through the environment.
+// The package's `test` is vitest over the helpers' own cases (`*.test.ts`),
+// which need none of it. What starts the journeys is `scripts/e2e-it.sh`,
+// which builds all of that first and hands it over through the environment.
 
 import { defineConfig } from '@playwright/test';
 
@@ -14,6 +15,9 @@ const setting = fromEnvironment();
 
 export default defineConfig({
   testDir: 'journeys',
+  // The journeys alone: the `*.test.ts` beside them are the helpers' own
+  // cases, which vitest runs in `make check`.
+  testMatch: '*.spec.ts',
 
   // One worker, in file order, and no parallelism. The journeys are one
   // journey: they share a Library on one disk, and the order is part of what
