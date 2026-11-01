@@ -1064,6 +1064,7 @@ it('reads every other answer the server sends through its type', () => {
       'files_present',
       'size',
       'mtime',
+      'size_on_device',
       'held_parcels',
     ]);
     return {
@@ -1072,6 +1073,7 @@ it('reads every other answer the server sends through its type', () => {
       files_present: number(fields.files_present, 'totals.files_present'),
       size: number(fields.size, 'totals.size'),
       mtime: nullable(fields.mtime, (value) => string(value, 'totals.mtime')),
+      size_on_device: number(fields.size_on_device, 'totals.size_on_device'),
       held_parcels: nullable(fields.held_parcels, (value) => heldParcels(value, 'totals.held_parcels')),
     };
   })();

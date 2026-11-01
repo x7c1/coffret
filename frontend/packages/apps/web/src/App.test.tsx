@@ -85,6 +85,7 @@ const TOTALS: LibraryTotals = {
   files_present: 3_210,
   size: 5_480_000_000,
   mtime: '2026-10-28T12:14:00Z',
+  size_on_device: 1_620_000_000,
   held_parcels: { count: 3, bytes: 1_400_000_000 },
 };
 
@@ -748,7 +749,7 @@ it('describes the focused row in the details pane, and opens it from there', asy
   expect(definition(pane, 'Kind')).toBe('Folder');
   expect(definition(pane, 'Size')).toBe(size(5_000_000));
   expect(definition(pane, 'Modified')).toBe(time(modified));
-  expect(definition(pane, 'On this device')).toBe('No');
+  expect(definition(pane, 'On this device')).toBe('0 of 1 file');
   expect(pane.queryByRole('button', { name: 'Open' })).toBeNull();
   // `Enter` on it opens the sheet all the same, which says it holds no image.
   fireEvent.keyDown(area, { key: 'Enter' });
@@ -1105,7 +1106,7 @@ describe('the details of the Library', () => {
 
   // With no row focused the pane is the Library's: a box over its items, its
   // name, and the facts a folder has over the whole Library, with where it is
-  // kept, what it keeps there, and what this device holds of it to read again.
+  // kept, what it keeps there, and how much of this device's disk it takes.
   it('describes the Library where no row is focused, every fact in order', async () => {
     vi.mocked(getLibrary).mockResolvedValue({ name: 'books', library_id: 'abc', provider: 'drive' });
     answers = library({ '': ['comics/', 'papers/', 'photos/', 'a.jpg', 'b.pdf'] });
@@ -1123,8 +1124,11 @@ describe('the details of the Library', () => {
       ['Size', size(5_480_000_000)],
       ['Modified', time('2026-10-28T12:14:00Z')],
       ['On this device', '3,210 of 12,480 files'],
-      ['Cached for reading', size(1_400_000_000)],
+      ['Size on this device', size(1_620_000_000)],
     ]);
+    // What the held parcels take is in the size on this device, not a fact of
+    // its own.
+    expect(pane.queryByText('Cached for reading')).toBeNull();
     // It stands nowhere, so no location is drawn over its name.
     expect(pane.queryByText('Library', { selector: 'p' })).toBeNull();
 
@@ -1143,6 +1147,7 @@ describe('the details of the Library', () => {
     vi.mocked(getLibraryTotals).mockResolvedValue({
       ...TOTALS,
       files_present: TOTALS.files_total,
+      size_on_device: TOTALS.size,
       held_parcels: null,
     });
     answers = library({ '': ['comics/'] });
@@ -1156,9 +1161,10 @@ describe('the details of the Library', () => {
     await waitFor(() => expect(definition(pane, 'Stored on')).toBe('S3'));
     expect(await pane.findByText('1 item')).toBeTruthy();
     expect(definition(pane, 'Items')).toBe('1');
-    await waitFor(() => expect(definition(pane, 'On this device')).toBe('All files'));
-    // Parcels that could not be counted are not drawn as none.
-    expect(definition(pane, 'Cached for reading')).toBe('—');
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('All 12,480 files'));
+    // Parcels that could not be counted leave the present files' part, which
+    // is drawn rather than nothing.
+    expect(definition(pane, 'Size on this device')).toBe(size(TOTALS.size));
   });
 
   // The facts that will not come are said so, and not drawn as still coming.
@@ -1172,15 +1178,16 @@ describe('the details of the Library', () => {
     await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
   });
 
-  // What this device holds to read again is the pane's to say now: the
-  // Activity row says nothing of it.
+  // What this device holds to read again is the pane's to say, in the size on
+  // this device: the Activity row says nothing of it.
   it('leaves the parcels this device holds out of the Activity row', async () => {
     answers = library({ '': ['comics/'] });
     render(<App />);
     const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
-    await waitFor(() => expect(definition(pane, 'Cached for reading')).toBe(size(1_400_000_000)));
+    await waitFor(() => expect(definition(pane, 'Size on this device')).toBe(size(1_620_000_000)));
     expect(activitySaid()).not.toMatch(/parcel/);
     expect(activitySaid()).not.toContain(size(1_400_000_000));
+    expect(activitySaid()).not.toContain(size(1_620_000_000));
   });
 
   // The facts follow the Library: a change to it has the root asked again,
@@ -1207,7 +1214,13 @@ describe('the details of the Library', () => {
     await deleteFromTree('comics', 'comics', () => {
       deleted = true;
       vi.mocked(getFolders).mockResolvedValue({ folders: ['albums'] });
-      vi.mocked(getLibraryTotals).mockResolvedValue({ ...TOTALS, objects: 213, files_total: 12_477, files_present: 3_207 });
+      vi.mocked(getLibraryTotals).mockResolvedValue({
+        ...TOTALS,
+        objects: 213,
+        files_total: 12_477,
+        files_present: 3_207,
+        size_on_device: 1_610_000_000,
+      });
     });
     // Delete focused the row it was pressed on; let go of, the pane is the
     // Library's again.
@@ -1215,6 +1228,7 @@ describe('the details of the Library', () => {
     await waitFor(() => expect(definition(pane, 'Files')).toBe('12,477'), { timeout: 3000 });
     expect(definition(pane, 'Objects on Storage')).toBe('213');
     expect(definition(pane, 'On this device')).toBe('3,207 of 12,477 files');
+    expect(definition(pane, 'Size on this device')).toBe(size(1_610_000_000));
     await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
   });
 });

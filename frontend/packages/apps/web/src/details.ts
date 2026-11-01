@@ -164,7 +164,7 @@ export function uploadStopped(file: ListedFile, sync: Sync | null, freeze: Freez
 
 /**
  * Whether a folder is on this device, counting every file at every depth below
- * it: `All files`, `18 of 196 files`, or `No`.
+ * it: `All 196 files`, `18 of 196 files`, `0 of 196 files`, or `No files`.
  *
  * The server's counts (`files_present`, `files_total`), because the page holds
  * the listings it asked for and not every descendant.
@@ -175,16 +175,19 @@ export function folderOnDevice(folder: ListedFolder): string {
 
 /**
  * How many of `total` files are on this device, as a folder's details and the
- * Library's say it: `All files`, `3,210 of 12,480 files`, or `No`.
+ * Library's say it: always with how many there are — `All 12,480 files`,
+ * `3,210 of 12,480 files`, `0 of 12,480 files`, `1 of 1 file` — and `No files`
+ * where there are none at all.
  */
 export function filesOnDevice(present: number, total: number): string {
-  if (total > 0 && present >= total) {
-    return 'All files';
+  if (total === 0) {
+    return 'No files';
   }
-  if (present === 0) {
-    return 'No';
+  const files = total === 1 ? 'file' : 'files';
+  if (present >= total && total > 1) {
+    return `All ${grouped(total)} ${files}`;
   }
-  return `${grouped(present)} of ${grouped(total)} files`;
+  return `${grouped(Math.min(present, total))} of ${grouped(total)} ${files}`;
 }
 
 /** What the Library itself is called among the kinds, where nothing is focused. */

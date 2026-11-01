@@ -787,6 +787,11 @@ Concept background: [Library](../../concepts/library/),
   - `mtime` — the newest modification time among every current Entry, as a
     folder's `mtime` is its newest file's, and `null` for a Library holding no
     Entry or where that time is a count of seconds no calendar reaches;
+  - `size_on_device` — what the Library takes on this device's disk: the
+    plaintext bytes of the `files_present` Entries, by the size each Entry
+    records, never a walk or a stat of the mapped folders, together with the
+    bytes the held parcels' files take; where the held parcels could not be
+    counted, the present Entries' part alone;
   - `held_parcels` — how many parcels this device holds (PK-21) whose file is
     on its disk, and how many bytes those files take there, or `null` where
     they could not be counted, which the server says in its log.
