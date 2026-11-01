@@ -26,6 +26,10 @@ pub struct LibraryTotals {
     /// The plaintext bytes of every Entry together, whether this device has
     /// them or not.
     pub size: u64,
+    /// The plaintext bytes of the `files_present` Entries together, by the
+    /// size each Entry records: what the files this device has take on its
+    /// disk, read off the catalog rather than a stat of the mapped folders.
+    pub size_present: u64,
     /// The latest modification time among every Entry, and `None` for a
     /// Library holding none.
     pub mtime: Option<Mtime>,
@@ -63,12 +67,17 @@ impl OpenLibrary {
             files_total: 0,
             files_present: 0,
             size: 0,
+            size_present: 0,
             mtime: None,
         };
         for location in &entries {
             totals.files_total += 1;
-            totals.files_present += u64::from(present.contains(location.path()));
-            totals.size += location.entry.extent.size();
+            let size = location.entry.extent.size();
+            if present.contains(location.path()) {
+                totals.files_present += 1;
+                totals.size_present += size;
+            }
+            totals.size += size;
             totals.mtime = totals.mtime.max(Some(location.entry.mtime));
         }
         debug!(

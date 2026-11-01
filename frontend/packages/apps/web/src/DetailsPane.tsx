@@ -140,8 +140,8 @@ export interface LibraryShown {
  * are, with a box in place of a folder's mark, its name with no location
  * above it — it is the top, and stands nowhere — and the facts a folder has,
  * over the whole Library, with three of its own: which Storage it is kept on,
- * how many objects it keeps there, and how much this device holds of it for
- * reading again.
+ * how many objects it keeps there, and how much of this device's disk it
+ * takes: the files here and the parcels held for reading again.
  *
  * Each fact is `…` while what it is read from is out, and `—` where that was
  * refused, as a folder's Items is: a count that will not come is not drawn as
@@ -166,7 +166,7 @@ function TheLibrary({ shown }: { shown: LibraryShown }) {
     ['Size', fromTotals((all) => size(all.size))],
     ['Modified', fromTotals((all) => time(all.mtime))],
     ['On this device', fromTotals((all) => filesOnDevice(all.files_present, all.files_total))],
-    ['Cached for reading', fromTotals((all) => (all.held_parcels === null ? '—' : size(all.held_parcels.bytes)))],
+    ['Size on this device', fromTotals((all) => size(all.size_on_device))],
   ];
 
   return (

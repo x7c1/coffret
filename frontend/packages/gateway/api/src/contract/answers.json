@@ -326,7 +326,8 @@
     },
     "mtime": "2026-01-01T00:00:00Z",
     "objects": 14,
-    "size": 129
+    "size": 129,
+    "size_on_device": 109
   },
   "unlock": {
     "already_unlocked": {

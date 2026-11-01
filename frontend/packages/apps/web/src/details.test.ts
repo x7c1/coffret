@@ -6,6 +6,7 @@ import {
   DOCUMENT,
   extensionOf,
   fileOnDevice,
+  filesOnDevice,
   firstImage,
   folderOnDevice,
   itemsIn,
@@ -108,22 +109,30 @@ describe('kindOf', () => {
 });
 
 describe('folderOnDevice', () => {
-  it('says every file is here where all of them at every depth are', () => {
-    expect(folderOnDevice(folder('book', { files_total: 196, files_present: 196, present_throughout: true }))).toBe(
-      'All files',
-    );
+  it.each([
+    ['none here', 12_480, 0, '0 of 12,480 files'],
+    ['some here', 12_480, 3_210, '3,210 of 12,480 files'],
+    ['all here', 12_480, 12_480, 'All 12,480 files'],
+    ['its one file here', 1, 1, '1 of 1 file'],
+    ['its one file not here', 1, 0, '0 of 1 file'],
+    ['no files at all', 0, 0, 'No files'],
+  ])('says how many of the files are here, and how many there are: %s', (_, total, present, said) => {
+    const counts = { files_total: total, files_present: present, present_throughout: total > 0 && present === total };
+    expect(folderOnDevice(folder('book', counts))).toBe(said);
   });
+});
 
-  it('counts the files here out of every file below where some are', () => {
-    expect(folderOnDevice(folder('book', { files_total: 196, files_present: 18 }))).toBe('18 of 196 files');
-  });
-
-  it('says no where none are', () => {
-    expect(folderOnDevice(folder('book', { files_total: 196, files_present: 0 }))).toBe('No');
-  });
-
-  it('says no for a folder the Library counts nothing under', () => {
-    expect(folderOnDevice(folder('prepared', { files_total: 0, files_present: 0 }))).toBe('No');
+describe('filesOnDevice', () => {
+  // The Library's "On this device" is said the way a folder's is.
+  it.each([
+    [12_480, 0, '0 of 12,480 files'],
+    [12_480, 3_210, '3,210 of 12,480 files'],
+    [12_480, 12_480, 'All 12,480 files'],
+    [1, 1, '1 of 1 file'],
+    [1, 0, '0 of 1 file'],
+    [0, 0, 'No files'],
+  ])('says %i files with %i here as %s', (total, present, said) => {
+    expect(filesOnDevice(present, total)).toBe(said);
   });
 });
 

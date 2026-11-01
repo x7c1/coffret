@@ -811,7 +811,8 @@ async fn the_rest_of_a_stroke_that_panics_after_the_answer_is_logged_and_let_go(
 // LA-39, PK-21: the totals count the whole Library out of the catalog — the
 // objects its current state rests on, its files at every depth and how many of
 // them this device has, what they come to, and the parcels this device holds
-// with the bytes their files take, from the rows and a stat of each file. They
+// with the bytes their files take, from the rows and a stat of each file, and
+// what the present files and those parcels take on this device together. They
 // move as a fetch places files and leaves parcels behind. Starting up again
 // sweeps a parcel file no row names out of the directory, and the count is
 // unchanged by it, since it was never counted.
@@ -864,6 +865,10 @@ async fn the_totals_count_the_library_and_the_parcels_it_holds() {
         json!({ "count": 0, "bytes": 0 }),
         "nothing is held before anything is fetched: {totals}",
     );
+    assert_eq!(
+        totals["size_on_device"], 0,
+        "a file this device does not have takes nothing of its disk: {totals}",
+    );
 
     for path in ["scans/vol2/000.jpg", "albums/cover.png"] {
         assert_eq!(
@@ -887,6 +892,16 @@ async fn the_totals_count_the_library_and_the_parcels_it_holds() {
     assert_eq!(
         totals["held_parcels"],
         json!({ "count": held.len(), "bytes": bytes }),
+    );
+    // What the Library takes on this device's disk: the files placed in the
+    // mapped folder — a page of the Pack and a loose file at least — and the
+    // held parcels' files, and nothing of the files still only on Storage.
+    let placed = placed_bytes(served.local_root());
+    assert!(placed > 0, "the fetched files are in the mapped folder");
+    assert_eq!(totals["size_on_device"], json!(placed + bytes), "{totals}");
+    assert!(
+        placed < totals["size"].as_u64().expect("a size"),
+        "some files are still only on Storage: {totals}",
     );
     // The files a fetch placed — a page of the Pack and a loose file, and
     // whatever the fills they armed brought with them — counted as the root's
@@ -921,6 +936,25 @@ async fn the_totals_count_the_library_and_the_parcels_it_holds() {
     let (_, again) = body_of(served.get("/api/library/totals").await).await;
     assert_eq!(again["held_parcels"], totals["held_parcels"]);
     logs.assert_free_of(&["deadbeef", "scans"]);
+}
+
+/// The bytes of every file in the mapped folder, at every depth: what the
+/// files this device has take on its disk, measured apart from the catalog.
+/// The folder's own marker (`.coffret/`) is no file of the Library's.
+fn placed_bytes(folder: &std::path::Path) -> u64 {
+    std::fs::read_dir(folder)
+        .expect("the mapped folder can be listed")
+        .map(|entry| entry.expect("an entry of the mapped folder"))
+        .filter(|entry| entry.file_name() != ".coffret")
+        .map(|entry| {
+            let kind = entry.file_type().expect("its type");
+            if kind.is_dir() {
+                placed_bytes(&entry.path())
+            } else {
+                entry.metadata().expect("its metadata").len()
+            }
+        })
+        .sum()
 }
 
 /// What the root's listing says its folders come to together: the Library holds

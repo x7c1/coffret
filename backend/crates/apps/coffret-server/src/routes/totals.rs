@@ -32,6 +32,11 @@ pub struct TotalsDto {
     /// UTC; `null` for a Library holding no file, and for a count of seconds no
     /// calendar reaches.
     mtime: Option<String>,
+    /// What the Library takes on this device's disk: the plaintext bytes of
+    /// the `files_present` files, by the size each Entry records, and the
+    /// bytes the held parcels' files take. Where the held parcels could not be
+    /// counted (`held_parcels` is `null`), the present files' part alone.
+    size_on_device: u64,
     /// The parcels this device holds for reading again (spec: PK-21), and
     /// `null` where they could not be counted.
     held_parcels: Option<HeldParcelsDto>,
@@ -70,13 +75,15 @@ impl HeldParcelsDto {
 pub async fn totals(State(state): State<Arc<ServerState>>) -> Result<Json<TotalsDto>, ApiError> {
     let library = state.unlocked()?;
     let totals = library.totals().await?;
-    let held_parcels = library.kept_tally().await.map(HeldParcelsDto::of);
+    let held = library.kept_tally().await;
+    let size_on_device = totals.size_present + held.map_or(0, |tally| tally.bytes);
     Ok(Json(TotalsDto {
         objects: totals.objects,
         files_total: totals.files_total,
         files_present: totals.files_present,
         size: totals.size,
         mtime: totals.mtime.and_then(iso8601),
-        held_parcels,
+        size_on_device,
+        held_parcels: held.map(HeldParcelsDto::of),
     }))
 }

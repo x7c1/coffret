@@ -71,6 +71,12 @@ export interface LibraryTotals {
    * calendar reaches.
    */
   mtime: string | null;
+  /**
+   * What the Library takes on this device's disk: the plaintext bytes of the
+   * `files_present` files, and the bytes the held parcels' files take — the
+   * present files' part alone where `held_parcels` could not be counted.
+   */
+  size_on_device: number;
   /** The parcels this device holds, and `null` where they could not be counted. */
   held_parcels: HeldParcels | null;
 }
