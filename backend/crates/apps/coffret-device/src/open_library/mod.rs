@@ -18,7 +18,7 @@ use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, LibraryName, MasterKeyEpoch};
 use coffret_usecase::device_state::LiveReservations;
 use coffret_usecase::fetch::FetchMemory;
-use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
+use coffret_usecase::{Index, LibraryKeys, LocalTrash, ObjectStore, UnknownBirths};
 
 use crate::drive_grant::DriveGrant;
 
@@ -54,6 +54,16 @@ pub struct OpenLibrary {
     /// and a capability everywhere above, which is what lets a flow be driven
     /// over a disk that refuses on request.
     pub local_fs: Arc<UnixFs>,
+    /// The trash a sync, a fetch, a move and a deletion discard a departed
+    /// file into, and the one that removes the folders those discards empty
+    /// and the scratches a writer that is gone left (spec: EP-15, OC-8).
+    ///
+    /// [`local_fs`](Self::local_fs) itself wherever a Library is opened for a
+    /// person — the desktop's own trash — and a field of its own so that a
+    /// test driving a whole server can hand it a trash that never reaches the
+    /// desktop it runs on: a run there would otherwise put its fixtures into
+    /// the developer's trash, and fail wherever that trash refuses them.
+    pub trash: Arc<dyn LocalTrash>,
     /// What this Master Key epoch's Containers are sealed and opened with.
     pub keys: LibraryKeys,
     /// Where encrypted Containers wait until they are uploaded.

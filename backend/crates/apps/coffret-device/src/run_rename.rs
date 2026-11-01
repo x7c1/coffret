@@ -158,7 +158,7 @@ impl OpenLibrary {
         .with_local_disk(
             self.local_fs.as_ref(),
             self.local_fs.as_ref(),
-            self.local_fs.as_ref(),
+            self.trash.as_ref(),
         )
     }
 }

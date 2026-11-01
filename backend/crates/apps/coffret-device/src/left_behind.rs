@@ -15,8 +15,13 @@ impl OpenLibrary {
     /// A walk that could not go on is reported and goes no further: the
     /// Library opens all the same, and the next sync meets what is left.
     pub async fn remove_left_behind(&self) -> usize {
-        let fs = self.local_fs.as_ref();
-        match remove_stale_scratches(self.index.as_ref(), fs, fs).await {
+        match remove_stale_scratches(
+            self.index.as_ref(),
+            self.local_fs.as_ref(),
+            self.trash.as_ref(),
+        )
+        .await
+        {
             Ok(removed) => {
                 if removed > 0 {
                     // How many and nothing else: a scratch's place is an

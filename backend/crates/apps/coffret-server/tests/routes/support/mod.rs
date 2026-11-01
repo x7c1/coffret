@@ -66,6 +66,9 @@ pub use readers::{
     sync, without_server, written,
 };
 
+mod removing_trash;
+use removing_trash::RemovingTrash;
+
 mod requests;
 
 mod storage;
@@ -338,7 +341,7 @@ impl Served {
             &keys,
             local_fs.as_ref(),
             local_fs.as_ref(),
-            local_fs.as_ref(),
+            &RemovingTrash::default(),
             local_fs.as_ref(),
             spools.path().join("filled"),
             BatchId::new("run-1"),
@@ -605,7 +608,7 @@ impl Served {
             &keys(),
             self.local_fs.as_ref(),
             self.local_fs.as_ref(),
-            self.local_fs.as_ref(),
+            &RemovingTrash::default(),
             self.local_fs.as_ref(),
             self.spools.path().join("filled"),
             // Named apart from the runs the fixture itself made, which the same
@@ -711,6 +714,9 @@ fn opened(
         store: Arc::clone(reads) as Arc<dyn ObjectStore>,
         index: Arc::clone(catalog) as Arc<dyn Index>,
         local_fs: Arc::clone(local_fs),
+        // Not the desktop's own trash, which `open_library` hands a Library
+        // opened for a person: see `RemovingTrash`.
+        trash: Arc::new(RemovingTrash::default()),
         keys: keys(),
         spool: spools.join("served"),
         parcel_dir: spools.join("served-parcels"),

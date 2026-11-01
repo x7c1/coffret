@@ -204,6 +204,7 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make napi-addon` | Builds the explorer, then the Node-API addon the desktop app runs the server in, as `backend/target/release/coffret.node` |
 | `make icons` | Derives the desktop app's icons, the tray's and the explorer's favicon from the SVG sources under `assets/icon/` (see [the desktop app](#the-desktop-app)) |
 | `make drive-store-it` | Runs the `ObjectStore` and commit conformance suites, and the cases that pin what Drive answers, against a real Google Drive folder: each case in a subfolder of its own under `COFFRET_DRIVE_FOLDER_ID`, trashed when the case ends. It needs an account and a consent given at a browser (`make drive-authorize`), so CI never runs it; without the variables its cases report themselves skipped. The variables are described at `drive-authorize` and `drive-store-it` in the `Makefile` |
+| `make test-desktop-trash` | Runs the one backend test that discards a file into the trash of the desktop it runs on (the Finder's on macOS, the freedesktop.org Trash on Linux), which `make test` and `make check` skip. It leaves a temporary `coffret-desktop-trash-check.txt` in your own trash, and a trash that refuses the file fails the test with the operating system's own error |
 
 `make server` and `make web` are the two halves of `make dev` in the
 foreground, and take the same variables; `WEB_PORT` moves the explorer's port.

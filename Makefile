@@ -535,6 +535,19 @@ drive-it-reset:
 rename-smoke:
 	./scripts/rename-smoke.sh "$(LIBRARY)"
 
+## test-desktop-trash: check that this desktop's own trash takes a file coffret discards — puts a temporary file into YOUR trash
+#
+# Manual: it is the one case in the workspace that reaches the trash of the
+# desktop it runs on, so `test` and `check` skip it (it is `#[ignore]`d). It writes
+# `coffret-desktop-trash-check.txt` into a temporary mapped folder and discards
+# it the way a sync does, which leaves that file in the person's own trash —
+# the Finder's on macOS, the freedesktop.org Trash on Linux — to be emptied
+# whenever they like. A trash that refuses fails the case with the operating
+# system's own error.
+.PHONY: test-desktop-trash
+test-desktop-trash:
+	cd backend && cargo test -p coffret-local-fs --test desktop_trash -- --ignored
+
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES, PHOTO_SIZE, PAGE_SIZE override defaults)
 .PHONY: fixtures
 fixtures:
