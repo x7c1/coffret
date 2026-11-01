@@ -194,6 +194,18 @@ pub enum Error {
         /// What the format layer reported.
         cause: coffret_format::Error,
     },
+    /// The stored Master Key file records an Argon2id cost above what coffret
+    /// accepts, so it was refused before any derivation (spec: KD-9).
+    ///
+    /// Kept apart from [`MasterKeyNotUnlocked`](Self::MasterKeyNotUnlocked)
+    /// because the Passphrase was never checked: no shell may read this as a
+    /// wrong Passphrase, and nothing retries it at a lower cost.
+    MasterKeyCostAboveCeiling {
+        /// The file that was read.
+        path: PathBuf,
+        /// What the format layer reported: which parameter, and its ceiling.
+        cause: coffret_format::Error,
+    },
     /// Key material could not be produced: what a new Library is built from,
     /// an account's cache key, or the stored form a changed Passphrase
     /// protects the Master Key with.

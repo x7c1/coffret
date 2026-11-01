@@ -27,6 +27,9 @@ impl StoredMasterKey {
         master_key: &MasterKey,
         epoch: MasterKeyEpoch,
     ) -> Result<Self> {
+        // A form a reader would refuse is not written, and the refusal comes
+        // before the derivation rather than after it (spec: KD-6, KD-9).
+        let params = params.within_ceiling()?;
         let salt: [u8; Self::SALT_LEN] = entropy::draw()?;
         let nonce = nonce::random()?;
 

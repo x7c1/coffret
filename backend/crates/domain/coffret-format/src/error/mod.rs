@@ -685,6 +685,22 @@ pub enum Error {
         /// The number the epoch bytes spell.
         epoch: u64,
     },
+    /// A stored Master Key records an Argon2id cost above what a reader
+    /// accepts (spec: KD-9).
+    ///
+    /// Refused before any derivation, so the Passphrase was never checked:
+    /// this is not [`AuthenticationFailed`](Self::AuthenticationFailed), and
+    /// nothing is retried at a lower cost. A writer asked for such a cost is
+    /// refused the same way, since it would write a form no reader opens
+    /// (spec: KD-6).
+    Argon2CostAboveCeiling {
+        /// The parameter over its ceiling, as KD-9's layout table names it.
+        parameter: &'static str,
+        /// The value recorded or asked for.
+        value: u32,
+        /// The most a reader accepts for that parameter.
+        ceiling: u32,
+    },
     /// The leading bytes are not the sealed token cache magic.
     UnknownTokenCacheMagic {
         /// The bytes found where the magic should be.

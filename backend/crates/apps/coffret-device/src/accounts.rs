@@ -148,7 +148,8 @@ impl Accounts {
 
     /// The same, or why not: `Err(None)` where the Passphrase unlocks none of
     /// the Libraries, and otherwise the first refusal of an envelope in one it
-    /// unlocked.
+    /// unlocked, or of a stored Master Key refused before the Passphrase was
+    /// checked.
     fn opened_through(
         &self,
         account: &AccountName,
@@ -169,7 +170,7 @@ impl Accounts {
                     warn!(
                         operation = OPERATION,
                         reason = %refused.redacted(),
-                        "a Library referencing the account opened, and its envelope did not"
+                        "a Library referencing the account was refused other than for its Passphrase"
                     );
                     unread.get_or_insert(refused);
                 }
@@ -196,7 +197,9 @@ impl Accounts {
     /// second cache for the account (spec: SA-8). A Library that did open and
     /// whose envelope did not is refused as that instead: the Passphrase was
     /// right, and naming another Library's would send the person after the
-    /// wrong thing.
+    /// wrong thing. So is a Library whose stored Master Key records a cost
+    /// above what a reader accepts: its Passphrase was never checked
+    /// (spec: KD-9).
     pub(crate) fn key_for(
         &self,
         account: &AccountName,
@@ -228,6 +231,10 @@ impl Accounts {
     /// The account-cache key of `account` out of the envelope of `library`,
     /// where `passphrase` unlocks it; `None` where it does not, and the
     /// envelope's refusal where it unlocks and the envelope does not open.
+    ///
+    /// A stored Master Key refused for the cost it records is that refusal
+    /// too, never `None`: the Passphrase was not checked, so it must not be
+    /// told as one that does not open the Library (spec: KD-9).
     fn key_in(
         library: &LibraryDir,
         account: &AccountName,
@@ -235,11 +242,13 @@ impl Accounts {
     ) -> Option<Result<AccountCacheKey>> {
         let unlocked = match StoredMasterKeyFile::unlock(library, passphrase) {
             Ok(unlocked) => unlocked,
+            Err(refused @ Error::MasterKeyCostAboveCeiling { .. }) => return Some(Err(refused)),
             Err(refused) => {
                 debug!(
                     operation = OPERATION,
                     reason = %refused.redacted(),
-                    "a Library referencing the account did not open with this Passphrase"
+                    "a Library referencing the account did not open; the reason says whether \
+                     this Passphrase was even tried"
                 );
                 return None;
             }

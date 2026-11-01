@@ -9,24 +9,31 @@ use crate::Error;
 /// terminal and a log — the wrong Passphrase alone comes with the Master Key
 /// file's full path and the format layer's own words underneath — so the window
 /// shows less than the chain and the caller logs what of it a log may carry
-/// ([`refusal_evidence()`]). The refusal a person causes is said plainly; every
-/// other keeps the outermost sentence of its chain, which still says what
-/// happened (another server holds the Library, nothing could listen) without
-/// the causes appended. That line is a lower-case, unstopped clause written to
-/// be joined to its causes, so it is capitalised and stopped like the page's
-/// own sentences.
+/// ([`refusal_evidence()`]). The refusal a person causes is said plainly, and
+/// so is a stored Master Key refused before its Passphrase was checked, lest it
+/// be taken for a wrong Passphrase; every other keeps the outermost sentence of
+/// its chain, which still says what happened (another server holds the
+/// Library, nothing could listen) without the causes appended. That line is a
+/// lower-case, unstopped clause written to be joined to its causes, so it is
+/// capitalised and stopped like the page's own sentences.
 pub fn refusal_line(refused: &Error) -> String {
-    let wrong_passphrase = match refused {
-        Error::Device(error) => is_wrong_passphrase(error),
+    let device_refused = |is: fn(&coffret_device::Error) -> bool| match refused {
+        Error::Device(error) => is(error),
         // The server says what it refused in a chain of its own, with the
         // device's failure somewhere under its sentences.
         Error::Server(chain) => chain
             .chain()
             .filter_map(|cause| cause.downcast_ref::<coffret_device::Error>())
-            .any(is_wrong_passphrase),
+            .any(is),
         _ => false,
     };
-    if wrong_passphrase {
+    // Checked first, and never read as a wrong Passphrase: the stored form was
+    // refused before the Passphrase was checked at all (spec: KD-9).
+    if device_refused(is_too_costly) {
+        "This Library's stored Master Key asks for more work than coffret allows; \
+         the Passphrase was not checked."
+            .to_owned()
+    } else if device_refused(is_wrong_passphrase) {
         "That is not this Library's Passphrase.".to_owned()
     } else {
         as_sentence(&refused.to_string())
@@ -76,6 +83,15 @@ pub fn refusal_evidence(refused: &Error) -> String {
 /// Library's Master Key.
 fn is_wrong_passphrase(error: &coffret_device::Error) -> bool {
     matches!(error, coffret_device::Error::MasterKeyNotUnlocked { .. })
+}
+
+/// Whether the device refused the Library's stored Master Key for recording an
+/// Argon2id cost above what coffret accepts.
+fn is_too_costly(error: &coffret_device::Error) -> bool {
+    matches!(
+        error,
+        coffret_device::Error::MasterKeyCostAboveCeiling { .. }
+    )
 }
 
 /// An `io::Error` as the log may carry it: its kind alone.
@@ -140,6 +156,34 @@ mod tests {
         assert_eq!(
             refusal_line(&refused),
             "That is not this Library's Passphrase."
+        );
+    }
+
+    fn too_costly() -> coffret_device::Error {
+        coffret_device::Error::MasterKeyCostAboveCeiling {
+            path: PathBuf::from("/state/libraries/home/master-key.cfmk"),
+            cause: FormatError::Argon2CostAboveCeiling {
+                parameter: "iterations",
+                value: u32::MAX,
+                ceiling: 8,
+            },
+        }
+    }
+
+    // KD-9: a stored form refused for its cost was refused before the
+    // Passphrase was checked, so it is never told as a wrong Passphrase.
+    #[test]
+    fn a_too_costly_stored_key_is_not_told_as_a_wrong_passphrase() {
+        let expected = "This Library's stored Master Key asks for more work than coffret \
+                        allows; the Passphrase was not checked.";
+        let line = refusal_line(&Error::Device(too_costly()));
+        assert_eq!(line, expected);
+        assert!(!line.contains("master-key.cfmk"));
+        let refused = from_server(too_costly(), "the Library could not be opened");
+        assert_eq!(refusal_line(&refused), expected);
+        assert_eq!(
+            refusal_evidence(&Error::Device(too_costly())),
+            too_costly().redacted()
         );
     }
 

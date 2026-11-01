@@ -65,7 +65,19 @@ impl StoredMasterKey {
     /// Length of the salt this build draws, in bytes.
     pub const SALT_LEN: usize = 16;
 
-    /// Takes stored bytes, checking that they are this form at all.
+    /// The longest a valid form can be: the fixed part, the longest salt the
+    /// one-byte salt length can record, the nonce, and the sealed key and
+    /// epoch (spec: KD-9).
+    ///
+    /// A reader of a file needs no more than this and one byte to refuse a
+    /// longer one.
+    pub const MAX_LEN: usize =
+        offset::SALT + u8::MAX as usize + crate::nonce::LEN + PLAINTEXT_LEN + crate::aead::TAG_LEN;
+
+    /// Takes stored bytes, checking that they are this form at all, and that
+    /// the cost they record is within [`Argon2Params::CEILING`] — so nothing
+    /// holding a `StoredMasterKey` can be asked for more work than a reader
+    /// accepts (spec: KD-9).
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
         let layout = Layout::parse(&bytes)?;
         Ok(Self { bytes, layout })

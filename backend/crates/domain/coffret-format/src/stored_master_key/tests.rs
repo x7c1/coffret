@@ -314,3 +314,112 @@ fn a_reserved_byte_that_is_not_zero_is_rejected() {
         "expected a non-zero reserved byte to be refused, got {result:?}"
     );
 }
+
+/// The bytes of a [`CHEAP`] form with its recorded cost replaced by `params`.
+///
+/// Only the parsing is under test here, so the tag no longer matching the
+/// edited associated data is beside the point.
+fn with_recorded_cost(params: Argon2Params) -> Vec<u8> {
+    let mut bytes = stored().into_bytes();
+    bytes[offset::MEMORY_KIB].copy_from_slice(&params.memory_kib().to_be_bytes());
+    bytes[offset::ITERATIONS].copy_from_slice(&params.iterations().to_be_bytes());
+    bytes[offset::PARALLELISM].copy_from_slice(&params.parallelism().to_be_bytes());
+    bytes
+}
+
+// KD-9: a form recording a cost at each ceiling is accepted. The memory ceiling
+// is checked by parsing alone, since deriving at 256 MiB would dominate the test
+// run; iterations and parallelism at their ceilings are cheap enough to round
+// trip over a small memory cost.
+#[test]
+fn a_form_at_each_ceiling_is_accepted() {
+    let ceiling = Argon2Params::CEILING;
+    for params in [
+        ceiling,
+        Argon2Params::new(ceiling.memory_kib(), 1, 1),
+        Argon2Params::new(8, ceiling.iterations(), 1),
+        Argon2Params::new(32, 1, ceiling.parallelism()),
+    ] {
+        let parsed = StoredMasterKey::from_bytes(with_recorded_cost(params))
+            .unwrap_or_else(|error| panic!("{params:?} should parse, got {error:?}"));
+        assert_eq!(parsed.params(), params);
+    }
+
+    let at_the_ceilings = Argon2Params::new(32, ceiling.iterations(), ceiling.parallelism());
+    let stored = StoredMasterKey::create_with(
+        at_the_ceilings,
+        &passphrase(b"pass"),
+        &master_key(),
+        epoch(1),
+    )
+    .expect("a cost within the ceilings is written");
+    let unlocked = StoredMasterKey::from_bytes(stored.into_bytes())
+        .expect("and read back")
+        .unlock(&passphrase(b"pass"))
+        .expect("and opened");
+    assert_eq!(unlocked.master_key.as_bytes(), master_key().as_bytes());
+}
+
+// KD-9: one past each ceiling, and the values of a form edited to exhaust a
+// reader, are refused by `from_bytes` itself. No `StoredMasterKey` exists to
+// unlock, so no derivation runs — the refusal is the parse's, not the
+// derivation's, and it is not an authentication failure.
+#[test]
+fn a_form_above_a_ceiling_is_refused_before_any_derivation() {
+    let cases: &[(Argon2Params, &str)] = &[
+        (Argon2Params::new(262_145, 1, 1), "memory cost in KiB"),
+        (Argon2Params::new(8, 9, 1), "iterations"),
+        (Argon2Params::new(40, 1, 5), "parallelism"),
+        (
+            Argon2Params::new(4_194_304, u32::MAX, 1),
+            "memory cost in KiB",
+        ),
+        (Argon2Params::new(19_456, u32::MAX, 1), "iterations"),
+    ];
+    for (params, named) in cases {
+        let result = StoredMasterKey::from_bytes(with_recorded_cost(*params));
+        assert!(
+            matches!(
+                result,
+                Err(Error::Argon2CostAboveCeiling { parameter, .. }) if parameter == *named
+            ),
+            "{params:?} should be refused as too costly, got {result:?}"
+        );
+    }
+}
+
+// KD-6: a writer never produces a form a reader refuses, and says so before it
+// derives anything.
+#[test]
+fn a_cost_above_a_ceiling_is_not_written() {
+    let result = StoredMasterKey::create_with(
+        Argon2Params::new(4_194_304, u32::MAX, 1),
+        &passphrase(b"pass"),
+        &master_key(),
+        epoch(1),
+    );
+    assert!(
+        matches!(result, Err(Error::Argon2CostAboveCeiling { .. })),
+        "expected the writer to refuse, got {result:?}"
+    );
+}
+
+// KD-9: no valid form is longer than the longest salt the header can record
+// makes it.
+#[test]
+fn the_longest_form_is_max_len() {
+    let mut bytes = stored().into_bytes();
+    bytes[offset::SALT_LEN] = u8::MAX;
+    let salt_end = offset::SALT + StoredMasterKey::SALT_LEN;
+    bytes.splice(
+        salt_end..salt_end,
+        vec![0; usize::from(u8::MAX) - StoredMasterKey::SALT_LEN],
+    );
+    assert_eq!(bytes.len(), StoredMasterKey::MAX_LEN);
+    assert!(StoredMasterKey::from_bytes(bytes.clone()).is_ok());
+    bytes.push(0);
+    assert!(matches!(
+        StoredMasterKey::from_bytes(bytes),
+        Err(Error::StoredMasterKeyLengthMismatch)
+    ));
+}

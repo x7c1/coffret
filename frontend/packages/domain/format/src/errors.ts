@@ -95,6 +95,10 @@ export type CoffretErrorCode =
   | 'unsupported_stored_master_key_version'
   | 'stored_master_key_length_mismatch'
   | 'invalid_argon2_params'
+  // A stored Master Key records, or a writer asks for, an Argon2id cost above
+  // ARGON2_PARAMS_CEILING. Raised before any derivation, so the Passphrase was
+  // never checked: never read it as 'authentication_failed' (spec: KD-9).
+  | 'argon2_cost_above_ceiling'
   | 'passphrase_derivation_failed'
   // Recovery Code
   | 'recovery_code_missing_separator'
