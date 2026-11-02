@@ -1,3 +1,5 @@
+use url::Url;
+
 /// Where the Drive metadata API lives.
 pub const DRIVE_API: &str = "https://www.googleapis.com/drive/v3";
 
@@ -12,14 +14,14 @@ pub const DRIVE_UPLOAD: &str = "https://www.googleapis.com/upload/drive/v3/files
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoints {
     api: String,
-    upload: String,
+    upload: Url,
 }
 
 impl Default for Endpoints {
     fn default() -> Self {
         Self {
             api: DRIVE_API.to_owned(),
-            upload: DRIVE_UPLOAD.to_owned(),
+            upload: Url::parse(DRIVE_UPLOAD).expect("the upload endpoint is a URL"),
         }
     }
 }
@@ -37,6 +39,12 @@ impl Endpoints {
 
     /// The URL uploads are opened against.
     pub fn upload(&self) -> &str {
+        self.upload.as_str()
+    }
+
+    /// The URL uploads are opened against, as the parts an upload session is
+    /// checked against.
+    pub fn upload_url(&self) -> &Url {
         &self.upload
     }
 }
@@ -70,6 +78,11 @@ mod tests {
             endpoints.file("../files/other"),
             format!("{DRIVE_API}/files/..%2Ffiles%2Fother")
         );
+    }
+
+    #[test]
+    fn the_upload_endpoint_reads_as_it_is_written() {
+        assert_eq!(Endpoints::default().upload(), DRIVE_UPLOAD);
     }
 
     #[test]

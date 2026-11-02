@@ -11,7 +11,12 @@
 //! - **Uploads are sessions.** Every object goes up through a resumable upload,
 //!   and the digest Drive reports is checked against one computed as the bytes
 //!   were sent, so an object that arrived corrupted fails its upload rather than
-//!   sitting in Storage waiting to be found unopenable.
+//!   sitting in Storage waiting to be found unopenable. The bytes, and the
+//!   bearer token with them, go only to a session URI at Drive's own upload
+//!   endpoint: `https`, that endpoint's host, port and path, no userinfo or
+//!   fragment, and an `upload_id`. A session URI of any other shape is refused
+//!   as a malformed answer before a token is attached or a byte is read, and a
+//!   redirect answering the upload is a failure rather than followed.
 //! - **A trash already exists**, and so does permanent deletion, so both of the
 //!   port's removals map onto Drive's own.
 //!

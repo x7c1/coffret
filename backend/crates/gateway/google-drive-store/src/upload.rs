@@ -1,10 +1,14 @@
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::{ByteStream, Error, ObjectRef, ProviderHash, Result, UploadedObject};
+use coffret_usecase::{
+    ByteStream, Error, GatewayFailure, ObjectRef, ProviderHash, Result, UploadedObject,
+};
 use serde_json::Value;
 use tracing::{info, warn};
 
 use crate::answer_ceiling::MAX_DOCUMENT_LEN;
-use crate::api::{authorization, DriveApi, FailedResponse, FileResource, FILE_FIELDS};
+use crate::api::{
+    authorization, DriveApi, FailedResponse, FileResource, UploadSession, FILE_FIELDS,
+};
 use crate::error::UnreadableAnswer;
 use crate::http::{HttpRequest, Method};
 use crate::upload_digest::UploadDigest;
@@ -30,6 +34,11 @@ pub type ClassifyFailure = fn(FailedResponse, &str) -> Error;
 /// failed write and a Library that is quietly missing a file. The digest Drive
 /// reported travels on in the answer, so the caller can hold the object to it
 /// as well.
+///
+/// The bytes, and the token with them, go only to a session URI at Drive's own
+/// upload endpoint ([`UploadSession`]), and a redirect answering them is a
+/// failure rather than somewhere else to send them. A session URI anywhere else
+/// is refused before a token is attached or a byte of the body is read.
 pub async fn create(
     api: &DriveApi,
     operation: &'static str,
@@ -54,6 +63,11 @@ pub async fn create(
 }
 
 /// Opens the upload session and reports where to send the bytes.
+///
+/// Where Drive said to send them is taken only if it is Drive's own upload
+/// endpoint. Anything else is a malformed answer from Storage — not a transport
+/// failure, and nothing a retry would change — and is reported by the rule it
+/// broke, never by the URL itself: its query is the session's capability.
 async fn open_session(
     api: &DriveApi,
     operation: &'static str,
@@ -61,7 +75,7 @@ async fn open_session(
     metadata: &Value,
     len: u64,
     classify: ClassifyFailure,
-) -> Result<String> {
+) -> Result<UploadSession> {
     let url = format!(
         "{}?uploadType=resumable&fields={FILE_FIELDS}",
         api.endpoints().upload()
@@ -87,20 +101,32 @@ async fn open_session(
         ));
     }
 
-    response
-        .header("location")
-        .map(str::to_owned)
-        .ok_or_else(|| {
-            warn!(
-                operation,
-                object = name,
-                "Storage opened an upload session with nowhere to send the bytes"
-            );
-            Error::MalformedResponse {
-                detail: "the upload session carries no Location to send bytes to".to_owned(),
-                source: None,
-            }
-        })
+    let Some(location) = response.header("location") else {
+        warn!(
+            operation,
+            object = name,
+            "Storage opened an upload session with nowhere to send the bytes"
+        );
+        return Err(Error::MalformedResponse {
+            detail: "the upload session carries no Location to send bytes to".to_owned(),
+            source: None,
+        });
+    };
+
+    UploadSession::accept(api.endpoints(), location).map_err(|refusal| {
+        warn!(
+            operation,
+            object = name,
+            refusal = %refusal,
+            "Storage opened an upload session somewhere other than its own upload endpoint, so no bytes were sent"
+        );
+        Error::MalformedResponse {
+            // The refusal is the next link, so the rule it broke reads under
+            // this line rather than folded into it.
+            detail: "the upload session is not at Drive's upload endpoint".to_owned(),
+            source: Some(GatewayFailure::new(refusal)),
+        }
+    })
 }
 
 /// Sends the bytes and checks Drive stored the ones that were sent, answering
@@ -109,7 +135,7 @@ async fn send_bytes(
     api: &DriveApi,
     operation: &'static str,
     name: &str,
-    session: &str,
+    session: &UploadSession,
     body: ByteStream,
     classify: ClassifyFailure,
 ) -> Result<(FileResource, String)> {
@@ -120,13 +146,18 @@ async fn send_bytes(
     let response = api
         .send_once(move |token| {
             let (header, value) = authorization(token);
-            HttpRequest::new(Method::Put, session)
+            HttpRequest::new(Method::Put, session.as_str())
                 .with_header(header, value)
                 .with_header("content-type", "application/octet-stream")
                 .with_stream(hashed)
+                // Followed, a redirect would carry the token and the object on
+                // to wherever it pointed, past the check the session passed.
+                .not_following_redirects()
         })
         .await?;
 
+    // A 3xx lands here too, and is read like any other answer that is not the
+    // file resource.
     if !response.is_success() {
         return Err(classify(
             FailedResponse::read(response, operation, &PrivateValues::none()).await,

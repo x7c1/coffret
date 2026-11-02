@@ -10,7 +10,9 @@
 //! The scripted transport cannot answer that — it drains a body before it
 //! answers, as any stand-in has to — so the call that carries the bytes is made
 //! by the real client, against a listener on the loopback interface that plays
-//! the session URI Drive would have handed back.
+//! the session URI Drive handed back. The gateway only sends bytes to a session
+//! at Drive's own upload endpoint, so the session is opened with one of those,
+//! and the transport is what carries the upload to the listener instead.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,25 +42,37 @@ const FIRST: usize = 256 * 1024;
 const REST: usize = 256 * 1024;
 
 /// A transport that opens the session from a script and sends the bytes for
-/// real.
+/// real, to the listener.
 ///
-/// The session's opening is not what is under test, and its answer is what
-/// points the upload at the listener: the URI the bytes go to is whatever
-/// `Location` Drive answered with.
+/// The session's opening is not what is under test. It answers with a session
+/// URI of Drive's own, which is the only kind the gateway sends bytes to, and
+/// the upload made to that URI is carried to the listener.
 struct OpenedByScript {
     opening: Arc<StubTransport>,
     wire: ReqwestTransport,
+    listener: String,
 }
 
 #[async_trait]
 impl HttpTransport for OpenedByScript {
-    async fn execute(&self, request: HttpRequest) -> Result<HttpResponse, TransportError> {
+    async fn execute(&self, mut request: HttpRequest) -> Result<HttpResponse, TransportError> {
         match request.method {
             Method::Post => self.opening.execute(request).await,
-            _ => self.wire.execute(request).await,
+            _ => {
+                assert_eq!(
+                    request.url, SESSION,
+                    "the upload goes to the session Drive answered with"
+                );
+                request.url = self.listener.clone();
+                self.wire.execute(request).await
+            }
         }
     }
 }
+
+/// The session URI the opening answers with, shaped as Drive's are.
+const SESSION: &str =
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=session-1";
 
 /// Plays the session URI: takes one upload, says once the first [`FIRST`]
 /// bytes of its body have arrived, and answers with the digest of what came.
@@ -134,12 +148,13 @@ async fn an_upload_sends_its_body_while_it_is_still_reading_it() {
     let url = session(arrived).await;
     let opening = StubTransport::new([StubAnswer::json_with_headers(
         200,
-        vec![("location".to_owned(), url)],
+        vec![("location".to_owned(), SESSION.to_owned())],
         "",
     )]);
     let transport = Arc::new(OpenedByScript {
         opening,
         wire: ReqwestTransport::with_default_client().expect("an HTTP client must be buildable"),
+        listener: url,
     });
     let store = GoogleDrive::new(
         transport,

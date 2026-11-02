@@ -11,6 +11,8 @@ pub struct RecordedRequest {
     pub headers: Vec<(String, String)>,
     /// The body it carried, drained.
     pub body: Vec<u8>,
+    /// Whether it asked for a redirect to be followed.
+    pub follow_redirects: bool,
 }
 
 impl RecordedRequest {

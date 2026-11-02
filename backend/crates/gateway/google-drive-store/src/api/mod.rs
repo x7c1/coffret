@@ -2,8 +2,9 @@
 //!
 //! [`DriveApi`] is what every call goes through — the bearer header and the
 //! one-refresh answer to a 401 — [`FileResource`], [`FileList`], and
-//! [`GeneratedIds`] are the shapes Drive answers in, and [`FailedResponse`] is
-//! where a refusal becomes one of the port's errors.
+//! [`GeneratedIds`] are the shapes Drive answers in, [`FailedResponse`] is
+//! where a refusal becomes one of the port's errors, and [`UploadSession`] is
+//! the one place an upload's bytes are sent to.
 
 mod drive_api;
 pub use drive_api::{authorization, DriveApi};
@@ -25,3 +26,6 @@ pub use generated_ids::GeneratedIds;
 
 mod live_files_query;
 pub use live_files_query::{live_files_query, name_prefixes_query};
+
+mod upload_session;
+pub use upload_session::UploadSession;

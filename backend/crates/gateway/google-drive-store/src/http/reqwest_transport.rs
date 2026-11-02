@@ -69,33 +69,45 @@ pub const WHOLE_CALL_DEADLINE: Duration = Duration::from_secs(30);
 /// Storage Object's bytes out ([`RequestBody::Stream`]) or asks for them back
 /// ([`ExpectedAnswer::ObjectBytes`]) is held only between bytes, and every other
 /// call is held to [`WHOLE_CALL_DEADLINE`] as well.
+///
+/// Whether a redirect is followed is read off the request too
+/// ([`HttpRequest::follow_redirects`]). A client's redirect policy is fixed when
+/// it is built, so the transport holds two clients made from one configuration:
+/// one that follows redirects as reqwest does by default, for every call that
+/// always has, and one that follows none, for the upload of an object's bytes.
 #[derive(Debug, Clone)]
 pub struct ReqwestTransport {
     client: reqwest::Client,
+    unredirected: reqwest::Client,
     whole_call_deadline: Duration,
 }
 
 impl ReqwestTransport {
-    /// Takes a client configured by the caller.
+    /// Builds its clients from a configuration the caller chooses.
     ///
-    /// Small calls are held to [`WHOLE_CALL_DEADLINE`]; the client's own
-    /// timeouts are the caller's to choose.
-    pub fn new(client: reqwest::Client) -> Self {
-        Self {
-            client,
+    /// `configure` is asked twice, once for each client, and the one that
+    /// follows no redirect has its policy set after it, so the two differ in
+    /// nothing else. Small calls are held to [`WHOLE_CALL_DEADLINE`]; the
+    /// clients' own timeouts are the caller's to choose.
+    pub fn from_builder(configure: impl Fn() -> reqwest::ClientBuilder) -> Result<Self> {
+        let build = |builder: reqwest::ClientBuilder| {
+            builder.build().map_err(|cause| Error::HttpClient { cause })
+        };
+
+        Ok(Self {
+            client: build(configure())?,
+            unredirected: build(configure().redirect(reqwest::redirect::Policy::none()))?,
             whole_call_deadline: WHOLE_CALL_DEADLINE,
-        }
+        })
     }
 
-    /// Builds a client with the timeouts this gateway expects.
+    /// Builds clients with the timeouts this gateway expects.
     pub fn with_default_client() -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .read_timeout(READ_TIMEOUT)
-            .build()
-            .map_err(|cause| Error::HttpClient { cause })?;
-
-        Ok(Self::new(client))
+        Self::from_builder(|| {
+            reqwest::Client::builder()
+                .connect_timeout(CONNECT_TIMEOUT)
+                .read_timeout(READ_TIMEOUT)
+        })
     }
 
     /// Holds small calls to another deadline than [`WHOLE_CALL_DEADLINE`].
@@ -114,9 +126,12 @@ impl ReqwestTransport {
     ) -> std::result::Result<HttpResponse, TransportError> {
         // Read off the request before it is consumed by being sent.
         let expected = request.answer;
-        let mut builder = self
-            .client
-            .request(to_reqwest_method(request.method), &request.url);
+        let client = if request.follow_redirects {
+            &self.client
+        } else {
+            &self.unredirected
+        };
+        let mut builder = client.request(to_reqwest_method(request.method), &request.url);
 
         for (name, value) in &request.headers {
             builder = builder.header(name, value);

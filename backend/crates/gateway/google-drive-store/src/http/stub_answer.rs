@@ -15,6 +15,15 @@ impl StubAnswer {
         Self::Respond(HttpResponse::json(status, body))
     }
 
+    /// A redirect to `location`, with an empty body.
+    pub fn redirect(status: u16, location: &str) -> Self {
+        Self::json_with_headers(
+            status,
+            vec![("location".to_owned(), location.to_owned())],
+            "",
+        )
+    }
+
     /// A JSON answer carrying headers as well.
     pub fn json_with_headers(status: u16, headers: Vec<(String, String)>, body: &str) -> Self {
         Self::Respond(HttpResponse::new(

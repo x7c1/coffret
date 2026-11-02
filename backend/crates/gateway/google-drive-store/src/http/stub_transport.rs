@@ -15,8 +15,10 @@ use crate::http::transport_error::TransportError;
 ///
 /// It is the whole reason the gateway takes its transport as an argument: a 429,
 /// a 5xx, a connection that times out, a digest that disagrees with the bytes
-/// sent — none of them can be provoked against the real API on demand, and all
-/// of them are exactly what the adapter has to get right.
+/// sent, a session URI pointing somewhere else, a redirect — none of them can be
+/// provoked against the real API on demand, and all of them are exactly what
+/// the adapter has to get right. It follows no redirect itself: a 3xx it is
+/// scripted with is the answer the gateway reads.
 pub struct StubTransport {
     answers: Mutex<VecDeque<StubAnswer>>,
     requests: Mutex<Vec<RecordedRequest>>,
@@ -56,6 +58,7 @@ impl HttpTransport for StubTransport {
     async fn execute(&self, request: HttpRequest) -> Result<HttpResponse, TransportError> {
         // Draining the body is what a real transport does, and the upload path
         // depends on it: the digest is computed from the bytes as they are read.
+        let follow_redirects = request.follow_redirects;
         let body = match request.body {
             RequestBody::Empty => Vec::new(),
             RequestBody::Bytes(bytes) => bytes,
@@ -73,6 +76,7 @@ impl HttpTransport for StubTransport {
                 url: request.url,
                 headers: request.headers,
                 body,
+                follow_redirects,
             });
 
         match self
