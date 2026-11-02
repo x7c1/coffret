@@ -50,6 +50,7 @@ impl error::Error for Error {
                 Some(cause)
             }
             Self::MasterKeyNotUnlocked { cause, .. }
+            | Self::MasterKeyFileMalformed { cause, .. }
             | Self::MasterKeyCostAboveCeiling { cause, .. }
             | Self::KeyMaterial { cause } => Some(cause),
             Self::MalformedStoragePrefix { cause } => Some(cause),

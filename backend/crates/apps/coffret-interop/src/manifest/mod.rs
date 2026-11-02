@@ -50,6 +50,11 @@ pub use payload_fields::{index_snapshot_fields, journal_record_fields, keyring_f
 mod recovery_code_fixture;
 pub use recovery_code_fixture::RecoveryCodeFixture;
 
+mod refused_stored_master_key_fixture;
+pub use refused_stored_master_key_fixture::{
+    RefusedStoredMasterKeyFixture, StoredMasterKeyRefusal,
+};
+
 mod stored_master_key_fixture;
 pub use stored_master_key_fixture::StoredMasterKeyFixture;
 
@@ -93,6 +98,14 @@ pub const REQUIRED_KEY_ENVELOPES: [&str; 1] = ["key-envelope"];
 /// The stored Master Key fixtures every set carries.
 pub const REQUIRED_STORED_MASTER_KEYS: [&str; 1] = ["stored-master-key"];
 
+/// The refused stored Master Key fixtures every set carries.
+///
+/// One form with several faults — a total length that disagrees with the
+/// recorded salt length, and iterations at `u32::MAX` — which KD-9's order
+/// refuses for its length. A reader checking the cost first refuses it for
+/// the cost instead, and the exchange says so.
+pub const REQUIRED_REFUSED_STORED_MASTER_KEYS: [&str; 1] = ["stored-master-key-several-faults"];
+
 /// The Recovery Code fixtures every set carries.
 ///
 /// Two of them, and the second is written in the grouped printing form: the
@@ -120,6 +133,9 @@ pub struct Manifest {
     pub key_envelopes: Vec<KeyEnvelopeFixture>,
     /// The stored Master Key forms in the set.
     pub stored_master_keys: Vec<StoredMasterKeyFixture>,
+    /// The byte strings in the set that no reader accepts as a stored Master
+    /// Key form, and the refusal each must be.
+    pub refused_stored_master_keys: Vec<RefusedStoredMasterKeyFixture>,
     /// The Recovery Codes in the set.
     pub recovery_codes: Vec<RecoveryCodeFixture>,
 }

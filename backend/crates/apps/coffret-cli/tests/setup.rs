@@ -1101,6 +1101,41 @@ fn a_wrong_current_passphrase_changes_nothing() {
     assert_eq!(stored_master_key(&device, "kept"), before);
 }
 
+// KD-9: a Master Key file coffret cannot read is refused before the Passphrase
+// is checked, under a kind of its own and in words that never say the
+// Passphrase is wrong — so nobody retypes a right one at it.
+#[test]
+fn a_malformed_master_key_file_is_not_told_as_a_wrong_passphrase() {
+    let device = Device::new();
+    init_s3(&device, "malformed");
+    let mut bytes = stored_master_key(&device, "malformed");
+    // The reserved byte of the fixed part (spec: KD-9).
+    bytes[6] = 0x01;
+    fs::write(device.library("malformed").join("master-key.cfmk"), &bytes)
+        .expect("the stored Master Key must be writable");
+
+    let refused = change_passphrase(
+        &device,
+        "malformed",
+        &format!("{PASSPHRASE}\n{CHANGED_PASSPHRASE}"),
+        true,
+    );
+
+    assert_eq!(code(&refused), 1, "{}", stderr(&refused));
+    let answer: serde_json::Value =
+        serde_json::from_str(stdout(&refused).trim()).expect("--json answers one object");
+    assert_eq!(
+        answer["error"]["kind"], "master_key_file_malformed",
+        "{answer}"
+    );
+    let said = answer.to_string();
+    assert!(
+        said.contains("not one coffret can read") && !said.contains("may not be the one"),
+        "{answer}"
+    );
+    assert_eq!(stored_master_key(&device, "malformed"), bytes);
+}
+
 // The new Passphrase is chosen the way `init` chooses one, so an empty line is
 // refused as it is there: the stored form would otherwise protect the Master
 // Key with nothing. Two differing entries at a prompt are the other refusal a

@@ -75,9 +75,12 @@ impl StoredMasterKey {
         offset::SALT + u8::MAX as usize + crate::nonce::LEN + PLAINTEXT_LEN + crate::aead::TAG_LEN;
 
     /// Takes stored bytes, checking that they are this form at all, and that
-    /// the cost they record is within [`Argon2Params::CEILING`] — so nothing
-    /// holding a `StoredMasterKey` can be asked for more work than a reader
-    /// accepts (spec: KD-9).
+    /// the cost they record is one Argon2id accepts and within
+    /// [`Argon2Params::CEILING`] — so nothing holding a `StoredMasterKey` can
+    /// be asked for more work than a reader accepts (spec: KD-9).
+    ///
+    /// The checks run in KD-9's order, the structure before the values it
+    /// records, and a form with several faults is refused for the first.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
         let layout = Layout::parse(&bytes)?;
         Ok(Self { bytes, layout })

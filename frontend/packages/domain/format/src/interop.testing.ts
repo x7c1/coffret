@@ -27,6 +27,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { CoffretErrorCode } from './errors.js';
 import { decodeCborExact } from './internal/cbor.js';
 import { fromHex, toHex } from './internal/bytes.js';
 import { CONTAINER_KEY_LENGTH, ContainerKey } from './model/containerKey.js';
@@ -87,6 +88,29 @@ export const REQUIRED_KEY_ENVELOPES = ['key-envelope'];
 export const REQUIRED_STORED_MASTER_KEYS = ['stored-master-key'];
 
 /**
+ * The refused stored Master Key fixtures every set carries.
+ *
+ * One form with several faults — a total length that disagrees with the
+ * recorded salt length, and iterations at `u32::MAX` — which KD-9's order
+ * refuses for its length. A reader checking the cost first refuses it for the
+ * cost instead, and the exchange says so.
+ */
+export const REQUIRED_REFUSED_STORED_MASTER_KEYS = ['stored-master-key-several-faults'];
+
+/** The refusals a reader of a stored Master Key form can give its bytes. */
+export const STORED_MASTER_KEY_REFUSALS = [
+  'stored_master_key_length_mismatch',
+  'unknown_stored_master_key_magic',
+  'unsupported_stored_master_key_version',
+  'reserved_not_zero',
+  'invalid_argon2_params',
+  'argon2_cost_above_ceiling',
+] as const satisfies readonly CoffretErrorCode[];
+
+/** A reader's refusal of a stored Master Key form, as its error code. */
+export type StoredMasterKeyRefusal = (typeof STORED_MASTER_KEY_REFUSALS)[number];
+
+/**
  * The Recovery Code fixtures every set carries.
  *
  * Two of them, and the second is written in the grouped printing form: the
@@ -112,6 +136,11 @@ export interface Manifest {
   keyEnvelopes: KeyEnvelopeFixture[];
   /** The stored Master Key forms in the set. */
   storedMasterKeys: StoredMasterKeyFixture[];
+  /**
+   * The byte strings in the set that no reader accepts as a stored Master Key
+   * form, and the refusal each must be.
+   */
+  refusedStoredMasterKeys: RefusedStoredMasterKeyFixture[];
   /** The Recovery Codes in the set. */
   recoveryCodes: RecoveryCodeFixture[];
 }
@@ -205,6 +234,23 @@ export interface StoredMasterKeyFixture {
   epoch: MasterKeyEpoch;
   /** The Argon2id cost the form was written at. */
   argon2: Argon2Params;
+}
+
+/**
+ * One byte string that is not a stored Master Key form a reader accepts, and the
+ * refusal reading it must give.
+ *
+ * A reader checks a form in the order KD-9 states and refuses it for the first
+ * fault in that order, so a form with several faults is refused with one kind in
+ * every implementation.
+ */
+export interface RefusedStoredMasterKeyFixture {
+  /** The name this fixture is known by across both implementations. */
+  fixture: string;
+  /** Where the bytes live, relative to the fixture directory. */
+  file: string;
+  /** The refusal reading the bytes must give. */
+  refusal: StoredMasterKeyRefusal;
 }
 
 /**
@@ -406,6 +452,9 @@ export function parseManifest(text: string): Manifest {
     controlObjects: readArray(root, 'control_objects').map(parseControlObject),
     keyEnvelopes: readArray(root, 'key_envelopes').map(parseKeyEnvelope),
     storedMasterKeys: readArray(root, 'stored_master_keys').map(parseStoredMasterKey),
+    refusedStoredMasterKeys: readArray(root, 'refused_stored_master_keys').map(
+      parseRefusedStoredMasterKey,
+    ),
     recoveryCodes: readArray(root, 'recovery_codes').map(parseRecoveryCode),
   };
 }
@@ -422,6 +471,9 @@ export function renderManifest(manifest: Manifest): string {
       control_objects: manifest.controlObjects.map(renderControlObject),
       key_envelopes: manifest.keyEnvelopes.map(renderKeyEnvelope),
       stored_master_keys: manifest.storedMasterKeys.map(renderStoredMasterKey),
+      refused_stored_master_keys: manifest.refusedStoredMasterKeys.map(
+        renderRefusedStoredMasterKey,
+      ),
       recovery_codes: manifest.recoveryCodes.map(renderRecoveryCode),
     },
     undefined,
@@ -637,6 +689,27 @@ function renderStoredMasterKey(fixture: StoredMasterKeyFixture): unknown {
       iterations: fixture.argon2.iterations,
       parallelism: fixture.argon2.parallelism,
     },
+  };
+}
+
+function parseRefusedStoredMasterKey(value: JsonObject): RefusedStoredMasterKeyFixture {
+  const refusal = readText(value, 'refusal');
+  const known = STORED_MASTER_KEY_REFUSALS.find((candidate) => candidate === refusal);
+  if (known === undefined) {
+    throw new Error(`${value.path}.refusal is not a stored Master Key refusal: ${refusal}`);
+  }
+  return {
+    fixture: readText(value, 'fixture'),
+    file: readText(value, 'file'),
+    refusal: known,
+  };
+}
+
+function renderRefusedStoredMasterKey(fixture: RefusedStoredMasterKeyFixture): unknown {
+  return {
+    fixture: fixture.fixture,
+    file: fixture.file,
+    refusal: fixture.refusal,
   };
 }
 

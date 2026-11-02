@@ -115,6 +115,12 @@ impl fmt::Display for Error {
                  written under",
                 path.display()
             ),
+            Self::MasterKeyFileMalformed { path, .. } => write!(
+                f,
+                "the Master Key file at {} is not one coffret can read; the Passphrase was not \
+                 checked",
+                path.display()
+            ),
             Self::MasterKeyCostAboveCeiling { path, .. } => write!(
                 f,
                 "the stored Master Key at {} asks for more work than coffret allows; the \

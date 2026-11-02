@@ -48,8 +48,9 @@ impl Argon2Params {
 
     /// Takes a cost, whatever Argon2id will accept.
     ///
-    /// Nothing is checked here: a cost above [`CEILING`](Self::CEILING) is
-    /// refused where it would be written or read, before any derivation.
+    /// Nothing is checked here: a cost Argon2id refuses, or one above
+    /// [`CEILING`](Self::CEILING), is refused where it would be written or
+    /// read, before any derivation.
     pub const fn new(memory_kib: u32, iterations: u32, parallelism: u32) -> Self {
         Self {
             memory_kib,
@@ -71,6 +72,33 @@ impl Argon2Params {
     /// How many lanes the passes are spread across.
     pub const fn parallelism(self) -> u32 {
         self.parallelism
+    }
+
+    /// This cost, if it meets the lower bounds Argon2id itself sets: at least
+    /// 8 KiB of memory per lane, at least one iteration, and at least one lane
+    /// (spec: KD-9).
+    ///
+    /// Checked before [`within_ceiling`](Self::within_ceiling), as KD-9 orders
+    /// it, and by hand rather than by asking Argon2id: its own check multiplies
+    /// the parallelism in `u32`, which a recorded value far above the ceiling
+    /// would overflow. The refusal is the one Argon2id gives for the same bound,
+    /// so a cost refused here is refused for the reason a derivation would have
+    /// given.
+    pub(super) fn accepted_by_argon2(self) -> Result<Self> {
+        let per_lane = 8 * u64::from(self.parallelism);
+        let refused = if u64::from(self.memory_kib) < per_lane.max(8) {
+            Some(argon2::Error::MemoryTooLittle)
+        } else if self.iterations < 1 {
+            Some(argon2::Error::TimeTooSmall)
+        } else if self.parallelism < 1 {
+            Some(argon2::Error::ThreadsTooFew)
+        } else {
+            None
+        };
+        match refused {
+            Some(cause) => Err(Error::InvalidArgon2Params { cause }),
+            None => Ok(self),
+        }
     }
 
     /// This cost, if no parameter of it exceeds [`CEILING`](Self::CEILING)

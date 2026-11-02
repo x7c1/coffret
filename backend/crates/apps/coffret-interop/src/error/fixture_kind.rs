@@ -11,6 +11,9 @@ pub enum FixtureKind {
     KeyEnvelope,
     /// A stored Master Key, under `stored_master_keys`.
     StoredMasterKey,
+    /// A byte string no reader accepts as a stored Master Key, under
+    /// `refused_stored_master_keys`.
+    RefusedStoredMasterKey,
     /// A Recovery Code, under `recovery_codes`.
     RecoveryCode,
 }
@@ -22,6 +25,7 @@ impl fmt::Display for FixtureKind {
             Self::ControlObject => "control-object",
             Self::KeyEnvelope => "Key Envelope",
             Self::StoredMasterKey => "stored Master Key",
+            Self::RefusedStoredMasterKey => "refused stored Master Key",
             Self::RecoveryCode => "Recovery Code",
         })
     }

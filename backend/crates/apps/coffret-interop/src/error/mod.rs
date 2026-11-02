@@ -25,6 +25,8 @@ use std::str::Utf8Error;
 use ciborium::Value;
 use coffret_model::ContainerId;
 
+use crate::manifest::StoredMasterKeyRefusal;
+
 mod display;
 
 mod fixture_kind;
@@ -142,6 +144,11 @@ pub enum Error {
         decoded: String,
         /// What the manifest states.
         stated: String,
+    },
+    /// A fixture the manifest states no reader accepts was accepted.
+    NotRefused {
+        /// The refusal the manifest states.
+        stated: StoredMasterKeyRefusal,
     },
     /// A Keyring's key table digests to something other than the `set_digest`
     /// its name carries (spec: FM-12, FM-17, KL-1).

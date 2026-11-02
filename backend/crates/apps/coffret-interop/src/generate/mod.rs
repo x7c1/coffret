@@ -7,7 +7,8 @@
 //! control-head chain's one name form admits — a replica that is not the
 //! only one of its set, an Entry with optional metadata, an Entry whose
 //! `mtime` predates 1970, the one Passphrase-derived form a device carries
-//! between builds, and the two Recovery Codes a Master Key leaves a device in.
+//! between builds, that form edited to carry several faults at once, and the
+//! two Recovery Codes a Master Key leaves a device in.
 //!
 //! Every control object carries the payload its own schema defines: a Journal
 //! record with additions, their entry tables, and a removal (spec: FM-15), both
@@ -62,6 +63,9 @@ use write_key_envelope::write_key_envelope;
 
 mod write_recovery_codes;
 use write_recovery_codes::write_recovery_codes;
+
+mod write_refused_stored_master_key;
+use write_refused_stored_master_key::write_refused_stored_master_key;
 
 mod write_stored_master_key;
 use write_stored_master_key::write_stored_master_key;
@@ -236,7 +240,8 @@ pub fn generate(out: &Path) -> Result<()> {
         index_snapshot_fields(&ordinary),
     )?;
 
-    let stored_master_key = write_stored_master_key(&writer, &master_key)?;
+    let (stored_master_key, stored) = write_stored_master_key(&writer, &master_key)?;
+    let refused_stored_master_key = write_refused_stored_master_key(&writer, &stored)?;
     let recovery_codes = write_recovery_codes(&writer, &master_key)?;
 
     writer.write_manifest(&Manifest {
@@ -253,6 +258,7 @@ pub fn generate(out: &Path) -> Result<()> {
         ],
         key_envelopes: vec![key_envelope],
         stored_master_keys: vec![stored_master_key],
+        refused_stored_master_keys: vec![refused_stored_master_key],
         recovery_codes,
     })
 }

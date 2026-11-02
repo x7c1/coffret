@@ -975,6 +975,62 @@ async fn a_damaged_envelope_behind_the_right_passphrase_is_refused_as_itself() {
     assert_eq!(drive.consents(), 1);
 }
 
+// SA-9, KD-9: a Library whose stored Master Key file is refused before its
+// Passphrase is checked — for recording iterations at `u32::MAX`, or for its
+// shape — is refused as that when the account is opened through it, never as a
+// Passphrase that does not open the Library: that would send the person
+// retyping a right one. The refusal is the same whether the Passphrase tried
+// was the new Library's own or the one asked for, and when there was nobody to
+// ask.
+#[tokio::test]
+async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_account_path() {
+    type Edit = fn(&mut Vec<u8>);
+    type Expected = fn(&Error) -> bool;
+    let cases: [(&str, Edit, Expected); 2] = [
+        (
+            "iterations at u32::MAX",
+            // The iterations field of the fixed part (spec: KD-9).
+            |bytes| bytes[12..16].copy_from_slice(&u32::MAX.to_be_bytes()),
+            |refused| matches!(refused, Error::MasterKeyCostAboveCeiling { .. }),
+        ),
+        (
+            "a non-zero reserved byte",
+            |bytes| bytes[6] = 0x01,
+            |refused| matches!(refused, Error::MasterKeyFileMalformed { .. }),
+        ),
+    ];
+    for (fault, edit, expected) in cases {
+        let _device = isolated::device();
+        let drive = DriveStub::empty();
+        create(&drive, "first", Some("work")).await;
+        let first = LibraryDir::named_here("first");
+        let mut bytes = fs::read(first.master_key_file()).expect("readable");
+        edit(&mut bytes);
+        fs::write(first.master_key_file(), bytes).expect("writable");
+
+        let (answered, _) = answering(PASSPHRASE);
+        for (own, referencing) in [
+            (PASSPHRASE, crate::ReferencingPassphrase::unasked()),
+            (OTHER_PASSPHRASE, crate::ReferencingPassphrase::unasked()),
+            (OTHER_PASSPHRASE, answered),
+        ] {
+            let mut request = drive_request("second", Some("work"));
+            request.referencing_passphrase = referencing;
+            let result =
+                create_library_through(&reach(&drive), request, pass(own), no_consent).await;
+            let Err(Error::LibraryNotCreated { cause, .. }) = &result else {
+                panic!("{fault}: expected the creation to stop, got {result:?}");
+            };
+            assert!(
+                expected(cause) && !matches!(**cause, Error::AccountNotOpened { .. }),
+                "{fault}: {}",
+                every_link(&**cause)
+            );
+        }
+        assert_eq!(drive.consents(), 1, "{fault}");
+    }
+}
+
 // SA-8: a join tries the accounts its own Passphrase opens first, and asks for
 // another Library's Passphrase only for the ones it does not — here, once, for
 // the account whose Drive lists the folder.

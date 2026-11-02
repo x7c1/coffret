@@ -10,12 +10,13 @@ use crate::Error;
 /// file's full path and the format layer's own words underneath — so the window
 /// shows less than the chain and the caller logs what of it a log may carry
 /// ([`refusal_evidence()`]). The refusal a person causes is said plainly, and
-/// so is a stored Master Key refused before its Passphrase was checked, lest it
-/// be taken for a wrong Passphrase; every other keeps the outermost sentence of
-/// its chain, which still says what happened (another server holds the
-/// Library, nothing could listen) without the causes appended. That line is a
-/// lower-case, unstopped clause written to be joined to its causes, so it is
-/// capitalised and stopped like the page's own sentences.
+/// so is a stored Master Key refused before its Passphrase was checked — for
+/// its cost or for its shape — lest it be taken for a wrong Passphrase; every
+/// other keeps the outermost sentence of its chain, which still says what
+/// happened (another server holds the Library, nothing could listen) without
+/// the causes appended. That line is a lower-case, unstopped clause written to
+/// be joined to its causes, so it is capitalised and stopped like the page's
+/// own sentences.
 pub fn refusal_line(refused: &Error) -> String {
     let device_refused = |is: fn(&coffret_device::Error) -> bool| match refused {
         Error::Device(error) => is(error),
@@ -32,6 +33,9 @@ pub fn refusal_line(refused: &Error) -> String {
     if device_refused(is_too_costly) {
         "This Library's stored Master Key asks for more work than coffret allows; \
          the Passphrase was not checked."
+            .to_owned()
+    } else if device_refused(is_malformed) {
+        "This Library's key file is not one coffret can read; the Passphrase was not checked."
             .to_owned()
     } else if device_refused(is_wrong_passphrase) {
         "That is not this Library's Passphrase.".to_owned()
@@ -92,6 +96,13 @@ fn is_too_costly(error: &coffret_device::Error) -> bool {
         error,
         coffret_device::Error::MasterKeyCostAboveCeiling { .. }
     )
+}
+
+/// Whether the device refused the Library's stored Master Key file as no
+/// stored form it reads: its length, magic, version, reserved byte, or a cost
+/// Argon2id itself refuses.
+fn is_malformed(error: &coffret_device::Error) -> bool {
+    matches!(error, coffret_device::Error::MasterKeyFileMalformed { .. })
 }
 
 /// An `io::Error` as the log may carry it: its kind alone.
@@ -184,6 +195,30 @@ mod tests {
         assert_eq!(
             refusal_evidence(&Error::Device(too_costly())),
             too_costly().redacted()
+        );
+    }
+
+    fn malformed() -> coffret_device::Error {
+        coffret_device::Error::MasterKeyFileMalformed {
+            path: PathBuf::from("/state/libraries/home/master-key.cfmk"),
+            cause: FormatError::ReservedNotZero,
+        }
+    }
+
+    // KD-9: a key file refused for its shape was refused before the Passphrase
+    // was checked, so it is never told as a wrong Passphrase.
+    #[test]
+    fn a_malformed_key_file_is_not_told_as_a_wrong_passphrase() {
+        let expected =
+            "This Library's key file is not one coffret can read; the Passphrase was not checked.";
+        let line = refusal_line(&Error::Device(malformed()));
+        assert_eq!(line, expected);
+        assert!(!line.contains("master-key.cfmk"));
+        let refused = from_server(malformed(), "the Library could not be opened");
+        assert_eq!(refusal_line(&refused), expected);
+        assert_eq!(
+            refusal_evidence(&Error::Device(malformed())),
+            malformed().redacted()
         );
     }
 
