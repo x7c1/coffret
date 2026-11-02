@@ -6,12 +6,22 @@
 //! turns out not to authenticate. Drive reports an MD5 of what it stored; the
 //! gateway hashes the bytes as it sends them and refuses to call the upload
 //! successful unless the two agree.
+//!
+//! Before any of that, the bytes have to go to Drive at all. The session URI
+//! they are sent to is whatever Drive answered the opening with, so an answer
+//! replaced on its way back could point them, and the bearer token with them,
+//! anywhere; the gateway sends them only to a session at Drive's own upload
+//! endpoint, and a redirect answering them is a failure rather than a second
+//! place to send them.
 
 use coffret_usecase::{ByteStream, CommitSlot, Error, ObjectStore, ProviderHash};
 
-use crate::http::StubAnswer;
+use std::sync::atomic::Ordering;
+
+use crate::http::{Method, StubAnswer};
 use crate::test_support::{
-    scripted_drive, session_opened, upload_finished, CIPHERTEXT, CIPHERTEXT_MD5,
+    scripted_drive, session_opened, session_opened_at, upload_finished, WatchedBody, CIPHERTEXT,
+    CIPHERTEXT_MD5,
 };
 
 #[tokio::test]
@@ -149,4 +159,90 @@ async fn a_slot_from_a_store_that_keys_by_name_is_refused() {
 
     assert!(matches!(error, Error::Unsupported { .. }), "{error:?}");
     assert_eq!(transport.call_count(), 0, "nothing should have been sent");
+}
+
+#[tokio::test]
+async fn an_upload_session_anywhere_but_drives_upload_endpoint_gets_neither_token_nor_body() {
+    let elsewhere = [
+        "https://collector.invalid/upload",
+        "http://collector.invalid/upload",
+        "http://127.0.0.1:49123/upload",
+        "http://www.googleapis.com/upload/drive/v3/files?upload_id=x",
+        "https://www.googleapis.com:8443/upload/drive/v3/files?upload_id=x",
+        "https://user:pw@www.googleapis.com/upload/drive/v3/files?upload_id=x",
+        "https://www.googleapis.com.evil.example/upload/drive/v3/files?upload_id=x",
+        "https://www.googleapis.com/upload/drive/v3/files?upload_id=x#frag",
+        "https://www.googleapis.com/drive/v3/files?upload_id=x",
+        "https://www.googleapis.com/upload/drive/v3/files",
+        "not a url",
+    ];
+
+    for location in elsewhere {
+        let (store, transport, _) = scripted_drive([session_opened_at(location)]);
+        let (body, read) = WatchedBody::stream(CIPHERTEXT.len() as u64);
+
+        let error = store
+            .put("head-1.cfrt", body)
+            .await
+            .expect_err("a session anywhere else must be refused");
+
+        assert!(
+            matches!(error, Error::MalformedResponse { .. }),
+            "{location}: refused as an answer this build cannot use, got {error:?}"
+        );
+        assert!(!error.is_retryable(), "{location}: a retry changes nothing");
+        assert!(
+            !read.load(Ordering::SeqCst),
+            "{location}: the body was never read"
+        );
+        // The opening is the one call made, and the one that carried a token:
+        // it went to Drive's upload endpoint, not to where the answer pointed.
+        assert_eq!(
+            transport.call_count(),
+            1,
+            "{location}: nothing was sent there"
+        );
+        let opening = transport.request(0);
+        assert_eq!(opening.method, Method::Post);
+        assert!(
+            opening
+                .url
+                .starts_with("https://www.googleapis.com/upload/drive/v3/files?"),
+            "{location}: the token went only to the upload endpoint: {}",
+            opening.url
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_upload_answered_with_a_redirect_fails_without_following_it() {
+    let (store, transport, _) = scripted_drive([
+        session_opened(),
+        StubAnswer::redirect(307, "https://collector.invalid/upload"),
+    ]);
+
+    let error = store
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .await
+        .expect_err("a redirect is not a stored object");
+
+    assert!(
+        matches!(error, Error::Rejected { status: 307, .. }),
+        "classified like any other answer it did not expect: {error:?}"
+    );
+    assert_eq!(
+        transport.call_count(),
+        2,
+        "the opening and the upload, and nothing sent where the redirect pointed"
+    );
+    let upload = transport.request(1);
+    assert_eq!(upload.method, Method::Put);
+    assert!(
+        !upload.follow_redirects,
+        "the upload asks its transport not to follow a redirect"
+    );
+    assert!(
+        transport.request(0).follow_redirects,
+        "the opening keeps following them as every other call does"
+    );
 }

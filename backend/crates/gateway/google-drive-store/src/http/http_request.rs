@@ -30,6 +30,15 @@ pub struct HttpRequest {
     /// cases are set out (the document ceilings themselves are the gateway's
     /// own, in `answer_ceiling`).
     pub answer: ExpectedAnswer,
+    /// Whether a redirect answering this call is followed.
+    ///
+    /// Every call follows one but the upload of an object's bytes, which
+    /// carries the bearer token and the object to a session URI checked to be
+    /// Drive's own upload endpoint (the gateway's `UploadSession`): a
+    /// redirect would send both on to wherever it pointed, past that check, so
+    /// the upload hands its 3xx back as an answer instead (see
+    /// [`not_following_redirects`](Self::not_following_redirects)).
+    pub follow_redirects: bool,
 }
 
 impl HttpRequest {
@@ -47,6 +56,7 @@ impl HttpRequest {
             headers: Vec::new(),
             body: RequestBody::Empty,
             answer: ExpectedAnswer::DOCUMENT,
+            follow_redirects: true,
         }
     }
 
@@ -63,6 +73,12 @@ impl HttpRequest {
     /// them here.
     pub fn answering_object_bytes(mut self) -> Self {
         self.answer = ExpectedAnswer::ObjectBytes;
+        self
+    }
+
+    /// Hands a redirect back as the answer rather than following it.
+    pub fn not_following_redirects(mut self) -> Self {
+        self.follow_redirects = false;
         self
     }
 

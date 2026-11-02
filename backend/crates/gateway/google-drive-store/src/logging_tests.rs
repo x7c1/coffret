@@ -17,8 +17,8 @@ use tracing::Level;
 
 use crate::http::{HttpTransport, StubAnswer, StubTransport};
 use crate::test_support::{
-    chain, scripted_drive, session_opened, upload_finished, CountingTokens, CIPHERTEXT,
-    CIPHERTEXT_MD5,
+    chain, scripted_drive, session_opened, session_opened_at, upload_finished, CountingTokens,
+    CIPHERTEXT, CIPHERTEXT_MD5,
 };
 use crate::{
     create_app_folder, AccessTokens, ClientCredentials, OAuthTokens, StoredTokens, TokenCache,
@@ -339,6 +339,41 @@ async fn the_upload_session_drive_minted_never_reaches_the_log() {
             .any(|event| event.field("url").contains("upload/drive/v3/files")),
         "{calls:#?}",
     );
+}
+
+#[tokio::test]
+async fn a_refused_upload_session_is_reported_without_its_query() {
+    // Each breaks a different rule, and each carries a capability in a part of
+    // the URL a refusal must not repeat.
+    let refused = [
+        "https://collector.invalid/upload?upload_id=capability-1",
+        "https://www.googleapis.com/upload/drive/v3/files?upload_id=capability-1#capability-2",
+        "https://capability-2:pw@www.googleapis.com/upload/drive/v3/files?upload_id=capability-1",
+        "https://www.googleapis.com/drive/v3/files?upload_id=capability-1",
+    ];
+
+    for location in refused {
+        let logs = CapturedLogs::capture();
+        let (store, _, _) = scripted_drive([session_opened_at(location)]);
+
+        let error = store
+            .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
+            .await
+            .expect_err("a session anywhere else must be refused");
+
+        for link in chain(&error) {
+            assert!(
+                !link.contains("capability-") && !link.contains("upload_id="),
+                "{location}: the refusal repeated the session's query: {link}"
+            );
+        }
+        logs.assert_free_of(&["capability-", "upload_id="]);
+
+        // Which rule it broke is what the record is for, and it is there.
+        let event = logs.only(Level::WARN);
+        assert_eq!(event.field("operation"), "put");
+        assert!(!event.field("refusal").is_empty(), "{event}");
+    }
 }
 
 #[tokio::test]

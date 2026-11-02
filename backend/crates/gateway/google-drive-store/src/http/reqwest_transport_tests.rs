@@ -187,11 +187,10 @@ async fn a_small_answer_that_stops_between_bytes_is_a_timeout() {
         }
     })
     .await;
-    let client = reqwest::Client::builder()
-        .read_timeout(between_bytes)
-        .build()
-        .expect("an HTTP client must be buildable");
-    let transport = ReqwestTransport::new(client).with_whole_call_deadline(Duration::from_secs(30));
+    let transport =
+        ReqwestTransport::from_builder(|| reqwest::Client::builder().read_timeout(between_bytes))
+            .expect("an HTTP client must be buildable")
+            .with_whole_call_deadline(Duration::from_secs(30));
 
     let started = Instant::now();
     let error = failure(transport.execute(listing(&url)).await);
@@ -223,11 +222,10 @@ async fn a_small_answer_without_a_length_that_stops_between_bytes_is_a_timeout()
         }
     })
     .await;
-    let client = reqwest::Client::builder()
-        .read_timeout(between_bytes)
-        .build()
-        .expect("an HTTP client must be buildable");
-    let transport = ReqwestTransport::new(client).with_whole_call_deadline(Duration::from_secs(30));
+    let transport =
+        ReqwestTransport::from_builder(|| reqwest::Client::builder().read_timeout(between_bytes))
+            .expect("an HTTP client must be buildable")
+            .with_whole_call_deadline(Duration::from_secs(30));
 
     let started = Instant::now();
     let error = failure(transport.execute(listing(&url)).await);
@@ -352,4 +350,54 @@ async fn a_call_that_stalled_once_is_ridden_out_by_the_retry_policy() {
         2,
         "the stall ended at the deadline and the policy asked again, once"
     );
+}
+
+/// Answers the first connection with a redirect to `/elsewhere` on the same
+/// server, and every later one with a small document.
+///
+/// The redirect closes its connection, so a client that follows it has to
+/// open another one, and the count of connections says whether it did.
+async fn redirect_once(mut socket: TcpStream, index: usize) {
+    if index == 0 {
+        read_request(&mut socket).await;
+        let head = "HTTP/1.1 303 See Other\r\nlocation: /elsewhere\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+        let _ = socket.write_all(head.as_bytes()).await;
+    } else {
+        answer_at_once(socket, r#"{"files":[]}"#).await;
+    }
+}
+
+#[tokio::test]
+async fn an_upload_that_is_redirected_hands_the_redirect_back() {
+    let (url, taken) = serve(redirect_once).await;
+    let body = ByteStream::from(b"ciphertext".as_slice());
+    let upload = HttpRequest::new(Method::Put, &url)
+        .with_header("authorization", "Bearer token-0")
+        .with_stream(body)
+        .not_following_redirects();
+
+    let response = transport()
+        .execute(upload)
+        .await
+        .expect("a redirect is an answer");
+
+    assert_eq!(response.status(), 303);
+    assert_eq!(
+        taken.load(Ordering::SeqCst),
+        1,
+        "the redirect was not followed: nothing was sent where it pointed"
+    );
+}
+
+#[tokio::test]
+async fn a_call_other_than_the_upload_still_follows_a_redirect() {
+    let (url, taken) = serve(redirect_once).await;
+
+    let response = transport()
+        .execute(listing(&url))
+        .await
+        .expect("the redirected call is answered");
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(taken.load(Ordering::SeqCst), 2, "the redirect was followed");
 }

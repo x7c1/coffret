@@ -1,7 +1,11 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
+use coffret_usecase::ByteStream;
+use tokio::io::{AsyncRead, ReadBuf};
 
 use crate::error::Result;
 use crate::google_drive::GoogleDrive;
@@ -52,14 +56,48 @@ pub const CIPHERTEXT_MD5: &str = "cb54616748fddc2fb607b9eb4312ee3d";
 
 /// Drive's answer to opening a resumable upload session.
 pub fn session_opened() -> StubAnswer {
-    StubAnswer::json_with_headers(
-        200,
-        vec![(
-            "location".to_owned(),
-            "https://www.googleapis.com/upload/drive/v3/files?upload_id=session-1".to_owned(),
-        )],
-        "",
+    session_opened_at(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=session-1",
     )
+}
+
+/// An answer to opening a resumable upload session that says to send the bytes
+/// to `location`.
+pub fn session_opened_at(location: &str) -> StubAnswer {
+    StubAnswer::json_with_headers(200, vec![("location".to_owned(), location.to_owned())], "")
+}
+
+/// A body that records whether anything ever read it.
+///
+/// What it yields is nothing: a case using it is about an upload that must
+/// not get as far as reading its body.
+pub struct WatchedBody {
+    read: Arc<AtomicBool>,
+}
+
+impl WatchedBody {
+    /// A body of `len` bytes, and the flag that says whether it was read.
+    pub fn stream(len: u64) -> (ByteStream, Arc<AtomicBool>) {
+        let read = Arc::new(AtomicBool::new(false));
+        let body = ByteStream::new(
+            len,
+            Self {
+                read: Arc::clone(&read),
+            },
+        );
+        (body, read)
+    }
+}
+
+impl AsyncRead for WatchedBody {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        _: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.read.store(true, Ordering::SeqCst);
+        Poll::Ready(Ok(()))
+    }
 }
 
 /// Drive's answer to a finished upload, reporting this digest.
