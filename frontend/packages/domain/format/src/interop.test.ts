@@ -58,6 +58,7 @@ import {
   REQUIRED_CONTROL_OBJECTS,
   REQUIRED_KEY_ENVELOPES,
   REQUIRED_RECOVERY_CODES,
+  REQUIRED_REFUSED_STORED_MASTER_KEYS,
   REQUIRED_STORED_MASTER_KEYS,
   decodeBodyFields,
   sortBodyFields,
@@ -65,8 +66,11 @@ import {
   type ControlObjectFixture,
   type Manifest,
   type RecoveryCodeFixture,
+  type RefusedStoredMasterKeyFixture,
   type StoredMasterKeyFixture,
 } from './interop.testing.js';
+import { errorCode } from './errors.testing.js';
+import { concatBytes, writeU32BE } from './internal/bytes.js';
 import { INDEX_SNAPSHOT, JOURNAL_RECORD, KEYRING, type MapFields } from './internal/fieldNumbers.js';
 import type { ControlObjectKind } from './model/kinds.js';
 
@@ -114,6 +118,9 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
     );
     expect(manifest.storedMasterKeys.map(named)).toEqual(
       expect.arrayContaining(REQUIRED_STORED_MASTER_KEYS),
+    );
+    expect(manifest.refusedStoredMasterKeys.map(named)).toEqual(
+      expect.arrayContaining(REQUIRED_REFUSED_STORED_MASTER_KEYS),
     );
     expect(manifest.recoveryCodes.map(named)).toEqual(
       expect.arrayContaining(REQUIRED_RECOVERY_CODES),
@@ -215,6 +222,17 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
     }
   });
 
+  // KD-9: a form with several faults is refused for the first of them in
+  // KD-9's order, so this reader and the one that wrote the set refuse it with
+  // the same kind.
+  it('refuses every malformed stored Master Key form as the manifest states', () => {
+    for (const fixture of manifest.refusedStoredMasterKeys) {
+      const where = `${manifest.producer}/${fixture.fixture}`;
+      const bytes = reader.read(fixture.file);
+      expect(errorCode(() => StoredMasterKey.fromBytes(bytes)), where).toBe(fixture.refusal);
+    }
+  });
+
   it('reads every Recovery Code to the pair the manifest states', () => {
     for (const fixture of manifest.recoveryCodes) {
       const where = `${manifest.producer}/${fixture.fixture}`;
@@ -310,6 +328,7 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
   });
 
   const storedMasterKeys: StoredMasterKeyFixture[] = [];
+  let written: Uint8Array | undefined;
   for (const fixture of source.storedMasterKeys) {
     const stored = await StoredMasterKey.create({
       passphrase: utf8(PASSPHRASE),
@@ -317,12 +336,26 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
       epoch: fixture.epoch,
       params: fixture.argon2,
     });
+    written = stored.bytes();
     storedMasterKeys.push({
       ...fixture,
-      file: writer.write(BLOBS_DIR, `${fixture.fixture}.bin`, stored.bytes()),
+      file: writer.write(BLOBS_DIR, `${fixture.fixture}.bin`, written),
       masterKey,
     });
   }
+
+  // The refused forms are made by editing a form this side wrote, so every
+  // field the edit leaves alone is one this side's writer produced.
+  const edited = written;
+  if (edited === undefined) {
+    throw new Error('the incoming set carries no stored Master Key form to edit');
+  }
+  const refusedStoredMasterKeys = source.refusedStoredMasterKeys.map(
+    (fixture): RefusedStoredMasterKeyFixture => ({
+      ...fixture,
+      file: writer.write(BLOBS_DIR, `${fixture.fixture}.bin`, refusedForm(fixture.fixture, edited)),
+    }),
+  );
 
   // A code is one Master Key on its own, not the set's: the incoming set states
   // a key per code, and one drawn here per code is what keeps a reader that
@@ -348,8 +381,29 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
     controlObjects,
     keyEnvelopes,
     storedMasterKeys,
+    refusedStoredMasterKeys,
     recoveryCodes,
   });
+}
+
+/**
+ * The faults the refused fixture `fixture` carries, made in a copy of `stored`.
+ *
+ * Each refused fixture is known by the faults its name states, so a name this
+ * side does not know is a fixture it cannot write back, and the run stops on it.
+ */
+function refusedForm(fixture: string, stored: Uint8Array): Uint8Array {
+  switch (fixture) {
+    case 'stored-master-key-several-faults': {
+      // One byte past the length the recorded salt length makes it, and
+      // iterations at `u32::MAX`: KD-9 checks the length first.
+      const bytes = Uint8Array.from(stored);
+      writeU32BE(bytes, 12, 0xffff_ffff);
+      return concatBytes(bytes, new Uint8Array(1));
+    }
+    default:
+      throw new Error(`no faults are known for the refused fixture ${fixture}`);
+  }
 }
 
 /** The map kind a control object of `kind` carries as its payload. */

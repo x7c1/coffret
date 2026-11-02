@@ -30,24 +30,27 @@ impl Layout {
         if fixed[offset::RESERVED] != 0 {
             return Err(Error::ReservedNotZero);
         }
-        let params = Argon2Params::new(
-            read_u32(fixed, offset::MEMORY_KIB),
-            read_u32(fixed, offset::ITERATIONS),
-            read_u32(fixed, offset::PARALLELISM),
-        )
-        // Refused here, at parsing, so that no caller holds a form whose cost
-        // could reach a derivation it should never run (spec: KD-9).
-        .within_ceiling()?;
-
         let salt = offset::SALT..offset::SALT + usize::from(fixed[offset::SALT_LEN]);
         let nonce = salt.end..salt.end + nonce::LEN;
         let message = nonce.end..nonce.end + PLAINTEXT_LEN + TAG_LEN;
         // The encrypted plaintext is a key and an epoch and nothing else, so the
         // whole form is exactly this long — no shorter, and with nothing
-        // appended.
+        // appended. Checked before the cost: the structure of a form is
+        // checked before the values it records, so a form with several faults
+        // is refused for the same one in every implementation (spec: KD-9).
         if bytes.len() != message.end {
             return Err(Error::StoredMasterKeyLengthMismatch);
         }
+        let params = Argon2Params::new(
+            read_u32(fixed, offset::MEMORY_KIB),
+            read_u32(fixed, offset::ITERATIONS),
+            read_u32(fixed, offset::PARALLELISM),
+        )
+        // Refused here, at parsing, so that no caller holds a form naming no
+        // derivation, or one whose cost could reach a derivation it should
+        // never run (spec: KD-9).
+        .accepted_by_argon2()?
+        .within_ceiling()?;
         Ok(Self {
             params,
             salt,

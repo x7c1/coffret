@@ -103,8 +103,29 @@ Concept background: [Master Key](../../concepts/master-key/),
   Integers are big-endian. Everything before the ciphertext is the
   associated data of KD-7's encryption. A reader follows the recorded salt
   length rather than its own build's policy, and rejects an unknown magic
-  or version, a non-zero reserved byte, or a total length that disagrees
-  with S. *(Form: test)*
+  or version, a non-zero reserved byte, a total length that disagrees
+  with S, or a recorded Argon2id cost that Argon2id itself refuses.
+  *(Form: test)*
+  - A reader checks a stored form in this order, before any derivation:
+    1. the header length: at least the 20 bytes before the salt
+    2. the magic
+    3. the format version
+    4. the reserved byte
+    5. the total length against S
+    6. the recorded Argon2id cost: first the lower bounds Argon2id itself
+       sets (at least 8 KiB of memory per lane, at least one iteration, at
+       least one lane), then the ceilings below in the order memory,
+       iterations, parallelism. A cost below a lower bound is one refusal,
+       whichever bound it misses, and no order among those bounds is set
+
+    The structure is checked before the values it records. A form with
+    several faults is refused for the first of them in this order, so every
+    implementation refuses it with the same refusal. A reader that refuses
+    a file longer than the longest valid form without reading it whole
+    (below) refuses it as a total length that disagrees with S. A form
+    refused at any step of this order is refused as its own refusal,
+    distinct from a failed authentication: the Passphrase was never
+    checked. *(Form: test)*
   - A reader rejects, before any derivation, a stored form whose recorded
     Argon2id cost exceeds any of these ceilings (inclusive):
 

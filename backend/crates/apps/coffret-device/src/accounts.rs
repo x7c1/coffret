@@ -197,8 +197,10 @@ impl Accounts {
     /// second cache for the account (spec: SA-8). A Library that did open and
     /// whose envelope did not is refused as that instead: the Passphrase was
     /// right, and naming another Library's would send the person after the
-    /// wrong thing. So is a Library whose stored Master Key records a cost
-    /// above what a reader accepts: its Passphrase was never checked
+    /// wrong thing. So is a Library whose stored Master Key file is refused
+    /// before its Passphrase is checked — a malformed file, or one recording a
+    /// cost above what a reader accepts: telling either as a Passphrase that
+    /// does not open the Library would send a person retyping a right one
     /// (spec: KD-9).
     pub(crate) fn key_for(
         &self,
@@ -232,9 +234,11 @@ impl Accounts {
     /// where `passphrase` unlocks it; `None` where it does not, and the
     /// envelope's refusal where it unlocks and the envelope does not open.
     ///
-    /// A stored Master Key refused for the cost it records is that refusal
-    /// too, never `None`: the Passphrase was not checked, so it must not be
-    /// told as one that does not open the Library (spec: KD-9).
+    /// A stored Master Key file refused before the Passphrase is checked — for
+    /// its shape, or for the cost it records — is that refusal too, never
+    /// `None`: it must not be told as a Passphrase that does not open the
+    /// Library (spec: KD-9). Another Library referencing the account is still
+    /// tried where there is one.
     fn key_in(
         library: &LibraryDir,
         account: &AccountName,
@@ -242,7 +246,10 @@ impl Accounts {
     ) -> Option<Result<AccountCacheKey>> {
         let unlocked = match StoredMasterKeyFile::unlock(library, passphrase) {
             Ok(unlocked) => unlocked,
-            Err(refused @ Error::MasterKeyCostAboveCeiling { .. }) => return Some(Err(refused)),
+            Err(
+                refused @ (Error::MasterKeyFileMalformed { .. }
+                | Error::MasterKeyCostAboveCeiling { .. }),
+            ) => return Some(Err(refused)),
             Err(refused) => {
                 debug!(
                     operation = OPERATION,

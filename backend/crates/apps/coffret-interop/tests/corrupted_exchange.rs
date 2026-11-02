@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::Path;
 
-use coffret_interop::manifest::{Manifest, MANIFEST_FILE};
+use coffret_interop::manifest::{Manifest, StoredMasterKeyRefusal, MANIFEST_FILE};
 use coffret_interop::{Error, FixtureKind, Step};
 
 /// The fixture whose bytes each case edits.
@@ -153,6 +153,77 @@ fn a_code_pasted_twice_fails_the_checksum_without_quoting_itself() {
     assert_parsing_refused(error, &report);
     assert!(report.contains("checksum"), "{report}");
     assert!(!report.contains(&code["coffret1".len()..]), "{report}");
+}
+
+/// The refused stored Master Key fixture every set carries.
+const SEVERAL_FAULTS: &str = "stored-master-key-several-faults";
+
+// KD-9: a form with several faults is refused for the first in KD-9's order,
+// so a reader refusing it for another one — the cost, say, checked before the
+// length — fails the exchange and names the refusal.
+#[test]
+fn a_form_refused_for_another_fault_fails_and_names_the_refusal() {
+    let directory = tempfile::tempdir().expect("a temporary directory is available");
+    coffret_interop::generate(directory.path()).expect("the set is generated");
+
+    let path = directory.path().join(MANIFEST_FILE);
+    let mut manifest = read_manifest(&path);
+    manifest
+        .refused_stored_master_keys
+        .iter_mut()
+        .find(|fixture| fixture.fixture == SEVERAL_FAULTS)
+        .expect("the fixture is listed")
+        .refusal = StoredMasterKeyRefusal::Argon2CostAboveCeiling;
+    fs::write(
+        &path,
+        serde_json::to_string(&manifest).expect("it serializes"),
+    )
+    .expect("the manifest is writable");
+
+    let error = coffret_interop::verify(directory.path()).expect_err("the refusal differs");
+    let report = report(&error);
+    let failure = in_fixture(
+        error,
+        "rust",
+        FixtureKind::RefusedStoredMasterKey,
+        SEVERAL_FAULTS,
+    );
+    assert!(
+        matches!(&failure, Error::Differs { field, .. } if field == "refusal"),
+        "{report}"
+    );
+    assert!(report.contains("StoredMasterKeyLengthMismatch"), "{report}");
+}
+
+#[test]
+fn a_form_accepted_where_the_manifest_states_a_refusal_fails() {
+    let directory = tempfile::tempdir().expect("a temporary directory is available");
+    coffret_interop::generate(directory.path()).expect("the set is generated");
+
+    // The intact form a reader accepts, where the manifest states a refusal.
+    let manifest = read_manifest(&directory.path().join(MANIFEST_FILE));
+    let intact = &manifest.stored_master_keys[0].file;
+    let refused = &manifest
+        .refused_stored_master_keys
+        .iter()
+        .find(|fixture| fixture.fixture == SEVERAL_FAULTS)
+        .expect("the fixture is listed")
+        .file;
+    fs::copy(
+        directory.path().join(intact),
+        directory.path().join(refused),
+    )
+    .expect("the fixture is writable");
+
+    let error = coffret_interop::verify(directory.path()).expect_err("the form is accepted");
+    let report = report(&error);
+    let failure = in_fixture(
+        error,
+        "rust",
+        FixtureKind::RefusedStoredMasterKey,
+        SEVERAL_FAULTS,
+    );
+    assert!(matches!(failure, Error::NotRefused { .. }), "{report}");
 }
 
 #[test]

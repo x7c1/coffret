@@ -26,6 +26,7 @@ impl error::Error for Error {
             | Self::UnknownSchema { .. }
             | Self::FixtureUnlisted { .. }
             | Self::Differs { .. }
+            | Self::NotRefused { .. }
             | Self::SetDigestDiffers { .. }
             | Self::NoSetDigest
             | Self::EpochDiffers { .. }

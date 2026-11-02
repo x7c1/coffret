@@ -207,13 +207,12 @@ describe('the stored Master Key', () => {
     }
   });
 
-  // KD-7: an edit that lands on parameters Argon2id will not run is refused as
-  // well — no unlock path treats an unusable cost as an absent one.
-  it('fails when an edited cost is one Argon2id refuses', async () => {
+  // KD-7, KD-9: an edit that lands on parameters Argon2id will not run is
+  // refused as well, by the parse and before any derivation — no path treats an
+  // unusable cost as an absent one.
+  it('refuses a form whose edited cost is one Argon2id refuses', async () => {
     const stored = await create();
-    expect(await asyncErrorCode(() => tamper(stored, 19).unlock(PASSPHRASE))).toBe(
-      'invalid_argon2_params',
-    );
+    expect(errorCode(() => tamper(stored, 19))).toBe('invalid_argon2_params');
   });
 
   // KD-6, KD-7: the recorded parameters drive the derivation, so a form written
@@ -344,6 +343,70 @@ describe('the stored Master Key', () => {
       );
       expect(() => StoredMasterKey.fromBytes(bytes)).toThrow(`Argon2id ${parameter} of`);
     }
+  });
+
+  // KD-9: a recorded cost Argon2id itself refuses names no derivation, so it is
+  // refused by `fromBytes` too.
+  it('refuses a form below an Argon2id bound before any derivation', async () => {
+    for (const params of [
+      { memoryKib: 7, iterations: 1, parallelism: 1 },
+      { memoryKib: 31, iterations: 1, parallelism: 4 },
+      { memoryKib: 0, iterations: 0, parallelism: 0 },
+      { memoryKib: 8, iterations: 0, parallelism: 1 },
+      { memoryKib: 8, iterations: 1, parallelism: 0 },
+    ]) {
+      const bytes = await withRecordedCost(params);
+      expect(errorCode(() => StoredMasterKey.fromBytes(bytes)), JSON.stringify(params)).toBe(
+        'invalid_argon2_params',
+      );
+    }
+  });
+
+  // KD-9: a reader checks a form in one order — header length, magic, version,
+  // reserved byte, total length, then the cost (Argon2id's own lower bounds,
+  // then the ceilings) — so a form with several faults is refused for the first
+  // of them, with the kind the Rust reader gives the same form.
+  it('refuses a form with several faults for the first in KD-9 order', async () => {
+    const stored = (await create()).bytes();
+    const edited = (edit: (bytes: Uint8Array) => Uint8Array): Uint8Array =>
+      edit(Uint8Array.from(stored));
+    const appended = (bytes: Uint8Array): Uint8Array => concatBytes(bytes, new Uint8Array(1));
+
+    // The total length before the cost.
+    const longAndCostly = edited((bytes) => {
+      writeU32BE(bytes, 12, 0xffff_ffff);
+      return appended(bytes);
+    });
+    expect(errorCode(() => StoredMasterKey.fromBytes(longAndCostly))).toBe(
+      'stored_master_key_length_mismatch',
+    );
+
+    // The reserved byte before the total length.
+    const reservedAndLong = edited((bytes) => {
+      bytes[6] = 0x01;
+      return appended(bytes);
+    });
+    expect(errorCode(() => StoredMasterKey.fromBytes(reservedAndLong))).toBe('reserved_not_zero');
+
+    // The magic before the version.
+    const magicAndVersion = edited((bytes) => {
+      bytes[0] = asciiBytes('X')[0];
+      bytes[5] = 0x02;
+      return bytes;
+    });
+    expect(errorCode(() => StoredMasterKey.fromBytes(magicAndVersion))).toBe(
+      'unknown_stored_master_key_magic',
+    );
+
+    // Argon2id's own bounds before the ceilings.
+    const unusableAndCostly = edited((bytes) => {
+      writeU32BE(bytes, 8, 0);
+      writeU32BE(bytes, 12, 0xffff_ffff);
+      return bytes;
+    });
+    expect(errorCode(() => StoredMasterKey.fromBytes(unusableAndCostly))).toBe(
+      'invalid_argon2_params',
+    );
   });
 
   // KD-6: a writer never produces a form a reader refuses, and says so before it

@@ -2,7 +2,8 @@ use crate::{Error, FixtureKind, Result};
 
 use super::{
     Manifest, REQUIRED_CONTAINERS, REQUIRED_CONTROL_OBJECTS, REQUIRED_KEY_ENVELOPES,
-    REQUIRED_RECOVERY_CODES, REQUIRED_STORED_MASTER_KEYS, SCHEMA,
+    REQUIRED_RECOVERY_CODES, REQUIRED_REFUSED_STORED_MASTER_KEYS, REQUIRED_STORED_MASTER_KEYS,
+    SCHEMA,
 };
 
 impl Manifest {
@@ -39,6 +40,13 @@ impl Manifest {
             FixtureKind::StoredMasterKey,
             &REQUIRED_STORED_MASTER_KEYS,
             self.stored_master_keys
+                .iter()
+                .map(|fixture| fixture.fixture.as_str()),
+        )?;
+        require(
+            FixtureKind::RefusedStoredMasterKey,
+            &REQUIRED_REFUSED_STORED_MASTER_KEYS,
+            self.refused_stored_master_keys
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
         )?;
@@ -80,7 +88,8 @@ mod tests {
     use crate::hex;
     use crate::manifest::{
         Argon2ParamsFixture, ContainerFixture, ControlObjectFixture, KeyEnvelopeFixture,
-        RecoveryCodeFixture, StoredMasterKeyFixture, WireContainerKind, WireControlObjectKind,
+        RecoveryCodeFixture, RefusedStoredMasterKeyFixture, StoredMasterKeyFixture,
+        StoredMasterKeyRefusal, WireContainerKind, WireControlObjectKind,
     };
 
     fn manifest() -> Manifest {
@@ -98,6 +107,10 @@ mod tests {
             stored_master_keys: REQUIRED_STORED_MASTER_KEYS
                 .iter()
                 .map(stored_master_key)
+                .collect(),
+            refused_stored_master_keys: REQUIRED_REFUSED_STORED_MASTER_KEYS
+                .iter()
+                .map(refused_stored_master_key)
                 .collect(),
             recovery_codes: REQUIRED_RECOVERY_CODES.iter().map(recovery_code).collect(),
         }
@@ -150,6 +163,14 @@ mod tests {
                 iterations: 1,
                 parallelism: 1,
             },
+        }
+    }
+
+    fn refused_stored_master_key(fixture: &&str) -> RefusedStoredMasterKeyFixture {
+        RefusedStoredMasterKeyFixture {
+            fixture: (*fixture).to_owned(),
+            file: String::new(),
+            refusal: StoredMasterKeyRefusal::StoredMasterKeyLengthMismatch,
         }
     }
 

@@ -28,6 +28,9 @@ use check_key_envelope::check_key_envelope;
 mod check_recovery_code;
 use check_recovery_code::check_recovery_code;
 
+mod check_refused_stored_master_key;
+use check_refused_stored_master_key::check_refused_stored_master_key;
+
 mod check_stored_master_key;
 use check_stored_master_key::check_stored_master_key;
 
@@ -66,6 +69,11 @@ fn check_fixtures(reader: &FixtureReader) -> Result<()> {
     for fixture in &manifest.stored_master_keys {
         check_stored_master_key(reader, &manifest.passphrase(), fixture)
             .map_err(|cause| cause.in_fixture(FixtureKind::StoredMasterKey, &fixture.fixture))?;
+    }
+    for fixture in &manifest.refused_stored_master_keys {
+        check_refused_stored_master_key(reader, fixture).map_err(|cause| {
+            cause.in_fixture(FixtureKind::RefusedStoredMasterKey, &fixture.fixture)
+        })?;
     }
     for fixture in &manifest.recovery_codes {
         check_recovery_code(reader, fixture)

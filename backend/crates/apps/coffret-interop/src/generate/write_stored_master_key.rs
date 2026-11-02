@@ -7,10 +7,12 @@ use crate::{hex, Error, Result, Step};
 
 use super::{EPOCH, PASSPHRASE};
 
+/// Writes the stored Master Key fixture, and hands back the form it wrote for
+/// the fixtures made by editing it.
 pub(super) fn write_stored_master_key(
     writer: &FixtureWriter,
     master_key: &MasterKey,
-) -> Result<StoredMasterKeyFixture> {
+) -> Result<(StoredMasterKeyFixture, StoredMasterKey)> {
     let params = Argon2Params::INITIAL;
     let epoch = MasterKeyEpoch::new(EPOCH).map_err(Error::model(Step::StatingGeneratorValue))?;
     let stored = StoredMasterKey::create_with(
@@ -22,11 +24,12 @@ pub(super) fn write_stored_master_key(
     .map_err(Error::format(Step::ProtectingMasterKey))?;
 
     let file = writer.write(BLOBS_DIR, "stored-master-key.bin", stored.as_bytes())?;
-    Ok(StoredMasterKeyFixture {
+    let fixture = StoredMasterKeyFixture {
         fixture: "stored-master-key".to_owned(),
         file,
         master_key: hex::encode(master_key.as_bytes()),
         epoch: epoch.get(),
         argon2: Argon2ParamsFixture::from(params),
-    })
+    };
+    Ok((fixture, stored))
 }

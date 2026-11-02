@@ -39,6 +39,10 @@ impl fmt::Display for Error {
                 f,
                 "{field}: decoded {decoded}, the manifest states {stated}"
             ),
+            Self::NotRefused { stated } => write!(
+                f,
+                "the bytes were accepted, the manifest states the refusal {stated:?}"
+            ),
             Self::SetDigestDiffers { computed, stated } => write!(
                 f,
                 "set_digest: the key table digests to {computed:?}, the name states {stated:?}"

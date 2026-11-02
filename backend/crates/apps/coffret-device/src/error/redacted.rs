@@ -65,6 +65,9 @@ impl Redacted for Error {
             Self::MasterKeyNotUnlocked { cause, .. } => {
                 format!("Device::MasterKeyNotUnlocked: {}", cause.redacted())
             }
+            Self::MasterKeyFileMalformed { cause, .. } => {
+                format!("Device::MasterKeyFileMalformed: {}", cause.redacted())
+            }
             Self::MasterKeyCostAboveCeiling { cause, .. } => {
                 format!("Device::MasterKeyCostAboveCeiling: {}", cause.redacted())
             }

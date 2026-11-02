@@ -388,6 +388,89 @@ fn a_form_above_a_ceiling_is_refused_before_any_derivation() {
     }
 }
 
+// KD-9: a recorded cost Argon2id itself refuses names no derivation, so it is
+// refused at parsing too, for the bound it misses. KD-9 sets no order among
+// these bounds; this reader checks memory, then iterations, then parallelism.
+#[test]
+fn a_form_below_an_argon2id_bound_is_refused_before_any_derivation() {
+    let cases: &[(Argon2Params, argon2::Error)] = &[
+        (Argon2Params::new(7, 1, 1), argon2::Error::MemoryTooLittle),
+        (Argon2Params::new(31, 1, 4), argon2::Error::MemoryTooLittle),
+        (Argon2Params::new(0, 0, 0), argon2::Error::MemoryTooLittle),
+        (Argon2Params::new(8, 0, 1), argon2::Error::TimeTooSmall),
+        (Argon2Params::new(8, 1, 0), argon2::Error::ThreadsTooFew),
+    ];
+    for (params, expected) in cases {
+        let result = StoredMasterKey::from_bytes(with_recorded_cost(*params));
+        assert!(
+            matches!(&result, Err(Error::InvalidArgon2Params { cause }) if cause == expected),
+            "{params:?} should be refused as {expected:?}, got {result:?}"
+        );
+    }
+}
+
+// KD-9: a reader checks a form in one order — header length, magic, version,
+// reserved byte, total length, then the cost (Argon2id's own lower bounds,
+// then the ceilings) — so a form with several faults is refused for the first
+// of them, and every implementation refuses it with the same kind.
+#[test]
+fn a_form_with_several_faults_is_refused_for_the_first_in_kd9_order() {
+    let edited = |edit: &dyn Fn(&mut Vec<u8>)| {
+        let mut bytes = stored().into_bytes();
+        edit(&mut bytes);
+        StoredMasterKey::from_bytes(bytes)
+    };
+    let iterations_max = |bytes: &mut Vec<u8>| {
+        bytes[offset::ITERATIONS].copy_from_slice(&u32::MAX.to_be_bytes());
+    };
+
+    // The total length before the cost: a trailing byte and iterations at
+    // `u32::MAX` is a length mismatch, not a cost above the ceiling.
+    let result = edited(&|bytes| {
+        iterations_max(bytes);
+        bytes.push(0);
+    });
+    assert!(
+        matches!(result, Err(Error::StoredMasterKeyLengthMismatch)),
+        "expected the length refusal, got {result:?}"
+    );
+
+    // The reserved byte before the total length.
+    let result = edited(&|bytes| {
+        bytes[offset::RESERVED] = 1;
+        bytes.push(0);
+    });
+    assert!(
+        matches!(result, Err(Error::ReservedNotZero)),
+        "expected the reserved-byte refusal, got {result:?}"
+    );
+
+    // The magic before the version.
+    let result = edited(&|bytes| {
+        bytes[0] = b'X';
+        bytes[offset::VERSION] = 0x02;
+    });
+    assert!(
+        matches!(result, Err(Error::UnknownStoredMasterKeyMagic { .. })),
+        "expected the magic refusal, got {result:?}"
+    );
+
+    // Argon2id's own bounds before the ceilings.
+    let result = edited(&|bytes| {
+        iterations_max(bytes);
+        bytes[offset::MEMORY_KIB].copy_from_slice(&0u32.to_be_bytes());
+    });
+    assert!(
+        matches!(
+            result,
+            Err(Error::InvalidArgon2Params {
+                cause: argon2::Error::MemoryTooLittle
+            })
+        ),
+        "expected the lower-bound refusal, got {result:?}"
+    );
+}
+
 // KD-6: a writer never produces a form a reader refuses, and says so before it
 // derives anything.
 #[test]

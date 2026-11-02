@@ -142,8 +142,8 @@ export class StoredMasterKey {
 
   /**
    * Takes stored bytes, checking that they are this form at all, and that the
-   * cost they record is within the ceiling — so nothing holding a
-   * `StoredMasterKey` can be asked for more work than a reader accepts
+   * cost they record is one Argon2id accepts and within the ceiling — so nothing
+   * holding a `StoredMasterKey` can be asked for more work than a reader accepts
    * (spec: KD-9).
    */
   static fromBytes(bytes: Uint8Array): StoredMasterKey {
@@ -191,9 +191,13 @@ export class StoredMasterKey {
  * Reads the plaintext part of a stored form.
  *
  * A reader follows the recorded salt length rather than its own build's policy,
- * and rejects an unknown magic or version, a non-zero reserved byte, a total
- * length that disagrees with the recorded salt length, or a recorded cost above
- * the ceiling — here, before any derivation (spec: KD-9).
+ * and rejects, here and before any derivation, in this order: a form shorter
+ * than its fixed part, an unknown magic, an unknown version, a non-zero reserved
+ * byte, a total length that disagrees with the recorded salt length, and a
+ * recorded cost Argon2id itself refuses or that lies above the ceiling. The
+ * structure is checked before the values, and a form with several faults is
+ * refused for the first of them in that order, as every implementation refuses
+ * it (spec: KD-9).
  */
 function parseLayout(bytes: Uint8Array): Layout {
   if (bytes.length < SALT_OFFSET) {
@@ -226,11 +230,13 @@ function parseLayout(bytes: Uint8Array): Layout {
     );
   }
   return {
-    params: requireWithinCeiling({
-      memoryKib: readU32BE(bytes, MEMORY_KIB_OFFSET),
-      iterations: readU32BE(bytes, ITERATIONS_OFFSET),
-      parallelism: readU32BE(bytes, PARALLELISM_OFFSET),
-    }),
+    params: requireWithinCeiling(
+      requireArgon2Params({
+        memoryKib: readU32BE(bytes, MEMORY_KIB_OFFSET),
+        iterations: readU32BE(bytes, ITERATIONS_OFFSET),
+        parallelism: readU32BE(bytes, PARALLELISM_OFFSET),
+      }),
+    ),
     saltEnd,
     nonceEnd,
     messageEnd,

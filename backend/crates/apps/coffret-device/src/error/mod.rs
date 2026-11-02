@@ -181,17 +181,32 @@ pub enum Error {
         /// What the encoder reported.
         cause: serde_json::Error,
     },
-    /// The stored Master Key file could not be opened.
+    /// The stored Master Key file did not open under the Passphrase given.
     ///
-    /// The Passphrase not being the one the file was written under is the
-    /// ordinary case, and it arrives as the format crate's own
+    /// Only a failed authentication, the format crate's own
     /// `AuthenticationFailed`: the bytes authenticate as a whole or not at all,
     /// so nothing in the file is read as key material on the way to finding out
-    /// (spec: DK-5, KD-9).
+    /// (spec: DK-5, KD-9). The Passphrase not being the one the file was
+    /// written under is the ordinary cause; a file refused before any
+    /// Passphrase is checked is [`MasterKeyFileMalformed`](Self::MasterKeyFileMalformed) or
+    /// [`MasterKeyCostAboveCeiling`](Self::MasterKeyCostAboveCeiling) instead.
     MasterKeyNotUnlocked {
         /// The file that was read.
         path: PathBuf,
         /// What the format layer reported.
+        cause: coffret_format::Error,
+    },
+    /// The stored Master Key file is not a stored form coffret reads: its
+    /// length, magic, version, reserved byte or a recorded cost Argon2id
+    /// itself refuses (spec: KD-9).
+    ///
+    /// Kept apart from [`MasterKeyNotUnlocked`](Self::MasterKeyNotUnlocked)
+    /// because the Passphrase was never checked: no shell may read this as a
+    /// wrong Passphrase, which a person would otherwise retype for ever.
+    MasterKeyFileMalformed {
+        /// The file that was read.
+        path: PathBuf,
+        /// What the format layer reported: which check the bytes failed.
         cause: coffret_format::Error,
     },
     /// The stored Master Key file records an Argon2id cost above what coffret
@@ -207,11 +222,12 @@ pub enum Error {
         cause: coffret_format::Error,
     },
     /// Key material could not be produced: what a new Library is built from,
-    /// an account's cache key, or the stored form a changed Passphrase
-    /// protects the Master Key with.
+    /// an account's cache key, the stored form a changed Passphrase protects
+    /// the Master Key with, or the Master Key a stored form is opened to.
     ///
-    /// The entropy source refused, or the Passphrase could not be derived from.
-    /// Either way nothing was drawn and nothing was written.
+    /// The entropy source refused, the Passphrase could not be derived from,
+    /// or an authentic stored form holds no epoch. Either way nothing was
+    /// drawn and nothing was written.
     KeyMaterial {
         /// What the format layer reported.
         cause: coffret_format::Error,
