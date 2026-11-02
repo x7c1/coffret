@@ -78,11 +78,12 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * opens the focused row in the reader's sheet — for an image, or a folder
  * holding images — which then follows the focus (see
  * [`ReaderView`](./ReaderView)); on a folder it also opens the folder, so
- * `↓` goes on into its files with the sheet following. While the sheet is
- * open, `↑`/`↓` go from file to file in reading order rather than row to row
- * (see [`readOn`](./tree)): off the end of one folder into the first file of
- * the next, opening it — save from a closed folder, where they go to the row
- * drawn beside it, so closed folders are paged through by their covers. The
+ * `↓` goes on onto its first row with the sheet following. While the sheet
+ * is open, `↑`/`↓` from a file go from file to file in reading order rather
+ * than row to row (see [`readOn`](./tree)): off the end of one folder into
+ * the first file of the next, opening it, and off the first or the last file
+ * onto the row drawn beside it. From a folder row, open or closed, they go to
+ * the row drawn beside it, so folders are paged through by their covers. The
  * list scrolls ahead
  * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
  * double-click opens it as `Enter` does, and a press on the disclosure button
@@ -307,9 +308,10 @@ export function TreeTable({
   escapeLetsGo?: boolean;
   /**
    * What `↑`/`↓` do instead of moving to the row above or below, while the
-   * reader's sheet is open: read on to the file before or after the focus
-   * (see [`readOn`](./tree)). Unset while it is closed. Shift with them still
-   * grows the selection row by row.
+   * reader's sheet is open: read on from a file to the file before or after
+   * it, or from a folder to the row beside it (see [`readOn`](./tree)).
+   * Unset while it is closed. Shift with them still grows the selection row
+   * by row.
    */
   onReadOn?: (arrow: 'ArrowUp' | 'ArrowDown') => void;
 }) {

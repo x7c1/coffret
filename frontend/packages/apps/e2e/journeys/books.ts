@@ -9,6 +9,12 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, photo, row, setting } from './journey';
 
+/**
+ * What the book the freeze journey drops first is called. It stays in the
+ * album, the first folder under it, and the read-on journey moves onto its row.
+ */
+export const IMPORTED = 'imported-in-the-browser';
+
 /** What the question offers for a Pack, chosen unless somebody says otherwise. */
 const AS_ONE_PACK = /^One Pack/;
 

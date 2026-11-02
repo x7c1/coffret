@@ -1621,13 +1621,14 @@ export function App() {
     [view.folder, sheeted, go],
   );
 
-  // `↑`/`↓` while the sheet is open: on to the file before or after the focus
-  // in reading order, folder rows passed over — or, from a closed folder, to the
-  // row drawn beside it (see [`readOn`](./tree)). Where a closed folder stands
-  // in the way the rows cannot say what is in it, so the server says which file
-  // that is, and the folders on the way down to it are opened. An answer is let
-  // go of where the focus moved meanwhile, the sheet closed, or the key was
-  // pressed again — the later press asks for itself.
+  // `↑`/`↓` while the sheet is open: from a file, on to the file before or
+  // after it in reading order, folder rows passed over; from a folder row, open
+  // or closed, to the row drawn beside it (see [`readOn`](./tree)). Where a
+  // closed folder stands in the way of reading on from a file the rows cannot
+  // say what is in it, so the server says which file that is, and the folders
+  // on the way down to it are opened. An answer is let go of where the focus
+  // moved meanwhile, the sheet closed, or the key was pressed again — the
+  // later press asks for itself.
   const sheetedNow = useRef(sheeted);
   sheetedNow.current = sheeted;
   const readingOn = useRef(0);

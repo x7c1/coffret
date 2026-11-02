@@ -32,7 +32,7 @@ import path from 'node:path';
 
 import type { Page } from '@playwright/test';
 
-import { addAsAPack, bookCalled, dropAsAPack, dropFolderOnto } from './books';
+import { addAsAPack, bookCalled, dropAsAPack, dropFolderOnto, IMPORTED } from './books';
 import {
   expect,
   glimpse,
@@ -48,9 +48,6 @@ import {
   TO_BE_PACKED,
 } from './journey';
 import { startStorage, stopStorage } from './storage';
-
-/** What the book dropped in the first journey is called. */
-const IMPORTED = 'imported-in-the-browser';
 
 /** What the book whose freeze Storage stops is called. */
 const STRANDED = 'stopped-in-the-browser';

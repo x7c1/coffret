@@ -82,11 +82,12 @@ test('walk the tree to a book, read a page, and reload back into it', async ({ p
   await page.keyboard.press('ArrowUp');
   await expect(reader.getByRole('img', { name: bookPage(0) })).toBeVisible();
 
-  // With the sheet open the arrows go from file to file, so the book's folder
-  // is reached by its row: a click moves the focus there, and the sheet shows
-  // its cover, told apart from its first page, with the folder left open. Not
-  // `↑` from the first page, which would read back into the last file of the
-  // folder before it — the album, which the next journey needs untouched.
+  // With the sheet open the arrows go from a file to the file beside it in
+  // reading order, so the book's folder is reached by its row: a click moves
+  // the focus there, and the sheet shows its cover, told apart from its first
+  // page, with the folder left open. Not `↑` from the first page, which would
+  // read back into the last file of the folder before it — the album, which
+  // the next journey needs untouched.
   // Clicked on its name: the rest of the row is under the sheet, and the strip
   // of the tree left uncovered is where the rows stay in reach.
   await inTree(page, leaf(setting.book)).getByText(leaf(setting.book), { exact: true }).click();

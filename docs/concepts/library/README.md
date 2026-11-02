@@ -106,7 +106,10 @@ Its **reader** displays an ordered sequence of Entries; a **page** is one step
 of that sequence. The sequence is the Library's files in **reading order** —
 the order the explorer's tree draws them in with every folder open, a
 folder's folders before its files — so reading on from the last file of one
-folder steps into the first file of the next (spec: LA-32). The explorer itself is also loaded as a page, in the
+folder steps into the first file of the next (spec: LA-32). Reading on starts
+from a file: from a folder's row, open or closed, the reader moves to the row
+the tree draws beside it, and so it does from a file with no file further
+that way. The explorer itself is also loaded as a page, in the
 desktop app's window or in a browser, and "the explorer's page" means that
 page, never a step of the reader's sequence. An Entry is **openable** when
 the reader supports displaying it, as determined from its name; every file
