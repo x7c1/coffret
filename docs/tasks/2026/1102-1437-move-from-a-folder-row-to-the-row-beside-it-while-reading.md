@@ -74,7 +74,7 @@ The server-side answer (`getBeside`) is unchanged.
 
 ### Before merge (verified outside the check command)
 
-- [ ] In `make local`, with the reader open, the person confirms: `↓` from
+- [x] In `make local`, with the reader open, the person confirms: `↓` from
       the open `Books` row moves to the `A book whose title…` row, and `↑`
       from `Albums/album-000/img-00000.jpg` moves to the `album-000` row
       (needs a person).
