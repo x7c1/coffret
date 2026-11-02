@@ -8,10 +8,15 @@
 // the next one's first pages ahead, so the page is there when the key is
 // pressed.
 //
+// From a folder's row, open or closed, the keys go to the row drawn beside it
+// instead: `↓` from the open album lands on the closed folder under it rather
+// than reading on into that folder's first page.
+//
 // The album is read into the book, which is the folder after it. Its last file
 // is the one the restart journey had another device commit, named to sort after
 // the photographs; reading it fetches it, as opening any file does.
 
+import { IMPORTED } from './books';
 import { ARRIVED_WHILE_DOWN, bookPage, expect, inTree, leaf, row, setting, shot, test, tree } from './journey';
 
 test('read off the end of one folder into the first page of the next, and back', async ({ page }) => {
@@ -46,4 +51,22 @@ test('read off the end of one folder into the first page of the next, and back',
   await expect(row(page, last)).toHaveAttribute('aria-selected', 'true');
   await expect(inTree(page, leaf(setting.book)).getByRole('button', { name: /^collapse / })).toBeVisible();
   await shot(page, '03-back-in-the-album');
+
+  // From a folder's row the keys go to the row drawn beside it rather than
+  // reading on: `↓` from the open album lands on its first row, the book the
+  // freeze journey dropped into it, whose folder is closed — and stays closed,
+  // the sheet on its cover rather than on its first page.
+  const album = leaf(setting.album);
+  await inTree(page, album).getByText(album, { exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`cover=${setting.album}$`));
+  await page.keyboard.press('ArrowDown');
+  await expect(page).toHaveURL(new RegExp(`cover=${setting.album}/${IMPORTED}$`));
+  await expect(inTree(page, IMPORTED)).toHaveAttribute('aria-selected', 'true');
+  await expect(inTree(page, IMPORTED).getByRole('button', { name: /^expand / })).toBeVisible();
+  await shot(page, '04-onto-a-closed-folder-in-the-album');
+
+  // And `↑` back onto the album's own row.
+  await page.keyboard.press('ArrowUp');
+  await expect(page).toHaveURL(new RegExp(`cover=${setting.album}$`));
+  await expect(inTree(page, album)).toHaveAttribute('aria-selected', 'true');
 });

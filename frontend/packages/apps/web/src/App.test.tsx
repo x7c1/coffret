@@ -634,8 +634,10 @@ it('reads on from the end of one folder into the next with the sheet open', asyn
   expect(parseHash(window.location.hash).open).toBe('series/notes.txt');
 });
 
-// And at the start of the Library ↑ does nothing; it does not wrap.
-it('reads back no further than the first file of the Library', async () => {
+// At the start of the Library there is no file before the first, so ↑ goes
+// to the folder row drawn above it, and at the first row drawn it does
+// nothing; it does not wrap.
+it('reads back off the first file of the Library onto the folder above it, and no further', async () => {
   answers = library({ '': ['vol-1/', 'vol-2/'], 'vol-1': ['001.jpg'], 'vol-2': ['001.jpg'] });
   window.history.replaceState(null, '', '#path=vol-1&open=vol-1/001.jpg');
   render(<App />);
@@ -644,11 +646,14 @@ it('reads back no further than the first file of the Library', async () => {
   const area = screen.getByRole('tree');
   area.focus();
   fireEvent.keyDown(area, { key: 'ArrowUp' });
-  // Nothing above it is closed, so the rows answer: there is no file before.
+  // Nothing above it is closed, so the rows answer: the folder it stands in.
+  await waitFor(() => expect(parseHash(window.location.hash).cover).toBe('vol-1'));
   expect(getBeside).not.toHaveBeenCalledWith('vol-1/001.jpg', false);
+  expect(tree().getByTitle('vol-1').getAttribute('aria-selected')).toBe('true');
+  fireEvent.keyDown(area, { key: 'ArrowUp' });
   await act(async () => undefined);
-  expect(parseHash(window.location.hash).open).toBe('vol-1/001.jpg');
-  expect(reader.getByAltText('001.jpg')).toBeTruthy();
+  expect(parseHash(window.location.hash).cover).toBe('vol-1');
+  expect(getBeside).not.toHaveBeenCalledWith('vol-1', true);
 });
 
 // The header over the tree: the Library's name, and where the focus stands,

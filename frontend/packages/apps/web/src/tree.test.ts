@@ -225,11 +225,11 @@ describe('the keys on the tree', () => {
   });
 });
 
-// With the reader's sheet open, `↑`/`↓` read on: to the file before or after
-// the focus in reading order, at any depth, folder rows passed over. Where a
-// closed folder stands in the way only the server can say what is in it, so
-// the case answers for it out of the fixture, in reading order, as the server
-// does.
+// With the reader's sheet open, `↑`/`↓` from a file read on: to the file
+// before or after it in reading order, at any depth, folder rows passed over;
+// from a folder they move to the row drawn beside it. Where a closed folder
+// stands in the way only the server can say what is in it, so the case
+// answers for it out of the fixture, in reading order, as the server does.
 describe('reading on with the reader open', () => {
   /** Every file of the fixture, in reading order: each folder's folders, then its files. */
   function readingOrder(folder = ''): string[] {
@@ -340,18 +340,98 @@ describe('reading on with the reader open', () => {
     expect(readOn(rows, on('vol-3'), 'ArrowUp')).toEqual({ kind: 'focus', state: on('vol-2') });
   });
 
-  it('keeps reading on from a file and from an open folder as before', () => {
-    // From a file, past a closed folder: the server says what is in it.
+  it('keeps reading on from a file past a closed folder, asking the server', () => {
     const fromFile = read(state(fileKey('albums/cover.png'), ['albums']), 'ArrowDown');
     expect(fromFile.asked).toBe(true);
     expect(fromFile.state.focus).toBe(fileKey('books/vol-1/p1.png'));
-    // From an open folder, into its first file.
+  });
+
+  // An open folder is a folder row like a closed one: the arrows go to the
+  // row drawn beside it, and never ask the server.
+  it('moves from an open folder to the row drawn beside it, whichever kind it is', () => {
+    // Onto a closed child folder, not into it.
+    expect(read(state(folderKey('books'), ['books']), 'ArrowDown')).toEqual({
+      state: state(folderKey('books/vol-1'), ['books']),
+      asked: false,
+    });
+    // Onto a child folder that is open, and from there onto its first file.
     const open = ['albums', 'albums/2026'];
     expect(read(state(folderKey('albums'), open), 'ArrowDown')).toEqual({
+      state: state(folderKey('albums/2026'), open),
+      asked: false,
+    });
+    expect(read(state(folderKey('albums/2026'), open), 'ArrowDown')).toEqual({
       state: state(fileKey('albums/2026/a.jpg'), open),
       asked: false,
     });
-    expect(read(state(folderKey('albums/2026'), open), 'ArrowUp').state).toEqual(state(folderKey('albums/2026'), open));
+    // `↑` onto the folder above, and from an open folder onto the last row
+    // drawn above it.
+    expect(read(state(folderKey('albums/2026'), open), 'ArrowUp')).toEqual({
+      state: state(folderKey('albums'), open),
+      asked: false,
+    });
+    expect(read(state(folderKey('books'), [...open, 'books']), 'ArrowUp')).toEqual({
+      state: state(fileKey('albums/cover.png'), [...open, 'books']),
+      asked: false,
+    });
+  });
+
+  it('moves from an empty open folder to the rows beside it', () => {
+    const held: Record<string, Listing> = {
+      '': listing('', ['a', 'empty', 'z'], []),
+      a: listing('a', [], ['a/1.png']),
+      empty: listing('empty', [], []),
+      z: listing('z', [], ['z/1.png']),
+    };
+    const rows = treeRows({
+      listing: (path) => (held[path] === undefined ? undefined : { status: 'ready', value: held[path] }),
+      expanded: new Set(['a', 'empty']),
+      prospective: [],
+      stranded: [],
+    });
+    const open = ['a', 'empty'];
+    expect(readOn(rows, state(folderKey('empty'), open), 'ArrowDown')).toEqual({
+      kind: 'focus',
+      state: state(folderKey('z'), open),
+    });
+    expect(readOn(rows, state(folderKey('empty'), open), 'ArrowUp')).toEqual({
+      kind: 'focus',
+      state: state(fileKey('a/1.png'), open),
+    });
+  });
+
+  // Where the rows say there is no file further that way, the focus goes to
+  // the row drawn beside the file instead.
+  it('moves off the first file onto the folder rows above it', () => {
+    const everything = ['albums', 'albums/2026', 'books', 'books/vol-1'];
+    const first = state(fileKey('albums/2026/a.jpg'), everything);
+    const up = read(first, 'ArrowUp');
+    expect(up).toEqual({ state: state(folderKey('albums/2026'), everything), asked: false });
+    // From there the folder rule takes over, up to the first row drawn.
+    const top = read(up.state, 'ArrowUp');
+    expect(top).toEqual({ state: state(folderKey('albums'), everything), asked: false });
+    expect(readOn(rowsOf(everything), top.state, 'ArrowUp')).toEqual({ kind: 'stay' });
+  });
+
+  it('moves off the last file onto the rows drawn below it that hold no file', () => {
+    const held: Record<string, Listing> = {
+      '': listing('', ['a', 'empty'], []),
+      a: listing('a', [], ['a/1.png', 'a/2.png']),
+      empty: listing('empty', [], []),
+    };
+    const rows = treeRows({
+      listing: (path) => (held[path] === undefined ? undefined : { status: 'ready', value: held[path] }),
+      expanded: new Set(['a', 'empty']),
+      prospective: [],
+      stranded: [],
+    });
+    const open = ['a', 'empty'];
+    expect(readOn(rows, state(fileKey('a/2.png'), open), 'ArrowDown')).toEqual({
+      kind: 'focus',
+      state: state(folderKey('empty'), open),
+    });
+    // The last row drawn: nothing further.
+    expect(readOn(rows, state(folderKey('empty'), open), 'ArrowDown')).toEqual({ kind: 'stay' });
   });
 
   it('asks the server where an open folder’s rows are not on hand', () => {
@@ -398,11 +478,11 @@ describe('reading on with the reader open', () => {
     expect(readOn(rows, state(null, open), 'ArrowDown')).toEqual({ kind: 'stay' });
   });
 
-  it('does nothing at either end of the Library, and does not wrap', () => {
+  it('does nothing at the first and the last row drawn, and does not wrap', () => {
     const everything = ['albums', 'albums/2026', 'books', 'books/vol-1'];
     const last = state(fileKey('readme.txt'), everything);
     expect(readOn(rowsOf(everything), last, 'ArrowDown')).toEqual({ kind: 'stay' });
-    const first = state(fileKey('albums/2026/a.jpg'), everything);
+    const first = state(folderKey('albums'), everything);
     expect(readOn(rowsOf(everything), first, 'ArrowUp')).toEqual({ kind: 'stay' });
     // With the folders closed, the server is asked and answers the same.
     expect(read(state(fileKey('albums/cover.png'), ['albums']), 'ArrowUp').state).toEqual(

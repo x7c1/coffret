@@ -384,10 +384,10 @@ export type Arrow = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
  *
  * Neither `←` nor `→` turns a page, and nothing else does either: the
  * reader's sheet follows the focus. While it is open, `↑`/`↓` are
- * [`readOn`](#readOn)'s instead: they move from file to file in reading order,
- * passing folder rows over, so reading off the end of one folder goes on into
- * the next (see [`ReaderView`](./ReaderView)) — save from a closed folder,
- * where they move to the row drawn beside it, as here.
+ * [`readOn`](#readOn)'s instead: from a file they move from file to file in
+ * reading order, passing folder rows over, so reading off the end of one
+ * folder goes on into the next (see [`ReaderView`](./ReaderView)); from a
+ * folder, open or closed, they move to the row drawn beside it, as here.
  *
  * With no row focused, any of them focuses the first row — or, for `↑`, the
  * last — so that the keys have somewhere to start.
@@ -443,38 +443,41 @@ export function arrowed(rows: readonly TreeRow[], state: TreeState, arrow: Arrow
 }
 
 /**
- * Where `↑`/`↓` take the focus while the reader's sheet is open: to the file
- * before or after the focused row in reading order, at any depth — folder
- * rows are passed over, so reading off the end of one folder goes on into the
- * first file of the next.
+ * Where `↑`/`↓` take the focus while the reader's sheet is open.
  *
- * Except from a closed folder. There the sheet shows the folder's cover, and
- * `↑`/`↓` go to the row drawn just above or below it — a folder or a file,
- * whichever is drawn there — and never into the closed folder, so a run of
- * closed folders side by side is paged through cover by cover, and `↑` from
- * the first of them lands on the last row drawn above it, the last file of an
- * open folder there included. At the first and the last row drawn there is
- * nothing further, and the focus stays.
+ * From a folder row, open or closed, they go to the row drawn just above or
+ * below it — a folder or a file, whichever is drawn there, notes passed over —
+ * and nothing is asked of the server. The sheet shows the folder's cover, so
+ * a run of folders side by side is paged through cover by cover; `↓` from an
+ * open folder lands on its first row, whichever kind it is, and never reaches
+ * into a closed folder under it.
  *
- * Reading order is the order the tree draws the Library in with every folder
- * open, so where every row between the focus and the file it lands on is on
- * show, the rows answer it: a file row is where the focus goes, and an open
- * folder's row is passed over, its rows being drawn under it. A file the
- * reader cannot show is landed on like any other; the sheet says so.
+ * From a file row they read on: to the file before or after it in reading
+ * order, at any depth — open folders' rows are passed over, so reading off
+ * the end of one folder goes on into the first file of the next. Reading
+ * order is the order the tree draws the Library in with every folder open,
+ * so where every row between the focus and the file it lands on is on show,
+ * the rows answer it. A file the reader cannot show is landed on like any
+ * other; the sheet says so.
  *
- * Where a closed folder stands in the way — or an open one whose listing is
- * not on hand — the rows cannot say what is in it, and the move is the
- * server's to answer (see [`getBeside`](@coffret/api)): `ask` names the row
- * the answer is wanted about. So it is where the focus's own row is not
- * drawn, as where reading on landed in a folder whose listing was then
- * refused: the server is asked about the focus itself. Past
- * the last row with nothing in the way, there is no file further on, and the
- * focus stays.
+ * Where a closed folder stands in the way of reading on — or an open one
+ * whose listing is not on hand — the rows cannot say what is in it, and the
+ * move is the server's to answer (see [`getBeside`](@coffret/api)): `ask`
+ * names the row the answer is wanted about. So it is where the focus's own
+ * row is not drawn, as where reading on landed in a folder whose listing was
+ * then refused: the server is asked about the focus itself.
+ *
+ * Where the rows say there is no file further that way — from the first
+ * file, with only open folders' rows above it, or the last, with only rows
+ * that hold no file below it — the focus goes to the row drawn just above or
+ * below instead, so `↑` from the first file reaches the folder it stands in,
+ * and the folder rule takes over from there. At the first and the last row
+ * drawn there is nothing further, and the focus stays.
  */
 export type ReadOn =
-  /** The rows answer it: the focus goes to the file named. */
+  /** The rows answer it: the focus goes to the row named. */
   | { kind: 'focus'; state: TreeState }
-  /** There is no file further that way: the focus stays where it is. */
+  /** There is no row further that way: the focus stays where it is. */
   | { kind: 'stay' }
   /** Only the server can say: the row at `path`, a folder or not. */
   | { kind: 'ask'; path: string; folder: boolean };
@@ -492,8 +495,8 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
   }
   const from = rows[at] as Walkable;
   const down = arrow === 'ArrowDown';
-  if (from.kind === 'folder' && !(from.expandable && from.expanded)) {
-    // A closed folder: on to the row drawn beside it, notes passed over.
+  // The row drawn just beside the focus that way, notes passed over.
+  const beside = (): ReadOn => {
     for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
       const row = rows[step];
       if (row.kind !== 'note') {
@@ -501,8 +504,10 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
       }
     }
     return { kind: 'stay' };
+  };
+  if (from.kind === 'folder') {
+    return beside();
   }
-  const ask: ReadOn = { kind: 'ask', path: from.path, folder: from.kind === 'folder' };
   // Whether a row hides what stands under it: a note is a listing not on
   // hand, and a closed folder with anything to open draws nothing of it.
   const hides = (row: TreeRow) =>
@@ -513,10 +518,11 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
       return { kind: 'focus', state: { ...state, focus: row.key } };
     }
     if (hides(row)) {
-      return ask;
+      return { kind: 'ask', path: from.path, folder: false };
     }
   }
-  return { kind: 'stay' };
+  // No file further that way: on to the row drawn beside the file instead.
+  return beside();
 }
 
 /**
