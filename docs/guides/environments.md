@@ -122,10 +122,14 @@ back to the next day. It needs Docker.
   creates the Library and seeds it, then starts the server, the explorer's
   build in watch mode and the development host over it, in the background, as
   `make dev` does, and prints the launch file to open. Later starts find the
-  Library and go straight to the three processes.
+  Library, seed nothing, and start the three processes over it. Where the
+  three or the MinIO container are running already, a later start first stops
+  them, as `make local-down` does, and says so, then starts them again: a
+  second `make local` is the restart, which is also what a server that has
+  locked itself after idling needs.
 - `make local-down` stops the three processes and the MinIO container, and
-  keeps everything else; `make local-down local` is the restart, which is
-  also what a server that has locked itself after idling needs.
+  keeps everything else; `make local-down local` is the same restart as a
+  second `make local`.
 - `make local-reset` is `make local-down`, then removes `.tmp/local/`, so that
   the next `make local` creates and seeds a fresh Library.
 
@@ -194,8 +198,8 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make cli ARGS="…"` | The command line, built in release, against the development state directory unless `COFFRET_STATE_DIR` is given |
 | `make rename-smoke LIBRARY=<name>` | Builds the command line, asks for the Passphrase once, and checks a `coffret rename` and two renames on disk against that Library, under a fresh smoke folder it leaves behind |
 | `make down` | Stops the three `make dev` started for `LIBRARY`; `make down dev` is the restart that a Library which has locked itself after idling needs |
-| `make local` | MinIO in Docker and, on the first start, a Library on it created and seeded under `.tmp/local/`; then the three `make dev` starts, over that Library, with the explorer at `http://127.0.0.1:5183/` (see [the local Library](#the-local-library)) |
-| `make local-down` | Stops the three `make local` started and the MinIO container, keeping everything under `.tmp/local/`; `make local-down local` is the restart |
+| `make local` | MinIO in Docker and, on the first start, a Library on it created and seeded under `.tmp/local/`; then the three `make dev` starts, over that Library, with the explorer at `http://127.0.0.1:5183/`; run again, it stops the three and MinIO and starts them afresh, which is the restart (see [the local Library](#the-local-library)) |
+| `make local-down` | Stops the three `make local` started and the MinIO container, keeping everything under `.tmp/local/`; `make local-down local` is the same restart as a second `make local` |
 | `make local-reset` | `make local-down`, then removes `.tmp/local/`, so the next `make local` seeds a fresh Library |
 | `make desktop-build` | Builds the explorer, the Node-API addon and the Electron app, then bundles it for this host under `frontend/packages/apps/desktop/release/` (`Coffret_<version>_aarch64.dmg` on macOS, `coffret-desktop_<version>_amd64.deb` on Linux) and checks the bundle (see [building it](#building-it)) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |

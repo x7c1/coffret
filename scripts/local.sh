@@ -17,10 +17,12 @@
 # `up` starts MinIO, seeds the Library where there is none yet, and then starts
 # the server, the explorer's build in watch mode and the development host over
 # it, in the background, exactly as `make dev` does — by scripts/dev.sh, which
-# prints the launch file to open. `down` stops the three and MinIO, and keeps
-# everything else; `down` then `up` is the restart, which is also what a server
-# that has locked itself after idling needs. `reset` is `down`, then the whole
-# Library thrown away, so that the next `up` seeds a fresh one.
+# prints the launch file to open. Where the Library is seeded and any of that
+# is running already, `up` first does what `down` does, and then starts it all
+# again: a second `up` is the restart, which is also what a server that has
+# locked itself after idling needs. `down` stops the three and MinIO, and keeps
+# everything else, so `down` then `up` is the same restart. `reset` is `down`,
+# then the whole Library thrown away, so that the next `up` seeds a fresh one.
 #
 # Everything lives under .tmp/local/, and nothing of it anywhere else but in
 # the container, which keeps nothing of its own:
@@ -302,6 +304,26 @@ seed() {
   echo "Seeded in $(($(date +%s) - started))s."
 }
 
+# Where `up` finds the three processes or the container from an earlier `up`,
+# stops them as `down` does, so that what follows starts them afresh: a server
+# that has been running since some earlier day has most likely locked the
+# Library after idling, and reusing it would greet the explorer with a lock
+# nobody asked for. The pid files are the ones scripts/dev.sh writes under
+# $RUN_DIR; a stale one only makes `down` say nothing was running. Nothing
+# under $WORK is removed. Where nothing is there, nothing is said or done.
+restart_what_is_running() {
+  if [ -z "$(container_state)" ] &&
+    [ ! -e "$RUN_DIR/server.pid" ] &&
+    [ ! -e "$RUN_DIR/build.pid" ] &&
+    [ ! -e "$RUN_DIR/host.pid" ]; then
+    return 0
+  fi
+  echo "Stopping what an earlier \`make local\` started — the server, the build, the host and"
+  echo "MinIO — then starting them again. Everything under $WORK is kept."
+  down
+  echo
+}
+
 up() {
   for tool in docker curl cargo node; do
     command -v "$tool" >/dev/null 2>&1 ||
@@ -322,7 +344,10 @@ up() {
     start_minio
     seed
   else
+    # The refusals first, so that a run that is refused stops nothing.
+    refuse_a_container_not_ours
     refuse_another_minio_port
+    restart_what_is_running
     start_minio
   fi
 

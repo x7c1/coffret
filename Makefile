@@ -690,18 +690,20 @@ napi-addon: web-dist
 down:
 	./scripts/dev.sh down $(LIBRARY)
 
-## local: serve a seeded Library on a local MinIO (Docker) — seeded on the first start, kept across restarts — with the explorer's build in watch mode and the development host, all in the background
+## local: serve a seeded Library on a local MinIO (Docker) — seeded on the first start, kept across restarts, restarted by running it again — with the explorer's build in watch mode and the development host, all in the background
 #
 # A Library to work on the explorer against without a cloud account: MinIO in a
 # container, its data under .tmp/local/minio/, and a Library on it created and
 # filled with a varied set of books and albums the first time this runs
 # (`coffret-fixtures --scenario seed`), then the three processes `dev` starts,
-# over that Library. Later runs find it and go straight to the three. The
-# Passphrase is fixed, written in scripts/local.sh and printed by this target,
-# and the server is handed it rather than asking; the script says why that is
-# acceptable for this Library and no other. Everything is under .tmp/local/;
-# the development state directory is never touched. LOCAL_PORT, LOCAL_WEB_PORT
-# and LOCAL_MINIO_PORT move the three ports; `local-down local` is the restart.
+# over that Library. Later runs find it, stop the three and MinIO where they
+# are running, as `local-down` does, and start them again, keeping the
+# Library. The Passphrase is fixed, written in scripts/local.sh and printed by
+# this target, and the server is handed it rather than asking; the script says
+# why that is acceptable for this Library and no other. Everything is under
+# .tmp/local/; the development state directory is never touched. LOCAL_PORT,
+# LOCAL_WEB_PORT and LOCAL_MINIO_PORT move the three ports; `local-down local`
+# is the same restart.
 .PHONY: local
 local:
 	./scripts/local.sh up $(LOCAL_PORT) $(LOCAL_WEB_PORT) $(LOCAL_MINIO_PORT)
