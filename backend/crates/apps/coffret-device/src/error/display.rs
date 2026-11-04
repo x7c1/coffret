@@ -127,6 +127,17 @@ impl fmt::Display for Error {
                  Passphrase was not checked",
                 path.display()
             ),
+            Self::MasterKeyFileMissing { path } => write!(
+                f,
+                "the Master Key file at {} is missing; the Passphrase was not checked",
+                path.display()
+            ),
+            Self::MasterKeyNotDerived { path, .. } => write!(
+                f,
+                "the Master Key at {} could not be opened for a reason other than the \
+                 Passphrase",
+                path.display()
+            ),
             Self::KeyMaterial { .. } => {
                 f.write_str("key material could not be produced; nothing was written")
             }

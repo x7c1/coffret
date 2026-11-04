@@ -32,9 +32,11 @@ impl StoredMasterKeyFile {
     /// a file longer than that is no stored form, and is refused as a length
     /// mismatch without the rest of it being read (spec: KD-9). Every refusal
     /// here comes before any Passphrase is asked for or checked, so none of
-    /// them is [`Error::MasterKeyNotUnlocked`]: a form recording a cost above
-    /// what a reader accepts is [`Error::MasterKeyCostAboveCeiling`], and any
-    /// other form the format refuses is [`Error::MasterKeyFileMalformed`].
+    /// them is [`Error::MasterKeyNotUnlocked`]: a file that is not there is
+    /// [`Error::MasterKeyFileMissing`], one that cannot be read is
+    /// [`Error::Local`], a form recording a cost above what a reader accepts
+    /// is [`Error::MasterKeyCostAboveCeiling`], and any other form the format
+    /// refuses is [`Error::MasterKeyFileMalformed`].
     pub fn read(dir: &LibraryDir) -> Result<StoredMasterKey> {
         let path = dir.master_key_file();
         let bytes = match File::open(&path).and_then(read_bounded) {
@@ -45,11 +47,11 @@ impl StoredMasterKeyFile {
                     cause: FormatError::StoredMasterKeyLengthMismatch,
                 })
             }
+            // Every caller found the Library by its settings first, so the
+            // Library is here and its key file is not: said as that, naming
+            // the file, and never as no Library at all (spec: KD-9).
             Err(cause) if cause.kind() == ErrorKind::NotFound => {
-                return Err(Error::NoSuchLibrary {
-                    library: dir.which(),
-                    path: dir.path().to_path_buf(),
-                })
+                return Err(Error::MasterKeyFileMissing { path })
             }
             Err(cause) => {
                 return Err(LocalIoError::new(LocalOperation::Reading, path, cause).into())
@@ -88,23 +90,29 @@ impl StoredMasterKeyFile {
     }
 
     /// Opens a stored form that has already been read.
-    ///
-    /// Only a failed authentication is [`Error::MasterKeyNotUnlocked`], the
-    /// refusal a shell tells as a wrong Passphrase. A derivation that could
-    /// not run, or an authentic form holding no epoch, is no answer about the
-    /// Passphrase, and is [`Error::KeyMaterial`].
     fn opened(
         dir: &LibraryDir,
         stored: StoredMasterKey,
         passphrase: &Passphrase,
     ) -> Result<UnlockedMasterKey> {
-        stored.unlock(passphrase).map_err(|cause| match cause {
-            FormatError::AuthenticationFailed => Error::MasterKeyNotUnlocked {
-                path: dir.master_key_file(),
-                cause,
-            },
-            cause => Error::KeyMaterial { cause },
-        })
+        stored
+            .unlock(passphrase)
+            .map_err(|cause| not_opened(dir, cause))
+    }
+}
+
+/// What the Library in `dir` is refused as where its stored form, read whole,
+/// does not open: `cause` is the format layer's refusal.
+///
+/// Only a failed authentication is [`Error::MasterKeyNotUnlocked`], the
+/// refusal a shell tells as a wrong Passphrase. A derivation that could not
+/// run, or an authentic form holding no epoch, is no answer about the
+/// Passphrase, and is [`Error::MasterKeyNotDerived`], naming the file.
+fn not_opened(dir: &LibraryDir, cause: FormatError) -> Error {
+    let path = dir.master_key_file();
+    match cause {
+        FormatError::AuthenticationFailed => Error::MasterKeyNotUnlocked { path, cause },
+        cause => Error::MasterKeyNotDerived { path, cause },
     }
 }
 

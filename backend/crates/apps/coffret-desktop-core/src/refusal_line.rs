@@ -11,7 +11,8 @@ use crate::Error;
 /// shows less than the chain and the caller logs what of it a log may carry
 /// ([`refusal_evidence()`]). The refusal a person causes is said plainly, and
 /// so is a stored Master Key refused before its Passphrase was checked — for
-/// its cost or for its shape — lest it be taken for a wrong Passphrase; every
+/// its absence, its cost or its shape — or one that did not open for a reason other
+/// than its Passphrase, lest either be taken for a wrong Passphrase; every
 /// other keeps the outermost sentence of its chain, which still says what
 /// happened (another server holds the Library, nothing could listen) without
 /// the causes appended. That line is a lower-case, unstopped clause written to
@@ -29,13 +30,19 @@ pub fn refusal_line(refused: &Error) -> String {
         _ => false,
     };
     // Checked first, and never read as a wrong Passphrase: the stored form was
-    // refused before the Passphrase was checked at all (spec: KD-9).
-    if device_refused(is_too_costly) {
+    // refused before the Passphrase was checked at all, or did not open for
+    // another reason (spec: KD-9).
+    if device_refused(is_missing) {
+        "This Library's key file is missing; the Passphrase was not checked.".to_owned()
+    } else if device_refused(is_too_costly) {
         "This Library's stored Master Key asks for more work than coffret allows; \
          the Passphrase was not checked."
             .to_owned()
     } else if device_refused(is_malformed) {
         "This Library's key file is not one coffret can read; the Passphrase was not checked."
+            .to_owned()
+    } else if device_refused(is_not_derived) {
+        "This Library's Master Key could not be opened, for a reason other than the Passphrase."
             .to_owned()
     } else if device_refused(is_wrong_passphrase) {
         "That is not this Library's Passphrase.".to_owned()
@@ -98,11 +105,24 @@ fn is_too_costly(error: &coffret_device::Error) -> bool {
     )
 }
 
+/// Whether the device found the Library on this device and not its stored
+/// Master Key file.
+fn is_missing(error: &coffret_device::Error) -> bool {
+    matches!(error, coffret_device::Error::MasterKeyFileMissing { .. })
+}
+
 /// Whether the device refused the Library's stored Master Key file as no
 /// stored form it reads: its length, magic, version, reserved byte, or a cost
 /// Argon2id itself refuses.
 fn is_malformed(error: &coffret_device::Error) -> bool {
     matches!(error, coffret_device::Error::MasterKeyFileMalformed { .. })
+}
+
+/// Whether the device read the Library's stored Master Key whole and still
+/// did not get the Master Key out of it, for a reason other than the
+/// Passphrase: the derivation could not run, or the form holds no epoch.
+fn is_not_derived(error: &coffret_device::Error) -> bool {
+    matches!(error, coffret_device::Error::MasterKeyNotDerived { .. })
 }
 
 /// An `io::Error` as the log may carry it: its kind alone.
@@ -219,6 +239,53 @@ mod tests {
         assert_eq!(
             refusal_evidence(&Error::Device(malformed())),
             malformed().redacted()
+        );
+    }
+
+    fn missing() -> coffret_device::Error {
+        coffret_device::Error::MasterKeyFileMissing {
+            path: PathBuf::from("/state/libraries/home/master-key.cfmk"),
+        }
+    }
+
+    // KD-9: a Library whose key file is missing was refused before the
+    // Passphrase was checked, so it is never told as a wrong Passphrase.
+    #[test]
+    fn a_missing_key_file_is_not_told_as_a_wrong_passphrase() {
+        let expected = "This Library's key file is missing; the Passphrase was not checked.";
+        let line = refusal_line(&Error::Device(missing()));
+        assert_eq!(line, expected);
+        assert!(!line.contains("master-key.cfmk"));
+        let refused = from_server(missing(), "the Library could not be opened");
+        assert_eq!(refusal_line(&refused), expected);
+        assert_eq!(
+            refusal_evidence(&Error::Device(missing())),
+            missing().redacted()
+        );
+    }
+
+    fn not_derived() -> coffret_device::Error {
+        coffret_device::Error::MasterKeyNotDerived {
+            path: PathBuf::from("/state/libraries/home/master-key.cfmk"),
+            cause: FormatError::StoredMasterKeyEpochOutOfRange { epoch: 0 },
+        }
+    }
+
+    // KD-9: a stored form that did not open for a reason other than the
+    // Passphrase is never told as a wrong Passphrase, which a person would
+    // retype for ever.
+    #[test]
+    fn a_master_key_not_derived_is_not_told_as_a_wrong_passphrase() {
+        let expected =
+            "This Library's Master Key could not be opened, for a reason other than the Passphrase.";
+        let line = refusal_line(&Error::Device(not_derived()));
+        assert_eq!(line, expected);
+        assert!(!line.contains("master-key.cfmk"));
+        let refused = from_server(not_derived(), "the Library could not be opened");
+        assert_eq!(refusal_line(&refused), expected);
+        assert_eq!(
+            refusal_evidence(&Error::Device(not_derived())),
+            not_derived().redacted()
         );
     }
 

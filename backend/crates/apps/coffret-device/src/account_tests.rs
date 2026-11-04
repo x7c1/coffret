@@ -1031,6 +1031,127 @@ async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_accou
     }
 }
 
+// SA-9, KD-9: only a failed authentication says a Passphrase does not open a
+// Library. A referencing Library whose stored Master Key file is missing, or
+// cannot be read, is refused as that when the account is opened through it,
+// never as a Passphrase that does not open the Library: that would send the
+// person retyping a right one. The refusal is the same whether the Passphrase
+// tried was the new Library's own or the one asked for, and when there was
+// nobody to ask.
+#[tokio::test]
+async fn a_stored_master_key_file_missing_or_unreadable_is_refused_as_itself_on_the_account_path() {
+    type Break = fn(&LibraryDir);
+    type Expected = fn(&Error) -> bool;
+    let cases: [(&str, Break, Expected); 2] = [
+        (
+            "a missing file",
+            |dir| fs::remove_file(dir.master_key_file()).expect("removable"),
+            |refused| matches!(refused, Error::MasterKeyFileMissing { .. }),
+        ),
+        (
+            "a file that cannot be read",
+            // A directory where the file goes opens, and refuses to be read.
+            |dir| {
+                fs::remove_file(dir.master_key_file()).expect("removable");
+                fs::create_dir(dir.master_key_file()).expect("creatable");
+            },
+            |refused| matches!(refused, Error::Local(_)),
+        ),
+    ];
+    for (fault, damage, expected) in cases {
+        let _device = isolated::device();
+        let drive = DriveStub::empty();
+        create(&drive, "first", Some("work")).await;
+        damage(&LibraryDir::named_here("first"));
+
+        let (answered, _) = answering(PASSPHRASE);
+        for (own, referencing) in [
+            (PASSPHRASE, crate::ReferencingPassphrase::unasked()),
+            (OTHER_PASSPHRASE, crate::ReferencingPassphrase::unasked()),
+            (OTHER_PASSPHRASE, answered),
+        ] {
+            let mut request = drive_request("second", Some("work"));
+            request.referencing_passphrase = referencing;
+            let result =
+                create_library_through(&reach(&drive), request, pass(own), no_consent).await;
+            let Err(Error::LibraryNotCreated { cause, .. }) = &result else {
+                panic!("{fault}: expected the creation to stop, got {result:?}");
+            };
+            assert!(
+                expected(cause) && !matches!(**cause, Error::AccountNotOpened { .. }),
+                "{fault}: {}",
+                every_link(&**cause)
+            );
+        }
+        assert_eq!(drive.consents(), 1, "{fault}");
+    }
+}
+
+// SA-9, KD-9: a wrong Passphrase on a stored Master Key file that is there and
+// well formed is still the one refusal told as a Passphrase that does not open
+// the Library.
+#[tokio::test]
+async fn only_a_failed_authentication_is_an_account_not_opened() {
+    let _device = isolated::device();
+    let drive = DriveStub::empty();
+    create(&drive, "first", Some("work")).await;
+    let accounts = Accounts::open().expect("the accounts open");
+    let work = AccountName::parse("work").expect("a name");
+    let first = accounts
+        .first_referencing(&work)
+        .expect("the Library references the account");
+
+    let wrong = Passphrase::from_bytes(OTHER_PASSPHRASE.to_vec());
+    let refused = accounts
+        .key_for(&work, &wrong, &crate::ReferencingPassphrase::unasked())
+        .expect_err("the Passphrase opens nothing");
+    assert!(
+        matches!(refused, Error::AccountNotOpened { .. }),
+        "{}",
+        every_link(&refused)
+    );
+
+    fs::remove_file(first.master_key_file()).expect("removable");
+    let right = Passphrase::from_bytes(PASSPHRASE.to_vec());
+    let refused = accounts
+        .key_for(&work, &right, &crate::ReferencingPassphrase::unasked())
+        .expect_err("the file is gone");
+    assert!(
+        matches!(&refused, Error::MasterKeyFileMissing { path } if *path == first.master_key_file()),
+        "{}",
+        every_link(&refused)
+    );
+}
+
+// SA-9, KD-9: with two Libraries referencing the account, a refusal of the one
+// tried first — other than for its Passphrase — does not stop the other from
+// opening the account.
+#[tokio::test]
+async fn a_refused_library_does_not_stop_another_from_opening_the_account() {
+    let _device = isolated::device();
+    let drive = DriveStub::empty();
+    create(&drive, "first", Some("work")).await;
+    create(&drive, "second", Some("work")).await;
+    let accounts = Accounts::open().expect("the accounts open");
+    let work = AccountName::parse("work").expect("a name");
+    let tried_first = accounts
+        .first_referencing(&work)
+        .expect("two Libraries reference the account");
+    fs::remove_file(tried_first.master_key_file()).expect("removable");
+
+    let passphrase = Passphrase::from_bytes(PASSPHRASE.to_vec());
+    accounts
+        .key_for(&work, &passphrase, &crate::ReferencingPassphrase::unasked())
+        .unwrap_or_else(|error| {
+            panic!(
+                "the other Library must open the account: {}",
+                every_link(&error)
+            )
+        });
+    assert!(accounts.key_through(&work, &passphrase).is_some());
+    assert_eq!(drive.consents(), 1);
+}
+
 // SA-8: a join tries the accounts its own Passphrase opens first, and asks for
 // another Library's Passphrase only for the ones it does not — here, once, for
 // the account whose Drive lists the folder.

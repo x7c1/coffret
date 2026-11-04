@@ -71,6 +71,10 @@ impl Redacted for Error {
             Self::MasterKeyCostAboveCeiling { cause, .. } => {
                 format!("Device::MasterKeyCostAboveCeiling: {}", cause.redacted())
             }
+            Self::MasterKeyFileMissing { .. } => "Device::MasterKeyFileMissing".to_owned(),
+            Self::MasterKeyNotDerived { cause, .. } => {
+                format!("Device::MasterKeyNotDerived: {}", cause.redacted())
+            }
             Self::KeyMaterial { cause } => {
                 format!("Device::KeyMaterial: {}", cause.redacted())
             }

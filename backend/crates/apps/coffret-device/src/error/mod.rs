@@ -188,8 +188,11 @@ pub enum Error {
     /// so nothing in the file is read as key material on the way to finding out
     /// (spec: DK-5, KD-9). The Passphrase not being the one the file was
     /// written under is the ordinary cause; a file refused before any
-    /// Passphrase is checked is [`MasterKeyFileMalformed`](Self::MasterKeyFileMalformed) or
-    /// [`MasterKeyCostAboveCeiling`](Self::MasterKeyCostAboveCeiling) instead.
+    /// Passphrase is checked is [`MasterKeyFileMissing`](Self::MasterKeyFileMissing),
+    /// [`MasterKeyFileMalformed`](Self::MasterKeyFileMalformed) or
+    /// [`MasterKeyCostAboveCeiling`](Self::MasterKeyCostAboveCeiling) instead,
+    /// and one that does not open for another reason is
+    /// [`MasterKeyNotDerived`](Self::MasterKeyNotDerived).
     MasterKeyNotUnlocked {
         /// The file that was read.
         path: PathBuf,
@@ -221,13 +224,42 @@ pub enum Error {
         /// What the format layer reported: which parameter, and its ceiling.
         cause: coffret_format::Error,
     },
-    /// Key material could not be produced: what a new Library is built from,
-    /// an account's cache key, the stored form a changed Passphrase protects
-    /// the Master Key with, or the Master Key a stored form is opened to.
+    /// The Library is on this device and its stored Master Key file is not:
+    /// its settings were found, and the file beside them was not there
+    /// (spec: KD-9).
     ///
-    /// The entropy source refused, the Passphrase could not be derived from,
-    /// or an authentic stored form holds no epoch. Either way nothing was
-    /// drawn and nothing was written.
+    /// Kept apart from [`NoSuchLibrary`](Self::NoSuchLibrary), which says no
+    /// Library here answers to what was asked for, and from
+    /// [`MasterKeyNotUnlocked`](Self::MasterKeyNotUnlocked), because the
+    /// Passphrase was never checked: no shell may read this as a wrong
+    /// Passphrase, which a person would otherwise retype for ever.
+    MasterKeyFileMissing {
+        /// Where the file was looked for.
+        path: PathBuf,
+    },
+    /// The stored Master Key file was read whole and is a stored form
+    /// coffret reads, and the Master Key still did not come out of it for a
+    /// reason other than the Passphrase: the derivation could not run, or the
+    /// form authenticated and holds no epoch (spec: KD-9).
+    ///
+    /// Kept apart from [`MasterKeyNotUnlocked`](Self::MasterKeyNotUnlocked)
+    /// because the Passphrase was not refused: no shell may read this as a
+    /// wrong Passphrase, which a person would otherwise retype for ever.
+    MasterKeyNotDerived {
+        /// The file that was read.
+        path: PathBuf,
+        /// What the format layer reported.
+        cause: coffret_format::Error,
+    },
+    /// Key material could not be produced: what a new Library is built from,
+    /// an account's cache key, or the stored form a changed Passphrase
+    /// protects the Master Key with.
+    ///
+    /// The entropy source refused, or the Passphrase could not be derived
+    /// from. Either way nothing was drawn and nothing was written. A stored
+    /// form that does not open is
+    /// [`MasterKeyNotDerived`](Self::MasterKeyNotDerived) instead, which names
+    /// the file.
     KeyMaterial {
         /// What the format layer reported.
         cause: coffret_format::Error,

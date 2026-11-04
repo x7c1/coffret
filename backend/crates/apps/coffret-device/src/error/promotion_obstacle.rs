@@ -13,7 +13,9 @@ pub enum PromotionObstacle {
     ClientDiffers(Box<ClientMismatch>),
     /// The held account's key could not be reached with the Passphrase given:
     /// no Library that references the account opens with it, or none whose
-    /// envelope then opens.
+    /// envelope then opens. A referencing Library whose stored Master Key file
+    /// is refused other than for its Passphrase counts as one that does not
+    /// open here.
     NotOpened,
     /// The held account's grant does not reach the Library's app folder, or
     /// holds no grant to ask with.
