@@ -258,7 +258,11 @@ async fn an_empty_missing_or_unreadable_path_is_reported() {
     if !listable {
         assert_eq!(not_taken(&dropped)[2], ("locked", "unreadable"));
     }
-    assert_eq!(dropped.handle, None, "nothing taken, so nothing is held");
+    assert_eq!(
+        dropped.handle.is_some(),
+        listable,
+        "a handle is held only for the locked folder's page, taken where it could be listed"
+    );
 }
 
 // A handle takes its drop once: the second time it is unknown.
