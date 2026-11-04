@@ -137,7 +137,11 @@ impl Accounts {
     /// that Library's own Master Key (spec: SA-9), so a device reaches it only
     /// by unlocking one of them. `None` where the Passphrase opens none of
     /// them, or where every one it opens holds an envelope that does not: the
-    /// account is there and this Passphrase is not a way into it.
+    /// account is there and this Passphrase is not a way into it. A Library
+    /// whose stored Master Key file is refused other than for its Passphrase
+    /// counts as one that does not open here, and the refusal is dropped; a
+    /// caller that tells the person why is [`key_for`](Self::key_for), which
+    /// keeps it (spec: KD-9).
     pub(crate) fn key_through(
         &self,
         account: &AccountName,
@@ -146,10 +150,10 @@ impl Accounts {
         self.opened_through(account, passphrase).ok()
     }
 
-    /// The same, or why not: `Err(None)` where the Passphrase unlocks none of
-    /// the Libraries, and otherwise the first refusal of an envelope in one it
-    /// unlocked, or of a stored Master Key refused before the Passphrase was
-    /// checked.
+    /// The same, or why not: `Err(None)` where the Passphrase fails to
+    /// authenticate against every one of the Libraries, and otherwise the
+    /// first refusal of an envelope in one it unlocked, or of a stored Master
+    /// Key refused other than for its Passphrase.
     fn opened_through(
         &self,
         account: &AccountName,
@@ -197,11 +201,13 @@ impl Accounts {
     /// second cache for the account (spec: SA-8). A Library that did open and
     /// whose envelope did not is refused as that instead: the Passphrase was
     /// right, and naming another Library's would send the person after the
-    /// wrong thing. So is a Library whose stored Master Key file is refused
-    /// before its Passphrase is checked — a malformed file, or one recording a
-    /// cost above what a reader accepts: telling either as a Passphrase that
-    /// does not open the Library would send a person retyping a right one
-    /// (spec: KD-9).
+    /// wrong thing. So is a Library whose stored Master Key did not open for
+    /// any reason other than a failed authentication — a file that is missing,
+    /// could not be read, is malformed, records a cost above what a reader
+    /// accepts, or holds a Master Key that could not be derived from it:
+    /// telling any of them as a Passphrase that does not open the Library would
+    /// send a person retyping a right one (spec: KD-9). Only a failed
+    /// authentication is [`Error::AccountNotOpened`].
     pub(crate) fn key_for(
         &self,
         account: &AccountName,
@@ -234,11 +240,13 @@ impl Accounts {
     /// where `passphrase` unlocks it; `None` where it does not, and the
     /// envelope's refusal where it unlocks and the envelope does not open.
     ///
-    /// A stored Master Key file refused before the Passphrase is checked — for
-    /// its shape, or for the cost it records — is that refusal too, never
-    /// `None`: it must not be told as a Passphrase that does not open the
-    /// Library (spec: KD-9). Another Library referencing the account is still
-    /// tried where there is one.
+    /// `None` is a failed authentication alone — the one refusal that says
+    /// the Passphrase is not this Library's. Every other refusal of the stored
+    /// Master Key file — missing, unreadable, malformed, above the cost
+    /// ceiling, or not derived — is that refusal, never `None`: it must not be
+    /// told as a Passphrase that does not open the Library (spec: KD-9).
+    /// Another Library referencing the account is still tried where there is
+    /// one.
     fn key_in(
         library: &LibraryDir,
         account: &AccountName,
@@ -246,19 +254,15 @@ impl Accounts {
     ) -> Option<Result<AccountCacheKey>> {
         let unlocked = match StoredMasterKeyFile::unlock(library, passphrase) {
             Ok(unlocked) => unlocked,
-            Err(
-                refused @ (Error::MasterKeyFileMalformed { .. }
-                | Error::MasterKeyCostAboveCeiling { .. }),
-            ) => return Some(Err(refused)),
-            Err(refused) => {
+            Err(refused @ Error::MasterKeyNotUnlocked { .. }) => {
                 debug!(
                     operation = OPERATION,
                     reason = %refused.redacted(),
-                    "a Library referencing the account did not open; the reason says whether \
-                     this Passphrase was even tried"
+                    "a Library referencing the account did not open under this Passphrase"
                 );
                 return None;
             }
+            Err(refused) => return Some(Err(refused)),
         };
         Some(AccountEnvelope::open(
             library,

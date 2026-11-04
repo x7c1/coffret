@@ -1,20 +1,56 @@
 //! What the command line says about the Storage accounts a device holds
 //! (spec: SA-8).
 //!
-//! Every refusal here is made before a Passphrase is read or a consent asked
-//! for, so each case runs the binary with nothing on standard input and a
-//! state directory laid out by hand: a Library's settings file, and the
-//! account directory it names.
+//! Every refusal here is made before a consent is asked for, and before
+//! anything reaches Storage, so each case runs the binary with at most a
+//! Passphrase on standard input and a state directory laid out by hand: a
+//! Library's settings file, its stored Master Key file, and the account
+//! directory it names.
 
 mod support;
 
-use support::{code, stderr, write_file, Device};
+use std::fs;
+use std::sync::OnceLock;
+
+use support::{
+    code, stderr, stdout, stub_endpoint, succeeded, write_file, Device, PASSPHRASE, REGION,
+};
 
 /// The OAuth client a laid-out account was consented to.
 const CLIENT: &str = "first.apps.googleusercontent.com";
 
+/// A stored Master Key file kept under [`PASSPHRASE`], made once by `init` on
+/// a device of its own and copied into every Library a case lays out.
+fn stored_master_key() -> &'static [u8] {
+    static STORED: OnceLock<Vec<u8>> = OnceLock::new();
+    STORED.get_or_init(|| {
+        let donor = Device::new();
+        let output = donor.run_with(
+            &[
+                "init",
+                "--name",
+                "donor",
+                "--s3",
+                "--bucket",
+                "photos",
+                "--endpoint",
+                stub_endpoint(),
+                "--region",
+                REGION,
+                "--path-style",
+                "--passphrase-stdin",
+            ],
+            Some(PASSPHRASE),
+        );
+        succeeded(&output, "init");
+        fs::read(donor.library("donor").join("master-key.cfmk"))
+            .expect("the stored Master Key must be readable")
+    })
+}
+
 /// Lays out a Drive Library called `library` referencing the account `account`,
-/// and the account itself, consented to through `client`.
+/// with a stored Master Key kept under [`PASSPHRASE`], and the account itself,
+/// consented to through `client`.
 fn lay_out(device: &Device, library: &str, account: &str, client: &str) {
     let state = device
         .libraries()
@@ -27,6 +63,10 @@ fn lay_out(device: &Device, library: &str, account: &str, client: &str) {
             r#"{{"version":1,"library_id":"0123456789abcdef","provider":{{"kind":"drive","folder_id":"f","client_id":"{client}","account":"{account}"}}}}"#
         )
         .as_bytes(),
+    );
+    write_file(
+        &device.libraries().join(library).join("master-key.cfmk"),
+        stored_master_key(),
     );
     write_file(
         &state.join("accounts").join(account).join("settings.json"),
@@ -205,4 +245,57 @@ fn a_script_is_told_which_library_s_passphrase_opens_the_account() {
         "stderr was:\n{printed}"
     );
     assert!(!device.libraries().join("second").exists());
+}
+
+// SA-9, KD-9: only a failed authentication is told as a Passphrase that does
+// not open the Library. A referencing Library whose stored Master Key file is
+// missing, or cannot be read, is refused as that — even under the right
+// Passphrase — so nobody retypes a right one at it.
+#[test]
+fn a_missing_or_unreadable_master_key_file_is_not_told_as_a_passphrase_that_does_not_open() {
+    type Break = fn(&std::path::Path);
+    let cases: [(&str, Break, &str); 2] = [
+        (
+            "a missing file",
+            |file| fs::remove_file(file).expect("removable"),
+            "is missing; the Passphrase was not checked",
+        ),
+        (
+            "a file that cannot be read",
+            // A directory where the file goes opens, and refuses to be read.
+            |file| {
+                fs::remove_file(file).expect("removable");
+                fs::create_dir(file).expect("creatable");
+            },
+            "could not be read",
+        ),
+    ];
+    for (fault, damage, told) in cases {
+        let device = Device::new();
+        lay_out(&device, "at-work", "work", CLIENT);
+        damage(&device.libraries().join("at-work").join("master-key.cfmk"));
+
+        let mut arguments = init_drive("second", CLIENT, Some("work"));
+        arguments.insert(0, "--json");
+        let output = device.run_with(&arguments, Some(PASSPHRASE));
+        assert_eq!(
+            code(&output),
+            1,
+            "{fault}: stderr was:\n{}",
+            stderr(&output)
+        );
+        let answer: serde_json::Value =
+            serde_json::from_str(stdout(&output).trim()).expect("--json answers one object");
+        let message = answer["error"]["message"]
+            .as_str()
+            .expect("a failure says what it was");
+        assert!(
+            message.contains(told)
+                && message.contains("master-key.cfmk")
+                && !message.contains("does not open one")
+                && !message.contains("is on this device"),
+            "{fault}: {answer}"
+        );
+        assert!(device.library_named("second").is_none(), "{fault}");
+    }
 }

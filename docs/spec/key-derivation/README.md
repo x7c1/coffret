@@ -145,6 +145,16 @@ Concept background: [Master Key](../../concepts/master-key/),
     retries at a lower cost. Because the largest salt length is 255, no
     valid form is longer than 355 bytes, and a reader of a file need read
     no more than that and one byte to refuse a longer one. *(Form: test)*
+  - Only a stored form that fails to authenticate is told as a Passphrase
+    that does not open the Library. A stored Master Key file that is
+    missing or cannot be read, and a stored form read whole whose Master
+    Key does not come out of it for a reason other than its Passphrase —
+    the derivation could not run, or the form authenticates and holds no
+    epoch (FM-13, FM-19) — is refused as its own refusal, which names the
+    file, wherever the stored form is opened: unlocking the Library, and
+    opening an account's key through a Library that references it to use
+    the account (SA-9), where another referencing Library is still tried.
+    *(Form: test)*
   - The Argon2id version is 0x13 (v1.3). The stored form records no Argon2
     version field, so the version is a format constant, not a recorded
     parameter: an implementation using a different version would derive a

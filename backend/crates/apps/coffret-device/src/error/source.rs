@@ -13,6 +13,7 @@ impl error::Error for Error {
             | Self::NoStateDirectory
             | Self::LibraryExists { .. }
             | Self::NoSuchLibrary { .. }
+            | Self::MasterKeyFileMissing { .. }
             | Self::AmbiguousLibraryName { .. }
             | Self::NotADriveLibrary { .. }
             | Self::LibraryInSeveralDirectories { .. }
@@ -52,6 +53,7 @@ impl error::Error for Error {
             Self::MasterKeyNotUnlocked { cause, .. }
             | Self::MasterKeyFileMalformed { cause, .. }
             | Self::MasterKeyCostAboveCeiling { cause, .. }
+            | Self::MasterKeyNotDerived { cause, .. }
             | Self::KeyMaterial { cause } => Some(cause),
             Self::MalformedStoragePrefix { cause } => Some(cause),
             // The model's refusal where the prefix is no Entry Path, and nothing

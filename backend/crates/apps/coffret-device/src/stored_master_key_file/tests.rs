@@ -4,7 +4,7 @@ use std::io::{self, Read};
 
 use coffret_format::{Error as FormatError, StoredMasterKey};
 
-use super::{read_bounded, StoredMasterKeyFile};
+use super::{not_opened, read_bounded, StoredMasterKeyFile};
 use crate::error::Error;
 use crate::library_dir::LibraryDir;
 use crate::testing::{create_s3, passphrase};
@@ -206,6 +206,70 @@ async fn a_file_asking_for_too_much_work_is_refused_without_checking_the_passphr
     let line = refused.to_string();
     assert!(
         line.contains("more work than coffret allows") && line.contains("was not checked"),
+        "the line must not read as a wrong Passphrase: {line}"
+    );
+}
+
+// KD-9: a stored form read whole that does not open for a reason other than a
+// failed authentication — here an authentic form holding no epoch — is no
+// answer about the Passphrase, and is refused naming the Library's key file;
+// only a failed authentication is told as a Passphrase that may be wrong.
+#[tokio::test]
+async fn a_stored_form_that_opens_to_no_master_key_is_refused_naming_the_file() {
+    create_s3("not-derived").await;
+    let dir = LibraryDir::named_here("not-derived");
+
+    let refused = not_opened(
+        &dir,
+        FormatError::StoredMasterKeyEpochOutOfRange { epoch: 0 },
+    );
+    match &refused {
+        Error::MasterKeyNotDerived {
+            path,
+            cause: FormatError::StoredMasterKeyEpochOutOfRange { epoch: 0 },
+        } => assert_eq!(path, &dir.master_key_file()),
+        other => panic!("expected the form to be refused as not derived, got {other:?}"),
+    }
+    let line = refused.to_string();
+    assert!(
+        line.contains("other than the Passphrase") && !line.contains("may not be the one"),
+        "the line must not read as a wrong Passphrase: {line}"
+    );
+
+    assert!(matches!(
+        not_opened(&dir, FormatError::AuthenticationFailed),
+        Error::MasterKeyNotUnlocked {
+            cause: FormatError::AuthenticationFailed,
+            ..
+        }
+    ));
+}
+
+// KD-9: a Library found on this device whose stored Master Key file is not
+// there is refused naming the file, before any Passphrase is asked for, and
+// never as no Library at all nor as a wrong Passphrase.
+#[tokio::test]
+async fn a_missing_file_is_refused_naming_it_before_the_passphrase_is_asked_for() {
+    create_s3("missing-master-key").await;
+    let dir = LibraryDir::named_here("missing-master-key");
+    fs::remove_file(dir.master_key_file()).expect("the file must be removable");
+
+    let asked = StoredMasterKeyFile::unlock_asking(&dir, || {
+        panic!("a missing file must not cost a Passphrase")
+    });
+    let given = StoredMasterKeyFile::unlock(&dir, &passphrase().expect("a fixed Passphrase"));
+    for refused in [asked, given] {
+        match refused {
+            Err(Error::MasterKeyFileMissing { path }) => assert_eq!(path, dir.master_key_file()),
+            other => panic!("expected the file to be refused as missing, got {other:?}"),
+        }
+    }
+    let line = Error::MasterKeyFileMissing {
+        path: dir.master_key_file(),
+    }
+    .to_string();
+    assert!(
+        line.contains("is missing") && !line.contains("may not be the one"),
         "the line must not read as a wrong Passphrase: {line}"
     );
 }
