@@ -7,7 +7,7 @@
 // hundred provider calls to open it again. So a drop holding a folder is asked
 // about before anything is sent, as every drop is confirmed: naming the folder
 // it lands in and the dropped folder with its count and size, and offering it
-// as One Pack. Adding it as a Pack packs exactly the pages the drop carried: they
+// as Packs. Adding it that way packs exactly the pages the drop carried: they
 // land, a freeze packs them together, and what the Library gains is Packs
 // (spec: PK-1, PK-7, PK-17).
 //

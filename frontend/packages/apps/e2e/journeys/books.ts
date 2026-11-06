@@ -16,20 +16,20 @@ import { expect, photo, row, setting } from './journey';
 export const IMPORTED = 'imported-in-the-browser';
 
 /** What the question offers for a Pack, chosen unless somebody says otherwise. */
-const AS_ONE_PACK = /^One Pack/;
+const AS_PACKS = /^Packs/;
 
 /**
  * Answers the confirmation a drop of the book `name` onto the album brings up:
  * it says where it lands — the album — names the folder with its count,
- * marked as a folder the Library does not have there yet, and goes as One
- * Pack on Add.
+ * marked as a folder the Library does not have there yet, and goes as Packs
+ * on Add.
  */
 export async function addAsAPack(page: Page, name: string): Promise<void> {
   const question = page.getByRole('dialog', { name: `Add to ${setting.album}` });
   const incoming = question.getByRole('list', { name: 'incoming' });
   await expect(incoming).toContainText(`📁 ${name} — ${setting.importPages} files`);
   await expect(incoming).toContainText('New folder');
-  await expect(question.getByRole('radio', { name: AS_ONE_PACK })).toBeChecked();
+  await expect(question.getByRole('radio', { name: AS_PACKS })).toBeChecked();
   await question.getByRole('button', { name: 'Add', exact: true }).click();
 }
 

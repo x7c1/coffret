@@ -33,16 +33,16 @@ const FILES: Added[] = [
   addedFile('BookX/cover.png', { size: 10, lastModified: 0 } as File),
 ];
 
-it('says where it adds, names the folder with its count and size, and offers One Pack or separate files', () => {
+it('says where it adds, names the folder with its count and size, and offers Packs or separate files', () => {
   const onChoose = vi.fn();
   render(<DropConfirm landing="comics" summary={BOOK} files={FILES} destinations={INTO} onChoose={onChoose} />);
 
   const said = screen.getByRole('dialog', { name: 'Add to comics' });
   expect(said.textContent).toContain('80 files, 58.0 MB');
   expect(said.textContent).toContain('📁 BookX — 80 files, 58.0 MB');
-  // One Pack unless somebody says otherwise, each choice saying what it is for.
+  // Packs unless somebody says otherwise, each choice saying what it is for.
   expect(packChoice().checked).toBe(true);
-  expect(said.textContent).toContain('One Pack — kept and fetched together, best for a book or an album');
+  expect(said.textContent).toContain('Packs — packed together with the rest of the drop, best for books and albums');
   expect(said.textContent).toContain(
     'Separate files — each file kept on its own, best for files you will replace',
   );
@@ -62,9 +62,9 @@ function add(): HTMLElement {
   return screen.getByRole('button', { name: 'Add' });
 }
 
-/** The choice of storing a dropped folder as One Pack. */
+/** The choice of storing a dropped folder as Packs. */
 function packChoice(): HTMLInputElement {
-  return screen.getByRole<HTMLInputElement>('radio', { name: /^One Pack/ });
+  return screen.getByRole<HTMLInputElement>('radio', { name: /^Packs/ });
 }
 
 /** The marks the incoming items carry, top to bottom. */

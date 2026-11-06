@@ -78,9 +78,9 @@ const ITEMS_SHOWN = 8;
  * refused. Where the folder added to is not one the Library holds yet — a
  * folder prepared with "New folder…", say — a line says the drop makes it.
  *
- * A drop holding a folder is asked how it is stored: **One Pack**, chosen
+ * A drop holding a folder is asked how it is stored: as **Packs**, chosen
  * unless somebody says otherwise, or **Separate files**, each with a line
- * saying what it is for. A Pack chosen here packs only the files this drop
+ * saying what it is for. Packs chosen here pack only the files this drop
  * carries, never the other files already in that folder (spec: PK-17).
  *
  * The one-line notes, each shown only where it applies: what the desktop app

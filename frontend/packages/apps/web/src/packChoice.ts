@@ -220,12 +220,12 @@ export function existsLine(folder: { name: string }): string {
 
 /**
  * The two ways a drop holding a folder can be stored, each with the line that
- * says what it is for. The confirmation offers them as a choice, One Pack
+ * says what it is for. The confirmation offers them as a choice, Packs
  * chosen unless somebody says otherwise; the loose files beside a folder go the
  * same way.
  */
 export const STORE_CHOICES: Record<Exclude<Choice, 'cancel'>, { label: string; note: string }> = {
-  pack: { label: 'One Pack', note: 'kept and fetched together, best for a book or an album' },
+  pack: { label: 'Packs', note: 'packed together with the rest of the drop, best for books and albums' },
   one_by_one: {
     label: 'Separate files',
     note: 'each file kept on its own, best for files you will replace',
