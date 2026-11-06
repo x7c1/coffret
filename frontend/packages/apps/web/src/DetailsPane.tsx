@@ -162,7 +162,6 @@ function TheLibrary({ shown }: { shown: LibraryShown }) {
     ['Stored on', fromLibrary((one) => storedOn(one.provider))],
     ['Objects on Storage', fromTotals((all) => grouped(all.objects))],
     ['Items', root !== null ? grouped(itemsIn(root)) : awaited(shown.root)],
-    ['Files', fromTotals((all) => grouped(all.files_total))],
     ['Size', fromTotals((all) => size(all.size))],
     ['Modified', fromTotals((all) => time(all.mtime))],
     ['On this device', fromTotals((all) => filesOnDevice(all.files_present, all.files_total))],
