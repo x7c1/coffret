@@ -600,7 +600,18 @@ impl Served {
     /// halt, and deliberately: what that switch stands for is *this* device's
     /// Storage going away, and a second device is not on the far end of it.
     pub async fn commit_elsewhere(&self, path: &str, content: &[u8]) {
-        plant(self.remote.path(), path, content);
+        self.commit_all_elsewhere(&[(path, content)]).await;
+    }
+
+    /// Commits several files into the Library from the other device, in one
+    /// sync and so in one batch, with one deposit time between them.
+    ///
+    /// For a case that wants more Entries than one commit apiece could make in
+    /// the time a case has.
+    pub async fn commit_all_elsewhere(&self, files: &[(&str, &[u8])]) {
+        for (path, content) in files {
+            plant(self.remote.path(), path, content);
+        }
         let batch = self.batches.fetch_add(1, Ordering::SeqCst) + 1;
         let outcome = sync_folders(SyncRequest::new(
             self.store.as_ref(),
@@ -620,8 +631,8 @@ impl Served {
         .expect("the other device carries its folder into the Library");
         assert_eq!(
             outcome.added.len(),
-            1,
-            "one file was planted, so one Entry is committed: {outcome:?}",
+            files.len(),
+            "each planted file is committed as an Entry: {outcome:?}",
         );
     }
 }

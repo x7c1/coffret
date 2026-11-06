@@ -3,9 +3,10 @@
 //! The value, and the builders every way of naming one goes through, are here.
 //! The ways of naming one are grouped by what they answer: [`admission`],
 //! [`paths`], [`declines`], [`placements`] (with [`refused_root`]), [`moves`],
-//! [`drop_budget`], [`local_folders`] and [`server`]. What a failure from below
-//! becomes is in [`from_error`], what may be said about one in a diagnostic
-//! event is in [`redact`], and what goes on the wire is in [`into_response`].
+//! [`drop_budget`], [`filters`], [`local_folders`] and [`server`]. What a
+//! failure from below becomes is in [`from_error`], what may be said about one
+//! in a diagnostic event is in [`redact`], and what goes on the wire is in
+//! [`into_response`].
 
 use axum::http::StatusCode;
 use coffret_device::Redacted;
@@ -16,6 +17,8 @@ pub(crate) use admission::WayBack;
 mod declines;
 
 mod drop_budget;
+
+mod filters;
 
 mod from_error;
 

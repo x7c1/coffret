@@ -29,7 +29,9 @@ folder coming; from LA-34, how a person **stops** an add, a freeze or a
 fill before it commits, and what a stopped add leaves; which set of
 colours this device's explorer is drawn in, which the server keeps as the
 device's own state (LA-38); and what the whole Library comes to, counted out
-of the catalog for the explorer's details of the Library itself (LA-39). The
+of the catalog for the explorer's details of the Library itself (LA-39); and
+which rows a tree filtered by a name or by the most recently deposited books
+keeps (LA-40 to LA-42). The
 two credentials never cross: the server key is what the host shows the server,
 a browser token is what a browser shows the host, and neither of the two
 accepts the other's.
@@ -821,3 +823,45 @@ Concept background: [Library](../../concepts/library/),
   It is a count and changes nothing: it arms no work and writes nothing, so
   the explorer asks for it again each time what it shows of the Library
   changes. *(Form: test)*
+
+### Filtering the Library
+
+- **LA-40.** The server answers which rows a tree filtered by a name keeps
+  (`GET /api/filter?name=…`), out of the Entry Paths in the Index and nothing
+  of Storage, over the whole Library. The name is matched against each
+  `/`-separated segment of each Entry Path, never across a `/` — the
+  segments of `a/b/c.jpg` are `a`, `b` and `c.jpg` — as a substring,
+  case-insensitively, both sides normalized by Unicode NFKC first, so
+  full-width and half-width forms match each other. A folder is not stored
+  but implied by the paths beneath it (EP-2), and it matches where its own
+  segment does. Along each Entry Path the answer keeps the shallowest folder
+  or file that matches: the contents of a matched folder are not rows of it,
+  since the explorer lists them folder by folder as one is opened, and
+  neither are the folders above a match, which the explorer derives from
+  its path. A name that matches nothing is an empty answer.
+  *(Form: test)*
+- **LA-41.** The server answers the n most recently deposited books
+  (`GET /api/filter?recent=n`), out of the Index and nothing of Storage. A
+  book is a folder that directly holds files; a folder holding only folders,
+  a series, is none, and the files directly under the Library root count
+  together as one book, the root, whose row's path is the empty string. A
+  book was deposited at the latest deposit time among the files directly in
+  it (FM-15), which a rename or a move carries with each file (FM-16), so
+  reorganizing the Library leaves the order as it was. The n newest books
+  are taken, two deposited in the same second ordered by their path.
+  *(Form: test)*
+- **LA-42.** A filter asked with both a name and a count takes the n most
+  recent books (LA-41) from within what the name matched (LA-40): the books
+  named by a match or under one, so the root, which has no segment, and a
+  book holding a matched file but not itself under a match are neither. The
+  answer lists the rows in path order, each with its `path`, its `kind`
+  (`folder` or `file`), and, on a folder, its `deposited_at`: the time
+  LA-41 dates a book by, ISO 8601 in UTC, or `null` where it holds no file
+  directly. At most 2,000 rows are answered, the first in path order; the
+  answer carries the `total` matched over the whole scan and whether it was
+  `truncated`, so the explorer can say how many it is not showing. A filter
+  naming neither a name nor a count, an empty name, or a count that is not a
+  positive whole number is refused as `400 bad_request`. It is keyed like
+  every route (LA-2), refused while the Library is locked, as every route
+  that reads the catalog is (DK-2), and changes nothing.
+  *(Form: test)*
