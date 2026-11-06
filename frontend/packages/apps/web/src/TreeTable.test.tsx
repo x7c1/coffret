@@ -517,6 +517,119 @@ describe('the keys on the tree', () => {
   });
 });
 
+// `Escape` folds one level of what is shown, and from a top-level row lets go
+// of the focus.
+describe('Escape on the tree', () => {
+  /**
+   * `albums/2026/08/a.jpg`, a file three levels deep, beside `albums/cover.png`
+   * and `albums/2026/b.jpg`; `albums/2026` and `albums/2026/08` open.
+   */
+  function deep(options: Options = {}) {
+    return mount(listing({ folders: [folder('2026')], files: [file('cover.png')] }), {
+      more: [
+        listing({ path: 'albums/2026', folders: [folder('08', {}, 'albums/2026')], files: [file('b.jpg', {}, 'albums/2026')] }),
+        listing({ path: 'albums/2026/08', files: [file('a.jpg', {}, 'albums/2026/08')] }),
+      ],
+      open: ['albums/2026', 'albums/2026/08'],
+      ...options,
+    });
+  }
+  const focusedName = () => document.querySelector('tbody tr[aria-selected="true"]')?.getAttribute('title') ?? null;
+
+  it('closes an open folder and keeps the focus on it, nested and top-level', () => {
+    const { tree } = deep({ focus: folderKey('albums/2026') });
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    expect(focusedName()).toBe('2026');
+    cleanup();
+
+    const top = deep({ focus: folderKey('albums') });
+    fireEvent.keyDown(top.tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums']);
+    expect(focusedName()).toBe('albums');
+  });
+
+  it('closes the folder a file stands in, moves the focus to it, and drops the selection', () => {
+    const { tree, onSelect } = deep({ focus: fileKey('albums/2026/08/a.jpg') });
+    fireEvent.keyDown(tree, { key: 'ArrowDown', shiftKey: true });
+    expect(selectedNames()).toEqual(['a.jpg', 'b.jpg']);
+    // The focus is on `b.jpg`, the row the range grew to, in `2026`.
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    expect(selectedNames()).toEqual(['2026']);
+    expect(onSelect).toHaveBeenLastCalledWith(NOTHING_SELECTED);
+  });
+
+  it('closes the folder a closed folder stands in, moves the focus to it, and drops the selection', () => {
+    const { tree, onSelect } = deep({ focus: folderKey('albums/2026/08'), open: ['albums/2026'] });
+    fireEvent.keyDown(tree, { key: 'ArrowDown', shiftKey: true });
+    expect(selectedNames()).toEqual(['08', 'b.jpg']);
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    expect(selectedNames()).toEqual(['2026']);
+    expect(onSelect).toHaveBeenLastCalledWith(NOTHING_SELECTED);
+  });
+
+  it('lets go of the focus from a top-level file or closed folder', () => {
+    const root = listing({ path: '', folders: [folder('books', {}, '')], files: [file('a.png', {}, '')] });
+    for (const focus of [fileKey('a.png'), folderKey('books')]) {
+      const { tree } = mount(root, { focus });
+      fireEvent.keyDown(tree, { key: 'Escape' });
+      expect(focusedName()).toBeNull();
+      expect(rowNames()).toEqual(['books', 'a.png']);
+      cleanup();
+    }
+  });
+
+  it('folds one level on each press from a file three levels deep, and lets go on the last', () => {
+    const { tree } = deep({ focus: fileKey('albums/2026/08/a.jpg') });
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'a.jpg', 'b.jpg', 'cover.png']);
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'b.jpg', 'cover.png']);
+    expect(focusedName()).toBe('08');
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    expect(focusedName()).toBe('2026');
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums']);
+    expect(focusedName()).toBe('albums');
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums']);
+    expect(focusedName()).toBeNull();
+  });
+
+  it('opens a folder it closed with every subfolder closed', () => {
+    const { tree } = deep({ focus: folderKey('albums/2026') });
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    fireEvent.keyDown(tree, { key: 'ArrowRight' });
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'b.jpg', 'cover.png']);
+  });
+
+  it('opens a folder closed by ← or by a click with its subfolders open again', () => {
+    const byArrow = deep({ focus: folderKey('albums/2026') });
+    fireEvent.keyDown(byArrow.tree, { key: 'ArrowLeft' });
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    fireEvent.keyDown(byArrow.tree, { key: 'ArrowRight' });
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'a.jpg', 'b.jpg', 'cover.png']);
+    cleanup();
+
+    deep({ focus: folderKey('albums/2026') });
+    fireEvent.click(screen.getByLabelText('collapse 2026'));
+    expect(rowNames()).toEqual(['albums', '2026', 'cover.png']);
+    fireEvent.click(screen.getByLabelText('expand 2026'));
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'a.jpg', 'b.jpg', 'cover.png']);
+  });
+
+  it('leaves the open folders and the focus alone while the reader is open', () => {
+    const { tree, onChange, onSelect } = deep({ focus: fileKey('albums/2026/08/a.jpg'), readingOn: true, escapeLetsGo: false });
+    fireEvent.keyDown(tree, { key: 'Escape' });
+    expect(rowNames()).toEqual(['albums', '2026', '08', 'a.jpg', 'b.jpg', 'cover.png']);
+    expect(focusedName()).toBe('a.jpg');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
 // A click on something that cannot hold the focus leaves it on the page's
 // body; the keys pressed then are the tree's, and give it the focus back.
 describe('the keys pressed with nothing holding the focus', () => {

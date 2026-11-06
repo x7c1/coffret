@@ -713,9 +713,10 @@ it('names the Library in the header, and the location follows the focus', async 
   expect(within(document.querySelector('footer') as HTMLElement).queryByText('main')).toBeNull();
 });
 
-// `Escape` climbs to the folder the focus stands in, and from a top-level row
-// lets go of the focus; with nothing focused the header's **+** is about the
-// Library root, and its "New folder…" makes the folder there.
+// `Escape` closes the folder the focus stands in and moves the focus to it,
+// and from a top-level closed folder lets go of the focus; with nothing
+// focused the header's **+** is about the Library root, and its "New folder…"
+// makes the folder there.
 it('makes a folder at the Library root from the + once the focus is let go of', async () => {
   answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg'] });
   render(<App />);
