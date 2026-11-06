@@ -18,25 +18,13 @@ on:
         description: The tag of an existing GitHub Release to attach the bundles to.
         type: string
         default: ''
+  # Every pull request runs this workflow, so that `bundle-green` always reports
+  # and can be a required check. Whether the bundles are built is decided by
+  # the `changes` job below, not by a `paths` filter here: a filtered-out
+  # workflow reports nothing, and a required check that never reports holds the
+  # pull request forever.
   pull_request:
     branches: [main, 'feat/**']
-    # Only what decides how the bundle is made: the app's package and its
-    # packaging config, the addon it runs the server in and the crates that
-    # make that addon, the lockfiles, and the scripts that build and check it.
-    # A change to the explorer or the server is built and tested by CI, and the
-    # Release workflow bundles everything on the way to a release.
-    paths:
-      - frontend/packages/apps/desktop/**
-      - frontend/pnpm-lock.yaml
-      - frontend/pnpm-workspace.yaml
-      - backend/crates/apps/coffret-napi/**
-      - backend/crates/apps/coffret-desktop-core/**
-      - backend/Cargo.lock
-      - Makefile
-      - scripts/desktop.sh
-      - scripts/check-desktop-bundle.sh
-      - scripts/workspace-version.sh
-      - .github/workflows/bundle.yml
   workflow_dispatch:
     inputs:
       ref:
@@ -45,8 +33,40 @@ on:
         required: true
 
 jobs:
+  # On a pull request, whether it changes how the bundle is made: the app's
+  # package and its packaging config, the addon it runs the server in and the
+  # crates that make that addon, the lockfiles, and the scripts that build and
+  # check it. A change to the explorer or the server is built and tested by CI,
+  # and the Release workflow bundles everything on the way to a release.
+  changes:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      bundle: ${{ steps.diff.outputs.bundle }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only "$BASE...$HEAD" | grep -qE '^(frontend/packages/apps/desktop/|frontend/pnpm-lock\.yaml$|frontend/pnpm-workspace\.yaml$|backend/crates/apps/coffret-napi/|backend/crates/apps/coffret-desktop-core/|backend/Cargo\.lock$|Makefile$|scripts/desktop\.sh$|scripts/check-desktop-bundle\.sh$|scripts/workspace-version\.sh$|\.github/workflows/bundle\.yml$)'; then
+            echo bundle=true >> "$GITHUB_OUTPUT"
+          else
+            echo bundle=false >> "$GITHUB_OUTPUT"
+          fi
+
   bundle:
     name: bundle (${{ matrix.name }})
+    needs: changes
+    # Called by the Release workflow or run by hand, `changes` is skipped and
+    # the bundles are always built.
+    if: ${{ !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -176,3 +196,16 @@ jobs:
           name: coffret-${{ matrix.name }}
           path: ${{ env.OUT_DIR }}
           if-no-files-found: error
+
+  # The one check of this workflow that `main` requires: it fails when any job
+  # above failed or was cancelled, and passes when the bundles were built or
+  # had no reason to be. See ci.yml's `all-green`.
+  bundle-green:
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [changes, bundle]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
