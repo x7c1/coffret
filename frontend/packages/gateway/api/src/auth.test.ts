@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { checkSession, launch } from './auth';
+import { checkSession, launch, revokeSession } from './auth';
 import { dropToken, onSessionEnding } from './credential';
 import { isRefusal } from './refusal';
 
@@ -73,4 +73,29 @@ it('asks about a session with the token being asked about', async () => {
   });
   expect(made[0].url).toBe('/auth/session');
   expect(made[0].init.headers).toEqual({ Authorization: `Bearer ${'c'.repeat(43)}` });
+});
+
+// LA-16: a session is revoked with its own token, which need not be the one
+// held, and a refusal of that is the caller's to read.
+it('revokes a session with its own token', async () => {
+  const made = recording(() => new Response(null, { status: 204 }));
+
+  await expect(revokeSession('c'.repeat(43))).resolves.toBeUndefined();
+  expect(made).toHaveLength(1);
+  expect(made[0].url).toBe('/auth/session/revoke');
+  expect(made[0].init.method).toBe('POST');
+  expect(made[0].init.headers).toEqual({ Authorization: `Bearer ${'c'.repeat(43)}` });
+
+  recording(() =>
+    Response.json({ error: 'authentication_required', message: 'gone' }, { status: 401 }),
+  );
+  const heard = vi.fn();
+  const stop = onSessionEnding(heard);
+  try {
+    const thrown = await revokeSession('c'.repeat(43)).catch((refusal: unknown) => refusal);
+    expect(isRefusal(thrown) && thrown.kind).toBe('authentication_required');
+  } finally {
+    stop();
+  }
+  expect(heard).not.toHaveBeenCalled();
 });

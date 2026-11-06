@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import { ORIGIN, TOKEN } from './page.testing';
 
-import { dropToken, holdToken, onSessionEnding, withdrawAnswers } from './credential';
+import { dropToken, holdToken, onSessionEnding, renewToken, withdrawAnswers } from './credential';
 import { apiUrl, asked, askedForJson, ForeignUrl, sentForJson } from './request';
 import { isRefusal } from './refusal';
 
@@ -164,6 +164,47 @@ it('says when an answer ended the session or found the Library locked', async ()
     'ended:server_unavailable',
     'locked:library_locked',
   ]);
+});
+
+// LA-18: a session renewed under a new token goes on: an answer in flight
+// under the token before is still handed over, and that token being refused
+// once it was let go of does not end the session its successor holds.
+it('keeps the session through a renewal of its token', async () => {
+  const RENEWED = 'r'.repeat(43);
+  let answer: (response: Response) => void = () => undefined;
+  const sent: string[] = [];
+  vi.stubGlobal('fetch', (_url: string, init: RequestInit) => {
+    sent.push((init.headers as Record<string, string>).Authorization);
+    return new Promise<Response>((resolve) => (answer = resolve));
+  });
+  const heard = vi.fn();
+  const stop = onSessionEnding(heard);
+  try {
+    const before = askedForJson(apiUrl('list'));
+    renewToken(RENEWED);
+    answer(Response.json({ path: '', folders: [], files: [] }));
+    await expect(before).resolves.toEqual({ path: '', folders: [], files: [] });
+
+    const refusedBefore = askedForJson(apiUrl('list')).catch((refusal: unknown) => refusal);
+    answer(hostRefusal(401, 'authentication_required'));
+    await refusedBefore;
+    // Sent with the renewed token, and refused as such: that is the session
+    // ending.
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(sent).toEqual([`Bearer ${TOKEN}`, `Bearer ${RENEWED}`]);
+
+    heard.mockClear();
+    holdToken(TOKEN);
+    const old = askedForJson(apiUrl('list')).catch((refusal: unknown) => refusal);
+    renewToken(RENEWED);
+    answer(hostRefusal(401, 'authentication_required'));
+    const thrown = await old;
+    expect(isRefusal(thrown) && thrown.kind).toBe('authentication_required');
+    expect(heard).not.toHaveBeenCalled();
+  } finally {
+    stop();
+    holdToken(TOKEN);
+  }
 });
 
 // A mutation refused because the session ended or the Library locked stays

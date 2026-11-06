@@ -20,7 +20,7 @@ import { CoffretServer } from './server';
 export const setting: Environment = fromEnvironment();
 
 /** What a tab with no session shows in place of the Library. */
-export const NO_SESSION = /This tab holds no session with the explorer/;
+export const NO_SESSION = /The explorer holds no session/;
 
 /**
  * Opens the explorer in `page`, the way a person does: by opening the launch file the

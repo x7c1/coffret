@@ -341,7 +341,7 @@ type Picture =
  * where there is no path or it was refused.
  *
  * Asked for rather than pointed at, as the reader's pages are: the request
- * carries the tab's session, which an `<img src>` would not. Let go of when the
+ * carries the page's session, which an `<img src>` would not. Let go of when the
  * path changes — a focus walking down a list asks for each row it passes and
  * keeps only the last — and the URL revoked with it. A refusal draws the
  * placeholder: the pane has nothing to say about a preview that did not come
