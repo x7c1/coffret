@@ -531,8 +531,9 @@ function typing(target: EventTarget | null): boolean {
 }
 
 /**
- * The tree's keyboard shortcuts, as `?` lists them: what the tree and the
- * reader bind (see `TreeTable` and `ReaderView`), written here once.
+ * The tree's keyboard shortcuts, as `?` lists them: what the tree, the
+ * reader and the filter's field bind (see `TreeTable`, `ReaderView` and
+ * `FilterField`), written here once.
  */
 export const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['↑ ↓', 'move'],
@@ -542,6 +543,7 @@ export const SHORTCUTS: readonly (readonly [string, string])[] = [
   ['Esc', 'close the reader, or go to the parent'],
   ['Shift ↑ ↓, Shift / ⌘ (Ctrl) click', 'select several'],
   ['Right-click', 'actions'],
+  ['/, ⌘ (Ctrl) F', 'filter the tree by name'],
   ['?', 'show these keys'],
 ];
 

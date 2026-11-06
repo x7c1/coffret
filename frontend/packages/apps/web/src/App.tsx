@@ -63,6 +63,19 @@ import { systemFilesLine, type SystemFile } from './systemFiles';
 import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
+import {
+  askOf,
+  drawnIn,
+  FILTERING,
+  filterFailedLine,
+  filteredOpen,
+  matchLine,
+  NO_FILTER,
+  shapeOf,
+  unfiltered,
+  type FilterSettings,
+  type FilterShape,
+} from './filter';
 import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { ChooseFolder } from './ChooseFolder';
@@ -126,9 +139,10 @@ import {
   type TreeRow,
   type TreeState,
 } from './tree';
-import { opened, TreeTable } from './TreeTable';
+import { opened, TreeTable, type FilterLine } from './TreeTable';
 import { heldBy } from './turns';
 import { unmappedLine, type Tried } from './unmapped';
+import { useFilter } from './useFilter';
 import { useListings } from './useListings';
 import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
@@ -154,6 +168,11 @@ import { said, useAsked, type Asked } from './useAsked';
  * the path it lands under before anything is sent. "New folder…" prepares the
  * path an add is to land under, held by this page alone and drawn as not in
  * the Library yet until one does (see [`prospective`](./prospective)).
+ *
+ * The tree can be filtered by a name, by the most recent books, or by both,
+ * from the header's search field: while a filter is on the tree is drawn from
+ * the server's answer of which rows it keeps (see [`treeRows`](./tree)), and
+ * turning it off brings back the tree as it stood before.
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -301,6 +320,21 @@ export function App() {
   }, [tree.expanded, view.folder, focusedFolder]);
   const listings = useListings(shown);
   const reloadListings = listings.reload;
+  // What the tree is filtered by, as the header's field and its panel are set,
+  // and the server's answer for it (see [`useFilter`](./useFilter)). Not in the
+  // URL: a reload forgets it.
+  const [filterSet, setFilterSet] = useState<FilterSettings>(NO_FILTER);
+  const filterAsk = useMemo(() => askOf(filterSet), [filterSet]);
+  const filter = useFilter(filterAsk);
+  const reloadFilter = filter.reload;
+  // What the tree is drawn from while a filter is on and answered; `null`
+  // draws the folders open in the Library, as before it was turned on — and
+  // so does a filter whose first answer is still out.
+  const filterAnswer = filter.answer;
+  const shape = useMemo<FilterShape | null>(
+    () => (filterAsk === null || filterAnswer === null ? null : shapeOf(filterAnswer)),
+    [filterAsk, filterAnswer],
+  );
   const heldListing = listings.listing;
   const rootState: Asked<Listing> = heldListing('') ?? LOADING;
   // The folder the screen's actions are about.
@@ -317,8 +351,13 @@ export function App() {
   const reloadFolders = folders.reload;
   // Every listing the tree holds, since what changed one row's state can
   // change the folders above it too: a folder is on this device whole only
-  // while every file below it is.
-  const reloadListing = useCallback(() => reloadListings(), [reloadListings]);
+  // while every file below it is. And the filter, where one is on: whatever
+  // changed the listings — a drop carried in, a move, a deletion, a refresh —
+  // may have changed which rows it keeps.
+  const reloadListing = useCallback(() => {
+    reloadListings();
+    reloadFilter();
+  }, [reloadListings, reloadFilter]);
   // One folder's listing and the ones above it, which answer for whether it is
   // here whole.
   const reloadAbove = useCallback(
@@ -1576,6 +1615,39 @@ export function App() {
     }
   }, [view]);
 
+  // The filter turned on, answered anew, or turned off. On, the tree is
+  // opened down to every row it kept and to no further — a kept folder drawn
+  // closed — and the tree as it stood is kept aside, the focus staying only on
+  // a row still drawn. Answered anew, the kept folders somebody opened that are
+  // still kept stay open. Off, the tree as it stood comes back, the focus left
+  // on the row it was on, with the folders above it opened (see
+  // [`unfiltered`](./filter)).
+  const normalTree = useRef<TreeState | null>(null);
+  const shapeDrawn = useRef<FilterShape | null>(null);
+  useEffect(() => {
+    const before = shapeDrawn.current;
+    shapeDrawn.current = shape;
+    if (before === shape) {
+      return;
+    }
+    const held = treeNow.current;
+    if (shape === null) {
+      const normal = normalTree.current;
+      normalTree.current = null;
+      if (normal !== null) {
+        changeTreeNow.current(unfiltered(normal, held));
+      }
+      return;
+    }
+    if (before === null) {
+      normalTree.current = held;
+    }
+    changeTreeNow.current({
+      focus: held.focus !== null && drawnIn(shape, held.focus) ? held.focus : null,
+      expanded: filteredOpen(shape, before === null ? new Set() : held.expanded),
+    });
+  }, [shape]);
+
   // The rows of the tree, top to bottom.
   const rows = useMemo(
     () =>
@@ -1585,8 +1657,9 @@ export function App() {
         prospective,
         stranded,
         incoming: incomingFiles,
+        ...(shape === null ? {} : { filter: shape }),
       }),
-    [heldListing, tree.expanded, prospective, stranded, incomingFiles],
+    [heldListing, tree.expanded, prospective, stranded, incomingFiles, shape],
   );
 
   // A folder the Library held that a listing shows is gone — a deletion took it
@@ -1620,6 +1693,8 @@ export function App() {
     },
     [view.folder, sheeted, go],
   );
+  const changeTreeNow = useRef(changeTree);
+  changeTreeNow.current = changeTree;
 
   // `↑`/`↓` while the sheet is open: from a file, on to the file before or
   // after it in reading order, folder rows passed over; from a folder row, open
@@ -1793,6 +1868,27 @@ export function App() {
   // let go of by `Escape` or by a choice: the keys go back to the tree, as they
   // do out of any menu opened over it.
   const keysBack = useCallback(() => treeArea.current?.focus(), []);
+  // `↓` or `Enter` in the filter's input: the keys to the tree, on its first row.
+  const filterToTree = useCallback(() => {
+    const first = rows.find((row) => row.kind !== 'note');
+    if (first !== undefined && tree.focus !== first.key) {
+      changeTree({ ...tree, focus: first.key });
+      setSelection(NOTHING_SELECTED);
+    }
+    treeArea.current?.focus();
+  }, [rows, tree, changeTree]);
+  // The line over the rows while a filter is on, and Clear on it: the name
+  // and Recent both off.
+  const clearFilter = useCallback(() => setFilterSet((held) => ({ ...held, name: '', recentOn: false })), []);
+  const filterLine: FilterLine | null =
+    filterAsk === null
+      ? null
+      : {
+          text: filterAnswer === null ? FILTERING : matchLine(filterAnswer),
+          failed: filter.failed === null ? null : filterFailedLine(filter.failed),
+          onClear: clearFilter,
+          onRetry: reloadFilter,
+        };
 
   // Closing the sheet leaves the focus and the folder where they are.
   const closeSheet = useCallback(() => go({ folder: view.folder, open: null }), [go, view.folder]);
@@ -1995,6 +2091,9 @@ export function App() {
         moving={moving}
         onMoveToRoot={() => moving !== null && moveRows(moving, '')}
         locked={locked}
+        filter={filterSet}
+        onFilter={setFilterSet}
+        onFilterToTree={filterToTree}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -2098,6 +2197,8 @@ export function App() {
                       areaRef={treeArea}
                       escapeLetsGo={!sheeted}
                       onReadOn={sheeted ? readOnward : undefined}
+                      filtered={filterLine}
+                      added={shape !== null && filterSet.recentOn}
                     />
                     <DetailsPane
                       selected={selected}

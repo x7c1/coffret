@@ -39,6 +39,33 @@
     "refused": [],
     "removed": 2
   },
+  "filter": {
+    "rows": [
+      {
+        "kind": "file",
+        "path": "albums/blocked"
+      },
+      {
+        "kind": "file",
+        "path": "albums/cover.png"
+      },
+      {
+        "kind": "file",
+        "path": "albums/dropped.jpg"
+      },
+      {
+        "kind": "file",
+        "path": "albums/notes.txt"
+      },
+      {
+        "deposited_at": "2026-01-02T00:00:00Z",
+        "kind": "folder",
+        "path": "books"
+      }
+    ],
+    "total": 5,
+    "truncated": false
+  },
   "folders": {
     "folders": [
       "albums",

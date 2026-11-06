@@ -10,6 +10,7 @@
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
+import type { FilterShape } from './filter';
 import { parentOf, prospectiveIn } from './prospective';
 import { inLibraryOrder } from './stranded';
 import type { Asked } from './useAsked';
@@ -91,6 +92,16 @@ export interface FolderRow {
    * names yet (see {@link IncomingFile}).
    */
   incoming?: boolean;
+  /**
+   * In a filtered tree, a folder drawn only because a row the filter kept
+   * stands under it: drawn dimmed, to show where the match stands.
+   */
+  above?: boolean;
+  /**
+   * In a filtered tree, a folder the filter kept, with when its book was
+   * added — `null` where it holds no file directly (spec: LA-42).
+   */
+  added?: string | null;
 }
 
 /**
@@ -149,6 +160,11 @@ export interface TreeSource {
   stranded: readonly string[];
   /** The files this page is adding, which no listing may name yet. */
   incoming?: readonly IncomingFile[];
+  /**
+   * The filter the tree is drawn from, while one is on (see
+   * [`shapeOf`](./filter)); the folders open in the Library otherwise.
+   */
+  filter?: FilterShape;
 }
 
 /**
@@ -163,6 +179,14 @@ export interface TreeSource {
  *
  * Nothing for the root itself while its listing is out or refused: that is the
  * whole tree, and the screen says so in its place.
+ *
+ * While a filter is on (`filter`), the folders above the rows it kept show
+ * only the way down to them: each kept row, and the folders above one (drawn
+ * `above`), open where `expanded` says so, as any folder is. A kept folder is
+ * an ordinary folder, its rows all shown once it is opened; a kept file is
+ * shown without the other files of its folder. The folders this page is
+ * preparing or adding, and the stranded ones, are not drawn above a match:
+ * the filter is the Library's answer, and they are not the Library's.
  */
 export function treeRows(source: TreeSource): TreeRow[] {
   const rows: TreeRow[] = [];
@@ -172,7 +196,11 @@ export function treeRows(source: TreeSource): TreeRow[] {
   // either.
   const strandedAbove = new Set(source.stranded.flatMap(ancestry));
   const incoming = source.incoming ?? [];
-  const walk = (folder: string, depth: number) => {
+  const filter = source.filter;
+  // `above` is whether the folder walked stands above a row the filter kept,
+  // and so shows only the rows on the way to one — not inside a kept folder,
+  // whose rows are all shown, as they are without a filter.
+  const walk = (folder: string, depth: number, above = false) => {
     const asked = source.listing(folder);
     if (asked === undefined || asked.status !== 'ready') {
       if (folder !== '') {
@@ -187,6 +215,10 @@ export function treeRows(source: TreeSource): TreeRow[] {
       return;
     }
     const listing = asked.value;
+    if (filter !== undefined && above) {
+      walkAbove(listing, depth, filter);
+      return;
+    }
     const arriving = incomingIn(listing, incoming);
     for (const child of foldersIn(listing, source.prospective, strandedAbove, arriving.folders)) {
       const named = listing.folders.some((one) => one.path === child.path);
@@ -227,7 +259,50 @@ export function treeRows(source: TreeSource): TreeRow[] {
       });
     }
   };
-  walk('', 0);
+  // A folder above a match: its folders that are kept or stand above a kept
+  // row, and its files that are kept — all of them where it is the Library
+  // root answered as a book.
+  const walkAbove = (listing: Listing, depth: number, shape: FilterShape) => {
+    for (const child of listing.folders) {
+      const matched = shape.answered.get(folderKey(child.path));
+      if (matched === undefined && !shape.above.has(child.path)) {
+        continue;
+      }
+      const expanded = source.expanded.has(child.path);
+      rows.push({
+        kind: 'folder',
+        key: folderKey(child.path),
+        path: child.path,
+        name: child.name,
+        depth,
+        folder: child,
+        in: listing,
+        expanded,
+        expandable: true,
+        prospective: false,
+        stranded: false,
+        ...(matched === undefined ? { above: true } : { added: matched.deposited_at ?? null }),
+      });
+      if (expanded) {
+        walk(child.path, depth + 1, matched === undefined);
+      }
+    }
+    const everyFile = listing.path === '' && shape.rootBook;
+    for (const file of listing.files) {
+      if (everyFile || shape.answered.has(fileKey(file.path))) {
+        rows.push({
+          kind: 'file',
+          key: fileKey(file.path),
+          path: file.path,
+          name: file.name,
+          depth,
+          file,
+          in: listing,
+        });
+      }
+    }
+  };
+  walk('', 0, filter !== undefined);
   return rows;
 }
 
