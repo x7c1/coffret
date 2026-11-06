@@ -1361,7 +1361,7 @@ export function App() {
   // Then the confirmation, which is [`chooseAndAdd`](./packChoice): a drop that
   // cannot be sent at all is refused without a question, and every other one
   // is asked about — where it lands, and for a drop holding a folder whether
-  // it goes as One Pack or as separate files. Where it lands is read against
+  // it goes as Packs or as separate files. Where it lands is read against
   // that folder's listing, the tree's where it holds one and asked for where
   // not, and asked afresh after a folder on this device was chosen for it.
   //

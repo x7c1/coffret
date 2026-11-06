@@ -74,7 +74,7 @@ describe('summarize', () => {
     expect(summary.loose).toBe(1);
     expect(summary.files).toBe(6);
     expect(existsLine(summary.folders[1])).toMatch(/^vol-2 already exists here — /);
-    expect(STORE_CHOICES.pack.label).toBe('One Pack');
+    expect(STORE_CHOICES.pack.label).toBe('Packs');
     expect(STORE_CHOICES.one_by_one.label).toBe('Separate files');
   });
 

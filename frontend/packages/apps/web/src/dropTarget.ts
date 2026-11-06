@@ -61,7 +61,7 @@ export function dropOutcome(target: DropTarget): DropOutcome {
  * run one at a time (spec: PK-7), so this one waits.
  */
 export const PACKED_AFTER =
-  'a book is being packed already, so a folder added as One Pack now is packed after it';
+  'a book is being packed already, so a folder added as Packs now is packed after it';
 
 /** What letting go of files over `landing` does: the confirmation comes up for that folder. */
 export function dropToAdd(landing: string): string {
