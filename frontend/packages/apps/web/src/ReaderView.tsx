@@ -242,7 +242,7 @@ export function ReaderView({
 
   // What is kept ready follows the focus: the picture drawn and the pages
   // around it, and nothing else — a long folder walked from end to end does
-  // not leave the tab holding every page of it.
+  // not leave the page holding every picture of it.
   //
   // Keyed by the list's contents, spelled as one string, since the list itself
   // is a new array on every render and the effect is about which pages.
@@ -309,7 +309,7 @@ export function ReaderView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [escapable, onClose]);
 
-  // Closing the reader is this tab dropping every picture it held.
+  // Closing the reader is this page dropping every picture it held.
   useEffect(() => {
     // React mounts an effect twice in development, and what holds the pictures
     // outlives both mounts, so the first one's teardown must not leave the

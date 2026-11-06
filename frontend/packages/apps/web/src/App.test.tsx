@@ -1457,7 +1457,7 @@ describe('the locked Library', () => {
   }
 
   // One locked state, in the main area and the Activity row, and nothing in
-  // a refusal's words: no "try again", no tab, no bar under the screen.
+  // a refusal's words: no "try again", no tab or window, no bar under the screen.
   it('draws one locked state in place of the tree, with Unlock in the main area and the Activity row', async () => {
     answers = library({ '': ['comics/'] });
     lockedServer();

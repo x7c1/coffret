@@ -334,7 +334,7 @@ export function App() {
   //
   // What the server is doing on its own is asked again with them, although it
   // is not a region and shows no refusal of its own. The question a page asks
-  // as it comes up can fail like any other, and a tab that read that failure as
+  // as it comes up can fail like any other, and a page that read that failure as
   // an answer would never again say what is running — with nothing on the
   // screen to press about it, because the sentence a failed work request
   // would have written is deliberately not shown. The three below fail with it
@@ -488,7 +488,7 @@ export function App() {
   }, [refusedLocked, prompting, unlock]);
   // Whether the Library has anything this device has not caught up with, which
   // is what draws the sync icon as waiting. Looked at as the page comes up,
-  // when the tab comes back in front (below), and every few minutes while it
+  // when the page comes back in front (below), and every few minutes while it
   // is shown — and never while a catch-up runs or the Library is locked; that
   // schedule is [`RemoteHeadLooks`](./remoteHead). A look moves nothing and
   // takes no key, so it keeps nothing unlocked (spec: DK-4).
@@ -1518,7 +1518,7 @@ export function App() {
   // what was dropped — each said as what it is (see
   // [`nothingAddedLine`](./drop)). Nothing was sent, so nothing else on the
   // screen is going to change — and the line the drop put up would stand
-  // saying the drop was being read for as long as the tab was open.
+  // saying the drop was being read for as long as the page was open.
   const unreadable = useCallback((cause: unknown) => {
     setAdding(null);
     setNotice(nothingAddedLine(cause));

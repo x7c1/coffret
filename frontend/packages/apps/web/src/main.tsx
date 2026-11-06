@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Explorer } from './Explorer';
-import { establish, shelf, takeTicket } from './session';
+import { desktopSession, establish, shelf, takeTicket } from './session';
 import { SHOWN_HERE } from './ShownAppearance';
 
 // The ticket comes out of the address before anything else happens, the
@@ -23,6 +23,6 @@ if (!root) {
 }
 createRoot(root).render(
   <StrictMode>
-    <Explorer opened={opened} shelved={shelved} />
+    <Explorer opened={opened} shelved={shelved} desktop={desktopSession()} />
   </StrictMode>,
 );

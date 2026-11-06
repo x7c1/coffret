@@ -2,10 +2,10 @@
 //
 // The explorer runs in the app's own window, so a drop onto it can be handed
 // over as the paths of what was let go of rather than read into the page and
-// sent as bytes. This exposes one function to the page, `coffretDesktop.
-// takeDrop`: given the dropped `File`s, it maps each to its path on this device
-// with `webUtils.getPathForFile` and asks the main process to walk them over
-// the one channel the app listens on. Files picked with the explorer's **+**
+// sent as bytes. This exposes `coffretDesktop.takeDrop` to the page: given the
+// dropped `File`s, it maps each to its path on this device with
+// `webUtils.getPathForFile` and asks the main process to walk them over the one
+// channel the app answers. Files picked with the explorer's **+**
 // go the same way; a folder picked whole arrives as every file under it, each
 // carrying its way down from the folder (`webkitRelativePath`), and is handed
 // over as the folder itself, so that the walk names its files relative to
@@ -13,10 +13,19 @@
 // drop handle and each file's path relative to the folder it was dropped from;
 // the paths themselves never reach the page.
 //
+// It also carries the explorer's session, one way in each direction and with
+// no answer either way. `coffretDesktop.onTicket` registers a listener the
+// main process's fresh tickets are relayed to: the main process sends one on
+// its own timer ahead of the page's token's expiry, and the page exchanges it
+// for a new token. `coffretDesktop.sessionEnded` tells the main process that
+// the page holds no session, which loads the window afresh where it can. The
+// page has no call that asks for a ticket.
+//
 // It runs sandboxed and isolated like every page of the app, so it is a
 // CommonJS script that reaches nothing but Electron's renderer modules: the
-// channel's name is written out here rather than imported, and `drops.ts` holds
-// the main process's copy of it, which its cases hold to this one.
+// channels' names are written out here rather than imported, and `drops.ts`
+// and `renewal.ts` hold the main process's copies of them, which their cases
+// hold to these.
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- a sandboxed preload is CommonJS and can require only Electron's own modules
 import electron = require('electron');
@@ -25,6 +34,12 @@ const { contextBridge, ipcRenderer, webUtils } = electron;
 
 /** The one channel the main process takes a drop on. */
 const TAKE_DROP = 'coffret:take-drop';
+
+/** The channel the main process hands a fresh ticket over on. */
+const FRESH_TICKET = 'coffret:fresh-ticket';
+
+/** The channel the page says over that it holds no session. */
+const SESSION_ENDED = 'coffret:session-ended';
 
 /**
  * What Electron puts before the main process's own sentence when a call over a
@@ -59,5 +74,20 @@ contextBridge.exposeInMainWorld('coffretDesktop', {
       const message = refused instanceof Error ? refused.message : String(refused);
       throw new Error(message.replace(INVOKE_REFUSED, ''));
     }
+  },
+  onTicket(listener: (ticket: string) => void): () => void {
+    // The page is handed the ticket alone, never the event it came in.
+    const relay = (_event: unknown, ticket: unknown) => {
+      if (typeof ticket === 'string') {
+        listener(ticket);
+      }
+    };
+    ipcRenderer.on(FRESH_TICKET, relay);
+    return () => {
+      ipcRenderer.removeListener(FRESH_TICKET, relay);
+    };
+  },
+  sessionEnded(): void {
+    ipcRenderer.send(SESSION_ENDED);
   },
 });

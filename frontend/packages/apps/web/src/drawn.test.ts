@@ -9,7 +9,7 @@ import { drawnPages, type Fetching } from './drawn';
  *
  * Counted rather than watched: what this module is for is that plaintext stops
  * being reachable, and a page dropped from a map without its URL being revoked
- * is a page the tab still holds. So every case here asks how many were revoked,
+ * is a picture the page still holds. So every case here asks how many were revoked,
  * and which.
  */
 const revoked: string[] = [];
@@ -59,7 +59,7 @@ function held(): { fetching: Fetching; answer: () => void } {
 }
 
 // The cache the reader turns pages out of: the page it already holds is the
-// page it shows, without a second request for bytes this tab has in memory.
+// page it shows, without a second request for bytes this page has in memory.
 it('answers from what it holds rather than asking again', async () => {
   const fetching = answers();
   const drawn = drawnPages(fetching);
@@ -208,7 +208,7 @@ it('keeps nothing asked for in a round a discard has closed, however many have',
   expect(drawn.held('albums/1.png')).toBeUndefined();
 });
 
-// A long folder read end to end would otherwise leave the tab holding every
+// A long folder read end to end would otherwise leave the page holding every
 // page of it.
 it('keeps the window the reader is in and revokes the rest', async () => {
   const drawn = drawnPages(answers());
@@ -221,7 +221,7 @@ it('keeps the window the reader is in and revokes the rest', async () => {
   expect(drawn.held('albums/2.png')).toBe(second);
 });
 
-// Closing the reader is this tab dropping every page it held.
+// Closing the reader is this page dropping every page it held.
 it('revokes what it holds when the reader closes', async () => {
   const drawn = drawnPages(answers());
   const first = await drawn.load('albums/1.png');
