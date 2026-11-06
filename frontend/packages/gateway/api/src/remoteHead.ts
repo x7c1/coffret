@@ -21,7 +21,7 @@ export interface RemoteHead {
  * A look and nothing more: the server reads the names Storage lists and no
  * object, so no key is reached for, and the catalog is not moved — that stays
  * [`refreshCatalog`](./refresh)'s to do when somebody presses it. Nor does it
- * keep the Library unlocked: a tab asking on a timer is not a person.
+ * keep the Library unlocked: a page asking on a timer is not a person.
  */
 export function getRemoteHead(signal?: AbortSignal): Promise<RemoteHead> {
   return askedForJson<RemoteHead>(apiUrl('remote-head'), signal);

@@ -119,7 +119,7 @@ export function useWork(readerOpen: boolean): {
    * Ask once now, whatever the interval is doing.
    *
    * What the screen's one try-again reaches this through. The question a page
-   * asks as it comes up can fail like any other, and a tab whose only ask
+   * asks as it comes up can fail like any other, and a page whose only ask
    * failed would be one that never again says what is running — while offering
    * nothing to press about it, because this is not one of the screen's regions
    * and has no refusal of its own on the screen.
@@ -214,7 +214,7 @@ export function useWork(readerOpen: boolean): {
   // by an answer rather than by a question: a page whose first ask failed has
   // still been told nothing, so the next reason to ask — the reader opening,
   // the screen's try-again — asks afresh instead of reading a failure as an
-  // answer and going quiet for the life of the tab.
+  // answer and going quiet for the life of the page.
   const quietly = () => undefined;
 
   const recheck = useCallback(() => {

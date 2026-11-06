@@ -11,6 +11,7 @@ import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TAKE_DROP } from './drops.js';
+import { FRESH_TICKET, SESSION_ENDED } from './renewal.js';
 
 /** A `File` as the preload reads one: where it is on this device, and its way down from a picked folder. */
 interface Picked {
@@ -32,6 +33,13 @@ function inFolder(path: string, relative: string): Picked {
 
 type TakeDrop = (files: readonly Picked[]) => Promise<unknown>;
 
+/** What the preload exposes to the page. */
+interface Exposed {
+  takeDrop: TakeDrop;
+  onTicket: (listener: (ticket: string) => void) => () => void;
+  sessionEnded: () => void;
+}
+
 /** The preload, loaded once per case, and what it asked the main process. */
 function loaded(answer: () => Promise<unknown> = async () => 'answered') {
   const source = readFileSync(new URL('./preload.cts', import.meta.url), 'utf8');
@@ -40,12 +48,26 @@ function loaded(answer: () => Promise<unknown> = async () => 'answered') {
   }).outputText;
 
   const invoke = vi.fn<(channel: string, paths: string[]) => Promise<unknown>>(async () => answer());
+  const send = vi.fn<(channel: string, ...rest: unknown[]) => void>();
+  type Relay = (event: unknown, ...rest: unknown[]) => void;
+  const listening = new Map<string, Set<Relay>>();
   const exposed = new Map<string, unknown>();
   const electron = {
     contextBridge: {
       exposeInMainWorld: (name: string, api: unknown) => exposed.set(name, api),
     },
-    ipcRenderer: { invoke },
+    ipcRenderer: {
+      invoke,
+      send,
+      on(channel: string, relay: Relay) {
+        const relays = listening.get(channel) ?? new Set<Relay>();
+        relays.add(relay);
+        listening.set(channel, relays);
+      },
+      removeListener(channel: string, relay: Relay) {
+        listening.get(channel)?.delete(relay);
+      },
+    },
     webUtils: { getPathForFile: (file: Picked) => file.path },
   };
   const required = (name: string) => {
@@ -57,12 +79,26 @@ function loaded(answer: () => Promise<unknown> = async () => 'answered') {
   const module = { exports: {} };
   runInNewContext(compiled, { require: required, module, exports: module.exports, Error, Set, Array, String });
 
-  const api = exposed.get('coffretDesktop') as { takeDrop: TakeDrop } | undefined;
+  const api = exposed.get('coffretDesktop') as Exposed | undefined;
   if (api === undefined) {
     throw new Error('the preload exposed nothing as coffretDesktop');
   }
   const handedOver = () => invoke.mock.calls.map(([channel, paths]) => ({ channel, paths }));
-  return { takeDrop: api.takeDrop, handedOver };
+  /** What the main process sending `args` over `channel` comes to. */
+  const mainSends = (channel: string, ...args: unknown[]) => {
+    for (const relay of listening.get(channel) ?? []) {
+      relay({ sender: 'the main process' }, ...args);
+    }
+  };
+  return {
+    api,
+    takeDrop: api.takeDrop,
+    handedOver,
+    invoke,
+    send,
+    mainSends,
+    listeners: (channel: string) => listening.get(channel)?.size ?? 0,
+  };
 }
 
 describe('the explorer preload, handing picked files over by path', () => {
@@ -117,5 +153,50 @@ describe('the explorer preload, handing picked files over by path', () => {
       throw new Error(`Error invoking remote method '${TAKE_DROP}': Error: no Library is open`);
     });
     await expect(takeDrop([alone('/a.jpg')])).rejects.toThrow(/^no Library is open$/);
+  });
+});
+
+// LA-17, LA-18: the page's session is carried one way in each direction. The
+// main process hands a fresh ticket over on its own, and the page listens;
+// the page says its session ended, and is answered nothing. No call the page
+// can make asks for a ticket.
+describe('the explorer preload, carrying the session', () => {
+  it('exposes nothing but taking a drop, listening for tickets, and saying the session ended', () => {
+    const { api } = loaded();
+    expect(Object.keys(api).sort()).toEqual(['onTicket', 'sessionEnded', 'takeDrop']);
+  });
+
+  it('relays a ticket the main process sends to the page, alone, until it stops listening', () => {
+    const { api, mainSends, listeners, invoke, send } = loaded();
+    const heard: unknown[][] = [];
+    const stop = api.onTicket((...args: unknown[]) => heard.push(args));
+    expect(listeners(FRESH_TICKET)).toBe(1);
+
+    mainSends(FRESH_TICKET, 'f'.repeat(43));
+    mainSends(FRESH_TICKET, { not: 'a ticket' });
+    expect(heard).toEqual([['f'.repeat(43)]]);
+
+    stop();
+    expect(listeners(FRESH_TICKET)).toBe(0);
+    mainSends(FRESH_TICKET, 'g'.repeat(43));
+    expect(heard).toHaveLength(1);
+    // Listening asks the main process nothing.
+    expect(invoke).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('says the session ended one way, with nothing in it, and is answered nothing', () => {
+    const { api, invoke, send } = loaded();
+    expect(api.sessionEnded()).toBeUndefined();
+    expect(send.mock.calls).toEqual([[SESSION_ENDED]]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('invokes the main process over the drop channel alone, whatever the page calls', async () => {
+    const { api, invoke } = loaded();
+    api.onTicket(() => undefined)();
+    api.sessionEnded();
+    await api.takeDrop([alone('/a.jpg')]);
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([TAKE_DROP]);
   });
 });
