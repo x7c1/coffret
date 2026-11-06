@@ -30,8 +30,8 @@ versions and are not bumped.
    by `.github/scripts/generate-changelog.sh`). See
    [Release summary](#release-summary).
 3. Write the summary. `Validate Release PR` fails while it is unwritten, which
-   blocks the merge once `validate-title` is a required check (see
-   [Release automation setup](#release-automation-setup)).
+   blocks the merge, since `validate-title` is a required check (see
+   [Required checks](#required-checks)).
 4. Merge the PR when you want to cut the release. The `Release` workflow
    then runs after CI completes on `main`, creates the `vX.Y.Z` tag, and
    publishes a GitHub Release carrying that summary plus links back to the
@@ -121,8 +121,8 @@ single-step bumps with the lower components reset are allowed:
 | v0.3.10 | `Release v2.0.0` | ❌ major skip |
 
 The check is `validate-title`. It passes on every PR that is not a release
-PR, so it can be listed in the repository's required checks; until it is, a
-failing title is reported but does not block the merge.
+PR, and it is one of the required checks of `main` (see
+[Required checks](#required-checks)), so a failing title blocks the merge.
 
 ## Branch naming
 
@@ -209,8 +209,8 @@ fails if any of it does not hold:
 - **Pull requests.** A pull request that changes how the bundle is made —
   the desktop app's package, the addon's crates (`coffret-napi`,
   `coffret-desktop-core`), the lockfiles, the `Makefile`, the scripts that
-  build and check the bundle, or `bundle.yml` (the `paths` filter in
-  `bundle.yml`) — runs
+  build and check the bundle, or `bundle.yml` (the `changes` job in
+  `bundle.yml` decides) — runs
   the same builds and uploads each platform's bundle as a workflow artifact
   (`coffret-macos-aarch64`, `coffret-linux-x86_64`), so a broken bundle is
   caught before a release depends on it, and reviewers can download and try
@@ -299,7 +299,6 @@ the checks run normally.
    **Workflows: Read and write** if a release PR may carry changes to files
    under `.github/workflows/` — and add it as the Actions secret
    `RELEASE_PAT`.
-2. Optionally, add `validate-title` to the required checks of `main`.
 
 Until `RELEASE_PAT` exists, `Create Release PR` ends green with a notice
 saying the secret is missing and that no release PR was made. There is no
@@ -310,3 +309,25 @@ release PR without waiting for the next push.
 The `Release` and `Bundle` workflows use the default `GITHUB_TOKEN`: they run
 after a merge a person made, and no workflow here listens to tag pushes or
 Release events, so nothing has to be triggered by what they create.
+
+## Required checks
+
+`main` requires one check per workflow that runs on every pull request, and
+nothing else:
+
+| Check | Workflow | Passes when |
+|---|---|---|
+| `all-green` | `ci.yml` | every CI job passed |
+| `bundle-green` | `bundle.yml` | the bundles were built and checked, or the pull request does not change how they are made |
+| `validate-title` | `validate-release-pr.yml` | the title is valid, or the pull request is not a release PR |
+
+The individual jobs are not required. `all-green` and `bundle-green` fail when
+any job of their workflow failed or was cancelled, so a failure anywhere blocks
+the merge — including for auto-merge, which waits only for required checks. A
+job that a pull request has no reason to run is skipped, and a skipped job does
+not fail them. Requiring a job directly would hold every pull request that
+skips it, since a required check that never reports is waited for forever.
+
+A new CI job goes into the `needs` of `all-green`; the required checks stay as
+they are. A new workflow that runs on pull requests gets a gathering job of its
+own, added to the required checks.
