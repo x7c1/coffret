@@ -1,6 +1,6 @@
 import { cleanup, createEvent, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Fill, ListedFile, ListedFolder, Listing } from '@coffret/api';
 
@@ -12,7 +12,7 @@ import { TRY_AGAIN } from './Region';
 import { NOTHING_SELECTED, type Selection } from './selection';
 import { ancestry, fileKey, folderKey, treeRows, type TreeState } from './tree';
 import { COLOR } from './theme';
-import { EMPTY_MAPPED_ROOT, FOLDER_SIZE_TITLE, ON_THIS_DEVICE, TreeTable } from './TreeTable';
+import { EMPTY_MAPPED_ROOT, FOLDER_SIZE_TITLE, ON_THIS_DEVICE, ROWS_BEYOND, TreeTable } from './TreeTable';
 
 afterEach(cleanup);
 
@@ -287,7 +287,7 @@ describe('one tree', () => {
   });
 
   // Each value column is as wide as the widest of its heading and its values.
-  it('draws each value column as wide as its widest string on show', () => {
+  it('draws each value column as wide as its widest string among the rows', () => {
     mount(listing({ files: [file('a.png', { size: 999_900_000 }), file('b.png', { size: 12 })] }));
     const widths = [...document.querySelectorAll('tbody')[0].closest('table')!.querySelectorAll('col')].map(
       (col) => (col as HTMLElement).style.width,
@@ -1255,3 +1255,217 @@ function resolved(hex: string): string {
   probe.style.color = hex;
   return probe.style.color;
 }
+
+describe('only the rows on show are drawn', () => {
+  // jsdom lays nothing out, so the tree is given the height of ten rows and a
+  // scroll position that holds what is set on it. The block over the rows
+  // measures 0 there, and a row the 32px asked for.
+  const ROW = 32;
+  const AREA = 10 * ROW;
+  let scrolled: WeakMap<Element, number>;
+  beforeEach(() => {
+    scrolled = new WeakMap();
+    Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return scrolled.get(this) ?? 0;
+      },
+      set(this: HTMLElement, to: number) {
+        scrolled.set(this, Math.max(0, to));
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.getAttribute('role') === 'tree' ? AREA : 0;
+      },
+    });
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTop;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).clientHeight;
+  });
+
+  /** The name of the file at `index` among `count` pages: zero-padded, so they list in order. */
+  const page = (index: number) => `p${String(index).padStart(4, '0')}.png`;
+  const pages = (count: number, over: (index: number) => Partial<ListedFile> = () => ({}), at = 'albums') =>
+    Array.from({ length: count }, (_, index) => file(page(index), over(index), at));
+
+  /** albums/ open with `count` pages under it: the albums row at 0, page n at n + 1. */
+  function mountPages(count: number, options: Options = {}) {
+    return mount(listing({ files: pages(count) }), options);
+  }
+
+  /** The heights of the spacers above and below the rows drawn, 0 where there is none. */
+  function spacers(): { above: number; below: number } {
+    const all = [...document.querySelectorAll('tbody tr')];
+    const height = (row: Element | undefined) =>
+      row !== undefined && row.getAttribute('aria-hidden') === 'true'
+        ? parseFloat((row.querySelector('td') as HTMLElement).style.height)
+        : 0;
+    return { above: height(all[0]), below: height(all[all.length - 1]) };
+  }
+
+  function scrollTo(tree: HTMLElement, top: number) {
+    tree.scrollTop = top;
+    fireEvent.scroll(tree);
+  }
+
+  function focusedName(): string | null {
+    return document.querySelector('tbody tr[data-focused]')?.getAttribute('title') ?? null;
+  }
+
+  it('draws a bounded number of rows of thousands, and spacers keeping the whole height', () => {
+    mountPages(5000);
+    const names = rowNames();
+    // The ten on show and the rows beyond them below; none above the first.
+    expect(names).toHaveLength(10 + ROWS_BEYOND);
+    expect(names[0]).toBe('albums');
+    expect(names[names.length - 1]).toBe(page(10 + ROWS_BEYOND - 2));
+    expect(spacers()).toEqual({ above: 0, below: (5001 - names.length) * ROW });
+  });
+
+  it('draws the rows the list is scrolled to, and moves the spacers with them', () => {
+    const { tree } = mountPages(5000);
+    scrollTo(tree, 2000 * ROW);
+    const names = rowNames();
+    expect(names).toHaveLength(10 + 2 * ROWS_BEYOND);
+    // Row 2000 is page 1999; the drawn rows start ROWS_BEYOND above it.
+    expect(names[0]).toBe(page(1999 - ROWS_BEYOND));
+    expect(names).toContain(page(1999));
+    expect(names).toContain(page(2008));
+    const { above, below } = spacers();
+    expect(above).toBe((2000 - ROWS_BEYOND) * ROW);
+    expect(above + names.length * ROW + below).toBe(5001 * ROW);
+    // To the end, the last row drawn and no spacer below it.
+    scrollTo(tree, 5001 * ROW - AREA);
+    expect(rowNames()[rowNames().length - 1]).toBe(page(4999));
+    expect(spacers().below).toBe(0);
+  });
+
+  it('reaches a row not drawn with ↓ from the last drawn row, and keeps it three rows from the bottom', () => {
+    // Focused on row 39, then scrolled back to the top: row 39 is the last drawn.
+    const { tree } = mountPages(5000, { focus: fileKey(`albums/${page(38)}`) });
+    scrollTo(tree, 0);
+    expect(rowNames()[rowNames().length - 1]).toBe(page(38));
+    expect(screen.queryByTitle(page(39))).toBeNull();
+    fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    expect(focusedName()).toBe(page(39));
+    // Row 40 ends at 41 rows, and three more below it fill the area to its bottom.
+    expect(tree.scrollTop).toBe((41 + 3) * ROW - AREA);
+  });
+
+  it('reaches a row not drawn with ↑ from the first drawn row, and keeps it three rows from the top', () => {
+    const { tree } = mountPages(5000, { focus: fileKey(`albums/${page(1999 - ROWS_BEYOND)}`) });
+    scrollTo(tree, 2000 * ROW);
+    expect(rowNames()[0]).toBe(page(1999 - ROWS_BEYOND));
+    expect(screen.queryByTitle(page(1998 - ROWS_BEYOND))).toBeNull();
+    fireEvent.keyDown(tree, { key: 'ArrowUp' });
+    expect(focusedName()).toBe(page(1998 - ROWS_BEYOND));
+    expect(tree.scrollTop).toBe((1999 - ROWS_BEYOND - 3) * ROW);
+  });
+
+  it('walks a long list with ↓ alone, every focused row drawn and in view', () => {
+    // Twice past the rows drawn at the start (the area's ten and ROWS_BEYOND
+    // below), and no further: each press renders the tree again.
+    const presses = 2 * (10 + ROWS_BEYOND);
+    const { tree } = mountPages(500);
+    for (let press = 0; press < presses; press += 1) {
+      fireEvent.keyDown(tree, { key: 'ArrowDown' });
+    }
+    expect(focusedName()).toBe(page(presses - 1));
+    expect(tree.scrollTop).toBe((presses + 1 + 3) * ROW - AREA);
+  });
+
+  it('keeps the focus in view as a folder opens and closes above it', () => {
+    // albums/ holds big/ (closed, 2000 pages) and then six pages; the focus on
+    // the fourth of those, row 5, well inside the area.
+    const { tree } = mount(listing({ folders: [folder('big')], files: pages(6) }), {
+      more: [listing({ path: 'albums/big', files: pages(2000, () => ({}), 'albums/big') })],
+      focus: fileKey(`albums/${page(3)}`),
+    });
+    expect(tree.scrollTop).toBe(0);
+    fireEvent.click(screen.getByLabelText('expand big'));
+    // Row 5 is row 2005 now: drawn, and three rows from the bottom.
+    expect(focusedName()).toBe(page(3));
+    expect(tree.scrollTop).toBe((2006 + 3) * ROW - AREA);
+    // Scrolled up to big/'s row, a few rows past its top, and closed there:
+    // the focus is row 5 again, and the list follows it back.
+    scrollTo(tree, 4 * ROW);
+    fireEvent.click(screen.getByLabelText('collapse big'));
+    expect(focusedName()).toBe(page(3));
+    expect(tree.scrollTop).toBe((5 - 3) * ROW);
+  });
+
+  it('says how many rows there are in all, and which of them each drawn row is and at what level', () => {
+    const { tree } = mountPages(5000);
+    expect(screen.getByTitle('albums').closest('table')!.getAttribute('aria-rowcount')).toBe('5001');
+    expect(screen.getByTitle('albums').getAttribute('aria-rowindex')).toBe('1');
+    expect(screen.getByTitle('albums').getAttribute('aria-level')).toBe('1');
+    scrollTo(tree, 3000 * ROW);
+    expect(screen.getByTitle(page(2999)).getAttribute('aria-rowindex')).toBe('3001');
+    expect(screen.getByTitle(page(2999)).getAttribute('aria-level')).toBe('2');
+  });
+
+  it('measures the value columns over every row, drawn or not', () => {
+    // The one large file is the last row, far below what is drawn.
+    const { tree } = mount(listing({ files: pages(3000, (index) => ({ size: index === 2999 ? 999_900_000 : 12 })) }));
+    expect(screen.queryByTitle(page(2999))).toBeNull();
+    const widths = () =>
+      [...document.querySelector('tbody')!.closest('table')!.querySelectorAll('col')].map(
+        (col) => (col as HTMLElement).style.width,
+      );
+    // `999.9 MB` is 8 characters at 8 a character, and 20 of padding.
+    expect(widths()[1]).toBe('84px');
+    scrollTo(tree, 1500 * ROW);
+    expect(widths()[1]).toBe('84px');
+  });
+
+  it('draws loading and refused rows as rows like the others', () => {
+    // Two hundred open folders, the last two with no listing yet and refused.
+    const folders = Array.from({ length: 200 }, (_, index) => folder(`f${String(index).padStart(3, '0')}`));
+    const { tree, onAskAgain } = mount(listing({ folders }), {
+      open: folders.map((one) => one.path),
+      more: folders.slice(0, 198).map((one) => listing({ path: one.path })),
+      refused: { 'albums/f199': 'the listing was refused' },
+    });
+    expect(screen.queryByText('loading…')).toBeNull();
+    // The albums row, the 200 folders and the two notes: the last two rows
+    // and a folder between them.
+    scrollTo(tree, 203 * ROW - AREA);
+    expect(screen.getByText('loading…').closest('tr')!.getAttribute('aria-rowindex')).toBe('201');
+    expect(screen.getByText('the listing was refused').closest('tr')!.getAttribute('aria-rowindex')).toBe('203');
+    fireEvent.click(screen.getByText(TRY_AGAIN));
+    expect(onAskAgain).toHaveBeenCalledWith('albums/f199');
+  });
+
+  it('takes a drag over rows drawn only once the list scrolled during it', () => {
+    // A drag of rows over pages: the folders below are not drawn until the
+    // list is scrolled to them, as the browser does while a drag rests near
+    // its edge.
+    const { tree, onMove } = mount(listing({ path: '', folders: [folder('albums', {}, ''), folder('zz', {}, '')] }), {
+      more: [listing({ files: pages(3000) })],
+      open: ['albums'],
+      focus: null,
+    });
+    const data = new Map<string, string>();
+    const air = {
+      dataTransfer: {
+        types: ['application/x-coffret-rows'],
+        effectAllowed: 'none',
+        dropEffect: 'none',
+        setData: (type: string, value: string) => data.set(type, value),
+        getData: (type: string) => data.get(type) ?? '',
+      },
+    };
+    fireEvent.dragStart(screen.getByTitle(page(0)), air);
+    fireEvent.dragEnter(tree, air);
+    expect(screen.queryByTitle('zz')).toBeNull();
+    scrollTo(tree, 3002 * ROW - AREA);
+    fireEvent.dragOver(screen.getByTitle('zz'), air);
+    expect(screen.getByRole('status').textContent).toBe('Move to zz');
+    fireEvent.drop(screen.getByTitle('zz'), air);
+    expect(onMove.mock.calls[0][0].map((row: Described) => row.path)).toEqual([`albums/${page(0)}`]);
+    expect(onMove.mock.calls[0][1]).toBe('zz');
+  });
+});

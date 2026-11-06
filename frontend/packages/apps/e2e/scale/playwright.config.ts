@@ -25,8 +25,8 @@ export default defineConfig({
   reporter: [['list']],
   outputDir: setting.artifacts,
 
-  // Opening the tree to twenty thousand rows is hundreds of listings, each
-  // drawn over every row already open.
+  // Opening the tree to twenty thousand rows is hundreds of listings, opened
+  // one folder at a time, each waited on.
   timeout: 3_600_000,
   expect: { timeout: 60_000 },
 

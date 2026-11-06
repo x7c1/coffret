@@ -16,6 +16,8 @@
 
 import {
   expect,
+  expectListed,
+  expectNotListed,
   expectRemote,
   inTree,
   leaf,
@@ -43,7 +45,7 @@ const CHANGES_WAITING = `${CHECKING} — changes are waiting`;
 
 test('ask what is new and find what another device committed', async ({ page }) => {
   await page.goto(`/#path=${setting.album}`);
-  await expect(row(page, ADDED)).toHaveCount(0);
+  await expectNotListed(page, row(page, ADDED));
   await shot(page, '01-before-the-other-device-commits');
 
   await commitElsewhere(setting, `${setting.album}/${ADDED}`, setting.refreshFile);
@@ -52,17 +54,18 @@ test('ask what is new and find what another device committed', async ({ page }) 
   // not caught up, and no amount of waiting would bring the row in. What the
   // explorer learns on its own — here as the page comes up again — is that
   // there is something to bring in.
-  await expect(row(page, ADDED)).toHaveCount(0);
+  await expectNotListed(page, row(page, ADDED));
   await page.reload();
   await expect(page.getByRole('button', { name: CHANGES_WAITING })).toBeVisible();
-  await expect(row(page, ADDED)).toHaveCount(0);
+  await expectNotListed(page, row(page, ADDED));
 
   await page.getByRole('button', { name: CHANGES_WAITING }).click();
 
+  // Below the album's photographs, so the tree is scrolled to it, which also
+  // brings it on to the screen for the picture.
+  await expectListed(page, row(page, ADDED));
   await expect(row(page, ADDED)).toHaveCount(1);
   await expectRemote(page, ADDED);
-  // Below the album's photographs, so brought on to the screen for the picture.
-  await row(page, ADDED).scrollIntoViewIfNeeded();
   await expect(page.getByText('1 new file', { exact: true })).toBeVisible();
   // And the Activity row says it as the newest thing that ended, since a
   // catch-up the explorer asked for is in the server's log like other work.
@@ -73,9 +76,11 @@ test('ask what is new and find what another device committed', async ({ page }) 
   // The tree is asked again as well, so a folder that arrived with the same
   // commit would be in it. Nothing about the folder on the screen has otherwise
   // moved: the rows this device already had are as they were.
+  await expectListed(page, inTree(page, leaf(setting.album)));
   await expect(inTree(page, leaf(setting.album))).toBeVisible();
 
   // And the bytes come the way they always do.
+  await expectListed(page, row(page, ADDED));
   await row(page, ADDED).dblclick();
   await expect(page.getByRole('img', { name: ADDED })).toBeVisible();
   await page.keyboard.press('Escape');

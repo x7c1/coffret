@@ -32,6 +32,13 @@ const LISTING_RUNS = 7;
 const ROWS = '[role="tree"] tr[data-key^="folder:"], [role="tree"] tr[data-key^="file:"]';
 
 /**
+ * The table of the tree's rows, which says how many rows are open in all
+ * (`aria-rowcount`): only the rows on show are drawn, so counting the rows in
+ * the page would count those alone.
+ */
+const ROW_TABLE = '[role="tree"] table[aria-rowcount]';
+
+/**
  * A closed folder's disclosure. Named by what it does, since the row's "⋮"
  * reports `aria-expanded` too, for its menu.
  */
@@ -103,7 +110,7 @@ test('the listing and the tree over a hundred thousand files', async ({ page }) 
   for (const target of setting.rows) {
     const opened = await openUntil(page, target, filesBelow);
     const millis = await timeArrowDown(page, setting.presses);
-    report(reportLine(`↓ with ${opened} rows drawn`, summarized(millis)));
+    report(reportLine(`↓ with ${opened} rows open`, summarized(millis)));
   }
 });
 
@@ -139,51 +146,80 @@ async function timeListing(
 }
 
 /**
- * Opens folders until at least `target` rows are drawn, the closed folder on
- * show with the most files below it first, and answers how many are.
+ * Opens folders until at least `target` rows are open, and answers how many
+ * are.
+ *
+ * Only the rows on show are drawn, so the closed folders are looked for a
+ * stretch of the list at a time, scrolling down it, and the one with the most
+ * files below it among the first stretch that has any is opened. Opening one
+ * adds rows below it alone, so the list above where the last was found holds
+ * no closed folder, and the next look starts there: the list is gone down once
+ * in all, not once an opening.
  */
 async function openUntil(page: Page, target: number, filesBelow: ReadonlyMap<string, number>): Promise<number> {
+  let from = 0;
   for (;;) {
-    const { rows, closed } = await page.evaluate(
-      ({ selector, disclosure }) => {
-        const closed = [...document.querySelectorAll(`[role="tree"] ${disclosure}`)]
-          .map((button) => button.closest('tr')?.getAttribute('data-key') ?? '')
-          .filter((key) => key.startsWith('folder:'))
-          .map((key) => key.slice('folder:'.length));
-        return { rows: document.querySelectorAll(selector).length, closed };
+    const { rows, closed, at } = await page.evaluate(
+      async ({ table, disclosure, from }) => {
+        const area = document.querySelector('[role="tree"]');
+        if (!(area instanceof HTMLElement)) {
+          throw new Error('the tree is not on the page');
+        }
+        const rows = Number(document.querySelector(table)?.getAttribute('aria-rowcount') ?? '0');
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+        for (let top = from; ; top += area.clientHeight) {
+          area.scrollTop = top;
+          // A frame for the scroll to be answered, and one for the rows it drew.
+          await frame();
+          await frame();
+          const closed = [...area.querySelectorAll(disclosure)]
+            .map((button) => button.closest('tr')?.getAttribute('data-key') ?? '')
+            .filter((key) => key.startsWith('folder:'))
+            .map((key) => key.slice('folder:'.length));
+          const atEnd = area.scrollTop + area.clientHeight >= area.scrollHeight - 1;
+          if (closed.length > 0 || atEnd) {
+            return { rows, closed, at: area.scrollTop };
+          }
+        }
       },
-      { selector: ROWS, disclosure: CLOSED },
+      { table: ROW_TABLE, disclosure: CLOSED, from },
     );
     if (rows >= target) {
       return rows;
     }
     const next = nextToOpen(closed, filesBelow);
     if (next === undefined) {
-      throw new Error(`every folder is open and only ${rows} rows are drawn, short of ${target}`);
+      throw new Error(`every folder is open and only ${rows} rows are open, short of ${target}`);
     }
+    from = at;
     // Clicked in the page rather than through Playwright's own click, which
     // would scroll to it and wait on it as an action: what follows is the
-    // listing arriving and being drawn, which is what is waited for.
+    // listing arriving and being drawn, which is what is waited for — the
+    // count of rows grown, and no "loading…" note left in what is drawn.
     await page.evaluate(
-      async ({ path, selector, disclosure, timeout }) => {
+      async ({ path, table, disclosure, timeout }) => {
+        const area = document.querySelector('[role="tree"]');
         const row = [...document.querySelectorAll('[role="tree"] tr[data-key]')].find(
           (candidate) => candidate.getAttribute('data-key') === `folder:${path}`,
         );
         const button = row?.querySelector(disclosure);
-        if (!(button instanceof HTMLElement)) {
+        if (!(area instanceof HTMLElement) || !(button instanceof HTMLElement)) {
           throw new Error(`the folder "${path}" has no closed disclosure to open`);
         }
-        const before = document.querySelectorAll(selector).length;
+        const count = () => Number(document.querySelector(table)?.getAttribute('aria-rowcount') ?? '0');
+        const loading = () =>
+          [...area.querySelectorAll('tr:not([data-key])')].some((note) => note.textContent === 'loading…');
+        const before = count();
         button.click();
         const until = performance.now() + timeout;
-        while (document.querySelectorAll(selector).length === before) {
+        while (count() === before || loading()) {
           if (performance.now() > until) {
-            throw new Error(`opening "${path}" drew no more rows within ${timeout}ms`);
+            throw new Error(`opening "${path}" opened no more rows within ${timeout}ms`);
           }
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
       },
-      { path: next, selector: ROWS, disclosure: CLOSED, timeout: SETTLE_TIMEOUT_MS },
+      { path: next, table: ROW_TABLE, disclosure: CLOSED, timeout: SETTLE_TIMEOUT_MS },
     );
   }
 }
@@ -193,6 +229,16 @@ async function openUntil(page: Page, target: number, filesBelow: ReadonlyMap<str
  * key event to the frame that painted the focus on the next row.
  */
 async function timeArrowDown(page: Page, presses: number): Promise<number[]> {
+  // From the top of the list, where opening it left the list scrolled anywhere.
+  await page.evaluate(() => {
+    const area = document.querySelector('[role="tree"]');
+    if (area instanceof HTMLElement) {
+      area.scrollTop = 0;
+    }
+  });
+  await page.waitForFunction(
+    () => document.querySelector('[role="tree"] tbody tr')?.getAttribute('aria-hidden') !== 'true',
+  );
   await page.locator(ROWS).first().click();
   await expect(page.locator('[role="tree"] tr[data-focused]')).toHaveCount(1);
   await settled(page);
@@ -238,8 +284,8 @@ async function timeArrowDown(page: Page, presses: number): Promise<number[]> {
 /**
  * Waits for the page to be idle: two animation frames in a row that come
  * within a frame and a half of each other, so that whatever the last press
- * set off — a listing for the folder the focus landed on, drawn over every
- * row — is not timed with the next one.
+ * set off — a listing for the folder the focus landed on, and the rows it
+ * draws — is not timed with the next one.
  */
 async function settled(page: Page): Promise<void> {
   await page.evaluate(async (timeout) => {
