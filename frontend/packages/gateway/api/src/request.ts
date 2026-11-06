@@ -18,11 +18,11 @@ const BASE = '/api';
 const OWN_PREFIXES = ['/api/', '/auth/'] as const;
 
 /** What a request made without a session is refused with, before it is sent. */
-const NO_SESSION = 'this tab holds no session with the explorer, so nothing was asked';
+const NO_SESSION = 'the explorer holds no session, so nothing was asked';
 
 /** What an answer let go of says, for whoever still reads it. */
 const WITHDRAWN =
-  'that answer arrived after this tab let go of its session, or after the Library locked';
+  'that answer arrived after the explorer let go of its session, or after the Library locked';
 
 /** The URL of one route, with the query it is asked with. */
 export function apiUrl(
@@ -160,6 +160,7 @@ export function asked(
 export async function requested(url: string, asking: Asking): Promise<Response> {
   const { signal, method = 'GET', body, contentType } = asking;
   ownUrl(url);
+  const sentWith = asking.authorization === undefined ? heldToken() : null;
   const headers: Record<string, string> = { Authorization: authorizationFor(asking.authorization) };
   // No `Content-Type` of this client's own for a `FormData` body: it has a
   // boundary the browser mints as it serializes, and a header written here
@@ -197,7 +198,7 @@ export async function requested(url: string, asking: Asking): Promise<Response> 
       throw refusal.cause;
     }
     if (asking.authorization === undefined) {
-      heardRefusal(refusal);
+      heardRefusal(refusal, sentWith);
     }
     throw refusal;
   }
@@ -317,6 +318,7 @@ export function sentForJson<T>(
       return;
     }
     ownUrl(url);
+    const sentWith = heldToken();
     const authorization = authorizationFor(undefined);
     const round = currentRound();
     const request = new XMLHttpRequest();
@@ -355,7 +357,7 @@ export function sentForJson<T>(
         }
         void answered<T>(request.status, request.responseText).then(resolve, (thrown: unknown) => {
           if (isRefusal(thrown)) {
-            heardRefusal(thrown);
+            heardRefusal(thrown, sentWith);
           }
           reject(thrown);
         });

@@ -13,7 +13,7 @@ import { holdToken } from './credential';
 export const ORIGIN = 'http://127.0.0.1:5173';
 
 /** The token the cases' page holds. */
-export const TOKEN = 'the-token-this-tab-holds';
+export const TOKEN = 'the-token-this-page-holds';
 
 beforeEach(() => {
   vi.stubGlobal('location', new URL(`${ORIGIN}/`));

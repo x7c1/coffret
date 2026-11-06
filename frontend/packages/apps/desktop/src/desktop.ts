@@ -36,6 +36,12 @@ export interface Shell {
   focusExplorer(): boolean;
   /** Hides the explorer's window, keeping it and its page as they are. */
   hideExplorer(): void;
+  /**
+   * Loads the explorer's window afresh from a fresh launch ticket, as
+   * *Reload the explorer* does, where there is a window; nothing where it was
+   * destroyed, since bringing it back opens it anew from one anyway.
+   */
+  reloadExplorer(): void;
   /** Says that the Library's server stopped, and waits until that is dismissed. */
   reportServerStopped(): void;
   /** Ends the app. */
@@ -73,6 +79,15 @@ export function explorerCloses(platform: NodeJS.Platform, tray: boolean, quittin
   return 'quit';
 }
 
+/**
+ * How long, after the explorer's window was loaded afresh for a session that
+ * ended, a further report that its session ended is let be rather than loading
+ * the window again: a page that loses its session as soon as it is loaded
+ * would otherwise be loaded round and round. The person can still reload it
+ * from the menu.
+ */
+export const REOPEN_SPACING_MS = 60 * 1000;
+
 /** Where the app runs, as far as its windows closing goes. */
 export interface Residency {
   platform: NodeJS.Platform;
@@ -95,6 +110,14 @@ export interface Residency {
  * - A Passphrase window whose token the door ended after its last refused
  *   try is spent: it is loaded afresh the next time it is brought forward,
  *   rather than shown again as it is.
+ * - When the explorer's page says its session ended — the server restarted,
+ *   the Library served changed, or a renewal was refused — its window is
+ *   loaded afresh from a fresh ticket, so that the person never sees a page
+ *   without one. Not while nothing is served or the app quits, where there is
+ *   nothing to load it from; not while the Library is locked and the
+ *   Passphrase window is in front, when it waits for the unlock; and not
+ *   again within {@link REOPEN_SPACING_MS} of the last time, so that it does
+ *   not go round and round.
  * - When the server stops, nothing is served any more, and the app says so
  *   and quits.
  */
@@ -105,12 +128,17 @@ export class Desktop {
   private quitting = false;
   /** Whether the door ended the Passphrase window's token unused. */
   private spent = false;
+  /** Whether the explorer's page lost its session while the Library was locked. */
+  private reopenOnUnlock = false;
+  /** When the explorer's window was last loaded afresh for a session that ended. */
+  private lastReopen: number | null = null;
 
   constructor(
     private readonly core: Core,
     private readonly passphrase: PassphraseWindow,
     private readonly shell: Shell,
     private readonly residency: Residency,
+    private readonly now: () => number = Date.now,
   ) {}
 
   /** Opens the Passphrase window on the Libraries this device has. */
@@ -136,6 +164,7 @@ export class Desktop {
         return;
       case 'ServerStopped':
         this.served = false;
+        this.reopenOnUnlock = false;
         this.shell.reportServerStopped();
         this.shell.quit();
         return;
@@ -173,6 +202,24 @@ export class Desktop {
         this.shell.quit();
         return;
     }
+  }
+
+  /**
+   * What the explorer's page saying its session ended comes to: its window
+   * loaded afresh from a fresh ticket where one can be issued and used, and
+   * otherwise what the app does in that state anyway.
+   */
+  explorerSessionEnded(): void {
+    if (this.quitting || !this.served) {
+      return;
+    }
+    if (this.locked()) {
+      // The Passphrase window is what the person sees; the explorer is loaded
+      // afresh once the Library is unlocked.
+      this.reopenOnUnlock = true;
+      return;
+    }
+    this.reopen();
   }
 
   /** The app has begun quitting: no window is kept from closing any more. */
@@ -262,9 +309,29 @@ export class Desktop {
   private libraryUnlocked(): void {
     const showing = this.passphrase.isVisible();
     this.passphrase.hide();
+    if (this.reopenOnUnlock) {
+      this.reopenOnUnlock = false;
+      this.reopen();
+    }
     if (showing) {
       this.shell.focusExplorer();
     }
+  }
+
+  /**
+   * Loads the explorer's window afresh for a session that ended, unless it was
+   * so loaded a moment ago.
+   */
+  private reopen(): void {
+    const now = this.now();
+    if (this.lastReopen !== null && now - this.lastReopen < REOPEN_SPACING_MS) {
+      this.shell.warn(
+        "the explorer's session ended again right after its window was loaded afresh; it is left until it is reloaded",
+      );
+      return;
+    }
+    this.lastReopen = now;
+    this.shell.reloadExplorer();
   }
 
   /**

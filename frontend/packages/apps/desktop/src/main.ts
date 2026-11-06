@@ -17,8 +17,12 @@
 // This process learns what happened from the addon's events. The one thing a
 // page may ask of it is to take a drop onto the explorer's window by path: the
 // explorer's preload asks over one channel, which is answered for that window
-// alone and hands the paths to the addon (`drops.ts`). Nothing else is exposed
-// to any page, and the Passphrase window has no preload.
+// alone and hands the paths to the addon (`drops.ts`). Beside it, the
+// explorer's session is kept from ending under its page (`renewal.ts`): this
+// process hands the page a fresh ticket on its own timer, one way, ahead of
+// its token's expiry, and the page may say, one way too, that it holds no
+// session, which loads its window afresh. Nothing else is exposed to any page,
+// and the Passphrase window has no preload.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -40,7 +44,7 @@ import {
 
 import { loadAddon, type Addon } from './addon.js';
 import { Desktop, explorerCloses, message, type PassphraseWindow, type Shell } from './desktop.js';
-import { TAKE_DROP, takeDropHandler } from './drops.js';
+import { fromOrigin, TAKE_DROP, takeDropHandler } from './drops.js';
 import { identityFor, type Identity } from './identity.js';
 import { loadAfresh } from './load.js';
 import { menuTemplate } from './menu.js';
@@ -52,6 +56,7 @@ import {
   guardNavigation,
 } from './navigation.js';
 import { denyEveryPermission } from './permissions.js';
+import { FRESH_TICKET, Renewal, SESSION_ENDED, sessionEndedListener } from './renewal.js';
 import { resourcesFor } from './resources.js';
 import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { trayMenuTemplate } from './tray.js';
@@ -215,6 +220,26 @@ function assemble(
     return groundOf(appearance, nativeTheme.shouldUseDarkColors);
   };
 
+  // Hands the explorer's page a fresh ticket ahead of its token's expiry.
+  const renewal = new Renewal({
+    issueTicket: () => addon.issueTicket(),
+    deliver(ticket) {
+      const window = explorerWindow;
+      if (window === null || window.isDestroyed()) {
+        return false;
+      }
+      // Only to the explorer's own page: a window passing through its blank
+      // page on its way to a load has nothing to take it.
+      if (!fromOrigin({ url: window.webContents.getURL() }, explorerServed)) {
+        return false;
+      }
+      window.webContents.send(FRESH_TICKET, ticket);
+      return true;
+    },
+    warn,
+  });
+  renewal.start();
+
   /** Loads the explorer into its window from a fresh launch ticket. */
   const launchExplorer = (window: BrowserWindow, address: string) => {
     window.setBackgroundColor(explorerGround());
@@ -225,10 +250,19 @@ function assemble(
       warn(`no launch ticket could be issued for the explorer: ${message(error)}`);
       return;
     }
+    renewal.loaded();
     // Said without the error, which quotes the URL and so the ticket.
     loadAfresh(window.webContents, explorerLaunchUrl(address, ticket)).catch(() => {
       warn('the explorer could not be loaded');
     });
+  };
+
+  /** Loads the explorer's window, where there is one, afresh from a fresh launch ticket. */
+  const reloadExplorer = () => {
+    const address = addon.explorerAddress();
+    if (explorerWindow !== null && !explorerWindow.isDestroyed() && address !== null) {
+      launchExplorer(explorerWindow, address);
+    }
   };
 
   // Set once the dispatcher is made, which the windows' handlers reach.
@@ -272,6 +306,9 @@ function assemble(
     hideExplorer() {
       explorerWindow?.hide();
     },
+    reloadExplorer() {
+      reloadExplorer();
+    },
     reportServerStopped() {
       dialog.showErrorBox(
         "The Library's server stopped",
@@ -298,16 +335,17 @@ function assemble(
   started = dispatcher;
   passphraseWindow.on('close', (event) => dispatcher.passphraseClosing(event));
 
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate(
-      menuTemplate(process.platform, () => {
-        const address = addon.explorerAddress();
-        if (explorerWindow !== null && !explorerWindow.isDestroyed() && address !== null) {
-          launchExplorer(explorerWindow, address);
-        }
-      }),
+  ipcMain.on(
+    SESSION_ENDED,
+    sessionEndedListener(
+      () => explorerWindow?.webContents ?? null,
+      () => explorerServed,
+      () => dispatcher.explorerSessionEnded(),
+      warn,
     ),
   );
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, reloadExplorer)));
 
   // The tray's menu, rebuilt where whether the Library is locked has changed
   // since it was last built, so that *Unlock…* is offered only while there is
@@ -349,6 +387,7 @@ function assemble(
   app.on('activate', () => dispatcher.bringForward());
   app.on('before-quit', () => {
     dispatcher.quit();
+    renewal.stop();
     if (refreshing !== null) {
       clearInterval(refreshing);
     }

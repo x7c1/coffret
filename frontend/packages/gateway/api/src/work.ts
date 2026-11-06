@@ -820,8 +820,9 @@ export interface Work {
    *
    * It matters because a restart is ordinary rather than exceptional: a server
    * started from the command line is unlocked by starting it again with the
-   * Passphrase, and a tab can stay open across one. An unlock in place, from the
-   * desktop app's own window, keeps the name: it is the same process.
+   * Passphrase, and the explorer's page can stay open across one. An unlock in
+   * place, from the desktop app's own window, keeps the name: it is the same
+   * process.
    */
   server: string;
   /**

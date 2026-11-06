@@ -1,4 +1,4 @@
-import { authUrl, requestedJson } from './request';
+import { authUrl, requested, requestedJson } from './request';
 import type { LibraryState } from './work';
 
 /**
@@ -8,7 +8,7 @@ import type { LibraryState } from './work';
 export interface Launched {
   /** The browser token, for every request this page makes from now on. */
   token: string;
-  /** How many seconds it is good for; nothing renews it (spec: LA-18). */
+  /** How many seconds it is good for; nothing extends it (spec: LA-18). */
   expires_in: number;
   /**
    * The host's generation it belongs to: public, admitting nothing, and what a
@@ -54,6 +54,22 @@ export function launch(ticket: string, signal?: AbortSignal): Promise<Launched> 
 export function checkSession(token: string, signal?: AbortSignal): Promise<SessionStanding> {
   return requestedJson<SessionStanding>(authUrl('session'), {
     signal,
+    authorization: `Bearer ${token}`,
+  });
+}
+
+/**
+ * Revokes the session `token` stands for, and no other (spec: LA-16): what a
+ * page does with the token it held before, once a renewal has given it a new
+ * one, so that the session it leaves takes none of the host's places.
+ *
+ * Asked with `token` in `Authorization` rather than the held token, so a
+ * refusal is the caller's to read and ends no session by itself.
+ */
+export async function revokeSession(token: string, signal?: AbortSignal): Promise<void> {
+  await requested(authUrl('session/revoke'), {
+    signal,
+    method: 'POST',
     authorization: `Bearer ${token}`,
   });
 }
