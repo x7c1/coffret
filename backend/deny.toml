@@ -42,7 +42,14 @@ all-features = false
 # has to be legible to whoever reads it next. cargo-deny warns as soon as an
 # entry matches nothing, so a waiver cannot sit here unnoticed once it has
 # stopped applying.
-ignore = []
+ignore = [
+  # pin-utils is unmaintained, which is not a known vulnerability in it. It is
+  # not a dependency of ours: it comes in only through the AWS SDK
+  # (aws-smithy-http, aws-smithy-runtime, aws-smithy-types), and no SDK release
+  # drops it yet. Take this out once the SDK does; cargo-deny warns when this
+  # entry stops matching anything.
+  { id = "RUSTSEC-2026-0441", reason = "unmaintained, not vulnerable; reaches us only through the AWS SDK" },
+]
 # A yank is the crate's own author saying not to resolve to that version, not a
 # note to take or leave. Failing here is what makes somebody read why it was
 # pulled.
