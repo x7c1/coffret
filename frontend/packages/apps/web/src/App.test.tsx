@@ -578,6 +578,35 @@ it('shows what the focus moves to while the sheet is open', async () => {
   expect(tree().getByTitle('notes.txt').getAttribute('aria-selected')).toBe('true');
 });
 
+// A click on the page being read leaves the focus on the page's body, and
+// the arrows still read on; `Escape` there closes the sheet and nothing else.
+it('reads on with the arrows after a click on the picture, and closes on Escape', async () => {
+  answers = library({ '': ['comics/'], comics: ['Series/'], 'comics/Series': ['001.jpg', '002.jpg', '003.jpg'] });
+  window.history.replaceState(null, '', '#path=comics/Series&open=comics/Series/001.jpg');
+  render(<App />);
+  const reader = within(await screen.findByRole('region', { name: 'Reader' }));
+  const picture = await reader.findByAltText('001.jpg');
+  await tree().findByTitle('002.jpg');
+  const area = screen.getByRole('tree');
+  area.focus();
+  fireEvent.click(picture);
+  area.blur();
+  expect(document.activeElement).toBe(document.body);
+  // The click turns no page.
+  expect(parseHash(window.location.hash).open).toBe('comics/Series/001.jpg');
+
+  fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+  expect(await reader.findByAltText('002.jpg')).toBeTruthy();
+  expect(parseHash(window.location.hash).open).toBe('comics/Series/002.jpg');
+  expect(document.activeElement).toBe(area);
+
+  area.blur();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Reader' })).toBeNull());
+  expect(tree().getByTitle('002.jpg').getAttribute('aria-selected')).toBe('true');
+  expect(within(screen.getByRole('banner')).getByTestId('location').textContent).toBe('comics / Series / 002.jpg');
+});
+
 // With the sheet open, ↓ reads on: off the end of one folder into the first
 // file of the next, which the server names since the tree has not opened it,
 // and the folder is opened and stays open. Near the end the reader has read the
