@@ -12,6 +12,7 @@
 
 import {
   expect,
+  expectListed,
   expectRemote,
   glimpse,
   ON_THIS_DEVICE,
@@ -42,6 +43,8 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   await expectRemote(page, last);
   await shot(page, '01-nothing-here-yet');
 
+  // Back up the album to it, which the look at the last photograph scrolled away.
+  await expectListed(page, row(page, first));
   await row(page, first).dblclick();
   await expect(page.getByRole('img', { name: first })).toBeVisible();
 
@@ -55,7 +58,11 @@ test('open one photograph and watch the rest of the album arrive', async ({ page
   // different question of the screen than this journey is asking — and the last
   // photograph of the album is far enough from the first that no prefetch of
   // the reader's own reaches it. Its arriving is the fill and nothing else.
+  // The tree is scrolled down to it beside the reader, since it draws only the
+  // rows on show; scrolling moves no focus, so the reader stays where it is.
+  await expectListed(page, row(page, last));
   await expect(stateIcon(page, last)).toHaveAccessibleName(ON_THIS_DEVICE, { timeout: BACKFILL_MS });
+  await expectListed(page, row(page, photo(1)));
   await expect(stateIcon(page, photo(1))).toHaveAccessibleName(ON_THIS_DEVICE);
 
   await page.keyboard.press('Escape');

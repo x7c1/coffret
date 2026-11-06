@@ -20,6 +20,7 @@ import {
   BEING_ADDED,
   dropFileOnto,
   expect,
+  expectNotListed,
   glimpse,
   ON_THIS_DEVICE,
   photo,
@@ -39,7 +40,7 @@ const SYNC_MS = 120_000;
 test('drop a photograph on the album and watch it become an Entry', async ({ page }) => {
   const dropped = path.basename(setting.dropFile);
   await page.goto(`/#path=${setting.album}`);
-  await expect(row(page, dropped)).toHaveCount(0);
+  await expectNotListed(page, row(page, dropped));
 
   // Onto the rows, which is the whole of the gesture: the folder on the screen
   // is the folder the files go to. The first row rather than the middle of the
@@ -55,7 +56,7 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   await expect(incoming).toContainText('New');
   await expect(incoming).toContainText(dropped);
   await expect(question).not.toContainText('is new');
-  await expect(row(page, dropped)).toHaveCount(0);
+  await expectNotListed(page, row(page, dropped));
   await question.getByRole('button', { name: 'Add', exact: true }).click();
 
   // In the folder from that moment. Which state its icon says is the race

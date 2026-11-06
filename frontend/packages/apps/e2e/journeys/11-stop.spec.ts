@@ -17,7 +17,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 
 import { addAsAPack, bookCalled, dropFolderOnto } from './books';
-import { expect, inTree, openActivity, photo, row, setting, shot, test } from './journey';
+import { expect, expectNotListed, inTree, openActivity, photo, row, setting, shot, test } from './journey';
 import { pauseStorage, unpauseStorage } from './storage';
 
 /** What the book this journey stops is called. */
@@ -88,10 +88,10 @@ test('stop an add of a folder, and find nothing added and nothing left behind', 
 
   // And the Library lists nothing new, before a reload and after one, while
   // the server's log still says what the stop came to.
-  await expect(inTree(page, STOPPED)).toHaveCount(0);
+  await expectNotListed(page, inTree(page, STOPPED));
   await page.reload();
   await expect(row(page, photo(0))).toBeVisible();
-  await expect(inTree(page, STOPPED)).toHaveCount(0);
+  await expectNotListed(page, inTree(page, STOPPED));
   await openActivity(page);
   await expect(page.getByText(nothingAdded())).toBeVisible();
   await shot(page, '03-after-a-reload-the-library-has-nothing-new');

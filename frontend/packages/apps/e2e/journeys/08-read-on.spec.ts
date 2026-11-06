@@ -17,7 +17,19 @@
 // the photographs; reading it fetches it, as opening any file does.
 
 import { IMPORTED } from './books';
-import { ARRIVED_WHILE_DOWN, bookPage, expect, inTree, leaf, row, setting, shot, test, tree } from './journey';
+import {
+  ARRIVED_WHILE_DOWN,
+  bookPage,
+  expect,
+  expectListed,
+  inTree,
+  leaf,
+  row,
+  setting,
+  shot,
+  test,
+  tree,
+} from './journey';
 
 test('read off the end of one folder into the first page of the next, and back', async ({ page }) => {
   const last = ARRIVED_WHILE_DOWN;
@@ -56,7 +68,10 @@ test('read off the end of one folder into the first page of the next, and back',
   // reading on: `↓` from the open album lands on its first row, the book the
   // freeze journey dropped into it, whose folder is closed — and stays closed,
   // the sheet on its cover rather than on its first page.
+  // The album's row is a hundred rows and more above its last photograph, so
+  // the tree is scrolled up to it first: it draws only the rows on show.
   const album = leaf(setting.album);
+  await expectListed(page, inTree(page, album));
   await inTree(page, album).getByText(album, { exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`cover=${setting.album}$`));
   await page.keyboard.press('ArrowDown');

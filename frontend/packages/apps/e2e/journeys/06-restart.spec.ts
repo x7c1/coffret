@@ -19,6 +19,8 @@
 import {
   ARRIVED_WHILE_DOWN,
   expect,
+  expectListed,
+  expectNotListed,
   expectRemote,
   libraryName,
   openExplorer,
@@ -34,7 +36,7 @@ const ADDED = ARRIVED_WHILE_DOWN;
 
 test('come back to a Library another device has moved on', async ({ page, coffret }) => {
   await page.goto(`/#path=${setting.album}`);
-  await expect(row(page, ADDED)).toHaveCount(0);
+  await expectNotListed(page, row(page, ADDED));
 
   await coffret.stop();
   await commitElsewhere(setting, `${setting.album}/${ADDED}`, setting.restartFile);
@@ -49,10 +51,11 @@ test('come back to a Library another device has moved on', async ({ page, coffre
 
   // No button pressed and nothing polled: the server caught the catalog up as it
   // opened the Library, so the first listing it answers is the Library as it is.
+  // Below the album's photographs, so the tree is scrolled to it, which also
+  // brings it on to the screen for the picture.
+  await expectListed(page, row(page, ADDED));
   await expect(row(page, ADDED)).toHaveCount(1);
   await expectRemote(page, ADDED);
   await expect(libraryName(page)).toBeVisible();
-  // Below the album's photographs, so brought on to the screen for the picture.
-  await row(page, ADDED).scrollIntoViewIfNeeded();
   await shot(page, '02-the-row-was-there-on-the-first-listing');
 });

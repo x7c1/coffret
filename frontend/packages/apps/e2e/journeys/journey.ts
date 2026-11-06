@@ -159,6 +159,11 @@ export async function openInTree(page: Page, name: string): Promise<void> {
  * a name too long for the column can still be read. It is the whole name and
  * not part of one, which is what makes `img-00001.jpg` a different row from
  * `img-00011.jpg`.
+ *
+ * It finds the row only while the tree draws it, which is while it is on show
+ * or a few dozen rows from it; [`expectListed`](#expectlisted) and
+ * [`expectNotListed`](#expectnotlisted) scroll the tree to ask after a row
+ * wherever it stands.
  */
 export function row(page: Page, name: string): Locator {
   return page.locator(`tbody tr[title="${name}"]`);
@@ -171,6 +176,104 @@ export function row(page: Page, name: string): Locator {
 export function rowsNamed(page: Page, names: readonly string[]): Locator {
   return page.locator(names.map((name) => `tbody tr[title="${name}"]`).join(', '));
 }
+
+/**
+ * Scrolls the tree to bring one of its rows among the rows it draws, the way a
+ * person scrolls to a row before looking at it, and says whether it is in the
+ * tree at all.
+ *
+ * The tree draws only the rows on show and a few dozen either side, so a row
+ * far down a long folder — or far above the focus — is in no element until the
+ * list is scrolled to it, and a locator for it finds nothing whether the row is
+ * listed or not. This scrolls through the list a screenful at a time from the
+ * top, each step waited on until every row on show is drawn, and stops where
+ * `target` is drawn, leaving it on the screen. Where it is not drawn anywhere,
+ * the list is put back where it was.
+ */
+export async function scrollTreeTo(page: Page, target: Locator): Promise<boolean> {
+  if ((await target.count()) > 0) {
+    await target.first().scrollIntoViewIfNeeded();
+    return true;
+  }
+  const area = tree(page);
+  const start = await area.evaluate((element) => element.scrollTop);
+  for (let top = 0; ; ) {
+    const step = await area.evaluate(scrollDrawn, top);
+    if ((await target.count()) > 0) {
+      await target.first().scrollIntoViewIfNeeded();
+      return true;
+    }
+    if (step.atEnd) {
+      break;
+    }
+    top = step.scrollTop + step.height;
+  }
+  await area.evaluate(scrollDrawn, start);
+  return false;
+}
+
+/**
+ * Scrolls the tree's area to `top` and waits, a frame at a time, until no
+ * spacer standing in for rows not drawn is on show: until the explorer has
+ * drawn the rows the scroll brought on. Run in the page.
+ */
+async function scrollDrawn(
+  area: HTMLElement,
+  top: number,
+): Promise<{ scrollTop: number; height: number; atEnd: boolean }> {
+  area.scrollTop = top;
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+  const spacerOnShow = () => {
+    const shown = area.getBoundingClientRect();
+    return [...area.querySelectorAll('tbody > tr[aria-hidden]')].some((spacer) => {
+      const box = spacer.getBoundingClientRect();
+      return box.bottom > shown.top + 1 && box.top < shown.bottom - 1;
+    });
+  };
+  // A second or so at most: the render a scroll asks for lands within a frame
+  // or two, and a spacer still on show after that is for the caller to find
+  // out about through the row it is looking for.
+  for (let frames = 0; frames < 60 && spacerOnShow(); frames++) {
+    await frame();
+  }
+  await frame();
+  return {
+    scrollTop: area.scrollTop,
+    height: area.clientHeight,
+    atEnd: area.scrollTop + area.clientHeight >= area.scrollHeight - 1,
+  };
+}
+
+/**
+ * Waits until `target` is in the tree, scrolling the tree to it (see
+ * [`scrollTreeTo`](#scrolltreeto)), and leaves it drawn: what a row being
+ * listed means where only the rows on show are drawn.
+ */
+export async function expectListed(
+  page: Page,
+  target: Locator,
+  { timeout = LISTED_MS }: { timeout?: number } = {},
+): Promise<void> {
+  await expect(async () => {
+    expect(await scrollTreeTo(page, target), 'drawn somewhere in the tree').toBe(true);
+  }).toPass({ timeout });
+}
+
+/**
+ * Waits until `target` is nowhere in the tree: not among the rows drawn at any
+ * scroll of it, rather than only among those drawn where the list stands.
+ */
+export async function expectNotListed(page: Page, target: Locator): Promise<void> {
+  await expect(async () => {
+    expect(await scrollTreeTo(page, target), 'drawn nowhere in the tree').toBe(false);
+  }).toPass({ timeout: LISTED_MS });
+}
+
+/**
+ * How long the two above wait, as long as an assertion of the suite does:
+ * `toPass` waits without end unless told otherwise.
+ */
+const LISTED_MS = 30_000;
 
 /** What the state icon says for a file this device has, fetched here or added from here. */
 export const ON_THIS_DEVICE = /^On this device$/;
@@ -199,6 +302,7 @@ export function stateIcon(page: Page, name: string): Locator {
 
 /** That a row is on the screen and is in the Library only: no state icon. */
 export async function expectRemote(page: Page, name: string): Promise<void> {
+  await expectListed(page, row(page, name));
   await expect(row(page, name)).toBeVisible();
   await expect(stateIcon(page, name)).toHaveCount(0);
 }
