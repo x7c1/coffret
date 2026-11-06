@@ -548,11 +548,50 @@ export function toggled(state: TreeState, folder: string): TreeState {
   return { ...state, expanded: new Set([...state.expanded, folder]) };
 }
 
-/** `folder` closed, and the focus brought out of it where it was inside. */
-function collapsed(state: TreeState, folder: string): TreeState {
-  const expanded = new Set(state.expanded);
-  expanded.delete(folder);
-  const inside = state.focus !== null && pathOf(state.focus).startsWith(`${folder}/`);
+/**
+ * What `Escape` does to the tree: it folds one level of what is shown.
+ *
+ * - On an open folder's row, the folder closes, and the focus stays on it.
+ * - On a file's row or a closed folder's row, the folder the row stands in
+ *   closes, and the focus moves to that folder's row.
+ * - On a top-level file's or closed folder's row, which stands in the Library
+ *   root, the focus is let go of: it comes back `null`.
+ *
+ * A folder closed this way forgets which of its subfolders were open, so that
+ * opening it again shows every one of them closed; a folder closed by `←` or
+ * by its disclosure button keeps them, and opens again in the shape it had.
+ *
+ * The state comes back as it was where nothing is focused.
+ */
+export function escaped(rows: readonly TreeRow[], state: TreeState): TreeState {
+  if (state.focus === null) {
+    return state;
+  }
+  const { kind, path } = keyed(state.focus);
+  const row = rows.find((one): one is Walkable => one.kind !== 'note' && one.key === state.focus);
+  // A row not drawn — in a folder whose listing is out — is told by its key.
+  const expandable = row === undefined ? kind === 'folder' : row.kind === 'folder' && row.expandable;
+  if (expandable && state.expanded.has(path)) {
+    return collapsed(state, path, { forget: true });
+  }
+  const parent = parentOf(path);
+  if (parent === '') {
+    return { ...state, focus: null };
+  }
+  return collapsed({ ...state, focus: folderKey(parent) }, parent, { forget: true });
+}
+
+/**
+ * `folder` closed, and the focus brought out of it where it was inside. With
+ * `forget`, the folders open under it are closed too, so that it opens again
+ * with every subfolder closed; without, they are kept for when it opens again.
+ */
+function collapsed(state: TreeState, folder: string, { forget = false } = {}): TreeState {
+  const under = `${folder}/`;
+  const expanded = new Set(
+    [...state.expanded].filter((path) => path !== folder && !(forget && path.startsWith(under))),
+  );
+  const inside = state.focus !== null && pathOf(state.focus).startsWith(under);
   return { focus: inside ? folderKey(folder) : state.focus, expanded };
 }
 

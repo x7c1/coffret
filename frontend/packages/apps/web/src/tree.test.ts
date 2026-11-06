@@ -6,6 +6,7 @@ import {
   ancestry,
   arrowed,
   contextOf,
+  escaped,
   fileKey,
   folderKey,
   landedOn,
@@ -214,6 +215,64 @@ describe('the keys on the tree', () => {
     expect(toggled(beside, 'albums').focus).toBe(folderKey('albums-old'));
     // Opening moves nothing.
     expect(toggled(state(fileKey('readme.txt')), 'books').focus).toBe(fileKey('readme.txt'));
+  });
+
+  it('closes an open folder on Escape and keeps the focus on it, nested or top-level', () => {
+    const nested = escaped(rowsOf(['albums', 'albums/2026']), state(folderKey('albums/2026'), ['albums', 'albums/2026']));
+    expect(nested.focus).toBe(folderKey('albums/2026'));
+    expect([...nested.expanded]).toEqual(['albums']);
+    const top = escaped(rowsOf(['albums', 'books']), state(folderKey('albums'), ['albums', 'books']));
+    expect(top.focus).toBe(folderKey('albums'));
+    expect([...top.expanded]).toEqual(['books']);
+  });
+
+  it('closes the folder a file or a closed folder stands in on Escape, and moves the focus to it', () => {
+    const open = ['albums', 'albums/2026'];
+    const fromFile = escaped(rowsOf(open), state(fileKey('albums/2026/a.jpg'), open));
+    expect(fromFile.focus).toBe(folderKey('albums/2026'));
+    expect([...fromFile.expanded]).toEqual(['albums']);
+    const fromClosed = escaped(rowsOf(['albums']), state(folderKey('albums/2026'), ['albums']));
+    expect(fromClosed.focus).toBe(folderKey('albums'));
+    expect(fromClosed.expanded.size).toBe(0);
+  });
+
+  it('lets go of the focus on Escape from a top-level file or closed folder', () => {
+    for (const focus of [fileKey('readme.txt'), folderKey('books')]) {
+      const next = escaped(rowsOf(['albums']), state(focus, ['albums']));
+      expect(next.focus).toBeNull();
+      expect([...next.expanded]).toEqual(['albums']);
+    }
+    const none = state(null, ['albums']);
+    expect(escaped(rowsOf(['albums']), none)).toBe(none);
+  });
+
+  it('folds one level on each Escape from a file three levels deep, and lets go on the last', () => {
+    const seen: (string | null)[] = [];
+    let held = state(fileKey('albums/2026/a.jpg'), ['albums', 'albums/2026', 'books']);
+    while (held.focus !== null) {
+      held = escaped(rowsOf(held.expanded), held);
+      seen.push(held.focus);
+    }
+    expect(seen).toEqual([folderKey('albums/2026'), folderKey('albums'), null]);
+    expect([...held.expanded]).toEqual(['books']);
+  });
+
+  it('forgets the subfolders open under a folder closed by Escape', () => {
+    const open = ['albums', 'albums/2026'];
+    const closed = escaped(rowsOf(open), state(folderKey('albums'), open));
+    const reopened = toggled(closed, 'albums');
+    expect([...reopened.expanded]).toEqual(['albums']);
+    expect(drawn(reopened.expanded)).toEqual(['albums', '  2026', '  cover.png', 'books', 'readme.txt']);
+  });
+
+  it('keeps the subfolders open under a folder closed by ← or by its button', () => {
+    const open = ['albums', 'albums/2026'];
+    const byArrow = press(state(folderKey('albums'), open), 'ArrowLeft');
+    expect([...byArrow.expanded]).toEqual(['albums/2026']);
+    expect([...press(byArrow, 'ArrowRight').expanded].sort()).toEqual(open);
+    const byButton = toggled(state(folderKey('albums'), open), 'albums');
+    expect([...toggled(byButton, 'albums').expanded].sort()).toEqual(open);
+    expect(drawn(toggled(byButton, 'albums').expanded)).toContain('    a.jpg');
   });
 
   it('says the folder the focus is in', () => {

@@ -47,8 +47,7 @@ import { COLOR, FONT } from './theme';
 import {
   arrowed,
   contextOf,
-  folderKey,
-  keyed,
+  escaped,
   toggled,
   type Arrow,
   type FileRow,
@@ -90,8 +89,11 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * opens or closes the folder without moving the focus — except out of a folder
  * being closed over it. On a touch screen a tap opens, since a double tap is
  * not a gesture a touch screen reliably hands over. `Escape` while the sheet is
- * closed climbs to the folder the focused row stands in, and from a top-level
- * row lets go of the focus; so does a click on the empty space below the rows.
+ * closed folds one level of what is shown (see [`escaped`](./tree)): on an
+ * open folder it closes that folder, elsewhere it closes the folder the
+ * focused row stands in and moves the focus there, and from a top-level row
+ * it lets go of the focus, as a click on the empty space below the rows does.
+ * A folder closed by `Escape` forgets which of its subfolders were open.
  * With nothing focused the header's **+** is about the Library root again.
  *
  * Rows are selected together with modifier keys, as in a desktop file manager
@@ -302,8 +304,8 @@ export function TreeTable({
    */
   areaRef?: RefObject<HTMLDivElement>;
   /**
-   * Whether `Escape` is the tree's to let go of the focus with: not while the
-   * reader's sheet is open, whose `Escape` closes it.
+   * Whether `Escape` is the tree's to fold folders and let go of the focus
+   * with: not while the reader's sheet is open, whose `Escape` closes it.
    */
   escapeLetsGo?: boolean;
   /**
@@ -530,16 +532,12 @@ export function TreeTable({
   // What the reader showed as the press that may begin a double-click was
   // made (see `openRow`).
   const shownAtPress = useRef<string | null>(null);
-  // `Escape` climbs: the focus goes to the folder the focused row stands in, and
-  // from a top-level row, which stands in the root, it is let go of.
-  const climbOrLetGo = (focus: string) => {
-    const parent = parentOf(keyed(focus).path);
-    if (parent === '') {
-      letGo();
-      return;
-    }
-    onChange({ ...state, focus: folderKey(parent) });
-    if (selection.keys.size > 0) {
+  // `Escape` folds one level of what is shown (see [`escaped`](./tree)). The
+  // selection is dropped whenever the focus moves or is let go of.
+  const foldOrLetGo = () => {
+    const next = escaped(rows, state);
+    onChange(next);
+    if (next.focus !== state.focus && selection.keys.size > 0) {
       onSelect(NOTHING_SELECTED);
     }
   };
@@ -578,7 +576,7 @@ export function TreeTable({
     if (event.key === 'Escape') {
       if (escapeLetsGo && state.focus !== null) {
         event.preventDefault();
-        climbOrLetGo(state.focus);
+        foldOrLetGo();
       }
       return;
     }
