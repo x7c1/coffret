@@ -72,5 +72,5 @@ Concept background: [Storage](../../concepts/storage/),
   holding the page its own request was answered with can tell whether that
   page is still the one waited on. `flow` is present only while the reconnect
   is waiting and absent once it has ended, and the work answer never carries
-  the consent page or its URL: a second tab asking what the server is doing is
-  told a page is open, not handed one to open. *(Form: test)*
+  the consent page or its URL: a second explorer page asking what the server
+  is doing is told a page is open, not handed one to open. *(Form: test)*

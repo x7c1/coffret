@@ -105,7 +105,7 @@ export function refreshedLine(refreshed: Refreshed): string {
  * Whether the answer just heard is a catch-up that has landed.
  *
  * The other way the catalog moves: not the gesture above, but a catch-up
- * somebody started elsewhere — another tab's press, a run this window only
+ * somebody started elsewhere — another page's press, a run this window only
  * watched — finishing while this screen was following it. Every listing comes
  * out of the catalog, so one that reached the Library's head has changed the
  * tree and the open folder at once, and a screen that did not ask again would

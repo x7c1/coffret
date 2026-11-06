@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DoorMode, ServedLibrary } from './addon.js';
-import { Desktop, explorerCloses, type Closing, type Residency } from './desktop.js';
+import { Desktop, explorerCloses, REOPEN_SPACING_MS, type Closing, type Residency } from './desktop.js';
 
 /** The windows and the addon, as the dispatcher sees them, recording what it asks. */
 function setup(residency: Residency = { platform: 'linux', tray: true }) {
@@ -41,13 +41,19 @@ function setup(residency: Residency = { platform: 'linux', tray: true }) {
     hideExplorer: vi.fn(() => {
       explorer = 'hidden';
     }),
+    reloadExplorer: vi.fn(),
     reportServerStopped: vi.fn(),
     quit: vi.fn(),
     warn: vi.fn(),
   };
-  const desktop = new Desktop(core, passphrase, shell, residency);
+  let now = 1_000_000;
+  const desktop = new Desktop(core, passphrase, shell, residency, () => now);
   return {
     desktop,
+    /** Moves the app's clock on by `ms`. */
+    pass(ms: number) {
+      now += ms;
+    },
     core,
     passphrase,
     shell,
@@ -404,5 +410,78 @@ describe('a spent Passphrase window', () => {
     fixture.desktop.bringForward();
     expect(fixture.shell.warn).toHaveBeenCalledWith(expect.stringContaining('the desktop has not started'));
     expect(fixture.passphrase.bringForward).toHaveBeenCalledTimes(2);
+  });
+});
+
+// LA-21: a page in the explorer's window that says its session ended — the
+// server restarted, the Library served changed, or a delivered ticket was
+// refused — has its window loaded afresh from a fresh ticket, where one can be
+// issued and used, and not round and round.
+describe("the explorer's session ending", () => {
+  beforeEach(() => {
+    fixture.desktop.handle('LibraryOpened');
+    fixture.serve(UNLOCKED);
+  });
+
+  it('loads the explorer window afresh from a fresh ticket', () => {
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
+    expect(fixture.shell.warn).not.toHaveBeenCalled();
+  });
+
+  it('loads it afresh while it is hidden, so that it holds a session when shown', () => {
+    fixture.desktop.explorerClosing(closing());
+    expect(fixture.explorer()).toBe('hidden');
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
+  });
+
+  it('does not load it again right after it was, and does once the spacing has passed', () => {
+    fixture.desktop.explorerSessionEnded();
+    fixture.pass(REOPEN_SPACING_MS - 1);
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
+    expect(fixture.shell.warn).toHaveBeenCalledOnce();
+    fixture.pass(1);
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads nothing while the app quits', () => {
+    fixture.desktop.quit();
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).not.toHaveBeenCalled();
+  });
+
+  it('loads nothing where no Library is served', () => {
+    const before = setup();
+    before.desktop.open();
+    before.desktop.explorerSessionEnded();
+    expect(before.shell.reloadExplorer).not.toHaveBeenCalled();
+    expect(before.shell.openExplorer).not.toHaveBeenCalled();
+
+    fixture.desktop.handle('ServerStopped');
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).not.toHaveBeenCalled();
+  });
+
+  it('waits while the Library is locked, with the Passphrase window in front, and loads it once unlocked', () => {
+    fixture.serve(LOCKED);
+    fixture.desktop.handle('UnlockRequested');
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).not.toHaveBeenCalled();
+    expect(fixture.passphrase.isVisible()).toBe(true);
+
+    fixture.serve(UNLOCKED);
+    fixture.desktop.handle('LibraryUnlocked');
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
+    expect(fixture.passphrase.isVisible()).toBe(false);
+
+    // Once only: a later unlock loads nothing more.
+    fixture.serve(LOCKED);
+    fixture.desktop.handle('UnlockRequested');
+    fixture.serve(UNLOCKED);
+    fixture.desktop.handle('LibraryUnlocked');
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
   });
 });

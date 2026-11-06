@@ -2,12 +2,14 @@
 //
 // The Passphrase page talks to the door it was served from and the explorer to
 // its host, each over its own origin, and neither reaches Node. The explorer's
-// window has the one preload of the app, which exposes a single function to
-// its page — taking a drop by the paths of what was let go of — over the one
-// channel the main process answers, and only for that window (`drops.ts`). The
-// Passphrase window has none. Every window is sandboxed and isolated, the
-// preload included, and keeps its storage in a partition of its own, so that
-// nothing one page stores is seen by the other.
+// window has the one preload of the app. It exposes two things to its page:
+// taking a drop by the paths of what was let go of, over the one channel the
+// main process answers, and only for that window (`drops.ts`); and, one way in
+// each direction, the fresh tickets that keep its session from ending and the
+// page saying it holds none (`renewal.ts`). The Passphrase window has no
+// preload. Every window is sandboxed and isolated, the preload included, and
+// keeps its storage in a partition of its own, so that nothing one page stores
+// is seen by the other.
 
 import type { BrowserWindowConstructorOptions, WebPreferences } from 'electron';
 

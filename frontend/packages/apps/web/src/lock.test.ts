@@ -5,12 +5,12 @@ import { Refusal, type LibraryState, type Unlocking } from '@coffret/api';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 
 /**
- * A tab reading one work answer after another, wired the way the screen is.
+ * A page reading one work answer after another, wired the way the screen is.
  *
  * It holds the state it was last told and counts the times it gave up what this
  * device decrypted.
  */
-function tab() {
+function page() {
   let held: LibraryState | null = null;
   let discards = 0;
   return {
@@ -33,7 +33,7 @@ function tab() {
 it('gives up what it decrypted when the answer turns from unlocked to locked', () => {
   expect(lockLanded('unlocked', 'locked')).toBe(true);
 
-  const open = tab();
+  const open = page();
   open.answered('unlocked');
   open.answered('locked');
 
@@ -46,19 +46,19 @@ it('gives up what it decrypted when the answer turns from unlocked to locked', (
 it('discards nothing when the first answer already says locked', () => {
   expect(lockLanded(null, 'locked')).toBe(false);
 
-  const late = tab();
+  const late = page();
   late.answered('locked');
 
   expect(late.discards).toBe(0);
 });
 
-// And then it goes on saying so, several times a second for as long as the tab
+// And then it goes on saying so, several times a second for as long as the page
 // is open. Only the change is news: a page that acted on every answer would be a
 // reader throwing away and re-asking for a page it is refused, over and over.
 it('discards nothing when locked follows locked', () => {
   expect(lockLanded('locked', 'locked')).toBe(false);
 
-  const shut = tab();
+  const shut = page();
   shut.answered('unlocked');
   shut.answered('locked');
   shut.answered('locked');
@@ -73,7 +73,7 @@ it('discards nothing while the Library stays open', () => {
   expect(lockLanded(null, 'unlocked')).toBe(false);
   expect(lockLanded('unlocked', 'unlocked')).toBe(false);
 
-  const reading = tab();
+  const reading = page();
   reading.answered('unlocked');
   reading.answered('unlocked');
 
@@ -81,7 +81,7 @@ it('discards nothing while the Library stays open', () => {
 });
 
 /**
- * The same tab, counting the times it asked its questions again because the
+ * The same page, counting the times it asked its questions again because the
  * Library came back.
  */
 function returning() {
@@ -100,9 +100,9 @@ function returning() {
   };
 }
 
-// The way back. The Library locked under an open tab, everything it asked was
+// The way back. The Library locked under an open page, everything it asked was
 // refused, and the Passphrase was given in the desktop app's own window. The
-// answer turning back to unlocked is where the tab asks everything again, so a
+// answer turning back to unlocked is where the page asks everything again, so a
 // page that was refused comes back without anybody asking for it again — the
 // locked page's one control is *Unlock*, and the page does not wait on it.
 it('asks again when the answer turns from locked to unlocked', () => {

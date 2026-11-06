@@ -1,7 +1,7 @@
 import type { Refusal } from './refusal';
 
 /**
- * The browser token this tab holds, and the one place it is held.
+ * The browser token this page holds, and the one place it is held.
  *
  * The explorer host admits a page only by a token of its own (spec: LA-14),
  * which the page got by exchanging a launch ticket. Every request this package
@@ -35,10 +35,23 @@ let token: string | null = null;
 let round = 0;
 const listeners = new Set<EndingListener>();
 
-/** Holds `next` as this tab's token, from a new round. */
+/** Holds `next` as this page's token, from a new round. */
 export function holdToken(next: string): void {
   token = next;
   round += 1;
+}
+
+/**
+ * Holds `next` in place of the token held now, in the same round: the session
+ * goes on under a token newly issued for it, and whatever is in flight under
+ * the one before is still handed to whoever asked (spec: LA-18).
+ *
+ * A refusal saying the token admits nothing, of a request sent with the token
+ * before, is not the session ending: that token was let go of on purpose, and
+ * the session stands under its successor ({@link heardRefusal}).
+ */
+export function renewToken(next: string): void {
+  token = next;
 }
 
 /** Lets the token go, from a new round. */
@@ -78,13 +91,21 @@ export function onSessionEnding(listener: EndingListener): () => void {
 }
 
 /**
- * Hears one refusal, and tells the listeners where it says the session ended —
- * the host no longer admits the token, or the server behind it stopped, which
- * revoked every session (spec: LA-15) — or where it says the Library locked.
+ * Hears one refusal of a request sent with `sentWith`, and tells the listeners
+ * where it says the session ended — the host no longer admits the token, or
+ * the server behind it stopped, which revoked every session (spec: LA-15) — or
+ * where it says the Library locked.
+ *
+ * A token that admits nothing is the session ending only where it is the
+ * token held now: one renewed away ({@link renewToken}) was let go of, and
+ * says nothing of the session its successor holds.
  */
-export function heardRefusal(refusal: Refusal): void {
+export function heardRefusal(refusal: Refusal, sentWith: string | null): void {
   const ending = endingOf(refusal);
   if (ending === null) {
+    return;
+  }
+  if (refusal.kind === 'authentication_required' && sentWith !== token) {
     return;
   }
   for (const listener of [...listeners]) {

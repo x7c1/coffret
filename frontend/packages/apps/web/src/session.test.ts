@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { dropToken, heldToken, Refusal, type Launched, type SessionStanding } from '@coffret/api';
+import { dropToken, heldToken, holdToken, Refusal, type Launched, type SessionStanding } from '@coffret/api';
 
-import { establish, KEPT_PREFIX, shelf, takeTicket, type Asking } from './session';
+import { desktopSession, establish, KEPT_PREFIX, renew, shelf, takeTicket, type Asking } from './session';
 
 afterEach(() => {
   dropToken();
@@ -51,7 +51,7 @@ it('takes the ticket out of the address at once', () => {
 
 // LA-16, LA-17: a ticket is exchanged once, however many wait on the answer,
 // and the token is held and kept under the generation it belongs to.
-it('exchanges the ticket once, and keeps the token for this tab', async () => {
+it('exchanges the ticket once, and keeps the token for this page', async () => {
   const asking = host();
   const shelved = shelf();
 
@@ -93,7 +93,7 @@ it('forgets a kept token the host refuses, and holds nothing', async () => {
   expect(window.sessionStorage.length).toBe(0);
 });
 
-// A tab with neither a ticket nor a kept token asks nothing about a session.
+// A page with neither a ticket nor a kept token asks nothing about a session.
 it('asks nothing where there is nothing to ask with', async () => {
   const asking = host();
   expect(await establish(null, shelf(), asking)).toEqual({ kind: 'none', said: null });
@@ -101,7 +101,7 @@ it('asks nothing where there is nothing to ask with', async () => {
   expect(asking.checkSession).not.toHaveBeenCalled();
 });
 
-// Storage that throws leaves the token in memory, for the life of the tab.
+// Storage that throws leaves the token in memory, for the life of the page.
 it('keeps the token in memory where storage throws', async () => {
   const refusing = {
     get length(): number {
@@ -160,4 +160,73 @@ it('carries no sentence where the exchange is refused as no session', async () =
   );
   expect(await establish(TICKET, shelf(), asking)).toEqual({ kind: 'none', said: null });
   expect(heldToken()).toBeNull();
+});
+
+const RENEWED = 'n'.repeat(43);
+
+/** A host that renews to `instanceId`, and revokes what it is asked to. */
+function renewing(instanceId = 'host.1') {
+  return {
+    launch: vi.fn(
+      (): Promise<Launched> =>
+        Promise.resolve({ token: RENEWED, expires_in: 43_200, instance_id: instanceId }),
+    ),
+    revokeSession: vi.fn((): Promise<void> => Promise.resolve()),
+  };
+}
+
+// LA-18: a renewal is a new token from a new ticket, held and kept in place of
+// the old one, whose session is revoked with its own token.
+it('renews to a new token, kept in place of the old one, and revokes the old session', async () => {
+  const shelved = shelf();
+  shelved.keep('host.1', TOKEN);
+  holdToken(TOKEN);
+  const asking = renewing();
+
+  expect(await renew(TICKET, shelved, asking)).toEqual({ kind: 'renewed', expiresIn: 43_200 });
+  expect(asking.launch).toHaveBeenCalledWith(TICKET);
+  expect(heldToken()).toBe(RENEWED);
+  expect(shelved.kept()).toEqual([{ instanceId: 'host.1', token: RENEWED }]);
+  expect(asking.revokeSession).toHaveBeenCalledWith(TOKEN);
+});
+
+// LA-17: a refused exchange of a delivered ticket leaves the token held as it
+// was, and says why, for the page to end its session by.
+it('leaves the token held where a renewal is refused', async () => {
+  const shelved = shelf();
+  shelved.keep('host.1', TOKEN);
+  holdToken(TOKEN);
+  const asking = renewing();
+  asking.launch.mockRejectedValueOnce(new Refusal('rate_limited', 429, 'too many at once'));
+
+  expect(await renew(TICKET, shelved, asking)).toEqual({ kind: 'refused', said: 'too many at once' });
+  expect(heldToken()).toBe(TOKEN);
+  expect(asking.revokeSession).not.toHaveBeenCalled();
+});
+
+// LA-18: a token of another generation is no renewal of the session held: the
+// host or its Library changed under the page.
+it('refuses a renewal to another generation, revoking what it brought', async () => {
+  const shelved = shelf();
+  shelved.keep('host.1', TOKEN);
+  holdToken(TOKEN);
+  const asking = renewing('host.2');
+
+  expect(await renew(TICKET, shelved, asking)).toEqual({ kind: 'refused', said: null });
+  expect(heldToken()).toBe(TOKEN);
+  expect(shelved.kept()).toEqual([{ instanceId: 'host.1', token: TOKEN }]);
+  expect(asking.revokeSession).toHaveBeenCalledWith(RENEWED);
+});
+
+it('finds the desktop app session bridge only where both calls are offered', () => {
+  try {
+    expect(desktopSession()).toBeNull();
+    vi.stubGlobal('coffretDesktop', { takeDrop: () => undefined });
+    expect(desktopSession()).toBeNull();
+    const bridge = { onTicket: () => () => undefined, sessionEnded: () => undefined };
+    vi.stubGlobal('coffretDesktop', bridge);
+    expect(desktopSession()).toBe(bridge);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

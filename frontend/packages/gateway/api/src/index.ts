@@ -86,12 +86,13 @@ export type {
 } from './work';
 export { getAppearance, setAppearance } from './appearance';
 export type { Appearance } from './appearance';
-export { checkSession, launch } from './auth';
+export { checkSession, launch, revokeSession } from './auth';
 export type { Launched, SessionStanding } from './auth';
 export {
   dropToken,
   heldToken,
   holdToken,
+  renewToken,
   onSessionEnding,
   withdrawAnswers,
 } from './credential';

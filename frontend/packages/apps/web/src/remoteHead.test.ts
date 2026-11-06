@@ -43,9 +43,9 @@ it('looks once on load', async () => {
   stop();
 });
 
-// Coming back to the tab is when somebody would glance at the icon, so it is
+// Coming back to the page is when somebody would glance at the icon, so it is
 // looked at then rather than at the next tick.
-it('looks again when the tab comes back to the front', async () => {
+it('looks again when the page comes back to the front', async () => {
   const { ask, watch } = looks('current');
   const stop = watch.start();
   await settled();
@@ -57,9 +57,9 @@ it('looks again when the tab comes back to the front', async () => {
   stop();
 });
 
-// And every few minutes while the tab is shown — not while it is hidden, when
+// And every few minutes while the page is shown — not while it is hidden, when
 // nobody would see the answer.
-it('looks on its interval while the tab is shown, and not while it is hidden', async () => {
+it('looks on its interval while the page is shown, and not while it is hidden', async () => {
   const { state, ask, watch } = looks('current');
   const stop = watch.start();
   await settled();

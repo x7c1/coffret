@@ -93,7 +93,7 @@ export function rowFill(
   fill: Fill | DisplacedFill | null,
 ): RowFill {
   // A file a drop asked to have packed, waiting for the freeze that does it —
-  // whether or not this tab is the one that dropped it, and whether or not a
+  // whether or not this page is the one that dropped it, and whether or not a
   // server started since is the one packing it. A sync leaves it alone, so the
   // `added` sentence below, which promises the next sync, would be wrong about
   // it. Not for a `remote` row: the Library has it and this device does not,
@@ -665,7 +665,7 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * Whether to be polling the work route at all.
  *
  * An explorer with nothing in flight asks for nothing: the whole point of the
- * interval is the minutes a fill, a sync or a freeze takes, and an idle tab that
+ * interval is the minutes a fill, a sync or a freeze takes, and an idle page that
  * kept asking would be a page making a request a second forever.
  *
  * The reasons overlap rather than nest. The reader being open means a fetch may
@@ -693,7 +693,7 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * only by asking, which is what brings its listing back without a reload. The
  * asking takes no key, so it neither counts as somebody being here nor keeps
  * anything unlocked; what it costs is one loopback request at the interval for
- * as long as a tab stays open over a locked Library.
+ * as long as a page stays open over a locked Library.
  *
  * A deletion running, or one waiting its turn, is about to take rows out of the
  * folder on the screen, and the press that armed it is owed the sentence
@@ -750,7 +750,7 @@ export function shouldPoll(
  *
  * `told` and not "asked", and the difference is the whole of one failure: a
  * request that never answered taught this page nothing, so a page counting it
- * as having asked would go quiet for the life of the tab with no idea what the
+ * as having asked would go quiet for the life of the page with no idea what the
  * server is doing — and, since nothing about a failed work request is shown
  * on the screen, with nothing to press about it either. A question counts once
  * it has been answered.

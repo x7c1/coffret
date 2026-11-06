@@ -16,7 +16,7 @@
 // The lock arrives by one road. It happens on the server's own clock and nobody
 // is told, so it arrives as a change in the answer to the question the screen
 // is already asking — what this server is doing — and [`lockLanded`] is where
-// that answer becomes the giving up. A tab left open over a page it decrypted
+// that answer becomes the giving up. A page left open over a picture it decrypted
 // lets go of it at the next poll rather than at the next page turn.
 //
 // The unlock arrives by the same road, the other way. The Passphrase is never

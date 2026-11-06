@@ -11,14 +11,14 @@ import {
 } from '@coffret/api';
 
 import { App } from './App';
-import type { Opened, Shelf } from './session';
+import { renew, type DesktopSession, type Opened, type Shelf } from './session';
 import { COLOR } from './theme';
 
 /** How often a page whose Library locked asks the host whether it is unlocked. */
 export const LOCKED_POLL_MS = 2_000;
 
 /** What a page holding no token says, in place of everything else. */
-export const NO_SESSION = 'This tab holds no session with the explorer, so it shows nothing of the Library.';
+export const NO_SESSION = 'The explorer holds no session, so it shows nothing of the Library.';
 
 /**
  * How the explorer is opened again, which is the one thing such a page can
@@ -28,10 +28,10 @@ export const HOW_TO_OPEN =
   'Reload the explorer from the coffret app to open it again — or, in development, open the ' +
   'launch file the development host printed.';
 
-/** What a tab whose session ended under it says, where the host gave no reason of its own. */
-const ENDED = 'This tab’s session ended: it ran out, was revoked, or the explorer was started again.';
+/** What a page whose session ended under it says, where the host gave no reason of its own. */
+export const ENDED = 'The explorer’s session ended: it ran out, was revoked, or the explorer was started again.';
 
-/** Where the tab stands with the explorer host. */
+/** Where the page stands with the explorer host. */
 type Standing =
   | { kind: 'opening' }
   | { kind: 'none'; said: string | null }
@@ -49,7 +49,7 @@ type Standing =
 /**
  * The explorer, behind the session that admits it.
  *
- * Until the tab holds a browser token there is no screen at all, only how the
+ * Until the page holds a browser token there is no screen at all, only how the
  * explorer is opened, and nothing under `/api` is asked (spec: LA-21). Once it
  * holds one, the screen is drawn, and what ends the session, or locks the
  * Library under it, ends the screen:
@@ -68,23 +68,37 @@ type Standing =
  * Either way, an answer to a request of the screen before is let go of rather
  * than drawn, and nothing that was refused is sent again.
  *
+ * In the desktop app's window (`desktop`), the session is kept from ending
+ * under the page (spec: LA-18). The app hands the page a fresh ticket ahead
+ * of its token's expiry, and the page exchanges it and holds the new token in
+ * place of the old one: the screen is not drawn again, and keeps what it
+ * shows. Where the session ends anyway, or never came, or the exchange of a
+ * delivered ticket is refused, the page tells the app, which loads the window
+ * afresh from a ticket of its own where it can (spec: LA-21).
+ *
  * The page offers no control that ends its own session: disconnecting is the
- * desktop app's, from its tray, for every tab at once.
+ * desktop app's, by quitting, for every session at once.
  */
 export function Explorer({
   opened,
   shelved,
   screen: Screen = App,
+  desktop = null,
 }: {
-  /** How the tab came up, asked once as the page loaded. */
+  /** How the page came up, asked once as it loaded. */
   opened: Promise<Opened>;
-  /** Where the tab keeps its token, which ending its session empties. */
+  /** Where the page keeps its token, which ending its session empties. */
   shelved: Shelf;
   /** What is drawn while a token is held: the explorer's own screen. */
   screen?: ComponentType;
+  /** The desktop app's window, where the page runs in one, and `null` in a browser. */
+  desktop?: DesktopSession | null;
 }) {
   const [standing, setStanding] = useState<Standing>({ kind: 'opening' });
-  const [expiresIn, setExpiresIn] = useState<number | null>(null);
+  // When the token held runs out: a new object for each token taken up, so
+  // that a renewal to a session as long as the one before still starts the
+  // clock again.
+  const [expiry, setExpiry] = useState<{ seconds: number } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -93,7 +107,7 @@ export function Explorer({
         return;
       }
       if (came.kind === 'held') {
-        setExpiresIn(came.expiresIn);
+        setExpiry({ seconds: came.expiresIn });
         setStanding({ kind: 'held', round: 0, locked: false });
       } else {
         setStanding({ kind: 'none', said: came.said });
@@ -114,7 +128,7 @@ export function Explorer({
       lockedNow.current = false;
       dropToken();
       shelved.forgetAll();
-      setExpiresIn(null);
+      setExpiry(null);
       setStanding({ kind: 'none', said });
     },
     [shelved],
@@ -144,16 +158,59 @@ export function Explorer({
     });
   }, [held, endSession]);
 
-  // A session runs out on the host's clock, and nothing renews it
-  // (spec: LA-18): the screen goes when it does, whether or not anything was
-  // being asked at the time.
+  // A session runs out on the host's clock, and is never extended
+  // (spec: LA-18): unless a new token was taken up first, the screen goes when
+  // it does, whether or not anything was being asked at the time.
   useEffect(() => {
-    if (!held || expiresIn === null) {
+    if (!held || expiry === null) {
       return;
     }
-    const timer = window.setTimeout(() => endSession(ENDED), expiresIn * 1000);
+    const timer = window.setTimeout(() => endSession(ENDED), expiry.seconds * 1000);
     return () => window.clearTimeout(timer);
-  }, [held, expiresIn, endSession]);
+  }, [held, expiry, endSession]);
+
+  // A fresh ticket the desktop app hands over is exchanged for a new token,
+  // held in place of the old one without drawing the screen again — locked or
+  // not, since a locked Library keeps its sessions (spec: LA-18). An exchange
+  // refused ends the session, which tells the app.
+  useEffect(() => {
+    if (!held || desktop === null) {
+      return;
+    }
+    let live = true;
+    const stop = desktop.onTicket((ticket) => {
+      void renew(ticket, shelved).then((renewed) => {
+        if (!live) {
+          // The session ended, or the page went, while the exchange was on
+          // its way: a token it brought is not held on.
+          if (renewed.kind === 'renewed') {
+            dropToken();
+            shelved.forgetAll();
+          }
+          return;
+        }
+        if (renewed.kind === 'renewed') {
+          setExpiry({ seconds: renewed.expiresIn });
+          return;
+        }
+        console.warn('the explorer could not renew its session', renewed.said);
+        endSession(renewed.said ?? ENDED);
+      });
+    });
+    return () => {
+      live = false;
+      stop();
+    };
+  }, [held, desktop, shelved, endSession]);
+
+  // A page in the desktop app's window holding no session tells the app,
+  // which loads it afresh where it can, rather than leaving this page shown.
+  const none = standing.kind === 'none';
+  useEffect(() => {
+    if (none && desktop !== null) {
+      desktop.sessionEnded();
+    }
+  }, [none, desktop]);
 
   // While the Library is locked, the host is asked — not the server, and not
   // through anything that would keep the Library open — whether it is still.
@@ -182,7 +239,9 @@ export function Explorer({
           if (aborter.signal.aborted) {
             return;
           }
-          if (isRefusal(refused) && refused.kind === 'authentication_required') {
+          // A token renewed away while it was being asked about was revoked on
+          // purpose, and says nothing of the session its successor holds.
+          if (isRefusal(refused) && refused.kind === 'authentication_required' && heldToken() === token) {
             endSession(ENDED);
           }
           // Anything else — the host not answering a moment — is asked again
@@ -212,7 +271,7 @@ function endedBy(refusal: Refusal): string {
   return refusal.kind === 'server_unavailable' ? refusal.message : ENDED;
 }
 
-/** The page a tab without a session shows: what it is, and how to open the explorer. */
+/** The page shown without a session: what it is, and how to open the explorer. */
 function Notice({ lines, said = null }: { lines: string[]; said?: string | null }) {
   return (
     <main
