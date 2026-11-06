@@ -68,6 +68,7 @@ import hostRefusals from './contract/host-refusals.json';
 import type { Appearance } from './appearance';
 import type { Beside } from './beside';
 import type { Browsed } from './browse';
+import type { Filtered, FilterRow, FilterRowKind } from './filter';
 import type { Folders } from './folders';
 import type { HeldParcels, Library, LibraryTotals } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
@@ -244,6 +245,7 @@ const HEAD_STATES: Literals<HeadState> = { newer: true, current: true };
 const APPEARANCES: Literals<Appearance> = { system: true, light: true, dark: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
 const MARKERS: Literals<MappedMarker> = { written: true, adopted: true, reset: true };
+const FILTER_ROW_KINDS: Literals<FilterRowKind> = { folder: true, file: true };
 
 /**
  * Every literal a narrowing met, by the table it was read against, so that a
@@ -1092,6 +1094,30 @@ it('reads every other answer the server sends through its type', () => {
       next: nullable(fields.next, (value) => string(value, 'beside.next')),
     };
   })();
+  const filtered: Filtered = (() => {
+    const fields = object(answers.filter, 'filter', ['rows', 'total', 'truncated']);
+    return {
+      rows: list(fields.rows, 'filter.rows', (value, where): FilterRow => {
+        const row = object(value, where, ['path', 'kind'], ['deposited_at']);
+        const kind = one(FILTER_ROW_KINDS, row.kind, `${where}.kind`);
+        const path = string(row.path, `${where}.path`);
+        // A folder always carries when its book was added, `null` or not; a
+        // file never does.
+        if (kind === 'file') {
+          object(value, where, ['path', 'kind']);
+          return { path, kind };
+        }
+        object(value, where, ['path', 'kind', 'deposited_at']);
+        return {
+          path,
+          kind,
+          deposited_at: nullable(row.deposited_at, (time) => string(time, `${where}.deposited_at`)),
+        };
+      }),
+      total: number(fields.total, 'filter.total'),
+      truncated: boolean(fields.truncated, 'filter.truncated'),
+    };
+  })();
   const refreshed: Refreshed = (() => {
     const fields = object(answers.refreshed, 'refreshed', ['advanced', 'gained', 'entries']);
     return {
@@ -1247,6 +1273,10 @@ it('reads every other answer the server sends through its type', () => {
   expect(appearance).toBe('system');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(beside.next).toBe('books/page-001.png');
+  expect(filtered.total).toBe(filtered.rows.length);
+  expect(filtered.truncated).toBe(false);
+  expect(unmet(FILTER_ROW_KINDS), 'row kinds no filter sent').toEqual([]);
+  expect(filtered.rows.find((row) => row.kind === 'folder')?.deposited_at).not.toBeNull();
   expect(refreshed.entries).toBeGreaterThan(0);
   expect(looked.current.head).toBe('current');
   expect(looked.newer.head).toBe('newer');

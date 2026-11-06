@@ -64,9 +64,11 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  *
  * Columns, in order: Name, Size, whether the row is on this device, and
  * Modified, a folder's Size and Modified being those of everything below it
- * (see `valuesOf`). A folder row opens and closes from the disclosure button at its
- * start; a file and an empty folder keep that room, so that every name at one
- * depth starts at one place. Every file is a row, each page of a book whose
+ * (see `valuesOf`) — and, while the tree is filtered by the most recent books,
+ * Added: when a kept folder's book, or a file, was added to the Library. A
+ * folder row opens and closes from the disclosure button at its start; a file
+ * and an empty folder keep that room, so that every name at one depth starts
+ * at one place. Every file is a row, each page of a book whose
  * pages are image files included. Each value column is as wide as the widest
  * of its heading and the values of every row open, drawn or not, measured from
  * the rendered strings (see [`columnWidth`](./columns)).
@@ -160,6 +162,10 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * The folders the Library does not hold yet (see [`prospective`](./prospective))
  * are rows too, marked as such, and so are the folders of books whose freeze
  * has not committed, dimmed. A prepared path's row offers "Forget this folder".
+ *
+ * While a filter is on, the rows are the ones it kept, with the folders above
+ * them drawn open and dimmed (see [`treeRows`](./tree)), and a line over them
+ * says how many matched and offers Clear.
  */
 export function TreeTable({
   rows,
@@ -199,6 +205,8 @@ export function TreeTable({
   areaRef,
   escapeLetsGo = true,
   onReadOn,
+  filtered = null,
+  added = false,
 }: {
   /** Every row on show, top to bottom (see [`treeRows`](./tree)). */
   rows: readonly TreeRow[];
@@ -324,6 +332,16 @@ export function TreeTable({
    * by row.
    */
   onReadOn?: (arrow: 'ArrowUp' | 'ArrowDown') => void;
+  /**
+   * The line over the rows while a filter is on — how many matched, or why
+   * the filter could not be applied — and `null` while none is.
+   */
+  filtered?: FilterLine | null;
+  /**
+   * Whether the Added column is drawn, after Modified: while the tree is
+   * filtered by the most recent books, when each was added.
+   */
+  added?: boolean;
 }) {
   const own = useRef<HTMLDivElement>(null);
   const scroller = areaRef ?? own;
@@ -424,8 +442,10 @@ export function TreeTable({
   // What is happening to this folder, said over the rows because it is true of
   // every one of them: the pages go up together, as Packs.
   const packing = listing !== null && freezingHere(freeze, listing.path);
+  // Not while a filter is on: the rows on show are what it kept, and a folder
+  // showing none of its own is not an empty one.
   const emptyHere =
-    listing !== null && listing.files.length === 0 && childFolders === 0;
+    filtered === null && listing !== null && listing.files.length === 0 && childFolders === 0;
 
   // What a drop comes to, read for the folder it would land in: the folder row
   // under the pointer, the folder a file row under it stands in, and the
@@ -781,11 +801,20 @@ export function TreeTable({
         'Modified',
         values.map((value) => value.modified),
         measured,
-        CELL_PAD + MODIFIED_END_PAD,
+        added ? 2 * CELL_PAD : CELL_PAD + MODIFIED_END_PAD,
       ),
+      added: added
+        ? columnWidth(
+            'Added',
+            values.map((value) => value.added),
+            measured,
+            CELL_PAD + MODIFIED_END_PAD,
+          )
+        : null,
     };
-  }, [rows, measured]);
+  }, [rows, measured, added]);
   const columns = <Columns widths={widths} />;
+  const spans = added ? 6 : 5;
 
   return (
     // The tree and, over its bottom edge, the pill a drag brings up: a frame
@@ -848,6 +877,7 @@ export function TreeTable({
               onMap={onMap}
             />
           )}
+          {filtered !== null && <FilterStatus line={filtered} />}
           {packing && <Packing />}
           {emptyHere && rows.length > 0 && (
             <Banner tone={COLOR.dim} background={COLOR.panel}>
@@ -863,16 +893,21 @@ export function TreeTable({
                 <th style={HEAD}>
                   <span style={HIDDEN}>On this device</span>
                 </th>
-                <th style={{ ...HEAD, paddingRight: MODIFIED_END_PAD }}>Modified</th>
+                <th style={added ? HEAD : { ...HEAD, paddingRight: MODIFIED_END_PAD }}>Modified</th>
+                {added && <th style={{ ...HEAD, paddingRight: MODIFIED_END_PAD }}>Added</th>}
                 <th style={HEAD} />
               </tr>
             </thead>
           </table>
         </div>
         {rows.length === 0 ? (
-          <p style={{ padding: 16, color: COLOR.dim }}>
-            {emptyLine(listing, root, nowhere, prospectiveHere)}
-          </p>
+          // A filter that kept nothing says so on its own line, and the
+          // Library is not empty for it.
+          filtered === null && (
+            <p style={{ padding: 16, color: COLOR.dim }}>
+              {emptyLine(listing, root, nowhere, prospectiveHere)}
+            </p>
+          )
         ) : (
           // Told how many rows there are in all, and each drawn row which of
           // them it is, since only the rows on show are drawn.
@@ -881,12 +916,12 @@ export function TreeTable({
             {/* No text selection across rows: Shift+click selects rows here, as
                 in a file manager, and would otherwise also select their text. */}
             <tbody style={{ userSelect: 'none' }}>
-              <Spacer rows={range.from} rowHeight={view.rowHeight} />
+              <Spacer rows={range.from} rowHeight={view.rowHeight} spans={spans} />
               {rows.slice(range.from, range.to).map((row, drawnAt) =>
                 row.kind === 'note' ? (
                   <tr key={row.key} aria-rowindex={range.from + drawnAt + 1} aria-level={row.depth + 1}>
                     <td
-                      colSpan={5}
+                      colSpan={spans}
                       style={{
                         ...CELL,
                         paddingLeft: indent(row.depth) + DISCLOSURE,
@@ -927,6 +962,7 @@ export function TreeTable({
                     focusOutside={selection.keys.size > 0 && !isSelected(selection, row.key)}
                     drop={row.kind === 'folder' && row.path === landingRow && drag.dragged ? landingOutcome : null}
                     shown={row.kind === 'file' ? rowFill(row.file, row.in.path, fillOf(row.in.path)) : null}
+                    added={added}
                     menuOpen={menu !== null && menu.rows.some((one) => one.key === row.key)}
                     onPress={(how, first) => {
                       if (first) {
@@ -959,7 +995,7 @@ export function TreeTable({
                   />
                 ),
               )}
-              <Spacer rows={rows.length - range.to} rowHeight={view.rowHeight} />
+              <Spacer rows={rows.length - range.to} rowHeight={view.rowHeight} spans={spans} />
             </tbody>
           </table>
         )}
@@ -1014,13 +1050,13 @@ function drawnRange(count: number, view: View): { from: number; to: number } {
  * are, so that the list scrolls as far as every row would take it. Nothing
  * where there are none.
  */
-function Spacer({ rows, rowHeight }: { rows: number; rowHeight: number }) {
+function Spacer({ rows, rowHeight, spans }: { rows: number; rowHeight: number; spans: number }) {
   if (rows <= 0) {
     return null;
   }
   return (
     <tr aria-hidden>
-      <td colSpan={5} style={{ height: rows * rowHeight, padding: 0, border: 'none' }} />
+      <td colSpan={spans} style={{ height: rows * rowHeight, padding: 0, border: 'none' }} />
     </tr>
   );
 }
@@ -1127,6 +1163,7 @@ function Row({
   focusOutside,
   drop,
   shown,
+  added,
   menuOpen,
   onPress,
   onMenu,
@@ -1154,6 +1191,8 @@ function Row({
   drop: DropOutcome | null;
   /** What a file row's state is, the listing's and the fill's together; `null` for a folder. */
   shown: RowFill | null;
+  /** Whether the Added column is drawn. */
+  added: boolean;
   /** Whether the actions menu is open on this row, which keeps its "⋮" on show. */
   menuOpen: boolean;
   /**
@@ -1266,7 +1305,9 @@ function Row({
                 folder !== null
                   ? folder.prospective || folder.stranded
                     ? COLOR.accentDeep
-                    : COLOR.text
+                    : folder.above === true
+                      ? COLOR.faint
+                      : COLOR.text
                   : row.kind === 'file' && !row.file.openable
                     ? COLOR.dim
                     : COLOR.text,
@@ -1303,7 +1344,10 @@ function Row({
           <Device state={shown.state} message={shown.message} onAccent={onAccent} />
         ) : null}
       </td>
-      <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.modified}</td>
+      <td style={{ ...CELL, paddingRight: added ? CELL_PAD : MODIFIED_END_PAD, color: ink(COLOR.dim) }}>
+        {values.modified}
+      </td>
+      {added && <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.added}</td>}
       <MenuCell name={row.name} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
@@ -1323,14 +1367,15 @@ function Row({
  * One function for the cells and for the column widths, so that a column is
  * always as wide as the widest value it actually draws.
  */
-function valuesOf(row: FolderRow | FileRow): { size: string; modified: string } {
+function valuesOf(row: FolderRow | FileRow): { size: string; modified: string; added: string } {
   if (row.kind === 'file') {
-    return { size: size(row.file.size), modified: time(row.file.mtime) };
+    return { size: size(row.file.size), modified: time(row.file.mtime), added: time(row.file.deposited_at) };
   }
+  const added = row.added === undefined ? '' : time(row.added);
   if (row.prospective || row.stranded) {
-    return { size: '', modified: '' };
+    return { size: '', modified: '', added };
   }
-  return { size: size(row.folder.size), modified: time(row.folder.mtime) };
+  return { size: size(row.folder.size), modified: time(row.folder.mtime), added };
 }
 
 /**
@@ -1532,6 +1577,57 @@ function MenuCell({
   );
 }
 
+/** What the line over a filtered tree says, and what it offers. */
+export interface FilterLine {
+  /** How many matched (see [`matchLine`](./filter)), or that the first answer is out. */
+  text: string;
+  /** Why the last request for the filter was refused, and `null` where it was not. */
+  failed: string | null;
+  /** Clear: the name and Recent both turned off. */
+  onClear: () => void;
+  /** Asking for the filter again, after a refusal. */
+  onRetry: () => void;
+}
+
+/**
+ * The line over a filtered tree: how many rows matched, and Clear — or,
+ * where the last request was refused, that, beside the rows the answer
+ * before it kept, and asking again.
+ */
+function FilterStatus({ line }: { line: FilterLine }) {
+  return (
+    <p
+      role="status"
+      aria-label="filter"
+      style={{
+        margin: 0,
+        padding: '6px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 10,
+        background: COLOR.panel,
+        borderBottom: `1px solid ${COLOR.border}`,
+        fontSize: 13,
+      }}
+    >
+      {line.failed === null ? (
+        <span style={{ color: COLOR.dim }}>{line.text}</span>
+      ) : (
+        <span style={{ color: COLOR.refused }}>
+          {line.failed}
+          <button type="button" onClick={line.onRetry} style={{ ...BAR_BUTTON, marginLeft: 10 }}>
+            {TRY_AGAIN}
+          </button>
+        </span>
+      )}
+      <button type="button" onClick={line.onClear} style={BAR_BUTTON}>
+        Clear
+      </button>
+    </p>
+  );
+}
+
 /** Said while the book in the focused folder is being packed. */
 function Packing() {
   return (
@@ -1603,15 +1699,16 @@ function Unmapped({
 /**
  * The widths of the columns, given to both tables so the two line up: the name
  * (the rest of the width), the size, whether the row is on this device, the
- * time, and the "⋮".
+ * modified time, the time added while that column is drawn, and the "⋮".
  */
-function Columns({ widths }: { widths: { size: number; modified: number } }) {
+function Columns({ widths }: { widths: { size: number; modified: number; added: number | null } }) {
   return (
     <colgroup>
       <col />
       <col style={{ width: widths.size }} />
       <col style={{ width: ICON + 2 * DEVICE_PAD }} />
       <col style={{ width: widths.modified }} />
+      {widths.added !== null && <col style={{ width: widths.added }} />}
       <col style={{ width: MENU_BUTTON_SIZE + 4 }} />
     </colgroup>
   );
@@ -1627,7 +1724,10 @@ const CELL_PAD = 10;
 /** What a folder's size is, said where the pointer rests on it. */
 export const FOLDER_SIZE_TITLE = 'Total of everything inside';
 
-/** The room after the modified time, less than a cell's: the row's "⋮" follows it. */
+/**
+ * The room after the last time column, Modified or Added, less than a cell's:
+ * the row's "⋮" follows it.
+ */
 const MODIFIED_END_PAD = 2;
 
 /** How wide an icon is drawn, and the room either side of one in its column. */

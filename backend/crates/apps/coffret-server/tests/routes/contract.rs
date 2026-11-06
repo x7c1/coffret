@@ -60,6 +60,19 @@ fn steadied(mut answer: Value) -> Value {
     answer
 }
 
+/// A filter's `answer` with every folder's deposit time replaced by
+/// [`DEPOSITED_AT`], for the reason a file's is.
+fn steadied_filter(mut answer: Value) -> Value {
+    if let Some(rows) = answer.get_mut("rows").and_then(Value::as_array_mut) {
+        for row in rows {
+            if row.get("deposited_at").is_some_and(|time| !time.is_null()) {
+                row["deposited_at"] = Value::from(DEPOSITED_AT);
+            }
+        }
+    }
+    answer
+}
+
 /// What `uri` answers with, having answered `200`.
 async fn answered_as_json(served: &Served, method: &str, uri: &str) -> Value {
     let response = match method {
@@ -295,6 +308,11 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         // The files either side of a row: the last file of `albums` reads on
         // into the first of `books`.
         "beside": answered_as_json(&served, "GET", "/api/beside?path=albums/notes.txt").await,
+        // The rows a tree filtered by a name keeps: folders, which carry when
+        // their book was added, and a file, which carries nothing of the kind.
+        "filter": steadied_filter(
+            answered_as_json(&served, "GET", "/api/filter?name=o").await,
+        ),
         "listings": {
             "root": root,
             "albums": albums,

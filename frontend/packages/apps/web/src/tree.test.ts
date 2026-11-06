@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
+import type { Filtered, ListedFile, ListedFolder, Listing } from '@coffret/api';
+
+import { filteredOpen, shapeOf } from './filter';
 
 import {
   ancestry,
@@ -17,6 +19,7 @@ import {
   toggled,
   treeRows,
   type Arrow,
+  type TreeRow,
   type TreeState,
 } from './tree';
 import type { Asked } from './useAsked';
@@ -643,5 +646,65 @@ describe('the focus after the tree is drawn again', () => {
       const rows = treeRows({ listing: ask, expanded: new Set(expanded), prospective: [], stranded: [] });
       expect(refocused(rows, row, ask)).toBeUndefined();
     }
+  });
+});
+
+describe('the tree a filter keeps', () => {
+  const kept = (rows: Filtered['rows'], expanded: Iterable<string>, filtered = shapeOf({ rows, total: rows.length, truncated: false })) =>
+    treeRows({ listing: asked, expanded: new Set(expanded), prospective: [], stranded: [], filter: filtered });
+  const drawn = (rows: TreeRow[]) =>
+    rows.map((row) =>
+      row.kind === 'note'
+        ? `note ${row.path}`
+        : row.kind === 'folder'
+          ? `${row.path}/${row.above === true ? ' above' : ''}${row.added !== undefined ? ` added ${row.added}` : ''}${row.expanded ? ' open' : ''}`
+          : row.path,
+    );
+
+  it('draws a kept folder closed, under the folders above it drawn open and dimmed', () => {
+    const answer: Filtered['rows'] = [{ path: 'albums/2026', kind: 'folder', deposited_at: '2026-01-02T00:00:00Z' }];
+    const shape = shapeOf({ rows: answer, total: 1, truncated: false });
+    expect(drawn(kept(answer, filteredOpen(shape, new Set()), shape))).toEqual([
+      'albums/ above open',
+      'albums/2026/ added 2026-01-02T00:00:00Z',
+    ]);
+    // Opened, it lists everything in it, not only what matched.
+    expect(drawn(kept(answer, ['albums', 'albums/2026'], shape))).toEqual([
+      'albums/ above open',
+      'albums/2026/ added 2026-01-02T00:00:00Z open',
+      'albums/2026/a.jpg',
+      'albums/2026/b.jpg',
+    ]);
+    // A folder above a match closes like any other, and its match with it.
+    expect(drawn(kept(answer, [], shape))).toEqual(['albums/ above']);
+  });
+
+  it('draws a kept file without the other files of its folder', () => {
+    expect(drawn(kept([{ path: 'books/vol-1/p2.png', kind: 'file' }], ['books', 'books/vol-1']))).toEqual([
+      'books/ above open',
+      'books/vol-1/ above open',
+      'books/vol-1/p2.png',
+    ]);
+    expect(drawn(kept([{ path: 'readme.txt', kind: 'file' }], []))).toEqual(['readme.txt']);
+  });
+
+  it('draws every file of the Library root answered as a book, and nothing where nothing matched', () => {
+    expect(
+      drawn(kept([{ path: '', kind: 'folder', deposited_at: null }, { path: 'albums/cover.png', kind: 'file' }], ['albums'])),
+    ).toEqual(['albums/ above open', 'albums/cover.png', 'readme.txt']);
+    expect(kept([], [])).toEqual([]);
+  });
+
+  it('says a listing above a match is still out', () => {
+    // A match its folder's listing does not name yet: nothing drawn for it.
+    expect(drawn(kept([{ path: 'books/vol-9/p1.png', kind: 'file' }], ['books', 'books/vol-9']))).toEqual(['books/ above open']);
+    const out = treeRows({
+      listing: (path) => (path === 'albums' ? { status: 'loading' } : asked(path)),
+      expanded: new Set(['albums']),
+      prospective: [],
+      stranded: [],
+      filter: shapeOf({ rows: [{ path: 'albums/cover.png', kind: 'file' }], total: 1, truncated: false }),
+    });
+    expect(drawn(out)).toEqual(['albums/ above open', 'note albums']);
   });
 });

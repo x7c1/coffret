@@ -9,6 +9,8 @@ import { dropGround, dropOutline } from './Banner';
 import { nameless, type Described } from './details';
 import { landingOf, placeOf } from './destination';
 import { pickedFiles, type Drop } from './drop';
+import { NO_FILTER, type FilterSettings } from './filter';
+import { FilterField } from './FilterField';
 import { locationOf } from './location';
 import { moveLine, movesInto } from './moving';
 import { NEW_FOLDER } from './prospective';
@@ -46,6 +48,9 @@ import type { Asked } from './useAsked';
  *   them, and it is how a folder is made at the Library root, which has no row
  *   and so no row menu.
  *
+ * - **The filter.** Between the location and the appearance switch, the
+ *   search field the tree is filtered by — a name, the most recent books, or
+ *   both (see [`FilterField`](./FilterField)).
  * - **Appearance.** Beside the **+**, the switch between the sets of colours
  *   the explorer is drawn in — the system's, light or dark (see
  *   [`AppearanceSwitch`](./AppearanceSwitch)). Here rather than in a menu bar,
@@ -55,7 +60,8 @@ import type { Asked } from './useAsked';
  * added to a locked Library, and a name the lock kept the page from reading is
  * left out rather than said as a refusal: the main area says the lock. So is
  * the location, which the focus restored from the address would otherwise
- * still name beside a screen saying the Library's files stay hidden.
+ * still name beside a screen saying the Library's files stay hidden, and so is
+ * the filter, which has no tree to filter.
  *
  * One row on a wide window; on a narrow one it wraps rather than scrolling
  * sideways, the location taking a line of its own before anything is cut off
@@ -73,6 +79,9 @@ export function Header({
   moving = null,
   onMoveToRoot = () => {},
   locked = false,
+  filter = NO_FILTER,
+  onFilter = () => {},
+  onFilterToTree = () => {},
 }: {
   /** The open Library, as the server last answered for it. */
   library: Asked<Library>;
@@ -100,6 +109,12 @@ export function Header({
   onMoveToRoot?: () => void;
   /** Whether the Library is locked, which leaves nothing to add to. */
   locked?: boolean;
+  /** What the tree is filtered by (see [`FilterSettings`](./filter)). */
+  filter?: FilterSettings;
+  /** The filter was changed in the field or its panel. */
+  onFilter?: (next: FilterSettings) => void;
+  /** `↓` or `Enter` in the filter's input: the focus to the tree's first row. */
+  onFilterToTree?: () => void;
 }) {
   const location = locationOf(focus);
   const addInto = landingOf(focus);
@@ -186,6 +201,9 @@ export function Header({
           </span>
         )}
       </div>
+      {!locked && (
+        <FilterField settings={filter} onChange={onFilter} onToTree={onFilterToTree} onKeysBack={onKeysBack} />
+      )}
       <AppearanceSwitch onKeysBack={onKeysBack} />
       <button
         type="button"

@@ -1,8 +1,9 @@
 /**
  * What the explorer reads a Library through.
  *
- * The twenty-three routes `coffret-server` answers, as typed calls: which Library
- * this is, every folder in it, what one folder holds, which files stand either
+ * The twenty-four routes `coffret-server` answers, as typed calls: which Library
+ * this is, every folder in it, what one folder holds, which rows a tree
+ * filtered by a name or by the most recent books keeps, which files stand either
  * side of one row in reading order, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
  * looked and whether it has anything newer than that, what the server is doing
@@ -102,6 +103,8 @@ export type { Browsed, BrowsedFolder } from './browse';
 export { getBeside } from './beside';
 export type { Beside } from './beside';
 export { getFile, peekFile, readAhead } from './file';
+export { getFilter } from './filter';
+export type { FilterAsk, Filtered, FilterRow, FilterRowKind } from './filter';
 export { getFolders } from './folders';
 export type { Folders } from './folders';
 export { getLibrary, getLibraryTotals } from './library';
