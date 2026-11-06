@@ -551,3 +551,18 @@ jobs:
             .tmp/e2e-electron/playwright/
             .tmp/e2e-electron/logs/
           if-no-files-found: warn
+
+  # The one check of this workflow that `main` requires. It fails when any job
+  # above failed or was cancelled, so a failure anywhere blocks the merge
+  # without each job having to be listed as required — and auto-merge, which
+  # waits only for required checks, waits for all of them. Add a new job to
+  # `needs` here.
+  all-green:
+    if: ${{ always() }}
+    needs: [backend, cargo-deny, frontend, spec, interop, s3-store, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
