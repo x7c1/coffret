@@ -34,8 +34,9 @@ checkout that once served the production Library itself may still have a
 lines, or every target there, `make dev` and `make cli` included, works on the
 production Library.
 
-The scripts that keep state of their own — `local`, `e2e-it`, `e2e-electron`,
-`drive-round-trip-it`, `drive-index-layout-it` and the `drive-it-*` targets —
+The scripts that keep state of their own — `local`, the `large-*` targets,
+`e2e-it`, `e2e-electron`, `drive-round-trip-it`, `drive-index-layout-it` and
+the `drive-it-*` targets —
 set their own directories under `.tmp/` and ignore these; `drive-authorize`
 logs under `COFFRET_LOG_DIR` like the rest.
 
@@ -168,6 +169,66 @@ are synced. The layout is described in one place,
 `backend/crates/apps/coffret-fixtures/src/seed.rs`: a pattern worth having in
 the Library is added there.
 
+## The large Library
+
+`make large-seed` and `make large-measure` are for measuring the explorer
+against a Library of about a hundred thousand files, the size a filter over
+the whole Library has to be designed for. Like `make local` they need Docker
+and no cloud account, and `make large-measure` needs a browser too, so neither
+is part of `make check`.
+
+- `make large-seed` creates the Library the way `make local` creates its own
+  — MinIO in a container, a device state under `.tmp/`, the same fixed
+  Passphrase — and fills it with `coffret-fixtures --scenario large`
+  (`backend/crates/apps/coffret-fixtures/src/large.rs`): about 100,000 tiny
+  pages in comics in series of volumes, novels under their authors, magazines
+  by title, year and issue, an archive nested five folders deep and one folder
+  of 3,000 loose scans, with English, Japanese, long and full-width names among
+  them. Every book is frozen into Packs and committed, one series, author or
+  year at a time in an order that mixes the parts, so the deposit times are
+  spread over the seed. It stops MinIO when it is done. Where the Library is
+  seeded already, it says so and does nothing. On a 4-CPU Linux machine the
+  seed took about three minutes once the binaries were built, most of it in
+  the 155 freezes, and it keeps about 600 MB under `.tmp/large/`.
+- `make large-measure` takes three measurements against it and prints one
+  report, also kept in `.tmp/large/report.txt`: the entry count, and the median
+  and worst in milliseconds of
+  1. a full scan of the Index's `entries` matching a name against every path
+     segment (NFKC, case-insensitive, never across a `/`) for a name in many
+     Entries, one in a few and one in none, and picking the 5 and the 50 most
+     recently deposited books — timed by `coffret-measure`
+     (`backend/crates/apps/coffret-measure/`) over the Index file opened
+     read-only, before anything serves the Library;
+  2. the folder listing the explorer uses, `GET /api/list`, asked from the
+     explorer's tab at the Library root and at the folder with the most rows;
+  3. the tree's `↓` with about 5,000 and then about 20,000 rows drawn, from the
+     key press to the frame that paints the new focus, in Playwright's Chromium,
+     headless.
+
+  For the last two it starts MinIO, the server, the explorer's build and the
+  development host, as `make local` does, and stops all of them when it ends.
+  Most of its time goes to opening the tree, one folder at a time, each
+  opening drawn over every row already open: about ten minutes on the same
+  machine.
+  `COFFRET_LARGE_ROWS` (`5000,20000`) and `COFFRET_LARGE_PRESSES` (`15`) change
+  what the tree is timed at, and `COFFRET_CHROMIUM` names a Chromium to run
+  instead of the one Playwright installs.
+- `make large-down` stops anything an interrupted seed or measurement left
+  running, and keeps the Library; `make large-reset` is `make large-down`,
+  then removes `.tmp/large/`, which is the whole of it.
+
+Each seed says how long it took, and `make large-measure` repeats that, and
+the machine it ran on, at the top of its report.
+
+Everything lives under `.tmp/large/`, apart from `make local`'s `.tmp/local/`:
+MinIO's data (`minio/`), the device's state directory (`state/`), the mapped
+folders (`library/`), the logs (`logs/`, the seed's own in `seed.log`), and the
+pid files and output of the three processes (`run/`). The ports are their own
+too — the server on 8807, the explorer on 5193 and MinIO on 19040, moved by
+`LARGE_PORT`, `LARGE_WEB_PORT` and `LARGE_MINIO_PORT` — so `make local` can stay
+up beside them. MinIO's port is written into the Library's settings when it is
+seeded, so `make large-measure` has to be given the same one.
+
 ## Production CLI operations
 
 The desktop app opens a Library and serves it; it does not offer the
@@ -201,6 +262,10 @@ follows it to `logs` beside the Libraries. Two things first:
 | `make local` | MinIO in Docker and, on the first start, a Library on it created and seeded under `.tmp/local/`; then the three `make dev` starts, over that Library, with the explorer at `http://127.0.0.1:5183/`; run again, it stops the three and MinIO and starts them afresh, which is the restart (see [the local Library](#the-local-library)) |
 | `make local-down` | Stops the three `make local` started and the MinIO container, keeping everything under `.tmp/local/`; `make local-down local` is the same restart as a second `make local` |
 | `make local-reset` | `make local-down`, then removes `.tmp/local/`, so the next `make local` seeds a fresh Library |
+| `make large-seed` | MinIO in Docker and a Library of about 100,000 tiny files on it, created, filled and committed under `.tmp/large/`; does nothing where it is seeded already (see [the large Library](#the-large-library)) |
+| `make large-measure` | Against that Library, times the full-scan match and the n most recent books over the Index, the folder listing, and the tree's `↓` with about 5,000 and 20,000 rows open in headless Chromium, and prints the report |
+| `make large-down` | Stops anything the two above left running, keeping everything under `.tmp/large/` |
+| `make large-reset` | `make large-down`, then removes `.tmp/large/` |
 | `make desktop-build` | Builds the explorer, the Node-API addon and the Electron app, then bundles it for this host under `frontend/packages/apps/desktop/release/` (`Coffret_<version>_aarch64.dmg` on macOS, `coffret-desktop_<version>_amd64.deb` on Linux) and checks the bundle (see [building it](#building-it)) |
 | `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced |
 | `make desktop-dev-build` | Builds the explorer, the Node-API addon and the Electron app, without bundling or starting it |

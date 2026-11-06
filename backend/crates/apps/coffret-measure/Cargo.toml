@@ -1,0 +1,19 @@
+[package]
+name = "coffret-measure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+# The Index file itself, opened read-only: the harness reads the rows the
+# server reads and must never be able to write one.
+rusqlite = { workspace = true }
+# NFKC, the normalization a typed name and every path segment are compared in.
+unicode-normalization = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

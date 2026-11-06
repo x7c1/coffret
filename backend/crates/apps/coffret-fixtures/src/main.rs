@@ -13,8 +13,14 @@
 //! little of every shape of book, name and folder the explorer has to show,
 //! laid out in `seed.rs`. It takes no counts or sizes, and prints the folders
 //! to freeze, one per line, on standard output.
+//!
+//! The third, `large`, is a Library to measure the explorer against: about a
+//! hundred thousand tiny pages in books and series of a realistic shape, laid
+//! out in `large.rs`. Like the seed it takes no counts or sizes, and prints the
+//! folders to freeze on standard output.
 
 mod digits;
+mod large;
 mod seed;
 
 use anyhow::{Context, Result};
@@ -32,8 +38,10 @@ struct Args {
     out: PathBuf,
 
     /// What to generate: `benchmark`, the albums and the book the counts and
-    /// sizes below describe; or `seed`, the varied Library `make local`
-    /// serves, which takes none of them and refuses them where they are given
+    /// sizes below describe; `seed`, the varied Library `make local` serves;
+    /// or `large`, the hundred thousand files `make large-seed` carries in.
+    /// The last two take none of the counts and sizes, and refuse them where
+    /// they are given
     #[arg(long, value_enum, default_value_t = Scenario::Benchmark)]
     scenario: Scenario,
 
@@ -58,6 +66,7 @@ struct Args {
 enum Scenario {
     Benchmark,
     Seed,
+    Large,
 }
 
 const PHOTOS_PER_ALBUM: usize = 100;
@@ -112,8 +121,8 @@ const BENCHMARK_ONLY: [&str; 4] = ["photos", "pages", "photo_size", "page_size"]
 
 /// The arguments as typed, the binary's name first, or what is wrong with them.
 ///
-/// A count or a size given to the seed is refused rather than ignored, since
-/// it would otherwise look as though it had been honoured.
+/// A count or a size given to the seed or the large Library is refused rather
+/// than ignored, since it would otherwise look as though it had been honoured.
 fn arguments<I, T>(typed: I) -> Result<Args, clap::Error>
 where
     I: IntoIterator<Item = T>,
@@ -121,7 +130,7 @@ where
 {
     let matches = Args::command().try_get_matches_from(typed)?;
     let args = Args::from_arg_matches(&matches)?;
-    if args.scenario == Scenario::Seed {
+    if args.scenario != Scenario::Benchmark {
         if let Some(given) = BENCHMARK_ONLY
             .iter()
             .find(|id| matches.value_source(id) == Some(ValueSource::CommandLine))
@@ -129,8 +138,12 @@ where
             return Err(Args::command().error(
                 clap::error::ErrorKind::ArgumentConflict,
                 format!(
-                    "--{} describes the benchmark; the seed's counts and sizes are its own",
-                    given.replace('_', "-")
+                    "--{} describes the benchmark; the {} scenario's counts and sizes are its own",
+                    given.replace('_', "-"),
+                    match args.scenario {
+                        Scenario::Large => "large",
+                        _ => "seed",
+                    }
                 ),
             ));
         }
@@ -153,6 +166,19 @@ fn main() -> Result<()> {
                 "generated the seed: {} books of {pages} pages, {} albums of {photos} photos, under {}",
                 seed.books.len(),
                 seed.albums.len(),
+                args.out.display()
+            );
+            Ok(())
+        }
+        Scenario::Large => {
+            let large = large::generate(&args.out)?;
+            for unit in &large.freeze_units {
+                println!("{unit}");
+            }
+            eprintln!(
+                "generated the large Library: {} books of {} pages, under {}",
+                large.books.len(),
+                large.files(),
                 args.out.display()
             );
             Ok(())
@@ -440,21 +466,23 @@ mod tests {
     }
 
     #[test]
-    fn the_seed_refuses_the_benchmarks_counts_and_sizes() {
-        for flag in [
-            "--photos=5",
-            "--pages=5",
-            "--photo-size=8x8",
-            "--page-size=8x8",
-        ] {
-            let error = parsed(&["--out", "x", "--scenario", "seed", flag])
-                .err()
-                .unwrap_or_else(|| panic!("{flag} is refused with the seed"));
-            assert_eq!(
-                error.kind(),
-                clap::error::ErrorKind::ArgumentConflict,
-                "{flag}"
-            );
+    fn the_seed_and_the_large_library_refuse_the_benchmarks_counts_and_sizes() {
+        for scenario in ["seed", "large"] {
+            for flag in [
+                "--photos=5",
+                "--pages=5",
+                "--photo-size=8x8",
+                "--page-size=8x8",
+            ] {
+                let error = parsed(&["--out", "x", "--scenario", scenario, flag])
+                    .err()
+                    .unwrap_or_else(|| panic!("{flag} is refused with {scenario}"));
+                assert_eq!(
+                    error.kind(),
+                    clap::error::ErrorKind::ArgumentConflict,
+                    "{scenario} {flag}"
+                );
+            }
         }
     }
 
