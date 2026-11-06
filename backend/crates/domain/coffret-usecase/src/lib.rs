@@ -257,6 +257,9 @@ pub mod fetch;
 #[cfg(feature = "conformance")]
 pub mod fetch_conformance;
 
+// Which rows a filtered tree keeps: a name, the most recent books, or both.
+pub mod filter;
+
 pub mod freeze;
 
 // The freeze's own contract, behind the same feature as the other five.

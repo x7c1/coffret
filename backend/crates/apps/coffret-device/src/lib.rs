@@ -495,6 +495,9 @@ pub use coffret_usecase::fetch::{
     Cancellation, EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, KeptTally, Publication,
     Surfaced, UnheldParcel, UnheldReason,
 };
+pub use coffret_usecase::filter::{
+    FilterAsk, FilterRow, FilterRowKind, LibraryFilter, NameQuery, MOST_FILTER_ROWS,
+};
 pub use coffret_usecase::freeze::{
     FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
 };

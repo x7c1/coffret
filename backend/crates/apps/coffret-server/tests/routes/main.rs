@@ -20,6 +20,7 @@ mod drop_scope;
 mod fences;
 mod file;
 mod fill;
+mod filter;
 mod freeze;
 mod import;
 mod left_behind;
