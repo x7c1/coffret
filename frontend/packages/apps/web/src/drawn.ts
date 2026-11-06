@@ -2,7 +2,7 @@
 //
 // The bytes arrive with `Cache-Control: private, no-store`, and deliberately:
 // the Library's plaintext must never reach the browser's disk cache. So this is
-// the only cache there is — object URLs over blobs this tab holds in memory,
+// the only cache there is — object URLs over blobs this page holds in memory,
 // revoked as the reader moves away from them, when the key that made them
 // plaintext is given up, and again when the reader closes.
 //
@@ -46,7 +46,7 @@ export interface Drawn {
    */
   load: (path: string, ahead?: boolean) => Promise<string | undefined>;
   /**
-   * Drops every page outside `wanted`, so a long folder does not leave the tab
+   * Drops every page outside `wanted`, so a long folder does not leave the page
    * holding every page of it.
    */
   keepOnly: (wanted: ReadonlySet<string>) => void;
@@ -140,7 +140,7 @@ export function drawnPages(fetching: Fetching, readingAhead: Fetching = fetching
           if (closed || asked !== round) {
             // The reader went, or the key did, while this was in flight. The
             // blob is nobody's now, and an object URL nothing revokes is held
-            // for the life of the tab. Nobody is handed it either — not even
+            // for the life of the page. Nobody is handed it either — not even
             // the caller waiting on this one, which would otherwise draw a page
             // out of a URL that stopped meaning anything a line ago.
             URL.revokeObjectURL(url);

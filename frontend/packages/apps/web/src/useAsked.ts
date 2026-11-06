@@ -36,7 +36,7 @@ export type Asked<T> =
  * Three states and every one of them leaveable. A request that failed carries
  * the refusal's own sentence and is retried by calling `reload` — which is what
  * this exists for: the spike logged its one failure to the console and left the
- * screen saying "loading" for as long as the tab was open.
+ * screen saying "loading" for as long as the page was open.
  *
  * The previous answer is dropped the moment `key` changes, so a folder that is
  * still loading never shows the last one's rows. A `reload` of the *same* key

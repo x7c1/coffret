@@ -375,13 +375,24 @@ Concept background: [Library](../../concepts/library/),
   exchange that would make a ninth is not refused: the host revokes the
   session whose token was used least recently — used meaning authenticated
   by any request, `/auth/session` included, or else issued — and admits the
-  new one. A cap that refused would refuse the owner, since closing a tab ends
-  no session; one that evicts is safe, since an exchange needs a ticket, which
-  only the owner's account can come by (LA-17, LA-21). The eviction is
-  recorded as an event by its kind, a fixed reason and a count alone (EL-1).
-  A session expires 12 hours after its token was issued, and nothing
-  refreshes it: a page whose session ended exchanges a new ticket, which only
-  the process the host runs in can give it. Every ticket and token is
+  new one. A cap that refused would refuse the owner, since closing the
+  explorer's page ends no session; one that evicts is safe, since an exchange
+  needs a ticket, which only the owner's account can come by (LA-17, LA-21).
+  The eviction is recorded as an event by its kind, a fixed reason and a count
+  alone (EL-1).
+  A session expires 12 hours after its token was issued, and is never
+  extended: nothing refreshes a token or moves its expiry. A session is
+  renewed only by a new one — a new token, from the exchange of a new ticket,
+  which only the process the host runs in can give (LA-17). The desktop app
+  gives its explorer window one on its own, ahead of the expiry: it issues a
+  fresh ticket on a timer of its own and hands it to the page one way, and no
+  page has a call that makes it issue one. The page exchanges it, holds the
+  new token in place of the old for every request from then on, and keeps it
+  where it kept the old, without loading again, so that what it shows stays;
+  it then revokes the old session with the old token, so that one window does
+  not fill the cap. A token of another generation is no renewal, and ends the
+  page's session. A page whose session ended exchanges a new ticket too, which
+  reaches it as LA-21 says. Every ticket and token is
   discarded when the host or the server restarts and when the Library it
   serves changes; a Library that locks keeps its sessions, which are then
   refused data (LA-14). A session is revoked singly by a request carrying its
@@ -414,8 +425,16 @@ Concept background: [Library](../../concepts/library/),
   put nowhere another account on the device can read. The desktop app loads
   its own window from that URL itself: the URL goes from the app's process to
   the window's renderer and onto no command line, into no file and into no
-  log, and a window whose page has lost its session is loaded again from a
-  fresh ticket only when the app is asked to. The desktop app writes no file
+  log. A window whose page has lost its session — the server restarted, the
+  Library served changed, or the exchange of a ticket handed over to renew it
+  (LA-18) was refused — is loaded again from a fresh ticket by the app on its
+  own: the page tells the app, one way and with no answer, that it holds no
+  session, and the app loads the window afresh as *Reload the explorer* does.
+  It does so only where it can use a ticket: not while no Library is served
+  or the app is quitting, not while the Library is locked and the Passphrase
+  window is in front, when it waits for the unlock, and not again within a
+  minute of the last time, so that a page that cannot hold a session is not
+  loaded round and round. The desktop app writes no file
   for a ticket and hands none to a browser. Only the development host — the
   host a checkout runs in front of a server already running, to serve the
   explorer's build to a system browser — writes a file. A browser is started
@@ -430,12 +449,15 @@ Concept background: [Library](../../concepts/library/),
   ticket that is still spent (LA-17). Either way, the page takes the ticket
   out of the fragment, removes it from the address with `history.replaceState`
   before it does anything else, and exchanges it (LA-16). A page that holds no
-  token reads no Library data, and says to reload the explorer from the app.
-  *(Form: test for the modes, the exclusive creation and the page's handling
-  of the fragment; prose for the window's URL staying within the app and the
-  browser's command line carrying no ticket, which are properties of how the
-  app loads its window and of how the development host's file is opened,
-  honored by construction.)*
+  token reads no Library data, and says to reload the explorer from the app or
+  to open the launch file: in a browser, where nothing loads it afresh, that
+  is the page a person sees. *(Form: test for the modes, the exclusive
+  creation, the page's handling of the fragment, and the page telling the
+  desktop app it holds no session and the app loading the window afresh where
+  it can; prose for the window's URL staying within the app and the browser's
+  command line carrying no ticket, which are properties of how the app loads
+  its window and of how the development host's file is opened, honored by
+  construction.)*
 
 ### The Passphrase door
 

@@ -68,7 +68,8 @@ export function takeDropHandler(
   };
 }
 
-function fromOrigin(frame: { url: string } | null, origin: string | null): boolean {
+/** Whether `frame` is a page of `origin`: false where either is unknown. */
+export function fromOrigin(frame: { url: string } | null, origin: string | null): boolean {
   if (frame === null || origin === null) {
     return false;
   }
