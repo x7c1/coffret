@@ -51,6 +51,14 @@ LOCAL_PORT ?= 8797
 LOCAL_WEB_PORT ?= 5183
 LOCAL_MINIO_PORT ?= 19030
 
+# The three loopback ports `large-seed` and `large-measure` bind, apart from
+# `local`'s, `dev`'s and `e2e-it`'s, so that `make local` can stay up beside
+# them. MinIO's port is written into the large Library's settings when it is
+# seeded, so a later `large-measure` has to be given the same one.
+LARGE_PORT ?= 8807
+LARGE_WEB_PORT ?= 5193
+LARGE_MINIO_PORT ?= 19040
+
 # Parameters for the fixture generator below. The sizes are the camera-sized
 # ones the reader benchmark wants; a caller that only needs files, not decode
 # cost, asks for smaller ones.
@@ -717,6 +725,38 @@ local-down:
 .PHONY: local-reset
 local-reset:
 	./scripts/local.sh reset
+
+## large-seed: create a Library of about a hundred thousand tiny files on a local MinIO (Docker) under .tmp/large/, to measure the explorer against; does nothing where it is seeded already
+#
+# The same machinery as `local` — MinIO in a container, a device state under
+# .tmp/, a fixed Passphrase — over a Library of its own, filled by
+# `coffret-fixtures --scenario large` and frozen into Packs one series, author
+# or year at a time, so that `local`'s Library is not disturbed. MinIO is
+# stopped again once the seed is done. Not part of `check`: it needs Docker,
+# and takes some minutes (docs/guides/environments.md says how many).
+.PHONY: large-seed
+large-seed:
+	./scripts/large.sh seed $(LARGE_MINIO_PORT)
+
+## large-measure: against the Library large-seed made, time the full-scan match and the n most recent books over the Index, the folder listing, and the tree's ↓ with ~5,000 and ~20,000 rows open in headless Chromium, and print the report
+#
+# Starts MinIO, the server, the explorer's build and the development host for
+# the measurements in the browser, and stops them all when it is done. Not part
+# of `check`: it needs Docker and a browser. COFFRET_CHROMIUM names a Chromium
+# to run instead of the one Playwright installs.
+.PHONY: large-measure
+large-measure:
+	./scripts/large.sh measure $(LARGE_PORT) $(LARGE_WEB_PORT) $(LARGE_MINIO_PORT)
+
+## large-down: stop anything large-seed or large-measure left running, keeping the Library under .tmp/large/
+.PHONY: large-down
+large-down:
+	./scripts/large.sh down
+
+## large-reset: stop anything large-seed or large-measure left running, and remove .tmp/large/
+.PHONY: large-reset
+large-reset:
+	./scripts/large.sh reset
 
 ## cli: run the command line with ARGS="…" against the development state directory, e.g. make cli ARGS="--help"
 #

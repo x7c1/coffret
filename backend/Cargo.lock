@@ -1185,6 +1185,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coffret-measure"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "rusqlite",
+ "tempfile",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "coffret-model"
 version = "0.1.0"
 dependencies = [
