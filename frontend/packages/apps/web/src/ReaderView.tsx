@@ -87,6 +87,7 @@ export function ReaderView({
   fetchStops = 0,
   onFetched,
   reconnect,
+  readsOnInto,
 }: {
   /** The row the tree's focus is on. */
   row: Sheeted;
@@ -108,6 +109,13 @@ export function ReaderView({
    * (spec: LA-37).
    */
   fetchStops?: number;
+  /**
+   * The file reading on from `from` lands on, where it is not the whole
+   * Library's next — while the tree is filtered, the next file inside it (see
+   * [`readInside`](./readInside)) — so that what is read ahead is what reading
+   * on will reach. The whole Library's next file where it is not given.
+   */
+  readsOnInto?: (from: string, signal: AbortSignal) => Promise<string | null>;
   /** A file this device did not have was fetched, and the rows naming it are stale. */
   onFetched: (path: string) => void;
   /**
@@ -214,14 +222,22 @@ export function ReaderView({
   // guess, and the page it was for is asked for again, and answered for on
   // the screen, when the focus lands on it.
   const from = readsOnFrom(row);
+  // Taken when the folder's end is reached, and a later change not followed: a
+  // filter changed while the focus is near the end leaves a guess read ahead,
+  // and nothing more.
+  const readsOnIntoNow = useRef(readsOnInto);
+  readsOnIntoNow.current = readsOnInto;
   const [across, setAcross] = useState<{ from: string; pages: string[] } | null>(null);
   useEffect(() => {
     if (from === null) {
       return;
     }
     const aborter = new AbortController();
-    void getBeside(from, false, aborter.signal)
-      .then(async ({ next }) => {
+    const into =
+      readsOnIntoNow.current?.(from, aborter.signal) ??
+      getBeside(from, false, { signal: aborter.signal }).then(({ next }) => next);
+    void into
+      .then(async (next) => {
         if (next === null || parentOf(next) === parentOf(from)) {
           return;
         }

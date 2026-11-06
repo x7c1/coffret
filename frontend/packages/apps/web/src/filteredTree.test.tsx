@@ -7,6 +7,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  getBeside,
+  getFile,
   getFilter,
   getFolders,
   getLibrary,
@@ -18,6 +20,7 @@ import {
   readAhead,
   refreshCatalog,
   Refusal,
+  type Beside,
   type FilterAsk,
   type Filtered,
   type ListedFile,
@@ -27,6 +30,7 @@ import {
 
 import { App } from './App';
 import { FILTERING, NO_MATCHES } from './filter';
+import { parseHash } from './hash';
 import { time } from './humanize';
 import { CHECKING } from './refresh';
 import { TRY_AGAIN } from './Region';
@@ -35,6 +39,8 @@ import { COLOR } from './theme';
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   getAppearance: vi.fn(() => Promise.resolve('system')),
+  getBeside: vi.fn(),
+  getFile: vi.fn(),
   getFilter: vi.fn(),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
@@ -118,6 +124,32 @@ function listing(path: string): Listing {
   };
 }
 
+/** Every file of the Library in reading order: each folder's folders, then its files. */
+function readingOrder(folder = ''): string[] {
+  const held = listing(folder);
+  return [...held.folders.flatMap((one) => readingOrder(one.path)), ...held.files.map((one) => one.path)];
+}
+
+/**
+ * The files either side of a row in reading order, among those under `under`
+ * where it is given — as the server reads them out of its catalog. A folder's
+ * place is before everything under it, and the file at its path after it
+ * (spec: LA-32).
+ */
+function besideIn(path: string, folder: boolean, under?: string): Beside {
+  const files = readingOrder().filter((one) => under === undefined || one.startsWith(`${under}/`));
+  const inside = files.filter((one) => one.startsWith(`${path}/`));
+  if (inside.length > 0) {
+    const start = files.indexOf(inside[0]);
+    const end = start + inside.length;
+    return folder
+      ? { previous: files[start - 1] ?? null, next: files[start] ?? null }
+      : { previous: files[end - 1] ?? null, next: files[end] ?? null };
+  }
+  const at = files.indexOf(path);
+  return at === -1 ? { previous: null, next: null } : { previous: files[at - 1] ?? null, next: files[at + 1] ?? null };
+}
+
 function answer(rows: Filtered['rows'], over: Partial<Filtered> = {}): Filtered {
   return { rows, total: rows.length, truncated: false, ...over };
 }
@@ -164,8 +196,12 @@ beforeEach(() => {
   vi.mocked(getWork).mockResolvedValue(IDLE);
   vi.mocked(getListing).mockImplementation((path: string) => Promise.resolve(listing(path)));
   vi.mocked(getFilter).mockImplementation((ask: FilterAsk) => Promise.resolve(answered(ask)));
+  vi.mocked(getFile).mockResolvedValue(new Blob(['page']));
   vi.mocked(peekFile).mockResolvedValue(new Blob(['page']));
   vi.mocked(readAhead).mockResolvedValue(new Blob(['page']));
+  vi.mocked(getBeside).mockImplementation((path: string, folder: boolean, { under } = {}) =>
+    Promise.resolve(besideIn(path, folder, under)),
+  );
   URL.createObjectURL = () => 'blob:page';
   URL.revokeObjectURL = () => undefined;
 });
@@ -484,5 +520,120 @@ describe('the keys', () => {
     expect(document.activeElement).toBe(input());
     fireEvent.keyDown(input(), { key: 'Escape' });
     expect(document.activeElement).toBe(screen.getByRole('tree'));
+  });
+});
+
+describe('reading on with the reader open', () => {
+  /** Opens the file whose row `key` names in the reader, from the tree. */
+  async function read(key: string) {
+    fireEvent.click(row(key));
+    fireEvent.keyDown(screen.getByRole('tree'), { key: 'Enter' });
+    await waitFor(() => expect(parseHash(window.location.hash).open).toBe(key.slice('file:'.length)));
+    await screen.findByRole('region', { name: 'Reader' });
+  }
+
+  /** The file the address says the reader is on. */
+  function inReader() {
+    return parseHash(window.location.hash).open;
+  }
+
+  function pressed(key: 'ArrowDown' | 'ArrowUp') {
+    fireEvent.keyDown(screen.getByRole('tree'), { key });
+  }
+
+  /**
+   * What the server was asked for a key pressed: the reader's read ahead past
+   * the end of a folder asks too, with a signal to let go of it by.
+   */
+  function pressedFor() {
+    return vi.mocked(getBeside).mock.calls.filter(([, , options]) => options?.signal === undefined);
+  }
+
+  /** Holds the answers to what a key pressed asks, to hand over one by one; the read ahead is answered at once. */
+  function holding(): ((beside: Beside) => void)[] {
+    const held: ((beside: Beside) => void)[] = [];
+    vi.mocked(getBeside).mockImplementation((path, folder, options = {}) =>
+      options.signal === undefined
+        ? new Promise<Beside>((resolve) => held.push(resolve))
+        : Promise.resolve(besideIn(path, folder, options.under)),
+    );
+    return held;
+  }
+
+  /** Recent on, `comics/Harbor` opened and its file in the reader: `comics/Starfall`, kept, closed after it. */
+  async function readingHarbor() {
+    await opened();
+    recentOn();
+    await waitFor(() => expect(keys()).toContain('folder:comics/Harbor'));
+    fireEvent.click(tree().getByLabelText('expand Harbor'));
+    await waitFor(() => expect(keys()).toContain('file:comics/Harbor/h1.jpg'));
+    await read('file:comics/Harbor/h1.jpg');
+  }
+
+  it('reads past the files a name did not match, onto the next kept file, and stops at the last', async () => {
+    await opened();
+    await typed('star', 'folder:comics/Starfall');
+    fireEvent.click(tree().getByLabelText('collapse novels'));
+    fireEvent.click(tree().getByLabelText('expand Starfall'));
+    await waitFor(() => expect(keys()).toContain('file:comics/Starfall/002.jpg'));
+    await read('file:comics/Starfall/002.jpg');
+
+    // `novels/スターフォール/p2.jpg` comes next in the Library, but only `表紙.jpg` was kept.
+    pressed('ArrowDown');
+    await waitFor(() => expect(inReader()).toBe('novels/スターフォール/表紙.jpg'));
+    expect(tree().getByLabelText('collapse novels')).toBeTruthy();
+    // The page knew which file the filter kept, so nothing was asked — nor
+    // read ahead from anywhere else.
+    expect(getBeside).not.toHaveBeenCalled();
+
+    // The last file inside: `novels/notes.txt` and `readme.txt` are not.
+    pressed('ArrowDown');
+    await act(async () => undefined);
+    expect(inReader()).toBe('novels/スターフォール/表紙.jpg');
+  });
+
+  it('asks the server for the first file of the next kept folder, and that folder’s alone', async () => {
+    await readingHarbor();
+    pressed('ArrowDown');
+    await waitFor(() => expect(inReader()).toBe('comics/Starfall/001.jpg'));
+    expect(pressedFor()).toEqual([['comics/Starfall', true, { under: 'comics/Starfall' }]]);
+    expect(tree().getByLabelText('collapse Starfall')).toBeTruthy();
+  });
+
+  it('lets go of an answer that arrives after the key is pressed again', async () => {
+    await readingHarbor();
+    const held = holding();
+    pressed('ArrowDown');
+    await waitFor(() => expect(held).toHaveLength(1));
+    pressed('ArrowDown');
+    await waitFor(() => expect(held).toHaveLength(2));
+    await act(async () => {
+      held[0]({ previous: null, next: 'comics/Starfall/002.jpg' });
+    });
+    expect(inReader()).toBe('comics/Harbor/h1.jpg');
+    await act(async () => {
+      held[1]({ previous: null, next: 'comics/Starfall/001.jpg' });
+    });
+    await waitFor(() => expect(inReader()).toBe('comics/Starfall/001.jpg'));
+  });
+
+  it('lets go of an answer that arrives after the filter is turned off, and reads the whole Library then', async () => {
+    await readingHarbor();
+    const held = holding();
+    pressed('ArrowDown');
+    await waitFor(() => expect(held).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off Recent' }));
+    await waitFor(() => expect(keys()).toContain('file:readme.txt'));
+    await act(async () => {
+      held[0]({ previous: null, next: 'comics/Starfall/001.jpg' });
+    });
+    expect(inReader()).toBe('comics/Harbor/h1.jpg');
+
+    // Off, reading on is the whole Library's, asked as it is without a filter.
+    vi.mocked(getBeside).mockImplementation((path, folder, options = {}) => Promise.resolve(besideIn(path, folder, options.under)));
+    vi.mocked(getBeside).mockClear();
+    pressed('ArrowDown');
+    await waitFor(() => expect(inReader()).toBe('comics/Starfall/001.jpg'));
+    expect(pressedFor()).toEqual([['comics/Harbor/h1.jpg', false]]);
   });
 });

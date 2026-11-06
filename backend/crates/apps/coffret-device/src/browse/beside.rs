@@ -12,17 +12,39 @@ impl OpenLibrary {
     /// [`FilesBeside`]); `folder` says whether the row is the folder at that
     /// path rather than the file, since the Library admits both at one path.
     ///
+    /// `under`, where given, limits the answer to the files standing under
+    /// that folder, at any depth: the nearest of them either side of the row,
+    /// each `None` where none of them stands that way. The row itself may
+    /// stand anywhere — a row after everything under the folder answers with
+    /// its last file as `previous`. `None` is the whole Library.
+    ///
     /// A folder's place is just before everything under it, so the file after
     /// a folder is the first one inside it, at whatever depth, and the file
     /// before it is the last one before it. The row need not be an Entry the
     /// Library holds: a path names a place in the order whatever stands there.
     ///
     /// One read of the catalog — every current Entry, which the Library
-    /// root's own listing reads as well — and nothing of Storage, so it
-    /// answers for folders nobody has listed as readily as for those on the
-    /// screen. One pass over the Entries, holding the nearest on either side.
-    pub async fn files_beside(&self, path: &EntryPath, folder: bool) -> Result<FilesBeside> {
-        let entries = self.index.entries_under(None).await?;
+    /// root's own listing reads as well, or only those under `under` — and
+    /// nothing of Storage, so it answers for folders nobody has listed as
+    /// readily as for those on the screen. One pass over the Entries, holding
+    /// the nearest on either side.
+    pub async fn files_beside(
+        &self,
+        path: &EntryPath,
+        folder: bool,
+        under: Option<&EntryPath>,
+    ) -> Result<FilesBeside> {
+        let read = self.index.entries_under(under).await?;
+        // The catalog's prefix holds the Entry at the folder's own path too,
+        // which is a file beside the folder rather than under it.
+        let prefix = under.map(|under| format!("{}/", under.as_str()));
+        let entries: Vec<_> = match &prefix {
+            None => read,
+            Some(prefix) => read
+                .into_iter()
+                .filter(|location| location.path().as_str().starts_with(prefix.as_str()))
+                .collect(),
+        };
         let at = Place::of(path, folder);
         let mut previous: Option<(&EntryPath, Place<'_>)> = None;
         let mut next: Option<(&EntryPath, Place<'_>)> = None;
@@ -47,6 +69,7 @@ impl OpenLibrary {
             operation = "files_beside",
             library = %self.library_id,
             entries = entries.len(),
+            under = under.is_some(),
             previous = previous.is_some(),
             next = next.is_some(),
             "found the files either side of a row",

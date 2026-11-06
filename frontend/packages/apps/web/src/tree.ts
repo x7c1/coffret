@@ -540,7 +540,10 @@ export function arrowed(rows: readonly TreeRow[], state: TreeState, arrow: Arrow
  * move is the server's to answer (see [`getBeside`](@coffret/api)): `ask`
  * names the row the answer is wanted about. So it is where the focus's own
  * row is not drawn, as where reading on landed in a folder whose listing was
- * then refused: the server is asked about the focus itself.
+ * then refused: the server is asked about the focus itself. While the tree is
+ * filtered, what is asked, and how, is [`readInside`](./readInside)'s, so
+ * that reading on stays inside the filtered tree; the rows answer as they do
+ * here, since a filtered tree draws no file outside it.
  *
  * Where the rows say there is no file further that way — from the first
  * file, with only open folders' rows above it, or the last, with only rows
@@ -572,21 +575,12 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
   const down = arrow === 'ArrowDown';
   // The row drawn just beside the focus that way, notes passed over.
   const beside = (): ReadOn => {
-    for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
-      const row = rows[step];
-      if (row.kind !== 'note') {
-        return { kind: 'focus', state: { ...state, focus: row.key } };
-      }
-    }
-    return { kind: 'stay' };
+    const row = drawnBeside(rows, state.focus, arrow);
+    return row === null ? { kind: 'stay' } : { kind: 'focus', state: { ...state, focus: row } };
   };
   if (from.kind === 'folder') {
     return beside();
   }
-  // Whether a row hides what stands under it: a note is a listing not on
-  // hand, and a closed folder with anything to open draws nothing of it.
-  const hides = (row: TreeRow) =>
-    row.kind === 'note' || (row.kind === 'folder' && row.expandable && !row.expanded);
   for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
     const row = rows[step];
     if (row.kind === 'file') {
@@ -598,6 +592,35 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
   }
   // No file further that way: on to the row drawn beside the file instead.
   return beside();
+}
+
+/**
+ * Whether a row hides what stands under it while the reader reads on: a note
+ * is a listing not on hand, and a closed folder with anything to open draws
+ * nothing of it.
+ */
+export function hides(row: TreeRow): boolean {
+  return row.kind === 'note' || (row.kind === 'folder' && row.expandable && !row.expanded);
+}
+
+/**
+ * The key of the row drawn just above or below the one `focus` names, notes
+ * passed over, or `null` where that row is not drawn or none is drawn that
+ * way.
+ */
+export function drawnBeside(rows: readonly TreeRow[], focus: string | null, arrow: 'ArrowUp' | 'ArrowDown'): string | null {
+  const at = rows.findIndex((row) => row.kind !== 'note' && row.key === focus);
+  if (at === -1) {
+    return null;
+  }
+  const down = arrow === 'ArrowDown';
+  for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
+    const row = rows[step];
+    if (row.kind !== 'note') {
+      return row.key;
+    }
+  }
+  return null;
 }
 
 /**

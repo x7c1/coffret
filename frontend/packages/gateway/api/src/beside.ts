@@ -17,16 +17,30 @@ export interface Beside {
 
 /**
  * Asks which files stand either side of the row at `path` —
- * `GET /api/beside?path=[&folder=true]`; `folder` where the row is the
- * folder at that path rather than the file.
+ * `GET /api/beside?path=[&folder=true][&under=]`; `folder` where the row is
+ * the folder at that path rather than the file.
+ *
+ * `under`, where given, limits the answer to the files under that folder, at
+ * any depth: the nearest of them either side of the row, wherever it stands.
+ * The file at the folder's own path stands after everything under it, so
+ * asked about with the folder as `under`, it answers with the folder's last
+ * file as `previous`.
  *
  * Out of the catalog alone: it answers for folders this page has never
  * listed, which is what a reader at the end of one folder asks to read on
  * into the next, and sets nothing going.
  */
-export function getBeside(path: string, folder: boolean, signal?: AbortSignal): Promise<Beside> {
-  return askedForJson<Beside>(
-    apiUrl('beside', folder ? { path, folder: 'true' } : { path }),
-    signal,
-  );
+export function getBeside(
+  path: string,
+  folder: boolean,
+  { under, signal }: { under?: string; signal?: AbortSignal } = {},
+): Promise<Beside> {
+  const params: Record<string, string> = { path };
+  if (folder) {
+    params.folder = 'true';
+  }
+  if (under !== undefined) {
+    params.under = under;
+  }
+  return askedForJson<Beside>(apiUrl('beside', params), signal);
 }

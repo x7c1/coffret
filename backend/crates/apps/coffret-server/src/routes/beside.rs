@@ -6,7 +6,7 @@ use coffret_device::FilesBeside;
 use serde::{Deserialize, Serialize};
 
 use crate::api_error::ApiError;
-use crate::entry_query::PathQuery;
+use crate::entry_query::{folder_named, PathQuery};
 use crate::state::ServerState;
 
 /// The `?folder=` the route may be asked with beside `?path=`: whether the row
@@ -19,6 +19,9 @@ use crate::state::ServerState;
 pub struct RowQuery {
     #[serde(default)]
     folder: bool,
+    /// The folder the answer is limited to, where it is asked for: only the
+    /// files under it are answered (spec: LA-32). Absent, the whole Library.
+    under: Option<String>,
 }
 
 /// The files either side of one row, in reading order (spec: LA-32).
@@ -40,7 +43,7 @@ impl From<FilesBeside> for BesideDto {
     }
 }
 
-/// `GET /api/beside?path=<row>[&folder=true]`
+/// `GET /api/beside?path=<row>[&folder=true][&under=<folder>]`
 ///
 /// The file a reader steps back onto and the one it reads on into from the
 /// row at `path`, across the whole Library (spec: LA-32). The explorer's tree
@@ -52,6 +55,12 @@ impl From<FilesBeside> for BesideDto {
 /// sets no read of Containers' fronts going: it reads nothing of Storage and
 /// arms nothing, and a path the Library holds nothing at is answered for the
 /// place it names rather than refused.
+///
+/// With `under`, the answer is the nearest files either side of the row among
+/// those standing under that folder alone (spec: LA-32): how a reader in a
+/// filtered tree, which knows which folders the filter kept, reads on inside
+/// one of them without stepping out of it. An empty `under` is the Library
+/// root, the same as none.
 pub async fn beside(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
@@ -59,5 +68,11 @@ pub async fn beside(
 ) -> Result<Json<BesideDto>, ApiError> {
     let library = state.unlocked()?;
     let path = query.entry()?;
-    Ok(Json(library.files_beside(&path, row.folder).await?.into()))
+    let under = folder_named(row.under.as_deref())?;
+    Ok(Json(
+        library
+            .files_beside(&path, row.folder, under.as_ref())
+            .await?
+            .into(),
+    ))
 }
