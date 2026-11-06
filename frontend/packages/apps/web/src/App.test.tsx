@@ -1149,13 +1149,12 @@ describe('the details of the Library', () => {
     const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
     expect(await pane.findByRole('heading', { name: 'books' })).toBeTruthy();
     expect(await pane.findByText('5 items')).toBeTruthy();
-    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,480'));
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('3,210 of 12,480 files'));
     expect(facts(pane)).toEqual([
       ['Kind', 'Library'],
       ['Stored on', 'Google Drive'],
       ['Objects on Storage', '214'],
       ['Items', '5'],
-      ['Files', '12,480'],
       ['Size', size(5_480_000_000)],
       ['Modified', time('2026-10-28T12:14:00Z')],
       ['On this device', '3,210 of 12,480 files'],
@@ -1208,7 +1207,7 @@ describe('the details of the Library', () => {
     answers = library({ '': ['comics/'] });
     render(<App />);
     const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
-    await waitFor(() => expect(definition(pane, 'Files')).toBe('—'));
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('—'));
     expect(definition(pane, 'Kind')).toBe('Library');
     await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
   });
@@ -1243,7 +1242,7 @@ describe('the details of the Library', () => {
     vi.mocked(getFolders).mockResolvedValue({ folders: ['albums', 'comics'] });
     render(<App />);
     const pane = within(await screen.findByRole('complementary', { name: 'Details' }));
-    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,480'));
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('3,210 of 12,480 files'));
     await waitFor(() => expect(definition(pane, 'Items')).toBe('2'));
 
     await deleteFromTree('comics', 'comics', () => {
@@ -1260,9 +1259,10 @@ describe('the details of the Library', () => {
     // Delete focused the row it was pressed on; let go of, the pane is the
     // Library's again.
     fireEvent.click(screen.getByRole('tree'));
-    await waitFor(() => expect(definition(pane, 'Files')).toBe('12,477'), { timeout: 3000 });
+    await waitFor(() => expect(definition(pane, 'On this device')).toBe('3,207 of 12,477 files'), {
+      timeout: 3000,
+    });
     expect(definition(pane, 'Objects on Storage')).toBe('213');
-    expect(definition(pane, 'On this device')).toBe('3,207 of 12,477 files');
     expect(definition(pane, 'Size on this device')).toBe(size(1_610_000_000));
     await waitFor(() => expect(definition(pane, 'Items')).toBe('1'));
   });
