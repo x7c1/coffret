@@ -68,8 +68,16 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * start; a file and an empty folder keep that room, so that every name at one
  * depth starts at one place. Every file is a row, each page of a book whose
  * pages are image files included. Each value column is as wide as the widest
- * of its heading and the values on show, measured from the rendered strings
- * (see [`columnWidth`](./columns)).
+ * of its heading and the values of every row open, drawn or not, measured from
+ * the rendered strings (see [`columnWidth`](./columns)).
+ *
+ * Only the rows on show are drawn, with a few dozen more either side, between
+ * spacers that keep the list as tall as every row would make it (see
+ * [`drawnRange`](#drawnrange)): a key press costs the same with a hundred rows
+ * open as with twenty thousand. The keys, the reader's read-on and the
+ * selection act on the rows, drawn or not. The table says how many rows there
+ * are in all (`aria-rowcount`), and each drawn row which of them it is
+ * (`aria-rowindex`) and at what level of the tree it stands (`aria-level`).
  *
  * The keys walk the rows the way a file manager's tree does (see
  * [`arrowed`](./tree)): `↑`/`↓` move the focus, `→` opens a folder and then
@@ -81,8 +89,8 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * is open, `↑`/`↓` from a file go from file to file in reading order rather
  * than row to row (see [`readOn`](./tree)): off the end of one folder into
  * the first file of the next, opening it, and off the first or the last file
- * onto the row drawn beside it. From a folder row, open or closed, they go to
- * the row drawn beside it, so folders are paged through by their covers. The
+ * onto the row beside it. From a folder row, open or closed, they go to the
+ * row beside it, so folders are paged through by their covers. The
  * list scrolls ahead
  * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
  * double-click opens it as `Enter` does, and a press on the disclosure button
@@ -671,37 +679,87 @@ export function TreeTable({
     }
   };
 
+  // Only the rows on show are drawn, and `ROWS_BEYOND` more either side of
+  // them, between two spacers that keep the list as tall as every row would
+  // make it: the cost of a key press does not grow with the rows open. Every
+  // row is as tall as the next, so which are on show follows from how far the
+  // list is scrolled, how tall it is, and how tall a row is (see
+  // [`drawnRange`](#drawnrange)). `view` is what was last read of those, again
+  // on every scroll, every resize and every render.
+  const [view, setView] = useState<View>(UNSEEN);
+  const look = useCallback(() => {
+    const area = scroller.current;
+    if (area === null) {
+      return;
+    }
+    // A row drawn says how tall a row is; a DOM that lays nothing out says 0,
+    // and the height asked for stands.
+    const first = drawn.current.values().next().value;
+    const drawnHeight = first === undefined ? 0 : first.getBoundingClientRect().height;
+    const next: View = {
+      scrollTop: area.scrollTop,
+      height: area.clientHeight,
+      above: block.current?.offsetHeight ?? 0,
+      rowHeight: drawnHeight > 0 ? drawnHeight : ROW_HEIGHT,
+    };
+    setView((last) =>
+      last.scrollTop === next.scrollTop &&
+      last.height === next.height &&
+      last.above === next.above &&
+      last.rowHeight === next.rowHeight
+        ? last
+        : next,
+    );
+  }, [scroller]);
+  useEffect(() => {
+    const area = scroller.current;
+    if (area === null || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const resized = new ResizeObserver(look);
+    resized.observe(area);
+    return () => resized.disconnect();
+  }, [scroller, look]);
+  const range = drawnRange(rows.length, view);
+
   // The list scrolls ahead of the focus: the focused row is kept three rows
   // from either edge of what is on show, and is kept in view as folders open
   // and close. Only when the focus moves, a folder opens or closes, or the
-  // focused row is first drawn — a folder restored from the URL several
-  // levels deep is drawn as the listings above it arrive — and not on every
-  // answer: a listing asked again must not pull back a list somebody
-  // scrolled away.
-  const focusDrawn = focused !== undefined;
+  // focused row is first among the rows — a folder restored from the URL
+  // several levels deep is listed as the listings above it arrive — and not on
+  // every answer: a listing asked again must not pull back a list somebody
+  // scrolled away. Where the row stands is worked out from its place in the
+  // list rather than read off the page, since it need not be drawn: `↓` from
+  // the last row drawn, or a folder opened above it, takes it out of the rows
+  // drawn until the list has scrolled to it.
+  const focusListed = focused !== undefined;
   useLayoutEffect(() => {
     const area = scroller.current;
-    const row = state.focus === null ? undefined : drawn.current.get(state.focus);
-    if (area === null || row === undefined) {
+    const index = state.focus === null ? -1 : rows.findIndex((row) => row.key === state.focus);
+    if (area === null || index < 0) {
       return;
     }
-    const box = row.getBoundingClientRect();
-    const top = box.top - area.getBoundingClientRect().top + area.scrollTop;
+    const covered = block.current?.offsetHeight ?? 0;
+    const top = covered + index * view.rowHeight;
     const to = scrollAhead({
       top,
-      bottom: top + box.height,
+      bottom: top + view.rowHeight,
       scrollTop: area.scrollTop,
       height: area.clientHeight,
-      covered: block.current?.offsetHeight ?? 0,
-      margin: ROWS_AHEAD * box.height,
+      covered,
+      margin: ROWS_AHEAD * view.rowHeight,
     });
     if (to !== null) {
       area.scrollTop = to;
     }
-    // The rows are read through the refs; what decides when is above.
-  }, [state.focus, state.expanded, focusDrawn]);
+    // The rows are read when the effect runs; what decides when is above.
+  }, [state.focus, state.expanded, focusListed]);
+  // After the scroll above, so that the rows it scrolled to are drawn before
+  // the frame is painted rather than one scroll event later.
+  useLayoutEffect(look);
 
-  // The value columns, each as wide as its widest string on show.
+  // The value columns, each as wide as its widest string among all the rows,
+  // drawn or not, so that they do not change width as the list is scrolled.
   const measured = useMemo(
     () =>
       measure ??
@@ -709,22 +767,24 @@ export function TreeTable({
       ((text: string) => text.length * 8),
     [measure],
   );
-  const values = rows.flatMap((row) => (row.kind === 'note' ? [] : [valuesOf(row)]));
-  const widths = {
-    size: columnWidth(
-      'Size',
-      values.map((value) => value.size),
-      measured,
-      2 * CELL_PAD,
-    ),
-    // Its right edge kept close to the "⋮" beside it, which is about the same row.
-    modified: columnWidth(
-      'Modified',
-      values.map((value) => value.modified),
-      measured,
-      CELL_PAD + MODIFIED_END_PAD,
-    ),
-  };
+  const widths = useMemo(() => {
+    const values = rows.flatMap((row) => (row.kind === 'note' ? [] : [valuesOf(row)]));
+    return {
+      size: columnWidth(
+        'Size',
+        values.map((value) => value.size),
+        measured,
+        2 * CELL_PAD,
+      ),
+      // Its right edge kept close to the "⋮" beside it, which is about the same row.
+      modified: columnWidth(
+        'Modified',
+        values.map((value) => value.modified),
+        measured,
+        CELL_PAD + MODIFIED_END_PAD,
+      ),
+    };
+  }, [rows, measured]);
   const columns = <Columns widths={widths} />;
 
   return (
@@ -763,6 +823,7 @@ export function TreeTable({
         // the focus, and the list scrolling ahead of the focus is not somebody
         // scrolling away.
         onWheel={menu === null ? undefined : () => closeMenu()}
+        onScroll={look}
         style={{
           flex: 1,
           overflow: 'auto',
@@ -813,14 +874,17 @@ export function TreeTable({
             {emptyLine(listing, root, nowhere, prospectiveHere)}
           </p>
         ) : (
-          <table style={{ ...TABLE, font: ROW_FONT }}>
+          // Told how many rows there are in all, and each drawn row which of
+          // them it is, since only the rows on show are drawn.
+          <table style={{ ...TABLE, font: ROW_FONT }} aria-rowcount={rows.length}>
             {columns}
             {/* No text selection across rows: Shift+click selects rows here, as
                 in a file manager, and would otherwise also select their text. */}
             <tbody style={{ userSelect: 'none' }}>
-              {rows.map((row) =>
+              <Spacer rows={range.from} rowHeight={view.rowHeight} />
+              {rows.slice(range.from, range.to).map((row, drawnAt) =>
                 row.kind === 'note' ? (
-                  <tr key={row.key}>
+                  <tr key={row.key} aria-rowindex={range.from + drawnAt + 1} aria-level={row.depth + 1}>
                     <td
                       colSpan={5}
                       style={{
@@ -848,6 +912,7 @@ export function TreeTable({
                   <Row
                     key={row.key}
                     row={row}
+                    index={range.from + drawnAt}
                     rowRef={(element) => {
                       if (element === null) {
                         drawn.current.delete(row.key);
@@ -894,6 +959,7 @@ export function TreeTable({
                   />
                 ),
               )}
+              <Spacer rows={rows.length - range.to} rowHeight={view.rowHeight} />
             </tbody>
           </table>
         )}
@@ -911,6 +977,51 @@ export function TreeTable({
       {moving === null && drag.dragged && drag.carriesFiles && <DropPill outcome={outcome} landing={target} />}
       {moveLanding !== null && <DropPill outcome="taken" landing={moveLanding} line={moveLine(moveLanding)} />}
     </div>
+  );
+}
+
+/** What was last read of the scrolling area, which says which rows are on show. */
+interface View {
+  /** How far the area is scrolled. */
+  scrollTop: number;
+  /** How tall the area is. */
+  height: number;
+  /** How tall the block over the rows is — the headings and the banners — which the rows start below. */
+  above: number;
+  /** How tall one row is. */
+  rowHeight: number;
+}
+
+/** How many rows are drawn past either edge of what is on show. */
+export const ROWS_BEYOND = 30;
+
+/**
+ * Which of `count` rows are drawn, from `from` up to and not including `to`:
+ * those any part of which is on show in `view`, and `ROWS_BEYOND` more either
+ * side of them, so that a key press or a short scroll lands on rows drawn
+ * already.
+ */
+function drawnRange(count: number, view: View): { from: number; to: number } {
+  const firstShown = Math.floor((view.scrollTop - view.above) / view.rowHeight);
+  const pastShown = Math.ceil((view.scrollTop + view.height - view.above) / view.rowHeight);
+  const from = Math.min(count, Math.max(0, firstShown - ROWS_BEYOND));
+  const to = Math.min(count, Math.max(from, pastShown + ROWS_BEYOND));
+  return { from, to };
+}
+
+/**
+ * The room of `rows` rows that are not drawn, above or below the ones that
+ * are, so that the list scrolls as far as every row would take it. Nothing
+ * where there are none.
+ */
+function Spacer({ rows, rowHeight }: { rows: number; rowHeight: number }) {
+  if (rows <= 0) {
+    return null;
+  }
+  return (
+    <tr aria-hidden>
+      <td colSpan={5} style={{ height: rows * rowHeight, padding: 0, border: 'none' }} />
+    </tr>
   );
 }
 
@@ -1009,6 +1120,7 @@ function emptyLine(listing: Listing | null, root: boolean, nowhere: boolean, pro
 
 function Row({
   row,
+  index,
   rowRef,
   focused,
   selected,
@@ -1025,6 +1137,8 @@ function Row({
   onLetGo,
 }: {
   row: FolderRow | FileRow;
+  /** Where the row stands among all the rows, from 0. */
+  index: number;
   rowRef: (element: HTMLTableRowElement | null) => void;
   focused: boolean;
   /** Selected beside the focus: tinted, where the focused row is highlighted. */
@@ -1080,6 +1194,8 @@ function Row({
       ref={rowRef}
       className={offered ? 'row activatable' : 'row'}
       aria-selected={highlighted || selected}
+      aria-rowindex={index + 1}
+      aria-level={row.depth + 1}
       // What shows the row's "⋮" beside the pointer's hover (see `index.html`).
       data-focused={focused ? '' : undefined}
       title={row.name}
@@ -1526,8 +1642,15 @@ function indent(depth: number): number {
   return 6 + depth * 14;
 }
 
-/** The least height of a row. */
+/**
+ * The height of a row, every row alike, which is what lets the rows on show be
+ * worked out from how far the list is scrolled. Where the page lays a drawn
+ * row out at another height, that height is used instead (see `look`).
+ */
 const ROW_HEIGHT = 32;
+
+/** Before the area has been read: nothing on show, so only the first rows are drawn. */
+const UNSEEN: View = { scrollTop: 0, height: 0, above: 0, rowHeight: ROW_HEIGHT };
 
 /** The side of a row's "⋮", square. */
 const MENU_BUTTON_SIZE = 28;

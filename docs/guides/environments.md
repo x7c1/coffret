@@ -201,15 +201,14 @@ is part of `make check`.
      read-only, before anything serves the Library;
   2. the folder listing the explorer uses, `GET /api/list`, asked from the
      explorer's tab at the Library root and at the folder with the most rows;
-  3. the tree's `↓` with about 5,000 and then about 20,000 rows drawn, from the
+  3. the tree's `↓` with about 5,000 and then about 20,000 rows open, from the
      key press to the frame that paints the new focus, in Playwright's Chromium,
      headless.
 
   For the last two it starts MinIO, the server, the explorer's build and the
   development host, as `make local` does, and stops all of them when it ends.
   Most of its time goes to opening the tree, one folder at a time, each
-  opening drawn over every row already open: about ten minutes on the same
-  machine.
+  waiting on its listing.
   `COFFRET_LARGE_ROWS` (`5000,20000`) and `COFFRET_LARGE_PRESSES` (`15`) change
   what the tree is timed at, and `COFFRET_CHROMIUM` names a Chromium to run
   instead of the one Playwright installs.

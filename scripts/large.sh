@@ -26,7 +26,7 @@
 #      the Library;
 #   2. the folder listing the explorer uses (`GET /api/list`), at the root and
 #      at the folder with the most rows, asked from the explorer's own tab;
-#   3. the tree's `↓` with about 5,000 and then about 20,000 rows drawn, from
+#   3. the tree's `↓` with about 5,000 and then about 20,000 rows open, from
 #      the key press to the frame that paints the new focus, in Playwright's
 #      Chromium, headless.
 #
