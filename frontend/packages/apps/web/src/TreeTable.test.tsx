@@ -1366,12 +1366,15 @@ describe('only the rows on show are drawn', () => {
   });
 
   it('walks a long list with ↓ alone, every focused row drawn and in view', () => {
+    // Twice past the rows drawn at the start (the area's ten and ROWS_BEYOND
+    // below), and no further: each press renders the tree again.
+    const presses = 2 * (10 + ROWS_BEYOND);
     const { tree } = mountPages(500);
-    for (let press = 0; press < 200; press += 1) {
+    for (let press = 0; press < presses; press += 1) {
       fireEvent.keyDown(tree, { key: 'ArrowDown' });
     }
-    expect(focusedName()).toBe(page(199));
-    expect(tree.scrollTop).toBe((201 + 3) * ROW - AREA);
+    expect(focusedName()).toBe(page(presses - 1));
+    expect(tree.scrollTop).toBe((presses + 1 + 3) * ROW - AREA);
   });
 
   it('keeps the focus in view as a folder opens and closes above it', () => {
