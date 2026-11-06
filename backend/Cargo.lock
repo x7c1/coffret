@@ -1190,9 +1190,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "coffret-model",
+ "coffret-usecase",
  "rusqlite",
  "tempfile",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -1285,6 +1286,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "unicode-normalization",
  "zeroize",
 ]
 

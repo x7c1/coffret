@@ -55,6 +55,9 @@ getrandom = { workspace = true }
 md-5 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# NFKC, the normalization a filter compares a typed name and every path
+# segment in (spec: LA-40).
+unicode-normalization = { workspace = true }
 # The marker the key bundles here state their drop-time wipe with: they hold
 # purpose keys, each of which wipes itself, and the trait is what says so to a
 # reader and to the assertions that pin the inventory (spec: DK-7).

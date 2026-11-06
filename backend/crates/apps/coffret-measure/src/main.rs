@@ -1,28 +1,27 @@
-//! Measures what a filter over a whole Library would rest on, in the server.
+//! Measures what the server's filter over a whole Library rests on.
 //!
-//! A filter of the explorer would match a typed name against every path
-//! segment of every Entry, and pick the n most recently deposited books. This
-//! times both as a full scan of the device's Index, the file the server reads:
-//! every row of `entries` read, then matched or grouped in memory, by the logic
-//! in [`matching`] and [`recent`]. Each is run several times and reported as
-//! the median and the worst, in milliseconds, with the time to read the rows
-//! alone beside them for comparison. It also names the folder with the most
-//! rows ([`folders`]), where the explorer's listing is timed besides the root.
+//! The filter matches a typed name against every path segment of every Entry,
+//! and picks the n most recently deposited books. This times both as a full
+//! scan of the device's Index, the file the server reads: every row of
+//! `entries` read, then matched or grouped in memory by
+//! [`coffret_usecase::filter`]. Each is run several times and reported as the
+//! median and the worst, in milliseconds, with the time to read the rows alone
+//! beside them for comparison. It also names the folder with the most rows
+//! ([`folders`]), where the explorer's listing is timed besides the root.
 //!
 //! The Index is opened read-only, and queried only: nothing here can write to
 //! it. It is meant to be run while nothing serves the Library, so that what is
 //! timed is the scan alone (`scripts/large.sh measure` runs it before it starts
 //! the server).
 //!
-//! It is a measurement and not a route: nothing of the server calls it, and
-//! the filter it measures for does not exist yet.
+//! It is a measurement and not a route: nothing of the server calls it.
 
 mod folders;
-mod matching;
-mod recent;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
+use coffret_model::DepositedAt;
+use coffret_usecase::filter::{Books, NameQuery};
 use rusqlite::{Connection, OpenFlags};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -84,10 +83,12 @@ fn main() -> Result<()> {
     report("reading every row, nothing else", &read_only, None);
 
     for typed in &args.queries {
-        let query = matching::Query::new(typed);
+        let Some(query) = NameQuery::new(typed) else {
+            bail!("--query {typed:?} is empty once normalized, so it matches everything");
+        };
         let times = timed(args.runs, || {
             let rows = read(&index)?;
-            Ok(query.count(rows.iter().map(|(path, _)| path.as_str())))
+            Ok(rows.iter().filter(|(path, _)| query.matches(path)).count())
         })?;
         report(
             &format!("match {typed:?}"),
@@ -99,9 +100,11 @@ fn main() -> Result<()> {
     for &n in &args.recents {
         let times = timed(args.runs, || {
             let rows = read(&index)?;
-            let books =
-                recent::most_recent_books(rows.iter().map(|(path, at)| (path.as_str(), *at)), n);
-            Ok(books.len())
+            let books = Books::of(
+                rows.iter()
+                    .map(|(path, at)| (path.as_str(), DepositedAt::from_unix_seconds(*at))),
+            );
+            Ok(books.most_recent(n, |_| true).len())
         })?;
         report(
             &format!("the {n} most recent books"),
