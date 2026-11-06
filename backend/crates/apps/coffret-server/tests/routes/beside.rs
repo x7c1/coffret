@@ -101,3 +101,65 @@ async fn a_row_the_library_holds_nothing_at_is_answered_for_its_place() {
         json!({ "previous": "albums/2026/summer.jpg", "next": "albums/caf\u{e9}.jpg" }),
     );
 }
+
+// LA-32: asked with `under`, only the files under that folder are answered —
+// the nearest of them either side of the row, wherever the row stands — and
+// the same row asked without it is answered across the whole Library, as
+// before. The file at the folder's own path stands after everything under it.
+#[tokio::test]
+async fn the_files_beside_a_row_under_one_folder_are_that_folders_alone() {
+    let served = Served::library().await;
+    served.forget_reads();
+
+    assert_eq!(
+        beside(&served, "/api/beside?path=albums/notes.txt").await,
+        json!({ "previous": "albums/cover.png", "next": "books/page-001.png" }),
+        "without it, reading on leaves the folder",
+    );
+    assert_eq!(
+        beside(&served, "/api/beside?path=albums/notes.txt&under=albums").await,
+        json!({ "previous": "albums/cover.png", "next": null }),
+        "with it, nothing under `albums` comes after its last file",
+    );
+    assert_eq!(
+        beside(
+            &served,
+            "/api/beside?path=albums/2026/summer.jpg&under=albums/2026"
+        )
+        .await,
+        json!({ "previous": "albums/2026/spring.jpg", "next": null }),
+    );
+    // From outside the folder: its first file, and its last.
+    assert_eq!(
+        beside(&served, "/api/beside?path=books&folder=true&under=books").await,
+        json!({ "previous": null, "next": "books/page-001.png" }),
+    );
+    assert_eq!(
+        beside(&served, "/api/beside?path=albums&under=albums").await,
+        json!({ "previous": "albums/notes.txt", "next": null }),
+        "the file at the folder's own path stands after everything under it",
+    );
+    assert_eq!(
+        beside(&served, "/api/beside?path=books/page-001.png&under=albums").await,
+        json!({ "previous": "albums/notes.txt", "next": null }),
+    );
+    // An empty one is the whole Library.
+    assert_eq!(
+        beside(&served, "/api/beside?path=albums/notes.txt&under=").await,
+        json!({ "previous": "albums/cover.png", "next": "books/page-001.png" }),
+    );
+    assert!(
+        served.asked().is_empty(),
+        "the catalog answers, and Storage is asked nothing: {:?}",
+        served.asked(),
+    );
+
+    let (status, refusal) = body_of(
+        served
+            .get("/api/beside?path=albums/notes.txt&under=albums//x")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 400, "{refusal}");
+    assert_eq!(refusal["error"], "bad_path", "{refusal}");
+}

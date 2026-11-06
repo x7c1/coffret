@@ -142,10 +142,20 @@ import {
 import { opened, TreeTable, type FilterLine } from './TreeTable';
 import { heldBy } from './turns';
 import { unmappedLine, type Tried } from './unmapped';
+import { readInside, type AskBeside } from './readInside';
 import { useFilter } from './useFilter';
 import { useListings } from './useListings';
 import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
+
+/** The server asked for the files beside a row inside one folder (see [`readInside`](./readInside)). */
+function askInside(signal?: AbortSignal): AskBeside {
+  return (path, folder, under) =>
+    getBeside(path, folder, {
+      ...(under === undefined ? {} : { under }),
+      ...(signal === undefined ? {} : { signal }),
+    });
+}
 
 /**
  * The explorer's one screen: a header naming the Library, where the focus
@@ -1704,8 +1714,15 @@ export function App() {
   // on the way down to it are opened. An answer is let go of where the focus
   // moved meanwhile, the sheet closed, or the key was pressed again — the
   // later press asks for itself.
+  //
+  // While a filter is on, reading on stays inside the filtered tree, and stops
+  // at its ends (see [`readInside`](./readInside)); an answer is let go of
+  // too where the filter changed or was turned off meanwhile, and once it is
+  // off, reading on is the whole Library's again.
   const sheetedNow = useRef(sheeted);
   sheetedNow.current = sheeted;
+  const shapeNow = useRef(shape);
+  shapeNow.current = shape;
   const readingOn = useRef(0);
   const readOnward = useCallback(
     (arrow: 'ArrowUp' | 'ArrowDown') => {
@@ -1719,25 +1736,66 @@ export function App() {
       }
       const asking = (readingOn.current += 1);
       const from = tree.focus;
-      const current = () => asking === readingOn.current && sheetedNow.current && treeNow.current.focus === from;
-      getBeside(step.path, step.folder).then(
-        (beside) => {
-          const landed = arrow === 'ArrowDown' ? beside.next : beside.previous;
-          if (landed !== null && current()) {
-            changeTree(landedOn(treeNow.current, landed));
+      const filtered = shape;
+      const current = () =>
+        asking === readingOn.current &&
+        sheetedNow.current &&
+        treeNow.current.focus === from &&
+        shapeNow.current === filtered;
+      const notOpened = (refused: unknown) => {
+        if (current()) {
+          const name = step.path.slice(step.path.lastIndexOf('/') + 1);
+          const side = arrow === 'ArrowDown' ? 'after' : 'before';
+          setNotice(`the file ${side} ${name} was not opened — ${said(refused)}`);
+        }
+      };
+      if (filtered !== null) {
+        readInside(rows, tree, arrow, filtered, askInside(), current).then((went) => {
+          if (!current()) {
+            return;
           }
-        },
-        (refused: unknown) => {
-          if (current()) {
-            const name = step.path.slice(step.path.lastIndexOf('/') + 1);
-            const side = arrow === 'ArrowDown' ? 'after' : 'before';
-            setNotice(`the file ${side} ${name} was not opened — ${said(refused)}`);
+          if (went.kind === 'land') {
+            changeTree(landedOn(treeNow.current, went.path));
+          } else if (went.kind === 'focus') {
+            changeTree({ ...treeNow.current, focus: went.focus });
           }
-        },
-      );
+        }, notOpened);
+        return;
+      }
+      getBeside(step.path, step.folder).then((beside) => {
+        const landed = arrow === 'ArrowDown' ? beside.next : beside.previous;
+        if (landed !== null && current()) {
+          changeTree(landedOn(treeNow.current, landed));
+        }
+      }, notOpened);
     },
-    [rows, tree, changeTree],
+    [rows, tree, shape, changeTree],
   );
+
+  // Near the end of a folder the reader reads ahead into the folder it will
+  // read on into; while a filter is on, that is the next file inside the
+  // filtered tree, found as `↓` finds it, rather than the whole Library's next.
+  const rowsNow = useRef(rows);
+  rowsNow.current = rows;
+  const readsOnInto = useMemo(() => {
+    if (shape === null) {
+      return undefined;
+    }
+    return async (from: string, signal: AbortSignal): Promise<string | null> => {
+      const state = { ...treeNow.current, focus: fileKey(from) };
+      const step = readOn(rowsNow.current, state, 'ArrowDown');
+      if (step.kind === 'stay') {
+        return null;
+      }
+      if (step.kind === 'focus') {
+        const landed = step.state.focus === null ? null : keyed(step.state.focus);
+        return landed?.kind === 'file' ? landed.path : null;
+      }
+      const going = () => !signal.aborted;
+      const went = await readInside(rowsNow.current, state, 'ArrowDown', shape, askInside(signal), going);
+      return went.kind === 'land' ? went.path : null;
+    };
+  }, [shape]);
 
   // A folder row opened: the reader's sheet, on the folder's cover, with the
   // focus left on the folder's row — and where the folder is not on this
@@ -2222,6 +2280,7 @@ export function App() {
                         fetchStops={fetchStops}
                         onFetched={fetchedInto}
                         reconnect={offer}
+                        readsOnInto={readsOnInto}
                       />
                     )}
                   </div>

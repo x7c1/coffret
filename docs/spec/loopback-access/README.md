@@ -620,7 +620,16 @@ Concept background: [Library](../../concepts/library/),
   the answer is the catalog's alone: it reads nothing of Storage, so it
   answers for folders nobody has listed, and it arms nothing. A row the
   Library holds nothing at is answered for the place its path names; a path
-  that is not one is refused as `400` (EP-2). *(Form: test)*
+  that is not one is refused as `400` (EP-2). Asked with `&under=<folder>`,
+  the answer is limited to the files standing under that folder, at any
+  depth: the nearest of them either side of the row, wherever the row
+  stands, each `null` where none of them stands that way. The file at the
+  folder's own path is beside the folder, not under it, and stands after
+  everything under it, so asked about, it answers with the folder's last
+  file as `previous`. An empty `under` is the Library root, the same as
+  none; one that is not a path is refused as `400` (EP-2). This is how a
+  tree a filter keeps (LA-40 to LA-42) reads on inside the folders it kept.
+  *(Form: test)*
 - **LA-33.** A file may be read without arming the fill of its folder: the
   **read ahead** (`GET /api/file?path=<entry>&fill=false`). It is answered as
   a read is, from the file on this device or, where there is none, by the

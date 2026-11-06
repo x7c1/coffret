@@ -775,8 +775,19 @@ async fn beside(
     path: &str,
     folder: bool,
 ) -> (Option<String>, Option<String>) {
+    beside_under(library, path, folder, None).await
+}
+
+/// The files either side of a row among those under `under` alone, as text.
+async fn beside_under(
+    library: &OpenLibrary,
+    path: &str,
+    folder: bool,
+    under: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let under = under.map(entry_path);
     let found = library
-        .files_beside(&entry_path(path), folder)
+        .files_beside(&entry_path(path), folder, under.as_ref())
         .await
         .expect("the catalog answers");
     (
@@ -876,5 +887,41 @@ async fn the_files_beside_a_folder_are_its_first_and_the_one_before_it() {
     assert_eq!(
         beside(&library, "b/z.jpg", false).await,
         (some("b/1.jpg"), some("d.jpg"))
+    );
+}
+
+// Limited to one folder, the files either side of a row are the nearest of
+// those under it alone, wherever the row stands: the file at the folder's own
+// path stands beside it, not under it, and after everything under it, so asked
+// about, it answers with the folder's last file.
+#[tokio::test]
+async fn the_files_beside_a_row_under_one_folder_are_that_folders_alone() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &["a/1.jpg", "b/c/1.jpg", "b/1.jpg", "b", "b.jpg", "bb/1.jpg"],
+    )])
+    .await;
+
+    assert_eq!(
+        beside_under(&library, "b", true, Some("b")).await,
+        (None, some("b/c/1.jpg"))
+    );
+    assert_eq!(
+        beside_under(&library, "b", false, Some("b")).await,
+        (some("b/1.jpg"), None)
+    );
+    assert_eq!(
+        beside_under(&library, "b/c/1.jpg", false, Some("b")).await,
+        (None, some("b/1.jpg"))
+    );
+    assert_eq!(
+        beside_under(&library, "a/1.jpg", false, Some("b")).await,
+        (None, some("b/c/1.jpg"))
+    );
+    // Without it, the same row reads on into whatever stands next.
+    assert_eq!(
+        beside(&library, "b/1.jpg", false).await,
+        (some("b/c/1.jpg"), some("bb/1.jpg"))
     );
 }
