@@ -130,9 +130,9 @@ it('leaves alone a folder the Library has taken over', () => {
   ).toEqual([]);
 });
 
-// A freeze still packing comes back too: a tab reloaded mid-pack has the same
+// A freeze still packing comes back too: a page reloaded mid-pack has the same
 // folder mid-flight, and taking it back is what keeps a drop of forgotten pages
-// refused while the pack runs instead of silently synced. In the tab that never
+// refused while the pack runs instead of silently synced. In the page that never
 // reloaded this is a no-op — the folder is on the screen there already. Only a
 // finished freeze that committed a Pack handed its folder to the Library.
 it('takes back a freeze still packing, and nothing from one that committed', () => {

@@ -9,23 +9,23 @@
 // done with the answer.
 //
 // Kept free of React so it is unit testable: what it does is a schedule — once
-// as the page comes up, again whenever the tab comes back to the front, and
+// as the page comes up, again whenever the page comes back to the front, and
 // every few minutes while it is shown — with two rules over it: never while a
 // catch-up is running, and never one answer that arrived after a catch-up began.
 
 import type { HeadState, RemoteHead } from '@coffret/api';
 
 /**
- * How long the explorer waits between two looks while its tab is shown.
+ * How long the explorer waits between two looks while its page is shown.
  *
  * Three minutes. Each look costs Storage one walk of the listing — names only,
  * but a page of them per few hundred objects — so a Library whose provider
- * counts calls is not asked every few seconds by a tab nobody is reading. And
+ * counts calls is not asked every few seconds by a page nobody is reading. And
  * nothing about the Library's correctness rests on hearing promptly (a stale
  * catalog is what every writing run's own catch-up fixes first): what rests on
  * it is a person glancing at the icon after another device committed, and
- * coming back to the tab already looks at once. A few minutes is the wait
- * somebody who left the tab in front would not notice.
+ * coming back to the page already looks at once. A few minutes is the wait
+ * somebody who left the page in front would not notice.
  */
 export const LOOK_EVERY_MS = 3 * 60 * 1000;
 
@@ -41,7 +41,7 @@ export interface Looking {
    * is locked and the look would only be refused.
    */
   held: () => boolean;
-  /** Whether the tab is shown, which is what the interval waits for. */
+  /** Whether the page is shown, which is what the interval waits for. */
   shown: () => boolean;
 }
 
@@ -67,7 +67,7 @@ export class RemoteHeadLooks {
 
   /**
    * Looks once as the page comes up, then every [`LOOK_EVERY_MS`] while the
-   * tab is shown, until the returned function is called.
+   * page is shown, until the returned function is called.
    */
   start(): () => void {
     this.look();
@@ -79,7 +79,7 @@ export class RemoteHeadLooks {
     return () => clearInterval(timer);
   }
 
-  /** The tab came back to the front, which is the moment it is looked at. */
+  /** The page came back to the front, which is the moment it is looked at. */
   front(): void {
     this.look();
   }

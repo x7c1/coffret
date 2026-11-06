@@ -512,9 +512,15 @@ control for a sync, since a drop starts one.
       not a key either — it unlocks nothing, and a locked Library stays
       locked to a page holding one until the Passphrase is entered in the
       app's own window.
-    - A tab holding no token — a bookmark, a typed address, a session that
-      ended — reads nothing of the Library, and says to reload the explorer
-      from the app (spec: LA-21).
+    - In the desktop app's window, the session does not end under the page:
+      ahead of the token's expiry the app hands the page a fresh ticket, which
+      it exchanges for a new token in place of the old, without loading again;
+      and where the session ends anyway the app loads the window afresh from a
+      ticket of its own (spec: LA-18, LA-21).
+    - A page holding no token elsewhere — a bookmark, a typed address, the
+      development host's page in a browser — reads nothing of the Library, and
+      says to reload the explorer from the app or to open the launch file
+      (spec: LA-21).
   - One server at a time serves a Library on a device, and a second start is
     refused rather than taking the first one's place: a second server would
     publish its key over the first one's, leaving that one running and
@@ -688,8 +694,8 @@ control for a sync, since a drop starts one.
     spec: LA-12, CK-9).
   - The explorer can say the Library's head has moved past the Catalog's
     before anybody catches up, whether the Catalog is stale, behind, or has
-    replayed nothing yet: it looks, as its page comes up, as its tab comes
-    back to the front, and every few minutes while the tab is shown, at the
+    replayed nothing yet: it looks, as its page comes up, as its page comes
+    back to the front, and every few minutes while the page is shown, at the
     names of the Library's heads, and draws the control that catches up as
     waiting when one is newer than the Catalog's. The look reads no object, needs no key, changes neither the
     Catalog nor the report above, and does not keep the Library unlocked

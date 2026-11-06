@@ -74,7 +74,7 @@ function textOf(blob: Blob): Promise<string> {
 }
 
 beforeEach(() => {
-  holdToken('the-token-this-tab-holds');
+  holdToken('the-token-this-page-holds');
 });
 
 afterEach(() => {

@@ -271,7 +271,7 @@ it('shows what a refused mapped root says, on the line a stopped fill already ha
 });
 
 // An idle explorer issues no requests at all: the interval exists for the
-// minutes a fill takes, not for a tab left open on a folder.
+// minutes a fill takes, not for a page left open on a folder.
 it('polls while the reader is open or work is running, and not otherwise', () => {
   expect(shouldPoll(false, null, null)).toBe(false);
   // LA-35: an add the server is carrying in or undoing is followed, so a page
@@ -332,7 +332,7 @@ it('follows a fill through a reload, with the reader shut', () => {
 
 // A catch-up is every folder's answer being about to change at once, which is
 // as much a reason to keep asking as a fill is — and a page that came up while
-// one was running would otherwise sit on "catching up" for as long as the tab
+// one was running would otherwise sit on "catching up" for as long as the page
 // was open.
 it('polls while this device is catching up with the Library', () => {
   expect(shouldPoll(false, null, null, null, caught({ state: 'catching_up' }))).toBe(true);
@@ -793,7 +793,7 @@ it('asks once as the page comes up, and not again by itself', () => {
 });
 
 // A question that never answered taught this page nothing, so it does not count
-// as having asked: a tab whose one question at the start failed would otherwise
+// as having asked: a page whose one question at the start failed would otherwise
 // never again say what the server is doing — and nothing about that failure is
 // on the screen to press about.
 it('asks again after a question nothing answered', () => {

@@ -557,31 +557,33 @@ export function TreeTable({
 
   // The keys the tree answers while it has the focus itself — which a click on
   // a row gives it — and not while a control inside it does: `Enter` on a
-  // row's "⋮" or in the menu is that control's.
+  // row's "⋮" or in the menu is that control's. Also the keys that reach the
+  // page with nothing on it holding the focus (see below).
   //
   // Shift with `↑`/`↓` grows the selection to the row arrived at; any other
   // arrow drops it (see [`stepped`](./selection)). No key deletes: which key
   // means delete differs between systems, and invites mistakes.
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) {
-      return;
-    }
+  //
+  // Says whether the key was the tree's, and so taken.
+  const answer = (event: Pressed): boolean => {
     if (event.key === 'Enter') {
-      if (focused !== undefined) {
-        event.preventDefault();
-        openRow(focused, readerOn);
+      if (focused === undefined) {
+        return false;
       }
-      return;
+      event.preventDefault();
+      openRow(focused, readerOn);
+      return true;
     }
     if (event.key === 'Escape') {
-      if (escapeLetsGo && state.focus !== null) {
-        event.preventDefault();
-        foldOrLetGo();
+      if (!escapeLetsGo || state.focus === null) {
+        return false;
       }
-      return;
+      event.preventDefault();
+      foldOrLetGo();
+      return true;
     }
     if (!ARROWS.has(event.key)) {
-      return;
+      return false;
     }
     event.preventDefault();
     if (onReadOn !== undefined && !event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
@@ -589,7 +591,7 @@ export function TreeTable({
       if (selection.keys.size > 0) {
         onSelect(NOTHING_SELECTED);
       }
-      return;
+      return true;
     }
     const next = arrowed(rows, state, event.key as Arrow);
     const extend = event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
@@ -602,16 +604,65 @@ export function TreeTable({
     if (next !== state || extend || selection.keys.size > 0) {
       onSelect(kept);
     }
+    return true;
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    answer(event);
   };
   // Whether the focus the tree is about to take comes from a press on it, which
   // focuses the row pressed, rather than from the keyboard.
   const pressed = useRef(false);
+  // Whether the tree is taking the focus back after answering a key that
+  // reached the page, whose row the key has just chosen.
+  const handingBack = useRef(false);
+
+  // A click on something that cannot hold the focus — the reader's picture,
+  // the space below the rows, the details pane's text — leaves it on the
+  // page's body, and the keys pressed then are the tree's: the page has
+  // nowhere else for them to go. Answering one gives the tree the focus back,
+  // so the next goes to it directly and the focused row is drawn as where the
+  // keys go. Not a key something took first, not one with a modifier other
+  // than Shift (the browser's own, such as Alt+← for back), and not while a
+  // dialog or a menu — a row's actions, the header's **+** — stands over the
+  // screen, whose keys are their own. While the reader's sheet is open its
+  // `Escape` is not the tree's (`escapeLetsGo`), so the sheet's own listener,
+  // on the window, closes it and the tree's focus stays where it is.
+  const answering = useRef(answer);
+  answering.current = answer;
+  useEffect(() => {
+    const onPageKey = (event: globalThis.KeyboardEvent) => {
+      if (
+        event.target !== document.body ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        document.querySelector('[role="dialog"][aria-modal="true"], [role="menu"]') !== null
+      ) {
+        return;
+      }
+      if (!answering.current(event)) {
+        return;
+      }
+      const area = scroller.current;
+      if (area !== null) {
+        handingBack.current = true;
+        area.focus({ preventScroll: true });
+        handingBack.current = false;
+      }
+    };
+    document.addEventListener('keydown', onPageKey);
+    return () => document.removeEventListener('keydown', onPageKey);
+  }, [scroller]);
   // Tabbing into the tree with no row focused focuses the first, so that the
   // focus is drawn on the screen and the keys have somewhere to start.
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     const byPress = pressed.current;
     pressed.current = false;
-    if (event.target !== event.currentTarget || byPress || state.focus !== null) {
+    if (event.target !== event.currentTarget || byPress || handingBack.current || state.focus !== null) {
       return;
     }
     const first = rows.find((row) => row.kind !== 'note');
@@ -917,6 +968,13 @@ const ROWS_TYPE = 'application/x-coffret-rows';
 
 /** The keys that move the focus. */
 const ARROWS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
+/** A key pressed, on the tree or on the page: what the tree reads of it. */
+interface Pressed {
+  key: string;
+  shiftKey: boolean;
+  preventDefault: () => void;
+}
 
 /**
  * What the Library root says when it holds nothing and a mapping of this

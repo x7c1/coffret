@@ -80,10 +80,10 @@ export function heldAfter(
  * The folders the uncommitted freezes hold, oldest first.
  *
  * A book whose freeze has not committed — stopped by Storage, waiting its
- * turn, thrown away by a worker that died, still packing when the tab went
+ * turn, thrown away by a worker that died, still packing when the page went
  * away, or finished with every file it read a finding and nothing committed —
  * is a folder full of pages sitting on the disk and out of the Library, which
- * the Library does not name. Without these a tab would draw no row for it,
+ * the Library does not name. Without these a page would draw no row for it,
  * offer no way to walk into it, and make no second attempt at it. The pages
  * would be there and nothing on the screen would say so.
  *

@@ -13,7 +13,7 @@ export const TRY_AGAIN = 'try again';
  * Loading and failed are both states the screen can be left from, which is the
  * point of stating them: a request that failed says what the server said and
  * offers to ask again, rather than leaving the region saying "loading" for as
- * long as the tab is open.
+ * long as the page is open.
  *
  * A refusal by the lock is not one of these: asking again only earns the same
  * refusal while the Library stays locked, so the screen draws its locked state

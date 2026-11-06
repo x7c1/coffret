@@ -230,7 +230,10 @@ under the Library's directory (`explorer-launch/explorer.html`) that refreshes
 to the explorer with the ticket in the address's fragment. The host prints its
 path once it has seen the server. Open that file in the browser — `make dev`
 prints the path once all three are up, and `.tmp/dev/<LIBRARY>/host.log` holds it
-too. The address typed by hand shows a page saying the tab holds no session.
+too. The address typed by hand shows a page saying the explorer holds no
+session, and to open the launch file. A page whose session ended shows the
+same, since nothing in a system browser loads it afresh: open the launch file
+again.
 
 The host keeps the file ready: it writes it again once its ticket has been used
 or is about to expire, and writes a fresh one — ending every tab's session —
@@ -254,9 +257,18 @@ directly, and no page of the app reaches the app's own process. Once the
 Library is open that window goes and the explorer's comes. When the explorer
 asks for the Library to be unlocked — a press of *Unlock*, or the idle lock
 seen — the Passphrase window comes back to take the Passphrase, and goes again
-once the Library is unlocked; the explorer comes back in place. A page that
-has lost its session gets a fresh one from *Reload the explorer* in the app's
-menu (Cmd/Ctrl+R). On Linux and Windows the windows keep that menu's bar
+once the Library is unlocked; the explorer comes back in place.
+
+The explorer's session does not end under it in the app's window. Its token
+lives 12 hours and is never extended, so an hour before that the app hands the
+page a fresh ticket of its own accord, shown or hidden in the tray, and the
+page swaps in the new token without loading again: the tree, the folders open,
+the reader and the details stay as they are. Where the session ends anyway —
+the server started again, another Library served, or the swap refused — the
+page tells the app, which loads the window afresh from a new ticket, as
+*Reload the explorer* in the app's menu (Cmd/Ctrl+R) does; while the Library
+is locked it waits for the unlock to do so, and it does not do so twice within
+a minute. On Linux and Windows the windows keep that menu's bar
 hidden until Alt is pressed; its shortcuts work either way. Addresses the
 explorer opens a window for, such as Google's consent page, open in the system
 browser.
