@@ -5,7 +5,7 @@ import { getBeside, getFile, getListing, readAhead, type Listing } from '@coffre
 import { drawnPages } from './drawn';
 import { LIBRARY_ROOT } from './location';
 import { parentOf } from './prospective';
-import { SHADOW, SHEET_COLOR } from './theme';
+import { LAYER, SHADOW, SHEET_COLOR } from './theme';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { refusedAsRanOut } from './ranOut';
 import {
@@ -589,7 +589,7 @@ const SHEET: CSSProperties = {
   color: SHEET_COLOR.text,
   borderLeft: `1px solid ${SHEET_COLOR.border}`,
   boxShadow: SHADOW.sheet,
-  zIndex: 10,
+  zIndex: LAYER.sheet,
 };
 
 const HEADER: CSSProperties = {

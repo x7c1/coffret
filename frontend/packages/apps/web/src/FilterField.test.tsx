@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -74,7 +74,6 @@ it('turns Recent on in its panel, shows the chip, and turns it off from the chip
   fireEvent.click(more);
   expect(more.getAttribute('aria-expanded')).toBe('true');
   const panel = screen.getByRole('group', { name: 'More filters' });
-  expect(panel.textContent).toContain(RECENT_EXPLAINED);
   const count = within(panel).getByRole('spinbutton', { name: 'How many recent folders' });
   expect((count as HTMLInputElement).value).toBe('10');
   fireEvent.click(within(panel).getByRole('checkbox'));
@@ -123,6 +122,80 @@ it('closes the panel by Escape or a press outside, keeping what was set', () => 
   fireEvent.mouseDown(screen.getByRole('button', { name: 'elsewhere' }));
   expect(screen.queryByRole('group', { name: 'More filters' })).toBeNull();
   expect(latest().recentOn).toBe(true);
+});
+
+/** The More filters panel opened, and its `[?]`. */
+function openedHelp() {
+  fireEvent.click(field().getByRole('button', { name: 'More filters' }));
+  const panel = screen.getByRole('group', { name: 'More filters' });
+  return { panel, help: within(panel).getByRole('button', { name: 'About Recent' }) };
+}
+
+/** The explainer, where it is shown: hidden, it is not in the accessibility tree. */
+function explainer() {
+  return screen.queryByRole('tooltip');
+}
+
+it('holds the Recent line and its [?], and keeps the explainer out of sight until asked for', () => {
+  mount();
+  const { panel, help } = openedHelp();
+  // `Recent [n] folders [?]`, and nothing else shown.
+  const shown = [...panel.querySelectorAll('label, button, [role="tooltip"]')].filter(
+    (part) => !(part as HTMLElement).hidden,
+  );
+  expect(shown.map((part) => part.textContent)).toEqual(['Recentfolders', '[?]']);
+  expect(explainer()).toBeNull();
+  // Hidden, it still describes the `[?]`, word for word.
+  const described = document.getElementById(help.getAttribute('aria-describedby') ?? '');
+  expect(described?.textContent).toBe(RECENT_EXPLAINED);
+  expect(described?.hidden).toBe(true);
+});
+
+it('shows the explainer while the [?] is hovered', () => {
+  mount();
+  const { help } = openedHelp();
+  fireEvent.mouseEnter(help);
+  expect(explainer()?.textContent).toBe(RECENT_EXPLAINED);
+  fireEvent.mouseLeave(help);
+  expect(explainer()).toBeNull();
+});
+
+it('shows the explainer while the [?] holds the focus', () => {
+  mount();
+  const { help } = openedHelp();
+  act(() => help.focus());
+  expect(explainer()?.textContent).toBe(RECENT_EXPLAINED);
+  act(() => help.blur());
+  expect(explainer()).toBeNull();
+});
+
+it('shows the explainer from a press on the [?] until a second press or a press elsewhere', () => {
+  mount();
+  const { help } = openedHelp();
+  fireEvent.click(help);
+  expect(explainer()?.textContent).toBe(RECENT_EXPLAINED);
+  fireEvent.click(help);
+  expect(explainer()).toBeNull();
+
+  fireEvent.click(help);
+  expect(explainer()).not.toBeNull();
+  fireEvent.mouseDown(screen.getByRole('checkbox'));
+  expect(explainer()).toBeNull();
+  expect(screen.queryByRole('group', { name: 'More filters' })).not.toBeNull();
+});
+
+it('hides the explainer at the first Escape, leaving the panel open, and closes the panel at the next', () => {
+  mount();
+  const { help } = openedHelp();
+  act(() => help.focus());
+  fireEvent.click(help);
+  expect(explainer()).not.toBeNull();
+  expect(fireEvent.keyDown(help, { key: 'Escape' })).toBe(false);
+  expect(explainer()).toBeNull();
+  expect(screen.queryByRole('group', { name: 'More filters' })).not.toBeNull();
+
+  fireEvent.keyDown(help, { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'More filters' })).toBeNull();
 });
 
 it('takes the focus by Ctrl+F and by /, but not from another input nor under a dialog', () => {

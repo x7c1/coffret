@@ -166,7 +166,7 @@ export function filterFailedLine(message: string): string {
   return `the filter could not be applied — ${message}`;
 }
 
-/** What the explanation in the panel says of Recent. */
+/** What the explainer behind the panel's `[?]` says of Recent. */
 export const RECENT_EXPLAINED =
   'Folders that directly hold files, newest first by when their files were added.';
 

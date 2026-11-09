@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import type { Action, ActionItem } from './actions';
-import { COLOR, SHADOW } from './theme';
+import { COLOR, LAYER, SHADOW } from './theme';
 
 /** Where the menu opens: a point on the screen, and which side of it the menu hangs from. */
 export interface MenuAt {
@@ -269,7 +269,7 @@ const EDGE = 4;
 
 const MENU: CSSProperties = {
   position: 'fixed',
-  zIndex: 20,
+  zIndex: LAYER.menu,
   boxSizing: 'border-box',
   width: 232,
   padding: 6,
