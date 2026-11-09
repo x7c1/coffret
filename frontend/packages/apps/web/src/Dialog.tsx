@@ -2,7 +2,7 @@ import { useEffect, type CSSProperties, type FormEvent, type ReactNode } from 'r
 
 import { LIBRARY_ROOT } from './location';
 import { FOLDER_ICON_PATH } from './rowIcon';
-import { COLOR, SHADOW } from './theme';
+import { COLOR, LAYER, SHADOW } from './theme';
 
 /**
  * The frame the explorer's questions stand in — "Delete…", "New folder…",
@@ -205,7 +205,7 @@ export const DANGER: CSSProperties = {
 const BACKDROP: CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 30,
+  zIndex: LAYER.dialog,
   background: COLOR.backdrop,
   display: 'flex',
   alignItems: 'center',

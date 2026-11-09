@@ -176,5 +176,26 @@ export const SHADOW = {
   sheet: '-16px 0 40px rgba(0, 0, 0, 0.28)',
 } as const;
 
+/**
+ * The stacking levels of what is drawn over the explorer, lowest first, all in
+ * the page's own stacking context:
+ *
+ * 1. `sheet` — the reader's sheet over the rows, and the Activity panel's
+ *    shortcuts tooltip.
+ * 2. `filterPanel` — the search field's More filters panel, hung from the
+ *    header, in front of the reader so that it can be used while a page is
+ *    read.
+ * 3. `menu` — the actions menu, opened from a row or the header's **+**. A
+ *    press that opens it closes the More filters panel, but one opened by the
+ *    keys leaves the panel open, and the menu, opened last, is in front of it.
+ * 4. `dialog` — a dialog and its backdrop, over everything.
+ */
+export const LAYER = {
+  sheet: 10,
+  filterPanel: 15,
+  menu: 20,
+  dialog: 30,
+} as const;
+
 /** The explorer's typeface, as `index.html` sets it on the page and the tree's column measure takes it. */
 export const FONT = 'Inter, system-ui, sans-serif';
