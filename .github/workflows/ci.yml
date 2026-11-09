@@ -244,6 +244,9 @@ jobs:
       - name: Field-number registry guard
         run: make field-numbers-guard field-numbers-guard-test
 
+      # Its two downloads retry through a GitHub Releases outage for at most
+      # about 100 s each, 200 s together, inside this job's 5 minutes
+      # (fetch_verified in scripts/shell-lint.sh).
       - name: Shell scripts, shellcheck and shfmt
         run: make shell-lint
 
