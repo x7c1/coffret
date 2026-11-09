@@ -15,13 +15,18 @@ export interface Filtering {
    * before the first one, or while no filter is on.
    */
   answer: Filtered | null;
+  /**
+   * The ask `answer` was answered for, which is not the ask on while a newer
+   * one is out; `null` where `answer` is.
+   */
+  answered: FilterAsk | null;
   /** Whether a request for it is out, or about to be sent. */
   asking: boolean;
   /** The sentence the last request was refused with, and `null` where it was not. */
   failed: string | null;
 }
 
-const OFF: Filtering = { answer: null, asking: false, failed: null };
+const OFF: Filtering = { answer: null, answered: null, asking: false, failed: null };
 
 /**
  * Asks which rows a filtered tree keeps (see [`getFilter`](@coffret/api)),
@@ -69,7 +74,7 @@ export function useFilter(ask: FilterAsk | null): Filtering & { reload: () => vo
         (answer) => {
           if (current()) {
             out.current = null;
-            setState({ answer, asking: false, failed: null });
+            setState({ answer, answered: asked, asking: false, failed: null });
           }
         },
         (refused: unknown) => {
@@ -77,7 +82,7 @@ export function useFilter(ask: FilterAsk | null): Filtering & { reload: () => vo
             return;
           }
           out.current = null;
-          setState((held) => ({ answer: held.answer, asking: false, failed: said(refused) }));
+          setState((held) => ({ ...held, asking: false, failed: said(refused) }));
         },
       );
     }, FILTER_WAIT_MS);
