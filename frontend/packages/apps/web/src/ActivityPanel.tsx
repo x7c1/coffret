@@ -25,7 +25,7 @@ import { LOCKED, LockIcon, UNLOCK, type UnlockOffer } from './Locked';
 import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { SyncIcon } from './SyncIcon';
-import { COLOR, SHADOW } from './theme';
+import { COLOR, LAYER, SHADOW } from './theme';
 
 /**
  * What the server and this page are doing and have done, along the bottom of
@@ -765,7 +765,7 @@ const TOOLTIP = {
   position: 'absolute',
   right: 0,
   bottom: 'calc(100% + 6px)',
-  zIndex: 10,
+  zIndex: LAYER.sheet,
   padding: '8px 10px',
   background: COLOR.panel,
   border: `1px solid ${COLOR.border}`,

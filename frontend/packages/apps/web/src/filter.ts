@@ -94,10 +94,20 @@ export function shapeOf(answer: Filtered): FilterShape {
 }
 
 /**
- * The folders open in a tree a filter has just been answered for: every one
- * above an answered row, and — where the filter was on already — those of the
- * ones open before that stand inside a folder still answered, so that a
- * matched folder somebody opened stays open as the name is narrowed.
+ * Whether two asks are the same filter: the same name and the same count of
+ * recent books, each or both absent alike.
+ */
+export function sameAsk(one: FilterAsk, other: FilterAsk): boolean {
+  return one.name === other.name && one.recent === other.recent;
+}
+
+/**
+ * The folders open in a tree a filter has just been answered for, on being
+ * turned on or on its conditions changing: every one above an answered row,
+ * and — where the filter was on already — those of the ones open before that
+ * stand inside a folder still answered, so that a matched folder somebody
+ * opened stays open as the name is narrowed. A filter answered again for the
+ * same ask does not come here (see [`answeredTree`](./filter)).
  */
 export function filteredOpen(shape: FilterShape, before: ReadonlySet<string>): Set<string> {
   const open = new Set(shape.above);
@@ -107,6 +117,27 @@ export function filteredOpen(shape: FilterShape, before: ReadonlySet<string>): S
     }
   }
   return open;
+}
+
+/**
+ * The tree once the filter is answered with `shape`, for `ask`, from the one
+ * that stood (`held`), where the shape drawn before was answered for `drawn`
+ * — `null` where the filter has just been turned on.
+ *
+ * Turned on, or with its conditions changed (another name, Recent turned on
+ * or off, another count), the folders open are [`filteredOpen`](./filter)'s.
+ * Answered again for the same ask — the Library changed under it — the
+ * folders open are left as they were: none is opened again above an answered
+ * row, nor above a row that is answered for the first time, so a person who
+ * closed them finds them closed. Either way the focus stays only on a row
+ * still drawn.
+ */
+export function answeredTree(held: TreeState, shape: FilterShape, ask: FilterAsk, drawn: FilterAsk | null): TreeState {
+  const focus = held.focus !== null && drawnIn(shape, held.focus) ? held.focus : null;
+  if (drawn !== null && sameAsk(ask, drawn)) {
+    return focus === held.focus ? held : { ...held, focus };
+  }
+  return { focus, expanded: filteredOpen(shape, drawn === null ? new Set() : held.expanded) };
 }
 
 /**
@@ -166,7 +197,7 @@ export function filterFailedLine(message: string): string {
   return `the filter could not be applied — ${message}`;
 }
 
-/** What the explanation in the panel says of Recent. */
+/** What the explainer behind the panel's `[?]` says of Recent. */
 export const RECENT_EXPLAINED =
   'Folders that directly hold files, newest first by when their files were added.';
 

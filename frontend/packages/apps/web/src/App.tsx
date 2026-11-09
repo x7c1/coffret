@@ -21,6 +21,7 @@ import {
   type Added,
   type CatalogState,
   type DeleteTarget,
+  type FilterAsk,
   type LibraryState,
   type ListedFile,
   type Listing,
@@ -64,11 +65,10 @@ import { askToAdd, overBudgetLine } from './dropped';
 import { DropConfirm } from './DropConfirm';
 import { addingLine, collectingLine, fillOfFolder, paced, rowFill } from './fill';
 import {
+  answeredTree,
   askOf,
-  drawnIn,
   FILTERING,
   filterFailedLine,
-  filteredOpen,
   matchLine,
   NO_FILTER,
   shapeOf,
@@ -340,11 +340,19 @@ export function App() {
   // What the tree is drawn from while a filter is on and answered; `null`
   // draws the folders open in the Library, as before it was turned on — and
   // so does a filter whose first answer is still out.
+  // Drawn from the answer alone, with the ask it was answered for: a new ask
+  // keeps the shape drawn until its own answer comes.
+  const filterOn = filterAsk !== null;
   const filterAnswer = filter.answer;
-  const shape = useMemo<FilterShape | null>(
-    () => (filterAsk === null || filterAnswer === null ? null : shapeOf(filterAnswer)),
-    [filterAsk, filterAnswer],
+  const filterAnswered = filter.answered;
+  const drawing = useMemo<{ shape: FilterShape; ask: FilterAsk } | null>(
+    () =>
+      !filterOn || filterAnswer === null || filterAnswered === null
+        ? null
+        : { shape: shapeOf(filterAnswer), ask: filterAnswered },
+    [filterOn, filterAnswer, filterAnswered],
   );
+  const shape = drawing === null ? null : drawing.shape;
   const heldListing = listings.listing;
   const rootState: Asked<Listing> = heldListing('') ?? LOADING;
   // The folder the screen's actions are about.
@@ -1628,20 +1636,26 @@ export function App() {
   // The filter turned on, answered anew, or turned off. On, the tree is
   // opened down to every row it kept and to no further — a kept folder drawn
   // closed — and the tree as it stood is kept aside, the focus staying only on
-  // a row still drawn. Answered anew, the kept folders somebody opened that are
-  // still kept stay open. Off, the tree as it stood comes back, the focus left
-  // on the row it was on, with the folders above it opened (see
+  // a row still drawn. Answered for other conditions, the tree is opened so
+  // again, and the kept folders somebody opened that are still kept stay
+  // open. Answered again for the same conditions — the Library changed under
+  // it — the folders open are left as they are, closed ones staying closed,
+  // and only the focus is let go of where its row is no longer drawn (see
+  // [`answeredTree`](./filter)): whether the conditions are the same is read
+  // from the ask each answer was for, so an answer to an older ask is never
+  // taken for the current one's. Off, the tree as it stood comes back, the
+  // focus left on the row it was on, with the folders above it opened (see
   // [`unfiltered`](./filter)).
   const normalTree = useRef<TreeState | null>(null);
-  const shapeDrawn = useRef<FilterShape | null>(null);
+  const drawn = useRef<{ shape: FilterShape; ask: FilterAsk } | null>(null);
   useEffect(() => {
-    const before = shapeDrawn.current;
-    shapeDrawn.current = shape;
-    if (before === shape) {
+    const before = drawn.current;
+    drawn.current = drawing;
+    if (before === drawing) {
       return;
     }
     const held = treeNow.current;
-    if (shape === null) {
+    if (drawing === null) {
       const normal = normalTree.current;
       normalTree.current = null;
       if (normal !== null) {
@@ -1652,11 +1666,11 @@ export function App() {
     if (before === null) {
       normalTree.current = held;
     }
-    changeTreeNow.current({
-      focus: held.focus !== null && drawnIn(shape, held.focus) ? held.focus : null,
-      expanded: filteredOpen(shape, before === null ? new Set() : held.expanded),
-    });
-  }, [shape]);
+    const next = answeredTree(held, drawing.shape, drawing.ask, before === null ? null : before.ask);
+    if (next !== held) {
+      changeTreeNow.current(next);
+    }
+  }, [drawing]);
 
   // The rows of the tree, top to bottom.
   const rows = useMemo(

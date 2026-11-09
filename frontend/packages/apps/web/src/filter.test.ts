@@ -1,8 +1,9 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import type { Filtered } from '@coffret/api';
+import type { FilterAsk, Filtered } from '@coffret/api';
 
 import {
+  answeredTree,
   askOf,
   drawnIn,
   filteredOpen,
@@ -70,6 +71,61 @@ it('opens the folders above the rows kept, and keeps open what was opened inside
     'comics/Starfall',
     'comics/Starfall/vol 1',
   ]);
+});
+
+describe('a filter answered', () => {
+  const starfall = answered([
+    { path: 'comics/Starfall', kind: 'folder', deposited_at: null },
+    { path: 'novels/Star/cover.jpg', kind: 'file', deposited_at: null },
+  ]);
+  // The same ask answered again after a book was added under a folder closed.
+  const starfallAgain = answered([
+    { path: 'comics/Starfall', kind: 'folder', deposited_at: null },
+    { path: 'novels/Star/cover.jpg', kind: 'file', deposited_at: null },
+    { path: 'archive/2024/Stars', kind: 'folder', deposited_at: null },
+  ]);
+  const byName = { name: 'star' };
+
+  it('on being turned on, opens the folders above every answered row', () => {
+    const held = { focus: null, expanded: new Set(['music']) };
+    const next = answeredTree(held, shapeOf(starfall), byName, null);
+    expect([...next.expanded].sort()).toEqual(['comics', 'novels', 'novels/Star']);
+  });
+
+  it('again for the same ask, leaves the folders open as they were', () => {
+    // Some opened, some closed: left exactly so.
+    const some = { focus: null, expanded: new Set(['comics', 'comics/Starfall']) };
+    expect(answeredTree(some, shapeOf(starfallAgain), { name: 'star' }, byName)).toBe(some);
+    // Every folder closed: they stay closed, a row new in the answer under a closed folder too.
+    const closed = { focus: null, expanded: new Set<string>() };
+    expect(answeredTree(closed, shapeOf(starfallAgain), { name: 'star' }, byName)).toBe(closed);
+  });
+
+  it('again for the same ask, lets go of the focus only where its row is no longer drawn', () => {
+    const held = { focus: folderKey('comics/Starfall'), expanded: new Set<string>() };
+    const gone = answered([{ path: 'novels/Star/cover.jpg', kind: 'file', deposited_at: null }]);
+    const next = answeredTree(held, shapeOf(gone), byName, byName);
+    expect(next.focus).toBeNull();
+    expect(next.expanded).toBe(held.expanded);
+  });
+
+  it('for other conditions, opens the folders above every answered row again', () => {
+    const closed = { focus: null, expanded: new Set<string>() };
+    const shape = shapeOf(starfallAgain);
+    const above = ['archive', 'archive/2024', 'comics', 'novels', 'novels/Star'];
+    const changes: [FilterAsk, FilterAsk][] = [
+      // Another name.
+      [{ name: 'sta' }, { name: 'star' }],
+      // Recent turned on, and turned off.
+      [{ name: 'star' }, { name: 'star', recent: 10 }],
+      [{ name: 'star', recent: 10 }, { name: 'star' }],
+      // Another count.
+      [{ recent: 10 }, { recent: 5 }],
+    ];
+    for (const [drawn, ask] of changes) {
+      expect([...answeredTree(closed, shape, ask, drawn).expanded].sort()).toEqual(above);
+    }
+  });
 });
 
 it('brings back the tree as it stood, with the focus left where it was', () => {

@@ -480,6 +480,28 @@ it('asks again after something the listings are asked again for', async () => {
   expect(getFilter).toHaveBeenLastCalledWith({ name: 'star' }, expect.any(AbortSignal));
 });
 
+it('leaves the folders open as they were when the same filter is answered again', async () => {
+  vi.mocked(refreshCatalog).mockResolvedValue({ advanced: true, gained: 1, entries: 9 });
+  await opened();
+  await typed('star', 'folder:comics/Starfall');
+  fireEvent.click(tree().getByLabelText('collapse comics'));
+  await waitFor(() => expect(keys()).not.toContain('folder:comics/Starfall'));
+  // Answered again with a row new under the folder closed.
+  vi.mocked(getFilter).mockResolvedValue(
+    answer([...BY_NAME.star.rows, { path: 'comics/Harbor/h1.jpg', kind: 'file' }]),
+  );
+  fireEvent.click(screen.getByRole('button', { name: CHECKING }));
+  await waitFor(() => expect(status().textContent).toContain('3 matches'));
+  expect(tree().getByLabelText('expand comics')).toBeTruthy();
+  expect(keys()).toEqual(['folder:comics', 'folder:novels', 'folder:novels/スターフォール', 'file:novels/スターフォール/表紙.jpg']);
+
+  // Another name opens the folders above every row it keeps again.
+  fireEvent.change(input(), { target: { value: 'sta' } });
+  await waitFor(() => expect(getFilter).toHaveBeenLastCalledWith({ name: 'sta' }, expect.any(AbortSignal)));
+  await waitFor(() => expect(keys()).toContain('file:comics/Harbor/h1.jpg'));
+  expect(tree().getByLabelText('collapse comics')).toBeTruthy();
+});
+
 describe('the keys', () => {
   it('Ctrl+F and / put the focus in the field, but not under a dialog', async () => {
     await opened();

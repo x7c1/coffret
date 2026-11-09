@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
 import { RECENT_EXPLAINED, recentCount, type FilterSettings } from './filter';
-import { COLOR } from './theme';
+import { COLOR, LAYER, SHADOW } from './theme';
 
 /**
  * The search field in the header, which filters the tree (see
@@ -9,8 +9,17 @@ import { COLOR } from './theme';
  * most recent books are asked for, the name input, a × that empties the name
  * while there is one, a divider, and ⏷ (More filters), which opens a small
  * panel under the field holding the conditions besides the name — for now
- * Recent and its count — and a line saying what it does. `Escape` or a press
- * outside closes the panel, and what was set in it stays set.
+ * Recent and its count, on the line `Recent [n] folders [?]`. `Escape` or a
+ * press outside closes the panel, and what was set in it stays set. The panel
+ * is drawn in front of the reader (see [`LAYER`](./theme)).
+ *
+ * The `[?]` ("About Recent") keeps what Recent does out of the way: the
+ * explainer is shown under the line while the `[?]` is hovered or holds the
+ * focus, and from a press on it — a tap, where there is no hover — until a
+ * second press, a press elsewhere, or `Escape`. `Escape` while the explainer
+ * is shown hides it and leaves the panel open; the next closes the panel. The
+ * `[?]` is described by the explainer (`aria-describedby`), so a screen
+ * reader reads it whether or not it is shown.
  *
  * The keys, beside what is typed:
  *
@@ -40,7 +49,17 @@ export function FilterField({
   const field = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const more = useRef<HTMLButtonElement>(null);
+  const help = useRef<HTMLButtonElement>(null);
+  const helpId = useId();
   const [panel, setPanel] = useState(false);
+  // What shows the explainer under the `[?]`: the pointer over it, the focus
+  // in it, a press on it that pinned it — unless it was hidden by a second
+  // press or `Escape` since, which the next hover, focus or press undoes.
+  const [helpHovered, setHelpHovered] = useState(false);
+  const [helpFocused, setHelpFocused] = useState(false);
+  const [helpPinned, setHelpPinned] = useState(false);
+  const [helpDismissed, setHelpDismissed] = useState(false);
+  const explained = !helpDismissed && (helpPinned || helpHovered || helpFocused);
   // What the count's input holds as typed, which may for a moment be no count
   // at all — emptied to type another — while the settings keep the last one.
   const [count, setCount] = useState(String(settings.recent));
@@ -88,9 +107,14 @@ export function FilterField({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // The panel closes on a press anywhere outside the field.
+  // The panel closes on a press anywhere outside the field, and whatever showed
+  // the explainer goes with it: a panel opened again starts without it.
   useEffect(() => {
     if (!panel) {
+      setHelpHovered(false);
+      setHelpFocused(false);
+      setHelpPinned(false);
+      setHelpDismissed(false);
       return;
     }
     const away = (event: MouseEvent) => {
@@ -101,6 +125,20 @@ export function FilterField({
     document.addEventListener('mousedown', away);
     return () => document.removeEventListener('mousedown', away);
   }, [panel]);
+
+  // An explainer pinned by a press is unpinned by a press anywhere but the `[?]`.
+  useEffect(() => {
+    if (!helpPinned) {
+      return;
+    }
+    const away = (event: MouseEvent) => {
+      if (event.target instanceof Node && help.current?.contains(event.target) !== true) {
+        setHelpPinned(false);
+      }
+    };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [helpPinned]);
 
   const onInputKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'Enter') {
@@ -120,15 +158,22 @@ export function FilterField({
     }
   };
 
-  // `Escape` in the panel, or on ⏷ while it is open: the panel closed, the
-  // focus on ⏷, and the key nobody else's — not the reader's `Escape`.
+  // `Escape` in the panel, or on ⏷ while it is open: the explainer hidden
+  // where it is shown, the panel closed otherwise, with the focus on ⏷; either
+  // way the key is nobody else's — not the reader's `Escape`.
   const closeByEscape = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      setPanel(false);
-      more.current?.focus();
+    if (event.key !== 'Escape') {
+      return;
     }
+    event.preventDefault();
+    event.stopPropagation();
+    if (explained) {
+      setHelpPinned(false);
+      setHelpDismissed(true);
+      return;
+    }
+    setPanel(false);
+    more.current?.focus();
   };
 
   return (
@@ -214,34 +259,62 @@ export function FilterField({
           style={PANEL}
         >
           {/* One condition a line, so that more can be added under it. */}
-          <label style={CONDITION}>
-            <input
-              type="checkbox"
-              checked={settings.recentOn}
-              onChange={(event) => onChange({ ...settings, recentOn: event.currentTarget.checked })}
-            />
-            Recent
-            <input
-              type="number"
-              aria-label="How many recent folders"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              value={count}
-              onChange={(event) => {
-                const typed = event.currentTarget.value;
-                setCount(typed);
-                const read = recentCount(typed);
-                if (read !== null && read !== settings.recent) {
-                  onChange({ ...settings, recent: read });
-                }
+          <div style={LINE}>
+            <label style={CONDITION}>
+              <input
+                type="checkbox"
+                checked={settings.recentOn}
+                onChange={(event) => onChange({ ...settings, recentOn: event.currentTarget.checked })}
+              />
+              Recent
+              <input
+                type="number"
+                aria-label="How many recent folders"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={count}
+                onChange={(event) => {
+                  const typed = event.currentTarget.value;
+                  setCount(typed);
+                  const read = recentCount(typed);
+                  if (read !== null && read !== settings.recent) {
+                    onChange({ ...settings, recent: read });
+                  }
+                }}
+                onBlur={() => setCount(String(settings.recent))}
+                style={COUNT}
+              />
+              folders
+            </label>
+            <button
+              ref={help}
+              type="button"
+              aria-label="About Recent"
+              aria-describedby={helpId}
+              onMouseEnter={() => {
+                setHelpHovered(true);
+                setHelpDismissed(false);
               }}
-              onBlur={() => setCount(String(settings.recent))}
-              style={COUNT}
-            />
-            folders
-          </label>
-          <p style={EXPLAINED}>{RECENT_EXPLAINED}</p>
+              onMouseLeave={() => setHelpHovered(false)}
+              onFocus={() => {
+                setHelpFocused(true);
+                setHelpDismissed(false);
+              }}
+              onBlur={() => setHelpFocused(false)}
+              onClick={() => {
+                setHelpDismissed(helpPinned);
+                setHelpPinned(!helpPinned);
+              }}
+              style={HELP}
+            >
+              [?]
+            </button>
+            {/* Kept in the page while hidden, so that the `[?]` is described by it either way. */}
+            <span id={helpId} role="tooltip" hidden={!explained} style={EXPLAINED}>
+              {RECENT_EXPLAINED}
+            </span>
+          </div>
         </div>
       )}
     </div>
@@ -339,7 +412,7 @@ const PANEL: CSSProperties = {
   position: 'absolute',
   top: 'calc(100% + 4px)',
   right: 0,
-  zIndex: 10,
+  zIndex: LAYER.filterPanel,
   width: 280,
   maxWidth: 'calc(100vw - 32px)',
   boxSizing: 'border-box',
@@ -363,4 +436,23 @@ const COUNT: CSSProperties = {
   padding: '2px 4px',
 };
 
-const EXPLAINED: CSSProperties = { margin: '8px 0 0', color: COLOR.dim, fontSize: 12 };
+/** The Recent line: the condition, then its `[?]`, which the explainer hangs under. */
+const LINE: CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center', gap: 6 };
+
+const HELP: CSSProperties = { ...SMALL_BUTTON, color: COLOR.dim, fontSize: 12 };
+
+/** Hung under the Recent line, over whatever the panel holds below it. */
+const EXPLAINED: CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% + 6px)',
+  left: 0,
+  right: 0,
+  zIndex: 1,
+  padding: '8px 10px',
+  border: `1px solid ${COLOR.border}`,
+  borderRadius: 8,
+  background: COLOR.panel,
+  boxShadow: SHADOW.menu,
+  color: COLOR.dim,
+  fontSize: 12,
+};
