@@ -8,22 +8,21 @@
 // walks — which rows were answered, and which folders stand above them — and
 // says what the line over the rows says of it.
 
-import type { FilterAsk, Filtered, FilterRow } from '@coffret/api';
+import type { FilterAsk, Filtered, FilterRow, FilterSettings } from '@coffret/api';
 
 import { parentOf } from './prospective';
 import { ancestry, fileKey, folderKey, keyed, type TreeState } from './tree';
 
-/** What the header's field and its panel are set to. */
-export interface FilterSettings {
-  /** The name typed, as typed. */
-  name: string;
-  /** Whether the most recent books are asked for. */
-  recentOn: boolean;
-  /** How many of them, a whole number from 1; kept while Recent is off. */
-  recent: number;
-}
+/**
+ * What the header's field and its panel are set to: the shape the server keeps
+ * them in for this device (see [`useKeptFilter`](./useKeptFilter)).
+ */
+export type { FilterSettings };
 
-/** How many of the most recent books the panel offers at first. */
+/**
+ * How many of the most recent books the panel offers at first — the count the
+ * server answers for a device that never kept a filter, too.
+ */
 const RECENT_AT_FIRST = 10;
 
 /** The field empty and Recent off: no filter at all. */
@@ -48,15 +47,23 @@ export function askOf(settings: FilterSettings): FilterAsk | null {
 }
 
 /**
- * The count the panel's number input holds, read: a whole number from 1, or
- * `null` for anything else — which leaves the count as it was.
+ * The largest count the server keeps for this device (spec: LA-43): a larger
+ * one would filter the tree but be refused at every keep, the name's
+ * included, for as long as the panel held it.
+ */
+const MOST_RECENT = 4_294_967_295;
+
+/**
+ * The count the panel's number input holds, read: a whole number from 1 to
+ * 4,294,967,295, or `null` for anything else — which leaves the count as it
+ * was.
  */
 export function recentCount(typed: string): number | null {
   if (!/^\s*\d+\s*$/.test(typed)) {
     return null;
   }
   const count = Number(typed.trim());
-  return Number.isSafeInteger(count) && count >= 1 ? count : null;
+  return Number.isSafeInteger(count) && count >= 1 && count <= MOST_RECENT ? count : null;
 }
 
 /**
@@ -130,14 +137,38 @@ export function filteredOpen(shape: FilterShape, before: ReadonlySet<string>): S
  * folders open are left as they were: none is opened again above an answered
  * row, nor above a row that is answered for the first time, so a person who
  * closed them finds them closed. Either way the focus stays only on a row
- * still drawn.
+ * still drawn (see [`drawnUnder`](./filter)): a page of a matched book the
+ * reader is open on stays focused, and so the reader stays open.
  */
 export function answeredTree(held: TreeState, shape: FilterShape, ask: FilterAsk, drawn: FilterAsk | null): TreeState {
-  const focus = held.focus !== null && drawnIn(shape, held.focus) ? held.focus : null;
   if (drawn !== null && sameAsk(ask, drawn)) {
+    const focus = held.focus !== null && drawnUnder(shape, held.expanded, held.focus) ? held.focus : null;
     return focus === held.focus ? held : { ...held, focus };
   }
-  return { focus, expanded: filteredOpen(shape, drawn === null ? new Set() : held.expanded) };
+  const expanded = filteredOpen(shape, drawn === null ? new Set() : held.expanded);
+  const focus = held.focus !== null && drawnUnder(shape, expanded, held.focus) ? held.focus : null;
+  return { focus, expanded };
+}
+
+/**
+ * Whether the row `key` names is drawn in a tree filtered by `shape` with the
+ * folders in `expanded` open: one [`drawnIn`](./filter) draws, or a row inside
+ * an answered folder — or directly in a Library root answered as a book —
+ * with every folder above it open.
+ */
+export function drawnUnder(shape: FilterShape, expanded: ReadonlySet<string>, key: string): boolean {
+  if (drawnIn(shape, key)) {
+    return true;
+  }
+  const row = keyed(key);
+  const folders = ancestry(parentOf(row.path));
+  if (!folders.every((folder) => expanded.has(folder))) {
+    return false;
+  }
+  if (folders.length === 0) {
+    return shape.rootBook && row.kind === 'file';
+  }
+  return folders.some((folder) => shape.answered.has(folderKey(folder)));
 }
 
 /**

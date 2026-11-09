@@ -1,7 +1,7 @@
 /**
  * What the explorer reads a Library through.
  *
- * The twenty-four routes `coffret-server` answers, as typed calls: which Library
+ * The twenty-six routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, which rows a tree
  * filtered by a name or by the most recent books keeps, which files stand either
  * side of one row in reading order, one Entry's plaintext,
@@ -15,8 +15,9 @@
  * and the question of what it would do to this device's files, the one that renews the grant
  * Storage stopped taking, the one that asks for a locked Library to be
  * unlocked, the two that choose a folder on this device and map part of
- * the Library to it, and the two that read and keep which set of colours this
- * device's explorer is drawn in. The types are this package's word
+ * the Library to it, the two that read and keep which set of colours this
+ * device's explorer is drawn in, and the two that read and keep what its tree
+ * was last filtered by. The types are this package's word
  * for the server's serialization — written by hand, one file per route, so that
  * a field the server gains has one obvious place to land here — and every
  * refusal arrives as one shape a screen can branch on.
@@ -105,6 +106,8 @@ export type { Beside } from './beside';
 export { getFile, peekFile, readAhead } from './file';
 export { getFilter } from './filter';
 export type { FilterAsk, Filtered, FilterRow, FilterRowKind } from './filter';
+export { getFilterSettings, setFilterSettings } from './filterSettings';
+export type { FilterSettings } from './filterSettings';
 export { getFolders } from './folders';
 export type { Folders } from './folders';
 export { getLibrary, getLibraryTotals } from './library';

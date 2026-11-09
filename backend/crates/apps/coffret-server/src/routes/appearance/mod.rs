@@ -34,8 +34,8 @@ pub struct AppearanceDto {
 pub async fn appearance(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<AppearanceDto>, ApiError> {
-    let file = state.appearance.clone();
-    let appearance = tokio::task::spawn_blocking(move || file.read())
+    let file = state.explorer.clone();
+    let appearance = tokio::task::spawn_blocking(move || file.appearance())
         .await
         .map_err(|cause| ApiError::server(NotJoined("AppearanceNotJoined", cause)))?;
     Ok(Json(AppearanceDto { appearance }))
@@ -51,9 +51,9 @@ pub async fn choose_appearance(
     body: Result<Json<AppearanceRequest>, JsonRejection>,
 ) -> Result<Json<AppearanceDto>, ApiError> {
     let Json(request) = body.map_err(ApiError::unreadable_json)?;
-    let file = state.appearance.clone();
+    let file = state.explorer.clone();
     let appearance = request.appearance;
-    tokio::task::spawn_blocking(move || file.write(appearance))
+    tokio::task::spawn_blocking(move || file.keep_appearance(appearance))
         .await
         .map_err(|cause| ApiError::server(NotJoined("AppearanceNotJoined", cause)))??;
     Ok(Json(AppearanceDto { appearance }))

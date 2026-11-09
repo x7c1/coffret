@@ -49,6 +49,8 @@ vi.mock('@coffret/api', async (actual) => ({
   getFile: vi.fn(),
   // A device that never chose how the explorer is drawn.
   getAppearance: vi.fn(() => Promise.resolve('system')),
+  getFilterSettings: vi.fn(() => Promise.resolve({ name: '', recentOn: false, recent: 10 })),
+  setFilterSettings: vi.fn((settings: unknown) => Promise.resolve(settings)),
   getFolders: vi.fn(),
   getLibrary: vi.fn(),
   getLibraryTotals: vi.fn(),

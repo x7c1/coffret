@@ -70,10 +70,8 @@ import {
   FILTERING,
   filterFailedLine,
   matchLine,
-  NO_FILTER,
   shapeOf,
   unfiltered,
-  type FilterSettings,
   type FilterShape,
 } from './filter';
 import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
@@ -144,6 +142,7 @@ import { heldBy } from './turns';
 import { unmappedLine, type Tried } from './unmapped';
 import { readInside, type AskBeside } from './readInside';
 import { useFilter } from './useFilter';
+import { useKeptFilter } from './useKeptFilter';
 import { useListings } from './useListings';
 import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
@@ -332,8 +331,14 @@ export function App() {
   const reloadListings = listings.reload;
   // What the tree is filtered by, as the header's field and its panel are set,
   // and the server's answer for it (see [`useFilter`](./useFilter)). Not in the
-  // URL: a reload forgets it.
-  const [filterSet, setFilterSet] = useState<FilterSettings>(NO_FILTER);
+  // URL, but kept for this device by the server (spec: LA-43), so a reload or
+  // the app's next launch opens filtered as it was left (see
+  // [`useKeptFilter`](./useKeptFilter)). Whether the Library is open to ask
+  // is said below, once the lock is known.
+  const [filterOpen, setFilterOpen] = useState(true);
+  const keptFilter = useKeptFilter(filterOpen);
+  const filterSet = keptFilter.settings;
+  const setFilterSet = keptFilter.change;
   const filterAsk = useMemo(() => askOf(filterSet), [filterSet]);
   const filter = useFilter(filterAsk);
   const reloadFilter = filter.reload;
@@ -529,6 +534,7 @@ export function App() {
   // and it comes back of itself once the unlock lands and the questions are
   // asked again.
   const locked = custody === 'locked' || refusedLocked;
+  useEffect(() => setFilterOpen(!locked), [locked]);
   useEffect(() => {
     if (custody !== null && prompting.heard(custody, inFront())) {
       unlock();
@@ -1951,7 +1957,10 @@ export function App() {
   }, [rows, tree, changeTree]);
   // The line over the rows while a filter is on, and Clear on it: the name
   // and Recent both off.
-  const clearFilter = useCallback(() => setFilterSet((held) => ({ ...held, name: '', recentOn: false })), []);
+  const clearFilter = useCallback(
+    () => setFilterSet((held) => ({ ...held, name: '', recentOn: false })),
+    [setFilterSet],
+  );
   const filterLine: FilterLine | null =
     filterAsk === null
       ? null
@@ -2165,6 +2174,7 @@ export function App() {
         locked={locked}
         filter={filterSet}
         onFilter={setFilterSet}
+        onFilterNameLeft={keptFilter.nameLeft}
         onFilterToTree={filterToTree}
       />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

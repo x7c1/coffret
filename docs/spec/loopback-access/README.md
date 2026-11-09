@@ -31,7 +31,8 @@ colours this device's explorer is drawn in, which the server keeps as the
 device's own state (LA-38); and what the whole Library comes to, counted out
 of the catalog for the explorer's details of the Library itself (LA-39); and
 which rows a tree filtered by a name or by the most recently deposited books
-keeps (LA-40 to LA-42). The
+keeps (LA-40 to LA-42); and what this device's explorer last had its tree
+filtered by, kept beside the colours as the device's own state (LA-43). The
 two credentials never cross: the server key is what the host shows the server,
 a browser token is what a browser shows the host, and neither of the two
 accepts the other's.
@@ -770,7 +771,7 @@ Concept background: [Library](../../concepts/library/),
   reader's fetch, which is the page withdrawing a request this server answers
   as any other.)*
 
-### The explorer's appearance
+### The explorer's own state
 
 - **LA-38.** Which set of colours this device's explorer is drawn in —
   `system`, the one the browser reports the system as asking for, followed as
@@ -793,6 +794,35 @@ Concept background: [Library](../../concepts/library/),
   itself — its `<meta name="color-scheme">` and its root element — so the
   page's first frame is drawn in that set before `GET /api/appearance` is
   answered, and `system` serves the page as it was built.
+  *(Form: test)*
+- **LA-43.** What this device's explorer last had its tree filtered by — the
+  name typed in its search field, whether the most recent books (LA-41) are
+  asked for, and how many — is this device's own state too, kept by the
+  server in the same file as the appearance (LA-38) and for the same reason:
+  never in a Library, so nothing of it is ever uploaded, and not in the page's
+  storage, which the desktop app's next launch does not have. Keeping either
+  leaves the other as it was, and a file kept before the filter was (the
+  appearance alone) reads with no filter. The server answers it
+  (`GET /api/filter-settings`, as
+  `{"name": …, "recentOn": …, "recent": …}`, the name as typed) and keeps new
+  settings (`POST /api/filter-settings` with the same body, answered as the
+  `GET` is). A device that never kept any, or whose kept settings cannot be
+  read, is answered no filter: an empty name, `recentOn` false and `recent`
+  10, the count the explorer offers at first. A body whose `recent` is not a
+  whole number from 1 to 4,294,967,295, whose name is longer than 1,000
+  characters, or which lacks a field or carries one more, is refused as `400`
+  and leaves what was kept as it was. Unlike the appearance, both are refused
+  by the server itself while the Library is locked, as every route that reads
+  the catalog is (DK-2), although neither needs its key: a name typed to
+  filter the tree says something about what the Library holds, so a locked
+  server neither hands it out nor takes a new one. Needing no key, neither
+  records anybody being here (DK-4).
+  The explorer reads the kept settings as it opens and applies them before it
+  first draws a filtered tree, so it opens filtered as it was left, and keeps
+  each change: a change of Recent or its count at once, and the name once
+  typing in it pauses or the field is left, not at every key. A change it
+  could not keep is said in the page's console and leaves the filter on
+  screen as it is.
   *(Form: test)*
 
 ### What the Library comes to

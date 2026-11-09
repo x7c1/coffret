@@ -19,7 +19,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
-use coffret_device::{AppearanceFile, EntryPath, OpenLibrary};
+use coffret_device::{EntryPath, ExplorerFile, OpenLibrary};
 use coffret_local_fs::UnixFs;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
@@ -118,12 +118,13 @@ const PLANTED: [(&str, &[u8]); 6] = [
     ("books/page-001.png", b"page one"),
 ];
 
-/// Where the served device keeps its explorer's appearance: in the fixture's
-/// own directory, beside the two devices' spools, so that a server started
-/// afresh over the same device reads what the one before it kept — and no case
-/// reaches the state directory of whoever runs it.
-fn appearance_file(device: &Path) -> AppearanceFile {
-    AppearanceFile::at(device.join("explorer.json"))
+/// Where the served device keeps its explorer's own state — its appearance and
+/// its filter settings: in the fixture's own directory, beside the two
+/// devices' spools, so that a server started afresh over the same device reads
+/// what the one before it kept — and no case reaches the state directory of
+/// whoever runs it.
+fn explorer_file(device: &Path) -> ExplorerFile {
+    ExplorerFile::at(device.join("explorer.json"))
 }
 
 /// One server over a Library another device filled.
@@ -413,7 +414,7 @@ impl Served {
         let state = ServerState::new(Some("served".to_owned()), library)
             .within(allowance)
             .consenting_through(Arc::clone(&consent) as _)
-            .keeping_appearance_in(appearance_file(spools.path()));
+            .keeping_explorer_state_in(explorer_file(spools.path()));
         let (state, prompted) = if prompting {
             let (prompt, asked) = UnlockPrompt::channel();
             (
@@ -501,6 +502,13 @@ impl Served {
         catch_up_at_startup(&self.state).await;
     }
 
+    /// Writes `contents` as the served device's explorer file, as a build
+    /// before this one, or a person, would have left it.
+    pub fn write_explorer_file(&self, contents: &str) {
+        std::fs::write(self.spools.path().join("explorer.json"), contents)
+            .expect("the explorer file is written");
+    }
+
     /// Stands a server started afresh over the same device in place of this
     /// one, the way the desktop app does after a Quit or a crash, without
     /// starting it up.
@@ -525,7 +533,7 @@ impl Served {
             ServerState::new(self.name.clone(), library)
                 .within(self.allowance)
                 .consenting_through(Arc::clone(&self.consent) as _)
-                .keeping_appearance_in(appearance_file(self.spools.path())),
+                .keeping_explorer_state_in(explorer_file(self.spools.path())),
         );
         self.router = router(
             Arc::clone(&state),
