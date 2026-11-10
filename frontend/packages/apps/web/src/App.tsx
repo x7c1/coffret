@@ -76,6 +76,7 @@ import {
 } from './filter';
 import { parseHash, sheetOpen, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
+import { CatalogNotice } from './CatalogNotice';
 import { ChooseFolder } from './ChooseFolder';
 import { folderToChoose } from './mapping';
 import { NewFolderDialog } from './NewFolderDialog';
@@ -114,7 +115,7 @@ import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
 import { NOTHING_SELECTED, selectedRows, type Selection } from './selection';
 import { askToReconnect, grantRenewed } from './reconnect';
-import { ReconnectOffer, type Offer } from './ReconnectOffer';
+import type { Offer } from './ReconnectOffer';
 import type { Edits, Numbering } from './renumber';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { RemoteHeadLooks } from './remoteHead';
@@ -122,7 +123,6 @@ import { counterOf, sheetKey, sheetOn } from './sheet';
 import { LockedScreen } from './Locked';
 import { Region } from './Region';
 import { heldAfter, strandedFolders } from './stranded';
-import { COLOR } from './theme';
 import { useRunReloads } from './runReloads';
 import {
   ancestry,
@@ -2269,24 +2269,7 @@ export function App() {
                   nothing is about one click, and this is about everything on the
                   screen. */}
               {catalogSaid !== null && (
-                <p
-                  style={{
-                    margin: 0,
-                    padding: '8px 12px',
-                    borderBottom: `1px solid ${COLOR.border}`,
-                    background: COLOR.warnGround,
-                    color: COLOR.warn,
-                    fontSize: 13,
-                  }}
-                >
-                  {catalogSaid}
-                  {catalogRanOut && offer !== null && (
-                    <>
-                      {' — '}
-                      <ReconnectOffer offer={offer} />
-                    </>
-                  )}
-                </p>
+                <CatalogNotice said={catalogSaid} offer={catalogRanOut ? offer : null} />
               )}
               {/* The folder the focus is in, where its own listing was refused
                   and the root's was not: the tree stands, and the refusal over it

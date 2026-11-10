@@ -47,6 +47,12 @@ export interface Offer {
  * one another window started, whose page this one was never handed, and then
  * the line says so instead.
  *
+ * Each sentence starts a line of its own, a block apiece, so that none runs on
+ * into the next at any width: the sentence saying the permission ran out, then
+ * the button with what the last press came to beside it (wrapping under it
+ * where the width runs out), then the link. The offer is a block itself, so it
+ * stands under whatever sentence precedes it.
+ *
  * Its words and its button are drawn in `ink` — the screen's colours, or
  * the reader's sheet's where it stands on the sheet's dark ground, so the
  * button reads as the sheet's Retry beside it does.
@@ -56,26 +62,39 @@ export function ReconnectOffer({ offer, ink = SCREEN_INK }: { offer: Offer; ink?
   const line =
     offer.refused ?? (elsewhere ? OPENED_ELSEWHERE : reconnectLine(offer.reconnect)) ?? offer.said;
   const link = consentLink(offer.reconnect, offer.consentPage);
+  const button = offersReconnect(offer.reconnect);
   return (
-    <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span>{RAN_OUT}</span>
-      {offersReconnect(offer.reconnect) && (
-        <button
-          onClick={offer.ask}
-          style={{ ...BUTTON, border: `1px solid ${ink.border}`, background: ink.raised, color: ink.text }}
-        >
-          {RECONNECTING}
-        </button>
-      )}
-      {line !== null && (
-        <span style={{ color: offer.refused !== null ? ink.refused : ink.text }}>{line}</span>
+    <div style={OFFER}>
+      <div>{RAN_OUT}</div>
+      {(button || line !== null) && (
+        <div>
+          {button && (
+            <button
+              onClick={offer.ask}
+              style={{
+                ...BUTTON,
+                marginRight: line !== null ? 10 : 0,
+                border: `1px solid ${ink.border}`,
+                background: ink.raised,
+                color: ink.text,
+              }}
+            >
+              {RECONNECTING}
+            </button>
+          )}
+          {line !== null && (
+            <span style={{ color: offer.refused !== null ? ink.refused : ink.text }}>{line}</span>
+          )}
+        </div>
       )}
       {link !== null && (
-        <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: ink.text }}>
-          {NO_TAB}
-        </a>
+        <div>
+          <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: ink.text }}>
+            {NO_TAB}
+          </a>
+        </div>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -89,6 +108,13 @@ interface Ink {
 
 /** The screen's colours, where every offer but the reader's stands. */
 const SCREEN_INK: Ink = { text: COLOR.text, refused: COLOR.refused, border: COLOR.border, raised: COLOR.panel };
+
+/**
+ * The offer's lines, one under another, a little apart. A grid rather than a
+ * column of flex items, so each line keeps the text alignment of where the
+ * offer stands: centred under the reader's sheet, from the left elsewhere.
+ */
+const OFFER = { display: 'grid', gap: 6 } as const;
 
 const BUTTON = {
   font: 'inherit',

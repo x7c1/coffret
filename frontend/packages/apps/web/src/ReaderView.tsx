@@ -517,9 +517,9 @@ function Picture({
               brings back: the reconnect is offered above it, and the retry
               stays for once the permission is renewed. */}
           {shown.ranOut && reconnect !== null && (
-            <p style={{ color: SHEET_COLOR.text, fontSize: 13 }}>
+            <div style={{ color: SHEET_COLOR.text, fontSize: 13, margin: '13px 0' }}>
               <ReconnectOffer offer={reconnect} ink={SHEET_COLOR} />
-            </p>
+            </div>
           )}
           <button
             onClick={onRetry}
