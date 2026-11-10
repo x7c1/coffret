@@ -80,11 +80,28 @@ sha256_of() {
   fi
 }
 
+# How long a download keeps retrying. GitHub Releases at times answers
+# `504 Gateway Timeout` for a minute or more, and curl's own retry gives up
+# about seven seconds after the first failure, so every failure is retried
+# (--retry-all-errors; -f makes an HTTP error one) every RETRY_DELAY seconds
+# until RETRY_MAX_TIME has passed. Each attempt is cut off after
+# ATTEMPT_MAX_TIME, so a stalled connection or transfer cannot spend the budget
+# alone; the binaries are a few MB, which takes seconds. A retry starts only
+# inside RETRY_MAX_TIME, so one download takes at most about
+# RETRY_MAX_TIME + RETRY_DELAY + ATTEMPT_MAX_TIME = 100 s, and the two at most
+# about 200 s, well inside the 5 minutes CI's `spec` job allows
+# (.github/workflows/ci.yml).
+readonly RETRY_MAX_TIME=75 RETRY_DELAY=5 ATTEMPT_MAX_TIME=20 CONNECT_TIMEOUT=10
+
 # Download $1 to $2 and refuse it unless its SHA-256 is $3.
 fetch_verified() {
-  local url="$1" out="$2" want="$3" got
+  local url="$1" out="$2" want="$3" got started=$SECONDS
   echo "shell-lint: fetching $url" >&2
-  curl -fsSL --retry 3 -o "$out" "$url" || fail "could not download $url."
+  curl -fsSL \
+    --retry 30 --retry-all-errors --retry-delay "$RETRY_DELAY" --retry-max-time "$RETRY_MAX_TIME" \
+    --connect-timeout "$CONNECT_TIMEOUT" --max-time "$ATTEMPT_MAX_TIME" \
+    -o "$out" "$url" ||
+    fail "could not download $url; gave up after trying for $((SECONDS - started)) s."
   got="$(sha256_of "$out")"
   if [ "$got" != "$want" ]; then
     rm -f "$out"
