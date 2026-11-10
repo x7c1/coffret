@@ -72,7 +72,14 @@ export const test = base.extend<object, { coffret: CoffretServer }>({
     { scope: 'worker', auto: true },
   ],
   page: async ({ page }, use) => {
+    // Each journey starts unfiltered whatever the one before it left kept, so
+    // that none depends on the last having cleared its filter.
+    const read = keptFilterRead(page);
     await openExplorer(page);
+    const kept = await read;
+    if (kept !== null && (kept.name !== '' || kept.recentOn)) {
+      await clearFilter(page);
+    }
     await use(page);
   },
 });
@@ -404,4 +411,58 @@ export async function dropFilesOnto(
 /** The same, for the one file a journey drops on its own. */
 export function dropFileOnto(page: Page, target: Locator, file: string): Promise<void> {
   return dropFilesOnto(page, target, [file]);
+}
+
+/** Filter settings as the server keeps them for this device (spec: LA-43). */
+export interface KeptFilter {
+  name: string;
+  recentOn: boolean;
+  recent: number;
+}
+
+/**
+ * Waits for the page to have kept filter settings for this device that
+ * `settled` holds of (spec: LA-43): the request it sends, answered with what
+ * was kept.
+ *
+ * A wait rather than an assertion about the wire: what the settings are is
+ * asserted on the screen after a reload, and this is only what lets a journey
+ * know the reload comes after the keep and not before it. Set it waiting
+ * before the gesture that changes the settings.
+ */
+export async function filterKept(page: Page, settled: (kept: KeptFilter) => boolean): Promise<void> {
+  await page.waitForResponse(async (answer) => {
+    if (
+      answer.request().method() !== 'POST' ||
+      new URL(answer.url()).pathname !== '/api/filter-settings' ||
+      !answer.ok()
+    ) {
+      return false;
+    }
+    return settled((await answer.json()) as KeptFilter);
+  });
+}
+
+/**
+ * The filter settings the page reads for this device as it opens (spec:
+ * LA-43), or `null` where the read was refused. Set it waiting before the page
+ * is opened or reloaded.
+ */
+async function keptFilterRead(page: Page): Promise<KeptFilter | null> {
+  const answer = await page.waitForResponse(
+    (one) => one.request().method() === 'GET' && new URL(one.url()).pathname === '/api/filter-settings',
+  );
+  return answer.ok() ? ((await answer.json()) as KeptFilter) : null;
+}
+
+/**
+ * Clears the filter on screen with Clear on its line, and waits for the server
+ * to have kept it cleared.
+ */
+export async function clearFilter(page: Page): Promise<void> {
+  const status = page.getByRole('status', { name: 'filter' });
+  const cleared = filterKept(page, (kept) => kept.name === '' && !kept.recentOn);
+  await status.getByRole('button', { name: 'Clear' }).click();
+  await cleared;
+  await expect(status).toHaveCount(0);
 }

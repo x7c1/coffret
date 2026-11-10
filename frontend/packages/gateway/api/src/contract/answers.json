@@ -66,6 +66,11 @@
     "total": 5,
     "truncated": false
   },
+  "filter_settings": {
+    "name": "",
+    "recent": 10,
+    "recentOn": false
+  },
   "folders": {
     "folders": [
       "albums",

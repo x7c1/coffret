@@ -195,13 +195,16 @@ mod account_name;
 mod account_settings;
 mod accounts;
 
-// Which set of colours this device's explorer is drawn in, and the file it is
-// kept in beside the Libraries.
+// Which set of colours this device's explorer is drawn in, what its tree was
+// last filtered by, and the file both are kept in beside the Libraries.
 mod appearance;
 pub use appearance::Appearance;
 
-mod appearance_file;
-pub use appearance_file::AppearanceFile;
+mod filter_settings;
+pub use filter_settings::{FilterSettings, MOST_FILTER_NAME_CHARS};
+
+mod explorer_file;
+pub use explorer_file::ExplorerFile;
 
 mod add;
 pub use add::{AddedFile, IncomingFile, KeptAside, LocalAdditions, Replacing};

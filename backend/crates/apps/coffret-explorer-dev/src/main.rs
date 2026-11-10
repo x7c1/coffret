@@ -106,7 +106,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
         dist: args.dist,
         // The state directory the server beside it was started under, which
         // is where that server keeps the choice.
-        appearance: coffret_device::AppearanceFile::of_this_device(),
+        appearance: coffret_device::ExplorerFile::of_this_device(),
     };
     // Bound first, so that the host is built around the address it is on.
     let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, args.port))

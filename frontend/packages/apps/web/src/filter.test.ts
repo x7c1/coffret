@@ -6,6 +6,7 @@ import {
   answeredTree,
   askOf,
   drawnIn,
+  drawnUnder,
   filteredOpen,
   matchLine,
   NO_FILTER,
@@ -29,10 +30,11 @@ it('asks nothing for an empty name with Recent off, and the name as typed otherw
   expect(askOf({ name: 'vol', recentOn: true, recent: 2 })).toEqual({ name: 'vol', recent: 2 });
 });
 
-it('reads a count of recent books as a whole number from 1', () => {
+it('reads a count of recent books as a whole number from 1 to the most the server keeps', () => {
   expect(recentCount('10')).toBe(10);
   expect(recentCount(' 3 ')).toBe(3);
-  for (const typed of ['', '0', '-1', '2.5', 'ten', '1e3', '99999999999999999999']) {
+  expect(recentCount('4294967295')).toBe(4294967295);
+  for (const typed of ['', '0', '-1', '2.5', 'ten', '1e3', '4294967296', '99999999999999999999']) {
     expect(recentCount(typed), typed).toBeNull();
   }
 });
@@ -54,6 +56,22 @@ it('shapes an answer into the rows kept and the folders above them', () => {
   // folder's path.
   expect(drawnIn(shape, fileKey('comics/Starfall/001.jpg'))).toBe(false);
   expect(drawnIn(shape, fileKey('comics'))).toBe(false);
+});
+
+it('draws what a kept folder holds once it, and every folder above it, is open', () => {
+  const shape = shapeOf(answered([{ path: 'comics/Starfall', kind: 'folder', deposited_at: null }]));
+  const page = fileKey('comics/Starfall/vol 1/001.jpg');
+  expect(drawnUnder(shape, new Set(['comics', 'comics/Starfall', 'comics/Starfall/vol 1']), page)).toBe(true);
+  expect(drawnUnder(shape, new Set(['comics', 'comics/Starfall']), page)).toBe(false);
+  expect(drawnUnder(shape, new Set(['comics', 'comics/Starfall']), folderKey('comics/Starfall/vol 1'))).toBe(true);
+  // Not beside the kept folder, in a folder above it only.
+  expect(drawnUnder(shape, new Set(['comics']), fileKey('comics/other.jpg'))).toBe(false);
+  // What drawnIn draws, whatever is open.
+  expect(drawnUnder(shape, new Set(), folderKey('comics/Starfall'))).toBe(true);
+  // The files directly in a Library root answered as a book.
+  const root = shapeOf(answered([{ path: '', kind: 'folder', deposited_at: null }]));
+  expect(drawnUnder(root, new Set(), fileKey('cover.jpg'))).toBe(true);
+  expect(drawnUnder(root, new Set(), folderKey('comics'))).toBe(false);
 });
 
 it('answers the Library root as a book with no row of its own', () => {
@@ -107,6 +125,19 @@ describe('a filter answered', () => {
     const next = answeredTree(held, shapeOf(gone), byName, byName);
     expect(next.focus).toBeNull();
     expect(next.expanded).toBe(held.expanded);
+  });
+
+  it('again for the same ask, keeps the focus on a page inside a kept folder opened', () => {
+    // The reader open on a page of a matched book: its row stays focused.
+    const held = { focus: fileKey('comics/Starfall/001.jpg'), expanded: new Set(['comics', 'comics/Starfall']) };
+    expect(answeredTree(held, shapeOf(starfallAgain), { name: 'star' }, byName)).toBe(held);
+  });
+
+  it('for other conditions, keeps the focus on a page inside a kept folder still open', () => {
+    const held = { focus: fileKey('comics/Starfall/001.jpg'), expanded: new Set(['comics', 'comics/Starfall']) };
+    const next = answeredTree(held, shapeOf(starfall), { name: 'starf' }, byName);
+    expect(next.focus).toBe(held.focus);
+    expect(next.expanded.has('comics/Starfall')).toBe(true);
   });
 
   it('for other conditions, opens the folders above every answered row again', () => {

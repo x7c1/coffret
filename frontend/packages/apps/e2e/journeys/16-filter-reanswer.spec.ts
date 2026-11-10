@@ -10,7 +10,7 @@
 // say, not a tree sprung open again. Only another name, or another Recent,
 // opens the folders above what it keeps.
 
-import { expect, inTree, leaf, setting, shot, test, top } from './journey';
+import { clearFilter, expect, inTree, leaf, setting, shot, test, top } from './journey';
 import { commitElsewhere } from './uploader';
 
 /** How long the other device's commit and the catch-up have to take. */
@@ -71,4 +71,8 @@ test('the same filter answered again leaves the folders closed', async ({ page }
   await expect(collapse).toBeVisible();
   await expect(addedRow).toHaveCount(1);
   await shot(page, '03-another-name-opened');
+
+  // Cleared, and kept cleared (spec: LA-43), so the journeys after this one
+  // open unfiltered.
+  await clearFilter(page);
 });

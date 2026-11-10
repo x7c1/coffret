@@ -44,7 +44,7 @@ use axum::extract::{Request, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
-use coffret_device::{Appearance, AppearanceFile};
+use coffret_device::{Appearance, ExplorerFile};
 
 use crate::host::Host;
 use crate::{HostKind, PageSource};
@@ -80,7 +80,7 @@ pub(crate) struct Page {
     kind: HostKind,
     /// Where this device keeps the set of colours its explorer is drawn in,
     /// read each time the index is served.
-    appearance: AppearanceFile,
+    appearance: ExplorerFile,
 }
 
 /// Where the build being served is.
@@ -90,7 +90,7 @@ enum Build {
 }
 
 impl Page {
-    pub(crate) fn new(source: &PageSource, kind: HostKind, appearance: AppearanceFile) -> Self {
+    pub(crate) fn new(source: &PageSource, kind: HostKind, appearance: ExplorerFile) -> Self {
         let build = match source {
             PageSource::Embedded => Build::Embedded,
             PageSource::Directory(root) => Build::Directory(DistDir::new(root.clone())),
@@ -104,7 +104,7 @@ impl Page {
 
     /// Answers `path`.
     fn respond(&self, path: &str) -> Response {
-        let chosen = || self.appearance.read();
+        let chosen = || self.appearance.appearance();
         match &self.build {
             Build::Embedded => respond_embedded(path, self.kind, chosen),
             Build::Directory(dist) => respond_from(dist, path, self.kind, chosen),

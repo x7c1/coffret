@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use coffret_device::{AppearanceFile, LibraryDir};
+use coffret_device::{ExplorerFile, LibraryDir};
 use coffret_server::ServerState;
 
 use crate::{HostKind, KeyFile, KeySource, LibraryLock, PageSource};
@@ -23,7 +23,7 @@ pub struct Config {
     pub kind: HostKind,
     /// Where this device keeps the set of colours its explorer is drawn in,
     /// which the page is served in (spec: LA-38).
-    pub appearance: AppearanceFile,
+    pub appearance: ExplorerFile,
 }
 
 impl Config {
@@ -40,7 +40,7 @@ impl Config {
         Self {
             server,
             key: Arc::new(KeyFile(library.server_key_file())),
-            appearance: state.appearance.clone(),
+            appearance: state.explorer.clone(),
             lock: state,
             page: PageSource::Embedded,
             kind,

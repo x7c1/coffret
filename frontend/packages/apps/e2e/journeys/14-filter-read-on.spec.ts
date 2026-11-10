@@ -16,7 +16,7 @@ import { readdir } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 
 import { bookCalled, dropAsAPack } from './books';
-import { expect, inTree, ON_THIS_DEVICE, row, setting, shot, test, tree } from './journey';
+import { clearFilter, expect, inTree, ON_THIS_DEVICE, row, setting, shot, test, tree } from './journey';
 
 /** The three books, in the Library's order: the first and the last match the name. */
 const FIRST = 'read-on-a-kept';
@@ -95,4 +95,11 @@ test('read on from one book a name matched into the next, past one it did not', 
   await expect(reader.getByLabel('position')).toHaveText(`${pages.length} / ${pages.length}`);
   await expect(reader.getByRole('img', { name: end })).toBeVisible();
   await shot(page, '03-stayed-at-the-last-match');
+
+  // The filter is this device's, kept by the server rather than by the tab:
+  // the page opened afresh is filtered as it was left.
+  await page.goto('/');
+  await expect(field).toHaveValue('kept');
+  await expect(page.getByRole('status', { name: 'filter' })).toContainText(/^2 matches/);
+  await clearFilter(page);
 });
