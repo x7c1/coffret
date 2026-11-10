@@ -228,7 +228,7 @@ export function filterFailedLine(message: string): string {
   return `the filter could not be applied — ${message}`;
 }
 
-/** What the explainer behind the panel's `[?]` says of Recent. */
+/** What the explainer behind the panel's question mark ("About Recent") says of Recent. */
 export const RECENT_EXPLAINED =
   'Folders that directly hold files, newest first by when their files were added.';
 
