@@ -11,6 +11,7 @@
     "freeze": null,
     "library": "locked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -68,6 +69,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -125,6 +127,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -162,6 +165,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -222,6 +226,7 @@
             }
           ],
           "relocated": 0,
+          "run": 1,
           "status": "stopped",
           "stopped": {
             "error": "storage",
@@ -247,6 +252,7 @@
             }
           ],
           "relocated": 0,
+          "run": 2,
           "status": "done",
           "stopped": null,
           "unrelocated": {
@@ -278,6 +284,7 @@
             }
           ],
           "relocated": 1,
+          "run": 3,
           "status": "done",
           "stopped": null,
           "unrelocated": null
@@ -493,6 +500,7 @@
         "settled": true
       }
     ],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -525,6 +533,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -542,6 +551,28 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [
+      {
+        "pairs": [
+          {
+            "from": "albums/2026",
+            "to": "scans/2026"
+          }
+        ],
+        "run": 4,
+        "waits": false
+      },
+      {
+        "pairs": [
+          {
+            "from": "books/vol-1.cbz",
+            "to": "books/Vol. 1.cbz"
+          }
+        ],
+        "run": 5,
+        "waits": true
+      }
+    ],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -555,6 +586,35 @@
       "waits": true
     },
     "turn": "move"
+  },
+  {
+    "adds": [],
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
+    "fill": null,
+    "findings": [],
+    "freeze": null,
+    "library": "unlocked",
+    "log": [],
+    "moves": [
+      {
+        "pairs": [
+          {
+            "from": "albums/2026",
+            "to": "scans/2026"
+          }
+        ],
+        "run": 6,
+        "waits": true
+      }
+    ],
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null,
+    "turn": "freeze"
   },
   {
     "adds": [
@@ -614,6 +674,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -648,6 +709,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -699,6 +761,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -762,6 +825,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -802,6 +866,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -844,6 +909,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -861,6 +927,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -892,6 +959,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -923,6 +991,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -954,6 +1023,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -1189,6 +1259,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -1458,6 +1529,7 @@
     },
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": {
@@ -1507,6 +1579,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": null,
     "server": "contract-server",
     "sync": null,
@@ -1528,6 +1601,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": {
       "flow": "c9ebbe11",
       "message": "waiting for Google's consent page to be answered in the tab that opened",
@@ -1553,6 +1627,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": {
       "message": "Google Drive's permission for this device was renewed",
       "state": "renewed"
@@ -1577,6 +1652,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": {
       "message": "the consent page was declined, so Google Drive's permission was not renewed",
       "state": "refused"
@@ -1601,6 +1677,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": {
       "message": "the consent page was not answered in time, so Google Drive's permission was not renewed",
       "state": "timed_out"
@@ -1625,6 +1702,7 @@
     "freeze": null,
     "library": "unlocked",
     "log": [],
+    "moves": [],
     "reconnect": {
       "message": "Google Drive's permission could not be renewed — the server's log says why",
       "state": "failed"

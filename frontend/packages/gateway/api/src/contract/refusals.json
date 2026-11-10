@@ -256,6 +256,21 @@
   },
   {
     "body": {
+      "error": "refused_move",
+      "message": "a move of \"albums/2026\" to \"books/2026\" is under way; wait until it has ended",
+      "reason": "moving"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "conflict",
+      "message": "a move of 2 items is under way; wait until it has ended"
+    },
+    "status": 409
+  },
+  {
+    "body": {
       "error": "epoch",
       "message": "this device has to be enrolled in the Library again: the Library's Master Key was replaced, and this device holds only the one before it — enroll it again with the new Recovery Code"
     },

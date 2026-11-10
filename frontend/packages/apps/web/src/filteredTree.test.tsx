@@ -67,6 +67,7 @@ const IDLE: Work = {
   sync: null,
   freeze: null,
   delete: null,
+  moves: [],
   reconnect: null,
   log: [],
   adds: [],

@@ -39,8 +39,10 @@ use super::work::WorkDto;
 /// nothing.
 ///
 /// Refused before anything is armed exactly where the preview is refused: a
-/// locked Library, the Library root as a whole, and a selection under which
-/// the Library holds nothing current.
+/// locked Library, the Library root as a whole, a selection touching the rows
+/// of a move still pending — a `409 conflict` saying a move of them is under
+/// way (spec: LA-31) — and a selection under which the Library holds nothing
+/// current.
 pub async fn delete(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<Vec<(String, String)>>,
@@ -98,6 +100,14 @@ async fn armable(state: &ServerState, query: &[(String, String)]) -> Result<Targ
             "it names no folder and no file, and a deletion is of files or a folder rather \
              than of the whole Library",
         ));
+    }
+    // A deletion of rows a move still pending is moving would take them out of
+    // the Library from where the person was no longer shown them (spec: LA-31).
+    if let Some(pending) = state
+        .moves
+        .touched_by(target.folders.iter().chain(&target.paths))
+    {
+        return Err(ApiError::under_a_move(&pending));
     }
     // Out of the catalog alone, so it costs no Storage: a deletion of nothing
     // would be a `202` for a run that commits nothing.

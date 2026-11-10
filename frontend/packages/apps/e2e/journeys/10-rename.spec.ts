@@ -3,8 +3,10 @@
 // "Rename…" asks for the new name in a dialog holding the current one,
 // selected, and refuses one the folder it stands in already holds with the
 // reason under the field; a name it takes is one rename in the Library, made
-// through the move route the drag uses. The folder renamed is the book the
-// drag journey moved into the album.
+// through the move route the drag uses: the dialog closes as soon as the
+// server has accepted it, and the folder is drawn at its new name from then on
+// (spec: LA-31). The folder renamed is the book the drag journey moved into the
+// album.
 
 import { expect, inTree, leaf, openActivity, photo, setting, shot, test, tree } from './journey';
 
@@ -31,8 +33,10 @@ test('rename a folder from its row’s menu', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Rename', exact: true }).click();
   await expect(dialog).toHaveCount(0);
 
-  await expect(tree(page).locator(`tr[data-key="folder:${setting.album}/${renamed}"]`)).toBeVisible();
+  const there = tree(page).locator(`tr[data-key="folder:${setting.album}/${renamed}"]`);
+  await expect(there).toBeVisible();
   await expect(tree(page).locator(`tr[data-key="folder:${moved}"]`)).toHaveCount(0);
+  await expect(there).not.toHaveAttribute('aria-busy', 'true');
   await openActivity(page);
   await expect(page.locator('footer')).toContainText(`moved ${moved} → ${setting.album}/${renamed}`);
   await shot(page, '02-renamed');

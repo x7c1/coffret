@@ -65,6 +65,12 @@ export type Action =
 /** What the one item of a menu over rows that offer nothing says. */
 export const NOTHING_TO_DELETE = 'Nothing here to delete';
 
+/**
+ * What the one item of a menu over rows drawn at the new place of a move that
+ * has not committed says: they offer nothing until it has ended.
+ */
+export const BEING_MOVED_ITEM = 'Being moved…';
+
 /** One item of the menu. */
 export interface ActionItem {
   label: string;
@@ -99,7 +105,13 @@ export function actionsFor(rows: readonly Described[], context: ActionContext): 
   if (rows.length === 0) {
     return [];
   }
-  const items = offeredFor(rows, context);
+  // Rows a move is under way for are not where the Library has them yet, and
+  // what would act on them is refused until it ends (spec: LA-31).
+  const standing = rows.filter((row) => row.moving !== true);
+  if (standing.length === 0) {
+    return [disabled(BEING_MOVED_ITEM)];
+  }
+  const items = offeredFor(standing, context);
   return items.length > 0 ? items : [disabled(NOTHING_TO_DELETE)];
 }
 

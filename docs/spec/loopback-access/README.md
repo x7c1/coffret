@@ -160,11 +160,11 @@ Concept background: [Library](../../concepts/library/),
   caller did, and how much room the disk has stays out of the sentence and
   goes in the record (EL-1). *(Form: test)*
 - **LA-12.** What a server holds about the work it runs — which fill, sync, or
-  freeze is running and how far it has got, which folders wait behind it, what
+  freeze is running and how far it has got, which folders wait behind it, which
+  moves it has accepted and not yet ended (LA-31), what
   the last run of each kind came to, and a **log** of the work it has finished
   — is the running process's own state. The log holds every fill, sync,
-  freeze, and deletion that ended, every move that was not refused before its
-  commit (LA-31), every catch-up the explorer asked for (CK-9) — landed, with
+  freeze, deletion, and move that ended (LA-31), every catch-up the explorer asked for (CK-9) — landed, with
   what it came to, or refused, with what refused it — every add a person
   stopped (LA-36), every folder a queue threw away, and every file a reader
   asked for and was refused, newest first. A catch-up the server makes on its
@@ -178,9 +178,7 @@ Concept background: [Library](../../concepts/library/),
   to have packed, or that was still owed a pack since a run of it stopped
   (LA-36), stopped on its line, is logged as its stopped adds and as
   a `cancelled` freeze of its folder, so whoever asked sees what became of
-  that request. A move, answered by its own
-  request, has no last run in the running state; it appears in the log and
-  the turn only. A refused file is
+  that request. A move has no last run in the running state. A refused file is
   left out when it was a peek or a read ahead (LA-33), or when what refused it
   was the Library being locked or the catalog holding no such Entry. The log drops the oldest entry
   past a fixed count, but keeps a failure past that count until a later run of
@@ -236,8 +234,8 @@ Concept background: [Library](../../concepts/library/),
     one that had stopped, so it is reported as `stopped` and always with its
     refusal. *(Form: test)*
   - A sync, a freeze, and a deletion each own this device's pending work for
-    the whole of a run (OC-2), and a move (LA-31) takes the same turn for the
-    whole of its request. Within one server they take **turns** at it
+    the whole of a run (OC-2), and a move (LA-31) takes the same turn from its
+    catch-up to its last relocation. Within one server they take **turns** at it
     rather than refusing each other: a run armed while another holds the turn
     waits, and the turns go in the order the runs ask for them. What the server
     holds of its running work names the run holding the turn and the runs
@@ -256,30 +254,48 @@ Concept background: [Library](../../concepts/library/),
   cannot be read to tell (EP-15); the files under the set this device has that the Library does not
   hold yet — standing in a mapped folder with no Entry at their path, or
   reserved for a Pack (PK-17); and every refusal the move would meet, each a
-  `409 refused_move` in the shape every refusal takes, naming its reason: the
-  set refused as a rename (FM-15, EP-18), an edited file, or an uploading one. A set
+  `409 refused_move` in the shape every refusal takes, naming its reason: a
+  move of some of the same rows still pending (LA-31), the set refused as a
+  rename (FM-15, EP-18), an edited file, or an uploading one. A set
   the move would refuse is answered `200` with its refusals; a query naming no
   pair, or more of one side than the other, is refused as `400`, and a locked
   Library as every keyed route refuses it (DK-2). *(Form: test)*
 - **LA-31.** A move (`POST /api/move`) names its pairs as its preview does and
-  takes this device's turn at its pending work (LA-12) for the whole of the
-  request. Under it, it asks again every refusal its preview answers with, and
-  any of them refuses the move before anything is written, as that
-  `409 refused_move`: an edited file of this device's in the set, or a file
-  under it the Library does not hold yet, would be lost by a file that leaves
-  this device (EP-10). Otherwise it commits every pair in one Journal record
-  (FM-15, EP-18), relocates this device's files of the renamed Entries
-  (EP-10), and answers `200` with what it did — how many Entries it renamed,
-  how many files followed and how many left, and the findings of each — once
-  all of that is done. A set the rename's own plan refuses, over the catalog
-  its catch-up brought to the head, is refused as the preview's refusals are,
-  even where the preview admitted it. A move refused before its commit did
-  nothing and is not logged; every other move is logged with the server's
-  finished work (LA-12): one that stopped short of the commit for any other
-  reason committed nothing, and one whose record committed is logged as
-  committed — and answered `200` — even where this device's files could not
+  is **background work**: the server accepts it and answers `202` at once —
+  before it has its turn at this device's pending work (LA-12), before its
+  catch-up, its commit and its relocations — with the number it draws for the
+  move (`run`) and the work answer as it stands once the move is accepted.
+  Refused there, with nothing accepted, are only a query naming no pair or more
+  of one side than the other (`400`), a locked Library as every keyed route
+  refuses it (DK-2), and a set touching the rows of a move still pending — a
+  path one of its pairs names, a path under one, or a path above one — as a
+  `409 refused_move` saying a move of them is under way, rather than queued
+  behind it. Accepted moves are carried out one at a time, in the order they
+  were accepted, each taking this device's turn at its pending work from its
+  catch-up to its last relocation. Under that turn it asks again every refusal
+  its preview answers with, and any of them stops the move before anything is
+  written: an edited file of this device's in the set, or a file under it the
+  Library does not hold yet, would be lost by a file that leaves this device
+  (EP-10). So does a set the rename's own plan refuses over the catalog its
+  catch-up brought to the head, even where the preview admitted it. Otherwise
+  it commits every pair in one Journal record (FM-15, EP-18) and relocates
+  this device's files of the renamed Entries (EP-10). The work answer lists
+  every move accepted and not yet ended (`moves`), in the order it was
+  accepted, each with its `run`, its pairs, and whether it `waits` — behind
+  another move, or for the turn while another flow holds it. Every move that
+  ends is logged with the server's finished work (LA-12) under the same `run`,
+  and leaves the list as it is logged: one whose record committed is `done`,
+  saying how many Entries it renamed, how many files followed and how many
+  left, and the findings of each — even where this device's files could not
   then be relocated, saying what kept them where they were, which the next
-  sync or fetch relocates (EP-10).
+  sync or fetch relocates (EP-10); one that stopped short of the commit —
+  refused under its turn, or stopped for any other reason, a locked Library or
+  Storage among them — is `stopped`, committed nothing, and carries the refusal
+  that stopped it, a refusal of the preview's in the shape the preview shows
+  it. While a move is pending, a deletion of rows it touches (in the same
+  sense) and a drop onto a folder it names or one under it are refused up
+  front as a `409 conflict` saying a move of them is under way, changing
+  nothing. A move cannot be stopped (LA-34).
   *(Form: test)*
 
 ### The explorer host

@@ -93,6 +93,15 @@ impl Served {
         self.state.deletes.until_idle().await;
     }
 
+    /// Waits for every move accepted to have ended, whatever each came to.
+    ///
+    /// No sleep, and no polling: the route accepts the move before it
+    /// answers, so a case that has had its `202` has already put the move on
+    /// the state it waits on here.
+    pub async fn move_idle(&self) {
+        self.state.moves.until_idle().await;
+    }
+
     /// Waits until `count` runs are queued for their turn at this device's
     /// pending rows, behind the one holding them.
     ///

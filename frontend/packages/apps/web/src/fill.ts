@@ -12,6 +12,7 @@
 
 import type {
   AddUnderWay,
+  PendingMove,
   Catalog,
   DeclinedEntry,
   Delete,
@@ -702,6 +703,10 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * And an add the server is still carrying in or undoing (spec: LA-34): a page
  * reloaded while a stop it asked for was being answered has nothing else
  * running to follow, and is owed what the stop came to (spec: LA-36).
+ *
+ * And a move the server has accepted and not yet ended (spec: LA-31): its rows
+ * are drawn at their new place until it ends, and only an answer says whether
+ * it committed or they go back.
  */
 export function shouldPoll(
   readerOpen: boolean,
@@ -713,9 +718,11 @@ export function shouldPoll(
   library: LibraryState | null = null,
   deletion: Delete | null = null,
   adds: readonly AddUnderWay[] = [],
+  moves: readonly PendingMove[] = [],
 ): boolean {
   return (
     adds.length > 0 ||
+    moves.length > 0 ||
     library === 'locked' ||
     deletion?.status === 'deleting' ||
     (deletion?.waiting ?? 0) > 0 ||

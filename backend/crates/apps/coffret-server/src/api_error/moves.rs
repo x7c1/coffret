@@ -2,9 +2,9 @@
 //! admit, and the files a move would lose (spec: FM-15, EP-10).
 
 use axum::http::StatusCode;
-use coffret_device::{EntryPath, RenameRefusal};
+use coffret_device::{EntryPath, RenamePair, RenameRefusal};
 
-use super::ApiError;
+use super::{ApiError, CONFLICT};
 
 impl ApiError {
     /// A move refused before anything was written, which is
@@ -70,6 +70,33 @@ impl ApiError {
             ),
         )
     }
+}
+
+impl ApiError {
+    /// A move of some of the same rows is under way already: accepted, and
+    /// not yet ended (spec: LA-31). Refused up front rather than queued behind
+    /// it, since what this one would move is not yet where it was shown.
+    pub(crate) fn move_under_way(pending: &[RenamePair]) -> Self {
+        Self::refused_move("moving", under_way(pending))
+    }
+
+    /// A deletion or a drop of rows a pending move is moving, refused up front
+    /// for the reason [`move_under_way`](Self::move_under_way) is a second move.
+    /// A `conflict`, as every request refused for other work over the same
+    /// rows is: the same request goes through once the move has ended.
+    pub(crate) fn under_a_move(pending: &[RenamePair]) -> Self {
+        Self::plain(StatusCode::CONFLICT, CONFLICT, under_way(pending))
+    }
+}
+
+/// What a request refused for a pending move is told: which move, by what it
+/// moves and where to, as the explorer names it in its Activity panel.
+fn under_way(pending: &[RenamePair]) -> String {
+    let named = match pending {
+        [only] => format!("\"{}\" to \"{}\"", only.from, only.to),
+        _ => format!("{} items", pending.len()),
+    };
+    format!("a move of {named} is under way; wait until it has ended")
 }
 
 /// The first of `paths` as a sentence names it, and how many others there are.

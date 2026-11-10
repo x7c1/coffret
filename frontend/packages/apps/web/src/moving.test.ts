@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ListedFile, ListedFolder, Listing, Move, MovePreview } from '@coffret/api';
+import type { ListedFile, ListedFolder, Listing, Logged, Move, MoveAccepted, MovePreview, PendingMove } from '@coffret/api';
 
 import type { Described } from './details';
 import {
   askToMove,
+  drawnMoves,
+  followedMoves,
   grabbed,
   leavingLine,
   moveLandingOver,
@@ -15,6 +17,8 @@ import {
   movesInto,
   moveTargets,
   moveTitle,
+  movedRowsFrom,
+  movingLine,
   NOTHING_TO_MOVE,
   notMovedLine,
   openedFor,
@@ -23,8 +27,9 @@ import {
   renamePair,
   renameStepOf,
 } from './moving';
+import { earlier, inProgress } from './activity';
 import { NOTHING_SELECTED, type Picked } from './selection';
-import type { FileRow, FolderRow, TreeRow } from './tree';
+import { treeRows, type FileRow, type FolderRow, type TreeRow } from './tree';
 
 function file(path: string, over: Partial<ListedFile> = {}): ListedFile {
   return {
@@ -253,7 +258,7 @@ describe('what the confirmation says', () => {
 });
 
 describe('a move asked about', () => {
-  const ran = { pairs: preview().pairs } as Move;
+  const ran = { run: 1, work: { moves: [] } } as unknown as MoveAccepted;
 
   function moving(answer: boolean, over: Partial<Parameters<typeof askToMove>[0]> = {}) {
     return {
@@ -273,7 +278,7 @@ describe('a move asked about', () => {
     const yes = moving(true);
     expect(await askToMove(yes)).toBe('moved');
     expect(yes.move).toHaveBeenCalledWith(preview().pairs);
-    expect(yes.moved).toHaveBeenCalledWith(ran);
+    expect(yes.moved).toHaveBeenCalledWith(ran, preview().pairs);
 
     const no = moving(false);
     expect(await askToMove(no)).toBe('cancelled');
@@ -376,5 +381,131 @@ describe('the folder tree Move to… offers', () => {
       'deep/down',
     ]);
     expect([...openedFor([PAGE])].sort()).toEqual(['series', 'series/vol-1']);
+  });
+});
+
+describe('a move under way, drawn at its new place (spec: LA-31)', () => {
+  const pairs = [{ from: 'series/vol-1', to: 'albums/vol-1' }];
+  const pending: PendingMove = { run: 3, pairs, waits: false };
+  const ALBUM = listing('albums', { files: [file('albums/a.jpg')] });
+  const held = new Map<string, Listing>([
+    ['', ROOT],
+    ['series', SERIES],
+    ['albums', ALBUM],
+  ]);
+  const on = (listings: ReadonlyMap<string, Listing>) => (folder: string) => listings.get(folder) ?? null;
+
+  /** The tree's rows as `{ key, moving }`, with `series` and `albums` open. */
+  function drawn(followed: Parameters<typeof drawnMoves>[0], listings: ReadonlyMap<string, Listing> = held) {
+    return treeRows({
+      listing: (folder) => {
+        const value = listings.get(folder);
+        return value === undefined ? undefined : { status: 'ready', value };
+      },
+      expanded: new Set(['series', 'albums']),
+      prospective: [],
+      stranded: [],
+      moves: drawnMoves(followed),
+    }).map((row) => ({ key: row.key, moving: row.kind !== 'note' && row.moving === true }));
+  }
+
+  function ended(status: 'done' | 'stopped'): Logged {
+    const run: Move =
+      status === 'done'
+        ? { run: 3, pairs, entries: 1, relocated: 1, left: 0, unrelocated: null, findings: [], status, stopped: null }
+        : {
+            run: 3,
+            pairs,
+            entries: 0,
+            relocated: 0,
+            left: 0,
+            unrelocated: null,
+            findings: [],
+            status,
+            stopped: {
+              kind: 'refused_move',
+              reason: 'edited',
+              surfaced: null,
+              message: 'this device\'s file "series/vol-1/p1.jpg" changed on this device since it was placed',
+            },
+          };
+    return { id: 9, at: '2026-11-10T10:00:00Z', settled: false, kind: 'move', run };
+  }
+
+  /** The move as this page follows it from Move pressed, with the rows it drew. */
+  const pressed = [{ run: 3, pairs, rows: movedRowsFrom([VOL1]), state: 'moving' as const }];
+
+  it('draws the moved rows at their new place as being moved, and not at their old place, while it is pending', () => {
+    const followed = followedMoves(pressed, [pending], [], on(held));
+    expect(followed).toBe(pressed);
+    const rows = drawn(followed);
+    expect(rows).toContainEqual({ key: 'folder:albums/vol-1', moving: true });
+    expect(rows.some((row) => row.key === 'folder:series/vol-1')).toBe(false);
+    // Closed while it is being moved: nothing under it is at the new place yet.
+    expect(rows.some((row) => row.key === 'file:albums/vol-1/p1.jpg')).toBe(false);
+  });
+
+  it('draws a move asked for elsewhere out of the listing of where it stood', () => {
+    const followed = followedMoves([], [pending], [], on(held));
+    expect(drawn(followed)).toContainEqual({ key: 'folder:albums/vol-1', moving: true });
+  });
+
+  it('draws them as ordinary rows once it has committed, until the listings say so themselves', () => {
+    const committed = followedMoves(pressed, [], [ended('done')], on(held));
+    expect(committed[0].state).toBe('moved');
+    const rows = drawn(committed);
+    expect(rows).toContainEqual({ key: 'folder:albums/vol-1', moving: false });
+    expect(rows.some((row) => row.key === 'folder:series/vol-1')).toBe(false);
+
+    // The listings answered again: the Library has it at the new place, and
+    // the move is not drawn any longer.
+    const answered = new Map(held)
+      .set('series', listing('series', { folders: [folder('series/vol-2')], files: [file('series/cover.jpg')] }))
+      .set('albums', listing('albums', { folders: [folder('albums/vol-1')], files: [file('albums/a.jpg')] }));
+    const settled = followedMoves(committed, [], [ended('done')], on(answered));
+    expect(settled).toEqual([]);
+    const after = drawn(settled, answered);
+    expect(after).toContainEqual({ key: 'folder:albums/vol-1', moving: false });
+    expect(after.some((row) => row.key === 'folder:series/vol-1')).toBe(false);
+  });
+
+  it('puts them back where they were, and the Activity panel says why, where it was refused before its commit', () => {
+    const refused = followedMoves(pressed, [], [ended('stopped')], on(held));
+    expect(refused).toEqual([]);
+    const rows = drawn(refused);
+    expect(rows).toContainEqual({ key: 'folder:series/vol-1', moving: false });
+    expect(rows.some((row) => row.key === 'folder:albums/vol-1')).toBe(false);
+
+    const [entry] = earlier([ended('stopped')], [], false);
+    expect(entry.outcome).toBe('failure');
+    expect(entry.text).toBe(
+      'could not move series/vol-1 → albums/vol-1 — this device\'s file "series/vol-1/p1.jpg" changed on this device since it was placed',
+    );
+  });
+
+  it('says on its line in progress what it moves and where to, and what it waits for', () => {
+    expect(movingLine(pending, 'move')).toBe('moving series/vol-1 → albums/vol-1…');
+    expect(movingLine({ ...pending, waits: true }, 'freeze')).toBe(
+      'moving series/vol-1 → albums/vol-1 — waiting for the packing under way to finish',
+    );
+    expect(movingLine({ run: 4, pairs: [...pairs, { from: 'x', to: 'y' }], waits: true }, 'move')).toBe(
+      'moving 2 items — waiting for the move under way to finish',
+    );
+    const lines = inProgress({
+      adding: null,
+      addingAs: null,
+      adds: [],
+      moves: [pending],
+      sent: null,
+      turn: 'move',
+      fill: null,
+      sync: null,
+      freeze: null,
+      deletion: null,
+      fetching: null,
+    });
+    expect(lines).toEqual([
+      { key: 'move:3', text: 'moving series/vol-1 → albums/vol-1…', progress: null, stop: null, ending: null },
+    ]);
   });
 });

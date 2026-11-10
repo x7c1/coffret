@@ -1,7 +1,8 @@
 //! Moving files and folders in the Library: what `GET /api/move` says a set of
-//! pairs would do, and what `POST /api/move` then does (spec: FM-15, EP-10).
+//! pairs would do, and what `POST /api/move` then does as background work
+//! (spec: FM-15, EP-10, LA-31).
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::support::{json as body_of, route, rows_of, Served};
 
@@ -17,6 +18,44 @@ async fn log(served: &Served) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// Asks for a move of what `named` names, which the server accepts at once,
+/// and waits for it to end: what the log says it came to.
+async fn moved(served: &Served, named: &str) -> Value {
+    let (status, accepted) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    let run = accepted["run"].clone();
+    served.move_idle().await;
+    ended(served, &run).await
+}
+
+/// The log entry of move `run`, which has ended.
+async fn ended(served: &Served, run: &Value) -> Value {
+    log(served)
+        .await
+        .into_iter()
+        .find(|entry| &entry["run"]["run"] == run)
+        .unwrap_or_else(|| panic!("move {run} is in the log"))["run"]
+        .clone()
+}
+
+/// The moves the work answer lists as pending, and the answer itself.
+async fn pending(served: &Served) -> (Vec<Value>, Value) {
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let moves = work["moves"]
+        .as_array()
+        .expect("the work answer lists the pending moves")
+        .clone();
+    (moves, work)
+}
+
+/// Waits until a run just armed is inside Storage, and so holds this device's
+/// turn at its pending rows.
+async fn inside_storage(served: &Served) {
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+}
+
 /// A server over a device that has brought `albums/2026` over from the
 /// Library, so its own files of the two Entries there are on its disk.
 async fn with_albums_here(served: Served) -> Served {
@@ -28,7 +67,7 @@ async fn with_albums_here(served: Served) -> Served {
 // LA-30, LA-31, LA-12: a folder moved within the one mapped folder is
 // previewed as two Entries whose two files follow, and then moved in one
 // record: the files follow on disk, nothing leaves this device, and the move
-// is logged as finished work.
+// is logged as finished work with what it did.
 #[tokio::test]
 async fn a_folder_moved_within_the_mapped_folder_is_previewed_and_its_files_follow() {
     let served = with_albums_here(Served::library().await).await;
@@ -51,14 +90,13 @@ async fn a_folder_moved_within_the_mapped_folder_is_previewed_and_its_files_foll
     assert!(log(&served).await.is_empty(), "a preview does nothing");
     assert!(served.holds("albums/2026/spring.jpg"), "and moves nothing");
 
-    let (status, moved) = body_of(served.post(named).await).await;
-    assert_eq!(status, 200, "{moved}");
-    assert_eq!(moved["status"], "done");
+    let moved = moved(&served, named).await;
+    assert_eq!(moved["status"], "done", "{moved}");
     assert_eq!(moved["entries"], 2);
     assert_eq!(moved["relocated"], 2);
     assert_eq!(moved["left"], 0);
-    assert_eq!(moved["stopped"], serde_json::Value::Null);
-    assert_eq!(moved["unrelocated"], serde_json::Value::Null);
+    assert_eq!(moved["stopped"], Value::Null);
+    assert_eq!(moved["unrelocated"], Value::Null);
 
     for name in ["spring.jpg", "summer.jpg"] {
         assert!(!served.holds(&format!("albums/2026/{name}")));
@@ -75,11 +113,9 @@ async fn a_folder_moved_within_the_mapped_folder_is_previewed_and_its_files_foll
             "one-file".to_owned()
         )),
     );
-    let entries = log(&served).await;
-    assert_eq!(entries.len(), 1, "{entries:?}");
-    assert_eq!(entries[0]["kind"], "move");
-    assert_eq!(entries[0]["run"]["status"], "done");
-    assert_eq!(entries[0]["run"]["entries"], 2);
+    assert_eq!(log(&served).await.len(), 1, "logged once");
+    let (moves, _) = pending(&served).await;
+    assert!(moves.is_empty(), "and no longer pending: {moves:?}");
 }
 
 // LA-30, LA-31: a folder moved to where this device maps no folder cannot take this
@@ -105,9 +141,8 @@ async fn a_folder_moved_to_where_this_device_maps_nothing_leaves_the_device() {
     );
     assert_eq!(preview["refused"], json!([]));
 
-    let (status, moved) = body_of(served.post(named).await).await;
-    assert_eq!(status, 200, "{moved}");
-    assert_eq!(moved["status"], "done");
+    let moved = moved(&served, named).await;
+    assert_eq!(moved["status"], "done", "{moved}");
     assert_eq!(moved["relocated"], 0);
     assert_eq!(moved["left"], 2, "{moved}");
     let findings = moved["findings"].as_array().expect("a list of findings");
@@ -130,7 +165,8 @@ async fn a_folder_moved_to_where_this_device_maps_nothing_leaves_the_device() {
 
 // LA-30, LA-31: a file of this device's in the move that changed since it was
 // placed, and a file under it the Library does not hold yet, are both shown
-// by the preview as refusals, and refuse the move before anything is written.
+// by the preview as refusals, and stop the move, once accepted, before
+// anything is written: it is logged as stopped with that refusal.
 #[tokio::test]
 async fn an_edited_file_and_an_uploading_one_refuse_the_move() {
     let served = with_albums_here(Served::library().await).await;
@@ -142,10 +178,11 @@ async fn an_edited_file_and_an_uploading_one_refuse_the_move() {
     assert_eq!(preview["edited"], json!(["albums/2026/spring.jpg"]));
     assert_eq!(preview["refused"][0]["error"], "refused_move");
     assert_eq!(preview["refused"][0]["reason"], "edited", "{preview}");
-    let (status, refusal) = body_of(served.post(named).await).await;
-    assert_eq!(status, 409, "{refusal}");
-    assert_eq!(refusal["error"], "refused_move");
-    assert_eq!(refusal["reason"], "edited");
+    let stopped = moved(&served, named).await;
+    assert_eq!(stopped["status"], "stopped", "{stopped}");
+    assert_eq!(stopped["stopped"]["error"], "refused_move");
+    assert_eq!(stopped["stopped"]["reason"], "edited");
+    assert_eq!(stopped["entries"], 0);
 
     served.plant_locally("albums/2026/spring.jpg", b"spring");
     served.plant_locally("albums/2026/autumn.jpg", b"not in the Library yet");
@@ -159,18 +196,23 @@ async fn an_edited_file_and_an_uploading_one_refuse_the_move() {
         .map(|refusal| refusal["reason"].as_str().expect("a reason"))
         .collect();
     assert!(reasons.contains(&"uploading"), "{preview}");
-    let (status, refusal) = body_of(served.post(named).await).await;
-    assert_eq!(status, 409, "{refusal}");
-    assert_eq!(refusal["error"], "refused_move");
+    let stopped = moved(&served, named).await;
+    assert_eq!(stopped["status"], "stopped", "{stopped}");
+    assert_eq!(stopped["stopped"]["error"], "refused_move");
+    assert_eq!(stopped["stopped"]["reason"], "uploading");
 
     assert!(served.holds("albums/2026/summer.jpg"), "nothing moved");
     assert!(!served.holds("books/2026/summer.jpg"));
-    assert!(log(&served).await.is_empty(), "a refused move did nothing");
+    assert_eq!(
+        rows_of(&served, "books/2026").await,
+        Vec::<(String, String, String)>::new(),
+        "and nothing was committed"
+    );
 }
 
-// LA-30, LA-31: a set the Library does not admit is the preview's refusal and the
-// move's, in the shape every refusal takes; a query that is no set of pairs is
-// refused before the Library is asked.
+// LA-30, LA-31: a set the Library does not admit is the preview's refusal and
+// what stops the move, in the shape every refusal takes; a query that is no set
+// of pairs is refused before anything is accepted.
 #[tokio::test]
 async fn a_set_the_library_does_not_admit_is_refused() {
     let served = Served::library().await;
@@ -180,18 +222,12 @@ async fn a_set_the_library_does_not_admit_is_refused() {
     assert_eq!(status, 200, "{preview}");
     assert_eq!(preview["entries"], 0);
     assert_eq!(preview["refused"][0]["reason"], "overlapping", "{preview}");
-    let (status, refusal) = body_of(served.post(overlapping).await).await;
-    assert_eq!(status, 409, "{refusal}");
-    assert_eq!(refusal["reason"], "overlapping");
+    let stopped = moved(&served, overlapping).await;
+    assert_eq!(stopped["stopped"]["error"], "refused_move", "{stopped}");
+    assert_eq!(stopped["stopped"]["reason"], "overlapping");
 
-    let (status, refusal) = body_of(
-        served
-            .post("/api/move?from=albums/gone.jpg&to=books/gone.jpg")
-            .await,
-    )
-    .await;
-    assert_eq!(status, 409, "{refusal}");
-    assert_eq!(refusal["reason"], "nothing_to_move");
+    let stopped = moved(&served, "/api/move?from=albums/gone.jpg&to=books/gone.jpg").await;
+    assert_eq!(stopped["stopped"]["reason"], "nothing_to_move", "{stopped}");
 
     for unpaired in [
         "/api/move",
@@ -222,33 +258,35 @@ async fn a_move_and_its_preview_are_refused_while_locked() {
 
 // LA-31: the preview admitted the set, and another device then took a
 // destination before the move's own catch-up. The rename's plan refuses it
-// before anything is written, so it is answered as the preview's refusals are
-// and not logged.
+// before anything is written, so it is logged as stopped with the refusal the
+// preview would have shown.
 #[tokio::test]
-async fn a_set_refused_after_the_preview_admitted_it_is_answered_and_not_logged() {
+async fn a_set_refused_after_the_preview_admitted_it_is_logged_as_stopped() {
     let served = with_albums_here(Served::library().await).await;
     let named = "/api/move?from=albums/2026&to=books/2026";
-    // A head the move's preview has to read a record to reach, so the
-    // preview's catch-up can be held inside that read: it has listed the
-    // Library by then, and the commit made while it waits is one only the
-    // move's own catch-up sees.
+    // A head the move's catch-up has to read a record to reach, so it can be
+    // held inside that read: the move's preview has listed the Library by
+    // then, and the commit made while it waits is one only the rename's own
+    // catch-up sees.
     served.commit_elsewhere("elsewhere/one.jpg", b"one").await;
     served.hold_next_whole_read();
-    let (answer, ()) = tokio::join!(served.post(named), async {
-        while served.held_reads() == 0 {
-            tokio::task::yield_now().await;
-        }
-        served
-            .commit_elsewhere("books/2026/spring.jpg", b"taken")
-            .await;
-        served.release_storage();
-    });
-    let (status, refusal) = body_of(answer).await;
-    assert_eq!(status, 409, "{refusal}");
-    assert_eq!(refusal["error"], "refused_move");
-    assert_eq!(refusal["reason"], "destination_taken", "{refusal}");
+    let (status, accepted) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    inside_storage(&served).await;
+    served
+        .commit_elsewhere("books/2026/spring.jpg", b"taken")
+        .await;
+    served.release_storage();
+    served.move_idle().await;
+
+    let stopped = ended(&served, &accepted["run"]).await;
+    assert_eq!(stopped["status"], "stopped", "{stopped}");
+    assert_eq!(stopped["stopped"]["error"], "refused_move");
+    assert_eq!(
+        stopped["stopped"]["reason"], "destination_taken",
+        "{stopped}"
+    );
     assert!(served.holds("albums/2026/summer.jpg"), "nothing moved");
-    assert!(log(&served).await.is_empty(), "a refused move did nothing");
 }
 
 // LA-31, LA-12: the record committed, and this device's catalog then could
@@ -263,27 +301,184 @@ async fn a_move_whose_files_could_not_follow_after_its_commit_is_logged_as_done(
     // Keyring, after the plan: the catalog is taken away there, so the
     // relocations after the commit are what meet it.
     served.hold_next_whole_read();
-    let (answer, ()) = tokio::join!(served.post(named), async {
-        while served.held_reads() == 0 {
-            tokio::task::yield_now().await;
-        }
-        served.refuse_the_catalog();
-        served.release_storage();
-    });
-    let (status, moved) = body_of(answer).await;
-    assert_eq!(status, 200, "{moved}");
-    assert_eq!(moved["status"], "done");
+    let (status, accepted) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    inside_storage(&served).await;
+    served.refuse_the_catalog();
+    served.release_storage();
+    served.move_idle().await;
+    let moved = ended(&served, &accepted["run"]).await;
+    assert_eq!(moved["status"], "done", "{moved}");
     assert_eq!(moved["entries"], 2);
     assert_eq!(moved["relocated"], 0);
-    assert_eq!(moved["stopped"], serde_json::Value::Null);
+    assert_eq!(moved["stopped"], Value::Null);
     assert_eq!(moved["unrelocated"]["error"], "server", "{moved}");
     assert!(
         served.holds("albums/2026/spring.jpg"),
         "the file stays until the next sync or fetch relocates it"
     );
+}
 
-    let entries = log(&served).await;
-    assert_eq!(entries.len(), 1, "{entries:?}");
-    assert_eq!(entries[0]["run"]["status"], "done");
-    assert_eq!(entries[0]["run"]["unrelocated"], moved["unrelocated"]);
+// LA-31, LA-12: a move asked for while a deletion holds this device's turn is
+// answered at once, before its commit: it is listed as pending and waiting for
+// that turn, nothing has moved, and nothing is in the log. Once the turn is
+// given back it is carried out, and it leaves the pending moves for the log,
+// with what it did.
+#[tokio::test]
+async fn a_move_is_answered_before_its_commit_and_then_carried_out_in_its_turn() {
+    let served = with_albums_here(Served::library().await).await;
+    served.hold_storage();
+    let (status, _) = body_of(served.post("/api/delete?entry=albums/cover.png").await).await;
+    assert_eq!(status, 202);
+    inside_storage(&served).await;
+
+    let named = "/api/move?from=albums/2026&to=books/2026";
+    let (status, accepted) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    let run = accepted["run"].clone();
+    assert_eq!(run, 1, "{accepted}");
+    assert_eq!(accepted["work"]["moves"][0]["run"], run, "{accepted}");
+
+    served.until_queued(1).await;
+    let (moves, work) = pending(&served).await;
+    assert_eq!(work["turn"], "delete", "{work}");
+    assert_eq!(
+        moves,
+        [json!({
+            "run": 1,
+            "pairs": [{ "from": "albums/2026", "to": "books/2026" }],
+            "waits": true,
+        })],
+    );
+    assert!(log(&served).await.is_empty(), "nothing has ended: {work}");
+    assert!(served.holds("albums/2026/spring.jpg"), "nor moved");
+
+    served.release_storage();
+    served.delete_idle().await;
+    served.move_idle().await;
+
+    let (moves, _) = pending(&served).await;
+    assert!(moves.is_empty(), "{moves:?}");
+    let moved = ended(&served, &run).await;
+    assert_eq!(moved["status"], "done", "{moved}");
+    assert_eq!(
+        moved["pairs"],
+        json!([{ "from": "albums/2026", "to": "books/2026" }])
+    );
+    assert_eq!(moved["entries"], 2);
+    assert_eq!(moved["relocated"], 2);
+    assert_eq!(moved["left"], 0);
+    assert!(served.holds("books/2026/spring.jpg"), "the file followed");
+}
+
+// LA-31, LA-12: the preview admitted the move, and a file of it was edited on
+// this device while the move waited for its turn. Asked again under that turn,
+// the edited file stops it: nothing is committed or moved, and the log says
+// it stopped and why.
+#[tokio::test]
+async fn a_move_refused_under_its_turn_commits_nothing_and_is_logged_with_its_refusal() {
+    let served = with_albums_here(Served::library().await).await;
+    let named = "/api/move?from=albums/2026&to=books/2026";
+    let (_, preview) = body_of(served.get(named).await).await;
+    assert_eq!(preview["refused"], json!([]), "{preview}");
+
+    served.hold_storage();
+    let (status, _) = body_of(served.post("/api/delete?entry=albums/cover.png").await).await;
+    assert_eq!(status, 202);
+    inside_storage(&served).await;
+    let (status, accepted) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    served.plant_locally("albums/2026/spring.jpg", b"spring, edited while it waited");
+    served.release_storage();
+    served.delete_idle().await;
+    served.move_idle().await;
+
+    let stopped = ended(&served, &accepted["run"]).await;
+    assert_eq!(stopped["status"], "stopped", "{stopped}");
+    assert_eq!(stopped["stopped"]["error"], "refused_move");
+    assert_eq!(stopped["stopped"]["reason"], "edited");
+    assert_eq!(stopped["entries"], 0);
+    assert!(served.holds("albums/2026/spring.jpg"), "nothing moved");
+    assert!(!served.holds("books/2026/spring.jpg"));
+    assert_eq!(
+        rows_of(&served, "books/2026").await,
+        Vec::<(String, String, String)>::new(),
+        "and nothing was committed"
+    );
+    assert_eq!(rows_of(&served, "albums/2026").await.len(), 2);
+}
+
+// LA-31: while a move is pending, a second move of the same rows — the same
+// set, one under it, its destination — is refused up front, and so is its
+// preview; a deletion of them and a drop among them are refused as a
+// conflict. A move of other rows is accepted, behind it.
+#[tokio::test]
+async fn what_touches_the_rows_of_a_pending_move_is_refused_up_front() {
+    let served = with_albums_here(Served::library().await).await;
+    // The deletion is held at its commit, so it holds the turn while the
+    // Library can still be read: the previews below catch up as they ask.
+    served.hold_commits();
+    let (status, _) = body_of(served.post("/api/delete?entry=albums/notes.txt").await).await;
+    assert_eq!(status, 202);
+    while served.held_commits() == 0 {
+        tokio::task::yield_now().await;
+    }
+    let (status, accepted) = body_of(
+        served
+            .post("/api/move?from=albums/2026&to=books/2026")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted}");
+
+    for touching in [
+        "/api/move?from=albums/2026&to=books/2026",
+        "/api/move?from=albums/2026/spring.jpg&to=albums/spring.jpg",
+        "/api/move?from=albums/cover.png&to=books/2026/cover.png",
+    ] {
+        let (status, preview) = body_of(served.get(touching).await).await;
+        assert_eq!(status, 200, "{touching}: {preview}");
+        assert_eq!(preview["refused"][0]["reason"], "moving", "{preview}");
+        let (status, refusal) = body_of(served.post(touching).await).await;
+        assert_eq!(status, 409, "{touching}: {refusal}");
+        assert_eq!(refusal["error"], "refused_move");
+        assert_eq!(refusal["reason"], "moving", "{refusal}");
+        assert!(
+            refusal["message"]
+                .as_str()
+                .expect("a sentence")
+                .contains("is under way"),
+            "{refusal}"
+        );
+    }
+    for touching in [
+        "/api/delete?path=albums",
+        "/api/delete?entry=books/2026/a.jpg",
+    ] {
+        let (status, refusal) = body_of(served.post(touching).await).await;
+        assert_eq!(status, 409, "{touching}: {refusal}");
+        assert_eq!(refusal["error"], "conflict", "{refusal}");
+    }
+    let (status, refusal) =
+        body_of(served.upload("books/2026", &[("late.jpg", b"late")]).await).await;
+    assert_eq!(status, 409, "{refusal}");
+    assert_eq!(refusal["error"], "conflict", "{refusal}");
+
+    let (status, other) = body_of(
+        served
+            .post("/api/move?from=albums/cover.png&to=books/cover.png")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 202, "{other}");
+    let (moves, _) = pending(&served).await;
+    assert_eq!(moves.len(), 2, "{moves:?}");
+
+    served.release_storage();
+    served.delete_idle().await;
+    served.move_idle().await;
+    assert!(served.holds("books/2026/spring.jpg"));
+    for run in [&accepted["run"], &other["run"]] {
+        assert_eq!(ended(&served, run).await["status"], "done");
+    }
 }

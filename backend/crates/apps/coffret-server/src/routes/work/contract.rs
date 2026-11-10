@@ -33,7 +33,7 @@ use crate::finding::Finding;
 use crate::folder::Folder;
 use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
-use crate::moves::{MoveRun, MoveStatus};
+use crate::moves::{MoveRun, MoveStatus, PendingMove};
 use crate::pending_rows::TurnTaker;
 use crate::read_findings::Found;
 use crate::reconnect::Reconnect;
@@ -301,6 +301,7 @@ fn answer(
         sync: sync.as_ref().map(|run| SyncDto::of(run, turn)),
         freeze: freeze.as_ref().map(|latest| FreezeDto::of(latest, turn)),
         delete: None,
+        moves: Vec::new(),
         reconnect: None,
         log: Vec::new(),
         adds: Vec::new(),
@@ -381,15 +382,20 @@ fn reconnecting(answer: WorkDto, reconnect: &Reconnect) -> WorkDto {
     }
 }
 
-/// An entry of every kind the log keeps, newest first, logged a minute apart.
-/// A move of `albums/2026` to `scans/2026`, before anything is counted.
-fn moved() -> MoveRun {
-    MoveRun::starting(vec![coffret_device::RenamePair::new(
+/// The one pair the moves here are of: `albums/2026` to `scans/2026`.
+fn pairs() -> Vec<coffret_device::RenamePair> {
+    vec![coffret_device::RenamePair::new(
         entry_path("albums/2026"),
         entry_path("scans/2026"),
-    )])
+    )]
 }
 
+/// Move `run`, before anything is counted.
+fn moved(run: u64) -> MoveRun {
+    MoveRun::starting(run, pairs())
+}
+
+/// An entry of every kind the log keeps, newest first, logged a minute apart.
 fn logged() -> Vec<Logged> {
     let ended = vec![
         Ended::Fetch {
@@ -406,7 +412,7 @@ fn logged() -> Vec<Logged> {
         },
         Ended::Move(MoveRun {
             status: MoveStatus::Stopped(storage()),
-            ..moved()
+            ..moved(1)
         }),
         // Committed, and this device's files could not follow: done, with what
         // kept them.
@@ -420,7 +426,7 @@ fn logged() -> Vec<Logged> {
                     }),
                 },
             ))),
-            ..moved()
+            ..moved(2)
         }),
         Ended::Move(MoveRun {
             entries: 2,
@@ -433,7 +439,7 @@ fn logged() -> Vec<Logged> {
                 },
             })
             .expect("a file that left this device is something to say")],
-            ..moved()
+            ..moved(3)
         }),
         Ended::Delete(DeleteRun {
             entries: 5,
@@ -772,13 +778,50 @@ fn every_answer() -> Vec<WorkDto> {
         }
     };
 
-    // A sync waiting for its turn while a move holds it: a move takes the
-    // same turn and answers its own request, so the sync is the one on record.
+    // A sync waiting for its turn while a move holds it, and a second move
+    // accepted behind the first: every pending move is listed, the one under
+    // way first.
     let behind_a_move = {
         let waiting = sync(4, SyncStatus::Syncing);
+        let turn = Some(TurnTaker::Move);
         WorkDto {
-            turn: Some(TurnTaker::Move.as_str()),
-            sync: Some(SyncDto::of(&waiting, Some(TurnTaker::Move))),
+            turn: turn.map(TurnTaker::as_str),
+            sync: Some(SyncDto::of(&waiting, turn)),
+            moves: [
+                PendingMove {
+                    run: 4,
+                    pairs: pairs(),
+                    taken: true,
+                },
+                PendingMove {
+                    run: 5,
+                    pairs: vec![coffret_device::RenamePair::new(
+                        entry_path("books/vol-1.cbz"),
+                        entry_path("books/Vol. 1.cbz"),
+                    )],
+                    taken: false,
+                },
+            ]
+            .iter()
+            .map(|pending| super::PendingMoveDto::of(pending, turn))
+            .collect(),
+            ..quiet()
+        }
+    };
+
+    // A move under way waiting for its turn while a book is packed.
+    let move_behind_a_freeze = {
+        let turn = Some(TurnTaker::Freeze);
+        WorkDto {
+            turn: turn.map(TurnTaker::as_str),
+            moves: vec![super::PendingMoveDto::of(
+                &PendingMove {
+                    run: 6,
+                    pairs: pairs(),
+                    taken: true,
+                },
+                turn,
+            )],
             ..quiet()
         }
     };
@@ -835,6 +878,7 @@ fn every_answer() -> Vec<WorkDto> {
         logged,
         found,
         behind_a_move,
+        move_behind_a_freeze,
         stopping,
         cancelled,
     ];

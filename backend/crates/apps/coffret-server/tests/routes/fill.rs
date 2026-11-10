@@ -454,6 +454,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
             "reconnect": null,
             "freeze": null,
             "delete": null,
+            "moves": [],
             "log": [],
             "adds": [],
             "findings": [],

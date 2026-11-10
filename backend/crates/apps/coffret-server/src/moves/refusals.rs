@@ -6,8 +6,8 @@ use crate::api_error::ApiError;
 /// told them: the rename's own, then this device's edited files, then what is
 /// still on its way into the Library. Empty where the move may go ahead.
 ///
-/// The same refusals [`move_pairs`](super::move_pairs) stops with, which is
-/// why a preview and a move cannot disagree about them except where the
+/// The same refusals an accepted move stops with once its turn has come, which
+/// is why a preview and a move cannot disagree about them except where the
 /// Library or the disk changed in between.
 pub fn refusals_of(preview: &MovePreview) -> Vec<ApiError> {
     let mut refusals = Vec::new();
