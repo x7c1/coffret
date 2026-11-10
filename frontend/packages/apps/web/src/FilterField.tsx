@@ -9,17 +9,18 @@ import { COLOR, LAYER, SHADOW } from './theme';
  * most recent books are asked for, the name input, a × that empties the name
  * while there is one, a divider, and ⏷ (More filters), which opens a small
  * panel under the field holding the conditions besides the name — for now
- * Recent and its count, on the line `Recent [n] folders [?]`. `Escape` or a
- * press outside closes the panel, and what was set in it stays set. The panel
- * is drawn in front of the reader (see [`LAYER`](./theme)).
+ * Recent and its count, on the line `Recent [n] folders`, with a question
+ * mark in a circle ("About Recent") at its right end. `Escape` or a press
+ * outside closes the panel, and what was set in it stays set. The panel is
+ * drawn in front of the reader (see [`LAYER`](./theme)).
  *
- * The `[?]` ("About Recent") keeps what Recent does out of the way: the
- * explainer is shown under the line while the `[?]` is hovered or holds the
- * focus, and from a press on it — a tap, where there is no hover — until a
- * second press, a press elsewhere, or `Escape`. `Escape` while the explainer
- * is shown hides it and leaves the panel open; the next closes the panel. The
- * `[?]` is described by the explainer (`aria-describedby`), so a screen
- * reader reads it whether or not it is shown.
+ * The question mark keeps what Recent does out of the way: the explainer is
+ * shown under the line while the question mark is hovered or holds the focus,
+ * and from a press on it — a tap, where there is no hover — until a second
+ * press, a press elsewhere, or `Escape`. `Escape` while the explainer is shown
+ * hides it and leaves the panel open; the next closes the panel. The question
+ * mark is described by the explainer (`aria-describedby`), so a screen reader
+ * reads it whether or not it is shown.
  *
  * The keys, beside what is typed:
  *
@@ -55,7 +56,7 @@ export function FilterField({
   const help = useRef<HTMLButtonElement>(null);
   const helpId = useId();
   const [panel, setPanel] = useState(false);
-  // What shows the explainer under the `[?]`: the pointer over it, the focus
+  // What shows the explainer under the question mark: the pointer over it, the focus
   // in it, a press on it that pinned it — unless it was hidden by a second
   // press or `Escape` since, which the next hover, focus or press undoes.
   const [helpHovered, setHelpHovered] = useState(false);
@@ -129,7 +130,7 @@ export function FilterField({
     return () => document.removeEventListener('mousedown', away);
   }, [panel]);
 
-  // An explainer pinned by a press is unpinned by a press anywhere but the `[?]`.
+  // An explainer pinned by a press is unpinned by a press anywhere but the question mark.
   useEffect(() => {
     if (!helpPinned) {
       return;
@@ -312,9 +313,9 @@ export function FilterField({
               }}
               style={HELP}
             >
-              [?]
+              <HelpIcon />
             </button>
-            {/* Kept in the page while hidden, so that the `[?]` is described by it either way. */}
+            {/* Kept in the page while hidden, so that the question mark is described by it either way. */}
             <span id={helpId} role="tooltip" hidden={!explained} style={EXPLAINED}>
               {RECENT_EXPLAINED}
             </span>
@@ -440,10 +441,54 @@ const COUNT: CSSProperties = {
   padding: '2px 4px',
 };
 
-/** The Recent line: the condition, then its `[?]`, which the explainer hangs under. */
-const LINE: CSSProperties = { position: 'relative', display: 'flex', alignItems: 'center', gap: 6 };
+/**
+ * The Recent line: the condition, then its question mark at the right end,
+ * which the explainer hangs under.
+ */
+const LINE: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 6,
+};
 
-const HELP: CSSProperties = { ...SMALL_BUTTON, color: COLOR.dim, fontSize: 12 };
+/**
+ * The question mark's button: no frame, so the icon is the control, on a 24px
+ * square hit area. It keeps the browser's own focus ring.
+ */
+const HELP: CSSProperties = {
+  ...SMALL_BUTTON,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 24,
+  height: 24,
+  padding: 0,
+  color: COLOR.dim,
+};
+
+/** A question mark in a circle, drawn in `currentColor` so it takes the button's colour in either scheme. */
+function HelpIcon() {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx={12} cy={12} r={10} />
+      <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
 
 /** Hung under the Recent line, over whatever the panel holds below it. */
 const EXPLAINED: CSSProperties = {
