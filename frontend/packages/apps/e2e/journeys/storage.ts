@@ -11,6 +11,13 @@
 // nothing, which the server would sit out for as long as its client's timeouts
 // say; a stopped one refuses the connection, which is the same outage said at
 // once.
+//
+// Where Docker runs on this machine itself — on Linux, except under Docker
+// Desktop or a rootless daemon — the container runs in the host's network
+// namespace, so stopping and starting it adds and removes no interface on the
+// host: one coming and going makes the browser abort the requests it has in
+// flight (see `minio_run_on_host` in `scripts/lib/minio.sh`, and
+// `scripts/e2e-it.sh`).
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';

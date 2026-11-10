@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getFilter, type FilterAsk, type Filtered } from '@coffret/api';
 
+import { askedThroughDrops } from './patience';
 import { said } from './useAsked';
 
 /** How long the explorer waits after the last keystroke, or change of the count, before asking. */
@@ -38,6 +39,9 @@ const OFF: Filtering = { answer: null, answered: null, asking: false, failed: nu
  * but the latest is not drawn. `null` is no filter at all: what was answered
  * is dropped, nothing is asked, and a request out is let go of.
  *
+ * A request that got no answer at all is asked again on its own, a few times,
+ * before it is drawn as failed (see [`patience`](./patience)).
+ *
  * `reload` asks again for the same filter, after something that changed the
  * Library: the rows it keeps may have moved.
  */
@@ -70,7 +74,7 @@ export function useFilter(ask: FilterAsk | null): Filtering & { reload: () => vo
       out.current = aborter;
       // Drawn only where it is still the request for the filter on.
       const current = () => out.current === aborter && wanted.current === key;
-      getFilter(asked, aborter.signal).then(
+      askedThroughDrops((signal) => getFilter(asked, signal), aborter.signal).then(
         (answer) => {
           if (current()) {
             out.current = null;
