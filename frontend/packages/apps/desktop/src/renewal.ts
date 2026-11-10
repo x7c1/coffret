@@ -142,13 +142,41 @@ export interface PageSaying {
 }
 
 /**
- * The listener `SESSION_ENDED` is heard by.
+ * A listener for a one-way message from the explorer's page, named `what` in
+ * what is said about it.
  *
  * Only the explorer's window is heard, and only from the explorer's own
- * origin, as a drop is (`drops.ts`); anything else is said and let be. What
- * is heard is handed to `ended`, which decides whether the window is loaded
- * afresh. Nothing is answered: the page learns of a fresh ticket only by the
- * window being loaded from one.
+ * origin, as a drop is (`drops.ts`): `explorer()` is its contents while it is
+ * open and `origin()` the origin it is served from. Anything else is said and
+ * let be. What is heard is handed to `heard`, with nothing of the message's
+ * own: the page says only that something happened.
+ */
+export function explorerPageListener(
+  what: string,
+  explorer: () => unknown,
+  origin: () => string | null,
+  heard: () => void,
+  warn: (message: string) => void,
+): (event: PageSaying) => void {
+  return (event) => {
+    const window = explorer();
+    if (window === null || window === undefined || event.sender !== window) {
+      warn(`${what} was ignored: it did not come from the explorer window`);
+      return;
+    }
+    if (!fromOrigin(event.senderFrame, origin())) {
+      warn(`${what} was ignored: it did not come from the explorer page`);
+      return;
+    }
+    heard();
+  };
+}
+
+/**
+ * The listener `SESSION_ENDED` is heard by: from the explorer's page alone
+ * ({@link explorerPageListener}). What is heard is handed to `ended`, which
+ * decides whether the window is loaded afresh. Nothing is answered: the page
+ * learns of a fresh ticket only by the window being loaded from one.
  */
 export function sessionEndedListener(
   explorer: () => unknown,
@@ -156,16 +184,5 @@ export function sessionEndedListener(
   ended: () => void,
   warn: (message: string) => void,
 ): (event: PageSaying) => void {
-  return (event) => {
-    const window = explorer();
-    if (window === null || window === undefined || event.sender !== window) {
-      warn('a session said to have ended was ignored: it did not come from the explorer window');
-      return;
-    }
-    if (!fromOrigin(event.senderFrame, origin())) {
-      warn('a session said to have ended was ignored: it did not come from the explorer page');
-      return;
-    }
-    ended();
-  };
+  return explorerPageListener('a session said to have ended', explorer, origin, ended, warn);
 }

@@ -1,12 +1,16 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Appearance } from '@coffret/api';
 
 import { AppearanceSwitch, type KeptAppearance } from './AppearanceSwitch';
 import { ShownAppearance } from './ShownAppearance';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 /** What a server keeps for one device, across every page drawn over it. */
 function keptOnTheDevice(start: Appearance = 'system') {
@@ -172,4 +176,76 @@ it('keeps a choice the locked Library refused once the switch is drawn afresh', 
   expect(kept.read).toHaveBeenCalledTimes(1);
   expect(button().getAttribute('aria-label')).toBe('Appearance: Dark');
   warn.mockRestore();
+});
+
+// In the desktop app's window, the app draws its windows' title bars in the
+// explorer's appearance: the page tells it, through the window's bridge, once
+// the server took a new one, and the app reads it afresh. In a browser there
+// is no bridge, and nothing is told.
+describe('telling the desktop app the appearance changed', () => {
+  /** A choice of `name` made from the switch's menu. */
+  const choose = (name: string) => {
+    fireEvent.click(button());
+    const menu = screen.getByRole('menu', { name: 'appearance' });
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name }));
+  };
+
+  it('tells the app through the bridge once the server took the choice, not before', async () => {
+    const appearanceChanged = vi.fn();
+    vi.stubGlobal('coffretDesktop', { appearanceChanged });
+    let accept: (appearance: Appearance) => void = () => {};
+    const kept: KeptAppearance = {
+      read: vi.fn(() => Promise.resolve<Appearance>('system')),
+      write: vi.fn((appearance: Appearance) => new Promise<Appearance>((resolve) => (accept = () => resolve(appearance)))),
+    };
+    page(kept);
+    await waitFor(() => expect(kept.read).toHaveBeenCalled());
+
+    choose('Dark');
+    expect(kept.write).toHaveBeenCalledWith('dark');
+    await act(async () => {});
+    expect(appearanceChanged).not.toHaveBeenCalled();
+
+    await act(async () => accept('dark'));
+    expect(appearanceChanged).toHaveBeenCalledOnce();
+    expect(appearanceChanged.mock.calls[0]).toEqual([]);
+  });
+
+  it('tells the app nothing where the server refused the choice', async () => {
+    const appearanceChanged = vi.fn();
+    vi.stubGlobal('coffretDesktop', { appearanceChanged });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const kept: KeptAppearance = {
+      read: vi.fn(() => Promise.resolve<Appearance>('system')),
+      write: vi.fn(() => Promise.reject(new Error('locked'))),
+    };
+    page(kept);
+    await waitFor(() => expect(kept.read).toHaveBeenCalled());
+
+    choose('Light');
+    await waitFor(() => expect(console.warn).toHaveBeenCalled());
+    expect(appearanceChanged).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing, and keeps the choice all the same, where the page has no bridge', async () => {
+    expect((globalThis as { coffretDesktop?: unknown }).coffretDesktop).toBeUndefined();
+    const kept = keptOnTheDevice();
+    page(kept);
+    await waitFor(() => expect(kept.read).toHaveBeenCalled());
+
+    choose('Dark');
+    await waitFor(() => expect(kept.held()).toBe('dark'));
+  });
+
+  it('sends nothing where the bridge offers no way to say it', async () => {
+    const takeDrop = vi.fn();
+    vi.stubGlobal('coffretDesktop', { takeDrop });
+    const kept = keptOnTheDevice();
+    page(kept);
+    await waitFor(() => expect(kept.read).toHaveBeenCalled());
+
+    choose('Dark');
+    await waitFor(() => expect(kept.held()).toBe('dark'));
+    expect(takeDrop).not.toHaveBeenCalled();
+  });
 });
