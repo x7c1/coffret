@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isLockedRefusal, isRefusal } from '@coffret/api';
 
+import { askedThroughDrops } from './patience';
 import { refusedAsRanOut } from './ranOut';
 
 /**
@@ -36,7 +37,9 @@ export type Asked<T> =
  * Three states and every one of them leaveable. A request that failed carries
  * the refusal's own sentence and is retried by calling `reload` — which is what
  * this exists for: the spike logged its one failure to the console and left the
- * screen saying "loading" for as long as the page was open.
+ * screen saying "loading" for as long as the page was open. A request that got
+ * no answer at all is first asked again on its own, a few times, before it is
+ * drawn as failed (see [`patience`](./patience)).
  *
  * The previous answer is dropped the moment `key` changes, so a folder that is
  * still loading never shows the last one's rows. A `reload` of the *same* key
@@ -65,7 +68,7 @@ export function useAsked<T>(
     setState((held) =>
       elsewhere || held.status !== 'ready' ? { status: 'loading' } : held,
     );
-    latest.current(aborter.signal).then(
+    askedThroughDrops((signal) => latest.current(signal), aborter.signal).then(
       (value) => {
         if (!aborter.signal.aborted) {
           setState({ status: 'ready', value });
