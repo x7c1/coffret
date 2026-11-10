@@ -124,7 +124,7 @@ it('closes the panel by Escape or a press outside, keeping what was set', () => 
   expect(latest().recentOn).toBe(true);
 });
 
-/** The More filters panel opened, and its `[?]`. */
+/** The More filters panel opened, and its question mark ("About Recent"). */
 function openedHelp() {
   fireEvent.click(field().getByRole('button', { name: 'More filters' }));
   const panel = screen.getByRole('group', { name: 'More filters' });
@@ -136,22 +136,46 @@ function explainer() {
   return screen.queryByRole('tooltip');
 }
 
-it('holds the Recent line and its [?], and keeps the explainer out of sight until asked for', () => {
+it('holds the Recent line and its question mark, and keeps the explainer out of sight until asked for', () => {
   mount();
   const { panel, help } = openedHelp();
-  // `Recent [n] folders [?]`, and nothing else shown.
+  // `Recent [n] folders` and the question mark, and nothing else shown.
   const shown = [...panel.querySelectorAll('label, button, [role="tooltip"]')].filter(
     (part) => !(part as HTMLElement).hidden,
   );
-  expect(shown.map((part) => part.textContent)).toEqual(['Recentfolders', '[?]']);
+  expect(shown.map((part) => part.textContent)).toEqual(['Recentfolders', '']);
   expect(explainer()).toBeNull();
-  // Hidden, it still describes the `[?]`, word for word.
+  // Hidden, it still describes the question mark, word for word.
   const described = document.getElementById(help.getAttribute('aria-describedby') ?? '');
   expect(described?.textContent).toBe(RECENT_EXPLAINED);
   expect(described?.hidden).toBe(true);
 });
 
-it('shows the explainer while the [?] is hovered', () => {
+it('draws the question mark as an icon, with no [?] text', () => {
+  mount();
+  const { help } = openedHelp();
+  expect(help.querySelector('svg')).not.toBeNull();
+  expect(help.textContent).toBe('');
+  expect(document.getElementById(help.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+    RECENT_EXPLAINED,
+  );
+});
+
+it('ends the Recent line with the question mark, after the count and "folders"', () => {
+  mount();
+  const { help } = openedHelp();
+  const line = help.parentElement as HTMLElement;
+  // What the line shows, in order: the condition, then the question mark last;
+  // the explainer beside them is hung under the line, not on it.
+  const onLine = [...line.children].filter((part) => part.getAttribute('role') !== 'tooltip');
+  expect(onLine.at(-1)).toBe(help);
+  const condition = onLine[0] as HTMLElement;
+  expect(condition.textContent).toBe('Recentfolders');
+  expect(condition.querySelector('input[type="number"]')).not.toBeNull();
+  expect(line.style.justifyContent).toBe('space-between');
+});
+
+it('shows the explainer while the question mark is hovered', () => {
   mount();
   const { help } = openedHelp();
   fireEvent.mouseEnter(help);
@@ -160,7 +184,7 @@ it('shows the explainer while the [?] is hovered', () => {
   expect(explainer()).toBeNull();
 });
 
-it('shows the explainer while the [?] holds the focus', () => {
+it('shows the explainer while the question mark holds the focus', () => {
   mount();
   const { help } = openedHelp();
   act(() => help.focus());
@@ -169,7 +193,7 @@ it('shows the explainer while the [?] holds the focus', () => {
   expect(explainer()).toBeNull();
 });
 
-it('shows the explainer from a press on the [?] until a second press or a press elsewhere', () => {
+it('shows the explainer from a press on the question mark until a second press or a press elsewhere', () => {
   mount();
   const { help } = openedHelp();
   fireEvent.click(help);
