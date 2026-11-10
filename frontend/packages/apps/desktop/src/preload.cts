@@ -21,11 +21,15 @@
 // the page holds no session, which loads the window afresh where it can. The
 // page has no call that asks for a ticket.
 //
+// `coffretDesktop.appearanceChanged` tells the main process, one way and with
+// nothing in it, that the server took a new appearance for the explorer; the
+// main process reads the appearance afresh and draws the windows' chrome in it.
+//
 // It runs sandboxed and isolated like every page of the app, so it is a
 // CommonJS script that reaches nothing but Electron's renderer modules: the
-// channels' names are written out here rather than imported, and `drops.ts`
-// and `renewal.ts` hold the main process's copies of them, which their cases
-// hold to these.
+// channels' names are written out here rather than imported, and `drops.ts`,
+// `renewal.ts` and `appearance.ts` hold the main process's copies of them,
+// which their cases hold to these.
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- a sandboxed preload is CommonJS and can require only Electron's own modules
 import electron = require('electron');
@@ -40,6 +44,9 @@ const FRESH_TICKET = 'coffret:fresh-ticket';
 
 /** The channel the page says over that it holds no session. */
 const SESSION_ENDED = 'coffret:session-ended';
+
+/** The channel the page says over that the server took a new appearance. */
+const APPEARANCE_CHANGED = 'coffret:appearance-changed';
 
 /**
  * What Electron puts before the main process's own sentence when a call over a
@@ -89,5 +96,8 @@ contextBridge.exposeInMainWorld('coffretDesktop', {
   },
   sessionEnded(): void {
     ipcRenderer.send(SESSION_ENDED);
+  },
+  appearanceChanged(): void {
+    ipcRenderer.send(APPEARANCE_CHANGED);
   },
 });

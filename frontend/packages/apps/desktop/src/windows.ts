@@ -2,11 +2,12 @@
 //
 // The Passphrase page talks to the door it was served from and the explorer to
 // its host, each over its own origin, and neither reaches Node. The explorer's
-// window has the one preload of the app. It exposes two things to its page:
+// window has the one preload of the app. It exposes three things to its page:
 // taking a drop by the paths of what was let go of, over the one channel the
-// main process answers, and only for that window (`drops.ts`); and, one way in
+// main process answers, and only for that window (`drops.ts`); one way in
 // each direction, the fresh tickets that keep its session from ending and the
-// page saying it holds none (`renewal.ts`). The Passphrase window has no
+// page saying it holds none (`renewal.ts`); and, one way, the page saying the
+// server took a new appearance (`appearance.ts`). The Passphrase window has no
 // preload. Every window is sandboxed and isolated, the preload included, and
 // keeps its storage in a partition of its own, so that nothing one page stores
 // is seen by the other.
@@ -49,8 +50,10 @@ export const GROUND = { light: '#f7f8fa', dark: '#15171c' } as const;
  * What the explorer's window is filled with before its page has drawn
  * anything: the ground of the set the page will be drawn in — the one this
  * device chose, or for `system` the one the system asks for, which is
- * `systemDark` (`nativeTheme.shouldUseDarkColors`). Without it the window
- * opens white, and a dark explorer flashes white before it is drawn.
+ * `systemDark` (`nativeTheme.shouldUseDarkColors`, read once the theme source
+ * is `system` again, so that it is the operating system's and not one the
+ * explorer's earlier choice forced: see `followAppearance`). Without it the
+ * window opens white, and a dark explorer flashes white before it is drawn.
  */
 export function groundOf(appearance: Appearance, systemDark: boolean): string {
   const scheme = appearance === 'system' ? (systemDark ? 'dark' : 'light') : appearance;

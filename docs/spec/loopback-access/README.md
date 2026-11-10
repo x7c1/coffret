@@ -809,7 +809,12 @@ Concept background: [Library](../../concepts/library/),
   kept, read as it serves the page: `light` or `dark` is written into the page
   itself — its `<meta name="color-scheme">` and its root element — so the
   page's first frame is drawn in that set before `GET /api/appearance` is
-  answered, and `system` serves the page as it was built.
+  answered, and `system` serves the page as it was built. In the desktop
+  app's window, the page tells the app, once the server has taken a new
+  choice, that it changed, saying nothing of which, and only the explorer's
+  own page, from the origin it is served from, is heard; the app reads the
+  kept choice afresh and draws its windows' native chrome in it, following
+  the system for `system` and where it cannot be read.
   *(Form: test)*
 - **LA-43.** What this device's explorer last had its tree filtered by — the
   name typed in its search field, whether the most recent books (LA-41) are

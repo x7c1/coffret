@@ -322,6 +322,11 @@ Library is open that window goes and the explorer's comes. When the explorer
 asks for the Library to be unlocked — a press of *Unlock*, or the idle lock
 seen — the Passphrase window comes back to take the Passphrase, and goes again
 once the Library is unlocked; the explorer comes back in place.
+The windows' title bars and other native chrome are drawn in the colour
+scheme chosen in the explorer's header (System follows the operating system),
+from when the explorer's window opens and again as soon as another is chosen;
+on Linux, whether the title bar follows depends on the window manager and the
+GTK theme.
 
 The explorer's session does not end under it in the app's window. Its token
 lives 12 hours and is never extended, so an hour before that the app hands the

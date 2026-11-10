@@ -21,8 +21,11 @@
 // explorer's session is kept from ending under its page (`renewal.ts`): this
 // process hands the page a fresh ticket on its own timer, one way, ahead of
 // its token's expiry, and the page may say, one way too, that it holds no
-// session, which loads its window afresh. Nothing else is exposed to any page,
-// and the Passphrase window has no preload.
+// session, which loads its window afresh. The page may also say, one way, that
+// the server took a new appearance for the explorer, whereupon this process
+// reads it afresh and draws the windows' chrome in it (`appearance.ts`).
+// Nothing else is exposed to any page, and the Passphrase window has no
+// preload.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -43,6 +46,7 @@ import {
 } from 'electron';
 
 import { loadAddon, type Addon } from './addon.js';
+import { APPEARANCE_CHANGED, appearanceChangedListener, followAppearance } from './appearance.js';
 import { Desktop, explorerCloses, message, type PassphraseWindow, type Shell } from './desktop.js';
 import { fromOrigin, TAKE_DROP, takeDropHandler } from './drops.js';
 import { identityFor, type Identity } from './identity.js';
@@ -62,7 +66,6 @@ import { IDLE_MINUTES, identifierFor, idleMinutes } from './settings.js';
 import { trayMenuTemplate } from './tray.js';
 import { trayHostLine, trayHostOn } from './tray-host.js';
 import {
-  type Appearance,
   type WindowLook,
   explorerWindowOptions,
   groundOf,
@@ -208,15 +211,13 @@ function assemble(
 
   /**
    * The ground the explorer will be drawn on, read afresh each time: the
-   * person may have chosen another set since the window was made.
+   * person may have chosen another set since the window was made. The
+   * windows' chrome is set to follow the same appearance on the way, before
+   * the system's choice is read for `system`: the theme source forces
+   * `shouldUseDarkColors` too, and under `system` it is the system's again.
    */
   const explorerGround = () => {
-    let appearance: Appearance = 'system';
-    try {
-      appearance = addon.appearance();
-    } catch (error) {
-      warn(`the explorer's appearance could not be read; it follows the system: ${message(error)}`);
-    }
+    const appearance = followAppearance(() => addon.appearance(), nativeTheme, warn);
     return groundOf(appearance, nativeTheme.shouldUseDarkColors);
   };
 
@@ -341,6 +342,24 @@ function assemble(
       () => explorerWindow?.webContents ?? null,
       () => explorerServed,
       () => dispatcher.explorerSessionEnded(),
+      warn,
+    ),
+  );
+
+  // The page says the server took a new appearance: the chrome follows it,
+  // read afresh, and the window's ground with it, which shows where the page
+  // has not drawn yet, as while the window is resized.
+  ipcMain.on(
+    APPEARANCE_CHANGED,
+    appearanceChangedListener(
+      () => explorerWindow?.webContents ?? null,
+      () => explorerServed,
+      () => {
+        const ground = explorerGround();
+        if (explorerWindow !== null && !explorerWindow.isDestroyed()) {
+          explorerWindow.setBackgroundColor(ground);
+        }
+      },
       warn,
     ),
   );
