@@ -181,8 +181,9 @@ pub struct ApiError {
     /// `reserved_namespace`, `into_itself`, `destination_taken`,
     /// `file_and_folder` or `rename_rule` for a set the Library does not admit
     /// (spec: FM-15, EP-5), `edited` for a file of this device's in it that
-    /// changed since it was placed (spec: EP-15), and `uploading` for a file
-    /// under it the Library does not hold yet (spec: EP-10).
+    /// changed since it was placed (spec: EP-15), `uploading` for a file
+    /// under it the Library does not hold yet (spec: EP-10), and `moving` for
+    /// a set touching the rows of a move still pending (spec: LA-31).
     ///
     /// And one that is not about a placement: `unauthenticated` under
     /// `storage`, for a credential Storage no longer takes — a grant that ran

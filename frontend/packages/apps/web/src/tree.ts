@@ -8,7 +8,7 @@
 // each expanded folder's as it is expanded. A folder row that has not been
 // expanded costs nothing beyond the listing it came from.
 
-import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
+import type { ListedFile, ListedFolder, Listing, MovePair } from '@coffret/api';
 
 import type { FilterShape } from './filter';
 import { parentOf, prospectiveIn } from './prospective';
@@ -102,7 +102,45 @@ export interface FolderRow {
    * added — `null` where it holds no file directly (spec: LA-42).
    */
   added?: string | null;
+  /**
+   * Drawn at the new place of a move that has not committed yet (see
+   * {@link DrawnMove}): closed, and offering nothing until the move ends.
+   */
+  moving?: boolean;
 }
+
+/**
+ * A move this page draws at its new place before the listings say it is there
+ * (spec: LA-31): the moment Move is pressed, while the move waits its turn and
+ * runs, and once it has committed until the listings it changed have been
+ * answered again.
+ *
+ * Its rows are drawn at their new place and not at their old one: `moving`
+ * while it has not committed, marked as being moved, and `moved` once it has,
+ * as ordinary rows. A move that ended without committing is no longer drawn
+ * at all, so its rows stand where the listings say they are, which is where
+ * they were.
+ */
+export interface DrawnMove {
+  /** What it moves, each `from` with everything under it to its `to`. */
+  pairs: readonly MovePair[];
+  /**
+   * The rows it moves, as their old place listed them: what is drawn at the
+   * new one.
+   */
+  rows: readonly MovedRow[];
+  /** `moving` until it has committed, and `moved` once it has. */
+  state: 'moving' | 'moved';
+  /**
+   * Once `moved`, the listings that were on hand as it committed: those still
+   * draw it at its old place, and a listing answered since says where it is.
+   * Unread while `moving`, which is drawn over every listing.
+   */
+  stale?: ReadonlySet<Listing>;
+}
+
+/** One row a move moves, as its old place listed it. */
+export type MovedRow = { kind: 'folder'; folder: ListedFolder } | { kind: 'file'; file: ListedFile };
 
 /**
  * A file this page is adding — picked with **+** or dropped, confirmed, and
@@ -128,6 +166,8 @@ export interface FileRow {
   file: ListedFile;
   /** The listing this row came from: the folder it stands in. */
   in: Listing;
+  /** Drawn at the new place of a move that has not committed yet (see {@link DrawnMove}). */
+  moving?: boolean;
 }
 
 /**
@@ -160,6 +200,8 @@ export interface TreeSource {
   stranded: readonly string[];
   /** The files this page is adding, which no listing may name yet. */
   incoming?: readonly IncomingFile[];
+  /** The moves drawn at their new place, which the listings may not say yet. */
+  moves?: readonly DrawnMove[];
   /**
    * The filter the tree is drawn from, while one is on (see
    * [`shapeOf`](./filter)); the folders open in the Library otherwise.
@@ -214,11 +256,11 @@ export function treeRows(source: TreeSource): TreeRow[] {
       }
       return;
     }
-    const listing = asked.value;
     if (filter !== undefined && above) {
-      walkAbove(listing, depth, filter);
+      walkAbove(asked.value, depth, filter);
       return;
     }
+    const { listing, moving } = withMoves(asked.value, source.moves ?? []);
     const arriving = incomingIn(listing, incoming);
     for (const child of foldersIn(listing, source.prospective, strandedAbove, arriving.folders)) {
       const named = listing.folders.some((one) => one.path === child.path);
@@ -227,7 +269,8 @@ export function treeRows(source: TreeSource): TreeRow[] {
       const notHeld = prospective.has(child.path) && !named;
       const waiting = strandedAbove.has(child.path) && !named;
       const adding = arriving.folders.some((one) => one.path === child.path);
-      const expandable = !notHeld || knownUnder(child.path, source);
+      const carried = moving.has(folderKey(child.path));
+      const expandable = !carried && (!notHeld || knownUnder(child.path, source));
       const expanded = expandable && source.expanded.has(child.path);
       rows.push({
         kind: 'folder',
@@ -242,20 +285,23 @@ export function treeRows(source: TreeSource): TreeRow[] {
         prospective: notHeld,
         stranded: waiting,
         ...(adding ? { incoming: true } : {}),
+        ...(carried ? { moving: true } : {}),
       });
       if (expanded) {
         walk(child.path, depth + 1);
       }
     }
     for (const file of arriving.files) {
+      const key = fileKey(file.path);
       rows.push({
         kind: 'file',
-        key: fileKey(file.path),
+        key,
         path: file.path,
         name: file.name,
         depth,
         file,
         in: listing,
+        ...(moving.has(key) ? { moving: true } : {}),
       });
     }
   };
@@ -304,6 +350,59 @@ export function treeRows(source: TreeSource): TreeRow[] {
   };
   walk('', 0, filter !== undefined);
   return rows;
+}
+
+/**
+ * `listing` as the moves drawn over it have it: without the rows a move takes
+ * away from it, and with the rows a move brings into it, in the Library's
+ * order — and the keys of those brought in by a move that has not committed,
+ * which are drawn as being moved.
+ *
+ * A move is drawn over every listing while it is `moving`, and once `moved`
+ * only over the listings that were on hand as it committed. A row it brings
+ * in that the listing names already is the listing's.
+ */
+export function withMoves(
+  listing: Listing,
+  moves: readonly DrawnMove[],
+): { listing: Listing; moving: ReadonlySet<string> } {
+  const over = moves.filter((move) => move.state === 'moving' || move.stale?.has(listing) === true);
+  const moving = new Set<string>();
+  if (over.length === 0) {
+    return { listing, moving };
+  }
+  const gone = new Set(over.flatMap((move) => move.pairs.map((pair) => pair.from)));
+  const folders = listing.folders.filter((folder) => !gone.has(folder.path));
+  const files = listing.files.filter((file) => !gone.has(file.path));
+  for (const move of over) {
+    for (const row of move.rows) {
+      const from = row.kind === 'folder' ? row.folder.path : row.file.path;
+      const to = move.pairs.find((pair) => pair.from === from)?.to;
+      if (to === undefined || parentOf(to) !== listing.path) {
+        continue;
+      }
+      const name = to.slice(to.lastIndexOf('/') + 1);
+      if (row.kind === 'folder') {
+        if (folders.some((folder) => folder.path === to)) {
+          continue;
+        }
+        folders.push({ ...row.folder, path: to, name });
+        if (move.state === 'moving') {
+          moving.add(folderKey(to));
+        }
+      } else {
+        if (files.some((file) => file.path === to)) {
+          continue;
+        }
+        files.push({ ...row.file, path: to, name });
+        if (move.state === 'moving') {
+          moving.add(fileKey(to));
+        }
+      }
+    }
+  }
+  const order = <Row extends { path: string }>(left: Row, right: Row) => inLibraryOrder(left.path, right.path);
+  return { listing: { ...listing, folders: folders.sort(order), files: files.sort(order) }, moving };
 }
 
 /**

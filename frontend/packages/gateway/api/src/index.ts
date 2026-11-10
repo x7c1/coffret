@@ -50,6 +50,7 @@ export type {
   Move,
   MovePair,
   MoveStatus,
+  PendingMove,
   LoggedWork,
   QueueFlow,
   ByteCount,
@@ -116,7 +117,7 @@ export { getListing } from './list';
 export type { ContainerKind, EntryState, Listing, ListedFile, ListedFolder } from './list';
 export { mapFolder } from './map';
 export { moveEntries, previewMove } from './move';
-export type { MovePreview } from './move';
+export type { MoveAccepted, MovePreview } from './move';
 export { componentDefect, reservedName } from './names';
 export type { ComponentDefect, ReservedName } from './names';
 export type { Mapped, MappedMarker } from './map';

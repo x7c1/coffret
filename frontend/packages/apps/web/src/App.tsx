@@ -26,7 +26,7 @@ import {
   type ListedFile,
   type Listing,
   type Mapped,
-  type Move,
+  type MoveAccepted,
   type MovePair,
   type ReconnectState,
 } from '@coffret/api';
@@ -83,13 +83,18 @@ import { MoveConfirm } from './MoveConfirm';
 import { MoveToDialog } from './MoveToDialog';
 import {
   askToMove,
+  drawnMoves,
+  followedMoves,
   movedPath,
+  movedRowsFrom,
   moveToTitle,
   notMovedLine,
   pairsOf,
   renameDefect,
   renamePair,
   renameStepOf,
+  unmoved,
+  type Followed,
   type MoveQuestion,
 } from './moving';
 import { RenameDialog, type RenameAnswer } from './RenameDialog';
@@ -307,6 +312,9 @@ export function App() {
   const deletion = work.deletion;
   const turn = work.turn;
   const recheckWork = work.recheck;
+  const takeWork = work.take;
+  const pendingMoves = work.moves;
+  const workLog = work.log;
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
   // What the whole Library comes to, which the details pane says where no row
@@ -1244,12 +1252,13 @@ export function App() {
   // in the header, or through "Move to…" in a row's menu — and renaming one,
   // through "Rename…", which is a move of one row within its folder. Every one
   // of them asks the server's preview first and shows what it said, and only
-  // Move writes anything (see [`askToMove`](./moving)); a refusal of either
-  // request is a notice of this page's own, since a move refused before its
-  // commit is not logged (spec: LA-31). Once the server answers, the rows are
-  // asked again, the tree is opened down to where they went with the focus on
-  // the first of them, and the server's log — where the move now is — is
-  // asked for once.
+  // Move asks for anything (see [`askToMove`](./moving)); a refusal of either
+  // request is a notice of this page's own, since nothing was accepted. Once
+  // the server has accepted the move it is background work (spec: LA-31): the
+  // rows are drawn at their new place at once, marked as being moved, the tree
+  // opened down to where they went with the focus on the first of them, and
+  // the Activity panel follows the move to its end — when the rows become the
+  // Library's there, or go back where they were with the reason it stopped.
   //
   // The rows being dragged, while a drag of them is in the air: the tree's, and
   // the header's for a move to the root.
@@ -1268,21 +1277,32 @@ export function App() {
   treeNow.current = tree;
   const viewNow = useRef(view);
   viewNow.current = view;
-  const moveLanded = useCallback(
-    (rows: readonly Described[], landing: string, pairs: readonly MovePair[]) => {
-      setSelection(NOTHING_SELECTED);
-      recheckWork();
-      reloadListing();
-      reloadFolders();
-      reloadRoot();
-      // A folder prepared under one that moved goes with it, rather than
-      // standing at a path whose parent is no longer there.
-      setPrepared((before) => {
-        const after = before.map((path) => movedPath(path, pairs));
-        return after.some((path, at) => path !== before[at]) ? after : before;
-      });
+  // The moves this page draws at their new place (see [`followedMoves`](./moving)):
+  // every move the server lists as pending, and each that committed until the
+  // listings it changed have been answered again.
+  const [followed, setFollowed] = useState<readonly Followed[]>([]);
+  const listingOrNull = useCallback(
+    (folder: string) => {
+      const asked = heldListing(folder);
+      return asked?.status === 'ready' ? asked.value : null;
+    },
+    [heldListing],
+  );
+  useEffect(() => {
+    setFollowed((held) => followedMoves(held, pendingMoves, workLog, listingOrNull));
+  }, [pendingMoves, workLog, listingOrNull]);
+  const movesDrawn = useMemo(() => drawnMoves(followed), [followed]);
+  // The tree and the screen brought along by a move: every path under a pair's
+  // `from` taken to where its `to` puts it, the folders the rows went to
+  // opened. Paths no pair names stay as they are, so bringing them along twice
+  // is bringing them along once.
+  const broughtAlong = useCallback(
+    (pairs: readonly MovePair[], focusOn: Described | undefined, landing: string | null) => {
       const held = treeNow.current;
-      const expanded = new Set([...[...held.expanded].map((path) => movedPath(path, pairs)), ...ancestry(landing)]);
+      const expanded = new Set([
+        ...[...held.expanded].map((path) => movedPath(path, pairs)),
+        ...(landing === null ? [] : ancestry(landing)),
+      ]);
       const before = viewNow.current;
       if (sheetOpen(before)) {
         // The reader's sheet stays on what it was open on, wherever that went,
@@ -1301,20 +1321,75 @@ export function App() {
         );
         return;
       }
-      // Otherwise the focus goes to the first of the rows, where it went.
-      const first = rows[0];
       const next: TreeState = {
         focus:
-          first === undefined
-            ? held.focus
-            : (first.kind === 'folder' ? folderKey : fileKey)(movedPath(first.path, pairs)),
+          focusOn !== undefined
+            ? (focusOn.kind === 'folder' ? folderKey : fileKey)(movedPath(focusOn.path, pairs))
+            : held.focus === null
+              ? null
+              : (keyed(held.focus).kind === 'folder' ? folderKey : fileKey)(movedPath(keyed(held.focus).path, pairs)),
         expanded,
       };
       setTree(next);
       go({ folder: contextOf(next), open: null }, true);
     },
-    [recheckWork, reloadListing, reloadFolders, reloadRoot, go],
+    [go],
   );
+  // What each move that changed state comes to on the screen. One that
+  // committed has every listing asked again, since what it moved left one
+  // folder and joined another and the folders above both count it — the
+  // folders, the root and the filter with them — and the screen brought along
+  // to where the rows went, the reader's sheet among it; a folder prepared
+  // under one that moved goes with it, rather than standing at a path whose
+  // parent is no longer there. One that ended without committing is no longer
+  // drawn, so its rows stand where they were, and the tree, where it was
+  // brought along to them, is put back; what stopped it is the log's entry in
+  // the Activity panel (spec: LA-31).
+  const followedBefore = useRef<readonly Followed[]>([]);
+  useEffect(() => {
+    const before = followedBefore.current;
+    followedBefore.current = followed;
+    for (const move of before) {
+      if (move.state !== 'moving') {
+        continue;
+      }
+      const now = followed.find((one) => one.run === move.run);
+      if (now?.state === 'moved') {
+        reloadListing();
+        reloadFolders();
+        reloadRoot();
+        setPrepared((held) => {
+          const after = held.map((path) => movedPath(path, move.pairs));
+          return after.some((path, at) => path !== held[at]) ? after : held;
+        });
+        broughtAlong(move.pairs, undefined, null);
+      } else if (now === undefined) {
+        broughtAlong(unmoved(move.pairs), undefined, null);
+      }
+    }
+  }, [followed, reloadListing, reloadFolders, reloadRoot, broughtAlong]);
+
+  // Move pressed, and the server has accepted it (spec: LA-31): the question
+  // is gone, and the rows are drawn at their new place, marked as being moved,
+  // with the tree opened down to it and the focus on the first of them. The
+  // reader's sheet, where it is open, stays on what it reads until the move
+  // has committed: the Library has nothing at the new path until then.
+  const moveShown = useCallback(
+    (rows: readonly Described[], landing: string, accepted: MoveAccepted, pairs: readonly MovePair[]) => {
+      setFollowed((held) =>
+        held.some((move) => move.run === accepted.run)
+          ? held
+          : [...held, { run: accepted.run, pairs, rows: movedRowsFrom(rows), state: 'moving' }],
+      );
+      takeWork(accepted.work);
+      setSelection(NOTHING_SELECTED);
+      if (!sheetOpen(viewNow.current)) {
+        broughtAlong(pairs, rows[0], landing);
+      }
+    },
+    [takeWork, broughtAlong],
+  );
+
   const [moveAsking, setMoveAsking] = useState<{
     question: MoveQuestion;
     answer: (move: boolean) => void;
@@ -1350,13 +1425,13 @@ export function App() {
         preview: (asked) => previewMove(asked),
         ask: askAboutMoving,
         move: (asked) => moveEntries(asked),
-        moved: (run: Move) => moveLanded(rows, landing, run.pairs),
+        moved: (accepted, pairs) => moveShown(rows, landing, accepted, pairs),
         refuse: (cause) => setNotice(notMovedLine(names, said(cause))),
       }).finally(() => {
         movePressed.current = false;
       });
     },
-    [askAboutMoving, moveLanded, setNotice],
+    [askAboutMoving, moveShown, setNotice],
   );
   // "Move to…": where to, asked first, then the same confirmation.
   const [movingTo, setMovingTo] = useState<readonly Described[] | null>(null);
@@ -1384,15 +1459,15 @@ export function App() {
         if (step !== 'go') {
           return step;
         }
-        const run = await moveEntries([pair]);
+        const accepted = await moveEntries([pair]);
         setRenaming(null);
-        moveLanded([row], parentOf(row.path), run.pairs);
+        moveShown([row], parentOf(row.path), accepted, [pair]);
         return null;
       } catch (refused: unknown) {
         return { blocked: said(refused) };
       }
     },
-    [renaming, prospective, moveLanded],
+    [renaming, prospective, moveShown],
   );
 
   // The Library, which a drop too large for this route names in the command
@@ -1687,9 +1762,10 @@ export function App() {
         prospective,
         stranded,
         incoming: incomingFiles,
+        moves: movesDrawn,
         ...(shape === null ? {} : { filter: shape }),
       }),
-    [heldListing, tree.expanded, prospective, stranded, incomingFiles, shape],
+    [heldListing, tree.expanded, prospective, stranded, incomingFiles, movesDrawn, shape],
   );
 
   // A folder the Library held that a listing shows is gone — a deletion took it
@@ -2043,6 +2119,7 @@ export function App() {
         adding,
         addingAs,
         adds: work.adds,
+        moves: pendingMoves,
         sent: adding === null ? null : sent,
         turn,
         freeze,
@@ -2051,7 +2128,7 @@ export function App() {
         fill,
         fetching,
       }),
-    [adding, addingAs, work.adds, sent, turn, freeze, sync, deletion, fill, fetching],
+    [adding, addingAs, work.adds, pendingMoves, sent, turn, freeze, sync, deletion, fill, fetching],
   );
   // One line's Stop (spec: LA-35). The reader's own fetch is this page's to
   // withdraw; everything else is asked of the server, whose answer says the

@@ -1,15 +1,19 @@
 // Moving and renaming files and folders of the Library: by dragging rows of
 // the tree onto a folder, and through "Rename…" and "Move to…" in a row's
 // actions menu. Every one of them asks the server's move route for a set of
-// `(from, to)` pairs (spec: LA-30, LA-31), which carries them out as one
-// rename in the Library (spec: FM-15) and has this device's files follow — or
-// leave this device where they cannot (spec: EP-10).
+// `(from, to)` pairs (spec: LA-30, LA-31), which accepts them as background
+// work and carries them out as one rename in the Library (spec: FM-15),
+// having this device's files follow — or leave this device where they cannot
+// (spec: EP-10).
 //
 // Nothing is written before the person has seen what the server's preview
 // said and has said yes. A move the preview refuses — a name the destination
 // holds already, a file of this device's that changed since it was placed, a
-// file the Library does not hold yet — says why and offers Cancel alone:
-// nothing is overwritten or merged.
+// file the Library does not hold yet, a move of the same rows still under
+// way — says why and offers Cancel alone: nothing is overwritten or merged.
+// Once they have said yes, the move is the server's: the question closes at
+// once, the rows are drawn at their new place while it is pending (see
+// [`DrawnMove`](./tree)), and the Activity panel follows it to its end.
 //
 // Kept free of DOM and of React so it is unit testable, as `deleteEntries.ts`
 // beside it is.
@@ -18,9 +22,16 @@ import {
   componentDefect,
   reservedName,
   type ComponentDefect,
+  type ListedFile,
+  type ListedFolder,
+  type Listing,
+  type Logged,
   type Move,
+  type MoveAccepted,
   type MovePair,
   type MovePreview,
+  type PendingMove,
+  type TurnTaker,
 } from '@coffret/api';
 
 import { deleteOffered } from './deleteEntries';
@@ -31,7 +42,8 @@ import { LIBRARY_ROOT } from './location';
 import { parentOf, RESERVED } from './prospective';
 import { rightClicked, type Picked } from './selection';
 import { inLibraryOrder } from './stranded';
-import { ancestry, type TreeRow } from './tree';
+import { ancestry, type DrawnMove, type MovedRow, type TreeRow } from './tree';
+import { heldBy, waitingClause } from './turns';
 
 /** The menu item that renames one file or folder. */
 export const RENAME = 'Rename…';
@@ -46,6 +58,9 @@ export const MOVE_TO = 'Move to…';
  * new path.
  */
 export function movable(row: Described): boolean {
+  if (row.moving === true) {
+    return false;
+  }
   return row.kind === 'folder' ? !row.prospective && !row.stranded : deleteOffered(row.file);
 }
 
@@ -215,10 +230,10 @@ export interface Moving {
   preview: (pairs: MovePair[]) => Promise<MovePreview>;
   /** Shows the question, and answers whether the person chose Move. */
   ask: (question: MoveQuestion) => Promise<boolean>;
-  /** Carries it out, answering once it is done. */
-  move: (pairs: MovePair[]) => Promise<Move>;
-  /** The server answered with what it did. */
-  moved: (run: Move) => void;
+  /** Asks for it, answering once the server has accepted it — before it is carried out. */
+  move: (pairs: MovePair[]) => Promise<MoveAccepted>;
+  /** The server accepted the move of `pairs`: it is under way. */
+  moved: (accepted: MoveAccepted, pairs: MovePair[]) => void;
   /** Says why the preview or the move was refused. */
   refuse: (cause: unknown) => void;
 }
@@ -227,10 +242,11 @@ export interface Moving {
 export type Moved = 'moved' | 'cancelled' | 'refused';
 
 /**
- * Asks what the move would do, shows it, and moves only on Move.
+ * Asks what the move would do, shows it, and asks for the move only on Move.
  *
  * A move the preview refuses is still shown its question, with nothing to
- * press but Cancel.
+ * press but Cancel. `moved` is the server having accepted the move, which it
+ * answers at once: what the move came to is the server's log's to say.
  */
 export async function askToMove(moving: Moving): Promise<Moved> {
   let preview: MovePreview;
@@ -245,15 +261,197 @@ export async function askToMove(moving: Moving): Promise<Moved> {
   if (!chosen || !question.moves) {
     return 'cancelled';
   }
-  let run: Move;
+  let accepted: MoveAccepted;
   try {
-    run = await moving.move(question.pairs);
+    accepted = await moving.move(question.pairs);
   } catch (refused) {
     moving.refuse(refused);
     return 'refused';
   }
-  moving.moved(run);
+  moving.moved(accepted, question.pairs);
   return 'moved';
+}
+
+/**
+ * What a move is named by on its lines in the Activity panel, as an add is
+ * named by its folder: what it moves and where to, `albums/2026 → books/2026`
+ * — or, for several, how many.
+ */
+export function movedName(pairs: readonly MovePair[]): string {
+  return pairs.length === 1 ? `${pairs[0].from} → ${pairs[0].to}` : `${pairs.length} items`;
+}
+
+/**
+ * The line of a move the server has accepted and not yet ended: under way, or
+ * waiting — for the move before it, or for the run that holds this device's
+ * turn (`turn`).
+ */
+export function movingLine(pending: PendingMove, turn: TurnTaker | null): string {
+  const named = movedName(pending.pairs);
+  const waits = pending.waits ? heldBy(turn) : null;
+  return waits === null ? `moving ${named}…` : `moving ${named}${waitingClause(waits)}`;
+}
+
+/**
+ * What a move that ended says: what it moved, and what kept this device's
+ * files from following where something did; or what stopped it — a refusal
+ * its preview would have shown, met once its turn came, among them.
+ */
+export function movedLine(run: Move): string {
+  const named = movedName(run.pairs);
+  if (run.status === 'stopped') {
+    return `could not move ${named} — ${run.stopped.message}`;
+  }
+  const left = run.left === 0 ? '' : `; ${run.left} no longer on this device`;
+  const unrelocated =
+    run.unrelocated === null
+      ? ''
+      : `; this device's files did not follow yet — ${run.unrelocated.message}`;
+  return `moved ${named}${left}${unrelocated}`;
+}
+
+/**
+ * The rows `pairs` move, as their old place lists them, out of the listings
+ * on hand: what a move asked for on another page, or before this one was
+ * reloaded, is drawn at its new place from. A row whose old place is not on
+ * hand is not drawn there.
+ */
+export function movedRowsOf(
+  pairs: readonly MovePair[],
+  listing: (folder: string) => Listing | null,
+): MovedRow[] {
+  return pairs.flatMap((pair) => {
+    const held = listing(parentOf(pair.from));
+    if (held === null) {
+      return [];
+    }
+    const rows: MovedRow[] = [];
+    const folder = held.folders.find((one) => one.path === pair.from);
+    if (folder !== undefined) {
+      rows.push({ kind: 'folder', folder });
+    }
+    const file = held.files.find((one) => one.path === pair.from);
+    if (file !== undefined) {
+      rows.push({ kind: 'file', file });
+    }
+    return rows;
+  });
+}
+
+/** The rows `described` stand for, as a move draws them at their new place. */
+export function movedRowsFrom(described: readonly Described[]): MovedRow[] {
+  return described.map((row): MovedRow =>
+    row.kind === 'folder'
+      ? { kind: 'folder', folder: row.folder satisfies ListedFolder }
+      : { kind: 'file', file: row.file satisfies ListedFile },
+  );
+}
+
+/** One move this page draws, and what it knows of it. */
+export interface Followed {
+  /** Which move it is, as the server numbers it. */
+  run: number;
+  pairs: readonly MovePair[];
+  /** The rows as this page drew them when Move was pressed, or none where it did not. */
+  rows: readonly MovedRow[];
+  /** `moving` until the server says it committed, `moved` from then. */
+  state: 'moving' | 'moved';
+  /** Once `moved`: the listings on hand as it committed, by folder. */
+  stale?: ReadonlyMap<string, Listing>;
+}
+
+/**
+ * The moves this page follows, brought up to the work answer: every move the
+ * server lists as pending is followed — kept as it was where this page
+ * followed it already, with the rows it drew — and one no longer pending is
+ * let go of or settled by what the log says it came to:
+ *
+ * - **done** — it committed: `moved`, the listings on hand as it ended
+ *   (`listing`) still drawing it at its old place until each is answered
+ *   again;
+ * - **stopped** — nothing was committed, so its rows are where they were: no
+ *   longer followed, and the log entry says why;
+ * - **not in the log** — the server no longer knows of it (a server started
+ *   again): no longer followed.
+ *
+ * A move already `moved` is kept until none of the listings it was drawn over
+ * is still the one on hand. Returns `followed` itself where nothing changed.
+ */
+export function followedMoves(
+  followed: readonly Followed[],
+  pending: readonly PendingMove[],
+  log: readonly Logged[],
+  listing: (folder: string) => Listing | null,
+): readonly Followed[] {
+  let changed = false;
+  const next: Followed[] = [];
+  for (const one of pending) {
+    const held = followed.find((move) => move.run === one.run);
+    const rows = held !== undefined && held.rows.length === 0 ? movedRowsOf(held.pairs, listing) : [];
+    if (held !== undefined && rows.length > 0) {
+      // Followed before its old place was on hand to draw it from.
+      changed = true;
+      next.push({ ...held, rows });
+    } else if (held !== undefined) {
+      next.push(held);
+    } else {
+      changed = true;
+      next.push({ run: one.run, pairs: one.pairs, rows: movedRowsOf(one.pairs, listing), state: 'moving' });
+    }
+  }
+  for (const move of followed) {
+    if (pending.some((one) => one.run === move.run)) {
+      continue;
+    }
+    if (move.state === 'moved') {
+      const standing = [...(move.stale ?? new Map<string, Listing>())].some(
+        ([folder, held]) => listing(folder) === held,
+      );
+      if (standing) {
+        next.push(move);
+      } else {
+        changed = true;
+      }
+      continue;
+    }
+    changed = true;
+    const ended = log.find((entry) => entry.kind === 'move' && entry.run.run === move.run);
+    if (ended?.kind === 'move' && ended.run.status === 'done') {
+      const stale = new Map<string, Listing>();
+      for (const folder of movedFolders(move.pairs)) {
+        const held = listing(folder);
+        if (held !== null) {
+          stale.set(folder, held);
+        }
+      }
+      next.push({ ...move, state: 'moved', stale });
+    }
+  }
+  return changed ? next.sort((left, right) => left.run - right.run) : followed;
+}
+
+/** The folders a move changes the listings of: the one each side of each pair stands in. */
+export function movedFolders(pairs: readonly MovePair[]): string[] {
+  return [...new Set(pairs.flatMap((pair) => [parentOf(pair.from), parentOf(pair.to)]))];
+}
+
+/** The moves this page follows, as the tree draws them. */
+export function drawnMoves(followed: readonly Followed[]): DrawnMove[] {
+  return followed.map((move) => ({
+    pairs: move.pairs,
+    rows: move.rows,
+    state: move.state,
+    ...(move.stale === undefined ? {} : { stale: new Set(move.stale.values()) }),
+  }));
+}
+
+/**
+ * `pairs` turned round: where a path a move brought somewhere stood before
+ * it. What the tree is put back by where a move it was opened down to ends
+ * without committing.
+ */
+export function unmoved(pairs: readonly MovePair[]): MovePair[] {
+  return pairs.map((pair) => ({ from: pair.to, to: pair.from }));
 }
 
 /**

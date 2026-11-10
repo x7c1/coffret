@@ -5,9 +5,12 @@ use crate::routes::RefusalDto;
 
 use super::{FindingDto, PairDto};
 
-/// What a move did, as the `POST` answers it and the log keeps it.
+/// What a move did, as the log keeps it.
 #[derive(Serialize)]
-pub(crate) struct MoveDto {
+pub(super) struct MoveDto {
+    /// Which move this is: the number the `POST` that asked for it answered
+    /// with, and the pending move's in the work answer while it was pending.
+    run: u64,
     /// The pairs it was asked to move.
     pairs: Vec<PairDto>,
     /// `done` or `stopped`.
@@ -32,8 +35,9 @@ pub(crate) struct MoveDto {
 }
 
 impl MoveDto {
-    pub(crate) fn of(run: &MoveRun) -> Self {
+    pub(super) fn of(run: &MoveRun) -> Self {
         Self {
+            run: run.run,
             pairs: run.pairs.iter().map(PairDto::of).collect(),
             status: run.status.as_str(),
             entries: run.entries,

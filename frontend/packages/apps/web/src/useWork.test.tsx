@@ -79,6 +79,7 @@ function answer(fill: Fill | null): Work {
     sync: null,
     freeze: null,
     delete: null,
+    moves: [],
     reconnect: null,
     log: over ? [{ id: fill.run, at: '2026-10-30T09:00:00Z', settled: false, kind: 'fill', run: fill }] : [],
   };

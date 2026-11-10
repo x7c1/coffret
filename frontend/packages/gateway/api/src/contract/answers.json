@@ -281,6 +281,55 @@
     "prefix": "books",
     "replaced": null
   },
+  "move_accepted": {
+    "run": 1,
+    "work": {
+      "adds": [],
+      "catalog": {
+        "state": "caught_up",
+        "stopped": null
+      },
+      "delete": null,
+      "fill": {
+        "declined": [],
+        "discarded": [],
+        "displaced": [],
+        "done": 2,
+        "findings": [],
+        "folder": "albums/2026",
+        "run": 1,
+        "status": "done",
+        "stop": null,
+        "stopped": null,
+        "total": 2,
+        "waiting": []
+      },
+      "findings": [],
+      "freeze": null,
+      "library": "unlocked",
+      "log": [],
+      "moves": [
+        {
+          "pairs": [
+            {
+              "from": "albums/2026",
+              "to": "books/2026"
+            },
+            {
+              "from": "albums/cover.png",
+              "to": "books/cover.png"
+            }
+          ],
+          "run": 1,
+          "waits": true
+        }
+      ],
+      "reconnect": null,
+      "server": "contract-server",
+      "sync": null,
+      "turn": null
+    }
+  },
   "move_preview": {
     "edited": [],
     "entries": 3,
@@ -328,6 +377,7 @@
       }
     ],
     "relocated": 2,
+    "run": 1,
     "status": "done",
     "stopped": null,
     "unrelocated": null

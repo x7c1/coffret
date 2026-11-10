@@ -261,6 +261,11 @@ export type PlacementReason =
   /** A file under the move this device has and the Library does not hold yet. */
   | 'uploading'
   /**
+   * A move of some of the same rows is under way already: accepted, and not
+   * yet ended. Moving them again is refused, not queued, until it has.
+   */
+  | 'moving'
+  /**
    * Not a placement's reason at all, and the one reason a `storage` refusal
    * carries: Storage no longer takes this device's grant — on Google Drive, a
    * permission that ran out (every seven days, for a consent screen in testing)
@@ -641,6 +646,7 @@ const REASONS: readonly string[] = [
   'rename_rule',
   'edited',
   'uploading',
+  'moving',
   'unauthenticated',
 ];
 

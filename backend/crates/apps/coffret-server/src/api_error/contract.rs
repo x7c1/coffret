@@ -144,6 +144,14 @@ fn every_refusal() -> Vec<ApiError> {
             path(),
             entry_path("albums/autumn.jpg"),
         ]));
+        // A move of the same rows under way already, which refuses a second
+        // move as `moving` and a deletion or a drop of them as a `conflict`.
+        let pending = [pair("albums/2026", "books/2026")];
+        refusals.push(ApiError::move_under_way(&pending));
+        refusals.push(ApiError::under_a_move(&[
+            pair("albums/2026", "books/2026"),
+            pair("albums/cover.png", "books/cover.png"),
+        ]));
     }
     refusals.extend([
         ApiError::from(Error::Fetch {

@@ -164,7 +164,7 @@ pub use authorize::{Admission, SERVER_KEY_HEADER};
 mod classify;
 
 mod moves;
-pub use moves::{move_pairs, refusals_of, MoveRun, MoveStatus};
+pub use moves::{move_pairs, refusals_of, MoveRun, MoveStatus, Moves, PendingMove};
 
 mod delete;
 pub use delete::{

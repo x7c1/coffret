@@ -27,6 +27,7 @@ import type {
   LoggedKind,
   Move,
   MoveStatus,
+  PendingMove,
   QueueFlow,
   ByteCount,
   Catalog,
@@ -60,7 +61,7 @@ import type {
   TurnTaker,
 } from './work';
 import { moveOf, workOf } from './work';
-import type { MovePreview } from './move';
+import type { MoveAccepted, MovePreview } from './move';
 import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
@@ -140,6 +141,7 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   rename_rule: true,
   edited: true,
   uploading: true,
+  moving: true,
   unauthenticated: true,
 };
 
@@ -609,6 +611,7 @@ function movePairs(value: unknown, where: string): { from: string; to: string }[
 
 function moved(value: unknown, where: string): Move {
   const fields = object(value, where, [
+    'run',
     'pairs',
     'status',
     'entries',
@@ -623,6 +626,7 @@ function moved(value: unknown, where: string): Move {
     throw new Error(`${where}: only a move that is done says what kept its files from following`);
   }
   return {
+    run: number(fields.run, `${where}.run`),
     pairs: movePairs(fields.pairs, `${where}.pairs`),
     entries: number(fields.entries, `${where}.entries`),
     relocated: number(fields.relocated, `${where}.relocated`),
@@ -681,6 +685,7 @@ function work(value: unknown, where: string): Work {
     'sync',
     'freeze',
     'delete',
+    'moves',
     'reconnect',
     'log',
     'adds',
@@ -695,10 +700,20 @@ function work(value: unknown, where: string): Work {
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),
     freeze: nullable(fields.freeze, (value) => freeze(value, `${where}.freeze`)),
     delete: nullable(fields.delete, (value) => deletion(value, `${where}.delete`)),
+    moves: list(fields.moves, `${where}.moves`, pendingMove),
     reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
     log: list(fields.log, `${where}.log`, logged),
     adds: list(fields.adds, `${where}.adds`, addUnderWay),
     findings: list(fields.findings, `${where}.findings`, foundByRead),
+  };
+}
+
+function pendingMove(value: unknown, where: string): PendingMove {
+  const fields = object(value, where, ['run', 'pairs', 'waits']);
+  return {
+    run: number(fields.run, `${where}.run`),
+    pairs: movePairs(fields.pairs, `${where}.pairs`),
+    waits: boolean(fields.waits, `${where}.waits`),
   };
 }
 
@@ -1025,6 +1040,11 @@ it('reads every work answer the server sends through the Work type', () => {
     read.some((answer) => answer.freeze?.waits === true || answer.sync?.waits === true),
     'a run waiting for its turn behind the one holding it',
   ).toBe(true);
+  expect(
+    read.some((answer) => answer.moves.some((pending) => pending.waits)) &&
+      read.some((answer) => answer.moves.some((pending) => !pending.waits)),
+    'a pending move waiting, and one under way',
+  ).toBe(true);
   for (const table of [
     FILL_STATUSES,
     SYNC_STATUSES,
@@ -1264,7 +1284,16 @@ it('reads every other answer the server sends through its type', () => {
       refused: list(fields.refused, 'move_preview.refused', refused),
     };
   })();
+  const moveAccepted: MoveAccepted = (() => {
+    const fields = object(answers.move_accepted, 'move_accepted', ['run', 'work']);
+    return {
+      run: number(fields.run, 'move_accepted.run'),
+      work: work(fields.work, 'move_accepted.work'),
+    };
+  })();
+  expect(moveAccepted.work.moves.map((pending) => pending.run)).toEqual([moveAccepted.run]);
   const moveDone = moved(answers.moved, 'moved');
+  expect(moveDone.run).toBe(moveAccepted.run);
   expect(moveOf(answers.moved as Parameters<typeof moveOf>[0])).toEqual(moveDone);
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),

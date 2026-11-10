@@ -276,6 +276,12 @@ pub async fn upload(
     if !library.list(folder.as_ref()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }
+    // A drop among the rows a move still pending is moving would land where
+    // the person was no longer shown them, and stop that move under its turn
+    // for a file the Library does not hold yet (spec: LA-31).
+    if let Some(pending) = state.moves.holding(folder.as_ref()) {
+        return Err(ApiError::under_a_move(&pending));
+    }
 
     // What the request says it is bringing, where it says anything. Every browser
     // sending a `FormData` does; a caller that streams without saying is not

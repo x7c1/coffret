@@ -16,6 +16,7 @@ use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::fronts_ahead::FrontsAhead;
 use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
+use crate::moves::Moves;
 use crate::pending_rows::PendingRows;
 use crate::read_findings::ReadFindings;
 use crate::reconnect::{Consent, DriveConsent, Reconnects};
@@ -163,12 +164,21 @@ pub struct ServerState {
     /// reads it whole and uploads its replacement (spec: PK-10), which is no
     /// shorter than packing a book.
     pub deletes: Deletes,
-    /// The one turn a sync, a freeze and a deletion take at this device's
-    /// pending rows, in the order they ask for it.
+    /// The moves accepted and not yet ended, and the worker carrying them out.
     ///
-    /// The three own those rows for the whole of a run and a second owner is
-    /// refused rather than made to wait (spec: OC-2), so the three workers above
-    /// queue here rather than refusing each other. See [`PendingRows`].
+    /// The fifth piece of background work. Apart from the others because a
+    /// move uploads nothing and takes no Storage beyond its catch-up and its
+    /// commit, and because what the explorer draws of it is every pending
+    /// move at once, at its new place, rather than one run on record
+    /// (spec: LA-31).
+    pub moves: Moves,
+    /// The one turn a sync, a freeze, a deletion and a move take at this
+    /// device's pending rows, in the order they ask for it.
+    ///
+    /// The first three own those rows for the whole of a run and a second owner
+    /// is refused rather than made to wait (spec: OC-2), and a move takes the
+    /// same turn (spec: LA-31), so the four workers above queue here rather than
+    /// refusing each other. See [`PendingRows`].
     pub pending_rows: PendingRows,
     /// What one request may bring, and how the room to take it is asked after.
     ///
@@ -252,6 +262,7 @@ impl ServerState {
             syncs: Syncs::logging_to(Arc::clone(&activity)),
             freezes: Freezes::logging_to(Arc::clone(&activity)),
             deletes: Deletes::logging_to(Arc::clone(&activity)),
+            moves: Moves::logging_to(Arc::clone(&activity)),
             activity,
             read_findings: ReadFindings::new(),
             adds: Adds::new(),

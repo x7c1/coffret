@@ -45,8 +45,8 @@ export function runOf(flow: TurnTaker, turns: Turns): Freeze | Sync | Delete | n
       return turns.sync;
     case 'delete':
       return turns.deletion;
-    // A move answers the request that asked for it, so no run of it is ever
-    // on record as running.
+    // A move is not a run on record: what the server holds of one is its
+    // pending moves, which say for themselves whether they wait.
     case 'move':
       return null;
   }

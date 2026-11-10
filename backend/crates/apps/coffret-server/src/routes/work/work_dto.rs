@@ -4,19 +4,22 @@ use crate::pending_rows::TurnTaker;
 use crate::state::ServerState;
 
 use super::{
-    AddDto, CatalogDto, DeleteDto, FillDto, FoundDto, FreezeDto, LoggedDto, ReconnectDto, SyncDto,
+    AddDto, CatalogDto, DeleteDto, FillDto, FoundDto, FreezeDto, LoggedDto, PendingMoveDto,
+    ReconnectDto, SyncDto,
 };
 
-/// What the server is doing on its own, which is four things — and the one
+/// What the server is doing on its own, which is five things — and the one
 /// thing it may have done to itself.
 ///
-/// A fill, a sync, a freeze and a deletion. Everything else this server does it
-/// does because a request asked it to, and a request is answered rather than
-/// reported on; these four are the work that goes on after the request that
-/// set it going has been answered — the rest of a folder being brought over
-/// behind a reader, files somebody dropped being carried into the Library, a
-/// book somebody brought in being packed, and files somebody chose being taken
-/// out of it — so they are what there is to tell a browser about.
+/// A fill, a sync, a freeze, a deletion and the moves. Everything else this
+/// server does it does because a request asked it to, and a request is
+/// answered rather than reported on; these five are the work that goes on
+/// after the request that set it going has been answered — the rest of a
+/// folder being brought over behind a reader, files somebody dropped being
+/// carried into the Library, a book somebody brought in being packed, files
+/// somebody chose being taken out of it, and files and folders somebody
+/// moved being given their new paths — so they are what there is to tell a
+/// browser about.
 ///
 /// Side by side and not one after another: they are separate work over one
 /// Library, any of them can be running without the others, and a browser reads
@@ -61,9 +64,9 @@ pub struct WorkDto {
     /// How this device's catalog stands with the Library.
     pub(super) catalog: CatalogDto,
     /// Which flow's run holds this device's pending rows right now — `sync`,
-    /// `freeze` or `delete` — and `null` where nobody does.
+    /// `freeze`, `delete` or `move` — and `null` where nobody does.
     ///
-    /// The three take turns at those rows, in the order their runs ask for
+    /// The four take turns at those rows, in the order their runs ask for
     /// them, and a run waiting for its turn is on record as running with no
     /// step, exactly as one that has just taken it is. Said here because a
     /// browser cannot tell the two apart on its own: guessing, it can have two
@@ -79,6 +82,14 @@ pub struct WorkDto {
     /// The latest deletion, running or finished, and `null` where none has
     /// run.
     pub(super) delete: Option<DeleteDto>,
+    /// Every move accepted and not yet ended, in the order it was accepted —
+    /// the one under way first — each until it has ended, when the log holds
+    /// it (spec: LA-31).
+    ///
+    /// Every one of them and not the latest alone, unlike the runs above: the
+    /// explorer draws each pending move's rows at their new place until it
+    /// ends, so it needs all of them.
+    pub(super) moves: Vec<PendingMoveDto>,
     /// The latest reconnect, waiting or ended, and `null` where none has run.
     ///
     /// Not work on the Library either, and here for the reason the catalog's
@@ -87,7 +98,7 @@ pub struct WorkDto {
     /// asking this.
     pub(super) reconnect: Option<ReconnectDto>,
     /// What the server has finished since it started, newest first: every
-    /// fill, sync, freeze and deletion that ended, every folder a queue lost,
+    /// fill, sync, freeze, deletion and move that ended, every folder a queue lost,
     /// and every file a reader was refused other than on a peek or a read ahead or by a locked
     /// Library or an Entry the catalog does not hold — the oldest dropped past a fixed
     /// count, a failure kept past it until the same work ends again, and never
@@ -163,6 +174,14 @@ impl WorkDto {
                 .reported()
                 .as_ref()
                 .map(|report| DeleteDto::of(report, turn)),
+            // Before the log, for the reason the adds are: a move is listed
+            // until it has been logged.
+            moves: state
+                .moves
+                .listed()
+                .iter()
+                .map(|pending| PendingMoveDto::of(pending, turn))
+                .collect(),
             reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
             // Before the log, for the log's own reason: an add is listed until
             // it has been logged, so read first, one that has just been undone

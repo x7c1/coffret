@@ -1260,6 +1260,10 @@ function Row({
       onDragOver={onDragOverRow}
       draggable
       data-key={row.key}
+      // A row drawn at the new place of a move that has not committed is busy
+      // until the move ends (see [`DrawnMove`](./tree)).
+      aria-busy={row.moving === true ? true : undefined}
+      data-moving={row.moving === true ? '' : undefined}
       onDragStart={onGrab}
       onDragEnd={onLetGo}
       style={{
@@ -1302,7 +1306,9 @@ function Row({
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               color: ink(
-                folder !== null
+                row.moving === true
+                  ? COLOR.dim
+                  : folder !== null
                   ? folder.prospective || folder.stranded
                     ? COLOR.accentDeep
                     : folder.above === true
@@ -1327,6 +1333,11 @@ function Row({
             </span>
           )}
           {folder?.incoming === true && <span style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>adding…</span>}
+          {row.moving === true && (
+            <span title={BEING_MOVED_TITLE} style={{ ...NOTE, color: ink(COLOR.accentDeep) }}>
+              {BEING_MOVED}
+            </span>
+          )}
         </span>
       </td>
       {/* A folder's size is the total of everything under it, drawn a step
@@ -1806,6 +1817,13 @@ const MARK: CSSProperties = { flex: '0 0 auto', width: ICON, marginRight: 6 };
 
 /** What a row says after its name. */
 const NOTE: CSSProperties = { marginLeft: 10, fontSize: 11, flex: '0 0 auto' };
+
+/** What a row drawn at the new place of a move that has not committed says beside its name. */
+export const BEING_MOVED = 'being moved…';
+
+/** And what that says in full, on hover. */
+const BEING_MOVED_TITLE =
+  'Being moved here: it takes its new place in the Library once the move has gone through, and goes back where it was if the move is refused';
 
 /** The headings' row. */
 const HEAD_ROW: CSSProperties = { background: COLOR.ground };

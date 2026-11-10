@@ -202,7 +202,8 @@ control for a sync, since a drop starts one.
   folder do
 - move (a selection of files and folders to another folder, as a person asks
   for it — the explorer's "Move to…", or a drag onto a folder — once they have
-  seen its preview: carried out as one rename, in one Journal record, of every
+  seen its preview: accepted at once and carried out as background work, in
+  this device's turn, as one rename, in one Journal record, of every
   Entry under them, and then the relocation of this device's files of them,
   each one following its Entry or leaving this device; refused whole where it
   would lose an edited file or one the Library does not hold yet) — the
@@ -559,11 +560,12 @@ control for a sync, since a drop starts one.
     removing already absent local leftovers is idempotent (spec: OC-2, OC-8).
 - A sync, a freeze and a deletion each own this device's pending work for the
   whole of a run, and a competing run is refused (spec: OC-2). Within one
-  server the three take **turns** instead: a run armed while another holds the
-  pending work waits, and the turns go in the order the runs ask for them — a
-  run asks as its flow takes it up, which for a flow already running is once
-  the run before it in that flow has finished. What the server reports of its
-  running work says which run holds the turn and which runs wait, and a
+  server the three take **turns** instead, and a move takes the same turn from
+  its catch-up to its last relocation (spec: LA-31): a run armed while another
+  holds the pending work waits, and the turns go in the order the runs ask for
+  them — a run asks as its flow takes it up, which for a flow already running
+  is once the run before it in that flow has finished. What the server reports
+  of its running work says which run holds the turn and which runs wait, and a
   waiting run is reported as waiting for the holder (spec: LA-12). Across
   processes there is no queue: of a server's run and a sync or a freeze from
   the command line, whichever comes second is refused at once, as a conflict,

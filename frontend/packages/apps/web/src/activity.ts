@@ -32,7 +32,7 @@ import type {
   FoundByRead,
   Freeze,
   Logged,
-  Move,
+  PendingMove,
   Refused,
   Step,
   StopOffer,
@@ -42,6 +42,7 @@ import type {
 } from '@coffret/api';
 
 import { deletedLine, deletingLine } from './deleteEntries';
+import { movedLine, movingLine } from './moving';
 import { discardedBooksLine, discardedLine, fillLine, freezeLine, syncLine } from './fill';
 import { ranOut } from './ranOut';
 import { refreshedLine } from './refresh';
@@ -152,6 +153,8 @@ export interface InFlight extends Turns {
   addingAs: { name: string; stopping: boolean } | null;
   /** The adds the server says it is carrying in (spec: LA-34). */
   adds: readonly AddUnderWay[];
+  /** The moves the server has accepted and not yet ended (spec: LA-31). */
+  moves?: readonly PendingMove[];
   /** How far that drop has been sent, from 0 to 1, where that is known. */
   sent: number | null;
   fill: Fill | null;
@@ -159,8 +162,8 @@ export interface InFlight extends Turns {
   fetching: string | null;
 }
 
-/** The three flows that take turns, in the order a tie between them is broken. */
-const TIED: readonly TurnTaker[] = ['freeze', 'sync', 'delete'];
+/** The flows that take turns, in the order a tie between them is broken. */
+const TIED: readonly TurnTaker[] = ['freeze', 'sync', 'delete', 'move'];
 
 /**
  * **In progress**, top to bottom: the drop's own line, then the run holding
@@ -203,6 +206,9 @@ export function inProgress(flight: InFlight): Running[] {
     const line = runningLine(flow, flight);
     if (line !== null) {
       running.push(line);
+    }
+    if (flow === 'move') {
+      running.push(...movingLines(flight));
     }
     if (flow === 'freeze') {
       running.push(...queuedBooks(flight.freeze));
@@ -249,6 +255,21 @@ function stopOf(offer: StopOffer | null, target: StopTarget): Pick<Running, 'sto
     case null:
       return { stop: null, ending: null };
   }
+}
+
+/**
+ * A line for each move the server has accepted and not yet ended, the one
+ * under way first, each named by what it moves and where to. A move cannot be
+ * stopped (spec: LA-34), so none offers a Stop.
+ */
+function movingLines(flight: InFlight): Running[] {
+  return (flight.moves ?? []).map((pending) => ({
+    key: `move:${pending.run}`,
+    text: movingLine(pending, flight.turn),
+    progress: null,
+    stop: null,
+    ending: null,
+  }));
 }
 
 /**
@@ -331,7 +352,7 @@ function runningLine(flow: TurnTaker, turns: Turns): Running | null {
         ending: null,
       };
     }
-    // A move is never on record as running: its request answers it.
+    // A move is not a run on record: its lines are the pending moves'.
     case 'move':
       return null;
   }
@@ -716,26 +737,6 @@ export function stoppedLine(add: StoppedAdd): string {
 /** A count of files, as a line says it. */
 function files(count: number): string {
   return count === 1 ? '1 file' : `${count} files`;
-}
-
-/**
- * What a move that ended says: what it moved, and what kept this device's
- * files from following where something did; or what stopped it.
- */
-function movedLine(run: Move): string {
-  const named =
-    run.pairs.length === 1
-      ? `${run.pairs[0].from} → ${run.pairs[0].to}`
-      : `${run.pairs.length} items`;
-  if (run.status === 'stopped') {
-    return `could not move ${named} — ${run.stopped.message}`;
-  }
-  const left = run.left === 0 ? '' : `; ${run.left} no longer on this device`;
-  const unrelocated =
-    run.unrelocated === null
-      ? ''
-      : `; this device's files did not follow yet — ${run.unrelocated.message}`;
-  return `moved ${named}${left}${unrelocated}`;
 }
 
 /**

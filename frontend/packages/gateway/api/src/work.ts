@@ -610,13 +610,17 @@ export interface MovePair {
 }
 
 /**
- * What one move did — the answer of `POST /api/move`, and the run the log
- * keeps of it.
+ * What one move did, as the log keeps it once it has ended.
  */
 export type Move = MoveOfItsOwn & Standing<MoveStatus>;
 
 /** What one move came to, beside its status. */
 interface MoveOfItsOwn {
+  /**
+   * Which move this is: the number `POST /api/move` answered with, and the
+   * pending move's while it was pending.
+   */
+  run: number;
   /** What it was asked to move, in the order it was named. */
   pairs: MovePair[];
   /** How many files of the Library it gave a new path, and `0` where it stopped. */
@@ -715,8 +719,9 @@ export interface Reconnect {
 
 /**
  * One of the four flows that take turns at this device's pending work, in the
- * word the work answer names it by. A move takes the turn while its request is
- * open, and is never on record as running: the request answers it.
+ * word the work answer names it by. A move takes the turn from its catch-up to
+ * its last relocation, and is listed among the pending moves rather than on
+ * record as a run.
  */
 export type TurnTaker = 'sync' | 'freeze' | 'delete' | 'move';
 
@@ -781,6 +786,23 @@ export interface AddUnderWay {
   stage: 'receiving' | 'armed';
   /** Whether a person asked for it to be stopped. */
   stopping: boolean;
+}
+
+/**
+ * One move the server has accepted and not yet ended (spec: LA-31): waiting
+ * its turn, or under way. Listed until it has ended, when the log holds it
+ * under the same `run`.
+ */
+export interface PendingMove {
+  /** Which move this is: the number `POST /api/move` answered with. */
+  run: number;
+  /** What it was asked to move, in the order it was named. */
+  pairs: MovePair[];
+  /**
+   * Whether it is waiting — behind another move, or for this device's turn
+   * while another flow holds it — rather than under way.
+   */
+  waits: boolean;
 }
 
 /** Which kinds of entry the log keeps. */
@@ -863,6 +885,12 @@ export interface Work {
   freeze: Freeze | null;
   /** The latest deletion, running or finished, and `null` where none has run. */
   delete: Delete | null;
+  /**
+   * Every move accepted and not yet ended, in the order it was accepted — the
+   * one under way first. Each is listed until it has ended, and then the log
+   * holds it.
+   */
+  moves: PendingMove[];
   /**
    * The latest reconnect, waiting or ended, and `null` where none has run.
    *
@@ -1186,6 +1214,7 @@ interface WorkSent {
   sync: SyncSent | null;
   freeze: FreezeSent | null;
   delete: DeleteSent | null;
+  moves?: PendingMove[];
   reconnect: Reconnect | null;
   log?: LoggedSent[];
   adds?: AddUnderWay[];
@@ -1246,6 +1275,7 @@ export function workOf(sent: unknown): Work {
     sync: work.sync === null ? null : syncOf(work.sync),
     freeze: work.freeze === null ? null : freezeOf(work.freeze),
     delete: work.delete === null ? null : deleteOf(work.delete),
+    moves: work.moves ?? [],
     reconnect: work.reconnect,
     log: (work.log ?? []).map(loggedOf),
     adds: work.adds ?? [],
@@ -1405,6 +1435,7 @@ function deleteOf(run: DeleteSent): Delete {
 /** One move, its refusals and findings read as every run's are. */
 export function moveOf(run: MoveSent): Move {
   return {
+    run: run.run,
     pairs: run.pairs,
     entries: run.entries,
     relocated: run.relocated,

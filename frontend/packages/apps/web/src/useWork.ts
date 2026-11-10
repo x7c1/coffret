@@ -16,6 +16,7 @@ import {
   type FoundByRead,
   type LibraryState,
   type Logged,
+  type PendingMove,
   type Reconnect,
   type Sync,
   type TurnTaker,
@@ -131,6 +132,17 @@ export function useWork(readerOpen: boolean): {
    */
   adds: readonly AddUnderWay[];
   /**
+   * The moves the server has accepted and not yet ended, and empty until an
+   * answer has said (spec: LA-31).
+   */
+  moves: readonly PendingMove[];
+  /**
+   * Takes the work answer a press of this page's own was met with — a move
+   * accepted — as an answer of this hook's own, and follows the work from
+   * there.
+   */
+  take: (work: Work) => void;
+  /**
    * Asks for an add, a freeze or a fill to be stopped (spec: LA-35), and
    * takes the work answer it is met with as every press's is taken: the run's
    * line says it was asked, and the run answers by ending. What refused the
@@ -150,6 +162,7 @@ export function useWork(readerOpen: boolean): {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
   const [adds, setAdds] = useState<readonly AddUnderWay[]>([]);
+  const [moves, setMoves] = useState<readonly PendingMove[]>([]);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
   // for the work answer since. A drop that broke mid-transfer turns this on too: it
@@ -160,7 +173,7 @@ export function useWork(readerOpen: boolean): {
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<Trouble | null>(null);
   const polling =
-    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion, adds) ||
+    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion, adds, moves) ||
     following;
   // Whether this page has ever asked *and been told*. In a ref rather than in
   // state because nothing on the screen is drawn from it: it is what turns the
@@ -188,13 +201,15 @@ export function useWork(readerOpen: boolean): {
     setCatalog(work.catalog);
     setReconnect(work.reconnect);
     setAdds(work.adds);
+    setMoves(work.moves);
     // Whatever the answer says about the flows a press arms — the sync and the
     // freeze a drop arms, and a deletion — it is an answer: from here on they
     // decide for themselves whether there is anything to follow.
     if (
       work.sync?.status !== 'syncing' &&
       work.freeze?.status !== 'freezing' &&
-      work.delete?.status !== 'deleting'
+      work.delete?.status !== 'deleting' &&
+      work.moves.length === 0
     ) {
       setFollowing(false);
     }
@@ -321,6 +336,14 @@ export function useWork(readerOpen: boolean): {
 
   const follow = useCallback(() => setFollowing(true), []);
 
+  const take = useCallback(
+    (work: Work) => {
+      answered(work);
+      setFollowing(true);
+    },
+    [answered],
+  );
+
   // A stop is a request, answered at once with the work answer (spec: LA-35):
   // taken as every press's answer is, so the line says it was asked from this
   // moment rather than from the next tick, and the asking goes on until the
@@ -373,6 +396,8 @@ export function useWork(readerOpen: boolean): {
     follow,
     recheck,
     adds,
+    moves,
+    take,
     stop,
   };
 }

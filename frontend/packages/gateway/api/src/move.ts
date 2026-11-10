@@ -1,8 +1,8 @@
 import type { Refused } from './refusal';
 import { refusedOf } from './refusal';
 import { apiUrl, askedForJson } from './request';
-import type { Move, MovePair, MoveSent } from './work';
-import { moveOf } from './work';
+import type { MovePair, Work } from './work';
+import { workOf } from './work';
 
 /**
  * The query a move is named by: `from` and `to` in turn, once per pair, the
@@ -72,21 +72,38 @@ export async function previewMove(
   return { ...preview, refused: preview.refused.map(refusedOf) };
 }
 
+/** What asking for a move is answered with: which move it is, and the work answer. */
+export interface MoveAccepted {
+  /**
+   * Which move this is: the pending move's in the work answer while it is
+   * pending, and the log entry's once it has ended.
+   */
+  run: number;
+  /** The work answer as it stood once the move was accepted. */
+  work: Work;
+}
+
 /**
- * Moves, or renames, `pairs` in the Library — `POST /api/move`.
+ * Asks for `pairs` to be moved, or renamed, in the Library — `POST /api/move`.
  *
  * What a drag onto a folder, "Rename…" and "Move to…" ask for once the person
- * has seen what {@link previewMove} said and has said yes. Every pair lands in
- * one change to the Library, nothing is uploaded, and this device's files
- * follow — or leave this device where they cannot. It answers once all of that
- * is done, with what it did.
+ * has seen what {@link previewMove} said and has said yes. The server accepts
+ * the move and answers at once, before it is carried out (spec: LA-31): it
+ * waits its turn among this device's work, listed in the work answer's
+ * `moves`, and then every pair lands in one change to the Library, nothing
+ * is uploaded, and this device's files follow — or leave this device where
+ * they cannot. What it came to is in the work answer's log, under the same
+ * `run`: done, or stopped by a refusal the preview would have shown, asked
+ * again once its turn came.
  *
- * Refused before anything is written, as a `refused_move`, wherever the
- * preview would have shown a refusal, asked again now.
+ * Refused before anything is accepted only for a locked Library, and for a
+ * set touching the rows of a move still pending — a `refused_move` whose
+ * reason is `moving`.
  */
 export async function moveEntries(
   pairs: readonly MovePair[],
   signal?: AbortSignal,
-): Promise<Move> {
-  return moveOf(await askedForJson<MoveSent>(moveUrl(pairs), signal, 'POST'));
+): Promise<MoveAccepted> {
+  const sent = await askedForJson<{ run: number; work: unknown }>(moveUrl(pairs), signal, 'POST');
+  return { run: sent.run, work: workOf(sent.work) };
 }

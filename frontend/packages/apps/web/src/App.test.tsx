@@ -14,8 +14,10 @@ import {
   getRemoteHead,
   getWork,
   mapFolder,
+  moveEntries,
   peekFile,
   previewDelete,
+  previewMove,
   readAhead,
   startDelete,
   stopWork,
@@ -24,6 +26,8 @@ import {
   type LibraryTotals,
   type ListedFile,
   type Listing,
+  type Logged,
+  type MovePair,
   type Work,
 } from '@coffret/api';
 
@@ -58,8 +62,10 @@ vi.mock('@coffret/api', async (actual) => ({
   getRemoteHead: vi.fn(),
   getWork: vi.fn(),
   mapFolder: vi.fn(),
+  moveEntries: vi.fn(),
   peekFile: vi.fn(),
   previewDelete: vi.fn(),
+  previewMove: vi.fn(),
   readAhead: vi.fn(),
   startDelete: vi.fn(),
   stopWork: vi.fn(),
@@ -74,6 +80,7 @@ const IDLE: Work = {
   sync: null,
   freeze: null,
   delete: null,
+  moves: [],
   reconnect: null,
   log: [],
   adds: [],
@@ -1649,3 +1656,95 @@ describe('opening a row again', () => {
   });
 });
 
+// A rename is background work (spec: LA-31): the dialog closes as soon as the
+// server has accepted it, the folder is drawn at its new name as being moved
+// until the move ends, and then it is the Library's there — or, refused once
+// its turn came, back at its old name with the reason in the Activity panel.
+describe('a rename carried on in the background', () => {
+  const pair: MovePair = { from: 'comics/vol-1', to: 'comics/Vol. 1' };
+  const PENDING: Work = { ...IDLE, turn: 'freeze', moves: [{ run: 1, pairs: [pair], waits: true }] };
+
+  function ended(status: 'done' | 'stopped'): Work {
+    const run =
+      status === 'done'
+        ? { status, stopped: null }
+        : {
+            status,
+            stopped: {
+              kind: 'refused_move' as const,
+              reason: 'edited' as const,
+              surfaced: null,
+              message: 'a file of it changed on this device since it was placed',
+            },
+          };
+    const logged: Logged = {
+      id: 1,
+      at: '2026-11-10T10:00:00Z',
+      settled: false,
+      kind: 'move',
+      run: { run: 1, pairs: [pair], entries: 2, relocated: 2, left: 0, unrelocated: null, findings: [], ...run },
+    };
+    return { ...IDLE, log: [logged] };
+  }
+
+  async function renamed() {
+    answers = library({ '': ['comics/'], comics: ['vol-1/', 'vol-2/'] });
+    vi.mocked(previewMove).mockResolvedValue({
+      pairs: [pair],
+      entries: 2,
+      following: 2,
+      leaving: 0,
+      leaving_bytes: 0,
+      edited: [],
+      uploading: [],
+      refused: [],
+    });
+    // Pending from the moment the server accepts it, behind a book being packed.
+    vi.mocked(moveEntries).mockImplementation(() => {
+      vi.mocked(getWork).mockResolvedValue(PENDING);
+      return Promise.resolve({ run: 1, work: PENDING });
+    });
+    window.history.replaceState(null, '', '#path=comics');
+    render(<App />);
+    fireEvent.click(await tree().findByLabelText('actions for vol-1'));
+    fireEvent.click(tree().getByRole('menuitem', { name: 'Rename…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Rename “vol-1”' });
+    fireEvent.change(within(dialog).getByLabelText('new name'), { target: { value: 'Vol. 1' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rename' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  }
+
+  function rowOf(path: string): HTMLElement | null {
+    return document.querySelector(`tr[data-key="folder:${path}"]`);
+  }
+
+  it('draws the folder at its new name as being moved, and then as the Library’s', async () => {
+    await renamed();
+    expect(moveEntries).toHaveBeenCalledWith([pair]);
+    await waitFor(() => expect(rowOf('comics/Vol. 1')).not.toBeNull());
+    expect(rowOf('comics/Vol. 1')?.getAttribute('aria-busy')).toBe('true');
+    expect(rowOf('comics/Vol. 1')?.textContent).toContain('being moved…');
+    expect(rowOf('comics/vol-1')).toBeNull();
+    expect(screen.getAllByText(/moving comics\/vol-1 → comics\/Vol\. 1 — waiting for the packing/).length).toBeGreaterThan(0);
+
+    answers = library({ '': ['comics/'], comics: ['Vol. 1/', 'vol-2/'] });
+    vi.mocked(getWork).mockResolvedValue(ended('done'));
+    await waitFor(() => expect(rowOf('comics/Vol. 1')?.getAttribute('aria-busy')).toBeNull(), { timeout: 3000 });
+    expect(rowOf('comics/Vol. 1')?.textContent).not.toContain('being moved…');
+    expect(rowOf('comics/vol-1')).toBeNull();
+  });
+
+  it('puts the folder back at its old name, and says why, where the move was refused under its turn', async () => {
+    await renamed();
+    await waitFor(() => expect(rowOf('comics/Vol. 1')).not.toBeNull());
+
+    vi.mocked(getWork).mockResolvedValue(ended('stopped'));
+    await waitFor(() => expect(rowOf('comics/vol-1')).not.toBeNull(), { timeout: 3000 });
+    expect(rowOf('comics/Vol. 1')).toBeNull();
+    expect(
+      screen.getAllByText(
+        'could not move comics/vol-1 → comics/Vol. 1 — a file of it changed on this device since it was placed',
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+});

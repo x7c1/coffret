@@ -290,7 +290,22 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let moving =
         "/api/move?from=albums/2026&to=books/2026&from=albums/cover.png&to=books/cover.png";
     let move_preview = answered_as_json(&mover, "GET", moving).await;
-    let moved = answered_as_json(&mover, "POST", moving).await;
+    // Accepted at once, before it has its turn, and then what it did, as the
+    // log keeps it once it has ended.
+    let (status, mut accepted) = body_of(mover.post(moving).await).await;
+    assert_eq!(status, 202, "{accepted}");
+    mover.move_idle().await;
+    let (_, work) = body_of(mover.get("/api/work").await).await;
+    let moved = work["log"]
+        .as_array()
+        .and_then(|log| log.iter().find(|entry| entry["kind"] == "move"))
+        .map(|entry| entry["run"].clone())
+        .expect("the move is in the log once it has ended");
+    // What it was accepted with, the work answer as it stood then: the fill
+    // before it is in the log, logged at an instant that differs every run,
+    // and the server's name is drawn as it starts.
+    accepted["work"]["server"] = Value::from("contract-server");
+    accepted["work"]["log"] = json!([]);
 
     // What the whole Library comes to, its newest time the planted instant as
     // a folder's is.
@@ -348,6 +363,7 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         // What moving a folder and a file would do, and what it did: the
         // device maps the whole Library, so its files of the folder follow.
         "move_preview": move_preview,
+        "move_accepted": accepted,
         "moved": moved,
         "reconnecting": reconnecting,
         "unlock": {

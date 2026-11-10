@@ -11,6 +11,9 @@ use super::MoveStatus;
 /// run is: what the Library holds afterwards is the listing's to say.
 #[derive(Clone, Debug)]
 pub struct MoveRun {
+    /// Which move this is, counted from 1 by this process as moves are
+    /// accepted: the number the `POST` answered with.
+    pub run: u64,
     /// What it was asked to move, in the order the request named it.
     pub pairs: Vec<RenamePair>,
     /// How it ended.
@@ -35,9 +38,10 @@ pub struct MoveRun {
 }
 
 impl MoveRun {
-    /// A move of `pairs` that has done nothing yet.
-    pub(crate) fn starting(pairs: Vec<RenamePair>) -> Self {
+    /// Move `run`, of `pairs`, that has done nothing yet.
+    pub(crate) fn starting(run: u64, pairs: Vec<RenamePair>) -> Self {
         Self {
+            run,
             pairs,
             status: MoveStatus::Done,
             entries: 0,
