@@ -90,7 +90,9 @@ pub(super) fn tie_records_to_entries(transaction: &Connection) -> IndexResult<u6
     let count = |table: &str| -> IndexResult<u64> {
         transaction
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get::<_, u64>(0)
+                // SQLite stores integers as i64; a COUNT(*) is never negative.
+                let count = row.get::<_, i64>(0)?;
+                u64::try_from(count).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, count))
             })
             .map_err(classify(OPERATION))
     };
