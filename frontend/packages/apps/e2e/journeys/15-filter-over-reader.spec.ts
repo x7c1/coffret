@@ -3,7 +3,7 @@
 // The panel hangs from the header over the right of the screen, where the
 // reader's sheet is drawn. It has to be drawn in front of the sheet — not
 // merely present in the page under it — so that it can be seen and used while
-// a page is read. What it says about Recent waits behind its `[?]`.
+// a page is read. What it says about Recent waits behind its question mark ("About Recent").
 
 import { expect, photo, row, setting, shot, test } from './journey';
 
@@ -35,7 +35,7 @@ test('open More filters over the reader, and turn Recent on from it', async ({ p
   }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
   expect(onTop).toBe(true);
 
-  // What Recent does is out of sight until its `[?]` is asked.
+  // What Recent does is out of sight until its question mark ("About Recent") is asked.
   const explainer = page.getByRole('tooltip');
   await expect(explainer).toHaveCount(0);
   await panel.getByRole('button', { name: 'About Recent' }).hover();
