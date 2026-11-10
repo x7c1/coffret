@@ -39,9 +39,9 @@ export function Region<T>({
         <div style={{ padding: 16 }}>
           <p style={{ color: COLOR.refused }}>{state.message}</p>
           {state.ranOut === true && reconnect !== null && (
-            <p style={{ color: COLOR.text, fontSize: 13 }}>
+            <div style={{ color: COLOR.text, fontSize: 13, margin: '13px 0' }}>
               <ReconnectOffer offer={reconnect} />
-            </p>
+            </div>
           )}
           <button onClick={onRetry} style={BUTTON}>
             {TRY_AGAIN}

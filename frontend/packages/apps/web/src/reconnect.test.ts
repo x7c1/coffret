@@ -10,6 +10,7 @@ import {
   flowOf,
   grantRenewed,
   NO_TAB,
+  RAN_OUT,
   OPENED_ELSEWHERE,
   openedElsewhere,
   offersReconnect,
@@ -186,4 +187,48 @@ it('drops the link once the flow waiting is not the one its page is on', () => {
   expect(after).not.toContain(pressed);
   expect(after).not.toContain(NO_TAB);
   expect(after).toContain(OPENED_ELSEWHERE.replaceAll("'", '&#x27;'));
+});
+
+// While a flow waits, the sentence saying so and the link to the consent page
+// each start a line of their own, under the sentence that the permission ran
+// out, rather than running on into one long line.
+it('puts the waiting sentence and the consent link on lines of their own', () => {
+  const page = 'https://consent.example/';
+  const host = document.createElement('div');
+  host.innerHTML = renderToStaticMarkup(
+    createElement(ReconnectOffer, {
+      offer: {
+        reconnect: { state: 'waiting', message: 'answer the consent page', flow: flowOf(page) },
+        said: null,
+        refused: null,
+        consentPage: page,
+        ask: () => undefined,
+      },
+    }),
+  );
+
+  // The nearest block around the one text node carrying `text`.
+  const blockOf = (text: string) => {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    const found: Node[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node.textContent === text) {
+        found.push(node);
+      }
+    }
+    expect(found, text).toHaveLength(1);
+    const block = found[0].parentElement?.closest('div');
+    expect(block, text).toBeTruthy();
+    return block as HTMLDivElement;
+  };
+  const ranOutBlock = blockOf(RAN_OUT);
+  const waitingBlock = blockOf('answer the consent page');
+  const linkBlock = blockOf(NO_TAB);
+  expect(new Set([ranOutBlock, waitingBlock, linkBlock]).size).toBe(3);
+  expect(waitingBlock.textContent).toBe('answer the consent page');
+  expect(linkBlock.textContent).toBe(NO_TAB);
+
+  const link = linkBlock.querySelector('a');
+  expect(link?.getAttribute('href')).toBe(page);
+  expect(host.querySelector('button')).toBeNull();
 });
