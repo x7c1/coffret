@@ -16,6 +16,39 @@ export interface KeptAppearance {
 /** The server's, which is what everything but a test keeps the choice in. */
 const ON_THE_SERVER: KeptAppearance = { read: getAppearance, write: setAppearance };
 
+/** What the desktop app's window offers the page about the appearance. */
+interface DesktopAppearance {
+  /** Tells the app, one way and with nothing in it, that the server took a new appearance. */
+  appearanceChanged: () => void;
+}
+
+/** The desktop app's appearance bridge, where the page runs in its window, and `null` in a browser. */
+function desktopAppearance(): DesktopAppearance | null {
+  const bridge = (globalThis as { coffretDesktop?: unknown }).coffretDesktop;
+  if (typeof bridge !== 'object' || bridge === null) {
+    return null;
+  }
+  return typeof (bridge as Partial<DesktopAppearance>).appearanceChanged === 'function'
+    ? (bridge as DesktopAppearance)
+    : null;
+}
+
+/**
+ * Keeps `appearance` in `kept`, and once it is taken tells the desktop app,
+ * where the page runs in its window, so that it draws its windows' title bars
+ * in it: the app reads the appearance afresh from the server's state rather
+ * than being told which. A choice that cannot be kept is said to the console,
+ * and the app is told nothing.
+ */
+function keep(kept: KeptAppearance, appearance: Appearance): void {
+  kept.write(appearance).then(
+    () => desktopAppearance()?.appearanceChanged(),
+    (refused: unknown) => {
+      console.warn('the explorer could not keep the appearance for this device', refused);
+    },
+  );
+}
+
 /** What each choice is called, in the menu and in the button's name. */
 export const APPEARANCE_LABEL: Record<Appearance, string> = {
   system: 'System',
@@ -44,7 +77,8 @@ export function appearanceItems(shown: Appearance): ActionItem[] {
  * same in words, so it is read out as what it is and where it stands.
  *
  * What is chosen is drawn at once and kept on the server as this device's own
- * state, which is read as the switch is drawn (spec: LA-38). While the
+ * state, which is read as the switch is drawn (spec: LA-38); in the desktop
+ * app's window, the app is told once the server took it ([`keep`](#keep)). While the
  * Library is locked the host refuses both (spec: LA-14), so a page opened then
  * is drawn in `System`. The unlock draws the screen afresh, the switch with
  * it, which then reads the kept choice — or, where one was made on this page
@@ -74,9 +108,7 @@ export function AppearanceSwitch({
     // is unlocked — since one made while it was locked was refused by the
     // host (spec: LA-14) and would otherwise be lost at the next launch.
     if (shown.chosenHere) {
-      kept.write(shown.appearance).catch((refused: unknown) => {
-        console.warn('the explorer could not keep the appearance for this device', refused);
-      });
+      keep(kept, shown.appearance);
       return;
     }
     const aborter = new AbortController();
@@ -100,9 +132,7 @@ export function AppearanceSwitch({
       return;
     }
     shown.choose(action.appearance);
-    kept.write(action.appearance).catch((refused: unknown) => {
-      console.warn('the explorer could not keep the appearance for this device', refused);
-    });
+    keep(kept, action.appearance);
   };
 
   const name = `Appearance: ${APPEARANCE_LABEL[appearance]}`;

@@ -10,6 +10,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 
+import { APPEARANCE_CHANGED } from './appearance.js';
 import { TAKE_DROP } from './drops.js';
 import { FRESH_TICKET, SESSION_ENDED } from './renewal.js';
 
@@ -38,6 +39,7 @@ interface Exposed {
   takeDrop: TakeDrop;
   onTicket: (listener: (ticket: string) => void) => () => void;
   sessionEnded: () => void;
+  appearanceChanged: () => void;
 }
 
 /** The preload, loaded once per case, and what it asked the main process. */
@@ -161,9 +163,9 @@ describe('the explorer preload, handing picked files over by path', () => {
 // the page says its session ended, and is answered nothing. No call the page
 // can make asks for a ticket.
 describe('the explorer preload, carrying the session', () => {
-  it('exposes nothing but taking a drop, listening for tickets, and saying the session ended', () => {
+  it('exposes nothing but taking a drop, listening for tickets, saying the session ended, and saying the appearance changed', () => {
     const { api } = loaded();
-    expect(Object.keys(api).sort()).toEqual(['onTicket', 'sessionEnded', 'takeDrop']);
+    expect(Object.keys(api).sort()).toEqual(['appearanceChanged', 'onTicket', 'sessionEnded', 'takeDrop']);
   });
 
   it('relays a ticket the main process sends to the page, alone, until it stops listening', () => {
@@ -196,7 +198,19 @@ describe('the explorer preload, carrying the session', () => {
     const { api, invoke } = loaded();
     api.onTicket(() => undefined)();
     api.sessionEnded();
+    api.appearanceChanged();
     await api.takeDrop([alone('/a.jpg')]);
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([TAKE_DROP]);
+  });
+});
+
+// LA-38: the page says the server took a new appearance, and the main process
+// reads it afresh; the page hands over nothing of what it chose.
+describe('the explorer preload, saying the appearance changed', () => {
+  it('says so one way, with nothing in it, and is answered nothing', () => {
+    const { api, invoke, send } = loaded();
+    expect(api.appearanceChanged()).toBeUndefined();
+    expect(send.mock.calls).toEqual([[APPEARANCE_CHANGED]]);
+    expect(invoke).not.toHaveBeenCalled();
   });
 });
