@@ -3,8 +3,8 @@
 # MinIO in Docker, as every script here that needs real S3 runs it: the image,
 # the way the container is started and waited on, and the way a bucket is made
 # in it. Sourced, not run, by scripts/s3-store-it.sh, scripts/e2e-it.sh,
-# scripts/e2e-electron.sh and scripts/local.sh, so that the pins below are
-# moved in one place and every one of them moves with it.
+# scripts/e2e-electron.sh, scripts/local.sh and scripts/large.sh, so that the
+# pins below are moved in one place and every one of them moves with it.
 #
 # Each function answers with its status and leaves what to say about a failure
 # to the script, since what a failure means differs: a suite that never ran,
@@ -47,7 +47,37 @@ minio_run() {
     "$MINIO_IMAGE" server "$MINIO_DATA_IN_CONTAINER" >/dev/null
 }
 
-# Waits up to $3 seconds for the MinIO published on 127.0.0.1:$2 to answer its
+# minio_run, in the host's own network namespace: MinIO in a container named
+# $1 listening on 127.0.0.1:$2 itself, with $3 and $4 as its root user and
+# password, its web console off, and any further arguments going to
+# `docker run` ahead of the image.
+#
+# For a MinIO that is stopped and started while a browser is open, as the
+# e2e journeys do to take Storage away and give it back. A container on
+# Docker's bridge network brings a veth interface onto the host each time it
+# starts, and takes it away each time it stops; the browser sees the host's
+# interfaces change — the new interface's IPv6 link-local address arrives a
+# second or two after the start — and aborts every request it has in flight
+# with `net::ERR_NETWORK_CHANGED`, the explorer's own loopback requests
+# included. A container in the host's namespace adds and removes no
+# interface. Listening on the loopback address keeps it off every other
+# interface, as the bridge's `--publish 127.0.0.1:…` did, and the console is
+# turned off rather than left to listen on a port of its choosing on all of
+# them.
+minio_run_on_host() {
+  local container="$1" port="$2" access_key="$3" secret_key="$4"
+  shift 4
+  docker run --detach \
+    --name "$container" \
+    --network host \
+    --env "MINIO_ROOT_USER=${access_key}" \
+    --env "MINIO_ROOT_PASSWORD=${secret_key}" \
+    --env "MINIO_BROWSER=off" \
+    "$@" \
+    "$MINIO_IMAGE" server --address "127.0.0.1:${port}" "$MINIO_DATA_IN_CONTAINER" >/dev/null
+}
+
+# Waits up to $3 seconds for the MinIO on 127.0.0.1:$2 to answer its
 # health check. Where it does not, the container $1's own output is put on
 # standard error before the failure is answered, since that output is what
 # says why.
@@ -65,14 +95,16 @@ minio_await() {
 
 # Makes the bucket $4 in the MinIO in container $1, signing as $2 with $3.
 # The CLI's container joins MinIO's network namespace, so that the loopback
-# address MinIO listens on is the one the CLI reaches. A bucket that is there
-# already is a failure, as it is to the CLI.
+# address MinIO listens on is the one the CLI reaches: port 9000 inside a
+# container minio_run started, or the port $5 names for one minio_run_on_host
+# started, whose namespace is the host's. A bucket that is there already is a
+# failure, as it is to the CLI.
 minio_create_bucket() {
-  local container="$1" access_key="$2" secret_key="$3" bucket="$4"
+  local container="$1" access_key="$2" secret_key="$3" bucket="$4" port="${5:-9000}"
   docker run --rm \
     --network "container:${container}" \
     --env "AWS_ACCESS_KEY_ID=${access_key}" \
     --env "AWS_SECRET_ACCESS_KEY=${secret_key}" \
     --env "AWS_REGION=us-east-1" \
-    "$AWS_CLI_IMAGE" s3api create-bucket --bucket "$bucket" --endpoint-url "http://127.0.0.1:9000" >/dev/null
+    "$AWS_CLI_IMAGE" s3api create-bucket --bucket "$bucket" --endpoint-url "http://127.0.0.1:${port}" >/dev/null
 }

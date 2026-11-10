@@ -39,6 +39,7 @@ import { ADD } from './packChoice';
 import { FORGET_FOLDER, PROSPECTIVE } from './prospective';
 import { LOCKED, LOCKED_HEADING, LOCKED_LINES, UNLOCK } from './Locked';
 import { CHECKING } from './refresh';
+import { DROPPED_PAUSES_MS } from './patience';
 import { NO_IMAGES } from './sheet';
 import { unmappedLine } from './unmapped';
 
@@ -1424,6 +1425,62 @@ it('says a refusal of the Library’s folders over the tree, and asks again', as
   fireEvent.click(tree().getByRole('button', { name: 'try again' }));
   await waitFor(() => expect(tree().queryByText('the catalog could not be read')).toBeNull());
   expect(tree().getByTitle('comics')).toBeTruthy();
+});
+
+/** A request that got no answer at all, as the gateway mints one. */
+function dropped(): Refusal {
+  return new Refusal('unreachable', 0, 'the coffret server did not answer');
+}
+
+// A network that moves under a load — Wi-Fi or a VPN switching, or the host's
+// interfaces changing — aborts the requests in flight with no answer. Asked
+// again a moment later, the same listing is answered, so the tree is drawn
+// without anybody pressing "try again".
+it('asks again on its own for a listing the network dropped, and draws the tree', async () => {
+  answers = library({ '': ['comics/'] });
+  vi.mocked(getListing).mockRejectedValueOnce(dropped());
+  render(<App />);
+
+  expect(await tree().findByTitle('comics')).toBeTruthy();
+  expect(rootAsked()).toBe(2);
+  expect(screen.queryByText('the coffret server did not answer')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'try again' })).toBeNull();
+});
+
+// An answer that refuses is the server's own word, and the same request would
+// meet it again: it is drawn at once, with "try again", and not asked again
+// until that is pressed.
+it('draws a listing the server refused at once, and does not ask again on its own', async () => {
+  answers = library({ '': ['comics/'] });
+  vi.mocked(getListing).mockRejectedValue(new Refusal('server', 500, 'the catalog could not be read'));
+  render(<App />);
+
+  expect(await tree().findByText('the catalog could not be read')).toBeTruthy();
+  expect(tree().getByRole('button', { name: 'try again' })).toBeTruthy();
+  await act(() => new Promise((resolve) => setTimeout(resolve, DROPPED_PAUSES_MS[0] * 3)));
+  expect(rootAsked()).toBe(1);
+});
+
+// A server that never answers is still said to be one, once the attempts are
+// spent — and nothing more is asked until "try again" is pressed.
+it('says the server did not answer once every attempt the network dropped is spent', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    answers = library({ '': ['comics/'] });
+    vi.mocked(getListing).mockRejectedValue(dropped());
+    render(<App />);
+    const spent = DROPPED_PAUSES_MS.reduce((all, one) => all + one, 0);
+
+    await act(() => vi.advanceTimersByTimeAsync(spent + 100));
+    expect(tree().getByText('the coffret server did not answer')).toBeTruthy();
+    expect(tree().getByRole('button', { name: 'try again' })).toBeTruthy();
+    expect(rootAsked()).toBe(DROPPED_PAUSES_MS.length + 1);
+
+    await act(() => vi.advanceTimersByTimeAsync(spent));
+    expect(rootAsked()).toBe(DROPPED_PAUSES_MS.length + 1);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 // LA-36: the one stop the server refuses for what it is, of an add whose
