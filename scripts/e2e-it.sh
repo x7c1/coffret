@@ -244,7 +244,24 @@ pnpm --filter @coffret/e2e exec playwright install chromium
 
 echo
 echo "--- starting MinIO in $CONTAINER on port $MINIO_PORT ---"
-minio_run "$CONTAINER" "$MINIO_PORT" "$ACCESS_KEY" "$SECRET_KEY" ||
+# On Linux, in the host's network namespace rather than on a bridge: the
+# journeys stop and start this container with a browser open, and a bridge's
+# interface coming and going on the host makes the browser abort the requests
+# it has in flight (see minio_run_on_host in scripts/lib/minio.sh). Where the
+# daemon is not in this machine's namespace — macOS, Docker Desktop on Linux
+# (a virtual machine in both), a rootless daemon (a namespace of its own) —
+# "the host's network" is the daemon's, a MinIO on its loopback address is out
+# of the browser's reach, and the bridge's interfaces are not ones the browser
+# sees: there the bridge with its published port stays.
+docker_info="$(docker info --format '{{.OperatingSystem}} {{json .SecurityOptions}}' 2>/dev/null || true)"
+if [[ "$(uname -s)" == Linux && "$docker_info" != *"Docker Desktop"* && "$docker_info" != *rootless* ]]; then
+  MINIO_RUN=minio_run_on_host
+  BUCKET_PORT="$MINIO_PORT"
+else
+  MINIO_RUN=minio_run
+  BUCKET_PORT=9000
+fi
+"$MINIO_RUN" "$CONTAINER" "$MINIO_PORT" "$ACCESS_KEY" "$SECRET_KEY" ||
   fail "MinIO could not be started, and the line above is docker's own account of why.
 No journey ran: they are walked against real Storage, so a run without one is a failure
 and never a pass."
@@ -257,7 +274,7 @@ minio_await "$CONTAINER" "$MINIO_PORT" "$STARTUP_TIMEOUT_SECONDS" ||
 # bucket is made here, by the AWS CLI (scripts/lib/minio.sh). The container is
 # fresh every run and so is its data, so the bucket never exists already; a
 # create that fails is a run that failed.
-minio_create_bucket "$CONTAINER" "$ACCESS_KEY" "$SECRET_KEY" "$BUCKET" ||
+minio_create_bucket "$CONTAINER" "$ACCESS_KEY" "$SECRET_KEY" "$BUCKET" "$BUCKET_PORT" ||
   fail "the bucket ${BUCKET} could not be created in MinIO, and the line above is the AWS CLI's own account of why.
 No journey ran: they are walked against real Storage, so a run without one is a failure
 and never a pass."
