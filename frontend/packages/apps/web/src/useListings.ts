@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getListing, isLockedRefusal, type Listing } from '@coffret/api';
 
+import { askedThroughDrops } from './patience';
 import { refusedAsRanOut } from './ranOut';
 import { said, type Asked } from './useAsked';
 
@@ -13,7 +14,9 @@ import { said, type Asked } from './useAsked';
  * listing is in one of the three states and every one of them leaveable, a
  * refusal carries the server's own sentence, and asking again keeps the rows
  * on hand while the answer is out — a listing asked again because a fetch
- * made one of its rows present must not blank the tree under the reader.
+ * made one of its rows present must not blank the tree under the reader. And
+ * as there, a listing whose request got no answer at all is asked again on its
+ * own, a few times, before it is drawn as failed (see [`patience`](./patience)).
  *
  * One request per folder per asking. A folder that leaves `wanted` — closed,
  * or its parent closed — has its request let go of and its answer dropped, so
@@ -70,7 +73,7 @@ export function useListings(wanted: readonly string[]): {
         }
         return new Map(held).set(folder, { status: 'loading' });
       });
-      getListing(folder, aborter.signal).then(
+      askedThroughDrops((signal) => getListing(folder, signal), aborter.signal).then(
         (value) => {
           if (!aborter.signal.aborted) {
             setStates((held) => new Map(held).set(folder, { status: 'ready', value }));
