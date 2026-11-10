@@ -1,0 +1,37 @@
+# Weekly update pull requests for the three places dependencies are declared:
+# the workflows' actions, the backend's cargo workspace, and the frontend's
+# pnpm workspace (one lockfile at frontend/, so one entry covers every
+# package).
+#
+# Minor and patch updates of each ecosystem arrive as one grouped pull
+# request, since they rarely break anything and one CI run covers them all.
+# Major updates stay one pull request each, so a failing one points at the
+# dependency that broke. Security updates are not grouped either.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
