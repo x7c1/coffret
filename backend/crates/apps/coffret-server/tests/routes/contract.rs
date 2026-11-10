@@ -305,6 +305,9 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         // The set this device's explorer is drawn in, on a device that never
         // chose one.
         "appearance": answered_as_json(&served, "GET", "/api/appearance").await,
+        // What this device's explorer last had its tree filtered by, on a
+        // device that never kept a filter.
+        "filter_settings": answered_as_json(&served, "GET", "/api/filter-settings").await,
         // The files either side of a row: the last file of `albums` reads on
         // into the first of `books`.
         "beside": answered_as_json(&served, "GET", "/api/beside?path=albums/notes.txt").await,

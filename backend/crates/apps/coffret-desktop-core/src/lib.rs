@@ -80,7 +80,7 @@ mod testing;
 mod listed_library;
 pub use listed_library::ListedLibrary;
 
-use coffret_device::{Appearance, AppearanceFile, LibraryDir};
+use coffret_device::{Appearance, ExplorerFile, LibraryDir};
 
 /// The Libraries on this device, for a Passphrase window to choose between:
 /// each one's ID, and the name it is listed under.
@@ -105,7 +105,7 @@ pub fn libraries() -> Result<Vec<ListedLibrary>> {
 /// before the page has drawn anything, so a dark explorer does not open on a
 /// white window.
 pub fn appearance() -> &'static str {
-    word_for(AppearanceFile::of_this_device().read())
+    word_for(ExplorerFile::of_this_device().appearance())
 }
 
 /// The word `appearance` is said in to the shell: the one the server's route

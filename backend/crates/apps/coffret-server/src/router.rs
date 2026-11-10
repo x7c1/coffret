@@ -48,6 +48,12 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
             "/api/appearance",
             get(routes::appearance).post(routes::choose_appearance),
         )
+        // And what its tree was last filtered by, read and kept the same way
+        // in the same file of the device's own (spec: LA-43).
+        .route(
+            "/api/filter-settings",
+            get(routes::filter_settings).post(routes::keep_filter_settings),
+        )
         // The eleven that are not a `GET`, because they are the ones that ask
         // the server to go and do something rather than to say what it knows.
         // Four of them arm background work and answer at once — the fill, the

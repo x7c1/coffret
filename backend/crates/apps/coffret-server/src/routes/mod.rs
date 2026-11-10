@@ -1,4 +1,4 @@
-//! The twenty-six things a browser may ask of a Library.
+//! The twenty-eight things a browser may ask of a Library.
 //!
 //! Six of them are about what the Library holds and answer out of the
 //! catalog alone — which Library this is, what the whole of it comes to
@@ -86,6 +86,13 @@
 //! storage, because the desktop app serves the page on a port chosen at each
 //! launch, and so on an origin whose storage the next launch does not have.
 //!
+//! And two more keep, in the same file and for the same reason, what the
+//! explorer's tree was last filtered by — the name, whether the most recent
+//! books are asked for, and how many — read as the explorer opens and kept as
+//! it changes (spec: LA-43). Unlike the colours, a name typed to filter the
+//! tree is about what the Library holds, so these two are refused while the
+//! Library is locked, as the listings are.
+//!
 //! None of them locks the Library. It locks after the idle interval (spec:
 //! DK-4), and stopping the server ends its hold on the keys as well; a route
 //! that did the same thing would be a third way to arrive at a state two ways
@@ -97,7 +104,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Five of the twenty-six go on answering once the Library is locked — which
+//! Five of the twenty-eight go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, the unlock,
 //! and the two about the explorer's colours — because none of them needs a key
 //! and a locked server is still one a person should be able to read the name
@@ -117,7 +124,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the twenty-six are two answers that are not routes at all: one for a
+//! Beside the twenty-eight are two answers that are not routes at all: one for a
 //! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -127,6 +134,9 @@ pub use appearance::{appearance, choose_appearance};
 
 mod beside;
 pub use beside::beside;
+
+mod filter_settings;
+pub use filter_settings::{filter_settings, keep_filter_settings};
 
 mod browse;
 pub use browse::browse;

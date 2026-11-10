@@ -10,6 +10,7 @@ import {
   getBeside,
   getFile,
   getFilter,
+  getFilterSettings,
   getFolders,
   getLibrary,
   getLibraryTotals,
@@ -20,6 +21,7 @@ import {
   readAhead,
   refreshCatalog,
   Refusal,
+  setFilterSettings,
   type Beside,
   type FilterAsk,
   type Filtered,
@@ -35,10 +37,13 @@ import { time } from './humanize';
 import { CHECKING } from './refresh';
 import { TRY_AGAIN } from './Region';
 import { COLOR } from './theme';
+import { NAME_PAUSE_MS } from './useKeptFilter';
 
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
   getAppearance: vi.fn(() => Promise.resolve('system')),
+  getFilterSettings: vi.fn(() => Promise.resolve({ name: '', recentOn: false, recent: 10 })),
+  setFilterSettings: vi.fn((settings: unknown) => Promise.resolve(settings)),
   getBeside: vi.fn(),
   getFile: vi.fn(),
   getFilter: vi.fn(),
@@ -196,6 +201,8 @@ beforeEach(() => {
   vi.mocked(getWork).mockResolvedValue(IDLE);
   vi.mocked(getListing).mockImplementation((path: string) => Promise.resolve(listing(path)));
   vi.mocked(getFilter).mockImplementation((ask: FilterAsk) => Promise.resolve(answered(ask)));
+  vi.mocked(getFilterSettings).mockResolvedValue({ name: '', recentOn: false, recent: 10 });
+  vi.mocked(setFilterSettings).mockImplementation((settings) => Promise.resolve(settings));
   vi.mocked(getFile).mockResolvedValue(new Blob(['page']));
   vi.mocked(peekFile).mockResolvedValue(new Blob(['page']));
   vi.mocked(readAhead).mockResolvedValue(new Blob(['page']));
@@ -320,6 +327,51 @@ describe('a name', () => {
     expect(status().textContent).toContain(FILTERING);
     await waitFor(() => expect(keys()).toContain('folder:comics/Starfall'));
     expect(getFilter).toHaveBeenCalledTimes(1);
+  });
+});
+
+// LA-43: the settings are this device's, kept by the server across a reload
+// and the app's next launch.
+describe('the settings kept for this device', () => {
+  it('are applied as the page opens, before a filtered tree is drawn', async () => {
+    vi.mocked(getFilterSettings).mockResolvedValue({ name: 'star', recentOn: true, recent: 3 });
+    render(<App />);
+    await waitFor(() => expect(keys()).toContain('folder:comics/Starfall'));
+    expect(input().value).toBe('star');
+    expect(screen.getByTestId('recent-chip').textContent).toContain('Recent 3');
+    // The kept settings are what was asked, and the only filter asked.
+    expect(getFilter).toHaveBeenCalledTimes(1);
+    expect(getFilter).toHaveBeenCalledWith({ name: 'star', recent: 3 }, expect.any(AbortSignal));
+    // Reading them back keeps nothing.
+    expect(setFilterSettings).not.toHaveBeenCalled();
+  });
+
+  it('are kept as they change, the name once typing pauses rather than per key', async () => {
+    await opened();
+    fireEvent.change(input(), { target: { value: 's' } });
+    fireEvent.change(input(), { target: { value: 'st' } });
+    fireEvent.change(input(), { target: { value: 'sta' } });
+    fireEvent.change(input(), { target: { value: 'star' } });
+    expect(setFilterSettings).not.toHaveBeenCalled();
+    await waitFor(() => expect(setFilterSettings).toHaveBeenCalled(), { timeout: NAME_PAUSE_MS * 4 });
+    expect(setFilterSettings).toHaveBeenCalledTimes(1);
+    expect(setFilterSettings).toHaveBeenLastCalledWith({ name: 'star', recentOn: false, recent: 10 });
+
+    // Recent is kept at once, with the name as it stands.
+    recentOn();
+    await waitFor(() => expect(setFilterSettings).toHaveBeenCalledTimes(2));
+    expect(setFilterSettings).toHaveBeenLastCalledWith({ name: 'star', recentOn: true, recent: 10 });
+  });
+
+  it('that cannot be kept leave the filter on screen as it is', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(setFilterSettings).mockRejectedValue(new Error('refused'));
+    await opened();
+    recentOn();
+    await waitFor(() => expect(warn).toHaveBeenCalled());
+    await waitFor(() => expect(keys()).toContain('folder:comics/Harbor'));
+    expect(screen.getByTestId('recent-chip').textContent).toContain('Recent 10');
+    warn.mockRestore();
   });
 });
 

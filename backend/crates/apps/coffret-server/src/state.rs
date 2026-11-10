@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::ensure;
 use coffret_device::{
-    AppearanceFile, Drops, EntryFetches, LibraryId, LibraryRef, LiveReservations, OpenLibrary,
+    Drops, EntryFetches, ExplorerFile, LibraryId, LibraryRef, LiveReservations, OpenLibrary,
 };
 use tokio::sync::watch;
 use tokio::time::Instant;
@@ -220,13 +220,15 @@ pub struct ServerState {
     /// before a lock stays live to the freezes and the resumption the next
     /// unlock runs.
     live: Arc<LiveReservations>,
-    /// Where this device keeps which set of colours its explorer is drawn in.
+    /// Where this device keeps its explorer's own state: which set of colours
+    /// it is drawn in (spec: LA-38) and what its tree was last filtered by
+    /// (spec: LA-43).
     ///
     /// The device's and not the Library's, and not this process's either: it
     /// is read from and written to the file each time it is asked about, so
     /// the next server — the desktop app's next launch — answers with the same
     /// choice.
-    pub appearance: AppearanceFile,
+    pub explorer: ExplorerFile,
 }
 
 impl ServerState {
@@ -261,17 +263,18 @@ impl ServerState {
             drops: Drops::new(),
             consent: Arc::new(DriveConsent),
             live,
-            appearance: AppearanceFile::of_this_device(),
+            explorer: ExplorerFile::of_this_device(),
         }
     }
 
-    /// Serves the same Library, keeping the explorer's appearance in `file`.
+    /// Serves the same Library, keeping the explorer's own state — its
+    /// appearance and its filter settings — in `file`.
     ///
-    /// The binary never calls it: what it keeps the choice in is the file in
-    /// this device's state directory. It exists so a case keeps the choice in
-    /// a directory of its own rather than in the state of whoever runs it.
-    pub fn keeping_appearance_in(mut self, file: AppearanceFile) -> Self {
-        self.appearance = file;
+    /// The binary never calls it: what it keeps them in is the file in this
+    /// device's state directory. It exists so a case keeps them in a directory
+    /// of its own rather than in the state of whoever runs it.
+    pub fn keeping_explorer_state_in(mut self, file: ExplorerFile) -> Self {
+        self.explorer = file;
         self
     }
 
@@ -351,6 +354,11 @@ impl ServerState {
     ///
     /// Refused while locked all the same, because the Storage it asks is
     /// reached through the open Library, and that goes with the keys.
+    ///
+    /// The explorer's kept filter settings go through it too: they need no
+    /// key, so they are not activity, and they are refused while locked
+    /// because a name typed to filter the tree says what the Library holds
+    /// (spec: LA-43).
     pub(crate) fn unlocked_unattended(&self) -> Result<Arc<OpenLibrary>, ApiError> {
         self.custody
             .unlocked()

@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use coffret_device::AppearanceFile;
+use coffret_device::ExplorerFile;
 
 /// What the development host stands in front of.
 pub struct Settings {
@@ -14,5 +14,5 @@ pub struct Settings {
     /// Where the set of colours the explorer is drawn in is kept, which the
     /// page is served in: the file of the state directory the server beside
     /// it keeps the choice in.
-    pub appearance: AppearanceFile,
+    pub appearance: ExplorerFile,
 }

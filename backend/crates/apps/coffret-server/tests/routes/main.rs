@@ -21,6 +21,7 @@ mod fences;
 mod file;
 mod fill;
 mod filter;
+mod filter_settings;
 mod freeze;
 mod import;
 mod left_behind;

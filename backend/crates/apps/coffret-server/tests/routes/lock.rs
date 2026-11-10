@@ -31,10 +31,13 @@ use crate::support::{bytes, json as body_of, route, Served};
 /// serve the mapping a page offers over a listing, and a locked server answers
 /// no listing (see `routes`). So does the look at the remote head, which reads
 /// names alone: the Storage it asks is reached through the open Library, and
-/// that goes with the keys.
-const KEYED_ROUTES: [(&str, &str); 14] = [
+/// that goes with the keys. And so do the filter settings, which are the
+/// device's own but name what the Library holds (spec: LA-43).
+const KEYED_ROUTES: [(&str, &str); 16] = [
     ("GET", "/api/library/totals"),
     ("GET", "/api/filter?name=albums"),
+    ("GET", "/api/filter-settings"),
+    ("POST", "/api/filter-settings"),
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),
     ("GET", "/api/file?path=albums/cover.png"),

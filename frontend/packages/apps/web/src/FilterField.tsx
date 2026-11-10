@@ -36,11 +36,14 @@ import { COLOR, LAYER, SHADOW } from './theme';
 export function FilterField({
   settings,
   onChange,
+  onNameLeft = () => {},
   onToTree,
   onKeysBack,
 }: {
   settings: FilterSettings;
   onChange: (next: FilterSettings) => void;
+  /** The name input lost the focus: what was typed is kept now rather than after the pause. */
+  onNameLeft?: () => void;
   /** `↓` or `Enter` in the input: the focus to the tree's first row. */
   onToTree: () => void;
   /** The input let go of by `Escape`: the keys go back to the tree. */
@@ -215,6 +218,7 @@ export function FilterField({
         spellCheck={false}
         value={settings.name}
         onChange={(event) => onChange({ ...settings, name: event.currentTarget.value })}
+        onBlur={onNameLeft}
         onKeyDown={onInputKey}
         style={INPUT}
       />

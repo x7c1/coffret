@@ -81,6 +81,7 @@ export function Header({
   locked = false,
   filter = NO_FILTER,
   onFilter = () => {},
+  onFilterNameLeft = () => {},
   onFilterToTree = () => {},
 }: {
   /** The open Library, as the server last answered for it. */
@@ -113,6 +114,8 @@ export function Header({
   filter?: FilterSettings;
   /** The filter was changed in the field or its panel. */
   onFilter?: (next: FilterSettings) => void;
+  /** The filter's name input was left. */
+  onFilterNameLeft?: () => void;
   /** `↓` or `Enter` in the filter's input: the focus to the tree's first row. */
   onFilterToTree?: () => void;
 }) {
@@ -202,7 +205,13 @@ export function Header({
         )}
       </div>
       {!locked && (
-        <FilterField settings={filter} onChange={onFilter} onToTree={onFilterToTree} onKeysBack={onKeysBack} />
+        <FilterField
+          settings={filter}
+          onChange={onFilter}
+          onNameLeft={onFilterNameLeft}
+          onToTree={onFilterToTree}
+          onKeysBack={onKeysBack}
+        />
       )}
       <AppearanceSwitch onKeysBack={onKeysBack} />
       <button

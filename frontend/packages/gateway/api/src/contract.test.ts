@@ -69,6 +69,7 @@ import type { Appearance } from './appearance';
 import type { Beside } from './beside';
 import type { Browsed } from './browse';
 import type { Filtered, FilterRow, FilterRowKind } from './filter';
+import type { FilterSettings } from './filterSettings';
 import type { Folders } from './folders';
 import type { HeldParcels, Library, LibraryTotals } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
@@ -1084,6 +1085,14 @@ it('reads every other answer the server sends through its type', () => {
     object(answers.appearance, 'appearance', ['appearance']).appearance,
     'appearance.appearance',
   );
+  const filterSettings: FilterSettings = (() => {
+    const fields = object(answers.filter_settings, 'filter_settings', ['name', 'recentOn', 'recent']);
+    return {
+      name: string(fields.name, 'filter_settings.name'),
+      recentOn: boolean(fields.recentOn, 'filter_settings.recentOn'),
+      recent: number(fields.recent, 'filter_settings.recent'),
+    };
+  })();
   const listed: Folders = {
     folders: folders(object(answers.folders, 'folders', ['folders']).folders, 'folders'),
   };
@@ -1271,6 +1280,7 @@ it('reads every other answer the server sends through its type', () => {
   expect(totals.files_present).toBeLessThanOrEqual(totals.files_total);
   expect(totals.objects).toBeGreaterThan(0);
   expect(appearance).toBe('system');
+  expect(filterSettings).toEqual({ name: '', recentOn: false, recent: 10 });
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(beside.next).toBe('books/page-001.png');
   expect(filtered.total).toBe(filtered.rows.length);

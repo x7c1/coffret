@@ -343,7 +343,7 @@ async fn a_production_host_answers_the_favicon_with_the_plain_one() {
 
 /// A build on disk whose index says what the explorer's does about colours, and
 /// the file the choice is kept in, both in a directory of the case's own.
-fn chosen_on_disk() -> (tempfile::TempDir, Page, AppearanceFile) {
+fn chosen_on_disk() -> (tempfile::TempDir, Page, ExplorerFile) {
     let directory = tempfile::tempdir().expect("a temporary directory");
     let dist = directory.path().join("dist");
     std::fs::create_dir(&dist).expect("the build's directory is made");
@@ -352,7 +352,7 @@ fn chosen_on_disk() -> (tempfile::TempDir, Page, AppearanceFile) {
         r#"<!doctype html><html lang="en"><head><meta name="color-scheme" content="light dark" /></head></html>"#,
     )
     .expect("the index is written");
-    let appearance = AppearanceFile::at(directory.path().join("explorer.json"));
+    let appearance = ExplorerFile::at(directory.path().join("explorer.json"));
     let page = Page::new(
         &PageSource::Directory(dist),
         HostKind::Production,
@@ -374,7 +374,7 @@ async fn the_index_is_served_in_the_set_this_device_chose() {
     assert!(!system.contains("data-appearance"), "{system}");
 
     appearance
-        .write(Appearance::Dark)
+        .keep_appearance(Appearance::Dark)
         .expect("the choice is kept");
     for path in ["/", "/index.html", "/folders/somewhere"] {
         let dark = body(page.respond(path)).await;
@@ -389,7 +389,7 @@ async fn the_index_is_served_in_the_set_this_device_chose() {
     }
 
     appearance
-        .write(Appearance::Light)
+        .keep_appearance(Appearance::Light)
         .expect("the choice is kept");
     let light = body(page.respond("/")).await;
     assert!(
@@ -402,7 +402,7 @@ async fn the_index_is_served_in_the_set_this_device_chose() {
     );
 
     appearance
-        .write(Appearance::System)
+        .keep_appearance(Appearance::System)
         .expect("the choice is kept");
     let system = body(page.respond("/")).await;
     assert!(system.contains(r#"content="light dark""#), "{system}");

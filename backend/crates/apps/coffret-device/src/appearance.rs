@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// This device's preference about how its explorer looks, and nothing about
 /// the Library: it is kept beside the Libraries rather than in one, so every
 /// Library this device opens is drawn the same, and nothing of it is ever
-/// uploaded. See [`AppearanceFile`](crate::AppearanceFile) for where.
+/// uploaded. See [`ExplorerFile`](crate::ExplorerFile) for where.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Appearance {
