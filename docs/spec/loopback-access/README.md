@@ -626,7 +626,8 @@ Concept background: [Library](../../concepts/library/),
 
 - **LA-32.** The server answers, for one row of the Library — a file or a
   folder, named by its Entry Path — the file before it and the file after it
-  in **reading order** (`GET /api/beside?path=<row>[&folder=true]`), each
+  in **reading order**
+  (`GET /api/beside?path=<row>[&folder=true][&under=<folder>]`), each
   `null` at that end of the Library. Reading order is the order the explorer's
   tree draws the whole Library in with every folder open: depth first, and in
   each folder its folders before its files, each in EP-3 order, so the file
@@ -842,8 +843,16 @@ Concept background: [Library](../../concepts/library/),
   first draws a filtered tree, so it opens filtered as it was left, and keeps
   each change: a change of Recent or its count at once, and the name once
   typing in it pauses or the field is left, not at every key. A change it
-  could not keep is said in the page's console and leaves the filter on
-  screen as it is.
+  could not keep, or kept settings it could not read, is said in the page's
+  console and leaves the filter on screen as it is. A change made on the page
+  before the kept settings are answered wins over them: the answer that
+  arrives after it is not applied.
+  Kept settings that read the same as the ones on screen — no filter, on a
+  device that never kept any — are left as they stand, so nothing drawn from
+  them is drawn again. Once a locked Library is unlocked, the explorer reads
+  the kept settings again where it has neither read them nor had a change
+  made, and keeps the settings on screen again where the last change it sent
+  was refused.
   *(Form: test)*
 
 ### What the Library comes to
