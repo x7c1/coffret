@@ -61,6 +61,12 @@ const PARCEL_DIRECTORY: &str = "parcels";
 /// into afresh, to read its name from, while it is first opened.
 const NAMING_DIRECTORY: &str = "naming";
 
+/// Whether `path` names the file a Library keeps its Master Key in, in whatever
+/// Library's directory (spec: KD-9).
+pub(crate) fn is_master_key_file(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == MASTER_KEY_FILE)
+}
+
 /// One Library's directory on this device, and the seven things in it.
 ///
 /// A Drive Library's grant is not among them: it belongs to the account the

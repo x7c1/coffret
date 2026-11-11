@@ -11,8 +11,9 @@ use crate::Error;
 /// shows less than the chain and the caller logs what of it a log may carry
 /// ([`refusal_evidence()`]). The refusal a person causes is said plainly, and
 /// so is a stored Master Key refused before its Passphrase was checked — for
-/// its absence, its cost or its shape — or one that did not open for a reason other
-/// than its Passphrase, lest either be taken for a wrong Passphrase; every
+/// its absence, a file that could not be read, its cost or its shape — or one
+/// that did not open for a reason other than its Passphrase, lest either be
+/// taken for a wrong Passphrase; every
 /// other keeps the outermost sentence of its chain, which still says what
 /// happened (another server holds the Library, nothing could listen) without
 /// the causes appended. That line is a lower-case, unstopped clause written to
@@ -34,6 +35,8 @@ pub fn refusal_line(refused: &Error) -> String {
     // another reason (spec: KD-9).
     if device_refused(is_missing) {
         "This Library's key file is missing; the Passphrase was not checked.".to_owned()
+    } else if device_refused(coffret_device::Error::is_unreadable_master_key_file) {
+        "This Library's key file could not be read; the Passphrase was not checked.".to_owned()
     } else if device_refused(is_too_costly) {
         "This Library's stored Master Key asks for more work than coffret allows; \
          the Passphrase was not checked."
@@ -262,6 +265,39 @@ mod tests {
             refusal_evidence(&Error::Device(missing())),
             missing().redacted()
         );
+    }
+
+    fn unreadable() -> coffret_device::Error {
+        coffret_device::Error::Local(coffret_device::LocalIoError::new(
+            coffret_device::LocalOperation::Reading,
+            "/state/libraries/home/master-key.cfmk",
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        ))
+    }
+
+    // KD-9: a Library whose key file is there and cannot be read was refused
+    // before the Passphrase was checked, so it is said as the key file, never
+    // as a wrong Passphrase nor as a Library that merely could not be opened.
+    #[test]
+    fn an_unreadable_key_file_is_said_as_the_key_file() {
+        let expected = "This Library's key file could not be read; the Passphrase was not checked.";
+        let line = refusal_line(&Error::Device(unreadable()));
+        assert_eq!(line, expected);
+        assert!(!line.contains("master-key.cfmk"));
+        let refused = from_server(unreadable(), "the Library could not be opened");
+        assert_eq!(refusal_line(&refused), expected);
+        assert_eq!(
+            refusal_evidence(&Error::Device(unreadable())),
+            unreadable().redacted()
+        );
+
+        // Any other file that could not be read keeps its own sentence.
+        let settings = coffret_device::Error::Local(coffret_device::LocalIoError::new(
+            coffret_device::LocalOperation::Reading,
+            "/state/libraries/home/settings.json",
+            std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        ));
+        assert_ne!(refusal_line(&Error::Device(settings)), expected);
     }
 
     fn not_derived() -> coffret_device::Error {

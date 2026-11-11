@@ -980,8 +980,8 @@ async fn a_damaged_envelope_behind_the_right_passphrase_is_refused_as_itself() {
 // shape — is refused as that when the account is opened through it, never as a
 // Passphrase that does not open the Library: that would send the person
 // retyping a right one. The refusal is the same whether the Passphrase tried
-// was the new Library's own or the one asked for, and when there was nobody to
-// ask.
+// was the new Library's own, there was somebody to ask for another, or nobody;
+// and nobody is asked, since the file is read before the question is put.
 #[tokio::test]
 async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_account_path() {
     type Edit = fn(&mut Vec<u8>);
@@ -1008,7 +1008,7 @@ async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_accou
         edit(&mut bytes);
         fs::write(first.master_key_file(), bytes).expect("writable");
 
-        let (answered, _) = answering(PASSPHRASE);
+        let (answered, asked) = answering(PASSPHRASE);
         for (own, referencing) in [
             (PASSPHRASE, crate::ReferencingPassphrase::unasked()),
             (OTHER_PASSPHRASE, crate::ReferencingPassphrase::unasked()),
@@ -1028,6 +1028,10 @@ async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_accou
             );
         }
         assert_eq!(drive.consents(), 1, "{fault}");
+        assert!(
+            asked.lock().expect("not poisoned").is_empty(),
+            "{fault}: no Passphrase may be asked for a key file refused unchecked"
+        );
     }
 }
 
@@ -1036,8 +1040,9 @@ async fn a_stored_master_key_refused_unchecked_is_refused_as_itself_on_the_accou
 // cannot be read, is refused as that when the account is opened through it,
 // never as a Passphrase that does not open the Library: that would send the
 // person retyping a right one. The refusal is the same whether the Passphrase
-// tried was the new Library's own or the one asked for, and when there was
-// nobody to ask.
+// tried was the new Library's own, there was somebody to ask for another, or
+// nobody; and nobody is asked, since the file is read before the question is
+// put.
 #[tokio::test]
 async fn a_stored_master_key_file_missing_or_unreadable_is_refused_as_itself_on_the_account_path() {
     type Break = fn(&LibraryDir);
@@ -1064,7 +1069,7 @@ async fn a_stored_master_key_file_missing_or_unreadable_is_refused_as_itself_on_
         create(&drive, "first", Some("work")).await;
         damage(&LibraryDir::named_here("first"));
 
-        let (answered, _) = answering(PASSPHRASE);
+        let (answered, asked) = answering(PASSPHRASE);
         for (own, referencing) in [
             (PASSPHRASE, crate::ReferencingPassphrase::unasked()),
             (OTHER_PASSPHRASE, crate::ReferencingPassphrase::unasked()),
@@ -1084,6 +1089,10 @@ async fn a_stored_master_key_file_missing_or_unreadable_is_refused_as_itself_on_
             );
         }
         assert_eq!(drive.consents(), 1, "{fault}");
+        assert!(
+            asked.lock().expect("not poisoned").is_empty(),
+            "{fault}: no Passphrase may be asked for a key file refused unchecked"
+        );
     }
 }
 
@@ -1120,6 +1129,38 @@ async fn only_a_failed_authentication_is_an_account_not_opened() {
         matches!(&refused, Error::MasterKeyFileMissing { path } if *path == first.master_key_file()),
         "{}",
         every_link(&refused)
+    );
+}
+
+// SA-9, KD-9: the stored Master Key file of the Library whose Passphrase would
+// be asked for is read before anybody is asked. A missing one is refused as
+// that, naming the file, and nobody is asked a Passphrase it could not be
+// opened with.
+#[tokio::test]
+async fn a_missing_key_file_is_refused_before_its_passphrase_is_asked_for() {
+    let _device = isolated::device();
+    let drive = DriveStub::empty();
+    create(&drive, "first", Some("work")).await;
+    let accounts = Accounts::open().expect("the accounts open");
+    let work = AccountName::parse("work").expect("a name");
+    let first = accounts
+        .first_referencing(&work)
+        .expect("the Library references the account");
+    fs::remove_file(first.master_key_file()).expect("removable");
+
+    let (referencing, asked) = answering(PASSPHRASE);
+    let wrong = Passphrase::from_bytes(OTHER_PASSPHRASE.to_vec());
+    let refused = accounts
+        .key_for(&work, &wrong, &referencing)
+        .expect_err("the file is gone");
+    assert!(
+        matches!(&refused, Error::MasterKeyFileMissing { path } if *path == first.master_key_file()),
+        "{}",
+        every_link(&refused)
+    );
+    assert!(
+        asked.lock().expect("not poisoned").is_empty(),
+        "no Passphrase may be asked for a Library whose key file is missing"
     );
 }
 
