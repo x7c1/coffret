@@ -63,8 +63,9 @@ readonly ARTIFACTS="$WORK/playwright"
 # second one to start takes the first one's Libraries out from under it.
 CONTAINER="${COFFRET_E2E_MINIO_CONTAINER:-coffret-minio-e2e}"
 MINIO_PORT="${COFFRET_E2E_MINIO_PORT:-19010}"
-# The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,
-# with the way the container is started and the bucket made.
+# scripts/lib/minio.sh reads the MinIO image and the AWS CLI image from their
+# pins under docker/, and holds the way the container is started and the
+# bucket made.
 # shellcheck source=scripts/lib/minio.sh
 source "$ROOT/scripts/lib/minio.sh"
 
