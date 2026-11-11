@@ -1,16 +1,18 @@
 /**
  * What the explorer reads a Library through.
  *
- * The twenty-six routes `coffret-server` answers, as typed calls: which Library
- * this is, every folder in it, what one folder holds, which rows a tree
- * filtered by a name or by the most recent books keeps, which files stand either
- * side of one row in reading order, one Entry's plaintext,
- * files added to a folder, what the Library has become since this device last
+ * The twenty-nine routes `coffret-server` answers, as typed calls: which Library
+ * this is, what the whole of it comes to, every folder in it, what one folder
+ * holds, which rows a tree filtered by a name or by the most recent books keeps,
+ * which files stand either side of one row in reading order, one Entry's
+ * plaintext, files added to a folder, by their bytes or by the desktop app's
+ * handle on them, what the Library has become since this device last
  * looked and whether it has anything newer than that, what the server is doing
  * on its own — which carries whether it still holds the Library open — the
  * three calls that ask it to take that work up
  * again, the freeze among them also packing a folder somebody chose, the
- * question of what that freeze would pack, the deletion of files or a folder
+ * question of what that freeze would pack, the one that asks for an add, a
+ * freeze or a fill to be stopped, the deletion of files or a folder
  * and the question of what it would take out, the move of files and folders
  * and the question of what it would do to this device's files, the one that renews the grant
  * Storage stopped taking, the one that asks for a locked Library to be
