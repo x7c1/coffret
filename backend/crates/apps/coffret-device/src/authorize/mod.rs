@@ -30,8 +30,7 @@ pub enum AuthorizeRequest {
         /// The Library on this device.
         library: LibraryRef,
         /// The account to bring the Library onto, for a Library that
-        /// references none yet — one whose own previous grant cannot go to
-        /// `default`, or one with no grant at all. For a Library that already
+        /// references none yet. For a Library that already
         /// references an account it has to be that one: the name is bound into
         /// the Library's envelope and cannot be changed yet (spec: SA-9).
         account: Option<String>,
@@ -62,10 +61,6 @@ pub enum AuthorizeRequest {
 /// as it was (spec: DK-2, DK-5), and so does a flow the person abandons: the
 /// gateway writes the new cache only once the grant is in hand, and writes it
 /// through a rename.
-///
-/// A Library a build before accounts put here has its own grant promoted into
-/// an account first, as opening it would (spec: SA-8), and that account's grant
-/// is what is renewed.
 pub async fn authorize<P, F>(
     request: AuthorizeRequest,
     enter_passphrase: P,
@@ -91,7 +86,7 @@ where
 {
     let (account, credentials) = match request {
         AuthorizeRequest::Library { library, account } => {
-            library_account(reach, &library, account.as_deref(), enter_passphrase).await?
+            library_account(&library, account.as_deref(), enter_passphrase)?
         }
         AuthorizeRequest::Account { name } => named_account(&name, enter_passphrase)?,
     };
@@ -112,8 +107,7 @@ where
 
 /// The account a Library references, opened through the Library, and the
 /// client it renews through.
-async fn library_account<P>(
-    reach: &Reach,
+fn library_account<P>(
     library: &LibraryRef,
     account: Option<&str>,
     enter_passphrase: P,
@@ -139,16 +133,8 @@ where
 
     let passphrase = enter_passphrase()?;
     let unlocked = StoredMasterKeyFile::unlock(&dir, &passphrase)?;
-    let grant = account_grant::of_library(
-        reach,
-        &dir,
-        &mut settings,
-        &unlocked.master_key,
-        &passphrase,
-        &accounts,
-        requested.as_ref(),
-    )
-    .await?;
+    let grant =
+        account_grant::of_library(&dir, &settings, &unlocked.master_key, requested.as_ref())?;
     let opened = match grant {
         LibraryGrant::Opened(opened) => opened,
         LibraryGrant::Unbound => account_grant::bind(

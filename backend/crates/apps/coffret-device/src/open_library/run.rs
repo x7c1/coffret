@@ -26,8 +26,7 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// the typing.
 ///
 /// A Drive Library opens the grant of the account it references through its
-/// envelope, and a Library a build before accounts put here has its own grant
-/// promoted into an account first, the first time it is opened (spec: SA-8).
+/// envelope (spec: SA-9).
 ///
 /// Every open copies the Library's name, as its catalog holds it, into the
 /// settings beside it (spec: FM-15). A Library a build before names put here
@@ -59,14 +58,7 @@ where
     let passphrase = enter_passphrase()?;
     let unlocked = StoredMasterKeyFile::unlock(&dir, &passphrase)?;
 
-    let (store, grant) = store::build(
-        reach,
-        &dir,
-        &mut settings,
-        &unlocked.master_key,
-        &passphrase,
-    )
-    .await?;
+    let (store, grant) = store::build(reach, &dir, &settings, &unlocked.master_key).await?;
     let keys = LibraryKeys::derive(&unlocked.master_key, unlocked.epoch);
     let index = SqliteIndex::open(dir.index_file())?;
     let name = named::read_or_give(&store, &index, &keys, &dir, &settings).await;

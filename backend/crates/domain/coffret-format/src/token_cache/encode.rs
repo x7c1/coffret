@@ -9,10 +9,10 @@ use crate::purpose_key::PurposeKey;
 
 /// Seals a Library's per-Library token cache under the token-cache purpose key.
 ///
-/// The previous shape (spec: KD-10): a device no longer writes a new cache in
-/// it, and it stays for the promotion's tests and for the tools that still
-/// reach a Library's grant that way. A key derived for any other purpose is
-/// refused rather than used (spec: KD-4).
+/// The previous shape (spec: KD-10): no device writes or reads a cache in it
+/// any longer, and it stays for the manual Drive tools that still keep their
+/// own grant that way. A key derived for any other purpose is refused rather
+/// than used (spec: KD-4).
 pub fn encode_token_cache(plaintext: &[u8], key: &PurposeKey) -> Result<Vec<u8>> {
     seal(plaintext, token_cache_key(key)?)
 }
