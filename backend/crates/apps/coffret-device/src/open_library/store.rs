@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use coffret_model::{MasterKey, Passphrase};
+use coffret_model::MasterKey;
 use coffret_usecase::ObjectStore;
 use google_drive_store::{DriveSettings, GoogleDrive};
 
@@ -15,19 +15,15 @@ use crate::{drive, s3};
 
 /// Builds the Storage the settings describe, and the grant it reaches Drive
 /// through where it does.
-///
-/// `settings` is mutable because opening a Drive Library a build before
-/// accounts put here promotes its grant, and records the account it went to.
 pub(super) async fn build(
     reach: &Reach,
     dir: &LibraryDir,
-    settings: &mut DeviceSettings,
+    settings: &DeviceSettings,
     master_key: &MasterKey,
-    passphrase: &Passphrase,
 ) -> Result<(Arc<dyn ObjectStore>, Option<DriveGrant>)> {
     match &settings.provider {
         ProviderSettings::Drive { .. } => {
-            let (store, grant) = drive_store(reach, dir, settings, master_key, passphrase).await?;
+            let (store, grant) = drive_store(reach, dir, settings, master_key)?;
             Ok((store, Some(grant)))
         }
         ProviderSettings::S3 {
@@ -55,18 +51,17 @@ pub(super) async fn build(
 ///
 /// The grant is the account's, opened through the Library's envelope
 /// (spec: SA-8, SA-9).
-async fn drive_store(
+fn drive_store(
     reach: &Reach,
     dir: &LibraryDir,
-    settings: &mut DeviceSettings,
+    settings: &DeviceSettings,
     master_key: &MasterKey,
-    passphrase: &Passphrase,
 ) -> Result<(Arc<dyn ObjectStore>, DriveGrant)> {
-    let accounts = Accounts::open()?;
-    let grant = account_grant::of_library(
-        reach, dir, settings, master_key, passphrase, &accounts, None,
-    )
-    .await?;
+    // Opened only for its side effect, which discards an account no Library
+    // references any longer (spec: SA-8); the accounts themselves are not
+    // needed here.
+    Accounts::open()?;
+    let grant = account_grant::of_library(dir, settings, master_key, None)?;
     let LibraryGrant::Opened(opened) = grant else {
         return Err(Error::NotAuthorized {
             library: dir.which(),

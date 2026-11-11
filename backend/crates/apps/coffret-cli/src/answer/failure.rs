@@ -306,7 +306,6 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::ClientMismatch(_) => "client_mismatch",
         Error::UnreadableAccountEnvelope { .. } => "unreadable_account_envelope",
         Error::AccountNotOpened { .. } => "account_not_opened",
-        Error::PromotionNeedsName { .. } => "promotion_needs_name",
         Error::NoSuchAccount { .. } => "no_such_account",
         Error::AccountFixed { .. } => "account_fixed",
         Error::MalformedMappingPrefix { .. } => "malformed_mapping_prefix",

@@ -67,9 +67,4 @@ impl AccountEnvelope {
         decode_account_cache_key_envelope(&bytes, &wrap, account.as_str())
             .map_err(|cause| unreadable(Some(Box::new(cause))))
     }
-
-    /// Whether the Library in `dir` holds an envelope at all.
-    pub(crate) fn is_present(dir: &LibraryDir) -> bool {
-        dir.account_envelope_file().is_file()
-    }
 }

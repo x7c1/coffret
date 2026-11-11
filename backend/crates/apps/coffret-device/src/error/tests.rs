@@ -696,44 +696,6 @@ fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
             "Device::NoAccountReachesFolder",
         ),
         (
-            Error::PromotionNeedsName {
-                library: LibraryRef::named(LIBRARY),
-                account: ACCOUNT.to_owned(),
-                obstacle: PromotionObstacle::ClientDiffers(Box::new(ClientMismatch {
-                    library: MismatchedLibrary::Which(LibraryRef::named(LIBRARY)),
-                    library_client: "one.apps.googleusercontent.com".to_owned(),
-                    account: ACCOUNT.to_owned(),
-                    account_client: "two.apps.googleusercontent.com".to_owned(),
-                })),
-            },
-            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
-             account \"family_photos\" this device already holds cannot take it in; name an \
-             account for it with `coffret authorize --library Summer 2026 --account NAME`",
-            "Device::PromotionNeedsName(client-differs)",
-        ),
-        (
-            Error::PromotionNeedsName {
-                library: LibraryRef::named(LIBRARY),
-                account: ACCOUNT.to_owned(),
-                obstacle: PromotionObstacle::NotOpened,
-            },
-            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
-             account \"family_photos\" this device already holds cannot take it in; name an \
-             account for it with `coffret authorize --library Summer 2026 --account NAME`",
-            "Device::PromotionNeedsName(not-opened)",
-        ),
-        (
-            Error::PromotionNeedsName {
-                library: LibraryRef::named(LIBRARY),
-                account: ACCOUNT.to_owned(),
-                obstacle: PromotionObstacle::FolderNotReached,
-            },
-            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
-             account \"family_photos\" this device already holds cannot take it in; name an \
-             account for it with `coffret authorize --library Summer 2026 --account NAME`",
-            "Device::PromotionNeedsName(folder-not-reached)",
-        ),
-        (
             Error::AccountNameRequired { held: 3 },
             "this device holds 3 accounts, so which one the Library uses has to be named: give \
              --account with the name of one of them, or a new name to consent as another",
@@ -782,17 +744,6 @@ fn advice_names_a_library_with_no_name_by_its_id() {
         "the Library with ID abababababababab (it has no name yet) has no usable grant on \
          Google Drive; run `coffret authorize --library-id abababababababab`"
     );
-    let missing = Error::PromotionNeedsName {
-        library: unnamed.clone(),
-        account: "family_photos".to_owned(),
-        obstacle: PromotionObstacle::NotOpened,
-    };
-    assert!(
-        missing
-            .to_string()
-            .ends_with("`coffret authorize --library-id abababababababab --account NAME`"),
-        "{missing}"
-    );
     let fixed = Error::AccountFixed {
         library: unnamed,
         account: "family_photos".to_owned(),
@@ -804,7 +755,7 @@ fn advice_names_a_library_with_no_name_by_its_id() {
             .contains("run `coffret authorize --library-id abababababababab` to renew"),
         "{fixed}"
     );
-    for error in [&gone, &missing, &fixed] {
+    for error in [&gone, &fixed] {
         assert!(!error.to_string().contains("--library abab"), "{error}");
     }
 

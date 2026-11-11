@@ -396,7 +396,10 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
         dir.account_envelope_file().is_file(),
         "and the envelope that opens it into the Library's, not the one it was staged in",
     );
-    assert!(!dir.previous_token_cache_file().exists());
+    assert!(
+        !dir.path().join("token-cache.cftc").exists(),
+        "and the Library keeps no grant of its own",
+    );
     assert_eq!(
         DeviceSettings::read(&dir).expect("the settings this build wrote must read"),
         created.settings,

@@ -4,10 +4,9 @@
 //! are here; what each variant says is in [`display`], what it says underneath
 //! in [`source`], what a diagnostic event may be told in [`redacted`], and
 //! what a lower layer's failure becomes in [`from`]. The values a variant
-//! carries to say which step failed, which two OAuth clients differ and why a
-//! promotion was refused are [`CreationStep`], [`ClientMismatch`] and
-//! [`PromotionObstacle`], each in a module of its own; what is wrong with a
-//! Library's name is the model's own [`LibraryNameDefect`].
+//! carries to say which step failed and which two OAuth clients differ are
+//! [`CreationStep`] and [`ClientMismatch`], each in a module of its own; what
+//! is wrong with a Library's name is the model's own [`LibraryNameDefect`].
 //!
 //! Whether one is a code exchange refused to a client that sent no secret is
 //! asked in [`exchange_without_client_secret`].
@@ -47,9 +46,6 @@ pub use joined_place::JoinedPlace;
 
 mod mismatched_library;
 pub use mismatched_library::MismatchedLibrary;
-
-mod promotion_obstacle;
-pub use promotion_obstacle::PromotionObstacle;
 
 mod redacted;
 
@@ -401,17 +397,6 @@ pub enum Error {
         /// The Library whose Passphrase would open it: one that references it,
         /// as a command names it.
         library: LibraryRef,
-    },
-    /// A Library's previous per-Library grant would go into an account the
-    /// device already holds, and that account cannot take it in, for the
-    /// reason [`PromotionObstacle`] says (spec: SA-8).
-    PromotionNeedsName {
-        /// The Library whose grant it is, as a command names it.
-        library: LibraryRef,
-        /// The account the promotion would have referenced.
-        account: String,
-        /// Why the held account cannot take it in.
-        obstacle: PromotionObstacle,
     },
     /// No account of this name is on this device.
     NoSuchAccount {
