@@ -71,8 +71,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly ROOT
 
-# The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,
-# with the way the container is started and the bucket made.
+# scripts/lib/minio.sh reads the MinIO image and the AWS CLI image from their
+# pins under docker/, and holds the way the container is started and the
+# bucket made.
 # shellcheck source=scripts/lib/minio.sh
 source "$ROOT/scripts/lib/minio.sh"
 

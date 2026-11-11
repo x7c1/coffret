@@ -65,8 +65,9 @@ readonly APP_DIR="$ROOT/frontend/packages/apps/desktop"
 # other's container in its way.
 CONTAINER="${COFFRET_E2E_ELECTRON_MINIO_CONTAINER:-coffret-minio-e2e-electron}"
 MINIO_PORT="${COFFRET_E2E_ELECTRON_MINIO_PORT:-19011}"
-# The MinIO image and the AWS CLI image are pinned in scripts/lib/minio.sh,
-# with the way the container is started and the bucket made.
+# scripts/lib/minio.sh reads the MinIO image and the AWS CLI image from their
+# pins under docker/, and holds the way the container is started and the
+# bucket made.
 # shellcheck source=scripts/lib/minio.sh
 source "$ROOT/scripts/lib/minio.sh"
 
