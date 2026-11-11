@@ -247,6 +247,11 @@ jobs:
       - name: Shell scripts, shellcheck and shfmt
         run: make shell-lint
 
+      # The MinIO and AWS CLI images are pinned once each, in their
+      # Dockerfiles under docker/, and scripts/lib/minio.sh reads them there.
+      - name: Container image pins test
+        run: make container-images-test
+
       # The release PR's summary handling (docs/guides/release.md), offline.
       - name: Release summary tests
         run: bash .github/scripts/release-summary.test.sh
