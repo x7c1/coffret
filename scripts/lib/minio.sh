@@ -3,30 +3,53 @@
 # MinIO in Docker, as every script here that needs real S3 runs it: the image,
 # the way the container is started and waited on, and the way a bucket is made
 # in it. Sourced, not run, by scripts/s3-store-it.sh, scripts/e2e-it.sh,
-# scripts/e2e-electron.sh, scripts/local.sh and scripts/large.sh, so that the
-# pins below are moved in one place and every one of them moves with it.
+# scripts/e2e-electron.sh, scripts/local.sh and scripts/large.sh, so that every
+# one of them runs the same images, pinned under docker/ (see below).
 #
 # Each function answers with its status and leaves what to say about a failure
 # to the script, since what a failure means differs: a suite that never ran,
 # or a local Library that is not up.
 
-# MinIO itself no longer publishes an image: its Docker Hub repository is gone,
-# its quay.io one answers every pull with `unauthorized`, and dl.min.io returns
-# 410 for the release binaries. What is pinned here is the last upstream release
-# (RELEASE.2025-10-15T17-29-55Z) as built from that source by the alpine-docker
-# project, by digest rather than by tag so that a retagged or retracted image
-# fails loudly instead of silently changing what runs against it. The image
-# runs MinIO as an unprivileged user, so the data directory it is handed below
-# is under that user's home rather than at the root of the filesystem.
-MINIO_IMAGE="${COFFRET_MINIO_IMAGE:-docker.io/alpine/minio@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4}"
+# The images are pinned each in the FROM line of a Dockerfile of its own,
+# docker/minio/Dockerfile and docker/aws-cli/Dockerfile, which say why each is
+# the image it is and why it is pinned by digest. They are kept there rather
+# than here because Dependabot reads image references only from Dockerfiles and
+# Compose files; this reads them back, so that each file is the one place its
+# image is pinned. Nothing builds either file.
+#
+# Prints the image reference in the one FROM line of docker/$1/Dockerfile,
+# which has to be `<image>:<tag>@sha256:<digest>`. Where the file is missing,
+# or holds no such line or more than one, says so on standard error and fails,
+# so that a script sourcing this stops rather than running some other image.
+pinned_image() {
+  local dockerfile line ref="" count=0
+  dockerfile="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/docker/$1/Dockerfile"
+  if [ ! -f "$dockerfile" ]; then
+    echo "scripts/lib/minio.sh: $dockerfile, which pins the $1 image, is missing." >&2
+    return 1
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ ^FROM[[:space:]]+([^[:space:]]+)[[:space:]]*$ ]]; then
+      ref="${BASH_REMATCH[1]}"
+      count=$((count + 1))
+    fi
+  done <"$dockerfile"
+  if [ "$count" -ne 1 ] || ! [[ "$ref" =~ ^[a-z0-9./_-]+:[A-Za-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]]; then
+    echo "scripts/lib/minio.sh: $dockerfile has to hold exactly one line \`FROM <image>:<tag>@sha256:<digest>\`, and holds $count FROM line(s)${ref:+, the last naming $ref}." >&2
+    return 1
+  fi
+  printf '%s\n' "$ref"
+}
 
-# MinIO's own client is not in that image — only the image MinIO itself used to
-# publish bundled it — so a bucket is made by the AWS CLI, in a container of its
-# own. Pinned by digest for the reason the MinIO image is.
-AWS_CLI_IMAGE="${COFFRET_AWS_CLI_IMAGE:-docker.io/amazon/aws-cli@sha256:83f8ffe939569070c5b66d22231862ab78718766d9d8e4c44ca84dd0be5569a5}"
+# COFFRET_MINIO_IMAGE and COFFRET_AWS_CLI_IMAGE, where set, name another image
+# to run in place of the pinned one, and the Dockerfile is then not read.
+MINIO_IMAGE="${COFFRET_MINIO_IMAGE:-$(pinned_image minio)}"
+AWS_CLI_IMAGE="${COFFRET_AWS_CLI_IMAGE:-$(pinned_image aws-cli)}"
 
-# Where MinIO keeps its data inside the container. A script that keeps the data
-# past the container mounts a directory of its own here.
+# Where MinIO keeps its data inside the container. The image runs MinIO as an
+# unprivileged user, so this is under that user's home rather than at the root
+# of the filesystem. A script that keeps the data past the container mounts a
+# directory of its own here.
 readonly MINIO_DATA_IN_CONTAINER="/home/minio/data"
 
 # Starts MinIO in the background, in a container named $1, published on
