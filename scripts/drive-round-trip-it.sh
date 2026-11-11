@@ -139,7 +139,7 @@ readonly FINDINGS=2
 
 # The two kinds of failure a grant that has died is answered with, and they are
 # two because a refresh token Google has expired is not a refresh token that was
-# never there. The first is the Library's token cache holding nothing or not
+# never there. The first is the account's token cache holding nothing or not
 # opening. The second is the token endpoint's own refusal on the way up, and it
 # is the one a run weeks after the last one gets: the cache still holds a
 # refresh token, so nothing notices until Google is asked to spend it — and the

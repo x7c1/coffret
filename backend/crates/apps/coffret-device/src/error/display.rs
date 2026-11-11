@@ -253,16 +253,6 @@ impl fmt::Display for Error {
                  the Passphrase given does not open one; the Passphrase of {} does",
                 library.the_library()
             ),
-            Self::PromotionNeedsName {
-                library, account, ..
-            } => write!(
-                f,
-                "{} keeps a grant of its own from an earlier build, and the account {account:?} \
-                 this device already holds cannot take it in; name an account for it with \
-                 `coffret authorize {} --account NAME`",
-                library.the_library(),
-                Flag(library)
-            ),
             Self::NoSuchAccount { account } => {
                 write!(f, "no account {account:?} is on this device")
             }
