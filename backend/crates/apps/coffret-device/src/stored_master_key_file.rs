@@ -89,8 +89,9 @@ impl StoredMasterKeyFile {
         Self::opened(dir, stored, &enter_passphrase()?)
     }
 
-    /// Opens a stored form that has already been read.
-    fn opened(
+    /// Opens a stored form that has already been read: for a caller that reads
+    /// the file before it asks for the Passphrase.
+    pub(crate) fn opened(
         dir: &LibraryDir,
         stored: StoredMasterKey,
         passphrase: &Passphrase,

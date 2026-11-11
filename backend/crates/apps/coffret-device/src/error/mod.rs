@@ -965,6 +965,23 @@ impl Error {
         }
     }
 
+    /// Whether this is a Library's stored Master Key file that is there and
+    /// could not be read: [`Local`](Self::Local), reading the file a Library
+    /// keeps its Master Key in (spec: KD-9).
+    ///
+    /// The refusal stays [`Local`](Self::Local), which a shell answers as any
+    /// file it could not read; this is how a shell tells the key file apart,
+    /// to say it is the key file and never a wrong Passphrase, which was never
+    /// checked.
+    pub fn is_unreadable_master_key_file(&self) -> bool {
+        matches!(
+            self,
+            Self::Local(refused)
+                if matches!(refused.operation, LocalOperation::Reading)
+                    && crate::library_dir::is_master_key_file(&refused.path)
+        )
+    }
+
     /// Names a local file or directory that could not be read or written.
     pub(crate) fn local(
         operation: LocalOperation,

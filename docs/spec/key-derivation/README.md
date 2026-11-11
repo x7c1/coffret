@@ -154,7 +154,10 @@ Concept background: [Master Key](../../concepts/master-key/),
     file, wherever the stored form is opened: unlocking the Library, and
     opening an account's key through a Library that references it to use
     the account (SA-9), where another referencing Library is still tried.
-    *(Form: test)*
+    Where the Passphrase of a Library referencing an account would be asked
+    for to open the account's key (SA-9), that Library's stored Master Key
+    file is read first, and a refusal of it is given without asking: nobody
+    types a Passphrase the file could not be opened with. *(Form: test)*
   - The Argon2id version is 0x13 (v1.3). The stored form records no Argon2
     version field, so the version is a format constant, not a recorded
     parameter: an implementation using a different version would derive a
