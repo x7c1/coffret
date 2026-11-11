@@ -10,8 +10,8 @@
 // device's disk holds nothing the drop wrote — not even the folder it made —
 // and the Library lists nothing new, before and after a reload.
 //
-// Last of the journeys, because it pauses the Storage every journey before it
-// reads from.
+// It pauses the Storage every journey reads from, and lets it answer again
+// however the steps end, so the journeys after it find Storage answering.
 
 import { access } from 'node:fs/promises';
 import path from 'node:path';

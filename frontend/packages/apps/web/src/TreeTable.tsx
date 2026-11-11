@@ -801,14 +801,14 @@ export function TreeTable({
         'Modified',
         values.map((value) => value.modified),
         measured,
-        added ? 2 * CELL_PAD : CELL_PAD + MODIFIED_END_PAD,
+        added ? 2 * CELL_PAD : CELL_PAD + LAST_DATE_END_PAD,
       ),
       added: added
         ? columnWidth(
             'Added',
             values.map((value) => value.added),
             measured,
-            CELL_PAD + MODIFIED_END_PAD,
+            CELL_PAD + LAST_DATE_END_PAD,
           )
         : null,
     };
@@ -893,8 +893,8 @@ export function TreeTable({
                 <th style={HEAD}>
                   <span style={HIDDEN}>On this device</span>
                 </th>
-                <th style={added ? HEAD : { ...HEAD, paddingRight: MODIFIED_END_PAD }}>Modified</th>
-                {added && <th style={{ ...HEAD, paddingRight: MODIFIED_END_PAD }}>Added</th>}
+                <th style={added ? HEAD : { ...HEAD, paddingRight: LAST_DATE_END_PAD }}>Modified</th>
+                {added && <th style={{ ...HEAD, paddingRight: LAST_DATE_END_PAD }}>Added</th>}
                 <th style={HEAD} />
               </tr>
             </thead>
@@ -1355,10 +1355,10 @@ function Row({
           <Device state={shown.state} message={shown.message} onAccent={onAccent} />
         ) : null}
       </td>
-      <td style={{ ...CELL, paddingRight: added ? CELL_PAD : MODIFIED_END_PAD, color: ink(COLOR.dim) }}>
+      <td style={{ ...CELL, paddingRight: added ? CELL_PAD : LAST_DATE_END_PAD, color: ink(COLOR.dim) }}>
         {values.modified}
       </td>
-      {added && <td style={{ ...CELL, paddingRight: MODIFIED_END_PAD, color: ink(COLOR.dim) }}>{values.added}</td>}
+      {added && <td style={{ ...CELL, paddingRight: LAST_DATE_END_PAD, color: ink(COLOR.dim) }}>{values.added}</td>}
       <MenuCell name={row.name} open={menuOpen} ink={ink(COLOR.dim)} onMenu={onMenu} />
     </tr>
   );
@@ -1739,7 +1739,7 @@ export const FOLDER_SIZE_TITLE = 'Total of everything inside';
  * The room after the last time column, Modified or Added, less than a cell's:
  * the row's "⋮" follows it.
  */
-const MODIFIED_END_PAD = 2;
+const LAST_DATE_END_PAD = 2;
 
 /** How wide an icon is drawn, and the room either side of one in its column. */
 const ICON = 16;
