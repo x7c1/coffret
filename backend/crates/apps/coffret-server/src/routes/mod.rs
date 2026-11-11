@@ -1,4 +1,4 @@
-//! The twenty-eight things a browser may ask of a Library.
+//! The twenty-nine things a browser may ask of a Library.
 //!
 //! Six of them are about what the Library holds and answer out of the
 //! catalog alone — which Library this is, what the whole of it comes to
@@ -59,6 +59,13 @@
 //! with the work answer, and the run answers it by ending: an add it stops is
 //! undone on this device, every file it wrote taken away again (spec: LA-36).
 //!
+//! And one takes things out: the deletion, which takes files or folders out
+//! of the Library and rebuilds the Packs that keep other files (spec: PK-9,
+//! PK-10). It arms that work and answers at once, as the fill, the sync and
+//! the freeze do, and it is read before it is asked for, as the freeze is: a
+//! `GET` of it counts what it would take out and rebuild, which the explorer
+//! shows before it offers Delete.
+//!
 //! And one moves things inside the Library: the move, which renames files and
 //! folders in one Journal record and uploads nothing (spec: FM-15), then has
 //! this device's files of them follow — or leave this device where they cannot
@@ -104,7 +111,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Five of the twenty-eight go on answering once the Library is locked — which
+//! Five of the twenty-nine go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, the unlock,
 //! and the two about the explorer's colours — because none of them needs a key
 //! and a locked server is still one a person should be able to read the name
@@ -115,7 +122,7 @@
 //! required and where it is entered (spec: DK-2): the browse and the map among
 //! them, for the reason given above.
 //!
-//! One of those three answers more than its own subject: the account of what
+//! One of those five answers more than its own subject: the account of what
 //! this server was doing carries which of the two states this device holds the
 //! Library in, so a window left open over a page it decrypted hears of a lock
 //! nobody asked it about (spec: DK-4) rather than waiting for its next request
@@ -124,7 +131,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the twenty-eight are two answers that are not routes at all: one for a
+//! Beside the twenty-nine are two answers that are not routes at all: one for a
 //! path none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
