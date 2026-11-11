@@ -42,6 +42,7 @@ describe('useKeptFilter', () => {
     expect(held.write).not.toHaveBeenCalled();
   });
 
+  // LA-43: kept settings the same as those on screen are left as they stand.
   it('leaves the settings on screen as they are where the kept ones equal them', async () => {
     const held = store({ ...NO_FILTER });
     const { result } = renderHook(() => useKeptFilter(true, held.kept));
@@ -108,6 +109,20 @@ describe('useKeptFilter', () => {
     warn.mockRestore();
   });
 
+  // LA-43: kept settings that could not be read are said in the console and
+  // leave the filter on screen as it is.
+  it('says a failed read in the console and leaves the filter on screen', async () => {
+    const held = store(KEPT);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    held.read.mockRejectedValueOnce(new Error('refused'));
+    const { result } = renderHook(() => useKeptFilter(true, held.kept));
+    await act(async () => {});
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(result.current.settings).toEqual(NO_FILTER);
+    warn.mockRestore();
+  });
+
+  // LA-43: a change made before the kept settings are answered wins over them.
   it('lets a change made before the answer win over it', async () => {
     const held = store(KEPT);
     const { result } = renderHook(() => useKeptFilter(true, held.kept));
@@ -116,6 +131,8 @@ describe('useKeptFilter', () => {
     expect(result.current.settings).toEqual({ ...NO_FILTER, recentOn: true });
   });
 
+  // LA-43: once unlocked, the kept settings are read again where nothing was
+  // read or set.
   it('reads again once the Library is unlocked where a lock refused the first read', async () => {
     const held = store(KEPT);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -130,6 +147,32 @@ describe('useKeptFilter', () => {
     expect(held.read).toHaveBeenCalledTimes(2);
     await act(async () => held.answer());
     expect(result.current.settings).toEqual(KEPT);
+    warn.mockRestore();
+  });
+
+  // LA-43: once unlocked, a change whose keeping was refused is kept again.
+  it('keeps again once the Library is unlocked what a lock refused to keep', async () => {
+    const held = store(NO_FILTER);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    held.write.mockRejectedValueOnce(new Error('locked'));
+    const { result, rerender } = renderHook(({ open }) => useKeptFilter(open, held.kept), {
+      initialProps: { open: true },
+    });
+    await act(async () => held.answer());
+    const changed = { ...NO_FILTER, recentOn: true, recent: 4 };
+    await act(async () => result.current.change(changed));
+    expect(warn).toHaveBeenCalledTimes(1);
+    rerender({ open: false });
+    expect(held.write).toHaveBeenCalledTimes(1);
+    await act(async () => rerender({ open: true }));
+    expect(held.write).toHaveBeenCalledTimes(2);
+    expect(held.write).toHaveBeenLastCalledWith(changed);
+    expect(held.read).toHaveBeenCalledTimes(1);
+
+    // Kept now: a later unlock sends nothing more.
+    rerender({ open: false });
+    await act(async () => rerender({ open: true }));
+    expect(held.write).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 });
