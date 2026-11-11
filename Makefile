@@ -978,6 +978,17 @@ e2e-electron-display-test:
 desktop-addon-test:
 	./scripts/desktop-addon-test.sh
 
+## container-images-test: show the scripts running the MinIO and AWS CLI images docker/ pins, and pinning none of their own
+#
+# scripts/lib/minio.sh reads each image from the FROM line of
+# docker/minio/Dockerfile and docker/aws-cli/Dockerfile, where Dependabot can
+# read and update it; this sources the script, against those files and against
+# broken copies in a throwaway tree, and greps for digests written elsewhere. It
+# pulls nothing, so it needs no container runtime.
+.PHONY: container-images-test
+container-images-test:
+	./scripts/container-images-test.sh
+
 ## shell-lint: shellcheck and shfmt over every shell script in the repository
 #
 # The scripts under scripts/ include the real-Drive targets, which run only when
@@ -1020,7 +1031,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + e2e-electron-display-test + desktop-addon-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + e2e-electron-display-test + desktop-addon-test + container-images-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -1089,6 +1100,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test e2e-electron-display-test desktop-addon-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test e2e-electron-display-test desktop-addon-test container-images-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
