@@ -20,9 +20,8 @@
 //!   the device holds one account and required when a second is added, so
 //!   creating a Library on a device holding more than one account refuses to
 //!   start without it. An
-//!   account the person leaves unnamed is named `default`, the name the
-//!   promotion below also gives, so every envelope has a name to be bound to
-//!   (spec: SA-9).
+//!   account the person leaves unnamed is named `default`, so every envelope
+//!   has a name to be bound to (spec: SA-9).
 //! - One account name binds to one OAuth client id on the device: the
 //!   account's grant is renewed, and consented to, only through the client the
 //!   account first consented to, since a refresh token is bound to the client
@@ -40,19 +39,10 @@
 //!   envelope that opened it removed with its Library — can no longer be
 //!   opened, and the device discards it the next time it opens the directory it
 //!   keeps accounts in.
-//! - A Library found holding its own per-Library cache, sealed under the
-//!   `coffret/v1/token-cache` purpose key (spec: KD-4, KD-10), and no
-//!   account-cache key envelope, has that cache **promoted** the first time it
-//!   is opened — the one path by which a Library leaves its previous shape. The
-//!   refresh token is resealed under a fresh account-cache key into an account
-//!   named `default`, the Library gains its envelope (spec: SA-9) and references
-//!   `default`, and only then is the per-Library cache removed, so an
-//!   interrupted promotion leaves the previous shape to promote again. Where the
-//!   device already holds an account named `default`, the Library references it
-//!   if that account's grant reaches the Library's app folder — the choice
-//!   joining makes — and its own cache is removed unused; otherwise the
-//!   promotion stops, says so, and asks the person to name an account for this
-//!   Library.
+//! - A per-Library cache an earlier build left in a Library's directory,
+//!   sealed under its `coffret/v1/token-cache` purpose key (spec: KD-4,
+//!   KD-10), is neither read nor removed: the Library is opened as any Library
+//!   that references no account is.
 //!
 //! SA-9: A Library that references an account holds, in its own directory on
 //! the device, one **account-cache key envelope**: that account's account-cache
@@ -85,10 +75,8 @@
 use std::fs;
 use std::sync::Arc;
 
-use coffret_format::{Purpose, PurposeKey};
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::Passphrase;
-use google_drive_store::{StoredTokens, TokenCache};
 use zeroize::Zeroizing;
 
 use crate::account_dir::AccountDir;
@@ -99,7 +87,7 @@ use crate::authorize::{authorize_through, AuthorizeRequest};
 use crate::create_library::{create_library_through, CreateLibraryRequest, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::drive;
-use crate::error::{Error, PromotionObstacle, Result};
+use crate::error::{Error, Result};
 use crate::join_library::{join_library_through, JoinLibraryRequest, JoinedProvider};
 use crate::library_dir::{isolated, LibraryDir};
 use crate::open_library::open_library_through;
@@ -250,7 +238,7 @@ async fn two_libraries_of_one_account_hold_one_cache() {
         let dir = LibraryDir::named_here(name);
         assert_eq!(account_of(name).as_deref(), Some("default"));
         assert!(
-            !dir.previous_token_cache_file().exists(),
+            !dir.path().join("token-cache.cftc").exists(),
             "{name} keeps no grant of its own"
         );
         envelopes.push(fs::read(dir.account_envelope_file()).expect("each holds an envelope"));
@@ -630,114 +618,39 @@ async fn renewing_an_account_renews_it_for_every_library() {
     );
 }
 
-// SA-8: a Library found with its own previous cache and no envelope has it
-// promoted the first time it is opened — into `default`, under a fresh key —
-// and its own cache goes only once the account holds the grant.
+// SA-8, KD-10: a per-Library cache an earlier build left in a Library's
+// directory is neither read nor removed: the Library is refused as one that
+// references no account, and the file is left as it was.
 #[tokio::test]
-async fn a_library_s_previous_grant_is_promoted_when_it_is_opened() {
-    let device = isolated::device();
+async fn a_library_s_own_cache_is_neither_read_nor_removed() {
+    let _device = isolated::device();
     let drive = DriveStub::empty();
     create(&drive, "old", None).await;
-    into_previous_shape("old", "1//a-grant-kept-per-library");
-    fs::remove_dir_all(device.path().join("accounts")).expect("the accounts are removable");
+    let dir = LibraryDir::named_here("old");
+    fs::remove_file(dir.account_envelope_file()).expect("the envelope is removable");
+    let mut settings = DeviceSettings::read(&dir).expect("reads");
+    if let ProviderSettings::Drive { account, .. } = &mut settings.provider {
+        *account = None;
+    }
+    settings.write(&dir).expect("writes");
+    let left = dir.path().join("token-cache.cftc");
+    let bytes = b"a cache an earlier build sealed in the Library".to_vec();
+    fs::write(&left, &bytes).expect("the cache is written");
 
-    open_library_through(
+    let result = open_library_through(
         &reach(&drive),
         &crate::LibraryRef::named("old"),
         pass(PASSPHRASE),
     )
-    .await
-    .unwrap_or_else(|error| panic!("the old Library must open: {}", every_link(&error)));
-
-    let dir = LibraryDir::named_here("old");
-    assert_eq!(account_of("old").as_deref(), Some("default"));
-    assert!(dir.account_envelope_file().is_file());
-    assert!(!dir.previous_token_cache_file().exists());
-    assert_eq!(
-        refresh_token_of("old", "default", PASSPHRASE).as_deref(),
-        Some("1//a-grant-kept-per-library"),
-        "the grant the Library kept is the account's now"
-    );
-    assert_eq!(drive.consents(), 1, "a promotion asks for no consent");
-}
-
-// SA-8: where the device already holds `default`, a promoted Library
-// references it if its grant reaches the Library's folder, and its own cache is
-// removed unused; where it does not, the promotion stops and asks for a name,
-// leaving the previous shape as it was.
-#[tokio::test]
-async fn a_promotion_into_a_held_default_is_the_choice_a_join_makes() {
-    let _device = isolated::device();
-    let drive = DriveStub::empty();
-    create(&drive, "current", None).await;
-    create(&drive, "reaching", None).await;
-    create(&drive, "elsewhere", None).await;
-    into_previous_shape("reaching", "1//unused");
-    into_previous_shape("elsewhere", "1//kept");
-    let dir = LibraryDir::named_here("elsewhere");
-    let mut settings = DeviceSettings::read(&dir).expect("reads");
-    if let ProviderSettings::Drive { folder_id, .. } = &mut settings.provider {
-        *folder_id = "a-folder-default-does-not-see".to_owned();
-    }
-    settings.write(&dir).expect("writes");
-
-    open_library_through(
-        &reach(&drive),
-        &crate::LibraryRef::named("reaching"),
-        pass(PASSPHRASE),
-    )
-    .await
-    .unwrap_or_else(|error| panic!("it must open: {}", every_link(&error)));
-    assert_eq!(account_of("reaching").as_deref(), Some("default"));
-    assert!(!LibraryDir::named_here("reaching")
-        .previous_token_cache_file()
-        .exists());
-    assert_eq!(
-        refresh_token_of("reaching", "default", PASSPHRASE).as_deref(),
-        Some("1//stub-refresh-1"),
-        "the account's grant is untouched, and the Library's own was not used"
-    );
-
-    let result = open_library_through(
-        &reach(&drive),
-        &crate::LibraryRef::named("elsewhere"),
-        pass(PASSPHRASE),
-    )
     .await;
-    let Err(
-        refused @ Error::PromotionNeedsName {
-            obstacle: PromotionObstacle::FolderNotReached,
-            ..
-        },
-    ) = &result
-    else {
-        panic!("expected the promotion to stop: {:?}", result.err());
-    };
-    assert_eq!(
-        refused.to_string(),
-        "the Library \"elsewhere\" keeps a grant of its own from an earlier build, and the account \
-         \"default\" this device already holds cannot take it in; name an account for it with \
-         `coffret authorize --library elsewhere --account NAME`"
-    );
-    assert!(dir.previous_token_cache_file().is_file());
-    assert!(!dir.account_envelope_file().exists());
-    assert_eq!(account_of("elsewhere"), None);
 
-    // Named, the promotion goes to a new account, which the renewal then asks a
-    // consent for.
-    authorize_through(
-        &reach(&drive),
-        AuthorizeRequest::Library {
-            library: crate::LibraryRef::named("elsewhere"),
-            account: Some("another".to_owned()),
-        },
-        pass(PASSPHRASE),
-        consent,
-    )
-    .await
-    .unwrap_or_else(|error| panic!("the named promotion must go: {}", every_link(&error)));
-    assert_eq!(account_of("elsewhere").as_deref(), Some("another"));
-    assert!(!dir.previous_token_cache_file().exists());
+    assert!(
+        matches!(&result, Err(Error::NotAuthorized { cause: None, .. })),
+        "refused as a Library that references no account: {:?}",
+        result.err()
+    );
+    assert_eq!(fs::read(&left).expect("the cache is still there"), bytes);
+    assert_eq!(account_of("old"), None);
 }
 
 // EL-1: the device-local account name never reaches a diagnostic event — not
@@ -832,32 +745,6 @@ fn join_request(folder_id: &str, account: Option<&str>) -> JoinLibraryRequest {
         },
         referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
-}
-
-/// Lays the Library called `name` out as a build before accounts left it: a
-/// grant of its own holding `refresh_token`, sealed under its token-cache
-/// purpose key (spec: KD-10), no envelope, and settings that name no account.
-fn into_previous_shape(name: &str, refresh_token: &str) {
-    let dir = LibraryDir::named_here(name);
-    let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
-        .expect("opens");
-    TokenCache::new(
-        dir.previous_token_cache_file(),
-        Arc::new(PurposeKey::derive(
-            &unlocked.master_key,
-            Purpose::TokenCache,
-        )),
-    )
-    .store(&StoredTokens {
-        refresh_token: refresh_token.to_owned(),
-    })
-    .expect("the previous cache is written");
-    fs::remove_file(dir.account_envelope_file()).expect("the envelope is removable");
-    let mut settings = DeviceSettings::read(&dir).expect("reads");
-    if let ProviderSettings::Drive { account, .. } = &mut settings.provider {
-        *account = None;
-    }
-    settings.write(&dir).expect("writes");
 }
 
 /// A caller that answers the question about another Library's Passphrase with

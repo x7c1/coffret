@@ -1,18 +1,13 @@
 //! How a Library reaches the grant of the account it references: set up for a
-//! Library being put on this device, opened for one already here, and promoted
-//! from a Library's own previous grant (spec: SA-8, SA-9).
+//! Library being put on this device, and opened for one already here
+//! (spec: SA-8, SA-9).
 
-use std::fs;
-use std::io::ErrorKind;
 use std::sync::Arc;
 
 use coffret_format::generate_account_cache_key;
 use coffret_model::{AccountCacheKey, MasterKey, Passphrase, Redacted};
-use coffret_usecase::{LocalIoError, LocalOperation};
-use google_drive_store::{
-    read_app_folder_name, AccessTokens, ClientCredentials, HttpTransport, TokenCache,
-};
-use tracing::{debug, info};
+use google_drive_store::{read_app_folder_name, AccessTokens, ClientCredentials, HttpTransport};
+use tracing::debug;
 
 use crate::account_dir::AccountDir;
 use crate::account_envelope::AccountEnvelope;
@@ -21,9 +16,8 @@ use crate::account_settings::AccountSettings;
 use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::drive;
-use crate::error::{Error, MismatchedLibrary, PromotionObstacle, Result};
+use crate::error::{Error, MismatchedLibrary, Result};
 use crate::library_dir::LibraryDir;
-use crate::reach::Reach;
 use crate::referencing_passphrase::ReferencingPassphrase;
 
 /// What this is recorded as.
@@ -200,44 +194,22 @@ pub(crate) struct Opened {
 pub(crate) enum LibraryGrant {
     /// An account, opened through the Library's envelope.
     Opened(Opened),
-    /// No account, and no grant of its own to promote into one.
+    /// No account.
     Unbound,
 }
 
-/// Opens the account a Drive Library references, promoting the Library's own
-/// previous grant into one first where that is what it holds (spec: SA-8,
-/// SA-9).
+/// Opens the account a Drive Library references (spec: SA-9).
 ///
-/// `requested` is an account the person named for this Library. It is where a
-/// promotion goes, and a Library that already references another is refused
-/// rather than moved: the name is bound into its envelope.
-pub(crate) async fn of_library(
-    reach: &Reach,
+/// `requested` is an account the person named for this Library. A Library that
+/// already references another is refused rather than moved: the name is bound
+/// into its envelope.
+pub(crate) fn of_library(
     dir: &LibraryDir,
-    settings: &mut DeviceSettings,
+    settings: &DeviceSettings,
     master_key: &MasterKey,
-    passphrase: &Passphrase,
-    accounts: &Accounts,
     requested: Option<&AccountName>,
 ) -> Result<LibraryGrant> {
-    let named = named_account(settings)?;
-    let previous = dir.previous_token_cache_file().is_file();
-
-    // The one path by which a Library leaves its previous shape: its own cache
-    // and no envelope, or an envelope an interrupted promotion wrote before the
-    // settings came to name the account (spec: SA-8).
-    if previous && (named.is_none() || !AccountEnvelope::is_present(dir)) {
-        let target = requested
-            .cloned()
-            .or_else(|| named.clone())
-            .unwrap_or_else(AccountName::default_name);
-        return promote(
-            reach, dir, settings, master_key, passphrase, accounts, target,
-        )
-        .await;
-    }
-
-    let Some(account) = named else {
+    let Some(account) = named_account(settings)? else {
         return Ok(LibraryGrant::Unbound);
     };
     if let Some(requested) = requested.filter(|requested| **requested != account) {
@@ -255,9 +227,6 @@ pub(crate) async fn of_library(
         MismatchedLibrary::Which(dir.which()),
         drive_client(settings).0,
     )?;
-    if previous {
-        complete_promotion(dir, settings, master_key, &account_dir, &key)?;
-    }
     Ok(LibraryGrant::Opened(Opened {
         account: account_dir,
         key,
@@ -299,153 +268,6 @@ pub(crate) fn bind(
     })
 }
 
-/// Moves a Library's own previous grant into the account `target`
-/// (spec: SA-8).
-///
-/// Into a new account under a fresh account-cache key, or — where the device
-/// already holds `target` — into nothing at all: the Library references that
-/// account if its grant reaches the Library's folder, the choice a join makes,
-/// and its own cache is removed unused. Where it does not, or cannot be opened,
-/// the promotion stops and asks for a name.
-///
-/// The order is what makes an interruption harmless: the account and the
-/// envelope first, the settings naming the account next, and the Library's own
-/// cache last, so a promotion stopped anywhere leaves the previous shape to
-/// promote again.
-async fn promote(
-    reach: &Reach,
-    dir: &LibraryDir,
-    settings: &mut DeviceSettings,
-    master_key: &MasterKey,
-    passphrase: &Passphrase,
-    accounts: &Accounts,
-    target: AccountName,
-) -> Result<LibraryGrant> {
-    let tokens = match drive::previous_token_cache(dir, master_key).load() {
-        Ok(Some(tokens)) => tokens,
-        // Gone between the look and the read: another run promoted it.
-        Ok(None) => return Ok(LibraryGrant::Unbound),
-        // Never read as an empty cache (spec: KD-10).
-        Err(cause) => {
-            return Err(Error::NotAuthorized {
-                library: dir.which(),
-                cause: Some(Box::new(cause)),
-            })
-        }
-    };
-    let (client_id, client_secret) = drive_client(settings);
-
-    if let Some(held) = accounts.get(&target) {
-        let needs_name = |obstacle| Error::PromotionNeedsName {
-            library: dir.which(),
-            account: target.as_str().to_owned(),
-            obstacle,
-        };
-        // Only another client asks for another name; a settings file that
-        // cannot be read is reported as itself.
-        match Accounts::require_client(held, MismatchedLibrary::Which(dir.which()), client_id) {
-            Ok(()) => {}
-            Err(Error::ClientMismatch(mismatch)) => {
-                return Err(needs_name(PromotionObstacle::ClientDiffers(mismatch)))
-            }
-            Err(other) => return Err(other),
-        }
-        let key = Arc::new(
-            accounts
-                .key_through(&target, passphrase)
-                .ok_or_else(|| needs_name(PromotionObstacle::NotOpened))?,
-        );
-        if !reaches_folder(reach, held, &key, settings).await? {
-            return Err(needs_name(PromotionObstacle::FolderNotReached));
-        }
-        AccountEnvelope::write(dir, master_key, &target, &key)?;
-        record_account(dir, settings, &target)?;
-        remove_previous(dir)?;
-        info!(
-            operation = OPERATION,
-            into = "held",
-            "promoted a Library's own grant: it references an account this device held"
-        );
-        return Ok(LibraryGrant::Opened(Opened {
-            account: held.clone(),
-            key,
-        }));
-    }
-
-    let key = Arc::new(generate_account_cache_key().map_err(|cause| Error::KeyMaterial { cause })?);
-    let new_account = NewAccount::begin(&target, &AccountSettings::new(client_id, client_secret))?;
-    TokenCache::for_account(new_account.staged().token_cache_file(), Arc::clone(&key))
-        .store(&tokens)?;
-    AccountEnvelope::write(dir, master_key, &target, &key)?;
-    record_account(dir, settings, &target)?;
-    let account = new_account.publish()?;
-    remove_previous(dir)?;
-    info!(
-        operation = OPERATION,
-        into = "new",
-        "promoted a Library's own grant into a new account's cache"
-    );
-    Ok(LibraryGrant::Opened(Opened { account, key }))
-}
-
-/// Whether the grant of `account` reaches the Library's app folder.
-async fn reaches_folder(
-    reach: &Reach,
-    account: &AccountDir,
-    key: &Arc<AccountCacheKey>,
-    settings: &DeviceSettings,
-) -> Result<bool> {
-    let ProviderSettings::Drive {
-        folder_id,
-        client_id,
-        client_secret,
-        ..
-    } = &settings.provider
-    else {
-        return Ok(false);
-    };
-    let cache = drive::token_cache(account, Arc::clone(key));
-    if !matches!(cache.load(), Ok(Some(_))) {
-        return Ok(false);
-    }
-    let transport = reach.drive_transport()?;
-    let tokens = drive::tokens(
-        &transport,
-        drive::credentials(client_id, client_secret.as_deref()),
-        cache,
-    );
-    Ok(read_app_folder_name(transport, tokens, folder_id)
-        .await
-        .is_ok())
-}
-
-/// Finishes a promotion that stopped after the settings came to name the
-/// account and before the Library's own cache was removed.
-///
-/// Where the account's cache is there, the Library's own is what the promotion
-/// had left to remove. Where it is not — the account had not yet taken its name
-/// — the Library's own grant is what fills it, under the key its envelope
-/// already holds.
-fn complete_promotion(
-    dir: &LibraryDir,
-    settings: &DeviceSettings,
-    master_key: &MasterKey,
-    account: &AccountDir,
-    key: &Arc<AccountCacheKey>,
-) -> Result<()> {
-    if !account.token_cache_file().is_file() {
-        let Ok(Some(tokens)) = drive::previous_token_cache(dir, master_key).load() else {
-            return Ok(());
-        };
-        if !account.is_present() {
-            let (client_id, client_secret) = drive_client(settings);
-            AccountSettings::new(client_id, client_secret).write(account)?;
-        }
-        drive::token_cache(account, Arc::clone(key)).store(&tokens)?;
-    }
-    remove_previous(dir)
-}
-
 /// The account a Library's settings name, if any.
 fn named_account(settings: &DeviceSettings) -> Result<Option<AccountName>> {
     match &settings.provider {
@@ -482,15 +304,4 @@ fn record_account(
         *recorded = Some(account.as_str().to_owned());
     }
     settings.write(dir)
-}
-
-/// Removes a Library's own previous grant, which its account's cache now holds
-/// or never needed (spec: SA-8).
-fn remove_previous(dir: &LibraryDir) -> Result<()> {
-    let path = dir.previous_token_cache_file();
-    match fs::remove_file(&path) {
-        Ok(()) => Ok(()),
-        Err(gone) if gone.kind() == ErrorKind::NotFound => Ok(()),
-        Err(cause) => Err(LocalIoError::new(LocalOperation::Removing, path, cause).into()),
-    }
 }

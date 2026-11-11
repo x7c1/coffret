@@ -29,7 +29,6 @@ impl error::Error for Error {
             | Self::NoAccountReachesFolder
             | Self::ClientMismatch(_)
             | Self::AccountNotOpened { .. }
-            | Self::PromotionNeedsName { .. }
             | Self::NoSuchAccount { .. }
             | Self::AccountFixed { .. } => None,
             Self::UnreadableAccountEnvelope { cause, .. } => cause

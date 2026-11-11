@@ -3,7 +3,7 @@
 
 use coffret_model::Redacted;
 
-use super::{Error, PromotionObstacle};
+use super::Error;
 
 impl Redacted for Error {
     /// Which state of this device it is, and none of the names it is about.
@@ -125,14 +125,6 @@ impl Redacted for Error {
                 None => "Device::UnreadableAccountEnvelope(missing)".to_owned(),
             },
             Self::AccountNotOpened { .. } => "Device::AccountNotOpened".to_owned(),
-            Self::PromotionNeedsName { obstacle, .. } => format!(
-                "Device::PromotionNeedsName({})",
-                match obstacle {
-                    PromotionObstacle::ClientDiffers(_) => "client-differs",
-                    PromotionObstacle::NotOpened => "not-opened",
-                    PromotionObstacle::FolderNotReached => "folder-not-reached",
-                }
-            ),
             Self::NoSuchAccount { .. } => "Device::NoSuchAccount".to_owned(),
             Self::AccountFixed { .. } => "Device::AccountFixed".to_owned(),
             // The prefix is a folder somebody means to keep their files in, so

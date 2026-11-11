@@ -8,8 +8,7 @@
 
 use std::sync::Arc;
 
-use coffret_format::{Purpose, PurposeKey};
-use coffret_model::{AccountCacheKey, MasterKey};
+use coffret_model::AccountCacheKey;
 use google_drive_store::{
     AccessTokens, Authorization, ClientCredentials, HttpTransport, OAuthTokens, ReqwestTransport,
     TokenCache,
@@ -17,7 +16,6 @@ use google_drive_store::{
 
 use crate::account_dir::AccountDir;
 use crate::error::Result;
-use crate::library_dir::LibraryDir;
 
 /// The transport every call to Drive goes out through.
 pub(crate) fn transport() -> Result<Arc<dyn HttpTransport>> {
@@ -44,17 +42,6 @@ pub(crate) fn credentials(client_id: &str, client_secret: Option<&str>) -> Clien
 /// nothing that opens anything else (spec: DK-7).
 pub(crate) fn token_cache(account: &AccountDir, key: Arc<AccountCacheKey>) -> TokenCache {
     TokenCache::for_account(account.token_cache_file(), key)
-}
-
-/// A Library's previous per-Library grant, sealed under its token-cache purpose
-/// key (spec: KD-10).
-///
-/// Read only to promote it into an account's cache (spec: SA-8). The key is
-/// derived here from a borrowed Master Key, so the Library's root secret is not
-/// handed to a value that outlives the call (spec: KD-4, DK-7).
-pub(crate) fn previous_token_cache(dir: &LibraryDir, master_key: &MasterKey) -> TokenCache {
-    let key = PurposeKey::derive(master_key, Purpose::TokenCache);
-    TokenCache::new(dir.previous_token_cache_file(), Arc::new(key))
 }
 
 /// The access tokens a call to Drive is made with, minted from `cache`.

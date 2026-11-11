@@ -26,9 +26,10 @@ pub enum Purpose {
     /// the key, not only on the admission table its name is checked against
     /// (spec: FM-12).
     ControlActivationSnapshot,
-    /// A Library's previous per-Library OAuth token cache on this device
-    /// (spec: KD-10), opened only to promote it into an account's cache
-    /// (spec: SA-8).
+    /// Retired: a Library's previous per-Library OAuth token cache on this
+    /// device (spec: KD-4, KD-10), which no device opens any longer. The
+    /// purpose stays so that its info string is never given to another; the
+    /// manual Drive tools still seal their own cache under it.
     ///
     /// One of the two purposes whose key protects device-local state rather
     /// than a Storage Object: the cache never reaches Storage, and has no

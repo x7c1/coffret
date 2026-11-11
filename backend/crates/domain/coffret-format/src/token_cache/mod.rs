@@ -13,8 +13,8 @@
 //! Library's `coffret/v1/token-cache` purpose key (spec: KD-4) instead. The form
 //! does not say which key sealed it; the two pairs of functions here do, so a
 //! caller holding one kind of key cannot open or write the other kind of cache
-//! with it. Only the promotion of a previous cache into an account's reads the
-//! former.
+//! with it. No device reads the former any longer; only the manual Drive tools
+//! still keep their own grant in it.
 //!
 //! The byte layout is normative in KD-10; this module implements it. The form
 //! is self-describing, on the model of the stored Master Key (spec: KD-9),
