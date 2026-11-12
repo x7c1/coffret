@@ -187,9 +187,9 @@ it('shows the locked state on a 423 and asks the host, not the server, until unl
   expect(await screen.findByText('library main')).toBeTruthy();
 });
 
-// A launch file whose ticket was spent already is answered by the host as a
-// request with no session, in its own words. The page says that itself, with
-// how to open the explorer, and says it once.
+// LA-21: a launch file whose ticket was spent already is answered by the host
+// as a request with no session, in its own words. The page says that itself,
+// with how to open the explorer, and says it once.
 it('says once that the page holds no session where the ticket was refused as such', async () => {
   const HOST_SAYS = 'This explorer holds no session. Open the explorer from the coffret app.';
   const opened = establish('t'.repeat(43), shelf(), {
@@ -203,8 +203,8 @@ it('says once that the page holds no session where the ticket was refused as suc
   expect(screen.getAllByText(/holds no session/)).toHaveLength(1);
 });
 
-// The page offers no control that ends its own session: that is the desktop
-// app's, by quitting, for every session at once (spec: LA-18).
+// LA-18: the page offers no control that ends its own session: that is the
+// desktop app's, by quitting, for every session at once.
 it('offers no control to disconnect the explorer', async () => {
   render(<Explorer opened={held()} shelved={shelf()} screen={Asking} />);
   await screen.findByText('library main');
@@ -558,9 +558,9 @@ it('keeps the session where a locked poll with the token renewed away is refused
   expect(desktop.sessionEnded).not.toHaveBeenCalled();
 });
 
-// LA-17, LA-18: an exchange of a delivered ticket that is refused — the ticket
-// spent or expired, or exchanges past the host's limit — ends the session,
-// and the page tells the desktop app, which loads its window afresh.
+// LA-17, LA-18, LA-21: an exchange of a delivered ticket that is refused — the
+// ticket spent or expired, or exchanges past the host's limit — ends the
+// session, and the page tells the desktop app, which loads its window afresh.
 it.each([
   [401, 'authentication_required', NO_SESSION],
   [429, 'rate_limited', 'too many exchanges'],

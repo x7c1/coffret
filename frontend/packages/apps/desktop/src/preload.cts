@@ -17,9 +17,9 @@
 // no answer either way. `coffretDesktop.onTicket` registers a listener the
 // main process's fresh tickets are relayed to: the main process sends one on
 // its own timer ahead of the page's token's expiry, and the page exchanges it
-// for a new token. `coffretDesktop.sessionEnded` tells the main process that
-// the page holds no session, which loads the window afresh where it can. The
-// page has no call that asks for a ticket.
+// for a new token (spec: LA-18). `coffretDesktop.sessionEnded` tells the main
+// process that the page holds no session, which loads the window afresh where
+// it can (spec: LA-21). The page has no call that asks for a ticket.
 //
 // `coffretDesktop.appearanceChanged` tells the main process, one way and with
 // nothing in it, that the server took a new appearance for the explorer; the

@@ -440,11 +440,29 @@ async fn a_root_the_system_would_not_answer_about_stops_the_drop() {
     let marker = served.local_path(".coffret/root");
     std::fs::set_permissions(&marker, Permissions::from_mode(0o000))
         .expect("the mapped root's marker can be made unreadable");
-    assert!(
-        std::fs::read(&marker).is_err(),
-        "this case needs a process the marker's own mode keeps out, and this one is not kept \
-         out — a run as root cannot arrange what it is about",
-    );
+    // A process running as root reads a file whatever its mode says, and there
+    // is no mode, nor anything else a test can arrange portably, that keeps it
+    // out. Skipping the case there would leave a run as root checking nothing,
+    // so it checks what is true for such a process instead: the marker is read
+    // all the same, it vouches for the root, and the drop lands. Whoever else
+    // runs it is kept out by the mode, and meets the refusal below.
+    if std::fs::read(&marker).is_ok() {
+        let (status, answer) = body_of(
+            served
+                .upload("albums", &[("first.png", b"one"), ("second.png", b"two")])
+                .await,
+        )
+        .await;
+        assert_eq!(
+            status, 200,
+            "a marker this process can read vouches for the root: {answer}"
+        );
+        assert_eq!(written(&answer), ["albums/first.png", "albums/second.png"]);
+        assert_eq!(answer["refused"], json!([]));
+        assert!(served.holds("albums/first.png"));
+        assert!(served.holds("albums/second.png"));
+        return;
+    }
     let logs = CapturedLogs::capture();
 
     let (status, refusal) = body_of(

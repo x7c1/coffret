@@ -190,8 +190,9 @@ it('renews to a new token, kept in place of the old one, and revokes the old ses
   expect(asking.revokeSession).toHaveBeenCalledWith(TOKEN);
 });
 
-// LA-17: a refused exchange of a delivered ticket leaves the token held as it
-// was, and says why, for the page to end its session by.
+// LA-17, LA-18: a refused exchange of a delivered ticket renews nothing: it
+// leaves the token held as it was, and says why, for the page to end its
+// session by.
 it('leaves the token held where a renewal is refused', async () => {
   const shelved = shelf();
   shelved.keep('host.1', TOKEN);
