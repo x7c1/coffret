@@ -44,7 +44,7 @@ test('come back to a Library another device has moved on', async ({ page, coffre
 
   // A server of another run, so the explorer's host ended every session issued
   // under the last one and wrote a launch file for this one, which is what gives
-  // the tab a session again (spec: LA-18).
+  // the tab a session again (spec: LA-18, LA-21).
   await coffret.start();
   await openExplorer(page, { afterRestart: true });
   await page.goto(`/#path=${setting.album}`);

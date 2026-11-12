@@ -113,11 +113,11 @@ export interface Residency {
  * - When the explorer's page says its session ended — the server restarted,
  *   the Library served changed, or a renewal was refused — its window is
  *   loaded afresh from a fresh ticket, so that the person never sees a page
- *   without one. Not while nothing is served or the app quits, where there is
- *   nothing to load it from; not while the Library is locked and the
- *   Passphrase window is in front, when it waits for the unlock; and not
- *   again within {@link REOPEN_SPACING_MS} of the last time, so that it does
- *   not go round and round.
+ *   without one (spec: LA-21). Not while nothing is served or the app quits,
+ *   where there is nothing to load it from; not while the Library is locked,
+ *   when it waits for the unlock and loads it then; and not again within
+ *   {@link REOPEN_SPACING_MS} of the last time, so that it does not go round
+ *   and round.
  * - When the server stops, nothing is served any more, and the app says so
  *   and quits.
  */
@@ -214,8 +214,8 @@ export class Desktop {
       return;
     }
     if (this.locked()) {
-      // The Passphrase window is what the person sees; the explorer is loaded
-      // afresh once the Library is unlocked.
+      // Whether or not the Passphrase window is in front, the explorer is
+      // loaded afresh once the Library is unlocked.
       this.reopenOnUnlock = true;
       return;
     }
