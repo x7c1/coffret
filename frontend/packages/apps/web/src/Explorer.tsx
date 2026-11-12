@@ -172,7 +172,7 @@ export function Explorer({
   // A fresh ticket the desktop app hands over is exchanged for a new token,
   // held in place of the old one without drawing the screen again — locked or
   // not, since a locked Library keeps its sessions (spec: LA-18). An exchange
-  // refused ends the session, which tells the app.
+  // refused ends the session, which tells the app (spec: LA-21).
   useEffect(() => {
     if (!held || desktop === null) {
       return;
@@ -204,7 +204,8 @@ export function Explorer({
   }, [held, desktop, shelved, endSession]);
 
   // A page in the desktop app's window holding no session tells the app,
-  // which loads it afresh where it can, rather than leaving this page shown.
+  // which loads it afresh where it can, rather than leaving this page shown
+  // (spec: LA-21).
   const none = standing.kind === 'none';
   useEffect(() => {
     if (none && desktop !== null) {

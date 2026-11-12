@@ -162,6 +162,9 @@ describe('the renewal of the explorer session', () => {
   });
 });
 
+// LA-21: the page tells the app, one way and with no answer, that it holds no
+// session. Beyond that rule, the app hears it only from the explorer's own
+// window and origin, as it hears a drop (spec: LA-26).
 describe('the explorer page saying its session ended', () => {
   const EXPLORER = { id: 'explorer' };
   const ORIGIN = 'http://127.0.0.1:41000';

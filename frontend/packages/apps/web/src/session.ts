@@ -318,7 +318,9 @@ function sentence(refused: unknown): string {
  * What the desktop app's window offers the page about its session, through
  * the window's preload. Neither call asks the app for a ticket: the app
  * hands one over on its own, ahead of the token's expiry, and the page only
- * listens for it (spec: LA-17, LA-18).
+ * listens for it (spec: LA-17, LA-18). What the page says the other way, that
+ * it holds no session, the app answers by loading the window afresh
+ * (spec: LA-21).
  */
 export interface DesktopSession {
   /**

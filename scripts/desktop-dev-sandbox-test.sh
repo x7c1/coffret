@@ -17,7 +17,8 @@
 # COFFRET_SANDBOX_HELPER_OWNER to the user's ID, the owner the check then wants
 # in place of root. The case after it keeps the default owner, root, and
 # expects the same file to be refused, so it is the owner, not the bit alone,
-# that lets the first one through.
+# that lets the first one through. Run as root, that case gives its file away
+# first (it says why there).
 
 set -euo pipefail
 
@@ -135,6 +136,14 @@ chmod 4755 "$(dirname "$work/setuid-sandbox/checkout/$ELECTRON_SUFFIX")/chrome-s
 expect_start setuid-sandbox COFFRET_SANDBOX_HELPER_OWNER="$(id -u)"
 
 setup setuid-sandbox-not-root 1
+# Run as root, the throwaway chrome-sandbox would be root's like everything
+# else root makes, and so exactly the file the check lets through. Root can
+# give it away, so it does, to nobody's ID: the file is then not root's for
+# whoever runs the case, and the check is still asked about its default owner.
+# The chown comes before the chmod because a chown clears the setuid bit.
+if [ "$(id -u)" -eq 0 ]; then
+  chown 65534 "$(dirname "$work/setuid-sandbox-not-root/checkout/$ELECTRON_SUFFIX")/chrome-sandbox"
+fi
 chmod 4755 "$(dirname "$work/setuid-sandbox-not-root/checkout/$ELECTRON_SUFFIX")/chrome-sandbox"
 expect_refusal setuid-sandbox-not-root \
   "sudo apparmor_parser -r $work/setuid-sandbox-not-root/apparmor.d/coffret-desktop-dev"
