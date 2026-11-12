@@ -158,10 +158,10 @@ describe('the explorer preload, handing picked files over by path', () => {
   });
 });
 
-// LA-17, LA-18: the page's session is carried one way in each direction. The
-// main process hands a fresh ticket over on its own, and the page listens;
-// the page says its session ended, and is answered nothing. No call the page
-// can make asks for a ticket.
+// LA-17, LA-18, LA-21: the page's session is carried one way in each
+// direction. The main process hands a fresh ticket over on its own, and the
+// page listens; the page says its session ended, and is answered nothing. No
+// call the page can make asks for a ticket.
 describe('the explorer preload, carrying the session', () => {
   it('exposes nothing but taking a drop, listening for tickets, saying the session ended, and saying the appearance changed', () => {
     const { api } = loaded();

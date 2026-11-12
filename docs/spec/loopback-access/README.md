@@ -450,8 +450,8 @@ Concept background: [Library](../../concepts/library/),
   own: the page tells the app, one way and with no answer, that it holds no
   session, and the app loads the window afresh as *Reload the explorer* does.
   It does so only where it can use a ticket: not while no Library is served
-  or the app is quitting, not while the Library is locked and the Passphrase
-  window is in front, when it waits for the unlock, and not again within a
+  or the app is quitting; while the Library is locked, it waits for the
+  Library to be unlocked before loading the window; and not again within a
   minute of the last time, so that a page that cannot hold a session is not
   loaded round and round. The desktop app writes no file
   for a ticket and hands none to a browser. Only the development host — the

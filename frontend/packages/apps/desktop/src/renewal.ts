@@ -8,8 +8,8 @@
 // the old one, without loading again. The page has no call that makes the main
 // process issue a ticket: what it can send is `SESSION_ENDED`, which answers
 // nothing, and tells the app its page holds no session, so that the app loads
-// the window afresh where it can (`desktop.ts`). Kept apart from Electron so
-// that it is tested without it.
+// the window afresh where it can (`desktop.ts`; spec: LA-21). Kept apart from
+// Electron so that it is tested without it.
 
 import { fromOrigin } from './drops.js';
 

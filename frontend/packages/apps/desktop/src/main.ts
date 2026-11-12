@@ -20,10 +20,11 @@
 // alone and hands the paths to the addon (`drops.ts`). Beside it, the
 // explorer's session is kept from ending under its page (`renewal.ts`): this
 // process hands the page a fresh ticket on its own timer, one way, ahead of
-// its token's expiry, and the page may say, one way too, that it holds no
-// session, which loads its window afresh. The page may also say, one way, that
-// the server took a new appearance for the explorer, whereupon this process
-// reads it afresh and draws the windows' chrome in it (`appearance.ts`).
+// its token's expiry (spec: LA-18), and the page may say, one way too, that it
+// holds no session, which loads its window afresh (spec: LA-21). The page may
+// also say, one way, that the server took a new appearance for the explorer,
+// whereupon this process reads it afresh and draws the windows' chrome in it
+// (`appearance.ts`).
 // Nothing else is exposed to any page, and the Passphrase window has no
 // preload.
 
