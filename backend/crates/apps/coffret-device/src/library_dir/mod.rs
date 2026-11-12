@@ -37,10 +37,6 @@ pub(crate) const STAGING_SUFFIX: &str = ".partial";
 const SETTINGS_FILE: &str = "settings.json";
 /// The file the Master Key is kept in, under the Passphrase (spec: KD-9).
 const MASTER_KEY_FILE: &str = "master-key.cfmk";
-/// The file a Library's previous per-Library OAuth grant was kept in, sealed
-/// under its Master Key's token-cache purpose key (spec: KD-10). Read only to
-/// promote it into an account's cache (spec: SA-8).
-const PREVIOUS_TOKEN_CACHE_FILE: &str = "token-cache.cftc";
 /// The file the Library's account-cache key envelope is kept in: the key of the
 /// account it references, wrapped under this Library's own purpose key
 /// (spec: SA-9, KD-12).
@@ -60,6 +56,12 @@ const PARCEL_DIRECTORY: &str = "parcels";
 /// The directory a Library an earlier build put here has its records replayed
 /// into afresh, to read its name from, while it is first opened.
 const NAMING_DIRECTORY: &str = "naming";
+
+/// Whether `path` names the file a Library keeps its Master Key in, in whatever
+/// Library's directory (spec: KD-9).
+pub(crate) fn is_master_key_file(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == MASTER_KEY_FILE)
+}
 
 /// One Library's directory on this device, and the seven things in it.
 ///
@@ -191,15 +193,6 @@ impl LibraryDir {
     /// The Master Key as this device stores it, under the Passphrase.
     pub fn master_key_file(&self) -> PathBuf {
         self.path.join(MASTER_KEY_FILE)
-    }
-
-    /// The Library's previous per-Library grant, where a build before accounts
-    /// left one (spec: KD-10).
-    ///
-    /// Nothing writes it any more; it is read once, to promote it into an
-    /// account's cache, and removed afterwards (spec: SA-8).
-    pub fn previous_token_cache_file(&self) -> PathBuf {
-        self.path.join(PREVIOUS_TOKEN_CACHE_FILE)
     }
 
     /// The account-cache key envelope of the account this Library references,
@@ -403,10 +396,6 @@ mod tests {
         assert_eq!(
             dir.master_key_file(),
             Path::new("/state/coffret/libraries/alpha/master-key.cfmk")
-        );
-        assert_eq!(
-            dir.previous_token_cache_file(),
-            Path::new("/state/coffret/libraries/alpha/token-cache.cftc")
         );
         assert_eq!(
             dir.account_envelope_file(),

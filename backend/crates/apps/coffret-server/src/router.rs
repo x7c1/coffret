@@ -54,10 +54,11 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
             "/api/filter-settings",
             get(routes::filter_settings).post(routes::keep_filter_settings),
         )
-        // The eleven that are not a `GET`, because they are the ones that ask
+        // The twelve below are `POST`s, because they are the ones that ask
         // the server to go and do something rather than to say what it knows.
         // Four of them arm background work and answer at once — the fill, the
-        // sync, the freeze and the deletion; the refresh and the move do their
+        // sync, the freeze and the deletion; the stop asks for that work to be
+        // stopped and is answered at once too; the refresh and the move do their
         // work while the request is open, because what each answers with is
         // what that work found; the reconnect starts a consent flow and answers with the page
         // to open; the unlock asks the app's own window for the Passphrase and

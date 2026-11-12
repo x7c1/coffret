@@ -6,6 +6,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+use coffret_format::UnlockedMasterKey;
 use coffret_model::{AccountCacheKey, Passphrase, Redacted};
 use coffret_usecase::{LocalIoError, LocalOperation};
 use tracing::{debug, info, warn};
@@ -207,7 +208,10 @@ impl Accounts {
     /// accepts, or holds a Master Key that could not be derived from it:
     /// telling any of them as a Passphrase that does not open the Library would
     /// send a person retyping a right one (spec: KD-9). Only a failed
-    /// authentication is [`Error::AccountNotOpened`].
+    /// authentication is [`Error::AccountNotOpened`]. The stored Master Key
+    /// file of the Library named is read before its Passphrase is asked for,
+    /// and a refusal of it is given without asking: nobody types a Passphrase
+    /// the file could not be opened with (spec: KD-9).
     pub(crate) fn key_for(
         &self,
         account: &AccountName,
@@ -229,11 +233,19 @@ impl Accounts {
             account: account.as_str().to_owned(),
             library: library.which(),
         };
+        // Where there is nobody to ask, a refusal here is the one `unread`
+        // already holds: the Library named is the first one tried.
+        let stored = StoredMasterKeyFile::read(library)?;
         let Some(given) = referencing.ask(&library.which()) else {
             return Err(unread.unwrap_or_else(not_opened));
         };
         let given = given?;
-        Self::key_in(library, account, &given).unwrap_or_else(|| Err(not_opened()))
+        Self::key_out_of(
+            library,
+            account,
+            StoredMasterKeyFile::opened(library, stored, &given),
+        )
+        .unwrap_or_else(|| Err(not_opened()))
     }
 
     /// The account-cache key of `account` out of the envelope of `library`,
@@ -252,7 +264,20 @@ impl Accounts {
         account: &AccountName,
         passphrase: &Passphrase,
     ) -> Option<Result<AccountCacheKey>> {
-        let unlocked = match StoredMasterKeyFile::unlock(library, passphrase) {
+        Self::key_out_of(
+            library,
+            account,
+            StoredMasterKeyFile::unlock(library, passphrase),
+        )
+    }
+
+    /// The same, given what unlocking the Library's stored Master Key came to.
+    fn key_out_of(
+        library: &LibraryDir,
+        account: &AccountName,
+        unlocked: Result<UnlockedMasterKey>,
+    ) -> Option<Result<AccountCacheKey>> {
+        let unlocked = match unlocked {
             Ok(unlocked) => unlocked,
             Err(refused @ Error::MasterKeyNotUnlocked { .. }) => {
                 debug!(

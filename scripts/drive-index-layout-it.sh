@@ -153,12 +153,12 @@ readonly SCHEMA_FILE="$ROOT/backend/crates/gateway/coffret-sqlite-index/src/sche
 
 # The two kinds of failure a grant that has died is answered with, and they are
 # two because a refresh token Google has expired is not a refresh token that was
-# never there. The first is the Library's token cache holding nothing or not
-# opening. The second is the token endpoint's own refusal on the way up, and it
-# is the one a run weeks after the last one gets: the cache still holds a
-# refresh token, so nothing notices until Google is asked to spend it — and the
-# consent screen a desktop client starts out on is in Testing, where Google
-# expires a refresh token after seven days.
+# never there. The first is the token cache of the Library's account holding
+# nothing or not opening. The second is the token endpoint's own refusal on
+# the way up, and it is the one a run weeks after the last one gets: the cache
+# still holds a refresh token, so nothing notices until Google is asked to
+# spend it — and the consent screen a desktop client starts out on is in
+# Testing, where Google expires a refresh token after seven days.
 readonly NO_CACHED_GRANT="not_authorized"
 readonly REJECTED_GRANT="unauthenticated"
 readonly NO_GRANT=".error.kind == \"$NO_CACHED_GRANT\" or .error.kind == \"$REJECTED_GRANT\""
@@ -995,7 +995,7 @@ echo "=== scenario C: a Library whose grant is gone says so and names the renewa
 echo
 echo "--- copying $LIBRARY to $UNGRANTED, and its account without its $TOKEN_CACHE ---"
 account="$(settings_value "$LIBRARY" account)"
-[ -n "$account" ] || fail "$LIBRARY's settings name no account; opening it should have promoted its grant into one."
+[ -n "$account" ] || fail "$LIBRARY's settings name no account; init should have put it on one."
 rm -rf "$UNGRANTED_STATE"
 mkdir -p "$UNGRANTED_STATE/libraries" "$UNGRANTED_STATE/accounts/$account"
 # As in scenario B: the copy goes whatever happens.

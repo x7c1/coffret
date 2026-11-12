@@ -43,7 +43,7 @@ Concept background: [Master Key](../../concepts/master-key/),
   | `coffret/v1/control/keyring` | Keyring replica payloads (FM-11) |
   | `coffret/v1/control/index-snapshot` | ordinary Index Snapshot payloads (FM-11) |
   | `coffret/v1/control/activation-snapshot` | activation Index Snapshot payloads (FM-11) |
-  | `coffret/v1/token-cache` | a Library's previous per-Library OAuth token cache on this device (KD-10), opened only to promote it (SA-8) |
+  | `coffret/v1/token-cache` | retired for Libraries: a Library's previous per-Library OAuth token cache on this device (KD-10), which no device opens any longer; the label is never reused, and only the manual Drive tools still seal their own cache under it |
   | `coffret/v1/account-cache-wrap` | an account's account-cache key, into this Library's account-cache key envelope on this device (KD-12) |
 
   A key derived for one purpose is used for no other, and every future
@@ -154,7 +154,10 @@ Concept background: [Master Key](../../concepts/master-key/),
     file, wherever the stored form is opened: unlocking the Library, and
     opening an account's key through a Library that references it to use
     the account (SA-9), where another referencing Library is still tried.
-    *(Form: test)*
+    Where the Passphrase of a Library referencing an account would be asked
+    for to open the account's key (SA-9), that Library's stored Master Key
+    file is read first, and a refusal of it is given without asking: nobody
+    types a Passphrase the file could not be opened with. *(Form: test)*
   - The Argon2id version is 0x13 (v1.3). The stored form records no Argon2
     version field, so the version is a format constant, not a recorded
     parameter: an implementation using a different version would derive a
@@ -188,10 +191,15 @@ Concept background: [Master Key](../../concepts/master-key/),
     the adapter that keeps the cache, so an adapter may change what it
     caches without changing this rule.
   - A Library's previous per-Library cache has this same form, sealed under
-    that Library's `coffret/v1/token-cache` purpose key (KD-4) instead. The
-    form does not say which key sealed it; where the file is found does — in
-    a Library's directory, or among the device's accounts — and the only
-    reader of the former is the promotion SA-8 describes.
+    that Library's retired `coffret/v1/token-cache` purpose key (KD-4)
+    instead. The form does not say which key sealed it; where the file is
+    found does — in a Library's directory, or among the device's accounts —
+    and a device reads only the latter: one left in a Library's directory is
+    neither read nor removed, and the Library is opened as though it were
+    not there. The manual Drive tools (the `authorize` and `app_folders`
+    examples of `google-drive-store`), run by hand outside any device, still
+    seal the cache they keep in this same form, under a
+    `coffret/v1/token-cache` key derived from the Master Key they are given.
   - The file is device-local and never uploaded — it is not a Storage
     Object — so KD-8 is untouched by it: nothing here is Passphrase-derived
     and nothing here reaches Storage.

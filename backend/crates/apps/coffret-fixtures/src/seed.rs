@@ -216,7 +216,7 @@ pub fn layout() -> Seed {
 
     // Names: Japanese ones, and ones too long for a listing to show whole.
     seed.book(
-        &format!("{BOOKS}/吾輩は猫である"),
+        &format!("{BOOKS}/裏庭の時計職人"),
         named(&[
             "表紙.jpg",
             "001.jpg",
@@ -227,7 +227,7 @@ pub fn layout() -> Seed {
         ]),
     );
     seed.book(
-        &format!("{BOOKS}/日本の作家/夏目漱石/こころ"),
+        &format!("{BOOKS}/日本の作家/山野辺透/灯台の午後"),
         numbered(8, Shape::Portrait),
     );
     seed.book(
@@ -440,8 +440,15 @@ mod tests {
         }
 
         // Japanese names, for books, folders and pages.
-        assert!(pages(out, "Books/吾輩は猫である").contains(&"表紙.jpg".to_owned()));
-        assert_eq!(pages(out, "Books/日本の作家/夏目漱石/こころ").len(), 8);
+        assert!(pages(out, "Books/裏庭の時計職人").contains(&"表紙.jpg".to_owned()));
+        assert_eq!(pages(out, "Books/日本の作家/山野辺透/灯台の午後").len(), 8);
+        // Every author and title under it is made up, and these are all of
+        // them, so no other name comes back unnoticed.
+        assert_eq!(listed(&out.join("Books/日本の作家")), vec!["山野辺透"]);
+        assert_eq!(
+            listed(&out.join("Books/日本の作家/山野辺透")),
+            vec!["灯台の午後"]
+        );
 
         // Names long enough to be cut short, for books and for folders, in
         // either script.

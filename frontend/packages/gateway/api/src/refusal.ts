@@ -123,7 +123,10 @@ export type RefusalKind =
    * The host holds no session for this page: its token is missing, unknown,
    * expired or revoked, or of a generation of the host that has ended
    * (spec: LA-14, LA-18). The page lets its token go and says how the explorer
-   * is opened.
+   * is opened. In the desktop app's window the page then tells the app it holds
+   * no session, and the app loads the window afresh from a new ticket — after
+   * the unlock where the Library is locked, and not twice within a minute
+   * (spec: LA-21).
    */
   | 'authentication_required'
   /**

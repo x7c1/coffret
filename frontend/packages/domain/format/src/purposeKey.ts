@@ -24,10 +24,11 @@ export type Purpose =
   // only on the admission table its name is checked against (spec: FM-12).
   | 'control/activation-snapshot'
   // The two purposes whose keys protect device-local state rather than a
-  // Storage Object: a Library's previous per-Library OAuth token cache, and the
-  // envelope that wraps an account's account-cache key for one Library. They
-  // are in the registry because the registry is the specification's, not any
-  // one implementation's.
+  // Storage Object: a Library's previous per-Library OAuth token cache (a
+  // retired purpose no device opens any longer, kept so that its info string is
+  // never reused), and the envelope that wraps an account's account-cache key
+  // for one Library. They are in the registry because the registry is the
+  // specification's, not any one implementation's.
   | 'token-cache'
   | 'account-cache-wrap';
 

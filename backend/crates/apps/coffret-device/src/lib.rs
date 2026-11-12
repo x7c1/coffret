@@ -55,9 +55,7 @@
 //! under its own purpose key and bound to the account's device-local name
 //! (spec: SA-8, SA-9). Unlocking any one of those Libraries opens the account's
 //! grant, and an account no Library's settings name any longer is discarded the
-//! next time the accounts are opened. A Library an earlier build put here, with
-//! a `token-cache.cftc` of its own, has that grant promoted into an account the
-//! first time it is opened.
+//! next time the accounts are opened.
 //!
 //! Four of the six are the Library as this device keeps it. The other two are
 //! not: [`ServerKey`] and [`ServerLock`] belong to one running process — the key
@@ -185,9 +183,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-// What a Library that reaches Drive opens its account's grant through, and
-// what a previous-shape Library's own grant is promoted into (spec: SA-8,
-// SA-9).
+// What a Library that reaches Drive opens its account's grant through
+// (spec: SA-8, SA-9).
 mod account_dir;
 mod account_envelope;
 mod account_grant;
@@ -256,9 +253,7 @@ mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
 mod error;
-pub use error::{
-    ClientMismatch, CreationStep, Error, JoinedPlace, MismatchedLibrary, PromotionObstacle, Result,
-};
+pub use error::{ClientMismatch, CreationStep, Error, JoinedPlace, MismatchedLibrary, Result};
 
 mod finding;
 pub use finding::Finding;
