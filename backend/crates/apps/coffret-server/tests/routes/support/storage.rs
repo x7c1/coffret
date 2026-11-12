@@ -2,6 +2,7 @@
 //! count what reached them.
 
 use coffret_model::{ControlObjectName, ObjectRef, ReplicaPosition};
+use coffret_usecase::fetch_conformance::lose_key;
 use coffret_usecase::{ByteStream, Index};
 
 use super::Served;
@@ -259,6 +260,25 @@ impl Served {
             .put(&lost.name, ByteStream::from(lost.bytes))
             .await
             .expect("the replica is written back");
+    }
+
+    /// Commits, from the other device, a Keyring that records the key of the
+    /// Container holding `path` as lost, and the head that selects it — the
+    /// state a device meets once another rebuilt the Keyring without that key
+    /// (spec: KL-7, RV-8).
+    ///
+    /// Behind the served device's switch and counter, as every commit from the
+    /// other device is. Nothing in the Library changes but which Keyring
+    /// generation is committed, so the served device's catalog says the same
+    /// after a catch-up as before it.
+    pub async fn lose_key_of(&self, path: &str) {
+        let location = self
+            .filled
+            .entry_at(&super::entry_path(path))
+            .await
+            .expect("the filling device's catalog answers")
+            .expect("the filling device placed the Entry somewhere");
+        lose_key(self.store.as_ref(), &self.filled, location.container_id).await;
     }
 }
 

@@ -99,9 +99,8 @@ Concept background: [Journal](../../concepts/journal/),
     reclaimable leftovers (OC-2).
   - Completion follows every catch-up that leaves the Index caught up, not
     only a sync's: the one a server makes as it starts and whenever it is
-    asked to, a command's on its own, the one a fetch, a rename, or a deletion
-    begins with, and the one before a deletion's preview — a freeze settles in
-    full instead (OC-9). It needs
+    asked to, a command's on its own, and the one a fetch, a rename, or a
+    deletion begins with — a freeze settles in full instead (OC-9). It needs
     the provenance and the current set and nothing a sync's settlement has
     besides, so a batch whose record landed and whose refresh did not is this
     device's own from the first catch-up after it, and a fill never takes the

@@ -668,8 +668,7 @@ pub enum Error {
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<FreezeError>,
     },
-    /// A deletion did not finish, or its preview could not read the committed
-    /// Keyring it names the refused Packs from.
+    /// A deletion did not finish, or its preview could not read the catalog.
     Delete {
         /// What the flow reported.
         ///

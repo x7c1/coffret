@@ -1139,10 +1139,11 @@ function deleteUrl(target: DeleteTarget): string {
  * What deleting folders or files would do, counted before it is asked
  * for — `GET /api/delete`.
  *
- * The run's own plan over the Library as it now stands, so what it counts is
- * what {@link startDelete} of the same target does — give or take the Library
- * moving in between, or a Pack that does not verify when the run reads it
- * back.
+ * The run's own plan over this device's catalog as it now stands, so what it
+ * counts is what {@link startDelete} of the same target does — give or take the
+ * Library moving in between, a Pack that does not verify when the run reads it
+ * back, or a Pack whose key is lost, which the preview counts as rebuilt and
+ * the run refuses.
  */
 export interface DeletePreview {
   /** The folders it would delete, in Entry Path order; empty where it names files only. */
@@ -1161,7 +1162,7 @@ export interface DeletePreview {
   rebuild_read: number;
   /** How many bytes the rebuilt Packs would weigh on Storage. */
   rebuild_written: number;
-  /** The Packs it would be refused for, and why. */
+  /** The Packs it would be refused for, and why: always empty, since the preview reads no Keyring. */
   refused: RefusedPack[];
   /** Named files the Library holds nothing at. */
   missing: string[];
