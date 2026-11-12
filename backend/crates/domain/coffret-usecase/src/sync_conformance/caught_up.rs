@@ -2,7 +2,6 @@ use std::path::Path;
 
 use crate::catch_up::{catch_up_catalog, CatchUpRequest};
 use crate::conformance_library::Library;
-use crate::delete::{committed_key_lost, preview_delete, DeleteSelection};
 use crate::device_state::{LocalEntryState, Mapping, RootMarkerId};
 use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, FetchOutcome, FetchRequest, KeptParcels};
@@ -283,41 +282,4 @@ pub async fn a_rename_completes_a_commit_whose_refresh_failed_before_it_plans(
     );
     assert!(pending(fixture.index()).await.is_empty());
     assert_eq!(spooled(fs), 0);
-}
-
-/// The step before a deletion's preview completes the batch, so the preview is
-/// worked out over a catalog that holds the batch's files as this device's
-/// local copies, as the deletion's own run would see them (spec: OC-7, PK-9).
-pub async fn a_delete_preview_completes_a_commit_whose_refresh_failed(fixture: &SyncUnderTest) {
-    let keys = keys();
-    interrupted_refresh(fixture, &keys).await;
-
-    let lost = committed_key_lost(
-        fixture.store(),
-        fixture.index(),
-        &keys,
-        fixture.fs(),
-        &policy(),
-        at(2),
-    )
-    .await
-    .unwrap_or_else(|error| panic!("the committed Keyring must be read: {error}"));
-    assert!(lost.is_empty());
-
-    assert!(
-        recorded_present(fixture).await,
-        "the batch's file is this device's local copy (spec: EP-10)",
-    );
-    assert!(pending(fixture.index()).await.is_empty());
-    assert_eq!(spooled(fixture.fs()), 0);
-
-    let preview = preview_delete(
-        fixture.index(),
-        &DeleteSelection::paths([entry_path("a.jpg")].into()),
-        &lost,
-    )
-    .await
-    .unwrap_or_else(|error| panic!("a preview reads the catalog: {error}"));
-    assert_eq!(preview.entries, 1);
-    assert!(preview.missing.is_empty());
 }

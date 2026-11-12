@@ -16,8 +16,10 @@ use super::{DeleteRun, DeleteStatus, Target};
 ///
 /// [`delete`](coffret_device::OpenLibrary::delete) and nothing around it: what
 /// is removed, what is rebuilt and what is refused is the use case's answer
-/// over the catalog as the run finds it, which is why a preview and a run can
-/// differ only where the Library moved in between (spec: PK-9).
+/// over the catalog as the run finds it. A preview, counted over the catalog
+/// alone, can differ from it where the Library moved in between, where a Pack
+/// the run reads back does not verify, and where a Pack's key is lost
+/// (spec: PK-9, PK-10, KL-17).
 ///
 /// The keys are taken once for the whole run, as every other flow here takes
 /// them: a lock that lands while a Pack is being rebuilt leaves this holding

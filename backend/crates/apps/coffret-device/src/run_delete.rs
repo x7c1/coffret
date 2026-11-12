@@ -1,9 +1,7 @@
 use std::collections::BTreeSet;
 
-use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::delete::{
-    committed_key_lost, delete_entries, preview_delete, DeleteOutcome, DeletePreview,
-    DeleteRequest, DeleteSelection,
+    delete_entries, preview_delete, DeleteOutcome, DeletePreview, DeleteRequest, DeleteSelection,
 };
 use coffret_usecase::Progress;
 use tracing::info;
@@ -71,33 +69,27 @@ impl OpenLibrary {
         Ok(outcome)
     }
 
-    /// Counts what [`delete`](Self::delete) would do with `selection`, naming
-    /// the Packs it would be refused for.
+    /// Counts what [`delete`](Self::delete) would do with `selection`.
     ///
-    /// The run's own plan over the catalog, after the run's own first step:
-    /// the catalog is caught up and the committed Keyring read for the
-    /// Containers whose key is lost (spec: CK-9, KL-7). So it reaches Storage
-    /// and takes the keys, and writes nothing to the Library.
+    /// The run's own plan, over the catalog as it stands and nothing else — no
+    /// Storage, no key, no write — so a person is told what a deletion costs
+    /// as soon as they ask. Which Packs' keys are lost is the one thing the
+    /// plan needs that the catalog does not hold, and reading it takes Storage
+    /// and the keys (spec: KL-7); so no Pack is counted as key-lost, and one
+    /// whose key is lost is counted as rebuilt. The run reads the committed
+    /// Keyring after its own catch-up and refuses that Pack, and says so
+    /// (spec: PK-10, KL-17).
     pub async fn preview_delete(&self, selection: &DeleteSelection) -> Result<DeletePreview> {
-        let key_lost = committed_key_lost(
-            self.store.as_ref(),
-            self.index.as_ref(),
-            &self.keys,
-            self.local_fs.as_ref(),
-            &CommitPolicy::default(),
-            now(),
-        )
-        .await?;
-        Ok(preview_delete(self.index.as_ref(), selection, &key_lost).await?)
+        Ok(preview_delete(self.index.as_ref(), selection, &BTreeSet::new()).await?)
     }
 
     /// Whether `selection` names any Entry the catalog holds as current.
     ///
-    /// Out of the catalog as it stands and nothing else — no Storage, no key —
-    /// for a caller that wants to refuse a deletion of nothing before arming
-    /// one.
+    /// Out of the [preview](Self::preview_delete), so out of the catalog as it
+    /// stands and nothing else, for a caller that wants to refuse a deletion of
+    /// nothing before arming one. A Pack whose key is lost is counted there as
+    /// rebuilt, so its named Entries count here as ones the deletion takes.
     pub async fn deletes_anything(&self, selection: &DeleteSelection) -> Result<bool> {
-        let plan = preview_delete(self.index.as_ref(), selection, &BTreeSet::new()).await?;
-        Ok(plan.entries > 0 || !plan.refused.is_empty())
+        Ok(self.preview_delete(selection).await?.entries > 0)
     }
 }

@@ -29,11 +29,13 @@ use crate::object_store::ObjectStore;
 ///
 /// The record adds and removes nothing. Nothing in the Library changes but which
 /// Keyring generation is committed, which is exactly what a rebuild changes.
-pub(crate) async fn lose_key(
-    store: &dyn ObjectStore,
-    index: &dyn Index,
-    container_id: ContainerId,
-) {
+///
+/// `index` is the catalog of a device caught up to the Library's head, which
+/// the record succeeds; it is read, never written. The control objects are
+/// sealed under the Master Key every suite's Library is enrolled under,
+/// `[0x5a; 32]` at the first epoch, so a Library made under another one is not
+/// one this can write into.
+pub async fn lose_key(store: &dyn ObjectStore, index: &dyn Index, container_id: ContainerId) {
     let checkpoint = index
         .checkpoint()
         .await
