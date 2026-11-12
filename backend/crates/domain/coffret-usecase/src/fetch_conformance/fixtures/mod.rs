@@ -21,7 +21,7 @@ mod keys;
 pub(crate) use keys::{keys, purpose_key};
 
 mod lose_key;
-pub(crate) use lose_key::lose_key;
+pub use lose_key::lose_key;
 
 mod objects;
 pub(crate) use objects::container_handle;

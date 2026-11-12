@@ -57,16 +57,18 @@ pub async fn delete(
 /// What [`POST /api/delete`](delete) of the same selection would do, counted
 /// before it is asked for: how many files and bytes leave the Library, how
 /// many Containers are removed outright, how many Packs are rebuilt and what
-/// that reads and writes, which Packs it would be refused for and why, and
-/// which named files the Library does not hold.
+/// that reads and writes, and which named files the Library does not hold.
 ///
 /// The count is the run's own plan (see
-/// [`preview_delete`](coffret_device::OpenLibrary::preview_delete)), after the
-/// run's own first step — the catalog caught up and the committed Keyring read
-/// for the Packs whose key is lost — so the two cannot disagree about what is
-/// removed and what is rebuilt. They can differ only where the Library moves
-/// between the two calls, or where a Pack the run reads back does not verify,
-/// which a preview reading nothing cannot know (spec: PK-10).
+/// [`preview_delete`](coffret_device::OpenLibrary::preview_delete)) over the
+/// catalog as it stands, and nothing else: it catches nothing up and reads no
+/// Keyring, so it takes neither Storage nor a key and answers at once. The two
+/// agree about what is removed and what is rebuilt except where the Library
+/// moves between the calls, where a Pack the run reads back does not verify
+/// (spec: PK-10), and where a Pack's key is lost: the preview counts that Pack
+/// as rebuilt and leaves `refused` always empty, and the run, reading the
+/// Keyring after its own catch-up, refuses it and names it in the work answer
+/// (spec: PK-10, KL-17).
 ///
 /// It changes nothing in the Library and arms nothing. Refused exactly where
 /// the `POST` is.
@@ -160,7 +162,9 @@ pub struct PreviewDto {
     rebuild_read: u64,
     /// How many bytes the rebuilt Packs would weigh on Storage.
     rebuild_written: u64,
-    /// The Packs it would be refused for, and why (spec: KL-17).
+    /// The Packs it would be refused for, and why (spec: KL-17): always empty,
+    /// since the preview reads no Keyring to find a Pack whose key is lost,
+    /// and kept so the answer keeps the shape the run's own count has.
     refused: Vec<RefusedPackDto>,
     /// Named files the Library holds nothing at.
     missing: Vec<String>,

@@ -49,10 +49,7 @@ pub use local_copies::{
 };
 
 mod preview;
-pub use preview::{
-    a_preview_counts_what_the_deletion_then_does,
-    the_committed_keyring_names_the_packs_a_preview_refuses,
-};
+pub use preview::a_preview_counts_what_the_deletion_then_does;
 
 mod progress;
 pub use progress::a_deletion_says_it_is_removing_this_devices_copies_after_committing;
@@ -123,7 +120,6 @@ macro_rules! delete_conformance {
             a_partial_deletion_of_a_key_lost_pack_is_refused,
             a_rebuild_whose_refresh_failed_is_completed_without_claiming_its_files,
             a_preview_counts_what_the_deletion_then_does,
-            the_committed_keyring_names_the_packs_a_preview_refuses,
             the_deleting_devices_unedited_copies_go_to_the_trash_after_the_commit,
             an_edited_copy_is_kept_and_reported,
             a_copy_gone_from_disk_is_left_alone,

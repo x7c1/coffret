@@ -183,8 +183,8 @@ control for a sync, since a drop starts one.
   leave out, by the freeze's own scan stopped before a file is read, changing
   nothing; a deletion: count what would leave the Library, the Containers it
   would remove, the Packs it would rebuild with what rebuilding them reads and
-  writes, and the Packs it would be refused for, by the deletion's own plan,
-  changing nothing in the Library)
+  writes, by the deletion's own plan over the catalog as it stands, changing
+  nothing in the Library)
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
 - delete (Entries from the Library — named one by one, or as a folder and
