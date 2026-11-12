@@ -51,9 +51,9 @@
 //!
 //! [`delete_entries`] is the whole of the public surface that changes
 //! anything, and [`preview_delete`] the one place a caller may look in from
-//! outside: the plan, counted, with no Storage, no key, and no write.
-//! [`committed_key_lost`] is the run's own first step on its own, for a caller
-//! that wants the preview to name the Packs a run would be refused for.
+//! outside: the plan, counted, with no Storage, no key, and no write. Step 1
+//! is not in it, so it counts over the catalog as it stands, and knows a Pack's
+//! key is lost only where its caller names it.
 //!
 //! What is deliberately not here. **Other devices' local files** for a deleted
 //! Entry: what becomes of them is each device's next sync's to decide, once it
@@ -79,7 +79,6 @@ mod delete_selection;
 pub use delete_selection::DeleteSelection;
 
 mod key_lost;
-pub use key_lost::committed_key_lost;
 
 mod mapped_copies;
 pub use mapped_copies::MappedCopies;

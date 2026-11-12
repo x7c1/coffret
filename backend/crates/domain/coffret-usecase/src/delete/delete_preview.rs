@@ -34,8 +34,8 @@ pub struct DeletePreview {
     /// How many bytes the replacements they write weigh on Storage.
     pub rebuild_written: u64,
     /// The Packs the deletion would be refused for, because they keep Entries
-    /// and the committed Keyring maps them to a key-lost marker (spec: PK-10,
-    /// KL-17).
+    /// and the caller named their keys as lost (spec: PK-10, KL-17). Empty
+    /// where it named none.
     pub refused: Vec<RefusedPack>,
     /// Named Entry Paths that hold no current Entry.
     pub missing: Vec<EntryPath>,
@@ -80,10 +80,9 @@ impl DeletePreview {
 /// before asking for one. The one fact the catalog does not hold is which
 /// Containers the committed Keyring maps to a key-lost marker, and reading that
 /// takes Storage and the Master Key (spec: KL-7). So it is handed in —
-/// `key_lost` is what a caller already learned from an earlier run's outcome,
-/// empty if it knows of none — and a Pack it does not name is counted as
-/// rebuilt. A run over a Pack whose key turns out to be lost refuses it, and
-/// says so (spec: PK-10, KL-17).
+/// `key_lost` is what a caller already knows, empty if it knows of none — and a
+/// Pack it does not name is counted as rebuilt. A run over a Pack whose key
+/// turns out to be lost refuses it, and says so (spec: PK-10, KL-17).
 pub async fn preview_delete(
     index: &dyn Index,
     selection: &DeleteSelection,

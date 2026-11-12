@@ -100,6 +100,85 @@ async fn the_preview_counts_exactly_what_the_deletion_does() {
     assert_eq!(bytes(response).await, b"the third scan");
 }
 
+// The count is the catalog's alone: with Storage gone the preview still
+// answers, and asks Storage nothing — no catch-up, no Keyring — while it still
+// splits the selection into a removal and a rebuild (spec: PK-9).
+#[tokio::test]
+async fn the_preview_answers_from_the_catalog_without_reaching_storage() {
+    let served = with_a_pack().await;
+    served.forget_reads();
+    served.halt_storage();
+
+    let (status, preview) = body_of(
+        served
+            .get("/api/delete?entry=scans/b.jpg&entry=albums/cover.png")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["entries"], 2, "{preview}");
+    assert_eq!(preview["removed"], 1, "{preview}");
+    assert_eq!(preview["rebuilt"], 1, "{preview}");
+    assert!(
+        served.asked().is_empty(),
+        "the catalog answers, and Storage is asked nothing: {:?}",
+        served.asked(),
+    );
+    assert_eq!(served.refused_reads(), 0, "nothing met the halted Storage");
+}
+
+// PK-10, KL-17: a Pack whose key is lost cannot be rebuilt, so a deletion of
+// only some of its files is refused for it. The preview reads no Keyring to
+// know it: it counts that Pack as rebuilt. The deletion reads the Keyring after
+// its own catch-up, refuses the Pack and says so, and takes out the rest.
+#[tokio::test]
+async fn a_pack_whose_key_is_lost_is_counted_as_rebuilt_and_then_refused() {
+    let served = with_a_pack().await;
+    served.lose_key_of("scans/b.jpg").await;
+    assert_eq!(served.post("/api/refresh").await.status(), 200);
+    let named = "/api/delete?entry=scans/b.jpg&entry=albums/cover.png";
+
+    let (status, preview) = body_of(served.get(named).await).await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["entries"], 2, "{preview}");
+    assert_eq!(preview["removed"], 1, "{preview}");
+    assert_eq!(
+        preview["rebuilt"], 1,
+        "the Pack is counted as rebuilt: {preview}"
+    );
+    assert_eq!(preview["refused"], json!([]), "{preview}");
+
+    let (status, armed) = body_of(served.post(named).await).await;
+    assert_eq!(status, 202, "{armed}");
+    served.delete_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let done = deletion(&work);
+    assert_eq!(done["status"], "done", "{work}");
+    assert_eq!(done["entries"], 1, "only the cover left: {work}");
+    assert_eq!(done["removed"], 1, "{work}");
+    assert_eq!(done["rebuilt"], 0, "{work}");
+    let refused = done["refused"].as_array().expect("a list of refusals");
+    assert_eq!(refused.len(), 1, "{work}");
+    assert_eq!(refused[0]["reason"], "key_lost", "{work}");
+    assert_eq!(refused[0]["spared"], json!(["scans/b.jpg"]), "{work}");
+    assert_eq!(refused[0]["kept"], 2, "{work}");
+
+    // The Pack is left whole, and the cover is gone.
+    assert_eq!(
+        rows_of(&served, "scans")
+            .await
+            .into_iter()
+            .map(|(name, _, _)| name)
+            .collect::<Vec<_>>(),
+        ["a.jpg", "b.jpg", "c.jpg"],
+    );
+    assert!(!rows_of(&served, "albums")
+        .await
+        .iter()
+        .any(|(name, _, _)| name == "cover.png"));
+}
+
 // A folder is everything under it, at every depth (spec: EP-9): here five
 // one-file Containers, each removed outright.
 #[tokio::test]

@@ -47,7 +47,6 @@ pub use caught_up::{
     a_catch_up_completes_a_commit_whose_refresh_failed,
     a_catch_up_leaves_a_row_whose_container_is_not_current,
     a_catch_up_leaves_rows_another_run_owns,
-    a_delete_preview_completes_a_commit_whose_refresh_failed,
     a_fetch_completes_a_commit_whose_refresh_failed_before_it_selects,
     a_rename_completes_a_commit_whose_refresh_failed_before_it_plans,
 };
@@ -362,7 +361,6 @@ macro_rules! sync_conformance {
             a_catch_up_leaves_a_row_whose_container_is_not_current,
             a_catch_up_leaves_rows_another_run_owns,
             a_rename_completes_a_commit_whose_refresh_failed_before_it_plans,
-            a_delete_preview_completes_a_commit_whose_refresh_failed,
             a_device_that_maps_nothing_is_told_apart_from_a_folder_with_nothing_new,
             a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can,
             sync_catches_up_before_scanning,
