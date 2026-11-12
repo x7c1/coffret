@@ -41,3 +41,16 @@ updates:
       npm-minor-and-patch:
         applies-to: version-updates
         update-types: [minor, patch]
+
+  # The MinIO and AWS CLI images the e2e, local and S3 scripts run. Nothing
+  # builds these Dockerfiles; they hold the pins so that they can be updated
+  # here (scripts/lib/minio.sh reads them).
+  - package-ecosystem: docker
+    directories:
+      - /docker/minio
+      - /docker/aws-cli
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: Asia/Tokyo
