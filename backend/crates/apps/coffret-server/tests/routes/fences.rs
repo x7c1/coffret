@@ -17,13 +17,17 @@ use crate::support::{asking, json as body_of, route, Served, SERVER_KEY};
 ///
 /// Written out rather than derived, because what the case over it says is that
 /// there is no route without the fences — and a list the router generated would
-/// hold whatever the router holds.
-const EVERY_ROUTE: [(&str, &str); 26] = [
+/// hold whatever the router holds. Kept whole by
+/// [`every_route_the_router_mounts_is_behind_the_fences_case`], which reads the
+/// router's own source for what it mounts.
+const EVERY_ROUTE: [(&str, &str); 30] = [
     ("GET", "/api/library"),
     ("GET", "/api/library/totals"),
     ("GET", "/api/filter?name=cover"),
     ("GET", "/api/filter-settings"),
     ("POST", "/api/filter-settings"),
+    ("GET", "/api/appearance"),
+    ("POST", "/api/appearance"),
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
     ("GET", "/api/beside?path=albums/cover.png"),
@@ -34,6 +38,8 @@ const EVERY_ROUTE: [(&str, &str); 26] = [
     ("POST", "/api/stop"),
     ("GET", "/api/freeze?path=albums"),
     ("POST", "/api/freeze?path=albums"),
+    ("GET", "/api/delete?path=albums"),
+    ("POST", "/api/delete?path=albums"),
     ("GET", "/api/move?from=albums/cover.png&to=books/cover.png"),
     ("POST", "/api/move?from=albums/cover.png&to=books/cover.png"),
     ("POST", "/api/refresh"),
@@ -126,6 +132,74 @@ async fn no_route_answers_a_request_that_shows_no_key() {
         let (status, refusal) = body_of(served.send(asked).await).await;
         assert_eq!(status, 403, "{method} {uri} answered without a key");
         assert_eq!(refusal["error"], "unauthorized", "{method} {uri}");
+    }
+}
+
+/// The router's source, which is where what this server mounts is written.
+const ROUTER_SOURCE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/router.rs"));
+
+/// Each method and path the router mounts, read off its `.route(…)` calls.
+///
+/// Axum keeps no list of its routes a test could ask for, so the source is read
+/// instead: a path is the first string in a `.route(` call, and its methods are
+/// the method routers named on `routes::` handlers before the next call.
+fn mounted() -> Vec<(&'static str, &'static str)> {
+    let routes = ROUTER_SOURCE
+        .split_once(".fallback(")
+        .map_or(ROUTER_SOURCE, |(routes, _)| routes);
+    let mut mounted = Vec::new();
+    for call in routes.split(".route(").skip(1) {
+        let path = call
+            .split('"')
+            .nth(1)
+            .expect("every route is mounted at a path written as a string");
+        let methods: Vec<&str> = [
+            ("get(routes::", "GET"),
+            ("post(routes::", "POST"),
+            ("put(routes::", "PUT"),
+            ("patch(routes::", "PATCH"),
+            ("delete(routes::", "DELETE"),
+        ]
+        .into_iter()
+        .filter(|(written, _)| call.contains(written))
+        .map(|(_, method)| method)
+        .collect();
+        assert!(
+            !methods.is_empty(),
+            "{path} is mounted, and no method of it could be read off the router"
+        );
+        mounted.extend(methods.into_iter().map(|method| (method, path)));
+    }
+    mounted
+}
+
+// The cases over `EVERY_ROUTE` say nothing about a route the list leaves out,
+// and a route added to the router is one the list does not hear about. So the
+// list is checked against what the router mounts, both ways: a route mounted
+// and not listed fails here rather than going unfenced in what is checked, and
+// a route listed and no longer mounted would be checked against nothing.
+#[test]
+fn every_route_the_router_mounts_is_behind_the_fences_case() {
+    let mounted = mounted();
+    assert!(
+        mounted.len() >= 20,
+        "the router's routes could not be read off its source: {mounted:?}"
+    );
+    let path_of = |uri: &'static str| uri.split_once('?').map_or(uri, |(path, _)| path);
+
+    for (method, path) in &mounted {
+        assert!(
+            EVERY_ROUTE
+                .iter()
+                .any(|(listed, uri)| listed == method && path_of(uri) == *path),
+            "{method} {path} is mounted and missing from EVERY_ROUTE"
+        );
+    }
+    for (method, uri) in EVERY_ROUTE {
+        assert!(
+            mounted.contains(&(method, path_of(uri))),
+            "{method} {uri} is in EVERY_ROUTE and not mounted"
+        );
     }
 }
 

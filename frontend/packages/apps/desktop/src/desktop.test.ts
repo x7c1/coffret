@@ -416,7 +416,8 @@ describe('a spent Passphrase window', () => {
 // LA-21: a page in the explorer's window that says its session ended — the
 // server restarted, the Library served changed, or a delivered ticket was
 // refused — has its window loaded afresh from a fresh ticket, where one can be
-// issued and used, and not round and round.
+// issued and used: not while nothing is served or the app quits, not while the
+// Library is locked, when it waits for the unlock, and not round and round.
 describe("the explorer's session ending", () => {
   beforeEach(() => {
     fixture.desktop.handle('LibraryOpened');
@@ -480,6 +481,17 @@ describe("the explorer's session ending", () => {
     // Once only: a later unlock loads nothing more.
     fixture.serve(LOCKED);
     fixture.desktop.handle('UnlockRequested');
+    fixture.serve(UNLOCKED);
+    fixture.desktop.handle('LibraryUnlocked');
+    expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
+  });
+
+  it('waits while the Library is locked even with no Passphrase window in front, and loads it once unlocked', () => {
+    fixture.serve(LOCKED);
+    fixture.desktop.explorerSessionEnded();
+    expect(fixture.shell.reloadExplorer).not.toHaveBeenCalled();
+    expect(fixture.passphrase.isVisible()).toBe(false);
+
     fixture.serve(UNLOCKED);
     fixture.desktop.handle('LibraryUnlocked');
     expect(fixture.shell.reloadExplorer).toHaveBeenCalledOnce();
