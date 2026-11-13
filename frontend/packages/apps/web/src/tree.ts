@@ -650,6 +650,17 @@ export function arrowed(rows: readonly TreeRow[], state: TreeState, arrow: Arrow
  * below instead, so `↑` from the first file reaches the folder it stands in,
  * and the folder rule takes over from there. At the first and the last row
  * drawn there is nothing further, and the focus stays.
+ *
+ * A move that takes the focus out of a folder closes the folders it left —
+ * the folder the focus stood in, and each folder above it that does not hold
+ * the row landed on (see [`readTo`](#readTo)): `↓` off the last file or row of
+ * a volume, or `↑` off its first, leaves the volume closed behind it, so a
+ * series read volume by volume does not leave every volume read so far open.
+ * The folder that holds both rows, and every folder outside that chain, stay
+ * open. A move inside one folder, and a move with nowhere to go, close
+ * nothing. The same holds where the server answers the move (see
+ * [`landedOn`](#landedOn)), and where the tree is filtered (see
+ * [`readInside`](./readInside)).
  */
 export type ReadOn =
   /** The rows answer it: the focus goes to the row named. */
@@ -675,7 +686,7 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
   // The row drawn just beside the focus that way, notes passed over.
   const beside = (): ReadOn => {
     const row = drawnBeside(rows, state.focus, arrow);
-    return row === null ? { kind: 'stay' } : { kind: 'focus', state: { ...state, focus: row } };
+    return row === null ? { kind: 'stay' } : { kind: 'focus', state: readTo(state, row) };
   };
   if (from.kind === 'folder') {
     return beside();
@@ -683,7 +694,7 @@ export function readOn(rows: readonly TreeRow[], state: TreeState, arrow: 'Arrow
   for (let step = down ? at + 1 : at - 1; step >= 0 && step < rows.length; step += down ? 1 : -1) {
     const row = rows[step];
     if (row.kind === 'file') {
-      return { kind: 'focus', state: { ...state, focus: row.key } };
+      return { kind: 'focus', state: readTo(state, row.key) };
     }
     if (hides(row)) {
       return { kind: 'ask', path: from.path, folder: false };
@@ -723,12 +734,48 @@ export function drawnBeside(rows: readonly TreeRow[], focus: string | null, arro
 }
 
 /**
- * The tree with the focus on the file at `path`, and every folder on the way
- * down to it opened: where reading on lands in a folder that was closed. The
- * folders read through stay open.
+ * The tree with the focus read on from the row it is on to the row `to`
+ * names, the folders it read out of closed (see [`readOn`](#readOn)).
+ *
+ * A folder is read out of where the row the focus moves from stands in it —
+ * directly or further down — and the row `to` names does not: neither stands
+ * in it nor is its own row. So it is the folder the focus stood in and each
+ * folder above that one, up to (not including) the nearest that holds both
+ * rows.
+ *
+ * The folders closed forget which of the folders under them were open, as
+ * they do under `Escape`: what reading on opened in a volume read through is
+ * gone with it, so that a series read volume by volume keeps no more open
+ * than the way down to the page on show, and a volume read back into opens
+ * only on the way down to the page it lands on.
+ */
+export function readTo(state: TreeState, to: string): TreeState {
+  if (state.focus === null) {
+    return { ...state, focus: to };
+  }
+  const landed = keyed(to);
+  const holds = (folder: string) =>
+    landed.path.startsWith(`${folder}/`) || (landed.kind === 'folder' && landed.path === folder);
+  const left = ancestry(parentOf(pathOf(state.focus))).filter((folder) => !holds(folder));
+  if (left.length === 0) {
+    return { ...state, focus: to };
+  }
+  // The outermost folder read out of holds every other one.
+  const outermost = left[0];
+  const expanded = new Set(
+    [...state.expanded].filter((path) => path !== outermost && !path.startsWith(`${outermost}/`)),
+  );
+  return { focus: to, expanded };
+}
+
+/**
+ * The tree with the focus read on to the file at `path`, the folders read out
+ * of closed (see [`readTo`](#readTo)), and every folder on the way down to it
+ * opened: where reading on lands in a folder that was closed.
  */
 export function landedOn(state: TreeState, path: string): TreeState {
-  return { focus: fileKey(path), expanded: new Set([...state.expanded, ...ancestry(parentOf(path))]) };
+  const read = readTo(state, fileKey(path));
+  return { focus: read.focus, expanded: new Set([...read.expanded, ...ancestry(parentOf(path))]) };
 }
 
 /**
