@@ -31,15 +31,16 @@ import { COLOR, LAYER, SHADOW } from './theme';
  * What the server and this page are doing and have done, along the bottom of
  * the screen.
  *
- * **Collapsed**, the default, it is one row: a chevron and **Activity**, one
- * line saying what is in progress — the first thing moving, with a count of
- * the rest — a small bar for how far that has got, and a red badge counting
- * the failures that stand. A failure does not open the panel by itself: the
- * badge is the signal, and a panel that sprang open over the tree each time
- * Storage blinked would take the screen from whoever was reading. Pressing the
- * badge is what opens it, at the newest failure standing, lit for a moment —
- * a count that said there was something wrong and could not be followed to it
- * would leave a person hunting down a list for the red dot.
+ * **Collapsed**, the default, it is one row: the toggle, an icon named
+ * **Activity**, one line saying what is in progress — the first thing moving,
+ * with a count of the rest — a small bar for how far that has got, and a red
+ * badge counting the failures that stand. A failure does not open the panel
+ * by itself: the badge is the signal, and a panel that sprang open over the
+ * tree each time Storage blinked would take the screen from whoever was
+ * reading. Pressing the badge is what opens it, at the newest failure
+ * standing, lit for a moment — a count that said there was something wrong and
+ * could not be followed to it would leave a person hunting down a list for the
+ * red dot.
  *
  * The answer this page gave the gesture just made takes the row's sentence for
  * a few seconds, ahead of what is in progress (see
@@ -158,7 +159,7 @@ export function ActivityPanel({
         {/* The toggle and what it is about, kept together: the summary reads
             as the icon's words, so it stands closer to the icon than the row's
             other parts stand to each other. */}
-        <span style={LEAD}>
+        <span style={locked === null ? SUMMARY_LEAD : LEAD}>
           <button
             onClick={() => setOpen((was) => !was)}
             aria-expanded={open}
@@ -219,7 +220,14 @@ export function ActivityPanel({
             </button>
           </>
         )}
-        {locked === null && !open && row.progress !== null && <Bar progress={row.progress} width={96} />}
+        {/* The bar's place is kept whether or not there is a bar to draw in
+            it, so that the badge beside it stands still as the row turns
+            from a run that says how far it has got to one that does not. */}
+        {locked === null && (
+          <span style={{ ...SLOT, width: ROW_BAR }}>
+            {!open && row.progress !== null && <Bar progress={row.progress} width={ROW_BAR} />}
+          </span>
+        )}
         {badge !== null && (
           <button
             onClick={showFailures}
@@ -256,29 +264,39 @@ export function ActivityPanel({
         <div id={listId} style={LIST}>
           <Group title="In progress">
             {running.length === 0 ? (
-              <p style={EMPTY}>{NOTHING_IN_PROGRESS}</p>
+              <p style={NOTHING_RUNNING}>{NOTHING_IN_PROGRESS}</p>
             ) : (
               <ul style={ITEMS}>
                 {running.map((item) => (
-                  <li key={item.key} style={ITEM}>
+                  // One height and one layout for every line, whatever it
+                  // says, so that a line turning from a run into the
+                  // reader's fetch moves nothing beside it and the panel
+                  // keeps its height.
+                  <li key={item.key} style={RUNNING_ITEM}>
                     <span style={TIME}>{clock(seen.get(item.key) ?? '')}</span>
-                    <span style={TEXT}>{item.text}</span>
-                    {item.progress !== null && <Bar progress={item.progress} width={120} />}
-                    {/* In the Stop's place once there is no stop to take: a
-                        line asked to stop says so until its run has ended,
-                        and one that has begun committing says it is
-                        finishing (spec: LA-35). */}
-                    {item.ending !== null && <span style={ENDING}>{ENDING_SAID[item.ending]}</span>}
-                    {item.stop !== null && (
-                      <StopButton
-                        what={item.text}
-                        onPress={() => {
-                          if (item.stop !== null) {
-                            onStop(item.stop);
-                          }
-                        }}
-                      />
-                    )}
+                    <span style={RUNNING_TEXT} title={item.text}>
+                      {item.text}
+                    </span>
+                    <span style={{ ...SLOT, width: LINE_BAR }}>
+                      {item.progress !== null && <Bar progress={item.progress} width={LINE_BAR} />}
+                    </span>
+                    <span style={STOP_SLOT}>
+                      {/* In the Stop's place once there is no stop to take: a
+                          line asked to stop says so until its run has ended,
+                          and one that has begun committing says it is
+                          finishing (spec: LA-35). */}
+                      {item.ending !== null && <span style={ENDING}>{ENDING_SAID[item.ending]}</span>}
+                      {item.stop !== null && (
+                        <StopButton
+                          what={item.text}
+                          onPress={() => {
+                            if (item.stop !== null) {
+                              onStop(item.stop);
+                            }
+                          }}
+                        />
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -619,12 +637,31 @@ const LEAD = {
   minWidth: 0,
 } as const;
 
+/**
+ * The toggle and its summary, taking the row's room up to the bar's place:
+ * the parts after it stand where they stand however long the summary is, and
+ * a summary longer than the room is cut short there.
+ */
+const SUMMARY_LEAD = { ...LEAD, flex: '1 1 0' } as const;
+
+/** The width of the collapsed row's bar, and of the place kept for it. */
+const ROW_BAR = 96;
+
+/** The width of an **In progress** line's bar, and of the place kept for it. */
+const LINE_BAR = 120;
+
+/** A place kept for a bar, drawn or not. */
+const SLOT = { flex: '0 0 auto', display: 'flex', alignItems: 'center' } as const;
+
 /** The row's parts, 12px apart: the toggle and its words, the progress bar, the badge, and the icons at the end. */
 const ROW = {
   display: 'flex',
   gap: 12,
   alignItems: 'center',
   boxSizing: 'border-box',
+  // The summary is held to one line and cut short, so the row keeps this
+  // height whatever it says; only an offer of several lines — a reconnect —
+  // makes it taller.
   minHeight: 36,
   // Less at the left than at a text row's, since the toggle's square holds
   // room around its icon: the icon itself starts 16px in.
@@ -714,6 +751,33 @@ const TIME = {
 
 const TEXT = { flex: 1, minWidth: 0, color: COLOR.text } as const;
 
+/**
+ * An **In progress** line: as tall as its Stop's 28px frame and the padding
+ * around it, whether or not it has a Stop, and never taller.
+ */
+const RUNNING_ITEM = { ...ITEM, height: 36 } as const;
+
+/** What an **In progress** line says, on one line, cut short with an ellipsis where it is longer. */
+const RUNNING_TEXT = {
+  ...TEXT,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+} as const;
+
+/**
+ * The place an **In progress** line keeps for its Stop, or what it says in the
+ * Stop's place: as wide as the longer of those words, the Stop at its right
+ * end where the words end.
+ */
+const STOP_SLOT = {
+  flex: '0 0 auto',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  width: '6.5em',
+} as const;
+
 /** What a line says in its Stop's place: quieter than the line itself. */
 const ENDING = { color: COLOR.dim, whiteSpace: 'nowrap' } as const;
 
@@ -728,6 +792,18 @@ const DOT = {
 } as const;
 
 const EMPTY = { margin: '2px 0' } as const;
+
+/**
+ * What **In progress** says where nothing is: one line in progress tall, so
+ * that a run or a fetch coming and going there leaves the panel its height.
+ */
+const NOTHING_RUNNING = {
+  margin: 0,
+  display: 'flex',
+  alignItems: 'center',
+  boxSizing: 'border-box',
+  height: 36,
+} as const;
 
 /** **Locked**, beside its padlock: quiet, since a lock is not a failure. */
 const LOCKED_MARK = { display: 'inline-flex', alignItems: 'center', gap: 6, color: COLOR.dim } as const;

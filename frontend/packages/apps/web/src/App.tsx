@@ -2298,7 +2298,12 @@ export function App() {
                   // the catalog's sentence above it and the Activity panel below,
                   // which says what the sheet is fetching, stay uncovered, and
                   // opening the panel shrinks all three rather than covering them.
-                  <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+                  // Clipped across, at the window's edges: the sheet slides in
+                  // from past the right edge, and part-way in it would otherwise
+                  // widen the page and draw a horizontal scrollbar for the
+                  // length of the slide. Only across, and by a clip rather than
+                  // a scroller, so nothing that hangs below or above is cut.
+                  <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflowX: 'clip' }}>
                     <TreeTable
                       rows={rows}
                       state={tree}
