@@ -319,7 +319,7 @@ export function TreeTable({
    * that hands the focus back to it: the details pane's Open leaves it on the
    * tree, so that the arrows walk the rows the reader's sheet follows.
    */
-  areaRef?: RefObject<HTMLDivElement>;
+  areaRef?: RefObject<HTMLDivElement | null>;
   /**
    * Whether `Escape` is the tree's to fold folders and let go of the focus
    * with: not while the reader's sheet is open, whose `Escape` closes it.
