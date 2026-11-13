@@ -115,7 +115,7 @@ jobs:
       # Keyed apart from ci.yml's: the release profile differs from its debug
       # builds, so sharing its cache would only evict it.
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
