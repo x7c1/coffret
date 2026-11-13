@@ -167,7 +167,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # Single source of truth: the pnpm version comes from the
           # "packageManager" field in frontend/package.json. Do not also set
@@ -311,7 +311,7 @@ jobs:
         run: scripts/forget-workspace-builds.sh backend
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # See the frontend job: the pnpm version comes from
           # frontend/package.json and must not be repeated here.
@@ -403,7 +403,7 @@ jobs:
         run: scripts/forget-workspace-builds.sh backend
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # See the frontend job: the pnpm version comes from
           # frontend/package.json and must not be repeated here.
