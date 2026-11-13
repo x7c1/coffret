@@ -619,9 +619,10 @@ it('reads on with the arrows after a click on the picture, and closes on Escape'
 
 // With the sheet open, ↓ reads on: off the end of one folder into the first
 // file of the next, which the server names since the tree has not opened it,
-// and the folder is opened and stays open. Near the end the reader has read the
-// next folder's first pages ahead, without reading them — reading is what sets
-// a folder coming — and once the focus is there they are read.
+// and the folder is opened, the one read out of closed behind it. Near the
+// end the reader has read the next folder's first pages ahead, without reading
+// them — reading is what sets a folder coming — and once the focus is there
+// they are read.
 it('reads on from the end of one folder into the next with the sheet open', async () => {
   const base = library({
     '': ['series/'],
@@ -651,22 +652,30 @@ it('reads on from the end of one folder into the next with the sheet open', asyn
   await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-2/001.jpg'));
   expect(getBeside).toHaveBeenCalledWith('series/vol-1/002.jpg', false);
   expect(await tree().findByLabelText('collapse vol-2')).toBeTruthy();
-  expect(tree().getByLabelText('collapse vol-1')).toBeTruthy();
+  expect(tree().getByLabelText('expand vol-1')).toBeTruthy();
+  expect(tree().getByLabelText('collapse series')).toBeTruthy();
   await waitFor(() => expect(reader.getByLabelText('position').textContent).toBe('1 / 2'));
   expect(reader.getByRole('heading', { name: '001.jpg' })).toBeTruthy();
   await waitFor(() => expect(getFile).toHaveBeenCalledWith('series/vol-2/001.jpg'));
   expect(window.history.length).toBe(before);
 
-  // Back up: the rows on show answer it, the folder rows passed over.
+  // Back up: `vol-1` is closed now, so the server names its last file, and
+  // `vol-2` is closed behind the focus in turn.
   fireEvent.keyDown(area, { key: 'ArrowUp' });
   await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-1/002.jpg'));
+  expect(getBeside).toHaveBeenCalledWith('series/vol-2/001.jpg', false);
+  expect(await tree().findByLabelText('expand vol-2')).toBeTruthy();
+  expect(tree().getByLabelText('collapse vol-1')).toBeTruthy();
 
   // On to the end: off the last folder onto a file of the one above it that
   // the reader cannot show, which it says, and no further.
   fireEvent.keyDown(area, { key: 'ArrowDown' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-2/001.jpg'));
   fireEvent.keyDown(area, { key: 'ArrowDown' });
+  await waitFor(() => expect(parseHash(window.location.hash).open).toBe('series/vol-2/002.jpg'));
   fireEvent.keyDown(area, { key: 'ArrowDown' });
   expect(await reader.findByText('preview of this format is not supported yet')).toBeTruthy();
+  expect(tree().getByLabelText('expand vol-2')).toBeTruthy();
   expect(parseHash(window.location.hash).open).toBe('series/notes.txt');
   expect(reader.getByLabelText('position').textContent).toBe('3 / 3');
   fireEvent.keyDown(area, { key: 'ArrowDown' });

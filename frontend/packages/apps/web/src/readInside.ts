@@ -205,6 +205,11 @@ async function endOf(
  * At either end, with no file inside further that way, the focus goes to the
  * row drawn beside it, or stays where none is drawn; it never wraps.
  *
+ * Where the focus goes, the folders it read out of close as they do in a tree
+ * not filtered (see [`readOn`](./tree)): a `land` is taken with
+ * [`landedOn`](./tree) and a `focus` with [`readTo`](./tree), so reading from
+ * one kept folder into the next leaves the one read closed behind it.
+ *
  * `going` says whether the press is still wanted — the focus not moved, the
  * sheet not closed, the key not pressed again, the filter still the one it was
  * pressed under — and once it is not, nothing more is asked, and the focus
