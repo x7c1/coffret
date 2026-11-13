@@ -4,7 +4,8 @@
 // name matched goes on to the first page of the next book it matched — not
 // into a book between them in the Library that it did not match, which the
 // filtered tree does not show. Past the last page of the last match there is
-// nothing inside further, and the reader stays where it is.
+// nothing inside further, and the reader stays where it is. The book read out
+// of is closed behind the focus, both ways, as it is in a tree not filtered.
 //
 // Three books of their own are dropped into the album for it, so that which
 // two matched and which one stands between them is this journey's to say: a
@@ -79,8 +80,21 @@ test('read on from one book a name matched into the next, past one it did not', 
   await expect(page).toHaveURL(reading(LAST, pages[0]));
   await expect(reader.getByRole('img', { name: pages[0] })).toBeVisible();
   await expect(inTree(page, LAST).getByRole('button', { name: `collapse ${LAST}` })).toBeVisible();
+  await expect(inTree(page, FIRST).getByRole('button', { name: `expand ${FIRST}` })).toBeVisible();
   await expect(inTree(page, BETWEEN)).toHaveCount(0);
   await shot(page, '02-on-into-the-next-match');
+
+  // And back over the boundary: onto the last page of the first match, opened
+  // again, and the match read back out of closed behind.
+  const end = pages[pages.length - 1];
+  await page.keyboard.press('ArrowUp');
+  await expect(page).toHaveURL(reading(FIRST, end));
+  await expect(inTree(page, FIRST).getByRole('button', { name: `collapse ${FIRST}` })).toBeVisible();
+  await expect(inTree(page, LAST).getByRole('button', { name: `expand ${LAST}` })).toBeVisible();
+  await expect(inTree(page, BETWEEN)).toHaveCount(0);
+  await page.keyboard.press('ArrowDown');
+  await expect(page).toHaveURL(reading(LAST, pages[0]));
+  await expect(inTree(page, FIRST).getByRole('button', { name: `expand ${FIRST}` })).toBeVisible();
 
   // Down to the last page of the last match, and past it: nothing inside the
   // filtered tree comes after, so the reader stays.
@@ -88,7 +102,6 @@ test('read on from one book a name matched into the next, past one it did not', 
     await page.keyboard.press('ArrowDown');
     await expect(page).toHaveURL(reading(LAST, name));
   }
-  const end = pages[pages.length - 1];
   await page.keyboard.press('ArrowDown');
   // Nothing is drawn below it either, so there is nothing to ask the server.
   await expect(page).toHaveURL(reading(LAST, end));

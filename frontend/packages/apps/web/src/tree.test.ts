@@ -13,6 +13,7 @@ import {
   folderKey,
   landedOn,
   readOn,
+  readTo,
   refocused,
   shownFolders,
   standing,
@@ -327,30 +328,34 @@ describe('reading on with the reader open', () => {
 
   it('reads off the end of one folder into the first file of the next, opening it', () => {
     const open = ['albums', 'albums/2026'];
-    // `albums/2026` holds what comes before `albums`'s own files.
+    // `albums/2026` holds what comes before `albums`'s own files; it is read
+    // out of, and closed, while `albums`, which holds both, stays open.
     const off = read(state(fileKey('albums/2026/b.jpg'), open), 'ArrowDown');
-    expect(off).toEqual({ state: state(fileKey('albums/cover.png'), open), asked: false });
+    expect(off).toEqual({ state: state(fileKey('albums/cover.png'), ['albums']), asked: false });
     // `books` is closed, so the server says its first file, two levels down,
-    // and every folder on the way is opened.
+    // and every folder on the way is opened; `albums` is read out of.
     const into = read(off.state, 'ArrowDown');
     expect(into.asked).toBe(true);
     expect(into.state.focus).toBe(fileKey('books/vol-1/p1.png'));
-    expect([...into.state.expanded]).toEqual(['albums', 'albums/2026', 'books', 'books/vol-1']);
-    // Now on show, the rows answer the rest, and the folders read through stay open.
+    expect([...into.state.expanded]).toEqual(['books', 'books/vol-1']);
+    // Now on show, the rows answer the rest, and inside one folder nothing closes.
     const next = read(into.state, 'ArrowDown');
     expect(next).toEqual({ state: { ...into.state, focus: fileKey('books/vol-1/p2.png') }, asked: false });
     // Out of the last folder, onto a file of the Library root: a file the
     // reader cannot show is landed on like any other, and the sheet says so.
-    expect(read(next.state, 'ArrowDown').state.focus).toBe(fileKey('readme.txt'));
+    // Both folders it stood in are read out of.
+    expect(read(next.state, 'ArrowDown').state).toEqual(state(fileKey('readme.txt')));
   });
 
   it('steps back from the first file of a folder onto the last of the one before', () => {
     const open = ['books', 'books/vol-1'];
     const back = read(state(fileKey('books/vol-1/p1.png'), open), 'ArrowUp');
-    // `books` and `books/vol-1` are passed over, and `albums` is closed.
+    // `books` and `books/vol-1` are passed over, and `albums` is closed; the
+    // two read out of close behind the focus.
     expect(back.asked).toBe(true);
-    expect(back.state.focus).toBe(fileKey('albums/cover.png'));
-    expect(read(back.state, 'ArrowUp').state.focus).toBe(fileKey('albums/2026/b.jpg'));
+    expect(back.state).toEqual(state(fileKey('albums/cover.png'), ['albums']));
+    // Back into a folder inside the one it stands in: nothing is read out of.
+    expect(read(back.state, 'ArrowUp').state).toEqual(state(fileKey('albums/2026/b.jpg'), ['albums', 'albums/2026']));
     expect(read(state(fileKey('readme.txt'), open), 'ArrowUp').state.focus).toBe(fileKey('books/vol-1/p2.png'));
   });
 
@@ -488,9 +493,10 @@ describe('reading on with the reader open', () => {
       stranded: [],
     });
     const open = ['a', 'empty'];
+    // Off the last file of `a`, out of it: `a` closes.
     expect(readOn(rows, state(fileKey('a/2.png'), open), 'ArrowDown')).toEqual({
       kind: 'focus',
-      state: state(folderKey('empty'), open),
+      state: state(folderKey('empty'), ['empty']),
     });
     // The last row drawn: nothing further.
     expect(readOn(rows, state(folderKey('empty'), open), 'ArrowDown')).toEqual({ kind: 'stay' });
@@ -552,6 +558,125 @@ describe('reading on with the reader open', () => {
     );
     const closed = state(fileKey('readme.txt'));
     expect(read(closed, 'ArrowDown')).toEqual({ state: closed, asked: false });
+  });
+
+  describe('closing the folders read out of', () => {
+    /**
+     * A series of two volumes, each with a chapter folder, beside a shelf of
+     * its own:
+     *
+     * ```
+     * series/            vol-1/, vol-2/
+     * series/vol-1/      ch-1/, 001.png, 002.png
+     * series/vol-1/ch-1/ a.png
+     * series/vol-2/      001.png, 002.png
+     * shelf/             x.png
+     * ```
+     */
+    const SERIES: Record<string, Listing> = {
+      '': listing('', ['series', 'shelf'], []),
+      series: listing('series', ['series/vol-1', 'series/vol-2'], []),
+      'series/vol-1': listing('series/vol-1', ['series/vol-1/ch-1'], ['series/vol-1/001.png', 'series/vol-1/002.png']),
+      'series/vol-1/ch-1': listing('series/vol-1/ch-1', [], ['series/vol-1/ch-1/a.png']),
+      'series/vol-2': listing('series/vol-2', [], ['series/vol-2/001.png', 'series/vol-2/002.png']),
+      shelf: listing('shelf', [], ['shelf/x.png']),
+    };
+    const rows = (expanded: Iterable<string>) =>
+      treeRows({
+        listing: (path) => (SERIES[path] === undefined ? undefined : { status: 'ready', value: SERIES[path] }),
+        expanded: new Set(expanded),
+        prospective: [],
+        stranded: [],
+      });
+    const all = ['series', 'series/vol-1', 'series/vol-1/ch-1', 'series/vol-2', 'shelf'];
+    const step = (start: TreeState, arrow: 'ArrowUp' | 'ArrowDown') => readOn(rows(start.expanded), start, arrow);
+
+    it('closes the volume ↓ reads out of, and keeps the series and the shelf open', () => {
+      expect(step(state(fileKey('series/vol-1/002.png'), all), 'ArrowDown')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('series/vol-2/001.png'), ['series', 'series/vol-2', 'shelf']),
+      });
+    });
+
+    it('closes the volume ↑ reads back out of, and keeps the one read into open', () => {
+      expect(step(state(fileKey('series/vol-2/001.png'), all), 'ArrowUp')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('series/vol-1/002.png'), ['series', 'series/vol-1', 'series/vol-1/ch-1', 'shelf']),
+      });
+    });
+
+    it('closes every folder up to the one that holds both rows', () => {
+      // Out of `vol-2` and `series` both, into `shelf`: nothing holds both
+      // but the Library root.
+      expect(step(state(fileKey('series/vol-2/002.png'), all), 'ArrowDown')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('shelf/x.png'), ['shelf']),
+      });
+      // And back, from `shelf` into the last file of `vol-2`, opened again.
+      expect(step(state(fileKey('shelf/x.png'), all), 'ArrowUp')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('series/vol-2/002.png'), ['series', 'series/vol-1', 'series/vol-1/ch-1', 'series/vol-2']),
+      });
+    });
+
+    it('closes the folders read out of where the server answers the move', () => {
+      // `vol-2` is closed, so the server names its first file.
+      const open = ['series', 'series/vol-1', 'series/vol-1/ch-1', 'shelf'];
+      const from = state(fileKey('series/vol-1/002.png'), open);
+      expect(step(from, 'ArrowDown')).toEqual({ kind: 'ask', path: 'series/vol-1/002.png', folder: false });
+      expect(landedOn(from, 'series/vol-2/001.png')).toEqual(
+        state(fileKey('series/vol-2/001.png'), ['series', 'shelf', 'series/vol-2']),
+      );
+      // And back up into `vol-1` closed, `vol-2` closed behind.
+      const back = state(fileKey('series/vol-2/001.png'), ['series', 'series/vol-2', 'shelf']);
+      expect(step(back, 'ArrowUp')).toEqual({ kind: 'ask', path: 'series/vol-2/001.png', folder: false });
+      expect(landedOn(back, 'series/vol-1/002.png')).toEqual(
+        state(fileKey('series/vol-1/002.png'), ['series', 'shelf', 'series/vol-1']),
+      );
+    });
+
+    it('forgets the folders open inside a folder read out of', () => {
+      // `ch-1` is open inside `vol-1`; reading out of `vol-1` closes both, so
+      // reading back into it opens only the way down to the file landed on.
+      const out = readTo(state(fileKey('series/vol-1/002.png'), all), fileKey('series/vol-2/001.png'));
+      expect(out.expanded.has('series/vol-1/ch-1')).toBe(false);
+      expect(landedOn(out, 'series/vol-1/002.png').expanded).toEqual(new Set(['series', 'shelf', 'series/vol-1']));
+    });
+
+    it('closes the folder a row off its end is read out of, onto a folder row beside it', () => {
+      // From the last row of `series` — the closed `vol-2` — down onto `shelf`.
+      const open = ['series', 'shelf'];
+      expect(step(state(folderKey('series/vol-2'), open), 'ArrowDown')).toEqual({
+        kind: 'focus',
+        state: state(folderKey('shelf'), ['shelf']),
+      });
+      // From the first row of `series` up onto its own row: still inside it.
+      expect(step(state(folderKey('series/vol-1'), open), 'ArrowUp')).toEqual({
+        kind: 'focus',
+        state: state(folderKey('series'), open),
+      });
+    });
+
+    it('closes nothing on a move inside one folder, nor on a move with nowhere to go', () => {
+      expect(step(state(fileKey('series/vol-1/001.png'), all), 'ArrowDown')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('series/vol-1/002.png'), all),
+      });
+      // Up into a folder inside the one it stands in.
+      expect(step(state(fileKey('series/vol-1/001.png'), all), 'ArrowUp')).toEqual({
+        kind: 'focus',
+        state: state(fileKey('series/vol-1/ch-1/a.png'), all),
+      });
+      expect(step(state(fileKey('shelf/x.png'), all), 'ArrowDown')).toEqual({ kind: 'stay' });
+      expect(step(state(folderKey('series'), all), 'ArrowUp')).toEqual({ kind: 'stay' });
+    });
+
+    it('leaves the tree alone with the reader closed', () => {
+      const keys = (start: TreeState, arrow: Arrow) => arrowed(rows(start.expanded), start, arrow);
+      expect(keys(state(fileKey('series/vol-1/002.png'), all), 'ArrowDown')).toEqual(
+        state(folderKey('series/vol-2'), all),
+      );
+    });
   });
 
   it('leaves the keys with the reader closed as they were: row by row', () => {
