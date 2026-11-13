@@ -132,6 +132,7 @@ import {
   keyed,
   landedOn,
   readOn,
+  readTo,
   refocused,
   shownFolders,
   standing,
@@ -1807,9 +1808,10 @@ export function App() {
   // or closed, to the row drawn beside it (see [`readOn`](./tree)). Where a
   // closed folder stands in the way of reading on from a file the rows cannot
   // say what is in it, so the server says which file that is, and the folders
-  // on the way down to it are opened. An answer is let go of where the focus
-  // moved meanwhile, the sheet closed, or the key was pressed again — the
-  // later press asks for itself.
+  // on the way down to it are opened. Either way, the folders the focus reads
+  // out of are closed behind it (see [`readTo`](./tree)). An answer is let go
+  // of where the focus moved meanwhile, the sheet closed, or the key was
+  // pressed again — the later press asks for itself.
   //
   // While a filter is on, reading on stays inside the filtered tree, and stops
   // at its ends (see [`readInside`](./readInside)); an answer is let go of
@@ -1853,7 +1855,7 @@ export function App() {
           if (went.kind === 'land') {
             changeTree(landedOn(treeNow.current, went.path));
           } else if (went.kind === 'focus') {
-            changeTree({ ...treeNow.current, focus: went.focus });
+            changeTree(readTo(treeNow.current, went.focus));
           }
         }, notOpened);
         return;
