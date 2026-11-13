@@ -2,11 +2,12 @@
 //
 // A series is read folder by folder, and the reader does not stop at the end
 // of one: `↓` on its last file goes on to the first file of the next folder,
-// opening it in the tree, as `↑` on the first goes back. The next folder is
-// closed when the reading gets there, so which file comes first in it is the
-// server's to say; and near the end of the first folder the reader has read
-// the next one's first pages ahead, so the page is there when the key is
-// pressed.
+// opening it in the tree, as `↑` on the first goes back. The folder read out
+// of is closed behind the focus, so a series read folder by folder does not
+// leave every folder read so far open. The next folder is closed when the
+// reading gets there, so which file comes first in it is the server's to say;
+// and near the end of the first folder the reader has read the next one's
+// first pages ahead, so the page is there when the key is pressed.
 //
 // From a folder's row, open or closed, the keys go to the row drawn beside it
 // instead: `↓` from the open album lands on the closed folder under it rather
@@ -47,8 +48,11 @@ test('read off the end of one folder into the first page of the next, and back',
   await expect(reader.getByRole('img', { name: bookPage(0) })).toBeVisible();
   await expect(reader.getByLabel('position')).toHaveText(`1 / ${setting.pages}`);
   await expect(page).toHaveURL(new RegExp(`open=${setting.book}/${bookPage(0)}$`));
-  // The folder it read on into is open, and the focused row in view.
+  // The folder it read on into is open, and the focused row in view; the one
+  // it read out of is closed.
   await expect(inTree(page, leaf(setting.book)).getByRole('button', { name: /^collapse / })).toBeVisible();
+  await expect(inTree(page, leaf(setting.album)).getByRole('button', { name: /^expand / })).toBeVisible();
+  await expect(row(page, last)).toHaveCount(0);
   await expect(row(page, bookPage(0))).toHaveAttribute('aria-selected', 'true');
   await expect(row(page, bookPage(0))).toBeInViewport();
   await shot(page, '02-first-page-of-the-book');
@@ -56,12 +60,15 @@ test('read off the end of one folder into the first page of the next, and back',
   await page.keyboard.press('ArrowDown');
   await expect(reader.getByRole('img', { name: bookPage(1) })).toBeVisible();
 
-  // And back over the boundary, the folders read through left open.
+  // And back over the boundary: the album, closed now, is the server's to
+  // answer again, and opens; the book read back out of closes behind.
   await page.keyboard.press('ArrowUp');
+  await expect(reader.getByRole('img', { name: bookPage(0) })).toBeVisible();
   await page.keyboard.press('ArrowUp');
   await expect(reader.getByRole('img', { name: last })).toBeVisible();
   await expect(row(page, last)).toHaveAttribute('aria-selected', 'true');
-  await expect(inTree(page, leaf(setting.book)).getByRole('button', { name: /^collapse / })).toBeVisible();
+  await expect(inTree(page, leaf(setting.book)).getByRole('button', { name: /^expand / })).toBeVisible();
+  await expect(row(page, bookPage(0))).toHaveCount(0);
   await shot(page, '03-back-in-the-album');
 
   // From a folder's row the keys go to the row drawn beside it rather than
