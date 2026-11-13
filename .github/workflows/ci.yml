@@ -44,7 +44,7 @@ jobs:
         run: rustup show
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -124,7 +124,7 @@ jobs:
 
       - name: Cache cargo-deny
         id: cache-cargo-deny
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/cargo-deny
           key: ${{ runner.os }}-cargo-deny-${{ env.CARGO_DENY_VERSION }}
@@ -294,7 +294,7 @@ jobs:
         run: rustup show
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -347,7 +347,7 @@ jobs:
         run: rustup show
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -385,7 +385,7 @@ jobs:
         run: rustup show
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -429,7 +429,7 @@ jobs:
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright's browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
@@ -450,7 +450,7 @@ jobs:
       # brings back the files whose versions did not change and apt fetches
       # only the rest.
       - name: Cache apt's downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/apt-archives
           key: ${{ runner.os }}-apt-${{ steps.runner-image.outputs.os }}-playwright-${{ steps.playwright.outputs.version }}-${{ steps.runner-image.outputs.version }}
