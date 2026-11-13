@@ -1081,10 +1081,10 @@ describe('a drop on the tree', () => {
     expect(screen.getByRole('status').textContent).toBe('Drop to add to albums');
     expect(screen.getByTitle('albums').style.outline).toContain('solid');
     expect(screen.getByTitle('albums').style.background).toBe(resolved(COLOR.accentTint));
-    expect(tree.style.outline).toBe('none');
+    expect(tree.style.outlineStyle).toBe('none');
     fireEvent.dragOver(screen.getByTitle('loose.png'), carryingFiles);
     expect(screen.getByRole('status').textContent).toBe('Drop to add to the Library');
-    expect(screen.getByTitle('albums').style.outline).toBe('none');
+    expect(screen.getByTitle('albums').style.outlineStyle).toBe('none');
     expect(tree.style.outline).toContain('solid');
   });
 
@@ -1186,7 +1186,7 @@ describe('a drag of rows onto a folder', () => {
     fireEvent.dragOver(screen.getByTitle('cover.png'), air);
     expect(screen.getByRole('status').textContent).toBe('Move to albums');
     expect(screen.getByTitle('albums').style.outline).toContain('solid');
-    expect(screen.getByTitle('cover.png').style.outline).toBe('none');
+    expect(screen.getByTitle('cover.png').style.outlineStyle).toBe('none');
     expect(air.dataTransfer.dropEffect).toBe('move');
     fireEvent.drop(screen.getByTitle('cover.png'), air);
     expect(onMove.mock.calls[0][0].map((row: Described) => row.path)).toEqual(['books']);
@@ -1201,7 +1201,7 @@ describe('a drag of rows onto a folder', () => {
     for (const over of ['albums', '2026', 'cover.png']) {
       fireEvent.dragOver(screen.getByTitle(over), air);
       expect(screen.queryByRole('status')).toBeNull();
-      expect(screen.getByTitle(over).style.outline).toBe('none');
+      expect(screen.getByTitle(over).style.outlineStyle).toBe('none');
       expect(air.dataTransfer.dropEffect).toBe('none');
     }
     fireEvent.drop(screen.getByTitle('cover.png'), air);
