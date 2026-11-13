@@ -47,7 +47,7 @@ jobs:
     outputs:
       bundle: ${{ steps.diff.outputs.bundle }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: diff
@@ -103,7 +103,7 @@ jobs:
     steps:
       # The pull_request run builds the event's merge ref; the other two build
       # the ref they were given.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.ref }}
 
