@@ -69,6 +69,6 @@ Do not change `.github/`.
 
 ### Before merge (verified outside the check command)
 
-- [ ] A person sees, in the desktop app, the Activity panel stay still while
+- [x] A person sees, in the desktop app, the Activity panel stay still while
       a book is fetched, and no horizontal scrollbar while the reader opens
       with the Activity panel expanded.
