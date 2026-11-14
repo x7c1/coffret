@@ -84,7 +84,7 @@ jobs:
       - name: Cache cargo-edit
         if: steps.secret.outputs.present == 'true'
         id: cache-cargo-edit
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cargo/bin/cargo-set-version
           key: ${{ runner.os }}-cargo-edit-${{ env.CARGO_EDIT_VERSION }}

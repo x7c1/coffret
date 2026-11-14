@@ -92,7 +92,8 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * than row to row (see [`readOn`](./tree)): off the end of one folder into
  * the first file of the next, opening it, and off the first or the last file
  * onto the row beside it. From a folder row, open or closed, they go to the
- * row beside it, so folders are paged through by their covers. The
+ * row beside it, so folders are paged through by their covers. Either way, a
+ * move that takes the focus out of a folder closes the folders it left. The
  * list scrolls ahead
  * of the focus (see [`scrollAhead`](./scrollAhead)). A click focuses a row, a
  * double-click opens it as `Enter` does, and a press on the disclosure button
@@ -318,7 +319,7 @@ export function TreeTable({
    * that hands the focus back to it: the details pane's Open leaves it on the
    * tree, so that the arrows walk the rows the reader's sheet follows.
    */
-  areaRef?: RefObject<HTMLDivElement>;
+  areaRef?: RefObject<HTMLDivElement | null>;
   /**
    * Whether `Escape` is the tree's to fold folders and let go of the focus
    * with: not while the reader's sheet is open, whose `Escape` closes it.
