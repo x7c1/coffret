@@ -115,7 +115,7 @@ jobs:
       # Keyed apart from ci.yml's: the release profile differs from its debug
       # builds, so sharing its cache would only evict it.
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -132,12 +132,12 @@ jobs:
         run: scripts/forget-workspace-builds.sh backend
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload the bundles
         if: ${{ !inputs.release_tag }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coffret-${{ matrix.name }}
           path: ${{ env.OUT_DIR }}

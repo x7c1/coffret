@@ -5,7 +5,7 @@ import type { Beside, Filtered, ListedFile, ListedFolder, Listing } from '@coffr
 import { filteredOpen, shapeOf, type FilterShape } from './filter';
 import { readInside, type AskBeside } from './readInside';
 import { inLibraryOrder } from './stranded';
-import { fileKey, folderKey, landedOn, readOn, treeRows, type TreeState } from './tree';
+import { fileKey, folderKey, landedOn, readOn, readTo, treeRows, type TreeState } from './tree';
 
 /**
  * The fixture Library, every file of it:
@@ -183,7 +183,7 @@ async function press(
     went.kind === 'land'
       ? landedOn(start, went.path)
       : went.kind === 'focus'
-        ? { ...start, focus: went.focus }
+        ? readTo(start, went.focus)
         : start;
   return { state, asked: server.asked };
 }
@@ -241,7 +241,8 @@ describe('reading on inside a filtered tree', () => {
     // — not `loose`'s own files, nor `z-match`.
     const fromC = await press(RECENT, { focus: fileKey('c-match/2.jpg'), expanded: new Set(['c-match']) }, 'ArrowDown');
     expect(fromC.state.focus).toBe(fileKey('loose/deep/1.jpg'));
-    expect(fromC.state.expanded).toEqual(new Set(['c-match', 'loose', 'loose/deep']));
+    // `c-match` is read out of, and closes behind the focus.
+    expect(fromC.state.expanded).toEqual(new Set(['loose', 'loose/deep']));
     // On from there, `loose`'s own files are not drawn: the root's are next.
     expect((await press(RECENT, fromC.state, 'ArrowDown')).state.focus).toBe(fileKey('readme.txt'));
     // And back from the root's first file, with `loose` closed, onto the last of `loose/deep`.
@@ -259,7 +260,7 @@ describe('reading on inside a filtered tree', () => {
     expect((await press(BY_NAME, last, 'ArrowDown')).state).toBe(last);
     // A kept folder the Library has emptied since it was drawn: passed over,
     // and with nothing inside after it, the focus goes to the row drawn
-    // beside — the folder's own.
+    // beside — the folder's own; the one read out of closes.
     const emptied = FILES.filter((one) => !one.startsWith('c-match/'));
     const twoFolders = shape([
       { path: 'a-match', kind: 'folder', deposited_at: null },
@@ -268,7 +269,7 @@ describe('reading on inside a filtered tree', () => {
     const start = on(twoFolders, fileKey('a-match/2.jpg'), ['a-match']);
     const gone = await press(twoFolders, start, 'ArrowDown', emptied);
     expect(gone.state.focus).toBe(folderKey('c-match'));
-    expect(gone.state.expanded).toEqual(start.expanded);
+    expect(gone.state.expanded).toEqual(new Set([...start.expanded].filter((path) => path !== 'a-match')));
   });
 
   it('never lands outside the filtered tree, nor opens a folder for a file there', async () => {
@@ -283,6 +284,34 @@ describe('reading on inside a filtered tree', () => {
     expect([...new Set(read)]).toEqual(inside.map(fileKey));
     expect(state.expanded.has('b-other')).toBe(false);
     expect([...state.expanded].every((path) => !path.startsWith('b-other'))).toBe(true);
+  });
+
+  it('closes the kept folder read out of, both ways, and keeps the rest open', async () => {
+    // Down from the last file of `a-match` into `c-match`: `a-match` closes,
+    // and `loose`, which is open above a kept file, stays open.
+    const start = on(BY_NAME, fileKey('a-match/2.jpg'), ['a-match']);
+    const down = await press(BY_NAME, start, 'ArrowDown');
+    expect(down.state).toEqual({ focus: fileKey('c-match/1.jpg'), expanded: new Set(['loose', 'c-match']) });
+    // And back up: `c-match` closes, `a-match` opens again.
+    const up = await press(BY_NAME, down.state, 'ArrowUp');
+    expect(up.state).toEqual({ focus: fileKey('a-match/2.jpg'), expanded: new Set(['loose', 'a-match']) });
+    // Out of `loose` up into `c-match`, closed: `loose` closes behind.
+    const fromLoose = await press(BY_NAME, on(BY_NAME, fileKey('loose/match.jpg')), 'ArrowUp');
+    expect(fromLoose.state).toEqual({ focus: fileKey('c-match/2.jpg'), expanded: new Set(['c-match']) });
+  });
+
+  it('closes nothing on a move inside a kept folder, nor on one with nowhere to go', async () => {
+    const start = on(BY_NAME, fileKey('c-match/1.jpg'), ['c-match']);
+    expect((await press(BY_NAME, start, 'ArrowDown')).state).toEqual({ ...start, focus: fileKey('c-match/2.jpg') });
+    // Asked of the server, inside the kept folder `loose`.
+    const deep = shape([{ path: 'loose', kind: 'folder', deposited_at: null }]);
+    const fromA = on(deep, fileKey('loose/a.jpg'), ['loose']);
+    expect((await press(deep, fromA, 'ArrowUp')).state).toEqual({
+      focus: fileKey('loose/deep/1.jpg'),
+      expanded: new Set(['loose', 'loose/deep']),
+    });
+    const last = on(BY_NAME, fileKey('z-match/1.jpg'), ['z-match']);
+    expect((await press(BY_NAME, last, 'ArrowDown')).state).toBe(last);
   });
 
   it('asks nothing more once the press is let go of', async () => {
