@@ -321,8 +321,9 @@ nothing else:
 | `bundle-green` | `bundle.yml` | the bundles were built and checked, or the pull request does not change how they are made |
 | `validate-title` | `validate-release-pr.yml` | the title is valid, or the pull request is not a release PR |
 
-The individual jobs are not required. `all-green` and `bundle-green` fail when
-any job of their workflow failed or was cancelled, so a failure anywhere blocks
+The individual jobs are not required. `all-green` and `bundle-green` pass only
+when every job of their workflow succeeded or was skipped, and fail on any
+other result (failed, cancelled, or abandoned without a runner), so a failure anywhere blocks
 the merge — including for auto-merge, which waits only for required checks. A
 job that a pull request has no reason to run is skipped, and a skipped job does
 not fail them. Requiring a job directly would hold every pull request that
