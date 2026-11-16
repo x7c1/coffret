@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('coffretDesktop', {
       // it is handed the sentence the app refused with — the addon's, such as
       // that no Library is open — rather than one naming the channel.
       const message = refused instanceof Error ? refused.message : String(refused);
+      // No `cause`: the original error names the IPC channel, which is what this
+      // rethrow keeps from the page.
+      // eslint-disable-next-line preserve-caught-error
       throw new Error(message.replace(INVOKE_REFUSED, ''));
     }
   },
