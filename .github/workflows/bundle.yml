@@ -197,9 +197,9 @@ jobs:
           path: ${{ env.OUT_DIR }}
           if-no-files-found: error
 
-  # The one check of this workflow that `main` requires: it fails when any job
-  # above failed or was cancelled, and passes when the bundles were built or
-  # had no reason to be. See ci.yml's `all-green`.
+  # The one check of this workflow that `main` requires: it passes only when
+  # every job above succeeded or was skipped — the bundles were built or had no
+  # reason to be — and fails on any other result. See ci.yml's `all-green`.
   bundle-green:
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs: [changes, bundle]
@@ -207,5 +207,14 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - name: Fail unless every job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needs results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) exit 1 ;;
+            esac
+          done
