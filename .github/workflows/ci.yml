@@ -557,11 +557,12 @@ jobs:
             .tmp/e2e-electron/logs/
           if-no-files-found: warn
 
-  # The one check of this workflow that `main` requires. It fails when any job
-  # above failed or was cancelled, so a failure anywhere blocks the merge
-  # without each job having to be listed as required — and auto-merge, which
-  # waits only for required checks, waits for all of them. Add a new job to
-  # `needs` here.
+  # The one check of this workflow that `main` requires. It passes only when
+  # every job above succeeded or was skipped, and fails on any other result
+  # (failed, cancelled, or abandoned without a runner), so a failure anywhere
+  # blocks the merge without each job having to be listed as required — and
+  # auto-merge, which waits only for required checks, waits for all of them.
+  # Add a new job to `needs` here.
   all-green:
     if: ${{ always() }}
     needs: [backend, cargo-deny, frontend, spec, interop, s3-store, e2e]
@@ -569,5 +570,14 @@ jobs:
     timeout-minutes: 5
     permissions: {}
     steps:
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-        run: exit 1
+      - name: Fail unless every job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needs results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *) exit 1 ;;
+            esac
+          done
