@@ -414,6 +414,7 @@ describe('adding where no folder on this device is chosen', () => {
     };
     render(<App />);
     expect(await tree().findByTitle('books')).toBeTruthy();
+    fireEvent.dragEnter(screen.getByRole('tree'), { dataTransfer: { types: ['Files'] } });
     fireEvent.dragOver(tree().getByTitle('books'));
     fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
     const step = await screen.findByRole('dialog', { name: /^Choose a folder on this device/ });
@@ -437,6 +438,7 @@ it('draws the files being added as rows at once', async () => {
   );
   render(<App />);
   expect(await tree().findByTitle('albums')).toBeTruthy();
+  fireEvent.dragEnter(screen.getByRole('tree'), { dataTransfer: { types: ['Files'] } });
   fireEvent.dragOver(tree().getByTitle('albums'));
   fireEvent.drop(screen.getByRole('tree'), carrying('new.jpg'));
   const confirm = await screen.findByRole('dialog', { name: 'Add to albums' });
