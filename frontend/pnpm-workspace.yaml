@@ -11,7 +11,6 @@ allowBuilds:
   # electron-builder's dependency for Windows installers, which nothing here
   # builds: its install script is not run.
   electron-winstaller: false
-  esbuild: true
 
 # An advisory `pnpm audit` (`make audit`, and the `Audit` step of CI's
 # `frontend` job) should let pass is listed under `auditConfig.ignoreGhsas`, by
