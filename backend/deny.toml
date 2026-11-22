@@ -49,6 +49,16 @@ ignore = [
   # drops it yet. Take this out once the SDK does; cargo-deny warns when this
   # entry stops matching anything.
   { id = "RUSTSEC-2026-0441", reason = "unmaintained, not vulnerable; reaches us only through the AWS SDK" },
+  # chrono is unmaintained, which is not a known vulnerability in it either. It
+  # is not a dependency of ours, and nothing that ships reaches it: it comes in
+  # only through the test clients the S3 cases are answered from
+  # (aws-smithy-http-client's `test-util`, a dev-dependency, via
+  # aws-smithy-protocol-test and cbor-diag), and no SDK release drops it yet.
+  # The trash crate, which used to bring it into the shipping tree for the
+  # deletion date it writes, now does that with jiff. Take this out once the
+  # SDK's test clients stop pulling chrono in; cargo-deny warns when this entry
+  # stops matching anything.
+  { id = "RUSTSEC-2026-0543", reason = "unmaintained, not vulnerable; reaches us only through the AWS SDK's test clients" },
 ]
 # A yank is the crate's own author saying not to resolve to that version, not a
 # note to take or leave. Failing here is what makes somebody read why it was

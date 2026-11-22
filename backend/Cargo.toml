@@ -165,11 +165,14 @@ time = { version = "0.3", default-features = false, features = [
 tokio = { version = "1", features = ["full"] }
 # Discarding a file a deleted Entry left on this device into the desktop's own
 # trash: the freedesktop.org Trash on Linux, the Finder's on macOS
-# (spec: EP-15). `chrono` is what writes the deletion date a freedesktop trash
-# lists a file by. `freedesktop` selects the Linux backend, which trash 5.3
-# put behind a feature (the alternative, `portal`, is not used); the default
-# set's remaining members are Windows COM settings coffret has no platform for.
-trash = { version = "5", default-features = false, features = ["chrono", "freedesktop"] }
+# (spec: EP-15). `jiff` is what writes the deletion date a freedesktop trash
+# lists a file by; trash 5.4 moved that from chrono, which is unmaintained, to
+# jiff, and kept `chrono` only as an alias for it, so the feature is named for
+# what it now pulls in. `freedesktop` selects the Linux backend, which trash
+# 5.3 put behind a feature (the alternative, `portal`, is not used); the
+# default set's remaining members are Windows COM settings coffret has no
+# platform for.
+trash = { version = "5.4", default-features = false, features = ["jiff", "freedesktop"] }
 tokio-util = { version = "0.7", features = ["io"] }
 # `ServiceExt::oneshot`, so a router can be driven as the service it is rather
 # than through a socket. Test support: nothing that ships reaches for it.
