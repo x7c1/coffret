@@ -295,7 +295,7 @@ impl Library {
             policy: policy(),
             ..FrontsRequest::new(store, self.fixture.target(), &self.keys, memory)
         };
-        read_fronts(request, None, &[self.container_id]).await
+        read_fronts(request, &[self.container_id]).await
     }
 }
 

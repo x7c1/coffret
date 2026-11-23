@@ -46,6 +46,9 @@ pub(crate) use library_summary::library_summary;
 mod folders;
 pub(crate) use folders::folders;
 
+mod child_beside;
+pub(crate) use child_beside::{child_beside, Children};
+
 /// The path `folder_totals` holds the Library root's row under, and the
 /// `parent` of an Entry or a folder standing directly in the root. No Entry
 /// Path is empty (spec: EP-2), so it names nothing else.

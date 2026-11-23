@@ -159,6 +159,42 @@ describe('the rows of the tree', () => {
   });
 });
 
+// A shelf of many child folders: every one is drawn once, in the Library's
+// order, a prepared folder merged among them is drawn as not held only where
+// the listing does not name it, and a stranded one as waiting likewise.
+describe('the rows of a folder of many folders', () => {
+  const names = Array.from({ length: 600 }, (_, at) => `shelf/vol-${String(at).padStart(4, '0')}`);
+  const shelf: Record<string, Listing> = {
+    '': listing('', ['shelf'], []),
+    shelf: listing('shelf', names, ['shelf/index.txt']),
+  };
+  const rows = treeRows({
+    listing: (path) => {
+      const held = shelf[path];
+      return held === undefined ? undefined : { status: 'ready', value: held };
+    },
+    expanded: new Set(['shelf']),
+    prospective: ['shelf/vol-0010', 'shelf/vol-0300a'],
+    stranded: ['shelf/vol-0020', 'shelf/vol-0599z/book'],
+  });
+
+  it('draws every child folder once, in order, then the folder’s files', () => {
+    const extra = ['shelf/vol-0300a', 'shelf/vol-0599z'];
+    const order = [...names, ...extra].sort();
+    expect(rows.map((row) => row.path)).toEqual(['shelf', ...order, 'shelf/index.txt']);
+    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
+  });
+
+  it('marks only the folders the listing does not name', () => {
+    const marked = rows.flatMap((row) =>
+      row.kind === 'folder' && (row.prospective || row.stranded)
+        ? [`${row.path}:${row.prospective ? 'prospective' : 'stranded'}`]
+        : [],
+    );
+    expect(marked).toEqual(['shelf/vol-0300a:prospective', 'shelf/vol-0599z:stranded']);
+  });
+});
+
 describe('the keys on the tree', () => {
   it('moves down and up across open and closed folders', () => {
     const open = ['albums', 'albums/2026'];

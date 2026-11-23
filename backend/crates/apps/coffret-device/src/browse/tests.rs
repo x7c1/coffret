@@ -987,3 +987,44 @@ async fn the_files_beside_a_row_under_one_folder_are_that_folders_alone() {
         (some("b/c/1.jpg"), some("bb/1.jpg"))
     );
 }
+
+// EP-3: stepping back out of a file onto the folders before it lands on the
+// last file at whatever depth the last of them holds it — down through folders
+// that hold no file of their own — and reading on out of the deepest folder
+// climbs every level it has to before it finds the next.
+#[tokio::test]
+async fn the_files_beside_a_row_are_found_through_folders_with_no_files_of_their_own() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &[
+            "x/1.jpg",
+            "y/w/v/1.jpg",
+            "y/w/v/2.jpg",
+            "y/w/u.jpg",
+            "z.jpg",
+        ],
+    )])
+    .await;
+
+    assert_eq!(
+        beside(&library, "z.jpg", false).await,
+        (some("y/w/u.jpg"), None)
+    );
+    assert_eq!(
+        beside(&library, "y/w/v/2.jpg", false).await,
+        (some("y/w/v/1.jpg"), some("y/w/u.jpg"))
+    );
+    assert_eq!(
+        beside(&library, "y/w/u.jpg", false).await,
+        (some("y/w/v/2.jpg"), some("z.jpg"))
+    );
+    assert_eq!(
+        beside(&library, "y", true).await,
+        (some("x/1.jpg"), some("y/w/v/1.jpg"))
+    );
+    assert_eq!(
+        beside_under(&library, "z.jpg", false, Some("y/w/v")).await,
+        (some("y/w/v/2.jpg"), None)
+    );
+}

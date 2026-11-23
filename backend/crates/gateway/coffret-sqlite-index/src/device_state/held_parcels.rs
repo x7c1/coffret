@@ -44,6 +44,22 @@ pub(crate) fn held_parcels(connection: &Connection) -> IndexResult<Vec<HeldParce
     )
 }
 
+/// Every parcel of one Container this device holds, by parcel index
+/// (spec: PK-21): the rows under that Container on the primary key, and no
+/// other.
+pub(crate) fn held_parcels_of(
+    connection: &Connection,
+    container_id: ContainerId,
+) -> IndexResult<Vec<HeldParcel>> {
+    collect(
+        connection,
+        "SELECT * FROM held_parcels WHERE container_id = ?1 ORDER BY parcel",
+        params![container_id.as_bytes().as_slice()],
+        "reading one Container's held parcels",
+        rows::held_parcel,
+    )
+}
+
 /// Forgets one held parcel's row. One that is not there is a no-op, so an
 /// interrupted letting go is simply run again (spec: OC-8, PK-21).
 pub(crate) fn let_go_parcel(

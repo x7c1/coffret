@@ -10,15 +10,17 @@ impl OpenLibrary {
     /// The question a page opened from disk asks before anything is brought
     /// over around it: a folder this device has whole has nothing left to fill,
     /// and one it does not is a folder somebody has started reading. One read
-    /// of the catalog — what the folder holds one level down, never the
-    /// subtree under it — and nothing of Storage, as every
-    /// question in this module is.
+    /// of the catalog, which stops at the first Entry standing directly in the
+    /// folder that is not here — never the subtree under it, nor the rest of
+    /// the folder's own files — and nothing of Storage, as every question in
+    /// this module is. An Entry is had by the same present materialization
+    /// record a listing's `present` reads (spec: EP-10).
     ///
     /// It says nothing about mappings. An Entry no mapping reaches is never
     /// present, so a folder of them is never whole here; what a caller does
     /// about one is decided where the folder's own listing says whether it is
     /// [`mapped`](super::FolderListing::mapped).
     pub async fn directly_present(&self, folder: Option<&EntryPath>) -> Result<bool> {
-        Ok(self.remote_in(folder).await?.is_empty())
+        Ok(!self.index.any_remote_in(folder).await?)
     }
 }

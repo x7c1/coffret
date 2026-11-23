@@ -58,6 +58,6 @@ impl OpenLibrary {
             &self.keys,
             &self.fetch_memory,
         );
-        Ok(read_fronts(request, folder, &containers).await?)
+        Ok(read_fronts(request, &containers).await?)
     }
 }

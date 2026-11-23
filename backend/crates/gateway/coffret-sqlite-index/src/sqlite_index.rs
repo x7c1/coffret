@@ -11,7 +11,7 @@ use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
     PendingRow, Reservation, ReservationId,
 };
-use coffret_usecase::folder_figures::{FolderContents, LibrarySummary};
+use coffret_usecase::folder_figures::{FolderContents, LibrarySummary, Side};
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
 };
@@ -366,6 +366,52 @@ impl Index for SqliteIndex {
             .await
     }
 
+    async fn folder_beside(
+        &self,
+        folder: Option<&EntryPath>,
+        bound: Option<&EntryPath>,
+        side: Side,
+    ) -> IndexResult<Option<EntryPath>> {
+        let folder = folder.cloned();
+        let bound = bound.cloned();
+        self.read(
+            "reading the nearest folder beside a row",
+            move |connection| {
+                folder_totals::child_beside(
+                    connection,
+                    folder_totals::Children::Folders,
+                    folder.as_ref(),
+                    bound.as_ref(),
+                    side,
+                )
+            },
+        )
+        .await
+    }
+
+    async fn entry_beside(
+        &self,
+        folder: Option<&EntryPath>,
+        bound: Option<&EntryPath>,
+        side: Side,
+    ) -> IndexResult<Option<EntryPath>> {
+        let folder = folder.cloned();
+        let bound = bound.cloned();
+        self.read(
+            "reading the nearest Entry beside a row",
+            move |connection| {
+                folder_totals::child_beside(
+                    connection,
+                    folder_totals::Children::Entries,
+                    folder.as_ref(),
+                    bound.as_ref(),
+                    side,
+                )
+            },
+        )
+        .await
+    }
+
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()> {
         self.write("recording a mapping", move |connection| {
             device_state::set_mapping(connection, &mapping)
@@ -428,6 +474,15 @@ impl Index for SqliteIndex {
         self.read(
             "reading a subtree's Entries this device does not have",
             move |connection| device_state::entries_absent_under(connection, prefix.as_ref()),
+        )
+        .await
+    }
+
+    async fn any_remote_in(&self, folder: Option<&EntryPath>) -> IndexResult<bool> {
+        let folder = folder.cloned();
+        self.read(
+            "asking whether a folder is wholly on this device",
+            move |connection| device_state::any_remote_in(connection, folder.as_ref()),
         )
         .await
     }
@@ -522,6 +577,13 @@ impl Index for SqliteIndex {
     async fn held_parcels(&self) -> IndexResult<Vec<HeldParcel>> {
         self.read("reading the held parcels", device_state::held_parcels)
             .await
+    }
+
+    async fn held_parcels_of(&self, container_id: ContainerId) -> IndexResult<Vec<HeldParcel>> {
+        self.read("reading one Container's held parcels", move |connection| {
+            device_state::held_parcels_of(connection, container_id)
+        })
+        .await
     }
 
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {
