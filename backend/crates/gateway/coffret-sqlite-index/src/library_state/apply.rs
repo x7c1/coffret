@@ -11,11 +11,22 @@ use super::{
 };
 use crate::device_state;
 use crate::error::classify;
-use crate::query::first;
+use crate::folder_totals;
+use crate::query::{collect, first};
 use crate::rows;
 
-/// Replays one committed Journal record (spec: CP-1, CP-11, EP-6, FM-15).
+/// Replays one committed Journal record (spec: CP-1, CP-11, EP-6, FM-15),
+/// and recounts every folder above a path it touched (spec: LA-45).
 pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResult<()> {
+    let touched = replay(connection, record)?;
+    folder_totals::recount(connection, touched.iter().map(String::as_str))
+}
+
+/// [`apply`] less the recount, answering with every Entry Path whose Entry or
+/// present record the record may have changed: the paths of the Entries it
+/// removes, of the Entries it renames before and after, of the Entries it
+/// adds, and of the rows of this device it reaches (spec: EP-10).
+fn replay(connection: &Connection, record: JournalRecord) -> IndexResult<BTreeSet<String>> {
     // A record at or below the head this catalog stands at is one it holds
     // already, refused before any of it is applied (spec: CK-9, RV-5). The
     // transaction holds the write lock from its start, so no other process
@@ -43,19 +54,32 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
     // Removals leave the current set before additions enter it: within one
     // record a path may pass from a replaced Container to its replacement
     // (spec: EP-6).
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+    let mut containers_removed: usize = 0;
     for removed in record.removals() {
+        touched.extend(collect(
+            connection,
+            "SELECT path FROM entries WHERE container_id = ?1",
+            params![removed.as_bytes().as_slice()],
+            "reading the paths of a Container's Entries",
+            |row| {
+                row.get::<_, String>(0)
+                    .map_err(classify("reading the paths of a Container's Entries"))
+            },
+        )?);
         connection
             .execute(
                 "DELETE FROM entries WHERE container_id = ?1",
                 params![removed.as_bytes().as_slice()],
             )
             .map_err(classify("removing a Container's Entries"))?;
-        connection
+        let gone = connection
             .execute(
                 "DELETE FROM containers WHERE id = ?1",
                 params![removed.as_bytes().as_slice()],
             )
             .map_err(classify("removing a Container"))?;
+        containers_removed += gone;
     }
     // Then every rename at once, against what the removals left
     // (spec: FM-15). Each renamed row leaves before any comes back under its
@@ -67,6 +91,7 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
         |path| standing_at(connection, path),
     )?;
     for one in &renamed {
+        touched.insert(one.before.path().as_str().to_owned());
         connection
             .execute(
                 "DELETE FROM entries WHERE container_id = ?1 AND entry_number = ?2",
@@ -112,15 +137,17 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
         reached.iter().map(String::as_str),
         "keeping the local files' rows about their Entries",
     )?;
+    folder_totals::count_containers(connection, added.len(), containers_removed)?;
     // The checkpoint the record reaches; which Snapshot this catalog once
     // adopted is unchanged by a replay.
     write_checkpoint(connection, &checkpoint)?;
     // The latest record carrying a name names the Library, and one carrying
     // none leaves the name as it was (spec: FM-15).
-    match &library_name {
-        Some(name) => write_library_name(connection, Some(name)),
-        None => Ok(()),
+    if let Some(name) = &library_name {
+        write_library_name(connection, Some(name))?;
     }
+    touched.extend(reached);
+    Ok(touched)
 }
 
 /// What the catalog holds under one `(Container ID, entry number)`, for a
@@ -172,8 +199,9 @@ pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexRe
         released,
     } = batch;
     let uploaded = uploaded(&record);
-    apply(connection, record)?;
-    complete(connection, &uploaded, materialized, released)
+    let mut touched = replay(connection, record)?;
+    touched.extend(complete(connection, &uploaded, materialized, released)?);
+    folder_totals::recount(connection, touched.iter().map(String::as_str))
 }
 
 /// Records the device-local half of this device's own batch, whose record the
@@ -182,12 +210,13 @@ pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexRe
 /// The record is read for the Containers it adds and not applied; the
 /// catalog and its checkpoint stay as they are.
 pub(crate) fn complete_applied(connection: &Connection, batch: CommittedBatch) -> IndexResult<()> {
-    complete(
+    let touched = complete(
         connection,
         &uploaded(&batch.record),
         batch.materialized,
         batch.released,
-    )
+    )?;
+    folder_totals::recount(connection, touched.iter().map(String::as_str))
 }
 
 /// The Containers a record adds, whose pending rows its commit clears.
@@ -201,15 +230,19 @@ fn uploaded(record: &JournalRecord) -> Vec<ContainerId> {
 
 /// The device-local half of a refresh: the files it put on disk become
 /// `present` (spec: EP-10), its spools stop being pending (spec: OC-2), and the
-/// reservations its batch packs are released (spec: PK-17).
+/// reservations its batch packs are released (spec: PK-17). Answers with the
+/// paths it marked present, for the caller to recount the folders above
+/// (spec: LA-45).
 fn complete(
     connection: &Connection,
     uploaded: &[ContainerId],
     materialized: Vec<LocalObservation>,
     released: Vec<ReservationId>,
-) -> IndexResult<()> {
+) -> IndexResult<Vec<String>> {
+    let mut touched = Vec::with_capacity(materialized.len());
     for observation in materialized {
         device_state::mark_present(connection, &observation)?;
+        touched.push(observation.path.as_str().to_owned());
     }
     for &container_id in uploaded {
         device_state::clear_pending_row(connection, container_id)?;
@@ -220,5 +253,5 @@ fn complete(
     for id in released {
         device_state::release_reservation(connection, id)?;
     }
-    Ok(())
+    Ok(touched)
 }

@@ -14,6 +14,7 @@ use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::{params, Connection};
 
 use crate::error::{classify, violation, Violation};
+use crate::folder_totals;
 use crate::query::first;
 use crate::rows;
 
@@ -159,8 +160,9 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
         .execute(
             "INSERT INTO entries (
                  path, container_id, entry_number, \"offset\", size, mtime, btime, hash,
-                 mime, derived_from_container, derived_from_path, captured_path, deposited_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                 mime, derived_from_container, derived_from_path, captured_path, deposited_at,
+                 parent
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
@@ -175,6 +177,7 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
                 derived.map(|from| from.path.as_str()),
                 entry.entry.captured_path.as_str(),
                 entry.deposited_at.as_unix_seconds(),
+                folder_totals::parent_of(entry.entry.path.as_str()),
             ],
         )
         .map_err(|error| match violation(&error) {

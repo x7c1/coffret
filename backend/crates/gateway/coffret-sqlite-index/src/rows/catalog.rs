@@ -3,6 +3,7 @@ use coffret_model::{
     DepositedAt, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryNumber, EntryPath,
     Generation, IndexCheckpoint, KeyringCommitment, LibraryName, MasterKeyEpoch, Mtime, ObjectRef,
 };
+use coffret_usecase::folder_figures::{FolderFile, FolderSummary, LibrarySummary};
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
 
@@ -17,11 +18,7 @@ pub(crate) fn container_summary(row: &Row<'_>) -> IndexResult<ContainerSummary> 
     const OPERATION: &str = "reading a Container";
     Ok(ContainerSummary {
         id: container_id(row, "id", OPERATION)?,
-        kind: match text(row, "kind", OPERATION)?.as_str() {
-            "one-file" => ContainerKind::OneFile,
-            "pack" => ContainerKind::Pack,
-            found => return Err(unreadable(OPERATION, "Container kind", found)),
-        },
+        kind: container_kind(&text(row, "kind", OPERATION)?, OPERATION)?,
         ciphertext_hash: content_hash(row, "ciphertext_hash", OPERATION)?,
         ciphertext_len: CiphertextLenClaim::new(from_integer(row, "ciphertext_len", OPERATION)?)
             .map_err(unreadable_model(OPERATION))?,
@@ -147,4 +144,54 @@ fn entry_extent(row: &Row<'_>, operation: &'static str) -> IndexResult<EntryExte
         from_integer(row, "size", operation)?,
     )
     .map_err(unreadable_model(operation))
+}
+
+/// One row of `folder_totals` below the Library root: a folder and what the
+/// Entries at every depth below it come to (spec: EP-2, EP-10).
+pub(crate) fn folder_summary(row: &Row<'_>) -> IndexResult<FolderSummary> {
+    const OPERATION: &str = "reading a folder's totals";
+    Ok(FolderSummary {
+        path: entry_path(row, "path", OPERATION)?,
+        files_total: from_integer(row, "files_total", OPERATION)?,
+        files_present: from_integer(row, "files_present", OPERATION)?,
+        size: from_integer(row, "size", OPERATION)?,
+        mtime: Mtime::from_unix_seconds(integer(row, "mtime", OPERATION)?),
+    })
+}
+
+/// The Library root's row of `folder_totals`, with the count of current
+/// Containers beside it in the `containers` column.
+pub(crate) fn library_summary(row: &Row<'_>) -> IndexResult<LibrarySummary> {
+    const OPERATION: &str = "reading the Library's totals";
+    Ok(LibrarySummary {
+        files_total: from_integer(row, "files_total", OPERATION)?,
+        files_present: from_integer(row, "files_present", OPERATION)?,
+        size: from_integer(row, "size", OPERATION)?,
+        size_present: from_integer(row, "size_present", OPERATION)?,
+        mtime: optional_integer(row, "mtime", OPERATION)?.map(Mtime::from_unix_seconds),
+        containers: from_integer(row, "containers", OPERATION)?,
+    })
+}
+
+/// One row of `entries` with whether this device has its file in the
+/// `present` column and its Container's kind in `kind` (spec: EP-10, PK-15).
+pub(crate) fn folder_file(row: &Row<'_>) -> IndexResult<FolderFile> {
+    const OPERATION: &str = "reading a folder's files";
+    let container = optional_text(row, "kind", OPERATION)?
+        .map(|kind| container_kind(&kind, OPERATION))
+        .transpose()?;
+    Ok(FolderFile {
+        location: entry_location(row)?,
+        present: integer(row, "present", OPERATION)? != 0,
+        container,
+    })
+}
+
+/// A Container's kind as `kind_text` spells it (spec: FM-9, PK-15).
+fn container_kind(text: &str, operation: &'static str) -> IndexResult<ContainerKind> {
+    match text {
+        "one-file" => Ok(ContainerKind::OneFile),
+        "pack" => Ok(ContainerKind::Pack),
+        found => Err(unreadable(operation, "Container kind", found)),
+    }
 }

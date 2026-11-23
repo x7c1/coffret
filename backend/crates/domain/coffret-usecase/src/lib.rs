@@ -275,6 +275,10 @@ pub use entry_ref::EntryRef;
 mod index;
 pub use index::Index;
 
+// What the folders of the Library come to, as the `Index` answers it, and the
+// derivation of each answer out of the subtree reads.
+pub mod folder_figures;
+
 mod pending_rows_guard;
 pub use pending_rows_guard::PendingRowsGuard;
 

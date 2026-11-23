@@ -5,7 +5,8 @@ use super::{stamp, unsupported, SCHEMA_VERSION};
 use crate::error::classify;
 
 /// Gives a layout-20 file's checkpoint row the Library's name, unset, keeping
-/// every row it holds (spec: FM-15, FM-16).
+/// every row it holds (spec: FM-15, FM-16), and then takes the step a
+/// layout-21 file takes, laying out every folder's totals (spec: LA-45).
 ///
 /// Unset rather than read from anywhere: a build before layout 21 kept no
 /// name, and the catalog is kept rather than rebuilt — rebuilding it would
@@ -29,6 +30,7 @@ pub(super) fn add(connection: &mut Connection) -> IndexResult<()> {
         found => return Err(unsupported(found)),
     }
     add_the_column(&transaction)?;
+    super::folder_totals::add_the_totals(&transaction)?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)
         .map_err(classify("stamping the Index file's schema version"))?;

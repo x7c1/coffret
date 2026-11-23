@@ -29,7 +29,9 @@ folder coming; from LA-34, how a person **stops** an add, a freeze or a
 fill before it commits, and what a stopped add leaves; which set of
 colours this device's explorer is drawn in, which the server keeps as the
 device's own state (LA-38); and what the whole Library comes to, counted out
-of the catalog for the explorer's details of the Library itself (LA-39); and
+of the catalog for the explorer's details of the Library itself (LA-39); what
+one folder holds, and what reading a folder, the Library's totals and its
+folders costs (LA-44, LA-45); and
 which rows a tree filtered by a name or by the most recently deposited books
 keeps (LA-40 to LA-42); and what this device's explorer last had its tree
 filtered by, kept beside the colours as the device's own state (LA-43). The
@@ -854,6 +856,59 @@ Concept background: [Library](../../concepts/library/),
   made, and keeps the settings on screen again where the last change it sent
   was refused.
   *(Form: test)*
+
+### The folders of the Library
+
+- **LA-44.** The server answers what one folder of the Library holds, one
+  level down (`GET /api/list?path=…`, the Library root where the path is
+  absent or empty), out of the Index, this device's mappings and the mapped
+  folder on its disk, and nothing of Storage. A folder is what the
+  separators of the Entry Paths under it imply (EP-2), so the answer carries:
+  - `path` — the folder asked about, the empty string for the root;
+  - `folders` — each folder standing directly in it, in EP-3 order, named by
+    its last component and its whole path, with `mapped` as below; how many
+    current Entries stand at every depth below it (`files_total`) and how many
+    of them are present on this device (`files_present`, EP-10);
+    `present_throughout`, whether every one of them is; `size`, the plaintext
+    bytes of all of them, here or not; and `mtime`, the newest modification
+    time among them;
+  - `files` — each current Entry standing directly in it, named by its last
+    component and its whole path, with its size, its `mtime` and deposit
+    time, whether this device has it (`present` or `remote`, EP-10) and the
+    kind of Container it lives in (PK-15), merged in EP-3 order with the files
+    standing in the mapped folder that the Library holds no Entry for
+    (`added`, with the local file's size and `mtime`, and no deposit time or
+    Container). Every row also says whether a reservation of a drop that asks
+    for a Pack names its path (`reserved`, PK-17), and whether a browser can
+    draw it and as which media type, by its extension (`openable`,
+    `content_type`). An Entry standing at exactly the folder's own path is not
+    a child of it and is not among them;
+  - `folders_on_disk` — the names of the folders standing in the mapped
+    folder that are not folders of the Library, in EP-3 order; coffret's
+    scratch, the management area (EP-14) and symbolic links are never named;
+  - `mapped` — whether a mapping of this device reaches the folder (EP-9): the
+    root by a root mapping alone, any other folder by the mapping of its
+    top-level component or the root mapping;
+  - `held` — whether the Library has the folder at all: `true` where a current
+    Entry stands under it, and always for the root, which is the Library rather
+    than a path; a folder the Library does not have is answered with empty
+    lists and `false`, not refused;
+  - `empty_mapped_prefixes` — at the root only, the top-level folders this
+    device maps that no current Entry stands under yet, in EP-3 order.
+  *(Form: test)*
+
+- **LA-45.** What the server reads of the Index to answer a folder's listing
+  (`GET /api/list`, LA-44), what the whole Library comes to
+  (`GET /api/library/totals`, LA-39) and every folder of the Library
+  (`GET /api/folders`) does not grow with the Entries below the folder beyond
+  what the answer itself holds: each row it answers with is found by key, at
+  a cost of the rows answered times the logarithm of the Entries the Library
+  holds, and no read covers the Entries, the present records or the
+  Containers of a subtree. What a folder's child folders and the Library come
+  to is kept for each folder beside the catalog, on this device alone — no
+  Index Snapshot carries it and nothing of it reaches Storage (CK-7) — and is
+  brought up to date by every write of the Entries or of the present records,
+  in the same transaction. *(Form: test)*
 
 ### What the Library comes to
 

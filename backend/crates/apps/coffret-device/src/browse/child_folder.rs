@@ -22,8 +22,8 @@ pub struct ChildFolder {
     ///
     /// Answered here rather than left to a browser because a browser holds the
     /// listings it has asked for and nothing deeper, and this needs every
-    /// descendant. The listing's own range scan already reads the whole subtree
-    /// and which of it is present, so the answer costs nothing more.
+    /// descendant. The Index keeps each folder's counts, so the answer reads
+    /// the folder's own row rather than the subtree (spec: LA-45).
     ///
     /// Only a present materialization record counts. A file whose fetch failed
     /// left none, and a file this device witnessed go had its record turned
@@ -52,8 +52,8 @@ pub struct ChildFolder {
     ///
     /// A count and not only the yes-or-no, because "18 of 196 files" is what a
     /// person deciding whether to fetch the rest of a book needs, and only the
-    /// catalog sees every descendant to count them. The listing's own range
-    /// scan already reads them, so the count costs nothing more.
+    /// catalog sees every descendant to count them. The Index keeps the count
+    /// for each folder, so it costs the listing nothing more (spec: LA-45).
     pub files_present: u64,
     /// The plaintext bytes of those [`files_total`](Self::files_total) Entries
     /// together, whether this device has them or not: what the folder comes

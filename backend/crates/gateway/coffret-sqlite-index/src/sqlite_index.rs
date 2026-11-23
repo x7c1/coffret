@@ -10,6 +10,7 @@ use coffret_usecase::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
     PendingRow, Reservation, ReservationId,
 };
+use coffret_usecase::folder_figures::{FolderContents, LibrarySummary};
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
 };
@@ -17,7 +18,7 @@ use rusqlite::{Connection, TransactionBehavior};
 use tracing::warn;
 
 use crate::error::classify;
-use crate::{device_state, library_state, schema};
+use crate::{device_state, folder_totals, library_state, schema};
 
 /// How long a statement waits for another connection to let go of the file.
 ///
@@ -322,6 +323,27 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn folder_contents(&self, folder: Option<&EntryPath>) -> IndexResult<FolderContents> {
+        let folder = folder.cloned();
+        self.read("reading one folder's contents", move |connection| {
+            folder_totals::folder_contents(connection, folder.as_ref())
+        })
+        .await
+    }
+
+    async fn library_summary(&self) -> IndexResult<LibrarySummary> {
+        self.read(
+            "reading the Library's totals",
+            folder_totals::library_summary,
+        )
+        .await
+    }
+
+    async fn folders(&self) -> IndexResult<Vec<EntryPath>> {
+        self.read("reading the Library's folders", folder_totals::folders)
+            .await
+    }
+
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()> {
         self.write("recording a mapping", move |connection| {
             device_state::set_mapping(connection, &mapping)
@@ -336,7 +358,8 @@ impl Index for SqliteIndex {
 
     async fn mark_present(&self, observation: LocalObservation) -> IndexResult<()> {
         self.write("recording a materialized file", move |connection| {
-            device_state::mark_present(connection, &observation)
+            device_state::mark_present(connection, &observation)?;
+            folder_totals::recount(connection, [observation.path.as_str()])
         })
         .await
     }
@@ -344,7 +367,8 @@ impl Index for SqliteIndex {
     async fn mark_absent(&self, path: &EntryPath, at: DeviceTime) -> IndexResult<()> {
         let path = path.clone();
         self.write("recording a file as gone", move |connection| {
-            device_state::mark_absent(connection, &path, at)
+            device_state::mark_absent(connection, &path, at)?;
+            folder_totals::recount(connection, [path.as_str()])
         })
         .await
     }
@@ -352,7 +376,8 @@ impl Index for SqliteIndex {
     async fn forget_local_entry(&self, path: &EntryPath) -> IndexResult<()> {
         let path = path.clone();
         self.write("forgetting a local file's row", move |connection| {
-            device_state::forget_local_entry(connection, &path)
+            device_state::forget_local_entry(connection, &path)?;
+            folder_totals::recount(connection, [path.as_str()])
         })
         .await
     }
@@ -399,7 +424,13 @@ impl Index for SqliteIndex {
     ) -> IndexResult<()> {
         let relocated = relocated.to_vec();
         self.write("re-keying relocated files' rows", move |connection| {
-            device_state::relocate_local_entries(connection, &relocated)
+            device_state::relocate_local_entries(connection, &relocated)?;
+            folder_totals::recount(
+                connection,
+                relocated
+                    .iter()
+                    .flat_map(|(from, to)| [from.as_str(), to.as_str()]),
+            )
         })
         .await
     }

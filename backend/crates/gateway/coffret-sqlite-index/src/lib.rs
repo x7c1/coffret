@@ -63,6 +63,10 @@ mod error;
 
 mod library_state;
 
+// What each folder comes to, kept beside the catalog for a listing to read
+// (spec: LA-45).
+mod folder_totals;
+
 mod path_prefix;
 
 mod query;

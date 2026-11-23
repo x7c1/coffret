@@ -48,8 +48,9 @@ pub(super) fn upgrade(connection: &mut Connection) -> IndexResult<()> {
 /// fact finished included: its files stay out of a Pack, and out of what a sync
 /// carries, until the next drop of its folder takes it over and packs it whole,
 /// and each start counts it among the drops in progress until then. A layout-19
-/// file keeps its catalog, and its checkpoint row gains the Library's name,
-/// unset, as a layout-20 file's does (spec: FM-15); a layout-18 one then loses
+/// file keeps its catalog, its checkpoint row gains the Library's name,
+/// unset, as a layout-20 file's does (spec: FM-15), and its folders gain their
+/// totals as a layout-21 file's do (spec: LA-45); a layout-18 one then loses
 /// its catalog, whose Entries carry no deposit time, for the next catch-up to
 /// rebuild from Storage (spec: RV-5, FM-15).
 ///
@@ -74,6 +75,7 @@ pub(super) fn add_the_received_mark(connection: &mut Connection) -> IndexResult<
         replace_the_catalog(&transaction)?;
     } else {
         super::library_name::add_the_column(&transaction)?;
+        super::folder_totals::add_the_totals(&transaction)?;
         transaction
             .pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(classify("stamping the Index file's schema version"))?;
