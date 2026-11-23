@@ -36,11 +36,8 @@ pub(super) async fn check_contested(
     if !renamed_onto && !filled {
         return Ok(());
     }
-    let current = index.entries_under(None).await?;
-    let standing: BTreeMap<&EntryPath, &EntryLocation> = current
-        .iter()
-        .map(|location| (location.path(), location))
-        .collect();
+    // Only the Entries standing at the paths the batch writes to are asked
+    // after, so each is looked up at its path rather than the Library read.
     let renamed_away: BTreeSet<EntryRef> =
         batch.renames.iter().map(|rename| rename.entry).collect();
 
@@ -54,13 +51,13 @@ pub(super) async fn check_contested(
             let path = superseded
                 .and_then(|superseded| renamed.get(&superseded).copied())
                 .unwrap_or(&entry.path);
-            let Some(holder) = standing.get(path) else {
+            let Some(holder) = index.entry_at(path).await? else {
                 continue;
             };
-            if Some(EntryRef::of(holder)) == superseded {
+            if Some(EntryRef::of(&holder)) == superseded {
                 continue;
             }
-            if let Some((record, Placed::ByRename)) = placed(intervening, holder) {
+            if let Some((record, Placed::ByRename)) = placed(intervening, &holder) {
                 return Err(CommitError::RebaseConflict {
                     pending: PendingChange::Addition(EntryRef::new(container_id, number)),
                     record,
@@ -71,13 +68,13 @@ pub(super) async fn check_contested(
         }
     }
     for rename in &batch.renames {
-        let Some(holder) = standing.get(&rename.path) else {
+        let Some(holder) = index.entry_at(&rename.path).await? else {
             continue;
         };
-        if renamed_away.contains(&EntryRef::of(holder)) {
+        if renamed_away.contains(&EntryRef::of(&holder)) {
             continue;
         }
-        if let Some((record, _)) = placed(intervening, holder) {
+        if let Some((record, _)) = placed(intervening, &holder) {
             return Err(CommitError::RebaseConflict {
                 pending: PendingChange::Rename(rename.entry),
                 record,

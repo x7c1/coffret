@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKind, EntryLocation};
+use coffret_model::{ContainerKind, EntryLocation};
 
 use crate::departure::{self, Departed};
 use crate::device_state::{
@@ -23,7 +23,6 @@ use crate::sync::sync_error::SyncResult;
 pub(super) async fn examine(
     index: &dyn Index,
     roots: &dyn MappedRoots,
-    kinds: &BTreeMap<ContainerId, ContainerKind>,
     now: DeviceTime,
     source: &SourceFile,
     expected: Option<RootMarkerId>,
@@ -64,7 +63,15 @@ pub(super) async fn examine(
         return Ok(());
     }
 
-    match kinds.get(&location.container_id) {
+    // The kind decides which path a changed file takes, and only a changed
+    // file's Container is asked after: looked up by its ID rather than every
+    // current Container read for the few files a sync finds changed.
+    let kind = index
+        .containers_among(&BTreeSet::from([location.container_id]))
+        .await?
+        .first()
+        .map(|container| container.kind);
+    match kind {
         Some(ContainerKind::OneFile) => survey.candidates.push(Candidate {
             source: source.clone(),
             replaces: Some(location),

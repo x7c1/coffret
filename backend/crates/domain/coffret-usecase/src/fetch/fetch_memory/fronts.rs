@@ -58,6 +58,11 @@ impl Fronts {
         self.queue.push_back((container_id, front));
     }
 
+    /// The Containers whose fronts are kept.
+    pub(super) fn ids(&self) -> BTreeSet<ContainerId> {
+        self.queue.iter().map(|(id, _)| *id).collect()
+    }
+
     pub(super) fn retain(&mut self, current: &BTreeSet<ContainerId>) {
         let bytes = &mut self.bytes;
         self.queue.retain(|(id, front)| {

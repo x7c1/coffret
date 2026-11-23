@@ -1,11 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use coffret_model::{ContainerAddition, ContainerId, EntryLocation, EntryPath, EntryRename};
+use coffret_model::{ContainerAddition, ContainerId, EntryPath, EntryRename};
 
-use crate::catalog_renames::{check_rename_set, Named, RenamedEntry};
+use crate::catalog_renames::{check_rename_set, RenameLookups, RenamedEntry};
 use crate::commit::commit_error::{CommitError, CommitResult};
 use crate::commit::prepared_batch::PreparedBatch;
-use crate::entry_ref::EntryRef;
 use crate::index::Index;
 use crate::index_error::IndexError;
 
@@ -38,30 +37,28 @@ pub(super) async fn check(index: &dyn Index, batch: &PreparedBatch) -> CommitRes
     let removed: BTreeSet<ContainerId> = batch.removals.iter().copied().collect();
     check_removals(index, &removed).await?;
 
-    let current = index.entries_under(None).await?;
-    let renamed = check_renames(index, batch, &removed, &current).await?;
+    let renamed = check_renames(index, batch, &removed).await?;
 
-    let mut paths: BTreeSet<&EntryPath> = current
-        .iter()
-        .filter(|location| !removed.contains(&location.container_id))
-        .map(|location| &location.entry.path)
-        .collect();
     // The renames apply together, after the removals and before the additions
     // (spec: FM-15); that they leave one Entry per path is what
-    // [`check_renames`] has just said.
-    for one in &renamed {
-        paths.remove(one.from());
-    }
-    for one in &renamed {
-        paths.insert(&one.path);
-    }
-
+    // [`check_renames`] has just said. So a path a rename takes is held, one a
+    // rename leaves is free, and any other is held by the Entry standing at it
+    // unless the batch removes that Entry's Container — which is all an
+    // addition's path asks, so each is looked up rather than the Library read.
+    let vacated: BTreeSet<&EntryPath> = renamed.iter().map(RenamedEntry::from).collect();
+    let taken: BTreeSet<&EntryPath> = renamed.iter().map(|one| &one.path).collect();
+    let mut added: BTreeSet<&EntryPath> = BTreeSet::new();
     for prepared in &batch.additions {
         for entry in prepared.addition.entries() {
-            if !paths.insert(&entry.path) {
-                return Err(CommitError::EntryPathCollision {
-                    path: entry.path.clone(),
-                });
+            let path = &entry.path;
+            let held = taken.contains(path)
+                || (!vacated.contains(path)
+                    && index
+                        .entry_at(path)
+                        .await?
+                        .is_some_and(|location| !removed.contains(&location.container_id)));
+            if held || !added.insert(path) {
+                return Err(CommitError::EntryPathCollision { path: path.clone() });
             }
         }
     }
@@ -76,12 +73,13 @@ pub(super) async fn check(index: &dyn Index, batch: &PreparedBatch) -> CommitRes
 /// after it is created and by every other device's on catch-up, and one whose
 /// renames a catalog does not admit is refused whole there (spec: RV-5): it
 /// would be a commit no device could follow. So the same rules are asked here,
-/// before anything is written, over the same three collections.
+/// before anything is written, over the same three collections — the Entries
+/// the renames name and the ones standing at their destinations looked up
+/// rather than the Library read, since those are all the rules ask after.
 async fn check_renames(
     index: &dyn Index,
     batch: &PreparedBatch,
     removed: &BTreeSet<ContainerId>,
-    current: &[EntryLocation],
 ) -> CommitResult<Vec<RenamedEntry>> {
     if batch.renames.is_empty() {
         return Ok(Vec::new());
@@ -98,21 +96,7 @@ async fn check_renames(
         })
         .collect::<Result<Vec<_>, _>>()
         .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
-    let containers: BTreeSet<ContainerId> = index
-        .containers_under(None)
-        .await?
-        .into_iter()
-        .map(|container| container.id)
-        .collect();
-    let by_number: BTreeMap<EntryRef, &EntryLocation> = current
-        .iter()
-        .map(|location| (EntryRef::of(location), location))
-        .collect();
-    let standing: BTreeMap<&EntryPath, EntryRef> = current
-        .iter()
-        .filter(|location| !removed.contains(&location.container_id))
-        .map(|location| (location.path(), EntryRef::of(location)))
-        .collect();
+    let lookups = RenameLookups::read(index, &renames).await?;
     let removals: Vec<ContainerId> = removed.iter().copied().collect();
     let additions: Vec<ContainerAddition> = batch
         .additions
@@ -124,18 +108,13 @@ async fn check_renames(
         &renames,
         &removals,
         &additions,
-        |container_id, entry_number| {
-            Ok(
-                match by_number.get(&EntryRef::new(container_id, entry_number)) {
-                    Some(location) => Named::Entry(Box::new((*location).clone())),
-                    None if containers.contains(&container_id) => Named::NoEntry,
-                    None => Named::NoContainer,
-                },
-            )
-        },
+        |container_id, entry_number| Ok(lookups.named(container_id, entry_number)),
+        // An Entry the batch removes with its Container has left before the
+        // renames apply, so it stands nowhere.
         |path| {
-            Ok(standing
-                .get(path)
+            Ok(lookups
+                .standing_at(path)
+                .filter(|entry| !removed.contains(&entry.container_id))
                 .map(|entry| (entry.container_id, entry.entry_number)))
         },
     )
@@ -148,13 +127,14 @@ async fn check_renames(
 /// Refuses removals that name a Container the current set no longer holds,
 /// naming every one of them (spec: CP-18).
 ///
-/// A batch that removes nothing costs no walk of the Index.
+/// Each removal is looked up by its Container ID, so a batch that removes
+/// nothing asks the Index nothing here.
 async fn check_removals(index: &dyn Index, removed: &BTreeSet<ContainerId>) -> CommitResult<()> {
     if removed.is_empty() {
         return Ok(());
     }
     let current: BTreeSet<ContainerId> = index
-        .containers_under(None)
+        .containers_among(removed)
         .await?
         .into_iter()
         .map(|container| container.id)

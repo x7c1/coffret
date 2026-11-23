@@ -110,7 +110,7 @@ async fn armable(state: &ServerState, query: PathQuery) -> Result<Book, ApiError
             "it names no folder, and a freeze is of one folder rather than of the whole Library",
         ));
     }
-    if !state.unlocked()?.list(book.folder.listed()).await?.mapped {
+    if !state.unlocked()?.mapped(book.folder.listed()).await? {
         return Err(ApiError::no_folder_here());
     }
     Ok(book)

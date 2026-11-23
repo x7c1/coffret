@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use async_trait::async_trait;
 use coffret_model::{
     ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, JournalRecord,
@@ -290,6 +292,49 @@ pub trait Index: Send + Sync {
         &self,
         prefix: Option<&EntryPath>,
     ) -> IndexResult<Vec<ContainerSummary>>;
+
+    /// The current Containers among `ids`, ordered by Container ID; an ID the
+    /// catalog holds no current Container under is left out.
+    ///
+    /// What an operation that names its Containers asks — the Containers a
+    /// commit removes (spec: CP-18), the ones a deletion touches (spec: PK-9),
+    /// the kind of the one a changed file lives in (spec: PK-11) — answered by
+    /// looking each one up rather than by reading the Library. Every current
+    /// Container holds at least one Entry (spec: FM-10), so this is the part of
+    /// [`containers_under(None)`](Self::containers_under) these IDs name,
+    /// which is what the default reads and keeps; an adapter keeping the
+    /// Containers by ID answers without.
+    async fn containers_among(
+        &self,
+        ids: &BTreeSet<ContainerId>,
+    ) -> IndexResult<Vec<ContainerSummary>> {
+        Ok(self
+            .containers_under(None)
+            .await?
+            .into_iter()
+            .filter(|container| ids.contains(&container.id))
+            .collect())
+    }
+
+    /// How many current Entries the catalog holds.
+    ///
+    /// Counted rather than read: what a catch-up reports of the catalog it
+    /// moved, before and after (spec: CK-9). The default reads every Entry,
+    /// which an adapter counting them answers without.
+    async fn entry_count(&self) -> IndexResult<u64> {
+        Ok(self.entries_under(None).await?.len() as u64)
+    }
+
+    /// Every current Container, ordered by Container ID.
+    ///
+    /// The same set as [`containers_under(None)`](Self::containers_under),
+    /// since every current Container holds at least one Entry (spec: FM-10),
+    /// which is what the default reads; an adapter keeping the Containers apart
+    /// answers from them alone, at a cost that follows the Containers rather
+    /// than the Entries they hold.
+    async fn containers(&self) -> IndexResult<Vec<ContainerSummary>> {
+        self.containers_under(None).await
+    }
 
     /// What one folder holds, one level down — `None` is the Library root —
     /// with what each child folder's Entries at every depth come to

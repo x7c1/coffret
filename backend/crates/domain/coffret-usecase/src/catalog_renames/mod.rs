@@ -21,5 +21,8 @@ pub use check_renames::check_renames;
 mod named;
 pub use named::Named;
 
+mod rename_lookups;
+pub(crate) use rename_lookups::RenameLookups;
+
 mod renamed_entry;
 pub use renamed_entry::RenamedEntry;

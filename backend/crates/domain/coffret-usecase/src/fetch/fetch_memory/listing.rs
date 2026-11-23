@@ -44,6 +44,12 @@ impl FetchMemory {
     /// Keeps a listing taken while the catalog stood at `at`, and forgets the
     /// front of every Container `index` no longer holds a current Entry in.
     ///
+    /// Only the Containers whose fronts are kept are asked after — a bounded
+    /// few, looked up by ID — so a look at the head every few minutes costs
+    /// what the memory holds rather than what the Library does. A front kept
+    /// between that lookup and the pruning was not asked after, so it is
+    /// forgotten too, which costs the cache one read of it.
+    ///
     /// Infallible, because what it keeps is a cache: every caller already
     /// holds the answer the listing served — a head compared, a catalog caught
     /// up, the handles an Entry fetch reaches objects by — and a catalog that
@@ -57,7 +63,8 @@ impl FetchMemory {
         listing: Arc<ControlListing>,
         at: Option<Generation>,
     ) {
-        let current: BTreeSet<ContainerId> = match index.containers_under(None).await {
+        let kept = self.locked().fronts.ids();
+        let current: BTreeSet<ContainerId> = match index.containers_among(&kept).await {
             Ok(containers) => containers
                 .into_iter()
                 .map(|container| container.id)

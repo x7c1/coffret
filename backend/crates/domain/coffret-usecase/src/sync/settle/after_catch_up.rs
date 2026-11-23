@@ -102,7 +102,7 @@ async fn complete_current(
     if pending.is_empty() {
         return Ok(0);
     }
-    let current = current(index).await?;
+    let current = current(index, &pending).await?;
     let mut landed = materialized(index, &pending, &current).await?;
     let mut completed = 0;
     for row in pending {

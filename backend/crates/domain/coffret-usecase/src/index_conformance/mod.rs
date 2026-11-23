@@ -29,6 +29,12 @@ pub use commit::{
     a_refresh_marks_its_files_present_and_clears_its_spools,
 };
 
+mod containers;
+pub use containers::the_containers_named_are_looked_up_by_id;
+
+mod counts;
+pub use counts::the_current_entries_are_counted;
+
 mod device_state;
 pub use device_state::{
     a_batch_is_marked_attempted_together,
@@ -167,6 +173,8 @@ macro_rules! index_conformance {
             width_variants_are_two_entry_paths,
             a_prefix_covers_a_subtree_and_stops_at_the_separator,
             the_containers_under_a_prefix_are_reported_once,
+            the_containers_named_are_looked_up_by_id,
+            the_current_entries_are_counted,
             a_prefix_reports_only_what_this_device_materialized,
             two_entries_at_one_path_are_refused,
             one_container_added_twice_is_refused,

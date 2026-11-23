@@ -56,6 +56,24 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
         }
     };
 
+    // A folder no mapping of this device reaches has nowhere to put a file, so
+    // there is nothing here to bring over (spec: EP-9) — and asking anyway would
+    // be one fetch per file to be told so once per file. The explorer
+    // says this over the rows already, out of the listing itself. Asked of the
+    // mappings alone, before the folder is listed, so that such a folder's
+    // fill reads nothing more.
+    match library.mapped(folder.listed()).await {
+        Ok(true) => {}
+        Ok(false) => {
+            run.status = FillStatus::Done;
+            return finish(state, run, started);
+        }
+        Err(error) => {
+            run.stop(Reported::recorded(&ApiError::from(error), "fill"));
+            return finish(state, run, started);
+        }
+    }
+
     let listing = match library.list(folder.listed()).await {
         Ok(listing) => listing,
         Err(error) => {
@@ -63,15 +81,6 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             return finish(state, run, started);
         }
     };
-
-    // A folder no mapping of this device reaches has nowhere to put a file, so
-    // there is nothing here to bring over (spec: EP-9) — and asking anyway would
-    // be one fetch per file to be told so once per file. The explorer
-    // says this over the rows already, out of the listing itself.
-    if !listing.mapped {
-        run.status = FillStatus::Done;
-        return finish(state, run, started);
-    }
 
     let wanted: Vec<EntryPath> = listing
         .files
