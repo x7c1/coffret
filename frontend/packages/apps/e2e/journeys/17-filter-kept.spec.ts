@@ -9,7 +9,7 @@
 // unfiltered, and the server keeps that too, so the journeys after it open
 // unfiltered.
 
-import type { Page } from '@playwright/test';
+import type { Page, Response } from '@playwright/test';
 
 import { clearFilter, expect, filterKept, leaf, setting, shot, test, tree } from './journey';
 
@@ -18,6 +18,44 @@ function drawn(page: Page): Promise<string[]> {
   return tree(page)
     .locator('tbody tr[data-key]')
     .evaluateAll((rows) => rows.map((one) => one.getAttribute('data-key') ?? ''));
+}
+
+/**
+ * The rows one answer of the filter kept, each by the key the tree draws it
+ * under: `folder:<path>` or `file:<path>`. The Library root, answered as a
+ * book, has no row and is left out.
+ */
+async function keptBy(answer: Response): Promise<string[]> {
+  const body = (await answer.json()) as { rows: { path: string; kind: 'folder' | 'file' }[] };
+  return body.rows.filter((one) => one.path !== '').map((one) => `${one.kind}:${one.path}`);
+}
+
+/**
+ * Waits until the tree is drawn from the answer that kept `kept`: every row it
+ * kept drawn, and no note left standing for a folder whose listing is still
+ * out (or was refused).
+ *
+ * Drawing an answer opens every folder above a row it kept, and each folder
+ * opened asks for its listing; until that comes, the folder's rows are a
+ * `loading…` note, which carries no key. Rows read in that window hold neither
+ * what was kept under the folder nor anything that says it is missing.
+ */
+async function drawnFrom(page: Page, kept: readonly string[]): Promise<void> {
+  await expect
+    .poll(() =>
+      tree(page)
+        .locator('tbody')
+        .evaluate((body, wanted) => {
+          const keys = new Set(
+            [...body.querySelectorAll('tr[data-key]')].map((one) => one.getAttribute('data-key')),
+          );
+          const missing = wanted.filter((key) => !keys.has(key));
+          // A row without a key, other than the spacers standing in for rows not drawn, is a note.
+          const notes = body.querySelectorAll('tr:not([data-key]):not([aria-hidden])').length;
+          return { missing, notes };
+        }, kept),
+    )
+    .toEqual({ missing: [], notes: 0 });
 }
 
 /** What the filter's line says once it has been answered: a count, or none. */
@@ -45,19 +83,28 @@ test('a filter set before a reload is the filter after it, until it is cleared',
   await more.click();
   await count.fill('2');
   const recentKept = filterKept(page, (kept) => kept.name === album && kept.recentOn && kept.recent === 2);
-  // The line read once the tree is drawn from the answer for both, not from
-  // the one for the name alone still standing while Recent is asked.
+  // The line and the rows read once the tree is drawn from the answer for
+  // both, not from the one for the name alone still standing while Recent is
+  // asked: the line already says that one's count, and the folders the new
+  // answer opens are listed only after it is drawn.
   const recentAnswered = page.waitForResponse((answer) => {
     const asked = new URL(answer.url());
-    return asked.pathname === '/api/filter' && asked.searchParams.get('recent') === '2';
+    return (
+      asked.pathname === '/api/filter' &&
+      asked.searchParams.get('name') === album &&
+      asked.searchParams.get('recent') === '2' &&
+      answer.ok()
+    );
   });
   await panel.getByRole('checkbox').check();
   await recentKept;
-  await recentAnswered;
+  const kept = await keptBy(await recentAnswered);
+  expect(kept.length).toBeGreaterThan(0);
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
   await expect(chip).toHaveText(/Recent 2/);
   await expect(tree(page).getByRole('columnheader', { name: 'Added' })).toBeVisible();
+  await drawnFrom(page, kept);
   await expect(status).toContainText(ANSWERED);
   const line = await status.textContent();
   const rows = await drawn(page);
