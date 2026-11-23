@@ -2,7 +2,7 @@
 //! (spec: LA-40, LA-41, LA-42).
 //!
 //! Out of the Entry Paths and deposit times the catalog holds and nothing
-//! else: a Library has no folders to store (spec: EP-2), so a folder matched
+//! else: a Library stores no folders (spec: EP-2), so a folder matched
 //! by name or taken as a book is one the paths imply, and Storage is never
 //! asked. It is a full scan of every Entry, in memory, which over a Library of
 //! a hundred thousand files is about a tenth of a second — measured, and the

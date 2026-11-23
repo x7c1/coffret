@@ -8,7 +8,7 @@ use tracing::debug;
 
 use super::{AddedFile, LocalAdditions};
 use crate::error::{Error, Result};
-use crate::folder_paths::{child_path, inside};
+use crate::folder_paths::child_path;
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
@@ -143,21 +143,19 @@ impl OpenLibrary {
         // What the Library holds one level down: the Entries standing in the
         // folder itself, and the child folders the Entries deeper down imply
         // (spec: EP-2). A name in either set is the Library's to list, not this.
-        let mut held: BTreeSet<EntryPath> = BTreeSet::new();
-        let mut held_folders: BTreeSet<String> = BTreeSet::new();
-        for location in self.index.entries_under(folder).await? {
-            let Some(rest) = inside(folder, location.path()) else {
-                continue;
-            };
-            match rest.split_once('/') {
-                Some((child, _)) => {
-                    held_folders.insert(child.to_owned());
-                }
-                None => {
-                    held.insert(location.path().clone());
-                }
-            }
-        }
+        // Read off the folder's own rows, the answer the listing beside this is
+        // drawn from, so nothing below its child folders is read (spec: LA-45).
+        let contents = self.index.folder_contents(folder).await?;
+        let held: BTreeSet<EntryPath> = contents
+            .files
+            .into_iter()
+            .map(|file| file.location.path().clone())
+            .collect();
+        let held_folders: BTreeSet<String> = contents
+            .folders
+            .into_iter()
+            .map(|child| child.path.name().to_owned())
+            .collect();
 
         // A folder that is not there is the `None` the capability answers with,
         // so nothing here reads an error kind to find that out.

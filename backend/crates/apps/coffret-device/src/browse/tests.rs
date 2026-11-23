@@ -312,7 +312,7 @@ async fn throughout(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String,
         .collect()
 }
 
-// EP-10: a folder is here whole only where every Entry at every depth below it
+// EP-10, LA-44: a folder is here whole only where every Entry at every depth below it
 // has a present record — the promise that the whole book, or the whole series,
 // reads without Storage. One file anywhere below that this device does not
 // have, however deep, takes the promise back.
@@ -397,9 +397,9 @@ async fn counted(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String, u6
         .collect()
 }
 
-// EP-10: a folder counts every Entry at every depth below it, and those this
-// device has a present record for — "18 of 196 files" — out of the same scan
-// that answers whether all of them are here. A file one level down and a file
+// EP-10, LA-44: a folder counts every Entry at every depth below it, and those
+// this device has a present record for — "18 of 196 files" — out of the same
+// read that answers whether all of them are here. A file one level down and a file
 // three levels down count alike, and a file that left this device does not
 // count as here.
 #[tokio::test]
@@ -547,6 +547,68 @@ async fn an_entry_standing_at_the_folder_itself_is_not_in_its_listing() {
     // From the root it is an ordinary file beside the folder of the same name.
     let root = library.list(None).await.expect("the catalog answers");
     assert_eq!(names(&root), (vec!["albums"], vec!["albums"]));
+}
+
+/// The paths of the Entries standing directly in `folder` that this device
+/// does not have.
+async fn remote(library: &OpenLibrary, folder: Option<&str>) -> Vec<String> {
+    library
+        .remote_in(folder.map(entry_path).as_ref())
+        .await
+        .expect("the catalog answers")
+        .into_iter()
+        .map(|location| location.path().as_str().to_owned())
+        .collect()
+}
+
+// What a listing's read-ahead of fronts and a page opened from disk ask: the
+// Entries standing directly in the folder that this device does not have, in
+// EP-3 order. Not the ones it has (spec: EP-10), not the ones further down,
+// not the one at the folder's own path, and not a sibling's whose name merely
+// begins with the same letters (spec: EP-2).
+#[tokio::test]
+async fn the_remote_entries_of_a_folder_are_its_own_that_this_device_lacks() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &[
+            "albums",
+            "albums-annex/page.jpg",
+            "albums/2026/spring.jpg",
+            "albums/b.jpg",
+            "albums/a.jpg",
+            "albums/c.jpg",
+        ],
+    )])
+    .await;
+    hold(&library, "albums/b.jpg").await;
+
+    assert_eq!(
+        remote(&library, Some("albums")).await,
+        ["albums/a.jpg", "albums/c.jpg"]
+    );
+    assert_eq!(remote(&library, None).await, ["albums"]);
+    assert!(
+        !library
+            .directly_present(Some(&entry_path("albums")))
+            .await
+            .expect("the catalog answers"),
+        "two of the folder's own files are not here",
+    );
+
+    // Whatever lies further down, a folder whose own files are all here is
+    // here directly.
+    hold(&library, "albums/a.jpg").await;
+    hold(&library, "albums/c.jpg").await;
+    assert_eq!(remote(&library, Some("albums")).await, Vec::<String>::new());
+    assert!(library
+        .directly_present(Some(&entry_path("albums")))
+        .await
+        .expect("the catalog answers"));
+    assert_eq!(
+        remote(&library, Some("albums/2026")).await,
+        ["albums/2026/spring.jpg"]
+    );
 }
 
 // Every folder, flat, each named by its whole path — and every ancestor of an

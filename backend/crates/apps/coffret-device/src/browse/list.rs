@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use coffret_model::{ContainerId, ContainerKind, EntryPath, LibraryId};
 use coffret_usecase::device_state::Mapping;
@@ -9,22 +9,21 @@ use crate::error::Result;
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
-    /// What one folder holds, one level down; `None` is the Library root.
+    /// What one folder holds, one level down; `None` is the Library root
+    /// (spec: LA-44).
     ///
-    /// Four questions of the catalog and no more: the Entries under the folder,
-    /// which of them this device has, what kind of Container each lives in, and
-    /// which parts of the Library this device has a folder for at all. A row's
-    /// state comes from a present materialization record and from nothing else,
-    /// because a mapping asserts nothing about what is on disk (spec: EP-9,
-    /// EP-10) — the mappings answer the separate question of whether anything
-    /// here could be fetched, which is [`mapped`](FolderListing::mapped).
-    ///
-    /// The same present records answer for each child folder how many Entries
-    /// stand at every depth below it, how many of them are here, and so whether
-    /// every one is ([`present_throughout`](ChildFolder::present_throughout)),
-    /// and the Entries themselves what they come to in bytes and when the
-    /// newest of them was modified ([`mtime`](ChildFolder::mtime)): the scan already
-    /// covers the whole subtree, so those answers read nothing more.
+    /// Two questions of the catalog and no more: what the folder holds, and
+    /// which parts of the Library this device has a folder for at all. The
+    /// first is answered by the Index out of the folder's own rows — its child
+    /// folders with what each comes to at every depth, and the Entries
+    /// standing directly in it with whether this device has each and the kind
+    /// of Container each lives in — never out of the subtree under it, so the
+    /// listing costs what it answers with however much lies below
+    /// (spec: LA-45). A row's state comes from a present materialization
+    /// record and from nothing else, because a mapping asserts nothing about
+    /// what is on disk (spec: EP-9, EP-10) — the mappings answer the separate
+    /// question of whether anything here could be fetched, which is
+    /// [`mapped`](FolderListing::mapped).
     ///
     /// An Entry standing at exactly the folder's own path is not in the listing.
     /// The Library admits one — nothing stops a file and a folder sharing a
@@ -36,21 +35,7 @@ impl OpenLibrary {
     /// there is nothing to look up and nothing to be missing — and says which of
     /// the two an empty answer is in [`held`](FolderListing::held).
     pub async fn list(&self, folder: Option<&EntryPath>) -> Result<FolderListing> {
-        let entries = self.index.entries_under(folder).await?;
-        let present: BTreeSet<EntryPath> = self
-            .index
-            .present_under(folder)
-            .await?
-            .into_iter()
-            .map(|local| local.observation.path)
-            .collect();
-        let kinds: BTreeMap<ContainerId, ContainerKind> = self
-            .index
-            .containers_under(folder)
-            .await?
-            .into_iter()
-            .map(|container| (container.id, container.kind))
-            .collect();
+        let contents = self.index.folder_contents(folder).await?;
         let mappings = self.index.mappings().await?;
         // The top-level folders this device maps, which the root's listing
         // names apart from its folders where nothing is under one yet.
@@ -63,82 +48,51 @@ impl OpenLibrary {
         };
         let reach = Reach::of(mappings);
 
-        let mut folders: Vec<ChildFolder> = Vec::new();
-        // Each child folder named so far, and where it stands in `folders`.
-        let mut named: BTreeMap<EntryPath, usize> = BTreeMap::new();
-        let mut files = Vec::new();
-        for location in &entries {
-            let path = location.path();
-            // An Entry whose own folder is this one is a row of the listing, and
-            // the name it is shown under is the last component of its path.
-            if path.parent().as_ref() == folder {
-                files.push(FileRow {
-                    name: path.name().to_owned(),
-                    path: path.clone(),
-                    size: location.entry.extent.size(),
-                    mtime: location.entry.mtime,
-                    deposited_at: location.deposited_at,
-                    state: match present.contains(path) {
-                        true => EntryState::Present,
-                        false => EntryState::Remote,
-                    },
-                    container: kind_of(&kinds, location.container_id, self.library_id),
-                });
-                continue;
-            }
-            // Anything deeper stands under a folder of this one, and that folder
-            // is a prefix of the Entry's own path rather than anything made out
-            // of text: what is left of an Entry Path when trailing components
-            // come off is an Entry Path (spec: EP-2).
-            let Some(child) = child_holding(folder, path) else {
-                // The Entry standing at exactly the folder's own path, and
-                // anything else the catalog handed back that does not lie under
-                // this folder at all.
-                continue;
-            };
-            // Whether this device has the Entry decides, with every other
-            // Entry under the same child, how much of that child is here and
-            // whether all of it is.
-            let here = present.contains(path);
-            let at = match named.get(&child) {
-                Some(&at) => at,
-                None => {
-                    named.insert(child.clone(), folders.len());
-                    folders.push(ChildFolder {
-                        name: child.name().to_owned(),
-                        mapped: reach.reaches(Some(&child)),
-                        path: child,
-                        present_throughout: true,
-                        files_total: 0,
-                        files_present: 0,
-                        size: 0,
-                        // The first Entry under the child is the latest so
-                        // far; the ones after it can only move it later.
-                        mtime: location.entry.mtime,
-                    });
-                    folders.len() - 1
-                }
-            };
-            let counted = &mut folders[at];
-            counted.files_total += 1;
-            counted.files_present += u64::from(here);
-            counted.size += location.entry.extent.size();
-            counted.mtime = counted.mtime.max(location.entry.mtime);
-            counted.present_throughout &= here;
-        }
+        let folders: Vec<ChildFolder> = contents
+            .folders
+            .into_iter()
+            .map(|child| ChildFolder {
+                name: child.path.name().to_owned(),
+                mapped: reach.reaches(Some(&child.path)),
+                // Every Entry below it is here exactly where the count of
+                // those here reaches the count of them all.
+                present_throughout: child.files_present == child.files_total,
+                files_total: child.files_total,
+                files_present: child.files_present,
+                size: child.size,
+                mtime: child.mtime,
+                path: child.path,
+            })
+            .collect();
+        let files: Vec<FileRow> = contents
+            .files
+            .into_iter()
+            .map(|file| FileRow {
+                name: file.location.path().name().to_owned(),
+                path: file.location.path().clone(),
+                size: file.location.entry.extent.size(),
+                mtime: file.location.entry.mtime,
+                deposited_at: file.location.deposited_at,
+                state: match file.present {
+                    true => EntryState::Present,
+                    false => EntryState::Remote,
+                },
+                container: kind_of(file.container, file.location.container_id, self.library_id),
+            })
+            .collect();
 
         // A mapped top-level folder that holds no Entry is not a folder of the
         // Library (spec: EP-2), and it is still where this device has room for
         // one: the explorer offers it as a place to drop into.
+        let named: BTreeSet<&EntryPath> = folders.iter().map(|child| &child.path).collect();
         let empty_mapped_prefixes: Vec<EntryPath> = prefixes
             .into_iter()
-            .filter(|prefix| !named.contains_key(prefix))
+            .filter(|prefix| !named.contains(prefix))
             .collect();
 
         debug!(
             operation = "list",
             library = %self.library_id,
-            entries = entries.len(),
             folders = folders.len(),
             files = files.len(),
             empty_mapped_prefixes = empty_mapped_prefixes.len(),
@@ -158,25 +112,6 @@ impl OpenLibrary {
             files,
             empty_mapped_prefixes,
         })
-    }
-}
-
-/// The child of `folder` that `path` stands under, or `None` where `path` does
-/// not lie strictly beneath `folder` at all.
-///
-/// The answer is `path` with trailing components taken off until one is left
-/// standing directly in `folder`, which is a prefix of a path the catalog
-/// answered with and so an Entry Path already (spec: EP-2). `None` is what an
-/// Entry standing at exactly the folder's own path comes to, since it is not a
-/// child of itself.
-fn child_holding(folder: Option<&EntryPath>, path: &EntryPath) -> Option<EntryPath> {
-    let mut child = path.parent()?;
-    loop {
-        let above = child.parent();
-        if above.as_ref() == folder {
-            return Some(child);
-        }
-        child = above?;
     }
 }
 
@@ -228,20 +163,22 @@ impl Reach {
 
 /// Which kind of Container one Entry lives in (spec: PK-15).
 ///
-/// The two reads behind the map are two reads, and another process may commit
-/// between them: a Container that stopped being current after the Entries were
-/// read is a Container this listing has an Entry for and no summary of. It is
-/// rare, it is nobody's mistake, and the next listing will not have it — but it
-/// is not nothing either, because what reads this field decides from it whether
-/// an Entry can be replaced one file at a time. So it is reported, and the row
-/// falls back to the answer that refuses nothing on its own.
+/// The Index answers with the Entry and the kind of its Container together,
+/// and an adapter reading them in two reads may meet another process
+/// committing between them: a Container that stopped being current after the
+/// Entries were read is a Container this listing has an Entry for and no
+/// summary of. It is rare, it is nobody's mistake, and the next listing will
+/// not have it — but it is not nothing either, because what reads this field
+/// decides from it whether an Entry can be replaced one file at a time. So it
+/// is reported, and the row falls back to the answer that refuses nothing on
+/// its own.
 fn kind_of(
-    kinds: &BTreeMap<ContainerId, ContainerKind>,
+    kind: Option<ContainerKind>,
     container_id: ContainerId,
     library: LibraryId,
 ) -> ContainerKind {
-    match kinds.get(&container_id) {
-        Some(kind) => *kind,
+    match kind {
+        Some(kind) => kind,
         None => {
             warn!(
                 operation = "list",

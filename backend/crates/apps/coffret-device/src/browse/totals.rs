@@ -1,6 +1,4 @@
-use std::collections::BTreeSet;
-
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::Mtime;
 use tracing::debug;
 
 use crate::error::Result;
@@ -38,22 +36,17 @@ pub struct LibraryTotals {
 impl OpenLibrary {
     /// What the whole Library comes to, out of the catalog alone (spec: LA-39).
     ///
-    /// Three reads of the catalog and none of Storage: every Entry, which of
-    /// them this device has, and the Containers and the checkpoint the counted
-    /// objects are read off. Journal records behind the head, ordinary
-    /// checkpoints, and Keyring generations a `prune` has yet to dispose of
-    /// are not counted: whether each is still on Storage is something only a
-    /// listing of Storage could say, and this asks Storage nothing.
+    /// Two reads of the catalog and none of Storage: what the Index keeps of
+    /// the Library root — its Entries' counts and sizes, how many of them this
+    /// device has, and how many Containers are current — and the checkpoint
+    /// the control objects are counted off. Neither reads the Entries
+    /// themselves, so the answer costs the same however many the Library holds
+    /// (spec: LA-45). Journal records behind the head, ordinary checkpoints,
+    /// and Keyring generations a `prune` has yet to dispose of are not
+    /// counted: whether each is still on Storage is something only a listing
+    /// of Storage could say, and this asks Storage nothing.
     pub async fn totals(&self) -> Result<LibraryTotals> {
-        let entries = self.index.entries_under(None).await?;
-        let present: BTreeSet<EntryPath> = self
-            .index
-            .present_under(None)
-            .await?
-            .into_iter()
-            .map(|local| local.observation.path)
-            .collect();
-        let containers = self.index.containers_under(None).await?.len() as u64;
+        let summary = self.index.library_summary().await?;
         // The head and the Keyring replicas it names: a catalog standing at
         // no committed state names neither, so its Containers are all it
         // counts (spec: LA-39).
@@ -62,24 +55,14 @@ impl OpenLibrary {
             None => 0,
         };
 
-        let mut totals = LibraryTotals {
-            objects: containers + control,
-            files_total: 0,
-            files_present: 0,
-            size: 0,
-            size_present: 0,
-            mtime: None,
+        let totals = LibraryTotals {
+            objects: summary.containers + control,
+            files_total: summary.files_total,
+            files_present: summary.files_present,
+            size: summary.size,
+            size_present: summary.size_present,
+            mtime: summary.mtime,
         };
-        for location in &entries {
-            totals.files_total += 1;
-            let size = location.entry.extent.size();
-            if present.contains(location.path()) {
-                totals.files_present += 1;
-                totals.size_present += size;
-            }
-            totals.size += size;
-            totals.mtime = totals.mtime.max(Some(location.entry.mtime));
-        }
         debug!(
             operation = "totals",
             library = %self.library_id,

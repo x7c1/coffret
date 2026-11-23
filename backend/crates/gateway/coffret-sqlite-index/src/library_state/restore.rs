@@ -6,6 +6,7 @@ use super::{
 };
 use crate::device_state;
 use crate::error::classify;
+use crate::folder_totals;
 
 /// Replaces the whole Library-wide state with a Snapshot's content
 /// (spec: CK-7, CK-9, RV-1).
@@ -51,6 +52,9 @@ pub(crate) fn restore(connection: &Connection, snapshot: SnapshotContent) -> Ind
         connection,
         "keeping the local files' rows about their Entries",
     )?;
+    // The whole catalog was replaced, so every folder's totals are laid out
+    // afresh from it (spec: LA-45).
+    folder_totals::rebuild(connection)?;
     write_checkpoint(connection, &checkpoint)?;
     // The Snapshot's name replaces the catalog's, whichever it is, a Snapshot
     // naming nothing included: a restore replaces the whole Library-wide state

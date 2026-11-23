@@ -10,8 +10,9 @@ impl OpenLibrary {
     /// The question a page opened from disk asks before anything is brought
     /// over around it: a folder this device has whole has nothing left to fill,
     /// and one it does not is a folder somebody has started reading. One read
-    /// of the catalog — the Entries under the folder this device does not
-    /// have — and nothing of Storage, as every question in this module is.
+    /// of the catalog — what the folder holds one level down, never the
+    /// subtree under it — and nothing of Storage, as every
+    /// question in this module is.
     ///
     /// It says nothing about mappings. An Entry no mapping reaches is never
     /// present, so a folder of them is never whole here; what a caller does

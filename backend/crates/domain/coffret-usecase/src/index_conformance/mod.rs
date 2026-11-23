@@ -48,6 +48,11 @@ pub use device_state::{
 
 mod fixtures;
 
+mod folder_figures;
+pub use folder_figures::{
+    assert_folder_figures_recount, the_folder_figures_add_up_to_what_lies_below,
+};
+
 mod identity;
 pub use identity::{
     a_departed_file_is_forgotten_where_a_rename_brings_another_entry,
@@ -195,6 +200,7 @@ macro_rules! index_conformance {
             a_restore_carries_a_record_over_to_a_replacement,
             a_record_of_an_entry_standing_elsewhere_waits_for_it,
             a_relocated_record_follows_its_file,
+            the_folder_figures_add_up_to_what_lies_below,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

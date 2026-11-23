@@ -9,6 +9,9 @@ use crate::device_state::{
     AttemptedSlot, BatchId, DeviceTime, HeldParcel, LocalEntry, LocalObservation, Mapping,
     PendingRow, Reservation, ReservationId,
 };
+use crate::folder_figures::{
+    derive_folder_contents, derive_folders, derive_library_summary, FolderContents, LibrarySummary,
+};
 use crate::index_error::IndexResult;
 
 /// The cached Catalog and device-local records of one Library.
@@ -287,6 +290,38 @@ pub trait Index: Send + Sync {
         &self,
         prefix: Option<&EntryPath>,
     ) -> IndexResult<Vec<ContainerSummary>>;
+
+    /// What one folder holds, one level down — `None` is the Library root —
+    /// with what each child folder's Entries at every depth come to
+    /// (spec: EP-2, EP-3, EP-10).
+    ///
+    /// The default reads the whole subtree under the folder off
+    /// [`entries_under`](Self::entries_under),
+    /// [`present_under`](Self::present_under) and
+    /// [`containers_under`](Self::containers_under), which an adapter keeping
+    /// each folder's figures apart answers without (spec: LA-45). Either way
+    /// the answer is the one [`derive_folder_contents`] gives.
+    async fn folder_contents(&self, folder: Option<&EntryPath>) -> IndexResult<FolderContents> {
+        derive_folder_contents(self, folder).await
+    }
+
+    /// What the whole Library comes to: its Entries, how many of them this
+    /// device has, their sizes and newest `mtime`, and its current Containers.
+    ///
+    /// The default reads every Entry, present record and Container, which an
+    /// adapter keeping the figures apart answers without (spec: LA-45).
+    async fn library_summary(&self) -> IndexResult<LibrarySummary> {
+        derive_library_summary(self).await
+    }
+
+    /// Every folder of the Library, each named by its whole path, in EP-3
+    /// order (spec: EP-2, EP-3).
+    ///
+    /// The default reads every Entry, which an adapter keeping the folders
+    /// apart answers without (spec: LA-45).
+    async fn folders(&self) -> IndexResult<Vec<EntryPath>> {
+        derive_folders(self).await
+    }
 
     /// Records where one part of the Library lives on this device, replacing
     /// any mapping already held for that prefix (spec: EP-9).

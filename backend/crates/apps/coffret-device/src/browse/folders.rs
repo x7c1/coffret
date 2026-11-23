@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use coffret_model::EntryPath;
 use tracing::debug;
 
@@ -18,37 +16,17 @@ impl OpenLibrary {
     /// A folder exists exactly where a current Entry stands under it. There are
     /// no empty ones, because a Library holds Entries and nothing else: a folder
     /// whose last Entry is removed stops existing at that commit.
+    ///
+    /// The Index answers with the folders it keeps apart rather than out of
+    /// every Entry, so the answer costs what it holds (spec: LA-45).
     pub async fn folders(&self) -> Result<Vec<EntryPath>> {
-        let entries = self.index.entries_under(None).await?;
-
-        // Byte order over an Entry Path is EP-3 order, which is the order the
-        // answer owes, so the set both dedupes the ancestors and sorts them.
-        //
-        // Each ancestor is taken off the path a whole component at a time rather
-        // than cut out of its text: what is left of an Entry Path when a
-        // trailing component is dropped is an Entry Path, so nothing here has to
-        // make one out of text and there is no refusal to invent an answer for
-        // about text the Library itself produced (spec: EP-1, EP-2).
-        let mut folders: BTreeSet<EntryPath> = BTreeSet::new();
-        for location in &entries {
-            let mut folder = location.path().parent();
-            while let Some(above) = folder {
-                folder = above.parent();
-                if !folders.insert(above) {
-                    // Everything above it is in the set already, put there by
-                    // whichever Entry first stood under it.
-                    break;
-                }
-            }
-        }
-
+        let folders = self.index.folders().await?;
         debug!(
             operation = "folders",
             library = %self.library_id,
-            entries = entries.len(),
             folders = folders.len(),
-            "derived the Library's folders from the catalog",
+            "read the Library's folders from the catalog",
         );
-        Ok(folders.into_iter().collect())
+        Ok(folders)
     }
 }

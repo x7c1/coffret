@@ -5,8 +5,8 @@ use serde_json::json;
 
 use crate::support::{files, folders, json as body_of, states, Served};
 
-// One folder, one level down, in EP-3 order: the child folder and the child
-// files, and nothing from inside the child folder.
+// LA-44: one folder, one level down, in EP-3 order: the child folder and the
+// child files, and nothing from inside the child folder.
 #[tokio::test]
 async fn a_folder_lists_its_child_folders_and_its_files() {
     let served = Served::library().await;
@@ -84,8 +84,8 @@ async fn naming_no_folder_lists_the_library_root() {
     }
 }
 
-// A folder of the Library is what the separators under it imply, so it cannot
-// be empty: an empty listing means the path names nothing, which is what a
+// LA-44: a folder of the Library is what the separators under it imply, so it
+// cannot be empty: an empty listing means the path names nothing, which is what a
 // mistyped component and a link kept too long both arrive as. The rows are
 // identical to an empty Library root's, so the route says which of the two it
 // answered — a browser reading the rows alone would show a mistyped path as an
@@ -241,8 +241,8 @@ async fn a_librarys_folder_spelled_decomposed_on_disk_is_not_named_twice() {
     assert_eq!(albums["folders_on_disk"], json!([]));
 }
 
-// A top-level folder this device maps with nothing under it yet is no folder of
-// the Library (spec: EP-2), and the root's listing names it apart from the
+// LA-44: a top-level folder this device maps with nothing under it yet is no
+// folder of the Library (spec: EP-2), and the root's listing names it apart from the
 // folders, so the explorer can offer it as a place to drop the first files into.
 // A mapped top-level folder that does hold Entries is an ordinary folder and is
 // not named there.

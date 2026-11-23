@@ -15,6 +15,12 @@ mod entry_identities;
 // (spec: FM-15, FM-16).
 mod library_name;
 
+// The upgrade that gives each Entry the folder it stands directly in and lays
+// out every folder's totals from the rows the file holds, which a layout-21
+// file takes in place and a layout-19 or -20 one beside its own upgrade
+// (spec: LA-45).
+mod folder_totals;
+
 use std::ops::Range;
 
 use coffret_usecase::{IndexError, IndexResult};
@@ -39,20 +45,28 @@ use crate::error::classify;
 /// Pack is kept in until a freeze has decided its files (spec: PK-17),
 /// version 19 each Entry's deposit time (spec: FM-15, FM-16), and version 20
 /// the mark saying whether a reservation's drop finished receiving
-/// (spec: PK-17, LA-12), and version 21 the Library's name on the checkpoint
-/// row (spec: FM-15, FM-16).
-pub(crate) const SCHEMA_VERSION: i64 = 21;
+/// (spec: PK-17, LA-12), version 21 the Library's name on the checkpoint
+/// row (spec: FM-15, FM-16), and version 22 the folder each Entry stands
+/// directly in, with every folder's totals and the count of current
+/// Containers kept beside the catalog, so that a listing reads a folder's own
+/// rows rather than the subtree under it (spec: LA-45).
+pub(crate) const SCHEMA_VERSION: i64 = 22;
 
 /// The device-local layout floor: the oldest layout whose device-local group is
 /// the one this build writes.
 ///
 /// Layout 20 last changed the device-local group, so the floor is layout 20,
-/// and layout 21 changed the catalog alone: a layout-20 file keeps every row it
-/// holds, catalog included, and its checkpoint row gains the Library's name,
-/// unset — the next open reads the name from Storage before giving the Library
-/// one (spec: FM-15). No older layout is read as it is: each takes an upgrade.
+/// and layouts 21 and 22 changed the catalog alone. A layout-21 file keeps
+/// every row it holds, catalog included; each of its Entries gains the folder
+/// it stands directly in, and every folder's totals and the count of current
+/// Containers are laid out from the rows it holds (spec: LA-45). A layout-20
+/// file keeps every row it holds, catalog included, its checkpoint row gains
+/// the Library's name, unset — the next open reads the name from Storage
+/// before giving the Library one (spec: FM-15) — and it takes the layout-21
+/// step after. No older layout is read as it is: each takes an upgrade.
 /// A layout-19 file keeps every row it holds, catalog included, its checkpoint
-/// row gains the name the same way, and its reservations gain the mark unset —
+/// row gains the name and its folders their totals the same way, and its
+/// reservations gain the mark unset —
 /// a build before it never said a drop had finished receiving, so each
 /// reservation it left is read as a drop cut off part way, which waits for its
 /// folder to be dropped again rather than being packed as it stands
@@ -107,6 +121,15 @@ CREATE TABLE entries (
     -- (spec: EP-5, EP-6); this catches a record that reached the catalog
     -- claiming otherwise.
     path                   TEXT PRIMARY KEY COLLATE BINARY,
+    -- The folder `path` stands directly in: `path` less its last component,
+    -- and the empty string for an Entry at the top of the Library. What a
+    -- folder's listing finds its own files by, and what a folder's totals are
+    -- recounted from (spec: EP-2, LA-45). The check holds it to `path`: the
+    -- inner `rtrim` takes off the last component, every character but `/`,
+    -- and the outer the separator before it, which is one `/` since no Entry
+    -- Path has an empty component (spec: EP-2).
+    parent                 TEXT NOT NULL COLLATE BINARY
+                           CHECK (parent = rtrim(rtrim(path, replace(path, '/', '')), '/')),
     -- The Entry Path the owning Container's meta section records for this
     -- Entry: the name it was captured under when that Container was written,
     -- which no rename changes, where `path` is where it stands now
@@ -137,9 +160,17 @@ CREATE TABLE entries (
 -- Removing a Container removes its Entries, and a Pack holds many; the
 -- entry number beside it finds one Entry of a Container by its position.
 CREATE INDEX entries_by_container ON entries (container_id, entry_number);
+
+-- The Entries standing directly in one folder, in EP-3 order: a listing's
+-- files, and what a folder's totals are recounted from (spec: LA-45).
+CREATE INDEX entries_by_parent ON entries (parent, path);
 "#
     };
 }
+
+/// The table of current Entries on its own, which the upgrade to layout 22
+/// lays out afresh to give each Entry the folder it stands directly in.
+const ENTRIES_DDL: &str = entries_ddl!();
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -183,6 +214,49 @@ CREATE TABLE containers (
 "#,
     entries_ddl!()
 );
+
+/// What each folder of the Library comes to, and the count of current
+/// Containers, which layout 22 added (spec: LA-45).
+///
+/// A derivation of the catalog's Entries and this device's present
+/// materialization records together, and so in neither group: no Index
+/// Snapshot carries it and nothing of it reaches Storage (spec: CK-7). It is
+/// laid out, and dropped, with the catalog, and rebuilt from the rows the file
+/// holds wherever the catalog is (see `crate::folder_totals`).
+pub(crate) const FOLDER_TOTALS_DDL: &str = r#"
+CREATE TABLE folder_totals (
+    -- One row per folder with a current Entry under it at any depth, and the
+    -- Library root's under the empty string, which no Entry Path is
+    -- (spec: EP-2). `parent` is the folder it stands directly in, spelled as
+    -- `entries.parent` spells it, and NULL for the root. The counts are of the
+    -- Entries at every depth below the folder and of those this device has by
+    -- a present materialization record at their own path (spec: EP-10); the
+    -- sizes are their plaintext bytes and the present ones'; `mtime` is the
+    -- newest among them, in Unix seconds as `entries.mtime` holds it
+    -- (spec: FM-9). A folder with nothing under it has no row, and the
+    -- present ones are a part of all of them.
+    path          TEXT PRIMARY KEY COLLATE BINARY,
+    parent        TEXT COLLATE BINARY,
+    files_total   INTEGER NOT NULL CHECK (files_total > 0),
+    files_present INTEGER NOT NULL CHECK (files_present BETWEEN 0 AND files_total),
+    size          INTEGER NOT NULL CHECK (size >= 0),
+    size_present  INTEGER NOT NULL CHECK (size_present BETWEEN 0 AND size),
+    mtime         INTEGER NOT NULL,
+    CHECK (CASE WHEN path = '' THEN parent IS NULL
+           ELSE parent IS rtrim(rtrim(path, replace(path, '/', '')), '/') END)
+) STRICT;
+
+-- A folder's child folders, in EP-3 order (spec: LA-45).
+CREATE INDEX folder_totals_by_parent ON folder_totals (parent, path);
+
+CREATE TABLE catalog_counts (
+    -- One row: how many Containers the catalog holds.
+    only_row   INTEGER PRIMARY KEY CHECK (only_row = 0),
+    containers INTEGER NOT NULL CHECK (containers >= 0)
+) STRICT;
+
+INSERT INTO catalog_counts (only_row, containers) VALUES (0, 0);
+"#;
 
 /// The group that is this device's alone and is never uploaded (spec: EP-9,
 /// EP-10, OC-2).
@@ -355,9 +429,11 @@ CREATE TABLE reserved_paths (
 /// as it is. An older one is decided by how old it is: down to
 /// [`DEVICE_SCHEMA_VERSION`] its device-local group is one this build reads, so
 /// the catalog alone would be discarded and the next catch-up rebuild it from
-/// Storage (spec: RV-5); in this build that window holds layout 20 alone, which
-/// is met first by an upgrade of its own that keeps its catalog and gives the
-/// checkpoint row the Library's name. Below the floor, layouts 19 and 18 gain
+/// Storage (spec: RV-5); in this build that window holds layouts 20 and 21,
+/// each met first by an upgrade of its own that keeps its catalog: layout 21's
+/// lays out every folder's totals from the rows the file holds, and layout
+/// 20's gives the checkpoint row the Library's name before taking layout 21's
+/// step. Below the floor, layouts 19 and 18 gain
 /// the mark of a finished drop on their reservations, the newer of the two
 /// gaining the name as layout 20 does and the older losing its catalog,
 /// layout 17 gains the tables of reservations and layout 16 has its
@@ -377,6 +453,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        21 => folder_totals::upgrade(connection),
         20 => library_name::add(connection),
         18 | 19 => reservations::add_the_received_mark(connection),
         17 => reservations::upgrade(connection),
@@ -416,6 +493,9 @@ fn create(connection: &Connection) -> IndexResult<()> {
 
     connection
         .execute_batch(LIBRARY_WIDE_DDL)
+        .map_err(classify(OPERATION))?;
+    connection
+        .execute_batch(FOLDER_TOTALS_DDL)
         .map_err(classify(OPERATION))?;
     connection
         .execute_batch(DEVICE_LOCAL_DDL)
@@ -480,12 +560,20 @@ fn discard_the_catalog(connection: &mut Connection) -> IndexResult<()> {
 pub(super) fn replace_the_catalog(transaction: &Connection) -> IndexResult<()> {
     // The Entries before the Containers they refer to, and the checkpoint last:
     // foreign keys are on for this connection, so a parent dropped out from
-    // under its children is a violation rather than a cascade.
+    // under its children is a violation rather than a cascade. The folders'
+    // totals go with it where the file has them: a layout before 22 has none,
+    // and a file a test built at this layout and stamped older does.
     transaction
-        .execute_batch("DROP TABLE entries; DROP TABLE containers; DROP TABLE checkpoint;")
+        .execute_batch(
+            "DROP TABLE entries; DROP TABLE containers; DROP TABLE checkpoint;
+             DROP TABLE IF EXISTS folder_totals; DROP TABLE IF EXISTS catalog_counts;",
+        )
         .map_err(classify("dropping the catalog of an older Index layout"))?;
     transaction
         .execute_batch(LIBRARY_WIDE_DDL)
+        .map_err(classify("recreating the Index catalog"))?;
+    transaction
+        .execute_batch(FOLDER_TOTALS_DDL)
         .map_err(classify("recreating the Index catalog"))?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -550,20 +638,20 @@ mod tests {
         );
     }
 
-    /// This build's own window holds layout 20 alone: layout 21 changed the
-    /// Library-wide group and nothing else, so a layout-20 file's device group
-    /// is this build's — and `prepare` meets it first with the upgrade that
-    /// keeps its catalog too and gives the checkpoint row the Library's name,
-    /// while every layout from 7 to 19 takes an upgrade of its own
-    /// (spec: OC-2, EP-10, PK-17, FM-15).
+    /// This build's own window holds layouts 20 and 21: layouts 21 and 22
+    /// changed the catalog and nothing of the device-local group, so a
+    /// layout-20 or -21 file's device group is this build's — and `prepare`
+    /// meets each first with an upgrade that keeps its catalog too, while every
+    /// layout from 7 to 19 takes an upgrade of its own
+    /// (spec: OC-2, EP-10, PK-17, FM-15, LA-45).
     #[test]
-    fn this_builds_window_holds_the_layout_before_the_library_name() {
+    fn this_builds_window_holds_the_layouts_before_the_folder_totals() {
         assert_eq!(DEVICE_SCHEMA_VERSION, 20);
-        assert_eq!(SCHEMA_VERSION, 21);
+        assert_eq!(SCHEMA_VERSION, 22);
         for found in 0..=SCHEMA_VERSION + 1 {
             assert_eq!(
                 carries_a_readable_device_group(found),
-                found == 20,
+                found == 20 || found == 21,
                 "layout {found}"
             );
         }

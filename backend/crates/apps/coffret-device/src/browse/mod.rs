@@ -12,26 +12,20 @@
 //! are in the catalog (spec: CK-7, EP-10). A listing therefore costs no network
 //! and works on a device whose provider is unreachable.
 //!
-//! # Why this is a range scan and not an Index method
+//! # Why a listing asks the Index for a folder and not for a subtree
 //!
-//! The [`Index`](coffret_usecase::Index) has no folder concept and no
-//! "children of" query, and this does not add one. What it uses is
-//! [`entries_under`](coffret_usecase::Index::entries_under), which is a range
-//! scan of the whole subtree, and it derives the children from that in memory.
-//!
-//! That is deliberate rather than provisional. The range scan is what the
-//! adapter's primary key already answers directly, and the measurement behind
-//! the catalog — 3,300 rows in 24 ms — says one is nothing to a folder of any
-//! size a person browses. A port method would need a SQLite implementation, an
-//! in-memory one, and a conformance case, all in exchange for a speedup nobody
-//! has measured a need for.
-//!
-//! The seam is here, though, and it is a small one: a Library of tens of
-//! thousands of Entries under one prefix would make the range scan the wrong
-//! shape, and the answer then is a `children_of` on the port with the two
-//! `/`-counting rules the `list` module applies in memory moved into each
-//! adapter's SQL. Until a measurement asks for it, one implementation in one
-//! place is worth more than the query.
+//! A listing, the Library's totals and its list of folders were once derived
+//! here out of [`entries_under`](coffret_usecase::Index::entries_under), a
+//! range scan of the whole subtree, counted in memory. That costs every Entry
+//! below the folder — all of them, for the root — and a Library of scanned
+//! books reaches hundreds of thousands. So the Index answers these itself
+//! ([`folder_contents`](coffret_usecase::Index::folder_contents),
+//! [`library_summary`](coffret_usecase::Index::library_summary),
+//! [`folders`](coffret_usecase::Index::folders)), and an adapter that keeps
+//! each folder's totals beside the catalog answers out of the folder's own
+//! rows, at a cost that does not grow with what lies below it (spec: LA-45).
+//! What is left here is what only this device's mappings decide: whether a
+//! folder is reachable, and which mapped top-level folders are empty.
 
 mod child_folder;
 pub use child_folder::ChildFolder;
