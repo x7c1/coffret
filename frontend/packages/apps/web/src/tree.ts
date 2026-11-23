@@ -262,13 +262,17 @@ export function treeRows(source: TreeSource): TreeRow[] {
     }
     const { listing, moving } = withMoves(asked.value, source.moves ?? []);
     const arriving = incomingIn(listing, incoming);
+    // Sets built once per listing, so a folder of many child folders is drawn
+    // in time that follows its children rather than their square.
+    const namedFolders = new Set(listing.folders.map((one) => one.path));
+    const arrivingFolders = new Set(arriving.folders.map((one) => one.path));
     for (const child of foldersIn(listing, source.prospective, strandedAbove, arriving.folders)) {
-      const named = listing.folders.some((one) => one.path === child.path);
+      const named = namedFolders.has(child.path);
       // Not where the Library names it already: its first Entry committed, and
       // it is an ordinary folder from here on.
       const notHeld = prospective.has(child.path) && !named;
       const waiting = strandedAbove.has(child.path) && !named;
-      const adding = arriving.folders.some((one) => one.path === child.path);
+      const adding = arrivingFolders.has(child.path);
       const carried = moving.has(folderKey(child.path));
       const expandable = !carried && (!notHeld || knownUnder(child.path, source));
       const expanded = expandable && source.expanded.has(child.path);

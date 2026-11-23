@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use coffret_model::EntryPath;
@@ -197,13 +198,13 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     };
 
     // Which Containers are current is what the Journal says rather than what a
-    // listing happens to hold (spec: CP-1, OC-1), and the walk under this Entry's
-    // own path reaches the one holding it.
+    // listing happens to hold (spec: CP-1, OC-1), and the catalog looks the one
+    // holding this Entry up by its ID.
     let summary = index
-        .containers_under(Some(&path))
+        .containers_among(&BTreeSet::from([container_id]))
         .await?
         .into_iter()
-        .find(|container| container.id == container_id)
+        .next()
         .ok_or(FetchError::ContainerUnreachable { container_id })?;
 
     let reading = Reading {

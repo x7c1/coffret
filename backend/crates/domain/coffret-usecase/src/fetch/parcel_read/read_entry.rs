@@ -74,10 +74,9 @@ impl ParcelRead<'_> {
         let asked = parcels.overlapping(&outline, &entry.extent)?;
         let mut held: BTreeMap<u64, HeldParcel> = self
             .index
-            .held_parcels()
+            .held_parcels_of(container_id)
             .await?
             .into_iter()
-            .filter(|parcel| parcel.container_id == container_id)
             .map(|parcel| (parcel.index, parcel))
             .collect();
 

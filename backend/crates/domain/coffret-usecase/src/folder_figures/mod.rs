@@ -28,6 +28,9 @@ pub use folder_contents::FolderContents;
 mod library_summary;
 pub use library_summary::LibrarySummary;
 
+mod side;
+pub use side::Side;
+
 mod derive_folder_contents;
 pub use derive_folder_contents::derive_folder_contents;
 

@@ -30,12 +30,16 @@ pub(in crate::fetch) async fn let_go_departed(
     index: &dyn Index,
     kept: &KeptParcels<'_>,
 ) -> FetchResult<()> {
+    // Every held parcel is a candidate here, so this reads all of this
+    // device's held rows, and then only their Containers, by ID: a page read
+    // costs what this device holds rather than what the Library does.
     let held = index.held_parcels().await?;
     if held.is_empty() {
         return Ok(());
     }
+    let named: BTreeSet<ContainerId> = held.iter().map(|parcel| parcel.container_id).collect();
     let current: BTreeSet<ContainerId> = index
-        .containers_under(None)
+        .containers_among(&named)
         .await?
         .into_iter()
         .map(|container| container.id)
@@ -73,12 +77,7 @@ pub(in crate::fetch) async fn let_go_settled(
     kept: &KeptParcels<'_>,
     container_id: ContainerId,
 ) -> FetchResult<()> {
-    let held: Vec<HeldParcel> = index
-        .held_parcels()
-        .await?
-        .into_iter()
-        .filter(|parcel| parcel.container_id == container_id)
-        .collect();
+    let held: Vec<HeldParcel> = index.held_parcels_of(container_id).await?;
     if held.is_empty() {
         return Ok(());
     }
@@ -132,6 +131,8 @@ pub(in crate::fetch) async fn let_go_settled(
 /// held.
 pub async fn let_go_parcels(index: &dyn Index, kept: &KeptParcels<'_>) -> FetchResult<()> {
     let_go_departed(index, kept).await?;
+    // Every Container parcels are held of is one to settle, so the whole of
+    // this device's held rows is what this reads, and nothing of the Library.
     let held: BTreeSet<ContainerId> = index
         .held_parcels()
         .await?

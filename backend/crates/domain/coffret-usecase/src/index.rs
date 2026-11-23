@@ -13,6 +13,7 @@ use crate::device_state::{
 };
 use crate::folder_figures::{
     derive_folder_contents, derive_folders, derive_library_summary, FolderContents, LibrarySummary,
+    Side,
 };
 use crate::index_error::IndexResult;
 
@@ -368,6 +369,48 @@ pub trait Index: Send + Sync {
         derive_folders(self).await
     }
 
+    /// The nearest folder standing directly in `folder` — `None` is the
+    /// Library root — on `side` of `bound`, in EP-3 order; the first or the
+    /// last of them where there is no bound (spec: EP-2, EP-3).
+    ///
+    /// `bound` is a path standing directly in `folder`, whatever stands there
+    /// or does not, and is on neither side. What a reader stepping back or
+    /// reading on asks of each folder it passes, one child at a time, rather
+    /// than the whole Library it steps through (spec: LA-32). The default
+    /// reads the folder's children off [`folder_contents`](Self::folder_contents),
+    /// which an adapter keeping the folders by their parent answers with one
+    /// row (spec: LA-45).
+    async fn folder_beside(
+        &self,
+        folder: Option<&EntryPath>,
+        bound: Option<&EntryPath>,
+        side: Side,
+    ) -> IndexResult<Option<EntryPath>> {
+        let folders = self.folder_contents(folder).await?.folders;
+        Ok(side.nearest(folders.into_iter().map(|child| child.path), bound))
+    }
+
+    /// The nearest current Entry standing directly in `folder` — `None` is
+    /// the Library root — on `side` of `bound`, in EP-3 order; the first or
+    /// the last of them where there is no bound (spec: EP-2, EP-3).
+    ///
+    /// `bound` is as [`folder_beside`](Self::folder_beside) takes it. The
+    /// default reads the folder's files off
+    /// [`folder_contents`](Self::folder_contents), which an adapter keeping
+    /// each Entry's folder beside it answers with one row.
+    async fn entry_beside(
+        &self,
+        folder: Option<&EntryPath>,
+        bound: Option<&EntryPath>,
+        side: Side,
+    ) -> IndexResult<Option<EntryPath>> {
+        let files = self.folder_contents(folder).await?.files;
+        Ok(side.nearest(
+            files.into_iter().map(|file| file.location.path().clone()),
+            bound,
+        ))
+    }
+
     /// Records where one part of the Library lives on this device, replacing
     /// any mapping already held for that prefix (spec: EP-9).
     ///
@@ -461,6 +504,25 @@ pub trait Index: Send + Sync {
         &self,
         prefix: Option<&EntryPath>,
     ) -> IndexResult<Vec<EntryLocation>>;
+
+    /// Whether any current Entry standing directly in `folder` — `None` is
+    /// the Library root — is remote: one this device does not have on disk, by
+    /// the same present record [`folder_contents`](Self::folder_contents) says it
+    /// has one by (spec: EP-10).
+    ///
+    /// What a page opened from disk asks before anything is brought over
+    /// around it: whether its folder is whole here. The first Entry not here
+    /// is the whole answer, so an adapter stops there rather than reading the
+    /// folder's files; the default reads them off
+    /// [`folder_contents`](Self::folder_contents).
+    async fn any_remote_in(&self, folder: Option<&EntryPath>) -> IndexResult<bool> {
+        Ok(self
+            .folder_contents(folder)
+            .await?
+            .files
+            .iter()
+            .any(|file| !file.present))
+    }
 
     /// Every row whose file waits to follow its Entry to another path
     /// ([`LocalEntry::relocate_to`]), ordered by the path it stands at
@@ -593,6 +655,21 @@ pub trait Index: Send + Sync {
     /// Every parcel this device holds, ordered by Container ID and then by
     /// parcel index (spec: PK-21).
     async fn held_parcels(&self) -> IndexResult<Vec<HeldParcel>>;
+
+    /// Every parcel of one Container this device holds, ordered by parcel
+    /// index (spec: PK-21).
+    ///
+    /// The part of [`held_parcels`](Self::held_parcels) that names
+    /// `container_id`, which is what the default reads and keeps; an adapter
+    /// keeping the rows by Container answers without reading the others.
+    async fn held_parcels_of(&self, container_id: ContainerId) -> IndexResult<Vec<HeldParcel>> {
+        Ok(self
+            .held_parcels()
+            .await?
+            .into_iter()
+            .filter(|parcel| parcel.container_id == container_id)
+            .collect())
+    }
 
     /// Forgets the row of one kept parcel, the parcel having been let go, or
     /// shed as not held after all or as one that did not arrive whole.

@@ -313,3 +313,105 @@ pub async fn the_entries_absent_under_a_prefix_are_the_ones_not_on_disk(fixture:
         "a file waiting to follow its Entry elsewhere is not the Entry at its own path",
     );
 }
+
+/// A folder is whole on this device exactly where no current Entry standing
+/// directly in it is remote, by the same present record a folder's listing
+/// reads (spec: EP-10).
+///
+/// What a page opened from disk asks of its folder, and the answer has to be
+/// [`folder_contents`](crate::Index::folder_contents)' own: an Entry never
+/// had, one marked absent, and one whose file waits to follow its Entry
+/// elsewhere are each not here, while nothing below the folder's child folders
+/// counts either way — a folder of books is whole where its own files are,
+/// whatever is missing from the books inside it.
+pub async fn a_folder_is_whole_where_nothing_directly_in_it_is_remote(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .apply(record(
+            0,
+            vec![addition(
+                1,
+                ContainerKind::Pack,
+                &[
+                    "albums/a.jpg",
+                    "albums/b.jpg",
+                    "albums/deep/c.jpg",
+                    "books/d.png",
+                ],
+            )],
+            vec![],
+        ))
+        .await
+        .expect("replaying a record must succeed");
+
+    let remote = |folder: Option<&'static str>| {
+        let folder = folder.map(path);
+        async move {
+            let answer = index
+                .any_remote_in(folder.as_ref())
+                .await
+                .expect("asking whether a folder is whole must succeed");
+            let listed = index
+                .folder_contents(folder.as_ref())
+                .await
+                .expect("reading the folder's contents must succeed")
+                .files
+                .iter()
+                .any(|file| !file.present);
+            assert_eq!(answer, listed, "the answer is the listing's own");
+            answer
+        }
+    };
+    assert!(remote(Some("albums")).await, "nothing is here yet");
+    assert!(
+        !remote(None).await,
+        "the root holds no Entry directly, so none of its own is remote",
+    );
+
+    index
+        .mark_present(observation_of("albums/a.jpg", 100, entry(1, 0)))
+        .await
+        .expect("recording a materialized file must succeed");
+    index
+        .mark_present(observation_of("albums/b.jpg", 101, entry(1, 1)))
+        .await
+        .expect("recording a materialized file must succeed");
+    assert!(
+        !remote(Some("albums")).await,
+        "every file directly in it is here, whatever its child folder lacks",
+    );
+    assert!(remote(Some("albums/deep")).await);
+    assert!(remote(Some("books")).await);
+
+    index
+        .mark_absent(
+            &path("albums/b.jpg"),
+            DeviceTime::from_unix_seconds(1_700_000_900),
+        )
+        .await
+        .expect("recording a file gone must succeed");
+    assert!(
+        remote(Some("albums")).await,
+        "a file marked absent is not here"
+    );
+
+    index
+        .mark_present(observation_of("albums/b.jpg", 101, entry(1, 1)))
+        .await
+        .expect("recording a materialized file must succeed");
+    assert!(!remote(Some("albums")).await);
+    // Swapping the two names leaves each file waiting to follow its Entry to
+    // the other's path, so neither Entry is had at its own path.
+    index
+        .apply(renaming(
+            record(1, vec![], vec![]),
+            vec![rename(1, 0, "albums/b.jpg"), rename(1, 1, "albums/a.jpg")],
+        ))
+        .await
+        .expect("applying the renames must succeed");
+    assert!(
+        remote(Some("albums")).await,
+        "a file waiting to follow its Entry elsewhere is not the Entry at its own path",
+    );
+}

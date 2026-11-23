@@ -13,7 +13,9 @@ use crate::index_conformance::index_under_test::IndexUnderTest;
 // against a restore or a replay stay here, beside the seed they share with the
 // refusal cases.
 mod held_parcels;
-pub use held_parcels::a_held_parcel_is_recorded_until_it_is_let_go;
+pub use held_parcels::{
+    a_held_parcel_is_recorded_until_it_is_let_go, one_containers_held_parcels_are_looked_up_by_id,
+};
 
 mod reservations;
 pub use reservations::{
@@ -25,6 +27,7 @@ pub use reservations::{
 mod local_entries;
 pub use local_entries::{
     a_file_left_behind_by_the_library_is_reported,
+    a_folder_is_whole_where_nothing_directly_in_it_is_remote,
     a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
     a_materialization_keeps_the_hash_it_was_recorded_with,
     only_a_file_this_device_had_can_go_absent,

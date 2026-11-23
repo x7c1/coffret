@@ -22,6 +22,9 @@
 //! hands it. It is behind the `conformance` feature so that only test targets
 //! pay for it.
 
+mod beside;
+pub use beside::the_children_beside_a_bound_are_looked_up_in_order;
+
 mod commit;
 pub use commit::{
     a_refresh_another_process_got_to_first_is_completed,
@@ -40,6 +43,7 @@ pub use device_state::{
     a_batch_is_marked_attempted_together,
     a_batch_keeps_every_slot_it_attempted_until_its_last_row_goes,
     a_file_left_behind_by_the_library_is_reported,
+    a_folder_is_whole_where_nothing_directly_in_it_is_remote,
     a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
     a_held_parcel_is_recorded_until_it_is_let_go, a_mapping_is_kept_once_per_prefix,
     a_mapping_round_trips_its_root_identity, a_materialization_keeps_the_hash_it_was_recorded_with,
@@ -48,7 +52,8 @@ pub use device_state::{
     a_reservation_is_kept_in_order_until_it_is_released, a_restore_leaves_device_state_alone,
     a_spool_is_recorded_until_its_row_is_cleared,
     a_spooling_row_becomes_spooled_when_its_file_completes,
-    a_spooling_row_that_names_an_object_is_refused, only_a_file_this_device_had_can_go_absent,
+    a_spooling_row_that_names_an_object_is_refused,
+    one_containers_held_parcels_are_looked_up_by_id, only_a_file_this_device_had_can_go_absent,
     the_entries_absent_under_a_prefix_are_the_ones_not_on_disk,
 };
 
@@ -156,6 +161,7 @@ macro_rules! index_conformance {
             a_file_left_behind_by_the_library_is_reported,
             only_a_file_this_device_had_can_go_absent,
             the_entries_absent_under_a_prefix_are_the_ones_not_on_disk,
+            a_folder_is_whole_where_nothing_directly_in_it_is_remote,
             a_materialization_keeps_the_hash_it_was_recorded_with,
             a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
             a_mapping_is_kept_once_per_prefix,
@@ -166,6 +172,7 @@ macro_rules! index_conformance {
             a_batch_is_marked_attempted_together,
             a_batch_keeps_every_slot_it_attempted_until_its_last_row_goes,
             a_held_parcel_is_recorded_until_it_is_let_go,
+            one_containers_held_parcels_are_looked_up_by_id,
             a_reservation_is_kept_in_order_until_it_is_released,
             a_reservation_is_in_progress_until_it_is_marked_received,
             a_refresh_releases_the_reservations_its_batch_packs,
@@ -174,6 +181,7 @@ macro_rules! index_conformance {
             a_prefix_covers_a_subtree_and_stops_at_the_separator,
             the_containers_under_a_prefix_are_reported_once,
             the_containers_named_are_looked_up_by_id,
+            the_children_beside_a_bound_are_looked_up_in_order,
             the_current_entries_are_counted,
             a_prefix_reports_only_what_this_device_materialized,
             two_entries_at_one_path_are_refused,

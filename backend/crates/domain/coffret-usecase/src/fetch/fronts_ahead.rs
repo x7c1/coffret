@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use coffret_format::unwrap_container_key;
-use coffret_model::{ContainerId, ContainerSummary, EntryPath, KeyTable, Redacted};
+use coffret_model::{ContainerId, ContainerSummary, KeyTable, Redacted};
 use tracing::{debug, info, warn};
 
 use crate::commit::ControlListing;
@@ -27,14 +27,14 @@ use crate::retry::RetryPolicy;
 /// reads is that the Containers were opened, which the fill a page opens would
 /// show it anyway (spec: PK-16, PK-20).
 ///
-/// `containers` are the ones a caller chose, in the order it wants them read;
-/// `folder` is where they hold Entries, which narrows the catalog walk that
-/// finds their summaries. A Container kept already costs nothing, and where
-/// every one is, nothing at all is asked of Storage or of the catalog's
-/// checkpoint. Otherwise the listing and the committed key table come out of
-/// the memory as an Entry fetch's would — read and kept where they are not —
-/// and each front is opened under its Container's key before it is kept, as
-/// one read by a fetch is.
+/// `containers` are the ones a caller chose, in the order it wants them read,
+/// and their summaries are looked up by ID — never the subtree they hold
+/// Entries in, however much lies there. A Container kept already costs
+/// nothing, and where every one is, nothing at all is asked of Storage or of
+/// the catalog's checkpoint. Otherwise the listing and the committed key
+/// table come out of the memory as an Entry fetch's would — read and kept
+/// where they are not — and each front is opened under its Container's key
+/// before it is kept, as one read by a fetch is.
 ///
 /// A Container whose front cannot be read or will not open is said and passed
 /// over: these reads are ahead of anybody asking, so the fetch that does ask
@@ -44,7 +44,6 @@ use crate::retry::RetryPolicy;
 /// Answers with how many fronts were read.
 pub async fn read_fronts(
     request: FrontsRequest<'_>,
-    folder: Option<&EntryPath>,
     containers: &[ContainerId],
 ) -> FetchResult<usize> {
     let FrontsRequest {
@@ -82,7 +81,7 @@ pub async fn read_fronts(
     )
     .await?;
     let summaries: BTreeMap<ContainerId, ContainerSummary> = index
-        .containers_under(folder)
+        .containers_among(&wanted.iter().copied().collect())
         .await?
         .into_iter()
         .map(|summary| (summary.id, summary))
