@@ -55,7 +55,7 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
     } = request;
 
     let from = head_of(index).await?;
-    let entries_before = index.entries_under(None).await?.len();
+    let entries_before = entry_count(index).await?;
 
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
     let to = head_of(index).await?;
@@ -77,7 +77,7 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
         from,
         to,
         entries_before,
-        entries_after: index.entries_under(None).await?.len(),
+        entries_after: entry_count(index).await?,
     };
     finished(&outcome);
     Ok(outcome)
@@ -87,6 +87,15 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
 /// state.
 async fn head_of(index: &dyn Index) -> CommitResult<Option<Generation>> {
     Ok(index.checkpoint().await?.map(|at| at.head_generation()))
+}
+
+/// How many current Entries the catalog holds: counted, rather than every
+/// Entry read only to be counted.
+async fn entry_count(index: &dyn Index) -> CommitResult<usize> {
+    let total = index.entry_count().await?;
+    // A count of Entries held in memory somewhere fits a `usize`; one that
+    // did not would be no count this device could hold either.
+    Ok(usize::try_from(total).unwrap_or(usize::MAX))
 }
 
 /// Records what the run came to, in generations and counts alone.

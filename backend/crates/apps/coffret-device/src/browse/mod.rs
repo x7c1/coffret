@@ -60,6 +60,14 @@ mod folders;
 // more than one kind of catalog row.
 mod list;
 
+// Whether a mapping of this device reaches one folder, asked of the mappings
+// alone.
+mod mapped;
+
+// Which parts of the Library this device's mappings reach, which a listing and
+// `mapped` both ask.
+mod reach;
+
 // Which of one folder's Entries this device does not have.
 mod remote_in;
 

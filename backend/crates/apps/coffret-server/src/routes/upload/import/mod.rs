@@ -103,7 +103,7 @@ pub async fn import(
     }
     let folder = folder_named(request.path.as_deref())?;
     // Asked once, of the folder, for the reason the upload gives.
-    if !library.list(folder.as_ref()).await?.mapped {
+    if !library.mapped(folder.as_ref()).await? {
         return Err(ApiError::no_folder_here());
     }
     // A drop among the rows a move still pending is moving would land where

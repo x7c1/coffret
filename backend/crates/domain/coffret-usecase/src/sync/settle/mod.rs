@@ -4,7 +4,7 @@ use coffret_model::ContainerId;
 use tracing::{info, warn};
 
 use crate::commit::{CaughtUp, CommitPolicy, ControlKeys};
-use crate::device_state::DeviceTime;
+use crate::device_state::{DeviceTime, PendingRow};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::progress::{Phase, Progress, Step};
@@ -66,7 +66,7 @@ pub(crate) async fn settle(
     }
     progress.step(Step::begun(Phase::Settling));
 
-    let current = current(index).await?;
+    let current = current(index, &pending).await?;
     let mut landed = materialized(index, &pending, &current).await?;
     let attempts = attempts(&storage, index, policy, &pending, &current).await?;
 
@@ -107,11 +107,16 @@ pub(crate) async fn settle(
     Ok(settled)
 }
 
-/// The Containers current in the catalog as it stands, which is the Library's
-/// current set only once the catalog is caught up (spec: CK-9, OC-7).
-async fn current(index: &dyn Index) -> SyncResult<BTreeSet<ContainerId>> {
+/// Which of the pending rows' Containers are current in the catalog as it
+/// stands, which is the Library's current set only once the catalog is caught
+/// up (spec: CK-9, OC-7).
+///
+/// Only the rows' own Containers are asked after, so each is looked up by its
+/// ID rather than every current Container read.
+async fn current(index: &dyn Index, pending: &[PendingRow]) -> SyncResult<BTreeSet<ContainerId>> {
+    let named: BTreeSet<ContainerId> = pending.iter().map(|row| row.container_id).collect();
     Ok(index
-        .containers_under(None)
+        .containers_among(&named)
         .await?
         .into_iter()
         .map(|container| container.id)

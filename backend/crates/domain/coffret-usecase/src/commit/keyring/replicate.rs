@@ -159,10 +159,10 @@ async fn next_generation(
         .collect();
 
     let mut elements = Vec::new();
-    // A Container is reported through the Entries it holds, which is every
-    // Container a commit can produce: one is built out of Entries and a batch
-    // that adds none adds no Container either (spec: PK-1, PK-15).
-    for container in index.containers_under(None).await? {
+    // Read off the catalog's Containers alone, without a read of the Entries
+    // they hold: every current Container holds at least one, so these are the
+    // ones the Entries report too (spec: FM-10, PK-1, PK-15).
+    for container in index.containers().await? {
         if removed.contains(&container.id) {
             continue;
         }

@@ -1,6 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKind};
 use tracing::debug;
 
 use crate::device_state::DeviceTime;
@@ -89,17 +88,6 @@ pub(super) async fn scan(
         }
     }
 
-    // The kind decides which path a changed file takes, and the port answers
-    // kinds a prefix at a time. One walk of the whole current set answers every
-    // lookup below, however many mappings overlap it and whichever Containers
-    // their Entries turn out to share (spec: PK-8).
-    let kinds: BTreeMap<ContainerId, ContainerKind> = index
-        .containers_under(None)
-        .await?
-        .into_iter()
-        .map(|container| (container.id, container.kind))
-        .collect();
-
     let reserved: BTreeSet<_> = index
         .reservations()
         .await?
@@ -120,7 +108,7 @@ pub(super) async fn scan(
             .iter()
             .find(|root| root.mapping.local_root == source.root)
             .and_then(|root| root.mapping.expected_root_id);
-        examine(index, roots, &kinds, now, source, expected, &mut survey).await?;
+        examine(index, roots, now, source, expected, &mut survey).await?;
     }
     let deletions = deletions(index, &mappings, &walked, &found, scope, &mut survey).await?;
     // Once both halves are known: what is gone, and what appeared (spec: EP-10).

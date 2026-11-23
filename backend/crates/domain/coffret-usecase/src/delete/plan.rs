@@ -1,9 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_format::{ChunkSize, ContainerFootprint, EntryPlan};
-use coffret_model::{
-    ContainerId, ContainerSummary, DepositedAt, EntryLocation, EntryMetadata, EntryPath,
-};
+use coffret_model::{ContainerId, ContainerSummary, DepositedAt, EntryMetadata, EntryPath};
 
 use crate::delete::delete_selection::DeleteSelection;
 use crate::delete::pack_refusal::PackRefusal;
@@ -137,21 +135,12 @@ pub(super) async fn plan(
 
     // A Pack's other Entries may lie anywhere in the namespace — path ranges of
     // Packs from different invocations overlap and interleave (spec: PK-8) — so
-    // the tables are read off the whole catalog rather than off the selection.
-    let mut tables: BTreeMap<ContainerId, Vec<EntryLocation>> = BTreeMap::new();
-    for location in index.entries_under(None).await? {
-        if touched.contains(&location.container_id) {
-            tables
-                .entry(location.container_id)
-                .or_default()
-                .push(location);
-        }
-    }
+    // each table is read off its Container rather than off the selection, and
+    // only the Containers the selection touches are read.
     let summaries: BTreeMap<ContainerId, ContainerSummary> = index
-        .containers_under(None)
+        .containers_among(&touched)
         .await?
         .into_iter()
-        .filter(|summary| touched.contains(&summary.id))
         .map(|summary| (summary.id, summary))
         .collect();
 
@@ -164,11 +153,11 @@ pub(super) async fn plan(
             .get(&container_id)
             .cloned()
             .ok_or_else(|| unheld(container_id))?;
-        let mut numbered = tables.remove(&container_id).unwrap_or_default();
-        // The catalog answers in path order; a Container's own order is its
-        // entry numbers (spec: FM-9). Offsets cannot stand in for them: Entries
-        // of length zero share one, and a rename has made path order no guide.
-        numbered.sort_by_key(|location| location.entry_number);
+        // In the Container's own order, its entry numbers, which is the order
+        // the catalog answers a Container's Entries in (spec: FM-9). Offsets
+        // cannot stand in for them: Entries of length zero share one, and a
+        // rename has made path order no guide.
+        let numbered = index.entries_in(container_id).await?;
         let (table, deposit_times): (Vec<EntryMetadata>, Vec<DepositedAt>) = numbered
             .into_iter()
             .map(|location| (location.entry, location.deposited_at))

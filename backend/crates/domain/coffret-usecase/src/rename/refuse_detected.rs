@@ -1,9 +1,12 @@
 use std::collections::BTreeSet;
 
+use coffret_model::EntryPath;
+
 use crate::commit::PendingRename;
+use crate::entry_ref::EntryRef;
 use crate::index::Index;
 use crate::index_error::IndexResult;
-use crate::rename::plan::{clash, refuse_outright};
+use crate::rename::plan::{clash, refuse_outright, standing_near};
 use crate::rename::rename_refusal::RenameRefusal;
 use crate::rename::renamed_path::RenamedPath;
 use crate::rename::rules::Rules;
@@ -36,7 +39,15 @@ pub(crate) async fn refuse_detected(
         .iter()
         .map(|one| refuse_outright(&one.from, &one.path).err())
         .collect();
-    let current = index.entries_under(None).await?;
+    // The Entries a detected rename's destination could clash with, looked up
+    // around each destination rather than the Library read.
+    let destinations: Vec<&EntryPath> = detected
+        .iter()
+        .zip(&refusals)
+        .filter(|(_, refusal)| refusal.is_none())
+        .map(|(one, _)| &one.path)
+        .collect();
+    let near = standing_near(index, &destinations).await?;
     loop {
         let leaving: BTreeSet<&str> = detected
             .iter()
@@ -44,9 +55,9 @@ pub(crate) async fn refuse_detected(
             .filter(|(_, refusal)| refusal.is_none())
             .map(|(one, _)| one.from.as_str())
             .collect();
-        let staying: BTreeSet<&str> = current
+        let staying: BTreeSet<&str> = near
             .iter()
-            .map(|location| location.path().as_str())
+            .map(EntryPath::as_str)
             .filter(|path| !leaving.contains(path))
             .collect();
         let mut refused_more = false;
@@ -61,17 +72,25 @@ pub(crate) async fn refuse_detected(
         }
     }
 
-    let rules = Rules::read(index, &current).await?;
+    let surviving: Vec<(EntryRef, RenamedPath)> = detected
+        .iter()
+        .zip(&refusals)
+        .filter(|(_, refusal)| refusal.is_none())
+        .map(|(one, _)| (one.entry, renamed_path(one)))
+        .collect();
+    let rules = Rules::read(index, &surviving).await?;
     for (one, refusal) in detected.iter().zip(refusals.iter_mut()) {
         if refusal.is_none() {
-            *refusal = rules.refusal(&[(
-                one.entry,
-                RenamedPath {
-                    from: one.from.clone(),
-                    to: one.path.clone(),
-                },
-            )])?;
+            *refusal = rules.refusal(&[(one.entry, renamed_path(one))])?;
         }
     }
     Ok(refusals)
+}
+
+/// One detected rename as the paths it changes.
+fn renamed_path(one: &PendingRename) -> RenamedPath {
+    RenamedPath {
+        from: one.from.clone(),
+        to: one.path.clone(),
+    }
 }

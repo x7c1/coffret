@@ -57,9 +57,9 @@ pub(super) fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bo
 /// [`CommittedBatch`](crate::CommittedBatch) names the materialized files
 /// rather than leaving them to be read off the additions.
 ///
-/// One walk of the current Entries answers every completion, and it is walked at
-/// all only where there is one to answer: the whole listing is not a hot path
-/// when the ordinary run leaves this function unreached.
+/// Each completing Container's Entries are read off that Container, and only
+/// where there is a completion to answer: the Library's other Entries are
+/// never read for it.
 pub(super) async fn materialized(
     index: &dyn Index,
     pending: &[PendingRow],
@@ -74,13 +74,14 @@ pub(super) async fn materialized(
     if completing.is_empty() {
         return Ok(entries);
     }
-    for location in index.entries_under(None).await? {
-        if completing.contains(&location.container_id) {
-            entries
-                .entry(location.container_id)
-                .or_default()
-                .push(location);
+    for container_id in completing {
+        let mut held = index.entries_in(container_id).await?;
+        if held.is_empty() {
+            continue;
         }
+        // In Entry Path order, as the files are marked present.
+        held.sort_by(|left, right| left.path().cmp(right.path()));
+        entries.insert(container_id, held);
     }
     Ok(entries)
 }

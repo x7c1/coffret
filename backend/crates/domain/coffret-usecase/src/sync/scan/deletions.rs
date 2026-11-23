@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use coffret_model::{EntryLocation, EntryPath};
@@ -71,7 +71,8 @@ pub(super) struct Deletions {
 ///
 /// A row standing in a folder out of `scope` is neither (spec: EP-10): the
 /// walk did not look there, so its file's absence from `found` says nothing
-/// about it.
+/// about it. So a scope of folders is read folder by folder ([`reads`]),
+/// rather than every record under a mapping read for the few in scope.
 pub(super) async fn deletions(
     index: &dyn Index,
     mappings: &[Mapping],
@@ -91,32 +92,34 @@ pub(super) async fn deletions(
             continue;
         }
         let prefix = root.mapping.prefix.as_ref();
-        for local in index.present_under(prefix).await? {
-            // A prefixed mapping's answer is already bounded to its own subtree;
-            // the root mapping's is the whole present set, so the subtrees other
-            // mappings stand for come out of it here.
-            if prefix.is_none()
-                && represented_elsewhere.contains(local.observation.path.top_level())
-            {
-                continue;
-            }
-            // A path a scan leaves out because an operating system keeps the
-            // name: its file is never found, so its absence is no deletion,
-            // and the record stays as it is (spec: EP-17).
-            if kept_by_system(prefix, &local.observation.path) {
-                continue;
-            }
-            // A row in a folder the walk did not look in is no evidence of
-            // anything (spec: EP-10).
-            if !scope.covers(&local.observation.path) {
-                continue;
-            }
-            let path = local.observation.path.clone();
-            if found.contains_key(&path) {
-                kept.entry(path).or_insert(local);
-            } else {
-                gone.entry(path)
-                    .or_insert_with(|| (local, root.mapping.local_root.clone()));
+        for read in reads(scope, prefix, &represented_elsewhere) {
+            for local in index.present_under(read.as_ref()).await? {
+                // A prefixed mapping's answer is already bounded to its own subtree;
+                // the root mapping's can take in the subtrees other mappings stand
+                // for — its whole present set does — so they come out of it here.
+                if prefix.is_none()
+                    && represented_elsewhere.contains(local.observation.path.top_level())
+                {
+                    continue;
+                }
+                // A path a scan leaves out because an operating system keeps the
+                // name: its file is never found, so its absence is no deletion,
+                // and the record stays as it is (spec: EP-17).
+                if kept_by_system(prefix, &local.observation.path) {
+                    continue;
+                }
+                // A row in a folder the walk did not look in is no evidence of
+                // anything (spec: EP-10).
+                if !scope.covers(&local.observation.path) {
+                    continue;
+                }
+                let path = local.observation.path.clone();
+                if found.contains_key(&path) {
+                    kept.entry(path).or_insert(local);
+                } else {
+                    gone.entry(path)
+                        .or_insert_with(|| (local, root.mapping.local_root.clone()));
+                }
             }
         }
     }
@@ -135,4 +138,44 @@ pub(super) async fn deletions(
         gone: current,
         kept: kept.into_values().collect(),
     })
+}
+
+/// What one mapping's records are read as: the subtree the mapping stands for
+/// (`prefix`, `None` being the Library root) where the scope is every mapped
+/// folder, and otherwise each folder in scope that the mapping reaches, read
+/// on its own rather than the whole mapping read and the rest thrown away
+/// (spec: EP-9, EP-10).
+///
+/// A folder in scope beneath another in scope is read with it. The files
+/// standing directly at the Library root are the one part of a scope that is
+/// not the subtree of a folder, so a scope holding the root reads the Library
+/// root mapping's whole present set, as a scan of every mapping does; that set
+/// is what this device has on disk, not what the Library holds.
+fn reads(
+    scope: &ScanScope,
+    prefix: Option<&EntryPath>,
+    elsewhere: &BTreeSet<&str>,
+) -> Vec<Option<EntryPath>> {
+    let ScanScope::Folders { root, folders } = scope else {
+        return vec![prefix.cloned()];
+    };
+    if prefix.is_none() && *root {
+        return vec![None];
+    }
+    let reached: Vec<&EntryPath> = folders
+        .iter()
+        .filter(|folder| match prefix {
+            Some(prefix) => folder.is_under(prefix),
+            None => !elsewhere.contains(folder.top_level()),
+        })
+        .collect();
+    reached
+        .iter()
+        .filter(|folder| {
+            !reached
+                .iter()
+                .any(|outer| outer != *folder && folder.is_under(outer))
+        })
+        .map(|folder| Some((*folder).clone()))
+        .collect()
 }

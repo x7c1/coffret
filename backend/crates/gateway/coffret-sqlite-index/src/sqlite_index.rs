@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -321,6 +322,27 @@ impl Index for SqliteIndex {
             library_state::containers_under(connection, prefix.as_ref())
         })
         .await
+    }
+
+    async fn containers_among(
+        &self,
+        ids: &BTreeSet<ContainerId>,
+    ) -> IndexResult<Vec<ContainerSummary>> {
+        let ids = ids.clone();
+        self.read("reading the named Containers", move |connection| {
+            library_state::containers_among(connection, &ids)
+        })
+        .await
+    }
+
+    async fn entry_count(&self) -> IndexResult<u64> {
+        self.read("counting the current Entries", library_state::entry_count)
+            .await
+    }
+
+    async fn containers(&self) -> IndexResult<Vec<ContainerSummary>> {
+        self.read("reading the current Containers", library_state::containers)
+            .await
     }
 
     async fn folder_contents(&self, folder: Option<&EntryPath>) -> IndexResult<FolderContents> {

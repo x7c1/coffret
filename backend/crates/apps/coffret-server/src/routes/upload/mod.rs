@@ -273,7 +273,7 @@ pub async fn upload(
     // reaches leaves none of the drop unreachable. Only at the Library root do
     // the parts carry components of their own, and there what is asked after is a
     // root mapping, which represents every component no other mapping does.
-    if !library.list(folder.as_ref()).await?.mapped {
+    if !library.mapped(folder.as_ref()).await? {
         return Err(ApiError::no_folder_here());
     }
     // A drop among the rows a move still pending is moving would land where

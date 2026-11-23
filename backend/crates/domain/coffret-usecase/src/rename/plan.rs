@@ -6,6 +6,7 @@ use coffret_model::{EntryLocation, EntryPath};
 use crate::commit::PendingRename;
 use crate::entry_ref::EntryRef;
 use crate::index::Index;
+use crate::index_error::IndexResult;
 use crate::rename::rename_error::RenameResult;
 use crate::rename::rename_pair::RenamePair;
 use crate::rename::rename_refusal::RenameRefusal;
@@ -103,16 +104,12 @@ pub(super) fn pairs_of(pairs: &[RenamePair]) -> Result<Vec<RenamePair>, RenameRe
 /// holds a record to, so that a record this plan produces is one every catalog
 /// applies (spec: RV-5).
 pub(super) async fn plan(index: &dyn Index, pairs: &[RenamePair]) -> RenameResult<Plan> {
-    let current = index.entries_under(None).await?;
-    let mut renaming: BTreeSet<&EntryPath> = BTreeSet::new();
+    let mut renaming: BTreeSet<EntryPath> = BTreeSet::new();
     let mut renamed: Vec<(EntryRef, RenamedPath)> = Vec::new();
     let mut folder = false;
     for pair in pairs {
         let (from, to) = (&pair.from, &pair.to);
-        let under: Vec<&EntryLocation> = current
-            .iter()
-            .filter(|location| location.path().is_under(from))
-            .collect();
+        let under: Vec<EntryLocation> = index.entries_under(Some(from)).await?;
         if under.is_empty() {
             return Err(RenameRefusal::NothingAt { path: from.clone() }.into());
         }
@@ -121,8 +118,8 @@ pub(super) async fn plan(index: &dyn Index, pairs: &[RenamePair]) -> RenameResul
             return Err(RenameRefusal::IntoItself.into());
         }
         folder |= names_folder;
-        for location in under {
-            renaming.insert(location.path());
+        for location in &under {
+            renaming.insert(location.path().clone());
             let path = location
                 .path()
                 .renamed_from(from, to)
@@ -138,10 +135,14 @@ pub(super) async fn plan(index: &dyn Index, pairs: &[RenamePair]) -> RenameResul
     }
     renamed.sort_by(|left, right| left.1.from.cmp(&right.1.from));
 
-    let staying: BTreeSet<&str> = current
+    // Every destination is a pair's `to` or lies under it, so the Entries
+    // standing at, above or under the pairs' destinations are every one a
+    // destination can clash with.
+    let destinations: Vec<&EntryPath> = pairs.iter().map(|pair| &pair.to).collect();
+    let near = standing_near(index, &destinations).await?;
+    let staying: BTreeSet<&str> = near
         .iter()
-        .map(EntryLocation::path)
-        .filter(|path| !renaming.contains(path))
+        .filter(|path| !renaming.contains(*path))
         .map(EntryPath::as_str)
         .collect();
     for (_, one) in &renamed {
@@ -150,7 +151,7 @@ pub(super) async fn plan(index: &dyn Index, pairs: &[RenamePair]) -> RenameResul
         }
     }
 
-    check_rules(index, &current, &renamed).await?;
+    check_rules(index, &renamed).await?;
 
     Ok(Plan {
         renames: renamed
@@ -166,9 +167,43 @@ pub(super) async fn plan(index: &dyn Index, pairs: &[RenamePair]) -> RenameResul
     })
 }
 
+/// The paths of the Entries standing at each of `destinations`, at a folder
+/// above one, or under one: every Entry [`clash`] asks after for a destination
+/// at or under any of them, looked up rather than the Library read.
+pub(super) async fn standing_near(
+    index: &dyn Index,
+    destinations: &[&EntryPath],
+) -> IndexResult<BTreeSet<EntryPath>> {
+    let mut near: BTreeSet<EntryPath> = BTreeSet::new();
+    let mut asked_above: BTreeSet<EntryPath> = BTreeSet::new();
+    for &to in destinations {
+        near.extend(
+            index
+                .entries_under(Some(to))
+                .await?
+                .into_iter()
+                .map(|location| location.entry.path),
+        );
+        let mut above = to.parent();
+        while let Some(folder) = above {
+            above = folder.parent();
+            if !asked_above.insert(folder.clone()) {
+                continue;
+            }
+            if let Some(location) = index.entry_at(&folder).await? {
+                near.insert(location.entry.path);
+            }
+        }
+    }
+    Ok(near)
+}
+
 /// Whether `to` would clash with an Entry the rename leaves where it is: stand
 /// at the same path, stand under a path such an Entry stands at, or have such
 /// an Entry under it.
+///
+/// `staying` needs to hold only the Entries [`standing_near`] finds for `to`,
+/// or for a destination `to` lies at or under: no other is asked after.
 pub(super) fn clash(staying: &BTreeSet<&str>, to: &EntryPath) -> Option<RenameRefusal> {
     if staying.contains(to.as_str()) {
         return Some(RenameRefusal::DestinationTaken { path: to.clone() });
@@ -192,14 +227,10 @@ pub(super) fn clash(staying: &BTreeSet<&str>, to: &EntryPath) -> Option<RenameRe
     None
 }
 
-/// Holds the renames to FM-15's rename-set check against the catalog the plan
-/// read (spec: FM-15, RV-5).
-async fn check_rules(
-    index: &dyn Index,
-    current: &[EntryLocation],
-    renamed: &[(EntryRef, RenamedPath)],
-) -> RenameResult<()> {
-    match Rules::read(index, current).await?.refusal(renamed)? {
+/// Holds the renames to FM-15's rename-set check against the catalog as it
+/// stands (spec: FM-15, RV-5).
+async fn check_rules(index: &dyn Index, renamed: &[(EntryRef, RenamedPath)]) -> RenameResult<()> {
+    match Rules::read(index, renamed).await?.refusal(renamed)? {
         Some(refusal) => Err(refusal.into()),
         None => Ok(()),
     }
