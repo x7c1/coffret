@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { NO_FILTER, RECENT_EXPLAINED, type FilterSettings } from './filter';
+import { MOST_NAME_CHARS, NO_FILTER, RECENT_EXPLAINED, type FilterSettings } from './filter';
 import { FilterField } from './FilterField';
 
 afterEach(cleanup);
@@ -269,4 +269,31 @@ it('empties the name at the first Escape and gives the keys back at the next, le
   fireEvent.keyDown(input(), { key: 'Escape' });
   expect(onKeysBack).toHaveBeenCalledTimes(1);
   expect(latest().recentOn).toBe(true);
+});
+
+// LA-43: the server refuses to keep a name longer than 1,000 characters, so the
+// field never takes one: typed or pasted, what goes past the limit is not entered.
+it('stops the name at the longest the server keeps, typed or pasted, counting characters as it does', () => {
+  const { seen, latest } = mount();
+  const full = 'a'.repeat(MOST_NAME_CHARS);
+  fireEvent.change(input(), { target: { value: full } });
+  expect(latest().name).toBe(full);
+
+  // One more character typed at the end is not entered.
+  fireEvent.change(input(), { target: { value: `${full}b` } });
+  expect((input() as HTMLInputElement).value).toBe(full);
+
+  // A paste longer than the limit is cut at it.
+  fireEvent.change(input(), { target: { value: '' } });
+  fireEvent.change(input(), { target: { value: 'c'.repeat(MOST_NAME_CHARS + 50) } });
+  expect(latest().name).toBe('c'.repeat(MOST_NAME_CHARS));
+  expect((input() as HTMLInputElement).value).toBe('c'.repeat(MOST_NAME_CHARS));
+
+  // An emoji is one character to the server, though two UTF-16 units here.
+  const emoji = '🐱'.repeat(MOST_NAME_CHARS);
+  fireEvent.change(input(), { target: { value: `${emoji}🐶` } });
+  expect(latest().name).toBe(emoji);
+  expect([...latest().name]).toHaveLength(MOST_NAME_CHARS);
+
+  expect(seen.every((settings) => [...settings.name].length <= MOST_NAME_CHARS)).toBe(true);
 });

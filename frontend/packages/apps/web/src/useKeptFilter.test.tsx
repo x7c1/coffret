@@ -4,7 +4,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { NO_FILTER, type FilterSettings } from './filter';
+import { MOST_NAME_CHARS, NO_FILTER, type FilterSettings } from './filter';
 import { NAME_PAUSE_MS, useKeptFilter, type KeptFilter } from './useKeptFilter';
 
 /** A store held in memory, whose read answers when the case says. */
@@ -174,5 +174,22 @@ describe('useKeptFilter', () => {
     await act(async () => rerender({ open: true }));
     expect(held.write).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+
+  // LA-43: the server refuses to keep a name longer than 1,000 characters, so
+  // the settings asked to be kept never hold one, whatever changed the name.
+  it('never asks to keep a name longer than the server keeps', async () => {
+    const held = store(NO_FILTER);
+    const { result } = renderHook(() => useKeptFilter(true, held.kept));
+    await act(async () => held.answer());
+    const longest = '🐱'.repeat(MOST_NAME_CHARS);
+    act(() => result.current.change((now) => ({ ...now, name: `${longest}🐶🐶` })));
+    expect(result.current.settings.name).toBe(longest);
+    await act(async () => result.current.nameLeft());
+    await act(async () => result.current.change((now) => ({ ...now, recentOn: true })));
+    expect(held.write).toHaveBeenCalledTimes(2);
+    for (const [sent] of held.write.mock.calls) {
+      expect([...sent.name]).toHaveLength(MOST_NAME_CHARS);
+    }
   });
 });

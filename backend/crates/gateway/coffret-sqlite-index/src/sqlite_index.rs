@@ -466,6 +466,24 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn present_outside(&self, excluded: &BTreeSet<&str>) -> IndexResult<Vec<LocalEntry>> {
+        let excluded: Vec<String> = excluded.iter().map(|&folder| folder.to_owned()).collect();
+        self.read(
+            "reading what this device has outside some folders",
+            move |connection| device_state::present_outside(connection, &excluded),
+        )
+        .await
+    }
+
+    async fn present_in(&self, folder: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>> {
+        let folder = folder.cloned();
+        self.read(
+            "reading what this device has in one folder",
+            move |connection| device_state::present_in(connection, folder.as_ref()),
+        )
+        .await
+    }
+
     async fn entries_absent_under(
         &self,
         prefix: Option<&EntryPath>,

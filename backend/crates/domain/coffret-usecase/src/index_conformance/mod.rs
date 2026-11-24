@@ -55,6 +55,8 @@ pub use device_state::{
     a_spooling_row_that_names_an_object_is_refused,
     one_containers_held_parcels_are_looked_up_by_id, only_a_file_this_device_had_can_go_absent,
     the_entries_absent_under_a_prefix_are_the_ones_not_on_disk,
+    the_present_rows_in_a_folder_are_the_ones_directly_in_it,
+    the_present_rows_outside_some_folders_are_the_remainder,
 };
 
 mod fixtures;
@@ -162,6 +164,8 @@ macro_rules! index_conformance {
             only_a_file_this_device_had_can_go_absent,
             the_entries_absent_under_a_prefix_are_the_ones_not_on_disk,
             a_folder_is_whole_where_nothing_directly_in_it_is_remote,
+            the_present_rows_outside_some_folders_are_the_remainder,
+            the_present_rows_in_a_folder_are_the_ones_directly_in_it,
             a_materialization_keeps_the_hash_it_was_recorded_with,
             a_forgotten_row_is_gone_and_forgetting_twice_succeeds,
             a_mapping_is_kept_once_per_prefix,

@@ -238,7 +238,11 @@ export function ActivityPanel({
             {badge}
           </button>
         )}
-        {expired && reconnect !== null && <ReconnectOffer offer={reconnect} />}
+        {expired && reconnect !== null && (
+          <div style={OFFER_ROOM}>
+            <ReconnectOffer offer={reconnect} />
+          </div>
+        )}
         <span style={END}>
           {/* What the sync icon's last asking came to, beside it rather than
               in the summary: a refresh that is over has nothing to stop
@@ -668,6 +672,13 @@ const ROW = {
   padding: '0 8px 0 10px',
   minWidth: 0,
 } as const;
+
+/**
+ * Room above and below the reconnect the row offers, whose stacked lines would
+ * otherwise touch the row's top and bottom edges. Only the offer takes it, so
+ * the row without one keeps [`ROW`]'s height and nothing in it moves.
+ */
+const OFFER_ROOM = { padding: '8px 0' } as const;
 
 /** The panel's open and close: square, as wide as the icon buttons at the row's right end. */
 const TOGGLE = {

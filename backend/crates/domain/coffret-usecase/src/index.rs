@@ -490,6 +490,35 @@ pub trait Index: Send + Sync {
     /// not among them.
     async fn present_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>>;
 
+    /// The Entries this device has on disk outside the top-level folders
+    /// `excluded` names, ordered by Entry Path bytes: what
+    /// [`present_under(None)`](Self::present_under) names, less every path
+    /// whose top-level component is among them.
+    ///
+    /// The remainder a Library-root mapping represents once other mappings
+    /// stand for those folders (spec: EP-9), which a scan reads its records off
+    /// (spec: EP-10). The default reads every present record and drops the
+    /// excluded ones; an adapter able to skip a subtree overrides it.
+    async fn present_outside(&self, excluded: &BTreeSet<&str>) -> IndexResult<Vec<LocalEntry>> {
+        let mut present = self.present_under(None).await?;
+        present.retain(|local| !excluded.contains(local.observation.path.top_level()));
+        Ok(present)
+    }
+
+    /// The Entries this device has on disk standing directly in `folder` —
+    /// `None` is the Library root — ordered by Entry Path bytes: what
+    /// [`present_under`](Self::present_under) names there, less everything in
+    /// the folders below it.
+    ///
+    /// The files a scan of one folder looks for (spec: EP-10). The default
+    /// reads the whole subtree and drops what lies deeper; an adapter able to
+    /// stop at one level overrides it.
+    async fn present_in(&self, folder: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>> {
+        let mut present = self.present_under(folder).await?;
+        present.retain(|local| local.observation.path.parent().as_ref() == folder);
+        Ok(present)
+    }
+
     /// Every current Entry under a prefix that this device does not have on
     /// disk, ordered by Entry Path bytes.
     ///
