@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
-use std::ops::Bound;
 
 use coffret_model::{EntryLocation, EntryPath};
 
 use crate::commit::PendingRename;
 use crate::entry_ref::EntryRef;
+use crate::file_and_folder::{self, Clash};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 use crate::rename::rename_error::RenameResult;
@@ -174,57 +174,24 @@ pub(super) async fn standing_near(
     index: &dyn Index,
     destinations: &[&EntryPath],
 ) -> IndexResult<BTreeSet<EntryPath>> {
-    let mut near: BTreeSet<EntryPath> = BTreeSet::new();
-    let mut asked_above: BTreeSet<EntryPath> = BTreeSet::new();
-    for &to in destinations {
-        near.extend(
-            index
-                .entries_under(Some(to))
-                .await?
-                .into_iter()
-                .map(|location| location.entry.path),
-        );
-        let mut above = to.parent();
-        while let Some(folder) = above {
-            above = folder.parent();
-            if !asked_above.insert(folder.clone()) {
-                continue;
-            }
-            if let Some(location) = index.entry_at(&folder).await? {
-                near.insert(location.entry.path);
-            }
-        }
-    }
-    Ok(near)
+    Ok(file_and_folder::standing_near(index, destinations)
+        .await?
+        .into_keys()
+        .collect())
 }
 
 /// Whether `to` would clash with an Entry the rename leaves where it is: stand
 /// at the same path, stand under a path such an Entry stands at, or have such
-/// an Entry under it.
+/// an Entry under it — the questions an addition is held to as well
+/// ([`file_and_folder::clash`]), answered as the rename's refusal.
 ///
 /// `staying` needs to hold only the Entries [`standing_near`] finds for `to`,
 /// or for a destination `to` lies at or under: no other is asked after.
 pub(super) fn clash(staying: &BTreeSet<&str>, to: &EntryPath) -> Option<RenameRefusal> {
-    if staying.contains(to.as_str()) {
-        return Some(RenameRefusal::DestinationTaken { path: to.clone() });
-    }
-    let mut above = to.parent();
-    while let Some(folder) = above {
-        if staying.contains(folder.as_str()) {
-            return Some(RenameRefusal::FileAndFolder { path: folder });
-        }
-        above = folder.parent();
-    }
-    // Every path under `to/` sorts from `to/` onwards and before anything that
-    // does not start with it, so the first one at or after it is the one to ask.
-    let below = format!("{to}/");
-    let first = staying
-        .range::<str, _>((Bound::Included(below.as_str()), Bound::Unbounded))
-        .next();
-    if first.is_some_and(|path| path.starts_with(&below)) {
-        return Some(RenameRefusal::FileAndFolder { path: to.clone() });
-    }
-    None
+    file_and_folder::clash(staying, to).map(|clash| match clash {
+        Clash::Taken(path) => RenameRefusal::DestinationTaken { path },
+        Clash::FileAndFolder(path) => RenameRefusal::FileAndFolder { path },
+    })
 }
 
 /// Holds the renames to FM-15's rename-set check against the catalog as it

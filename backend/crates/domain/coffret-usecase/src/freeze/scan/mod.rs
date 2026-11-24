@@ -21,6 +21,9 @@ use crate::spool_file::WRITE_CHUNK;
 mod examine;
 use examine::{examine, judge, Verdict};
 
+mod files_and_folders;
+use files_and_folders::leave_out_files_and_folders;
+
 /// Which files one invocation considers: those under the prefix, and of those
 /// only the ones the selection names where there is one (spec: PK-17).
 ///
@@ -163,6 +166,8 @@ pub(super) async fn scan(
         .await?;
     }
 
+    leave_out_files_and_folders(index, &mut survey).await?;
+
     survey.closing = closing(
         index,
         Walk {
@@ -224,8 +229,8 @@ struct Walk<'a> {
 /// A decided reservation with any path selected is packed, and the commit
 /// releases it. One with none is released with a [`Lapsed`] per path saying
 /// why — save a path the scan has already surfaced, which has its finding
-/// (spec: PK-14). A path no mapping represents is ineligible rather than gone:
-/// nothing looked for it (spec: EP-9).
+/// (spec: PK-14, EP-6, PK-17). A path no mapping represents is ineligible
+/// rather than gone: nothing looked for it (spec: EP-9).
 async fn closing(
     index: &dyn Index,
     walk: Walk<'_>,
@@ -243,7 +248,9 @@ async fn closing(
         .surfaced
         .iter()
         .map(|surfaced| match surfaced {
-            NotFrozen::ModifiedInPack { path, .. } | NotFrozen::KeyLostInPack { path, .. } => path,
+            NotFrozen::ModifiedInPack { path, .. }
+            | NotFrozen::KeyLostInPack { path, .. }
+            | NotFrozen::FileAndFolder { path, .. } => path,
         })
         .collect();
     let unwalked = |path: &EntryPath| {
@@ -440,7 +447,8 @@ pub(super) async fn preview(
     let mut preview = FreezePreview {
         unavailable: match scope.prefix {
             Some(prefix) => {
-                let folders = represented_by(&walked, prefix).map(|root| &root.mapping.prefix);
+                let folders =
+                    folder_represented_by(&walked, prefix).map(|root| &root.mapping.prefix);
                 unavailable_roots(&walked)
                     .into_iter()
                     .filter(|root| Some(&root.prefix) == folders)
@@ -517,17 +525,32 @@ pub(super) async fn preview(
     Ok(preview)
 }
 
-/// The mapping that represents `path`: the top-level one standing for its first
-/// component, or else the Library-root one, which represents the remainder
+/// The mapping that represents the file at `path`: the top-level one standing
+/// for its first component, or else the Library-root one, which represents the
+/// remainder — the Entry at a top-level mapping's own prefix among it
 /// (spec: EP-9). `None` where this device maps neither.
 fn represented_by<'w>(walked: &'w [WalkedRoot], path: &EntryPath) -> Option<&'w WalkedRoot> {
     walked
         .iter()
         .find(|root| {
-            root.mapping
-                .prefix
-                .as_ref()
-                .is_some_and(|prefix| prefix.as_str() == path.top_level())
+            path.parent().is_some()
+                && root.mapping.prefix.as_ref().map(EntryPath::as_str) == Some(path.top_level())
+        })
+        .or_else(|| walked.iter().find(|root| root.mapping.prefix.is_none()))
+}
+
+/// The mapping that represents the folder at `folder`: the top-level one at
+/// its first component — its own root, where the folder is that component —
+/// or else the Library-root one (spec: EP-9). `None` where this device maps
+/// neither.
+fn folder_represented_by<'w>(
+    walked: &'w [WalkedRoot],
+    folder: &EntryPath,
+) -> Option<&'w WalkedRoot> {
+    walked
+        .iter()
+        .find(|root| {
+            root.mapping.prefix.as_ref().map(EntryPath::as_str) == Some(folder.top_level())
         })
         .or_else(|| walked.iter().find(|root| root.mapping.prefix.is_none()))
 }

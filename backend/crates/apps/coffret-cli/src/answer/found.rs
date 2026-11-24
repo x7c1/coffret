@@ -231,6 +231,7 @@ fn reason_name(reason: &FindingReason) -> &'static str {
         FindingReason::RelocationRefused { .. } => "RelocationRefused",
         FindingReason::Renamed { .. } => "Renamed",
         FindingReason::RenameRefused { .. } => "RenameRefused",
+        FindingReason::FileAndFolder { .. } => "FileAndFolder",
         FindingReason::AwaitsPack => "AwaitsPack",
         FindingReason::Unreserved { .. } => "Unreserved",
     }

@@ -309,6 +309,7 @@ fn device_kind(error: &Error, storage_below: bool) -> &'static str {
         Error::NoSuchAccount { .. } => "no_such_account",
         Error::AccountFixed { .. } => "account_fixed",
         Error::MalformedMappingPrefix { .. } => "malformed_mapping_prefix",
+        Error::MappingAtEntry { .. } => "mapping_at_entry",
         Error::NoSuchLocalRoot { .. } => "no_such_local_root",
         Error::ManagementAreaNotADirectory { .. } => "management_area_not_a_directory",
         Error::ManagementAreaIncomplete { .. } => "management_area_incomplete",

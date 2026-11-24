@@ -107,6 +107,20 @@ pub enum Surfaced {
         /// What a rename from `from` to `path` is refused for.
         refusal: RenameRefusal,
     },
+    /// The file is new, or changed, and adding it would leave one Entry Path
+    /// both a file and a folder: it stands under a path an Entry stands at, or
+    /// Entries stand under its own path (spec: EP-4, EP-6).
+    ///
+    /// Left out of the run — neither encoded nor uploaded — because a commit
+    /// carrying it would be refused whole, and the rest of the run goes on.
+    /// Reported by every run until one of the two is renamed.
+    FileAndFolder {
+        /// Where in the Library the file left out would stand.
+        path: EntryPath,
+        /// The path that would be both a file and a folder: a folder above
+        /// `path`, or `path` itself.
+        both: EntryPath,
+    },
 }
 
 impl Surfaced {
@@ -118,7 +132,8 @@ impl Surfaced {
             | Self::Discarded { path }
             | Self::KeptEdited { path }
             | Self::DiscardRefused { path, .. }
-            | Self::RenameRefused { path, .. } => path,
+            | Self::RenameRefused { path, .. }
+            | Self::FileAndFolder { path, .. } => path,
         }
     }
 }

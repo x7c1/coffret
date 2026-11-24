@@ -144,6 +144,12 @@ fn every_finding() -> Vec<Finding> {
             },
         },
         Found::Surfaced {
+            path: entry_path("notes/g.jpg"),
+            reason: FindingReason::FileAndFolder {
+                both: entry_path("notes"),
+            },
+        },
+        Found::Surfaced {
             path: entry_path("scans/vol-1/page-001.jpg"),
             reason: FindingReason::AwaitsPack,
         },

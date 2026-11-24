@@ -253,8 +253,8 @@ fn a_sync_answers_the_renames_it_detected() {
                 "needs_attention": true,
                 "said": "surfaced x/y.jpg: it holds what this device's file of b.jpg held \
                          before that file went, and renaming that Entry here was refused (the \
-                         rename would make \"x\" both a file and a folder); it is carried in as \
-                         a new file instead",
+                         rename would make \"x\" both a file and a folder); it is taken as a new \
+                         file instead",
                 "path": "x/y.jpg",
                 "reason": "RenameRefused",
             }, {

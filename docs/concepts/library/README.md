@@ -258,8 +258,9 @@ control for a sync, since a drop starts one.
   its survey; a placement, a mapped folder whose filesystem gives no file lock,
   remedied by keeping the folder on a local disk (spec: OC-8); a deletion, a
   [Pack](../pack/) it cannot rebuild; a rename, a destination another Entry
-  holds or a path it would leave both a file and a folder; a commit, when
-  another device committed underneath its batch)
+  holds or a path it would leave both a file and a folder; a commit, an
+  addition that would leave a path both a file and a folder, or another
+  device having committed underneath its batch)
 - surface (a file a run reports rather than silently skips)
 - remedy (a refusal, or a state a run keeps reporting, by the gesture its report
   names — renaming a folder, naming a different Entry Path, recording a mapping
@@ -558,6 +559,13 @@ control for a sync, since a drop starts one.
     OC-3, OC-7).
   - Failed trash keeps the pending provenance so it can be retried safely;
     removing already absent local leftovers is idempotent (spec: OC-2, OC-8).
+  - A file whose addition would leave one path both a file and a folder — it
+    stands under a path an Entry stands at, or Entries stand under its own
+    path — is left out of a sync or a freeze before anything is packed or
+    uploaded, and reported with the path and what to do: rename one of the
+    two. The rest of the run carries on; a commit that would make such a path
+    is refused whole, so leaving the file out is how a person hears of it
+    (spec: EP-4, EP-6).
 - A sync, a freeze and a deletion each own this device's pending work for the
   whole of a run, and a competing run is refused (spec: OC-2). Within one
   server the three take **turns** instead, and a move takes the same turn from
@@ -786,7 +794,9 @@ control for a sync, since a drop starts one.
   - Anything short of that pairs nothing, and each file is what it was before:
     a file edited as well as renamed, one renamed into another mapped folder,
     two files with the same content. A pair whose rename the Library would
-    refuse is reported with the refusal, and its files are read the same way.
+    refuse is reported with the refusal, and its files are read the same way —
+    the new one an addition like any other, left out where it would leave a
+    path both a file and a folder (spec: EP-6).
   - A gone file that pairs with nothing keeps its record and is reported
     deleted locally, so a later sync that sees its partner can still pair them.
 - A rename another device committed meanwhile is not by itself such a refusal.

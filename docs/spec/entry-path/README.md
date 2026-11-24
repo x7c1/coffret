@@ -76,8 +76,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     and a folder of Entries: a new path under a path an Entry the rename
     leaves in place stands at, or with such an Entry under it. No device can
     materialize both (EP-4); a Library already holding such a pair keeps it,
-    and a rename does not make one. So is a rename to the same path, a path
-    renamed to one under itself while Entries stand under it, and one either
+    and neither a rename nor an addition (EP-6) makes one. So is a rename to
+    the same path, a path renamed to one under itself while Entries stand
+    under it, and one either
     of whose paths lies under the top-level component reserved for derived
     Entries (FM-15). Every rule FM-15 holds a record's renames to against the
     catalog is asked of the rename then too, so a rename that commits is one
@@ -86,9 +87,32 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   record's removals from the current path map, then inserts every Entry owned
   by its additions. The commit is rejected if an insertion finds an existing
   Entry Path or if the additions contain a duplicate. *(Form: test)*
+  - The commit is rejected too where the state it would leave has one Entry
+    Path both an Entry and a folder of Entries: an added Entry's path lies
+    under a path a current Entry stands at, or a current Entry stands under an
+    added Entry's path. The state is read as the uniqueness check reads it —
+    the Entries of the removals gone and the record's renames applied (FM-15)
+    first — and the additions of one record are held to it against each other
+    too. The refusal comes before anything is written, and names the path
+    that would be both. No device can materialize both (EP-4).
+  - The rule is about what a commit may newly make. A catalog applying a
+    committed record keeps applying it whatever paths it holds (RV-5), and a
+    Library already holding such a pair keeps it (EP-5): nothing migrates or
+    repairs one. An addition beside an existing pair is refused like any
+    other the rule covers.
+  - A writer asks the rule of the files it is about to add before it packs or
+    uploads any of them, against the catalog it has caught up and with its
+    batch's removals and renames applied, holding its own files to it against
+    each other in Entry Path order. A file the rule refuses is left out and
+    reported — the file, the path that would be both a file and a folder, and
+    that renaming one of the two is what to do — and the rest of the run
+    carries on, so a refused commit is the backstop and not the way a person
+    learns of it.
 - **EP-7.** A writer that loses the Journal commit race rebases onto the new
   head and repeats the same uniqueness check, so two concurrent writes to one
   Entry Path become an explicit conflict rather than last-write-wins (CP-7).
+  It repeats EP-6's check of a path both a file and a folder the same way, so
+  of two writers adding `a` and `a/b` at once the later is refused.
   *(Form: test)*
   - A pending change remembers the Entry it acts on by `(Container ID, entry
     number)` (FM-9) and the current name it was prepared against. The rebase
@@ -145,6 +169,20 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   mapping represents the remainder. An invalid top-level component is
   rejected before any scan runs. The mappings to local paths are device state
   and are never uploaded. *(Form: test)*
+  - A top-level mapping's subtree is what lies under its component, and not
+    the Entry standing at the component itself: the mapped root is the folder
+    the subtree lives in and cannot also be a file in it. That Entry is part
+    of the remainder. A scan of the Library-root mapping steps over a folder at
+    a component another mapping represents and finds a file there like any
+    other file at its top, and only the Library-root mapping reads this
+    device's materialization record of it, so it is reported once, as
+    deleted locally when it is gone and never while it stands.
+  - Recording a new top-level mapping whose component is a path a current
+    Entry stands at is refused, naming the Entry, since nothing could be added
+    under it (EP-6). The state can still arise afterwards, where another
+    device adds such an Entry once the mapping is recorded; a file at the
+    component is then the Library-root mapping's, and EP-6 holds what either
+    mapping would add beside it.
   - The top-level component a mapping is keyed by is that component's NFC
     spelling (EP-1), the same one every Entry Path under it carries. So the
     key a device records a mapping under and the spelling a scan composes its
@@ -334,7 +372,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     rename away, a destination that would make a path both a file and a
     folder, and FM-15's rename-set check. A pair one of them refuses is not
     paired: its files are read as without pairing, and the run reports the
-    refusal beside them.
+    refusal beside them. The appeared file is then an addition like any
+    other, held to EP-6: where the rename was refused for making a path both
+    a file and a folder, the addition would make that path too, so the file
+    is left out and reported.
   - A gone file that pairs with nothing keeps its record and is reported
     deleted locally, so a later scan whose scope covers its partner can still
     pair them. Pairing changes nothing about what a sync scans.

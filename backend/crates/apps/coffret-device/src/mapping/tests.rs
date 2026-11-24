@@ -616,3 +616,56 @@ async fn resetting_the_marker_issues_a_new_identity() {
         "and it was left exactly as it was"
     );
 }
+
+// EP-9: a new top-level mapping stands for the folder of its name, and a file
+// of the Library at that name leaves nothing to add under it, since a path is
+// never both a file and a folder (spec: EP-4). So the mapping is refused,
+// naming the file, and nothing is recorded; a name nothing stands at, or one
+// only a folder of Entries stands at, maps as before.
+#[tokio::test]
+async fn a_new_mapping_at_a_path_a_file_stands_at_is_refused() {
+    use coffret_model::ContainerKind;
+
+    let library =
+        crate::testing::library(&[(1, ContainerKind::OneFile, &["notes", "albums/a.jpg"])]).await;
+    let folders = tempfile::tempdir().expect("a temporary directory must be available");
+    let notes = folders.path().join("notes");
+    let albums = folders.path().join("albums");
+    for path in [&notes, &albums] {
+        fs::create_dir(path).expect("the folder must be creatable");
+    }
+
+    let refused = library
+        .set_mapping(Some("notes"), &notes, MarkerRequest::AdoptWhatIsThere)
+        .await;
+    match &refused {
+        Err(error @ Error::MappingAtEntry { prefix }) => {
+            assert_eq!(prefix.as_str(), "notes");
+            assert!(
+                error
+                    .to_string()
+                    .contains("the Library holds a file at \"notes\""),
+                "the refusal names the file: {error}"
+            );
+        }
+        other => panic!("expected the mapping to be refused, got {other:?}"),
+    }
+    assert!(
+        library
+            .index
+            .mappings()
+            .await
+            .expect("the mappings must read")
+            .is_empty(),
+        "nothing is recorded"
+    );
+    assert!(
+        !marker_in(&notes).exists(),
+        "and nothing is written into the folder"
+    );
+
+    library
+        .set_mapping(Some("albums"), &albums, MarkerRequest::AdoptWhatIsThere)
+        .await
+        .expect("a name Entries stand under is a folder, and maps");
+}

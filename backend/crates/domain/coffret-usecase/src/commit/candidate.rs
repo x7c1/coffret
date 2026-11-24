@@ -5,13 +5,16 @@ use coffret_model::{ContainerAddition, ContainerId, EntryPath, EntryRename};
 use crate::catalog_renames::{check_rename_set, RenameLookups, RenamedEntry};
 use crate::commit::commit_error::{CommitError, CommitResult};
 use crate::commit::prepared_batch::PreparedBatch;
+use crate::file_and_folder;
 use crate::index::Index;
 use crate::index_error::IndexError;
 
 /// Refuses a batch that cannot commit onto the head the Index stands at: one
 /// that removes a Container that is no longer current (spec: CP-18), one with
-/// a rename the head does not admit (spec: FM-15), or one whose commit would
-/// put two current Entries at one Entry Path (spec: EP-5, EP-6).
+/// a rename the head does not admit (spec: FM-15), one whose commit would put
+/// two current Entries at one Entry Path (spec: EP-5, EP-6), or one whose
+/// additions would leave one Entry Path both an Entry and a folder of Entries
+/// (spec: EP-4, EP-6).
 ///
 /// The removals are checked first, because the path check takes them as given:
 /// it lets an Entry leave with a Container the batch removes, and a Container
@@ -60,6 +63,46 @@ pub(super) async fn check(index: &dyn Index, batch: &PreparedBatch) -> CommitRes
             if held || !added.insert(path) {
                 return Err(CommitError::EntryPathCollision { path: path.clone() });
             }
+        }
+    }
+
+    check_files_and_folders(index, &removed, &renamed, &added).await
+}
+
+/// Refuses a batch whose additions would leave one Entry Path both an Entry
+/// and a folder of Entries, naming the path (spec: EP-4, EP-6).
+///
+/// Read as the path-uniqueness check above reads the state the commit leaves:
+/// the Entries of the Containers the batch removes have left, the renamed ones
+/// stand at their new paths, and every addition of the batch stands too, so
+/// the additions are held to the rule against one another as well as against
+/// the catalog. Only the Entries standing at, above or under an addition's
+/// path are looked up, as a rename's plan looks them up
+/// ([`file_and_folder`]); a batch that adds nothing asks nothing.
+///
+/// What a replay of a committed record does is not asked here: a catalog
+/// applying records keeps applying them, and a Library already holding such a
+/// pair keeps it (spec: EP-5). An addition beside one is refused like any
+/// other the rule covers.
+async fn check_files_and_folders(
+    index: &dyn Index,
+    removed: &BTreeSet<ContainerId>,
+    renamed: &[RenamedEntry],
+    added: &BTreeSet<&EntryPath>,
+) -> CommitResult<()> {
+    if added.is_empty() {
+        return Ok(());
+    }
+    let paths: Vec<&EntryPath> = added.iter().copied().collect();
+    let renames: Vec<(&EntryPath, &EntryPath)> = renamed
+        .iter()
+        .map(|one| (RenamedEntry::from(one), &one.path))
+        .collect();
+    let mut staying = file_and_folder::staying_near(index, &paths, removed, &renames).await?;
+    staying.extend(paths.iter().map(|path| path.as_str().to_owned()));
+    for path in paths {
+        if let Some(both) = file_and_folder::file_and_folder(&staying, path) {
+            return Err(CommitError::FileAndFolder { path: both });
         }
     }
     Ok(())

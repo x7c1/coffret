@@ -264,8 +264,10 @@ pub(crate) fn present_under(
 
 /// The files this device has on disk outside the top-level folders `excluded`
 /// names (spec: EP-9, EP-10): the remainder a Library-root mapping stands for,
-/// each excluded folder's subtree left out in the statement by the range
-/// [`present_under`] reads it by, so none of its rows is handed back.
+/// everything under each excluded folder left out in the statement by the
+/// range [`present_under`] reads it by, so none of its rows is handed back. The
+/// row at exactly an excluded folder's path is not under it and is kept: it is
+/// the file at the top of the root-mapped folder under that name.
 pub(crate) fn present_outside(
     connection: &Connection,
     excluded: &[String],
@@ -281,12 +283,11 @@ pub(crate) fn present_outside(
         let (lower, upper) = subtree_range_of(folder);
         let at = values.len();
         sql.push_str(&format!(
-            " AND NOT (path = ?{} OR (path >= ?{} AND path < ?{}))",
+            " AND NOT (path >= ?{} AND path < ?{})",
             at + 1,
-            at + 2,
-            at + 3
+            at + 2
         ));
-        values.extend([folder.clone(), lower, upper]);
+        values.extend([lower, upper]);
     }
     sql.push_str(" ORDER BY path");
     collect(

@@ -185,6 +185,11 @@ mod removing_rival;
 
 pub mod device_state;
 
+// Whether a new path makes one Entry Path both an Entry and a folder of
+// Entries, asked alike of a rename, of a batch at its commit, and of the files
+// a writer is about to add (spec: EP-4, EP-5, EP-6).
+mod file_and_folder;
+
 // Where this crate's tests and conformance suites turn a literal pair of
 // numbers into an Entry's extent, beside the module that does the same for an
 // Entry Path and for the same reason.

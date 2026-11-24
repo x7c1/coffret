@@ -169,6 +169,7 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
   RelocationRefused: 'finding',
   Renamed: 'finding',
   RenameRefused: 'finding',
+  FileAndFolder: 'finding',
   AwaitsPack: 'finding',
   Unreserved: 'finding',
 };

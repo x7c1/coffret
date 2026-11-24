@@ -110,6 +110,7 @@ pub use stale_removal::a_pack_absorbing_a_removed_container_is_refused;
 
 mod surfacing;
 pub use surfacing::{
+    a_file_that_would_make_a_path_both_a_file_and_a_folder_is_not_frozen,
     a_key_lost_pack_entry_is_surfaced_and_untouched,
     a_modified_pack_resident_entry_is_surfaced_and_untouched,
     a_touched_pack_resident_entry_is_not_a_finding,
@@ -163,6 +164,7 @@ macro_rules! freeze_conformance {
             a_modified_one_file_entry_freezes_to_the_local_bytes,
             a_key_lost_one_file_entry_freezes_to_the_local_bytes,
             a_modified_pack_resident_entry_is_surfaced_and_untouched,
+            a_file_that_would_make_a_path_both_a_file_and_a_folder_is_not_frozen,
             a_touched_pack_resident_entry_is_not_a_finding,
             a_key_lost_pack_entry_is_surfaced_and_untouched,
             a_missing_mapped_root_is_reported_unavailable_by_a_freeze,

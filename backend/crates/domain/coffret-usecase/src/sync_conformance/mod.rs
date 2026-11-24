@@ -191,6 +191,9 @@ pub use roots::{
     an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_root_mapping,
 };
 
+mod files_and_folders;
+pub use files_and_folders::a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out;
+
 mod scope;
 pub use scope::{
     a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_the_root,
@@ -275,6 +278,7 @@ macro_rules! sync_conformance {
             an_entry_this_device_never_materialized_is_left_alone,
             a_sync_within_some_folders_walks_those_alone,
             a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_the_root,
+            a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out,
             an_unedited_file_this_device_deleted_goes_to_the_trash,
             an_unedited_file_another_device_deleted_goes_to_the_trash,
             an_edited_departed_file_is_kept_and_reported_every_run,

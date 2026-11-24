@@ -287,6 +287,13 @@ impl fmt::Display for Error {
             Self::NoSuchLocalRoot { path, .. } => {
                 write!(f, "{} is not a directory on this device", path.display())
             }
+            Self::MappingAtEntry { prefix } => write!(
+                f,
+                "{:?} cannot be mapped: the Library holds a file at {:?}, and nothing could be \
+                 added to a folder of the same name; rename or delete that file first",
+                prefix.as_str(),
+                prefix.as_str()
+            ),
             // Each of these says which folder it is about and what is standing
             // where, because that is the whole of what the person has to go and
             // look at — and each says nothing was recorded, since a mapping

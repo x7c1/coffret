@@ -49,6 +49,9 @@
 //!    opened, are both update-eligible and are reported in
 //!    [`FreezeOutcome::surfaced`] rather than passed over — silence there would
 //!    tell the user that stale or unrecoverable content is safely backed up.
+//!    A file whose addition would leave one Entry Path both a file and a folder
+//!    is left out of the selection and reported there too, since a commit
+//!    carrying it would be refused whole (spec: EP-4, EP-6).
 //! 5. **Segment** (spec: PK-3, PK-4, PK-5, PK-6). Sort the selection by Entry
 //!    Path and append the next Entry while the resulting pre-padding Container
 //!    footprint stays at or below the target, closing the current non-empty Pack

@@ -45,4 +45,18 @@ pub enum NotFrozen {
         /// The Pack whose key the Library records as lost.
         container_id: ContainerId,
     },
+    /// The file is not yet in a Pack, and adding it would leave one Entry Path
+    /// both a file and a folder: it stands under a path an Entry stands at, or
+    /// Entries stand under its own path (spec: EP-4, EP-6).
+    ///
+    /// Left out of the Packs, because a commit carrying it would be refused
+    /// whole, and the rest of the selection is packed. Reported by every run
+    /// until one of the two is renamed.
+    FileAndFolder {
+        /// Where in the Library the file left out would stand.
+        path: EntryPath,
+        /// The path that would be both a file and a folder: a folder above
+        /// `path`, or `path` itself.
+        both: EntryPath,
+    },
 }

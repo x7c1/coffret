@@ -174,14 +174,27 @@ pub enum FindingReason {
     /// holds exactly its Entry's content, but renaming that Entry here is a
     /// rename the Library refuses (spec: EP-10, FM-15).
     ///
-    /// So the file here was carried in as new, and the one that is gone is
-    /// reported deleted locally as well; this says why the rename was not
-    /// carried instead.
+    /// So the file here was taken as new — carried in, unless the rules for an
+    /// addition leave it out, which is then said beside this — and the one that
+    /// is gone is reported deleted locally as well; this says why the rename
+    /// was not carried instead.
     RenameRefused {
         /// Where the Entry whose file is gone stands.
         from: EntryPath,
         /// What the rename was refused for.
         refusal: RenameRefusal,
+    },
+    /// Adding the file would leave one Entry Path both a file and a folder — it
+    /// stands under a path an Entry stands at, or Entries stand under its own
+    /// path — so the run left it out and carried on with the rest
+    /// (spec: EP-4, EP-6).
+    ///
+    /// Nothing about it was uploaded, and every run reports it again until one
+    /// of the two is renamed.
+    FileAndFolder {
+        /// The path that would be both: a folder above the file's own, or the
+        /// file's own.
+        both: EntryPath,
     },
     /// A drop put the file here to be added as a Pack, and the run left it for
     /// the freeze that packs it (spec: PK-17).
@@ -302,9 +315,21 @@ impl fmt::Display for FindingReason {
                 return write!(
                     f,
                     "it holds what this device's file of {} held before that file went, and \
-                     renaming that Entry here was refused ({refusal}); it is carried in as a new \
-                     file instead",
+                     renaming that Entry here was refused ({refusal}); it is taken as a new file \
+                     instead",
                     from.as_str(),
+                );
+            }
+            // The path is said because it is the one to rename, and it may be
+            // a folder above the file rather than the file itself. Quoted as a
+            // refused rename quotes the same phrase, which a detected rename
+            // falling back to an addition puts on the line next to this one.
+            Self::FileAndFolder { both } => {
+                return write!(
+                    f,
+                    "it was left out, because adding it would make {:?} both a file and a folder; \
+                     rename the file or the folder, then run again",
+                    both.as_str(),
                 );
             }
             // The one reason with something of its own to name. Which folder it

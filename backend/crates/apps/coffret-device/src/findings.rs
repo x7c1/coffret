@@ -113,6 +113,10 @@ impl From<&FreezeOutcome> for Findings {
                 path: path.clone(),
                 reason: FindingReason::KeyLost,
             },
+            NotFrozen::FileAndFolder { path, both } => Finding::Surfaced {
+                path: path.clone(),
+                reason: FindingReason::FileAndFolder { both: both.clone() },
+            },
         });
 
         let lapsed = outcome
@@ -303,6 +307,9 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
                 refusal: refusal.clone(),
             },
         ),
+        Surfaced::FileAndFolder { path, both } => {
+            (path, FindingReason::FileAndFolder { both: both.clone() })
+        }
     };
     Finding::Surfaced {
         path: path.clone(),
@@ -640,7 +647,7 @@ mod tests {
             [
                 "surfaced x/y.jpg: it holds what this device's file of b.jpg held before that \
                  file went, and renaming that Entry here was refused (the rename would make \
-                 \"x\" both a file and a folder); it is carried in as a new file instead",
+                 \"x\" both a file and a folder); it is taken as a new file instead",
                 "surfaced b.jpg: this device had it and it is gone from disk",
             ]
         );

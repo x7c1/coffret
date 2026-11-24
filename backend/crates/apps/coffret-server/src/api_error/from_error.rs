@@ -127,16 +127,20 @@ impl From<Error> for ApiError {
 /// the control again will never clear it. [`ApiError::epoch`] says why it has
 /// the status it has.
 ///
-/// Four of the commit's own verdicts are `conflict`: the Library moved
+/// Five of the commit's own verdicts are `conflict`: the Library moved
 /// underneath the batch while it was being assembled. A path another device's
-/// commit claimed meanwhile, a removal another commit already made
-/// (spec: CP-18), a change of the batch's that cannot be carried over another
-/// commit's renames (spec: EP-7), and the slot lost to other devices on every
-/// attempt the commit makes, every rebase clean (spec: CP-4) — each says
-/// another device changed the Library, and the batch was not committed
-/// (spec: CP-1). Running the same thing again catches up first and plans from
-/// the Library as it now stands, so unlike the rest a person can do something
-/// about them, and the refusal says what ([`ApiError::conflict`]).
+/// commit claimed meanwhile, a path another device's commit made a file or a
+/// folder meanwhile so that the batch would make it both (spec: EP-4, EP-7), a
+/// removal another commit already made (spec: CP-18), a change of the batch's
+/// that cannot be carried over another commit's renames (spec: EP-7), and the
+/// slot lost to other devices on every attempt the commit makes, every rebase
+/// clean (spec: CP-4) — each says another device changed the Library, and the
+/// batch was not committed (spec: CP-1). A path both a file and a folder is
+/// among them because the run that assembled the batch already left out every
+/// file it could see would make one, so what reaches the commit is what
+/// another device did. Running the same thing again catches up first and
+/// plans from the Library as it now stands, so unlike the rest a person can do
+/// something about them, and the refusal says what ([`ApiError::conflict`]).
 ///
 /// The rest are `500`. A catalog that would not take a record is this device's
 /// own. The commit's other verdicts — a Keyring left incomplete, a committed
@@ -200,6 +204,7 @@ fn from_commit(commit: &CommitError) -> ApiError {
         CommitError::EpochActivated { .. } => ApiError::epoch(),
         CommitError::Index(_) => catalog_unusable(),
         CommitError::EntryPathCollision { .. }
+        | CommitError::FileAndFolder { .. }
         | CommitError::RemovalNotCurrent { .. }
         | CommitError::RebaseConflict { .. }
         | CommitError::ConflictLimitReached { .. } => ApiError::conflict(),

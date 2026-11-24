@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use coffret_device::{
     EntryPath, FindingReason, Lapse, RelocationRefused, RootRefused, RootUnavailable,
 };
@@ -91,7 +93,7 @@ impl Finding {
                 let (reason_named, surfaced) = named(reason);
                 Some(Self {
                     path: Some(path.as_str().to_owned()),
-                    message: said(reason).to_owned(),
+                    message: said(reason).into_owned(),
                     reason: reason_named,
                     surfaced: Some(surfaced),
                 })
@@ -294,11 +296,14 @@ fn refused(prefix: Option<&EntryPath>, reason: &RootRefused) -> String {
 /// somebody else's words.
 ///
 /// A reason that names a folder on this device says it at a terminal and not
-/// here, which is why this takes the reason by reference and still answers in
-/// static sentences: a local path is one of the things this boundary leaves out,
-/// exactly as an unavailable root's folder is left out above.
-fn said(reason: &FindingReason) -> &'static str {
-    match reason {
+/// here, which is why this takes the reason by reference and answers in static
+/// sentences: a local path is one of the things this boundary leaves out,
+/// exactly as an unavailable root's folder is left out above. The one sentence
+/// that is not static names an Entry Path, which crosses this boundary as the
+/// row's own path does: the path a file left out would make both a file and a
+/// folder, which may be a folder above the row's and is the one to rename.
+fn said(reason: &FindingReason) -> Cow<'static, str> {
+    Cow::Borrowed(match reason {
         FindingReason::ChangedInPack => {
             "this file changed, and what it changed from is inside a Pack — coffret cannot \
              replace it yet"
@@ -350,7 +355,7 @@ fn said(reason: &FindingReason) -> &'static str {
         }
         FindingReason::RenameRefused { .. } => {
             "a file this device had put in place is gone and this file holds exactly its content, \
-             but renaming its Entry here was refused, so this file is carried in as a new one"
+             but renaming its Entry here was refused, so this file is taken as a new one"
         }
         FindingReason::AwaitsPack => {
             "this file was added to go into a Pack, and waits for the freeze that packs it"
@@ -366,7 +371,14 @@ fn said(reason: &FindingReason) -> &'static str {
                  packs"
             }
         },
-    }
+        FindingReason::FileAndFolder { both } => {
+            return Cow::Owned(format!(
+                "this file was left out, because adding it would make {:?} both a file and a \
+                 folder; rename the file or the folder, then try again",
+                both.as_str()
+            ))
+        }
+    })
 }
 
 /// What a person who meets a file left behind by a rename is told, naming what
@@ -458,6 +470,9 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         // declined fetch names either.
         FindingReason::Renamed { .. } => ("surfaced", "Renamed"),
         FindingReason::RenameRefused { .. } => ("surfaced", "RenameRefused"),
+        // The one a sync or a freeze reports about a file it left out, which
+        // no declined fetch names either (spec: EP-4, EP-6).
+        FindingReason::FileAndFolder { .. } => ("surfaced", "FileAndFolder"),
         // The two about a file a drop reserved for a Pack: a sync leaving it
         // for its freeze, and a freeze finding it no longer one to pack
         // (spec: PK-17). No declined fetch names them either.
@@ -805,7 +820,10 @@ mod tests {
                         path: entry_path("albums"),
                     },
                 }),
-                FindingReason::RenameRefused { .. } => surfaced(FindingReason::AwaitsPack),
+                FindingReason::RenameRefused { .. } => surfaced(FindingReason::FileAndFolder {
+                    both: entry_path("albums"),
+                }),
+                FindingReason::FileAndFolder { .. } => surfaced(FindingReason::AwaitsPack),
                 FindingReason::AwaitsPack => {
                     surfaced(FindingReason::Unreserved { lapse: Lapse::Gone })
                 }

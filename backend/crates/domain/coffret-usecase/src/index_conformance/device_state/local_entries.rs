@@ -417,16 +417,16 @@ pub async fn a_folder_is_whole_where_nothing_directly_in_it_is_remote(fixture: &
 }
 
 /// The present rows outside some top-level folders are what this device has on
-/// disk, less every path whose top-level component is one of them: the
-/// remainder a Library-root mapping represents once other mappings stand for
-/// those folders (spec: EP-9, EP-10).
+/// disk, less every path under one of them: the remainder a Library-root
+/// mapping represents once other mappings stand for those folders
+/// (spec: EP-9, EP-10).
 ///
 /// A sibling whose name merely begins with an excluded folder's is not inside
 /// it, a file marked absent is not had, and leaving nothing out is every
 /// materialization record that says present. A file standing at the Library
-/// root under the very name of an excluded folder is left out with that folder,
-/// as [`present_under`](crate::index::Index::present_under) takes it in for the
-/// folder.
+/// root under the very name of an excluded folder is not under that folder: it
+/// is the Entry at the folder's mapping's own prefix, which the remainder
+/// holds, so it is kept.
 pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &IndexUnderTest) {
     let index = fixture.index();
     for (text, size) in [
@@ -468,20 +468,19 @@ pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &I
     );
     assert_eq!(
         outside(&["albums", "books", "notes"]).await,
-        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg"],
-        "the file at an excluded folder's own path is that folder's, as present_under takes it",
+        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg", "notes"],
+        "the file at an excluded folder's own path is not under it, and is the remainder's",
     );
-    let under_notes: Vec<String> = index
-        .present_under(Some(&path("notes")))
-        .await
-        .expect("reading what this device has under a prefix must succeed")
-        .into_iter()
-        .map(|local| local.observation.path.as_str().to_owned())
-        .collect();
     assert_eq!(
-        under_notes,
-        ["notes"],
-        "the boundary present_outside leaves out"
+        outside(&["albums", "cover.jpg"]).await,
+        [
+            "albums-annex/c.jpg",
+            "books/d.png",
+            "cover.jpg",
+            "misc/e.jpg",
+            "notes"
+        ],
+        "a file at the root is kept whatever folder its name excludes",
     );
     let every: Vec<String> = index
         .present_under(None)

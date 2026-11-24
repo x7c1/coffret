@@ -66,6 +66,14 @@ all — and both still hold the whole Library's [Catalog](../catalog/) in their
     one every Entry Path under it carries, so the key a mapping is recorded
     under and the paths a scan composes from it are one string (spec: EP-9,
     EP-1).
+  - A top-level mapping's subtree is what lies under its component. An Entry
+    standing at the component itself is a file, not the folder the mapped root
+    is, so it is part of the remainder the root mapping represents: that
+    mapping's scan finds it at the top of its folder, and reports it once
+    (spec: EP-9).
+  - Recording a new top-level mapping is refused where a file of the Library
+    stands at its component, naming the file, since nothing could be added
+    under it (spec: EP-6, EP-9).
   - A mapping whose root is unavailable still represents its subtree, so the
     root mapping neither walks the folder standing where that subtree belongs
     nor reads the subtree as emptied (spec: EP-12).

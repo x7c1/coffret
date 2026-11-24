@@ -35,10 +35,10 @@ use crate::index::Index;
 /// [`FetchError::EntryNotCurrent`] where the Library holds no current Entry at
 /// the path, [`FetchError::UnmappedEntryPath`] where it holds one no mapping of
 /// this device reaches, and [`FetchError::UnmaterializablePath`] where a mapping
-/// does reach it and no file here can stand for it — an Entry standing at
-/// exactly a mapping's own prefix, or a component no local name may be made of
-/// (spec: EP-2, EP-4). The three are separate because they are different
-/// verdicts: the first is about the Library, the other two about this device.
+/// does reach it and no file here can stand for it — a component no local name
+/// may be made of (spec: EP-2, EP-4). The three are separate because they are
+/// different verdicts: the first is about the Library, the other two about this
+/// device.
 ///
 /// A catalog that could not be read is none of the three and travels as
 /// [`FetchError::Index`], having decided nothing about the path.
@@ -74,10 +74,10 @@ pub async fn local_place_of(index: &dyn Index, path: &EntryPath) -> FetchResult<
 ///
 /// [`FetchError::UnmappedEntryPath`] where no mapping of this device reaches the
 /// path, and [`FetchError::UnmaterializablePath`] where one does and no file
-/// here can stand for it — a path that is exactly a mapping's own prefix, or a
-/// component no local name may be made of (spec: EP-2, EP-4). There is no
-/// `EntryNotCurrent` among them, and that is the whole difference: the Library
-/// holding nothing at the path is the ordinary case here rather than a refusal.
+/// here can stand for it — a component no local name may be made of
+/// (spec: EP-2, EP-4). There is no `EntryNotCurrent` among them, and that is the
+/// whole difference: the Library holding nothing at the path is the ordinary
+/// case here rather than a refusal.
 ///
 /// A catalog whose mappings could not be read is neither of the two and travels
 /// as [`FetchError::Index`], having decided nothing about the path.
@@ -142,12 +142,18 @@ pub async fn local_folder_for(
             .find(|mapping| mapping.prefix.is_none())
             .map(|mapping| LocalFolder::root(mapping.local_root.clone())));
     };
+    // A folder at a top-level mapping's own prefix is that mapping's root,
+    // where a file at the same path would be the Library-root mapping's
+    // (spec: EP-9).
+    if let Some(mapping) = mappings
+        .iter()
+        .find(|mapping| mapping.prefix.as_ref() == Some(folder))
+    {
+        return Ok(Some(LocalFolder::root(mapping.local_root.clone())));
+    }
     let Some(mapping) = reaching(&mappings, folder) else {
         return Ok(None);
     };
-    if mapping.prefix.as_ref() == Some(folder) {
-        return Ok(Some(LocalFolder::root(mapping.local_root.clone())));
-    }
     let relative = match mapping.prefix.as_ref() {
         None => folder.as_str(),
         Some(prefix) => folder
@@ -171,15 +177,18 @@ pub async fn local_folder_for(
 /// the top-level ones do not. So the path's top-level component decides, and a
 /// root mapping is the answer only where no other mapping represents that
 /// component — which is the same partition [`targets`] walks from the other
-/// end.
+/// end. A path of one component is under no top-level mapping, even one keyed
+/// by that very component: it is the Entry at that mapping's own prefix, which
+/// the Library-root mapping represents.
 pub(crate) fn reaching<'a>(mappings: &'a [Mapping], path: &EntryPath) -> Option<&'a Mapping> {
     mappings
         .iter()
         .find(|mapping| {
-            mapping
-                .prefix
-                .as_ref()
-                .is_some_and(|prefix| prefix.as_str() == path.top_level())
+            path.parent().is_some()
+                && mapping
+                    .prefix
+                    .as_ref()
+                    .is_some_and(|prefix| prefix.as_str() == path.top_level())
         })
         .or_else(|| mappings.iter().find(|mapping| mapping.prefix.is_none()))
 }
@@ -246,10 +255,10 @@ pub(super) async fn targets(
         };
         for location in index.entries_under(scope.as_ref()).await? {
             // A top-level mapping represents its own subtree, so the Library-root
-            // mapping represents what is left (spec: EP-9).
-            if mapped_prefix.is_none()
-                && represented_elsewhere.contains(location.path().top_level())
-            {
+            // mapping represents what is left — the Entry at a top-level
+            // mapping's own prefix among it, which is no part of that subtree
+            // (spec: EP-9).
+            if !mapping.represents(location.path(), &represented_elsewhere) {
                 continue;
             }
             let place = translate(mapping, location.path())?;
@@ -322,7 +331,9 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// An Entry standing at exactly a mapping's own prefix is refused before the
 /// split is reached: stripping the prefix leaves no separator to strip after
 /// it, so there is no relative path to take components off. The local root is
-/// the folder the subtree lives in, and it cannot also be a file in it.
+/// the folder the subtree lives in, and it cannot also be a file in it — which
+/// is why such an Entry is the Library-root mapping's ([`reaching`]), and a
+/// caller that asks only the mapping representing a path never meets this.
 fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<LocalPlace> {
     // No folder to name: nothing on disk has been reached at this point, and
     // the path itself is the whole of the verdict.
