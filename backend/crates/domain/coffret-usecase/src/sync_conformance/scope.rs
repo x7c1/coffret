@@ -264,3 +264,72 @@ pub async fn a_sync_within_some_folders_walks_those_alone(fixture: &SyncUnderTes
         "and the root that went is reported"
     );
 }
+
+/// A file this device placed at the Library root under the very name a
+/// top-level mapping later stands for, and no longer has, is reported once by a
+/// sync whose scope holds both the Library root and that mapping's folder
+/// (spec: EP-9, EP-10).
+///
+/// The file's path is the mapping's own prefix, so the Library-root mapping's
+/// read of the files directly at the root sees its materialization record but
+/// leaves it to that mapping, and the mapping finds it only by reading the one
+/// record at its prefix. Reporting it twice or not at all would each mean one
+/// of the two mappings got the boundary wrong. The device reaches this state by
+/// mapping the folder after the file was placed under the Library-root mapping:
+/// nothing about a mapping asks whether an Entry stands at its prefix.
+pub async fn a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_the_root(
+    fixture: &SyncUnderTest,
+) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    let remainder = fixture.folder().join("everything");
+    let noted = fixture.folder().join("noted");
+    index
+        .set_mapping(Mapping::new(None, remainder.clone()))
+        .await
+        .expect("recording a mapping must succeed");
+    let placed = write(
+        fixture.fs(),
+        &remainder,
+        "notes",
+        b"a file named as a folder will be",
+    );
+    write(fixture.fs(), &remainder, "top.jpg", b"at the top");
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
+        .await
+        .expect("a first sync must succeed");
+    assert_eq!(first.added.len(), 2, "{first:?}");
+
+    fixture.fs().create_dir(&noted);
+    index
+        .set_mapping(Mapping::new(Some(entry_path("notes")), noted))
+        .await
+        .expect("recording a mapping must succeed");
+    fixture.fs().remove_file(&placed);
+
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2).within(
+        ScanScope::Folders {
+            root: true,
+            folders: BTreeSet::from([entry_path("notes")]),
+        },
+    ))
+    .await
+    .expect("a sync within the root and the mapped folder must succeed");
+
+    assert!(outcome.commit.is_none(), "a sync propagates no deletion");
+    assert!(
+        outcome.unavailable.is_empty(),
+        "both roots are there: {:?}",
+        outcome.unavailable,
+    );
+    assert!(
+        matches!(
+            outcome.surfaced.as_slice(),
+            [Surfaced::DeletedLocally { path }] if *path == entry_path("notes")
+        ),
+        "the missing file is reported once: {:?}",
+        outcome.surfaced,
+    );
+    assert_eq!(outcome.unchanged, 1, "the file at the top is unchanged");
+}

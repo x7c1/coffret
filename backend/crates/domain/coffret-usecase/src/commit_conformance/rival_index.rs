@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
@@ -170,6 +171,10 @@ impl Index for RivalIndex<'_> {
         self.inner.entries_under(prefix).await
     }
 
+    async fn entry_count(&self) -> IndexResult<u64> {
+        self.inner.entry_count().await
+    }
+
     async fn entries_in(&self, container_id: ContainerId) -> IndexResult<Vec<EntryLocation>> {
         self.inner.entries_in(container_id).await
     }
@@ -179,6 +184,17 @@ impl Index for RivalIndex<'_> {
         prefix: Option<&EntryPath>,
     ) -> IndexResult<Vec<ContainerSummary>> {
         self.inner.containers_under(prefix).await
+    }
+
+    async fn containers_among(
+        &self,
+        ids: &BTreeSet<ContainerId>,
+    ) -> IndexResult<Vec<ContainerSummary>> {
+        self.inner.containers_among(ids).await
+    }
+
+    async fn containers(&self) -> IndexResult<Vec<ContainerSummary>> {
+        self.inner.containers().await
     }
 
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()> {
@@ -207,6 +223,14 @@ impl Index for RivalIndex<'_> {
 
     async fn present_under(&self, prefix: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>> {
         self.inner.present_under(prefix).await
+    }
+
+    async fn present_outside(&self, excluded: &BTreeSet<&str>) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.present_outside(excluded).await
+    }
+
+    async fn present_in(&self, folder: Option<&EntryPath>) -> IndexResult<Vec<LocalEntry>> {
+        self.inner.present_in(folder).await
     }
 
     async fn entries_absent_under(
@@ -265,6 +289,13 @@ impl Index for RivalIndex<'_> {
 
     async fn held_parcels(&self) -> IndexResult<Vec<crate::device_state::HeldParcel>> {
         self.inner.held_parcels().await
+    }
+
+    async fn held_parcels_of(
+        &self,
+        container_id: ContainerId,
+    ) -> IndexResult<Vec<crate::device_state::HeldParcel>> {
+        self.inner.held_parcels_of(container_id).await
     }
 
     async fn let_go_parcel(&self, container_id: ContainerId, index: u64) -> IndexResult<()> {

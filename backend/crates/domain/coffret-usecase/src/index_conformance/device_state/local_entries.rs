@@ -423,7 +423,10 @@ pub async fn a_folder_is_whole_where_nothing_directly_in_it_is_remote(fixture: &
 ///
 /// A sibling whose name merely begins with an excluded folder's is not inside
 /// it, a file marked absent is not had, and leaving nothing out is every
-/// present row.
+/// materialization record that says present. A file standing at the Library
+/// root under the very name of an excluded folder is left out with that folder,
+/// as [`present_under`](crate::index::Index::present_under) takes it in for the
+/// folder.
 pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &IndexUnderTest) {
     let index = fixture.index();
     for (text, size) in [
@@ -434,6 +437,7 @@ pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &I
         ("books/d.png", 104),
         ("misc/e.jpg", 105),
         ("misc/f.jpg", 106),
+        ("notes", 107),
     ] {
         index
             .mark_present(observation(text, size))
@@ -459,8 +463,25 @@ pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &I
     };
     assert_eq!(
         outside(&["albums", "books"]).await,
-        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg"],
+        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg", "notes"],
         "the remainder, in path order",
+    );
+    assert_eq!(
+        outside(&["albums", "books", "notes"]).await,
+        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg"],
+        "the file at an excluded folder's own path is that folder's, as present_under takes it",
+    );
+    let under_notes: Vec<String> = index
+        .present_under(Some(&path("notes")))
+        .await
+        .expect("reading what this device has under a prefix must succeed")
+        .into_iter()
+        .map(|local| local.observation.path.as_str().to_owned())
+        .collect();
+    assert_eq!(
+        under_notes,
+        ["notes"],
+        "the boundary present_outside leaves out"
     );
     let every: Vec<String> = index
         .present_under(None)
