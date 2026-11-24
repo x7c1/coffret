@@ -88,11 +88,15 @@ produce. The run also does local work and may upload ciphertext before that
 commit, so its progress and the Catalog's state answer different questions.
 
 A **finding** is a report accompanying a run, distinct from an error that
-refuses the run. Findings have two lifetimes:
+refuses the run. One kind of run is refused whole by what its findings report
+instead: a `freeze` where a file it selects would make a path both a file and a
+folder packs and commits nothing, and still ends with the result done (below),
+its findings saying which files stand in the way (spec: EP-6). Findings have
+two lifetimes:
 
 | Kind | Examples | Reported again |
 | --- | --- | --- |
-| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused, a file awaiting relocation that could not be relocated | While a later run still observes the condition |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, a Keyring short of valid replicas (degraded where a loss is established), an edited departed file kept, a departed file whose discard into the desktop's trash was refused, a file awaiting relocation that could not be relocated, a file that would make a path both a file and a folder | While a later run still observes the condition |
 | This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint, a departed file discarded into the desktop's trash, a file relocated, a file that could not follow a rename discarded into the desktop's trash as it left this device, a redundant waiting copy discarded | As the result of that attempt; later attempts report their own results |
 
 A successful run with unresolved findings has completed its own work while
@@ -180,7 +184,8 @@ control for a sync, since a drop starts one.
   to add as a Pack, or from the explorer's "Pack this folder…" on a folder this
   device maps, once the person has seen its preview
 - preview (a freeze of a folder: count what it would select and what it would
-  leave out, by the freeze's own scan stopped before a file is read, changing
+  leave out, and name the files that would stand in the way of the whole run
+  (spec: EP-6), by the freeze's own scan stopped before a file is read, changing
   nothing; a deletion: count what would leave the Library, the Containers it
   would remove, the Packs it would rebuild with what rebuilding them reads and
   writes, by the deletion's own plan over the catalog as it stands, changing
@@ -561,15 +566,21 @@ control for a sync, since a drop starts one.
     removing already absent local leftovers is idempotent (spec: OC-2, OC-8).
   - A file whose addition would leave one path both a file and a folder — it
     stands under a path an Entry stands at, or Entries stand under its own
-    path — is left out of a sync or a freeze before anything is packed or
-    uploaded, and reported with the path and what to do: rename one of the
-    two. Where the folder is the one a top-level mapping of this device is
-    mapped at, the report says so, says that renaming that folder on disk
-    changes nothing, since the mapping's place in the Library is that name and
-    not its local folder's (spec: EP-9), and offers renaming the file. The
-    rest of the run carries on; a commit that would make such a path is
-    refused whole, so leaving the file out is how a person hears of it (spec:
-    EP-4, EP-6).
+    path — is found before anything is packed or uploaded, and reported with
+    the path and what to do: rename one of the two. Where the folder is the
+    one a top-level mapping of this device is mapped at, the report says so,
+    says that renaming that folder on disk changes nothing, since the
+    mapping's place in the Library is that name and not its local folder's
+    (spec: EP-9), and offers renaming the file. A commit that would make such
+    a path is refused whole, so finding the file first is how a person hears
+    of it (spec: EP-4, EP-6).
+    - A sync leaves the file out and carries the rest in.
+    - A freeze is refused whole: it packs and commits nothing, says that
+      nothing was frozen, and is asked for again once the names are changed.
+      Its Pack is one book, and a file left out of it could not be put into
+      it afterwards. A drop's reservation is kept through the refusal, so the
+      next freeze still packs that book, and a freeze's preview says the run
+      would be refused before anybody asks for it (spec: EP-6, PK-17).
 - A sync, a freeze and a deletion each own this device's pending work for the
   whole of a run, and a competing run is refused (spec: OC-2). Within one
   server the three take **turns** instead, and a move takes the same turn from

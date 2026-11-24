@@ -497,7 +497,7 @@ pub use coffret_usecase::filter::{
     FilterAsk, FilterRow, FilterRowKind, LibraryFilter, NameQuery, MOST_FILTER_ROWS,
 };
 pub use coffret_usecase::freeze::{
-    FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
+    FileAndFolder, FreezeError, FreezeOutcome, FreezePreview, Lapse, Lapsed, SourceChange,
 };
 pub use coffret_usecase::prune::{
     PruneError, PruneOutcome, PruneRefusal, UnremovedRecord, UnremovedReplica,

@@ -1,52 +1,46 @@
+use coffret_model::{ContainerId, EntryPath};
+
 use crate::device_state::Mapping;
 use crate::file_and_folder::{refuse_additions, Adding};
+use crate::freeze::file_and_folder::FileAndFolder;
 use crate::freeze::freeze_error::FreezeResult;
-use crate::freeze::not_frozen::NotFrozen;
-use crate::freeze::survey::Survey;
 use crate::index::Index;
 
-/// Leaves out of the selection every file whose addition would make one Entry
-/// Path both a file and a folder, and reports each (spec: EP-4, EP-6).
+/// Every file of a selection whose addition would make one Entry Path both a
+/// file and a folder, in Entry Path order (spec: EP-4, EP-6).
 ///
-/// A commit refuses such an addition, and a refused commit holds back the whole
-/// batch, so the run asks first, against the catalog it has caught up, with
-/// the one-file Containers the selection absorbs gone as the commit removes
-/// them, and the files held to the rule against one another in Entry Path
-/// order — the first of two that cannot both be added is the one kept.
-pub(super) async fn leave_out_files_and_folders(
+/// `selection` is each file a freeze would pack, with the one-file Container
+/// it absorbs, in Entry Path order. The rule is asked as the commit would ask
+/// it — against the catalog the caller has read, with those Containers gone as
+/// the commit removes them, and the files held to it against one another in
+/// Entry Path order, so that of two that cannot both be added the later is the
+/// one named. The run and the preview both ask it here, so the two cannot
+/// disagree about which files stand in the way.
+pub(super) async fn files_and_folders(
     index: &dyn Index,
-    survey: &mut Survey,
-) -> FreezeResult<()> {
-    let refusals = {
-        let adding: Vec<Adding<'_>> = survey
-            .selected
-            .iter()
-            .map(|selected| Adding {
-                path: &selected.source.path,
-                removes: selected.absorbs,
-            })
-            .collect();
-        refuse_additions(index, &adding, &[]).await?
-    };
+    selection: &[(&EntryPath, Option<ContainerId>)],
+) -> FreezeResult<Vec<FileAndFolder>> {
+    let adding: Vec<Adding<'_>> = selection
+        .iter()
+        .map(|&(path, removes)| Adding { path, removes })
+        .collect();
+    let refusals = refuse_additions(index, &adding, &[]).await?;
+    if refusals.iter().all(Option::is_none) {
+        return Ok(Vec::new());
+    }
     // Against every mapping this device records, available or not, as the
     // partition of the Library's namespace is read (spec: EP-9).
     let mappings = index.mappings().await?;
     let mapped = Mapping::represented_prefixes(&mappings);
-    let mut refusals = refusals.into_iter();
-    let mut surfaced = Vec::new();
-    survey
-        .selected
-        .retain(|selected| match refusals.next().flatten() {
-            None => true,
-            Some(both) => {
-                surfaced.push(NotFrozen::FileAndFolder {
-                    path: selected.source.path.clone(),
-                    mapped: mapped.contains(both.as_str()),
-                    both,
-                });
-                false
-            }
-        });
-    survey.surfaced.extend(surfaced);
-    Ok(())
+    Ok(selection
+        .iter()
+        .zip(refusals)
+        .filter_map(|(&(path, _), refusal)| {
+            refusal.map(|both| FileAndFolder {
+                path: path.clone(),
+                mapped: mapped.contains(both.as_str()),
+                both,
+            })
+        })
+        .collect())
 }

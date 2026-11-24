@@ -13,10 +13,10 @@ use serde_json::{json, Value};
 
 use coffret_device::{
     CommitError, ContainerId, EntryFetch, EntryFetchOutcome, EntryNumber, EntryPath, EntryRef,
-    Error, FetchError, FetchOutcome, Finding, FindingReason, Findings, FormatError, IndexError,
-    LocalIoError, LocalOperation, PendingChange, ProviderSettings, PruneError, PruneRefusal,
-    RebaseRule, RenameError, RenameRefusal, RenamedPath, ShortKeyring, StorageError, SyncError,
-    SyncOutcome,
+    Error, FetchError, FetchOutcome, FileAndFolder, Finding, FindingReason, Findings, FormatError,
+    FreezeOutcome, IndexError, LocalIoError, LocalOperation, PendingChange, ProviderSettings,
+    PruneError, PruneRefusal, RebaseRule, RenameError, RenameRefusal, RenamedPath, ShortKeyring,
+    StorageError, SyncError, SyncOutcome,
 };
 
 use super::*;
@@ -268,7 +268,7 @@ fn a_sync_answers_the_renames_it_detected() {
     );
 }
 
-// A file a sync or a freeze left out for making a path both a file and a
+// A file a sync left out for making a path both a file and a
 // folder is said with what helps (spec: EP-6). Where the folder is the one a
 // top-level mapping of this device is mapped at, renaming it on disk changes
 // nothing (spec: EP-9), so the answer says which folder it is and never offers
@@ -281,6 +281,7 @@ fn a_file_left_out_beside_a_mapped_folder_is_not_told_to_rename_the_folder() {
             reason: FindingReason::FileAndFolder {
                 both: path("notes"),
                 mapped,
+                froze_nothing: false,
             },
         }]);
         let ran = Ran::found(
@@ -327,6 +328,69 @@ fn a_file_left_out_beside_a_mapped_folder_is_not_told_to_rename_the_folder() {
         said(false),
         "surfaced notes/x.pdf: it was left out, because adding it would make \"notes\" both a \
          file and a folder; rename the file or the folder, then run again",
+    );
+}
+
+// A freeze any file of which would make a path both a file and a folder packs
+// nothing (spec: EP-6): its answer counts the files that stood in the way, and
+// each one's finding says that nothing was frozen, the path quoted, and what to
+// rename before freezing again. Beside a folder a top-level mapping of this
+// device is mapped at, that is the file (spec: EP-9).
+#[test]
+fn a_refused_freeze_answers_with_the_files_in_the_way() {
+    let outcome = FreezeOutcome {
+        packs: Vec::new(),
+        absorbed: Vec::new(),
+        packed_already: 0,
+        mappings: 2,
+        surfaced: Vec::new(),
+        refused: vec![FileAndFolder {
+            path: path("notes/x.pdf"),
+            both: path("notes"),
+            mapped: true,
+        }],
+        unavailable: Vec::new(),
+        settled: Vec::new(),
+        released: 0,
+        lapsed: Vec::new(),
+        commit: None,
+        short: None,
+    };
+    let findings = Findings::from(&outcome);
+    let ran = Ran::found(
+        crate::report::findings(&findings, Form::Json),
+        Answer::Frozen(Frozen::from(&outcome)),
+        &findings,
+    );
+
+    assert_eq!(
+        succeeded("freeze", &ran),
+        json!({
+            "version": 1,
+            "command": "freeze",
+            "exit_status": 2,
+            "log": LOG,
+            "answer": {
+                "packs": 0,
+                "entries": 0,
+                "absorbed": 0,
+                "packed_already": 0,
+                "committed_head": null,
+                "mappings": 2,
+                "refused": 1,
+            },
+            "error": null,
+            "findings": [{
+                "kind": "surfaced",
+                "needs_attention": true,
+                "said": "surfaced notes/x.pdf: nothing was frozen, because adding it would make \
+                         \"notes\" both a file and a folder, and the folder is the one this \
+                         device maps at \"notes\", so renaming that folder on disk changes \
+                         nothing; rename the file \"notes\", then freeze again",
+                "path": "notes/x.pdf",
+                "reason": "FileAndFolder",
+            }],
+        }),
     );
 }
 

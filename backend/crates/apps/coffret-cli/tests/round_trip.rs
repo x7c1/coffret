@@ -135,6 +135,7 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
             "packed_already": 0,
             "committed_head": synced_head + 1,
             "mappings": 1,
+            "refused": 0,
         }),
     );
 

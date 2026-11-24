@@ -49,9 +49,13 @@
 //!    opened, are both update-eligible and are reported in
 //!    [`FreezeOutcome::surfaced`] rather than passed over — silence there would
 //!    tell the user that stale or unrecoverable content is safely backed up.
-//!    A file whose addition would leave one Entry Path both a file and a folder
-//!    is left out of the selection and reported there too, since a commit
-//!    carrying it would be refused whole (spec: EP-4, EP-6).
+//!    And the selection is held to the rule that no Entry Path is both a file
+//!    and a folder (spec: EP-4, EP-6): where adding any selected file would make
+//!    one, the run is refused whole — nothing is packed, nothing is committed,
+//!    no reservation is decided — and every such file is reported in
+//!    [`FreezeOutcome::refused`]. A sync leaves such a file out and carries on;
+//!    a freeze cannot, because the Pack is one book, and a file left out of it
+//!    could not be put into it once it is committed.
 //! 5. **Segment** (spec: PK-3, PK-4, PK-5, PK-6). Sort the selection by Entry
 //!    Path and append the next Entry while the resulting pre-padding Container
 //!    footprint stays at or below the target, closing the current non-empty Pack
@@ -108,6 +112,8 @@
 //! of which the run considered is released by it — with the commit, where it packs
 //! any of them, or on its own with a [`Lapsed`] per path, where it packs none —
 //! so a book a stopped server left is packed by whichever freeze takes it up.
+//! A run refused because a file would make a path both a file and a folder
+//! releases none: the book is still the one the next run packs.
 //! A reservation whose drop has not finished receiving
 //! ([`Reservation::received`](crate::device_state::Reservation::received)) is
 //! a drop in progress, decided by no run and with none of its pages packed:
@@ -115,6 +121,9 @@
 //! it over, where it was cut off — is what decides it. One a drop in this
 //! process held live since the run read it is spared as well
 //! ([`LiveReservations`](crate::device_state::LiveReservations)).
+
+mod file_and_folder;
+pub use file_and_folder::FileAndFolder;
 
 mod freeze_error;
 pub use freeze_error::{FreezeError, FreezeResult, SourceChange};

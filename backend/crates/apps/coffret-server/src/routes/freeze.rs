@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::api_error::ApiError;
 use crate::entry_query::PathQuery;
+use crate::finding::file_and_folder;
 use crate::folder::Folder;
 use crate::freeze::{freeze_folder, packs_already, Book};
 use crate::state::ServerState;
@@ -71,6 +72,11 @@ pub async fn freeze(
 /// the same book the `POST` would arm — a kept selection included — so the two
 /// cannot disagree about which files are selected. They can disagree only
 /// where the folder or the catalog changes between the two calls.
+///
+/// Where any file it would pack would make a path both a file and a folder,
+/// the `POST` would pack nothing at all (spec: EP-6): the answer counts those
+/// files and names the first few, each with what to rename, so the explorer
+/// says so before anybody asks for a run that would be refused.
 ///
 /// It changes nothing. No Storage is reached, no key is used beyond holding the
 /// Library open, nothing is written on this device, and nothing is armed. It is
@@ -149,6 +155,12 @@ pub struct PreviewDto {
     /// reach right now — at most one, for a folder — under which nothing was
     /// counted, not even as not here (spec: EP-12).
     unavailable: usize,
+    /// How many of the files it would pack would each make a path both a file
+    /// and a folder, so that the `POST` would pack none of them (spec: EP-6).
+    file_and_folder: usize,
+    /// The first of those, at most [`IN_THE_WAY_NAMED`], in Entry Path order,
+    /// each with what to rename.
+    in_the_way: Vec<InTheWayDto>,
     /// Whether a freeze is already running, so this one would wait its turn.
     after_current: bool,
     /// Whether this folder is being packed already, so the `POST` would arm
@@ -156,6 +168,26 @@ pub struct PreviewDto {
     /// for, or the folder is waiting its turn (see
     /// [`packs_already`](crate::freeze::packs_already)).
     already_packing: bool,
+}
+
+/// How many of the files that refuse a freeze its preview names.
+///
+/// A count says how many there are; the names are what a person renames, and a
+/// handful is enough to start on. A clash with a mapped folder can stand in
+/// the way of every file under it, and listing a thousand of them would bury
+/// the one rename that clears them all.
+pub(crate) const IN_THE_WAY_NAMED: usize = 5;
+
+/// One file that would make a path both a file and a folder, as the preview
+/// names it (spec: EP-6).
+#[derive(Debug, Serialize)]
+struct InTheWayDto {
+    /// Where in the Library the file would stand.
+    path: String,
+    /// What it would make both, and what to rename — the remedy the Activity
+    /// panel gives a refused run, a folder a mapping stands at never offered
+    /// (spec: EP-9).
+    message: String,
 }
 
 impl PreviewDto {
@@ -176,6 +208,24 @@ impl PreviewDto {
             system_files: preview.system_files,
             system_folders: preview.system_folders,
             unavailable: preview.unavailable.len(),
+            file_and_folder: preview.refused.len(),
+            in_the_way: preview
+                .refused
+                .iter()
+                .take(IN_THE_WAY_NAMED)
+                // Ending as the Activity panel's line for the refused run
+                // does: the dialog that shows it offers only Close, so what
+                // the person does next is ask for the Pack again.
+                .map(|refused| InTheWayDto {
+                    path: refused.path.as_str().to_owned(),
+                    message: file_and_folder(
+                        "adding this file would make",
+                        &refused.both,
+                        refused.mapped,
+                        "pack again",
+                    ),
+                })
+                .collect(),
             after_current,
             already_packing,
         }

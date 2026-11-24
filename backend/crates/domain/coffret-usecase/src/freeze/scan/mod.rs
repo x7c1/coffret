@@ -22,7 +22,7 @@ mod examine;
 use examine::{examine, judge, Verdict};
 
 mod files_and_folders;
-use files_and_folders::leave_out_files_and_folders;
+use files_and_folders::files_and_folders;
 
 /// Which files one invocation considers: those under the prefix, and of those
 /// only the ones the selection names where there is one (spec: PK-17).
@@ -143,6 +143,7 @@ pub(super) async fn scan(
         refreshed: Vec::new(),
         unavailable: unavailable_roots(&walked),
         closing: Vec::new(),
+        refused: Vec::new(),
     };
     // `found` is keyed by Entry Path, so this walk is already the order
     // segmentation needs (spec: EP-3, PK-3).
@@ -166,21 +167,34 @@ pub(super) async fn scan(
         .await?;
     }
 
-    leave_out_files_and_folders(index, &mut survey).await?;
-
-    survey.closing = closing(
-        index,
-        Walk {
-            walked: &walked,
-            found: &found,
-            kinds: &kinds,
-        },
-        scope,
-        key_lost,
-        reserved,
-        &survey,
-    )
-    .await?;
+    // A commit refuses an addition that would make a path both a file and a
+    // folder, and a freeze is refused whole before it packs anything where
+    // one of its files would (spec: EP-6): the selection is dropped, and no
+    // reservation is decided, so a drop's book is still what the next run
+    // packs once the names are changed (spec: PK-17).
+    let selection: Vec<_> = survey
+        .selected
+        .iter()
+        .map(|selected| (&selected.source.path, selected.absorbs))
+        .collect();
+    survey.refused = files_and_folders(index, &selection).await?;
+    if survey.refused.is_empty() {
+        survey.closing = closing(
+            index,
+            Walk {
+                walked: &walked,
+                found: &found,
+                kinds: &kinds,
+            },
+            scope,
+            key_lost,
+            reserved,
+            &survey,
+        )
+        .await?;
+    } else {
+        survey.selected.clear();
+    }
 
     // Counts only: a prefix and a selection are Entry Paths and a local root is
     // a local path, and none of them may reach a diagnostic event.
@@ -193,6 +207,7 @@ pub(super) async fn scan(
         selected = survey.selected.len(),
         packed_already = survey.packed_already,
         surfaced = survey.surfaced.len(),
+        refused = survey.refused.len(),
         unavailable = survey.unavailable.len(),
         "scanned a folder for freezing",
     );
@@ -229,8 +244,12 @@ struct Walk<'a> {
 /// A decided reservation with any path selected is packed, and the commit
 /// releases it. One with none is released with a [`Lapsed`] per path saying
 /// why — save a path the scan has already surfaced, which has its finding
-/// (spec: PK-14, EP-6, PK-17). A path no mapping represents is ineligible
-/// rather than gone: nothing looked for it (spec: EP-9).
+/// (spec: PK-14, PK-17). A path no mapping represents is ineligible rather
+/// than gone: nothing looked for it (spec: EP-9).
+///
+/// Not asked at all of a run refused because a file it selects would make a
+/// path both a file and a folder (spec: EP-6): such a run decides no
+/// reservation, as any run that stops before deciding one (spec: PK-17).
 async fn closing(
     index: &dyn Index,
     walk: Walk<'_>,
@@ -248,9 +267,7 @@ async fn closing(
         .surfaced
         .iter()
         .map(|surfaced| match surfaced {
-            NotFrozen::ModifiedInPack { path, .. }
-            | NotFrozen::KeyLostInPack { path, .. }
-            | NotFrozen::FileAndFolder { path, .. } => path,
+            NotFrozen::ModifiedInPack { path, .. } | NotFrozen::KeyLostInPack { path, .. } => path,
         })
         .collect();
     let unwalked = |path: &EntryPath| {
@@ -459,14 +476,21 @@ pub(super) async fn preview(
         ..FreezePreview::default()
     };
     let nothing_lost = BTreeSet::new();
+    let mut selection = Vec::new();
     for source in found
         .values()
         .filter(|source| scope.covers(&source.path) && !waiting.contains(&source.path))
     {
         match judge(index, &kinds, &nothing_lost, source).await? {
-            Verdict::New | Verdict::Absorbs(_) => {
+            Verdict::New => {
                 preview.files += 1;
                 preview.bytes += source.size;
+                selection.push((&source.path, None));
+            }
+            Verdict::Absorbs(location) => {
+                preview.files += 1;
+                preview.bytes += source.size;
+                selection.push((&source.path, Some(location.container_id)));
             }
             Verdict::NotMaterialized => preview.not_here += 1,
             // Neither in the Library nor going into it: the sync is what says
@@ -479,6 +503,9 @@ pub(super) async fn preview(
             Verdict::InPackTouched(_) => preview.changed_in_pack += 1,
         }
     }
+    // The run's own question, over the run's own selection in the same order
+    // (spec: EP-6): a file it names refuses the whole freeze.
+    preview.refused = files_and_folders(index, &selection).await?;
     preview.not_here += index
         .entries_under(scope.prefix)
         .await?
@@ -513,6 +540,7 @@ pub(super) async fn preview(
         mappings,
         selection = scope.only.map(BTreeSet::len),
         selected = preview.files,
+        refused = preview.refused.len(),
         in_pack = preview.in_pack,
         changed_in_pack = preview.changed_in_pack,
         not_here = preview.not_here,

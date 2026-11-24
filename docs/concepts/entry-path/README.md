@@ -84,9 +84,10 @@ Entry and changes only its Entry Path (see
 - No Entry Path is both an Entry and a folder of Entries, since no device
   could materialize both. A commit is refused where an addition would make one
   — under a path an Entry stands at, or with Entries under it — as a rename is,
-  and a run leaves such a file out and reports it rather than carry it to that
-  refusal. A Library already holding such a pair keeps it, and an addition
-  beside it is refused like any other (spec: EP-4, EP-5, EP-6).
+  and a run reports such a file rather than carry it to that refusal: a sync
+  leaves it out, and a freeze packs nothing until it is renamed. A Library
+  already holding such a pair keeps it, and an addition beside it is refused
+  like any other (spec: EP-4, EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict, and so
   do two that would make one path a file and a folder (spec: EP-7, CP-7).
 - What an Entry Path's current content carries in time is its **deposit

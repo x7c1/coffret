@@ -73,6 +73,7 @@ export type {
   Freeze,
   FreezePreview,
   FreezeStatus,
+  InTheWay,
   LibraryState,
   NotStopped,
   PackRefusalReason,

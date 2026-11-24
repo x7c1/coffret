@@ -371,28 +371,54 @@ fn said(reason: &FindingReason) -> Cow<'static, str> {
                  packs"
             }
         },
+        // A sync left the file out and carried on; a freeze packed nothing,
+        // and is the one to ask for again once the names are changed
+        // (spec: EP-6). "Pack again" and not "pack the folder again": the
+        // sentence has just named a folder to rename, which is not the one
+        // that was being packed.
         FindingReason::FileAndFolder {
             both,
-            mapped: false,
+            mapped,
+            froze_nothing,
         } => {
-            return Cow::Owned(format!(
-                "this file was left out, because adding it would make {:?} both a file and a \
-                 folder; rename the file or the folder, then try again",
-                both.as_str()
-            ))
-        }
-        // Never "rename the folder", for the reason the terminal's sentence
-        // gives: the folder is the one a mapping stands for, and renaming it
-        // on disk leaves it at the name it was mapped at (spec: EP-9).
-        FindingReason::FileAndFolder { both, mapped: true } => {
-            return Cow::Owned(format!(
-                "this file was left out, because adding it would make {both:?} both a file and a \
-                 folder, and the folder is the one this device maps at {both:?}, so renaming that \
-                 folder on disk changes nothing; rename the file {both:?}, then try again",
-                both = both.as_str()
-            ))
+            let (opening, then) = if *froze_nothing {
+                (
+                    "nothing was packed, because adding this file would make",
+                    "pack again",
+                )
+            } else {
+                (
+                    "this file was left out, because adding it would make",
+                    "try again",
+                )
+            };
+            return Cow::Owned(file_and_folder(opening, both, *mapped, then));
         }
     })
+}
+
+/// What a person is told of a file that would make `both` both a file and a
+/// folder: `opening`, the path quoted, what to rename, and `then` (spec: EP-6).
+///
+/// One sentence for a sync's file left out, a freeze refused, and a freeze's
+/// preview, so the three cannot offer different remedies for one state. Never
+/// "rename the folder" where `mapped`, for the reason the terminal's sentence
+/// gives: the folder is the one a mapping stands for, and renaming it on disk
+/// leaves it at the name it was mapped at (spec: EP-9).
+pub(crate) fn file_and_folder(opening: &str, both: &EntryPath, mapped: bool, then: &str) -> String {
+    let both = both.as_str();
+    if mapped {
+        format!(
+            "{opening} {both:?} both a file and a folder, and the folder is the one this device \
+             maps at {both:?}, so renaming that folder on disk changes nothing; rename the file \
+             {both:?}, then {then}"
+        )
+    } else {
+        format!(
+            "{opening} {both:?} both a file and a folder; rename the file or the folder, then \
+             {then}"
+        )
+    }
 }
 
 /// What a person who meets a file left behind by a rename is told, naming what
@@ -484,8 +510,9 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
         // declined fetch names either.
         FindingReason::Renamed { .. } => ("surfaced", "Renamed"),
         FindingReason::RenameRefused { .. } => ("surfaced", "RenameRefused"),
-        // The one a sync or a freeze reports about a file it left out, which
-        // no declined fetch names either (spec: EP-4, EP-6).
+        // The one a sync reports about a file it left out, and a freeze about
+        // a file it packed nothing for, which no declined fetch names either
+        // (spec: EP-4, EP-6).
         FindingReason::FileAndFolder { .. } => ("surfaced", "FileAndFolder"),
         // The two about a file a drop reserved for a Pack: a sync leaving it
         // for its freeze, and a freeze finding it no longer one to pack
@@ -513,19 +540,48 @@ mod tests {
     const PREFIX: &str = "albums";
     const LOCAL_ROOT: &str = "/mnt/photos";
 
-    /// What the explorer is told of a file a run left out for making `both`
+    /// What the explorer is told of a file a sync left out for making `both`
     /// both a file and a folder, `mapped` saying whether a top-level mapping
     /// of this device is mapped at that name.
     fn left_out(path: &str, both: &str, mapped: bool) -> String {
+        said_of(path, both, mapped, false)
+    }
+
+    /// The same, of a freeze that packed nothing for it.
+    fn froze_nothing(path: &str, both: &str, mapped: bool) -> String {
+        said_of(path, both, mapped, true)
+    }
+
+    fn said_of(path: &str, both: &str, mapped: bool, froze_nothing: bool) -> String {
         Finding::of(&coffret_device::Finding::Surfaced {
             path: entry_path(path),
             reason: FindingReason::FileAndFolder {
                 both: entry_path(both),
                 mapped,
+                froze_nothing,
             },
         })
         .expect("a file left out is something to say")
         .message
+    }
+
+    // EP-6: a freeze is refused whole for such a file, so the Activity panel
+    // says that nothing was packed rather than that the file was left out, and
+    // says to pack again once the names are changed — with the remedy a
+    // sync's sentence gives, the mapped folder never offered.
+    #[test]
+    fn a_refused_freeze_says_nothing_was_packed_and_what_to_rename() {
+        assert_eq!(
+            froze_nothing("notes/g.jpg", "notes", true),
+            "nothing was packed, because adding this file would make \"notes\" both a file and \
+             a folder, and the folder is the one this device maps at \"notes\", so renaming \
+             that folder on disk changes nothing; rename the file \"notes\", then pack again",
+        );
+        assert_eq!(
+            froze_nothing("notes/g.jpg", "notes", false),
+            "nothing was packed, because adding this file would make \"notes\" both a file and \
+             a folder; rename the file or the folder, then pack again",
+        );
     }
 
     // Where the folder of the two is one a mapping stands for, renaming it on
@@ -890,6 +946,7 @@ mod tests {
                 FindingReason::RenameRefused { .. } => surfaced(FindingReason::FileAndFolder {
                     both: entry_path("albums"),
                     mapped: false,
+                    froze_nothing: false,
                 }),
                 FindingReason::FileAndFolder { .. } => surfaced(FindingReason::AwaitsPack),
                 FindingReason::AwaitsPack => {

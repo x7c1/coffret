@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use coffret_model::EntryPath;
 
+use crate::freeze::file_and_folder::FileAndFolder;
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::scan::{self, Scope};
 use crate::index::Index;
@@ -54,6 +55,15 @@ pub struct FreezePreview {
     /// vouch for — at most one, unless the folder is the Library root — under
     /// which nothing was counted, not even as not here (spec: EP-12).
     pub unavailable: Vec<UnavailableRoot>,
+    /// The files among the ones a freeze would pack whose addition would make
+    /// a path both a file and a folder, in Entry Path order — the ones the run
+    /// would name (spec: EP-6).
+    ///
+    /// Where there is any, the run is refused whole and packs none of
+    /// [`files`](Self::files): it is these that stand in the way, and renaming
+    /// them — or the folder each names, where no top-level mapping is mapped
+    /// at it — is what lets it run (spec: EP-6, EP-9).
+    pub refused: Vec<FileAndFolder>,
 }
 
 /// Counts what [`freeze_folder`](super::freeze_folder) would select under

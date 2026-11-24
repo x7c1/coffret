@@ -109,11 +109,32 @@ pub async fn run(args: FreezeArgs, form: Form) -> anyhow::Result<Ran> {
 /// the counts cannot say.
 fn summary(outcome: &FreezeOutcome) -> Vec<String> {
     let mut lines = vec![counts(outcome)];
+    lines.extend(refused(outcome));
     lines.extend(report::nothing_mapped(
         outcome.mappings,
         Unmapped::NothingToCarryIn,
     ));
     lines
+}
+
+/// What a run refused whole says beside its counts, and nothing where it was
+/// not refused (spec: EP-6).
+///
+/// The counts of such a run are those of a run with nothing to pack, and mean
+/// the opposite: there was something, and none of it was packed. So this says
+/// that nothing was frozen, why, and that the freeze is to be asked for again
+/// once the names are changed — each file, the path it would make both and
+/// what to rename are its finding's, printed below.
+fn refused(outcome: &FreezeOutcome) -> Option<String> {
+    let files = match outcome.refused.len() {
+        0 => return None,
+        1 => "1 file".to_owned(),
+        n => format!("{n} files"),
+    };
+    Some(format!(
+        "nothing was frozen: adding {files} would make a path both a file and a folder; \
+         rename as said below, then freeze again"
+    ))
 }
 
 /// The one line a person reads to know what the run did.
@@ -136,6 +157,8 @@ fn counts(outcome: &FreezeOutcome) -> String {
 mod tests {
     use clap::Parser;
 
+    use coffret_device::FileAndFolder;
+
     use super::*;
 
     /// A run that packed nothing, on a device holding `mappings` mappings.
@@ -149,6 +172,7 @@ mod tests {
             packed_already: 0,
             mappings,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             unavailable: Vec::new(),
             commit: None,
             short: None,
@@ -182,6 +206,39 @@ mod tests {
         assert!(
             said.contains("`coffret map`"),
             "and what leaves it: {said:?}",
+        );
+    }
+
+    // EP-6: a run refused whole has the counts of a run with nothing to pack,
+    // and means the opposite, so it says that nothing was frozen and to
+    // freeze again once the names are changed. What to rename is each file's
+    // finding's to say.
+    #[test]
+    fn a_refused_run_says_that_nothing_was_frozen() {
+        let refused = |files: &[&str]| FreezeOutcome {
+            refused: files
+                .iter()
+                .map(|file| FileAndFolder {
+                    path: EntryPath::parse(*file).expect("a valid Entry Path"),
+                    both: EntryPath::parse("notes").expect("a valid Entry Path"),
+                    mapped: true,
+                })
+                .collect(),
+            ..empty_run(2)
+        };
+
+        assert_eq!(
+            summary(&refused(&["notes/x.pdf"])),
+            [
+                "packs 0 holding 0 entries, absorbed 0, packed already 0, committed nothing",
+                "nothing was frozen: adding 1 file would make a path both a file and a folder; \
+                 rename as said below, then freeze again",
+            ],
+        );
+        assert_eq!(
+            summary(&refused(&["notes/x.pdf", "notes/y.pdf"]))[1],
+            "nothing was frozen: adding 2 files would make a path both a file and a folder; \
+             rename as said below, then freeze again",
         );
     }
 

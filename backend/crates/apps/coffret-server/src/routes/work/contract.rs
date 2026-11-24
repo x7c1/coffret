@@ -148,6 +148,7 @@ fn every_finding() -> Vec<Finding> {
             reason: FindingReason::FileAndFolder {
                 both: entry_path("notes"),
                 mapped: false,
+                froze_nothing: false,
             },
         },
         Found::Surfaced {

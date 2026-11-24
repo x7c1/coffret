@@ -12,7 +12,10 @@ import { COLOR } from './theme';
  *
  * Where nothing would be packed it says so and why — the folder being packed
  * already among the reasons — and offers only Close: there is nothing for
- * Pack to do. Where another freeze is running it says this one waits for it.
+ * Pack to do. So it does where a file it would pack would make a path both a
+ * file and a folder, which refuses the whole freeze: it names each such file
+ * with what to rename (spec: EP-6). Where another freeze is running it says
+ * this one waits for it.
  *
  * Escape and a click outside it are Cancel, as they close any dialog — and
  * Cancel costs nothing, because nothing has been armed.
@@ -47,6 +50,16 @@ export function PackFolderConfirm({
       }
     >
       <p style={LINE}>{question.line}</p>
+      {question.inTheWay.length > 0 && (
+        <Note tone="warn">
+          <span style={{ fontSize: 12 }}>In the way</span>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {question.inTheWay.map((file) => (
+              <li key={file}>{file}</li>
+            ))}
+          </ul>
+        </Note>
+      )}
       {question.leftOut.length > 0 && (
         <Note tone="plain">
           <span style={{ color: COLOR.dim, fontSize: 12 }}>Left as they are</span>

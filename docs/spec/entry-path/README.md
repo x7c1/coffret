@@ -103,11 +103,22 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - A writer asks the rule of the files it is about to add before it packs or
     uploads any of them, against the catalog it has caught up and with its
     batch's removals and renames applied, holding its own files to it against
-    each other in Entry Path order. A file the rule refuses is left out and
-    reported — the file, the path that would be both a file and a folder, and
-    that renaming one of the two is what to do — and the rest of the run
-    carries on, so a refused commit is the backstop and not the way a person
-    learns of it.
+    each other in Entry Path order, so a refused commit is the backstop and
+    not the way a person learns of it. It reports each file the rule refuses:
+    the file, the path that would be both a file and a folder, and what to
+    do. That is renaming one of the two, except where the folder is the one a
+    top-level mapping of the device is mapped at (EP-9): that folder's place
+    in the Library is the name it was mapped at, renaming it on disk changes
+    nothing, and renaming the file is what to do.
+  - What the writer does about such a file differs by writer. A sync leaves
+    the file out and carries the rest in. A `freeze` is refused whole: it
+    packs, uploads and commits nothing, and says that nothing was frozen and
+    that it can be asked for again once the names are changed. A Pack is one
+    book, and a file left out of it could not be put into it once it is
+    committed — only beside it, as an Entry of its own, or by deleting the
+    Pack and freezing again (PK-1, PK-17). A `freeze`'s preview asks the
+    same question of the same files, and says the run would be refused,
+    naming the files that stand in the way.
 - **EP-7.** A writer that loses the Journal commit race rebases onto the new
   head and repeats the same uniqueness check, so two concurrent writes to one
   Entry Path become an explicit conflict rather than last-write-wins (CP-7).

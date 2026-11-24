@@ -374,9 +374,10 @@ export type SurfacedFinding =
   /**
    * Adding the file would make one path both a file and a folder — it stands
    * under a path an Entry stands at, or Entries stand under its own path — so
-   * the sync or the freeze left it out and carried on with the rest (spec:
-   * EP-4, EP-6). Nothing of it was uploaded; renaming the file, or a folder
-   * no mapping of this device is mapped at, is what stops the report.
+   * the sync left it out and carried on with the rest, or the freeze packed
+   * nothing at all (spec: EP-4, EP-6). Nothing of it was uploaded; renaming
+   * the file, or a folder no mapping of this device is mapped at, is what
+   * stops the report.
    */
   | 'FileAndFolder'
   /**
