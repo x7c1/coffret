@@ -313,7 +313,7 @@ async fn throughout(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String,
 }
 
 // EP-10, LA-44: a folder is here whole only where every Entry at every depth below it
-// has a present record — the promise that the whole book, or the whole series,
+// is present on this device — the promise that the whole book, or the whole series,
 // reads without Storage. One file anywhere below that this device does not
 // have, however deep, takes the promise back.
 #[tokio::test]
@@ -328,7 +328,8 @@ async fn a_folder_is_present_throughout_only_where_every_file_below_it_is() {
             // One file missing two levels down.
             "books/deep/page-1.png",
             "books/deep/vol-2/page-1.png",
-            // A file whose fetch failed: it left no present record.
+            // A file whose fetch failed: it left no materialization record
+            // that says present.
             "books/failed/page-1.png",
             "books/failed/page-2.png",
             // A file that was here and that this device witnessed go.
@@ -398,10 +399,9 @@ async fn counted(library: &OpenLibrary, folder: Option<&str>) -> Vec<(String, u6
 }
 
 // EP-10, LA-44: a folder counts every Entry at every depth below it, and those
-// this device has a present record for — "18 of 196 files" — out of the same
-// read that answers whether all of them are here. A file one level down and a file
-// three levels down count alike, and a file that left this device does not
-// count as here.
+// present on this device — "18 of 196 files" — out of the same read that answers
+// whether all of them are here. A file one level down and a file three levels down
+// count alike, and a file that left this device does not count as here.
 #[tokio::test]
 async fn a_folder_counts_the_files_below_it_and_those_here_at_every_depth() {
     let library = library(&[(

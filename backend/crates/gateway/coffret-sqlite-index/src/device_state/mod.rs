@@ -41,8 +41,8 @@ mod tests {
     use super::local_entries::ANY_REMOTE_IN;
     use crate::query::plan;
 
-    // LA-48: whether a page's folder is wholly here is a test for one Entry
-    // of the folder, through the index on its parent, against its present
+    // LA-48: whether a page's folder is wholly here is a test for one Entry of
+    // the folder, through the index on its parent, against its materialization
     // record on the primary key; and the parcels held of the Container a page
     // is read from are its own rows on the primary key. Neither scans a table.
     #[test]

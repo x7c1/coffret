@@ -354,8 +354,9 @@ pub trait Index: Send + Sync {
     /// What the whole Library comes to: its Entries, how many of them this
     /// device has, their sizes and newest `mtime`, and its current Containers.
     ///
-    /// The default reads every Entry, present record and Container, which an
-    /// adapter keeping the figures apart answers without (spec: LA-45).
+    /// The default reads every Entry, every materialization record that says
+    /// present and every Container, which an adapter keeping the figures apart
+    /// answers without (spec: LA-45).
     async fn library_summary(&self) -> IndexResult<LibrarySummary> {
         derive_library_summary(self).await
     }
@@ -497,8 +498,9 @@ pub trait Index: Send + Sync {
     ///
     /// The remainder a Library-root mapping represents once other mappings
     /// stand for those folders (spec: EP-9), which a scan reads its records off
-    /// (spec: EP-10). The default reads every present record and drops the
-    /// excluded ones; an adapter able to skip a subtree overrides it.
+    /// (spec: EP-10). The default reads every materialization record that says
+    /// present and drops the excluded ones; an adapter able to skip a subtree
+    /// overrides it.
     async fn present_outside(&self, excluded: &BTreeSet<&str>) -> IndexResult<Vec<LocalEntry>> {
         let mut present = self.present_under(None).await?;
         present.retain(|local| !excluded.contains(local.observation.path.top_level()));
@@ -536,8 +538,8 @@ pub trait Index: Send + Sync {
 
     /// Whether any current Entry standing directly in `folder` — `None` is
     /// the Library root — is remote: one this device does not have on disk, by
-    /// the same present record [`folder_contents`](Self::folder_contents) says it
-    /// has one by (spec: EP-10).
+    /// the same materialization record [`folder_contents`](Self::folder_contents)
+    /// says it has one by (spec: EP-10).
     ///
     /// What a page opened from disk asks before anything is brought over
     /// around it: whether its folder is whole here. The first Entry not here

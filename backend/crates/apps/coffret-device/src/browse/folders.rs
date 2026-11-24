@@ -5,7 +5,8 @@ use crate::error::Result;
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
-    /// Every folder in the Library, in EP-3 order.
+    /// Every folder in the Library, in EP-3 order: what `GET /api/folders`
+    /// answers (spec: LA-47).
     ///
     /// Flat and complete: each folder is named by its whole path, and a folder
     /// implied by an Entry Path several components deep contributes every

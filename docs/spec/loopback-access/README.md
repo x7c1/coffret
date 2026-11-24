@@ -241,9 +241,12 @@ Concept background: [Library](../../concepts/library/),
     the whole of a run (OC-2), and a move (LA-31) takes the same turn from its
     catch-up to its last relocation. Within one server they take **turns** at it
     rather than refusing each other: a run armed while another holds the turn
-    waits, and the turns go in the order the runs ask for them. What the server
-    holds of its running work names the run holding the turn and the runs
-    waiting for it, and a waiting run is reported as waiting for the holder.
+    waits, and the turns go in the order the runs ask for them. Deletions go
+    one at a time: one asked for while another is running or waiting waits
+    behind it, and one naming exactly what is already running or waiting is
+    not queued again. What the server holds of its running work names the run
+    holding the turn and the runs waiting for it, and a waiting run is reported
+    as waiting for the holder.
     Across processes there is no queue: of a server's run and a sync or a
     freeze from the command line, whichever comes second is refused at once,
     changing nothing — a server's run as a `conflict` — and goes through when
@@ -685,8 +688,8 @@ Concept background: [Library](../../concepts/library/),
   *(Form: test)*
 - **LA-48.** What the server reads of the Index to read on and to read a file
   does not grow with the Library, nor with the folders the reader passes,
-  beyond what each read touches; no read covers the Entries, the present
-  records or the Containers of the Library or of a subtree:
+  beyond what each read touches; no read covers the Entries, the
+  materialization records or the Containers of the Library or of a subtree:
   - the files beside a row (`GET /api/beside`, LA-32) are found from the
     folder the row stands in up towards `under` or the root, by the nearest
     child folder or Entry of each folder on the side looked at, and then down
@@ -981,12 +984,12 @@ Concept background: [Library](../../concepts/library/),
   (`GET /api/folders`, LA-47) does not grow with the Entries below the folder
   beyond what the answer itself holds: each row it answers with is found by key, at
   a cost of the rows answered times the logarithm of the Entries the Library
-  holds, and no read covers the Entries, the present records or the
+  holds, and no read covers the Entries, the materialization records or the
   Containers of a subtree. What a folder's child folders and the Library come
   to is kept for each folder beside the catalog, on this device alone — no
   Index Snapshot carries it and nothing of it reaches Storage (CK-7) — and is
-  brought up to date by every write of the Entries or of the present records,
-  in the same transaction. Two reads beside these are not by key, and a
+  brought up to date by every write of the Entries or of the materialization
+  records, in the same transaction. Two reads beside these are not by key, and a
   folder's listing makes both. It reads every mapping this device holds, to
   say which rows are `mapped` and to find the folder on disk: at most one for
   the Library root and one for each top-level component (EP-9), so they do
@@ -995,10 +998,10 @@ Concept background: [Library](../../concepts/library/),
   reservation is a drop that asked for a Pack and that no `freeze` has
   decided yet (PK-17), so what that read covers is the files of the drops in
   flight on this device, which do not grow with the Library. *(Form: test for
-  the reads of the Entries, the present records, the Containers and the kept
-  totals; prose for what bounds the mappings and the reservations, which is
-  what a mapping and a reservation are rather than anything a read of the
-  Index can observe, honored by construction.)*
+  the reads of the Entries, the materialization records, the Containers and
+  the kept totals; prose for what bounds the mappings and the reservations,
+  which is what a mapping and a reservation are rather than anything a read
+  of the Index can observe, honored by construction.)*
 
 ### What the Library comes to
 

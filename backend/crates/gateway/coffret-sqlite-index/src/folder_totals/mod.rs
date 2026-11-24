@@ -10,10 +10,10 @@
 //! Containers.
 //!
 //! Both are a derivation of this file's own rows — the catalog's Entries and
-//! this device's records of what it has — and so neither is carried by an
-//! Index Snapshot nor reaches Storage (spec: CK-7). They are kept up to date by
-//! the writes themselves rather than by triggers: every operation that changes
-//! the Entries or the present records hands [`recount`] the Entry Paths it
+//! this device's records of what it has — and so neither is carried by an Index
+//! Snapshot nor reaches Storage (spec: CK-7). They are kept up to date by the
+//! writes themselves rather than by triggers: every operation that changes the
+//! Entries or the materialization records hands [`recount`] the Entry Paths it
 //! touched, in the same transaction as its writes, and a restore, which
 //! replaces the whole catalog, has [`rebuild`] lay the figures out afresh.
 //!
@@ -158,9 +158,9 @@ mod tests {
 
     // LA-45: what a listing, the Library's totals and the list of folders read
     // is the folder's own rows, each found through an index, and never a scan
-    // of the Entries, the present records or the Containers; nor a sort, since
-    // each index already holds its rows in EP-3 order. A write's recount of
-    // one folder reads its own rows the same way.
+    // of the Entries, the materialization records or the Containers; nor a
+    // sort, since each index already holds its rows in EP-3 order. A write's
+    // recount of one folder reads its own rows the same way.
     #[test]
     fn a_folder_is_read_by_its_own_rows_and_never_by_a_scan() {
         let mut connection = Connection::open_in_memory().expect("an in-memory database opens");

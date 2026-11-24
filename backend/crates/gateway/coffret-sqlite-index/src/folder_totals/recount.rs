@@ -26,7 +26,8 @@ pub(super) const COUNT_CHILD_FOLDERS: &str = "SELECT ifnull(sum(files_total), 0)
      FROM folder_totals WHERE parent = ?1";
 
 /// Recounts every folder above each of `paths`, deepest first, after a write
-/// that may have changed the Entry or the present record at each of them.
+/// that may have changed the Entry or the materialization record at each of
+/// them.
 ///
 /// A folder whose last Entry has gone loses its row: a folder exists exactly
 /// where a current Entry stands under it (spec: EP-2).
