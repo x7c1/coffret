@@ -15,6 +15,10 @@ pub struct Frozen {
     packed_already: usize,
     committed_head: Option<u64>,
     mappings: usize,
+    /// How many files would each have made a path both a file and a folder,
+    /// for which the run packed and committed nothing; `0` where it was not
+    /// refused (spec: EP-6).
+    refused: usize,
 }
 
 impl From<&FreezeOutcome> for Frozen {
@@ -26,6 +30,7 @@ impl From<&FreezeOutcome> for Frozen {
             packed_already: outcome.packed_already,
             committed_head: committed_head(outcome.commit.as_ref()),
             mappings: outcome.mappings,
+            refused: outcome.refused.len(),
         }
     }
 }

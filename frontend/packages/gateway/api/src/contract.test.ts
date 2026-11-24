@@ -1217,6 +1217,8 @@ it('reads every other answer the server sends through its type', () => {
       'system_files',
       'system_folders',
       'unavailable',
+      'file_and_folder',
+      'in_the_way',
       'after_current',
       'already_packing',
     ]);
@@ -1231,6 +1233,14 @@ it('reads every other answer the server sends through its type', () => {
       system_files: number(fields.system_files, 'freeze_preview.system_files'),
       system_folders: number(fields.system_folders, 'freeze_preview.system_folders'),
       unavailable: number(fields.unavailable, 'freeze_preview.unavailable'),
+      file_and_folder: number(fields.file_and_folder, 'freeze_preview.file_and_folder'),
+      in_the_way: list(fields.in_the_way, 'freeze_preview.in_the_way', (item, where) => {
+        const one = object(item, where, ['path', 'message']);
+        return {
+          path: string(one.path, `${where}.path`),
+          message: string(one.message, `${where}.message`),
+        };
+      }),
       after_current: boolean(fields.after_current, 'freeze_preview.after_current'),
       already_packing: boolean(fields.already_packing, 'freeze_preview.already_packing'),
     };

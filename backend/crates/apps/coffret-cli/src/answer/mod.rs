@@ -174,7 +174,10 @@ answer, per command:
                  as renames of their Entries, each also a \"Renamed\"
                  finding), unchanged, committed_head, mappings
   freeze         packs, entries, absorbed, packed_already, committed_head,
-                 mappings
+                 mappings, refused (how many files would each make a path
+                 both a file and a folder, each also a \"FileAndFolder\"
+                 finding: where it is not 0, nothing was packed or
+                 committed)
   fetch          fetched, containers, skipped, mappings; with --entry,
                  entry (\"placed\", \"already_present\" or \"surfaced\"),
                  fetched, skipped and alongside (the other files the

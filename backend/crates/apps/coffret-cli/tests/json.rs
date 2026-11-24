@@ -479,6 +479,7 @@ fn freeze_answers_its_counts() {
                 "packed_already": 0,
                 "committed_head": null,
                 "mappings": 0,
+                "refused": 0,
             },
             "error": null,
             "findings": [],

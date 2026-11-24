@@ -1087,6 +1087,14 @@ export interface FreezePreview {
    * right now, under which nothing was counted, not even as not here.
    */
   unavailable: number;
+  /**
+   * How many of the files it would pack would each make a path both a file
+   * and a folder. Where any would, a freeze of the folder packs nothing at
+   * all, and {@link startFreeze} is not to be offered until the names change.
+   */
+  file_and_folder: number;
+  /** The first few of those, in path order, each with what to rename. */
+  in_the_way: InTheWay[];
   /** Whether a freeze is already running, so this one would wait its turn. */
   after_current: boolean;
   /**
@@ -1095,6 +1103,21 @@ export interface FreezePreview {
    * it now would start no run of its own.
    */
   already_packing: boolean;
+}
+
+/**
+ * A file that would make a path both a file and a folder, as a freeze's
+ * preview names it.
+ */
+export interface InTheWay {
+  /** Where in the Library the file would stand. */
+  path: string;
+  /**
+   * The server's sentence: the path it would make both, quoted, and what to
+   * rename — never a folder a mapping stands at, which renaming on disk would
+   * not change.
+   */
+  message: string;
 }
 
 /**

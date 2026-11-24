@@ -17,11 +17,19 @@ function preview(over: Partial<FreezePreview> = {}): FreezePreview {
     system_files: 0,
     system_folders: 0,
     unavailable: 0,
+    file_and_folder: 0,
+    in_the_way: [],
     after_current: false,
     already_packing: false,
     ...over,
   };
 }
+
+/** The server's sentence for a file beside a folder a mapping stands at. */
+const MAPPED_CLASH =
+  'adding this file would make "notes" both a file and a folder, and the folder is the ' +
+  'one this device maps at "notes", so renaming that folder on disk changes nothing; ' +
+  'rename the file "notes", then pack again';
 
 describe('packOffered', () => {
   // EP-9: an unmapped folder has no file here for a freeze to read. And the
@@ -39,8 +47,49 @@ describe('questionOf', () => {
     expect(question.title).toBe('Pack “BookX”?');
     expect(question.line).toBe('80 files, 58.0 MB will be packed');
     expect(question.packs).toBe(true);
+    expect(question.inTheWay).toEqual([]);
     expect(question.leftOut).toEqual([]);
     expect(question.waits).toBeNull();
+  });
+
+  // EP-6: a freeze any file of which would make a path both a file and a
+  // folder packs nothing at all, so the question says the folder cannot be
+  // packed, names each file with what to rename, and offers no Pack.
+  it('says a folder whose freeze would be refused cannot be packed, and why', () => {
+    const question = questionOf(
+      preview({
+        file_and_folder: 1,
+        in_the_way: [{ path: 'notes/x.pdf', message: MAPPED_CLASH }],
+        in_pack: 2,
+      }),
+    );
+    expect(question.packs).toBe(false);
+    expect(question.line).toBe(
+      'Can’t pack this folder: 1 file would make a path both a file and a folder, so nothing ' +
+        'would be packed.',
+    );
+    expect(question.inTheWay).toEqual([`notes/x.pdf — ${MAPPED_CLASH}`]);
+    expect(question.leftOut).toEqual([]);
+    expect(question.waits).toBeNull();
+  });
+
+  // The server names the first few; the rest are counted, not dropped.
+  it('counts the files in the way it was not told the names of', () => {
+    const question = questionOf(
+      preview({
+        file_and_folder: 7,
+        in_the_way: [
+          { path: 'books/a', message: 'first' },
+          { path: 'books/b', message: 'second' },
+        ],
+      }),
+    );
+    expect(question.line).toContain('7 files would each make a path both a file and a folder');
+    expect(question.inTheWay).toEqual([
+      'books/a — first',
+      'books/b — second',
+      'and 5 files more like them',
+    ]);
   });
 
   // A count smaller than the folder is not a surprise when the rest is named.
@@ -151,6 +200,22 @@ describe('askToPack', () => {
   it('arms nothing for a folder with nothing to pack', async () => {
     const { given, asked, start } = packing(true, {
       preview: () => Promise.resolve(preview({ files: 0, bytes: 0, in_pack: 80 })),
+    });
+    expect(await askToPack(given)).toBe('cancelled');
+    expect(asked[0].packs).toBe(false);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  // EP-6: the run would be refused whole, so the press arms nothing.
+  it('arms nothing for a folder whose freeze would be refused', async () => {
+    const { given, asked, start } = packing(true, {
+      preview: () =>
+        Promise.resolve(
+          preview({
+            file_and_folder: 1,
+            in_the_way: [{ path: 'notes/x.pdf', message: MAPPED_CLASH }],
+          }),
+        ),
     });
     expect(await askToPack(given)).toBe('cancelled');
     expect(asked[0].packs).toBe(false);

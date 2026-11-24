@@ -1,4 +1,5 @@
 use crate::device_state::{LocalObservation, ReservationId};
+use crate::freeze::file_and_folder::FileAndFolder;
 use crate::freeze::lapsed::Lapsed;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::freeze::selected::Selected;
@@ -28,7 +29,15 @@ pub(super) struct Survey {
     pub(super) refreshed: Vec<LocalObservation>,
     /// The reservations this run decided every path of, in the order they
     /// were made (spec: PK-17).
+    ///
+    /// Empty where the run is refused: it decides none (spec: PK-17).
     pub(super) closing: Vec<Closing>,
+    /// The files that refuse the whole run, because adding each would make a
+    /// path both a file and a folder, in Entry Path order (spec: EP-6).
+    ///
+    /// Where there is any, [`selected`](Self::selected) is empty: the run
+    /// packs nothing and commits nothing.
+    pub(super) refused: Vec<FileAndFolder>,
 }
 
 /// What a run makes of one reservation all of whose paths it considered

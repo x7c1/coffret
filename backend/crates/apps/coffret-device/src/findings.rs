@@ -3,7 +3,7 @@ use std::error;
 use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, ShortKeyring};
 use coffret_usecase::delete::DeleteOutcome;
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
-use coffret_usecase::freeze::{FreezeOutcome, Lapsed, NotFrozen};
+use coffret_usecase::freeze::{FileAndFolder, FreezeOutcome, Lapsed, NotFrozen};
 use coffret_usecase::rename::{RenameOutcome, RenamedPath};
 use coffret_usecase::repack::RepackOutcome;
 use coffret_usecase::sync::{RetainedKeyringReplicas, Surfaced, SyncOutcome};
@@ -113,14 +113,20 @@ impl From<&FreezeOutcome> for Findings {
                 path: path.clone(),
                 reason: FindingReason::KeyLost,
             },
-            NotFrozen::FileAndFolder { path, both, mapped } => Finding::Surfaced {
+        });
+        // First, because they are the reason the run packed nothing, and
+        // each one says so (spec: EP-6).
+        let refused = outcome
+            .refused
+            .iter()
+            .map(|FileAndFolder { path, both, mapped }| Finding::Surfaced {
                 path: path.clone(),
                 reason: FindingReason::FileAndFolder {
                     both: both.clone(),
                     mapped: *mapped,
+                    froze_nothing: true,
                 },
-            },
-        });
+            });
 
         let lapsed = outcome
             .lapsed
@@ -132,7 +138,8 @@ impl From<&FreezeOutcome> for Findings {
         let settled = outcome.settled.iter().cloned().map(Finding::Settled);
 
         Self(
-            surfaced
+            refused
+                .chain(surfaced)
                 .chain(lapsed)
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
@@ -315,6 +322,7 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
             FindingReason::FileAndFolder {
                 both: both.clone(),
                 mapped: *mapped,
+                froze_nothing: false,
             },
         ),
     };
@@ -660,11 +668,13 @@ mod tests {
         );
     }
 
-    // EP-6 and EP-9: a file a sync or a freeze left out for making a path both
-    // a file and a folder is said with that path and what helps. Where the
-    // folder is one a top-level mapping of this device is mapped at, renaming
-    // it on disk would change nothing, so the sentence says which folder it is
-    // and never offers that; anywhere else it offers renaming either.
+    // EP-6 and EP-9: a file a sync left out, or a freeze was refused whole
+    // for, for making a path both a file and a folder is said with that path
+    // and what helps. Where the folder is one a top-level mapping of this
+    // device is mapped at, renaming it on disk would change nothing, so the
+    // sentence says which folder it is and never offers that; anywhere else it
+    // offers renaming either. A sync's says the file was left out; a freeze's
+    // says nothing was frozen, and to freeze again once the name is changed.
     #[test]
     fn a_file_left_out_says_what_helps_whether_or_not_the_folder_is_mapped() {
         let sync = |surfaced| SyncOutcome {
@@ -681,7 +691,7 @@ mod tests {
             commit: None,
             retained_keyrings: Vec::new(),
         };
-        let freeze = |surfaced| FreezeOutcome {
+        let freeze = |refused| FreezeOutcome {
             settled: Vec::new(),
             released: 0,
             lapsed: Vec::new(),
@@ -689,7 +699,8 @@ mod tests {
             absorbed: Vec::new(),
             packed_already: 0,
             mappings: 2,
-            surfaced,
+            surfaced: Vec::new(),
+            refused,
             unavailable: Vec::new(),
             commit: None,
             short: None,
@@ -714,12 +725,12 @@ mod tests {
         };
         let frozen = |mapped| {
             said(Findings::from(&freeze(vec![
-                NotFrozen::FileAndFolder {
+                FileAndFolder {
                     path: entry_path("notes"),
                     both: entry_path("notes"),
                     mapped,
                 },
-                NotFrozen::FileAndFolder {
+                FileAndFolder {
                     path: entry_path("notes/x.pdf"),
                     both: entry_path("notes"),
                     mapped,
@@ -737,9 +748,19 @@ mod tests {
              \"notes\", so renaming that folder on disk changes nothing; rename the file \
              \"notes\", then run again",
         ];
+        let refused_beside_mapped = [
+            "surfaced notes: nothing was frozen, because adding it would make \"notes\" both a \
+             file and a folder, and the folder is the one this device maps at \"notes\", so \
+             renaming that folder on disk changes nothing; rename the file \"notes\", then \
+             freeze again",
+            "surfaced notes/x.pdf: nothing was frozen, because adding it would make \"notes\" \
+             both a file and a folder, and the folder is the one this device maps at \
+             \"notes\", so renaming that folder on disk changes nothing; rename the file \
+             \"notes\", then freeze again",
+        ];
         assert_eq!(synced(true), beside_mapped);
-        assert_eq!(frozen(true), beside_mapped);
-        for line in beside_mapped {
+        assert_eq!(frozen(true), refused_beside_mapped);
+        for line in beside_mapped.iter().chain(&refused_beside_mapped) {
             for never in ["rename the file or the folder", "another name"] {
                 assert!(
                     !line.contains(never),
@@ -756,7 +777,16 @@ mod tests {
              both a file and a folder; rename the file or the folder, then run again",
         ];
         assert_eq!(synced(false), beside_ordinary);
-        assert_eq!(frozen(false), beside_ordinary);
+        assert_eq!(
+            frozen(false),
+            [
+                "surfaced notes: nothing was frozen, because adding it would make \"notes\" \
+                 both a file and a folder; rename the file or the folder, then freeze again",
+                "surfaced notes/x.pdf: nothing was frozen, because adding it would make \
+                 \"notes\" both a file and a folder; rename the file or the folder, then \
+                 freeze again",
+            ],
+        );
     }
 
     // EP-15's discarded copy is said as what was done, and still
@@ -1135,6 +1165,7 @@ mod tests {
             packed_already: 0,
             mappings: 1,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             unavailable: Vec::new(),
             commit: Some(unfinished_commit(container_id)),
             short: None,
@@ -1173,6 +1204,7 @@ mod tests {
             packed_already: 0,
             mappings: 1,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             unavailable: Vec::new(),
             commit: None,
             short: None,
@@ -1417,6 +1449,7 @@ mod tests {
             packed_already: 2,
             mappings: 1,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             unavailable: Vec::new(),
             commit: None,
             short: Some(short_keyring(1, 0)),
@@ -1525,6 +1558,7 @@ mod tests {
             packed_already: 0,
             mappings: 1,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             unavailable: Vec::new(),
             commit: Some(repaired()),
             short: None,

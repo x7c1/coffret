@@ -1,6 +1,7 @@
 use coffret_model::ContainerId;
 
 use crate::commit::{CommitOutcome, ShortKeyring};
+use crate::freeze::file_and_folder::FileAndFolder;
 use crate::freeze::frozen_pack::FrozenPack;
 use crate::freeze::lapsed::Lapsed;
 use crate::freeze::not_frozen::NotFrozen;
@@ -56,6 +57,16 @@ pub struct FreezeOutcome {
     pub mappings: usize,
     /// What the run found and could not absorb (spec: PK-14).
     pub surfaced: Vec<NotFrozen>,
+    /// The files that refused the whole run, each because adding it would
+    /// make a path both a file and a folder, in Entry Path order (spec: EP-6).
+    ///
+    /// Where there is any, the run packed nothing and committed nothing:
+    /// [`packs`](Self::packs) and [`absorbed`](Self::absorbed) are empty,
+    /// [`commit`](Self::commit) is `None`, and no reservation was released
+    /// (spec: PK-17); [`FileAndFolder`] says why. Read the way
+    /// [`surfaced`](Self::surfaced) is: a person is owed the news that nothing
+    /// was frozen, which file stands in the way, and what to rename.
+    pub refused: Vec<FileAndFolder>,
     /// The mappings whose local roots the device could not vouch for
     /// (spec: EP-12).
     ///

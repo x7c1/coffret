@@ -556,6 +556,8 @@ async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
             "system_files": 1,
             "system_folders": 1,
             "unavailable": 0,
+            "file_and_folder": 0,
+            "in_the_way": [],
             "after_current": false,
             "already_packing": false,
         }),
@@ -592,6 +594,53 @@ async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
     assert_eq!(
         containers(rows_of(&served, "scans/deep").await),
         ["new.jpg present pack"],
+    );
+}
+
+// EP-6: where a file the freeze would pack would make a path both a file and
+// a folder, the preview says so, naming the file and what to rename, and the
+// freeze then asked for anyway packs nothing and says the same in the Activity
+// panel. `scans/notes` is an Entry another device committed, and a file this
+// device has under a folder of that name would make it both.
+#[tokio::test]
+async fn the_preview_names_what_would_refuse_the_freeze_and_the_run_refuses_it() {
+    let served = Served::library().await;
+    served
+        .commit_elsewhere("scans/notes", b"a file named as a folder")
+        .await;
+    assert_eq!(served.post("/api/refresh").await.status(), 200);
+    served.plant_locally("scans/a.jpg", b"a page that could be packed");
+    served.plant_locally("scans/notes/x.jpg", b"a page under the name");
+
+    let (status, preview) = body_of(served.get("/api/freeze?path=scans").await).await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["file_and_folder"], 1, "{preview}");
+    assert_eq!(
+        preview["in_the_way"],
+        json!([{
+            "path": "scans/notes/x.jpg",
+            "message": "adding this file would make \"scans/notes\" both a file and a folder; \
+                        rename the file or the folder, then pack again",
+        }]),
+    );
+
+    let (status, armed) = body_of(served.post("/api/freeze?path=scans").await).await;
+    assert_eq!(status, 202, "{armed}");
+    served.freeze_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["status"], "done", "{work}");
+    assert_eq!(freeze(&work)["packs"], 0, "nothing was packed: {work}");
+    assert_eq!(freeze(&work)["entries"], 0);
+    assert_eq!(
+        freeze(&work)["findings"],
+        json!([{
+            "path": "scans/notes/x.jpg",
+            "message": "nothing was packed, because adding this file would make \"scans/notes\" \
+                        both a file and a folder; rename the file or the folder, then pack \
+                        again",
+            "reason": "surfaced",
+            "surfaced": "FileAndFolder",
+        }]),
     );
 }
 

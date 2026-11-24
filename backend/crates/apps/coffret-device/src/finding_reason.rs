@@ -186,8 +186,8 @@ pub enum FindingReason {
     },
     /// Adding the file would leave one Entry Path both a file and a folder — it
     /// stands under a path an Entry stands at, or Entries stand under its own
-    /// path — so the run left it out and carried on with the rest
-    /// (spec: EP-4, EP-6).
+    /// path (spec: EP-4, EP-6). A sync left it out and carried on with the
+    /// rest; a freeze was refused whole for it, and packed nothing.
     ///
     /// Nothing about it was uploaded, and every run reports it again until the
     /// file, or a folder no mapping is mapped at, is renamed.
@@ -202,6 +202,11 @@ pub enum FindingReason {
         /// that name rather than its local folder's: renaming the folder on
         /// disk changes nothing, so the sentence never offers it.
         mapped: bool,
+        /// Whether a freeze met it, and so packed nothing and committed
+        /// nothing for it, rather than leaving the file out of a sync
+        /// (spec: EP-6, PK-17). The sentence then says that nothing was
+        /// frozen, and to freeze again once the names are changed.
+        froze_nothing: bool,
     },
     /// A drop put the file here to be added as a Pack, and the run left it for
     /// the freeze that packs it (spec: PK-17).
@@ -331,29 +336,41 @@ impl fmt::Display for FindingReason {
             // a folder above the file rather than the file itself. Quoted as a
             // refused rename quotes the same phrase, which a detected rename
             // falling back to an addition puts on the line next to this one.
+            //
+            // Never "rename the folder" where it is the one a mapping stands
+            // for: renaming it on disk leaves it at the name it was mapped at
+            // (spec: EP-9), and a person told to rename it would do so and see
+            // nothing change.
+            //
+            // A sync left the file out and carried on; a freeze packed
+            // nothing, so the sentence says so and says to ask for the freeze
+            // again rather than to wait for the next run (spec: EP-6).
             Self::FileAndFolder {
                 both,
-                mapped: false,
+                mapped,
+                froze_nothing,
             } => {
-                return write!(
-                    f,
-                    "it was left out, because adding it would make {:?} both a file and a folder; \
-                     rename the file or the folder, then run again",
-                    both.as_str(),
-                );
-            }
-            // Never "rename the folder": the folder is the one a mapping
-            // stands for, and renaming it on disk leaves it at the name it was
-            // mapped at (spec: EP-9). A person told to rename it would do so
-            // and see nothing change.
-            Self::FileAndFolder { both, mapped: true } => {
-                return write!(
-                    f,
-                    "it was left out, because adding it would make {both:?} both a file and a \
-                     folder, and the folder is the one this device maps at {both:?}, so renaming \
-                     that folder on disk changes nothing; rename the file {both:?}, then run again",
-                    both = both.as_str(),
-                );
+                let (done, again) = if *froze_nothing {
+                    ("nothing was frozen", "freeze again")
+                } else {
+                    ("it was left out", "run again")
+                };
+                let both = both.as_str();
+                return if *mapped {
+                    write!(
+                        f,
+                        "{done}, because adding it would make {both:?} both a file and a folder, \
+                         and the folder is the one this device maps at {both:?}, so renaming \
+                         that folder on disk changes nothing; rename the file {both:?}, then \
+                         {again}",
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{done}, because adding it would make {both:?} both a file and a folder; \
+                         rename the file or the folder, then {again}",
+                    )
+                };
             }
             // The one reason with something of its own to name. Which folder it
             // is is the whole of what a person does next — `ls -l` on that one

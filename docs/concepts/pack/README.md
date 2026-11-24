@@ -116,6 +116,12 @@ the Entry count — decides `freeze` eligibility.
 - A `freeze` the person asks for on a folder packs every eligible file under
   it, save the files of a drop still in progress, which wait for the `freeze`
   that drop arms once it finishes (spec: PK-17).
+- A `freeze` packs a book whole or not at all where a file of it would make a
+  path both a file and a folder: such a file could not be put into the Pack
+  once it is committed, so the run packs nothing, names the file and what to
+  rename, and keeps any drop's reservation of the book for the `freeze` asked
+  for once the names are changed. Its preview says so first (spec: EP-6,
+  PK-17).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means reading from that set the

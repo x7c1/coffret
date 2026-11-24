@@ -7,7 +7,9 @@
 // freeze of the folder would pack, the answer is shown, and only a yes arms
 // the freeze. Where nothing would be
 // packed, the question says why instead of offering Pack — and so it does
-// where the folder is being packed already, since Pack would arm nothing.
+// where the folder is being packed already, since Pack would arm nothing, and
+// where a file it would pack would make a path both a file and a folder, since
+// such a freeze is refused whole and packs nothing (spec: EP-6).
 //
 // What the answer counts is the freeze's own scan, stopped before a file is
 // read, so what is packed is what was counted — give or take files that change
@@ -58,6 +60,14 @@ export interface PackQuestion {
   /** Whether there is anything to pack, which is whether Pack is offered. */
   packs: boolean;
   /**
+   * The files that would refuse the freeze, each with what to rename —
+   * `notes/x.pdf — adding this file would make "notes" both a file and a
+   * folder; …` — and, where the server named only the first few, a last line
+   * counting the rest (`and 5 files more like them`). Empty where none would.
+   * Where there is any, nothing is packed and Pack is not offered.
+   */
+  inTheWay: string[];
+  /**
    * What would be left as it is, one group a line with why — `2 files already
    * in a Pack`, `3 files not on this device`, `4 files not in the Library yet`
    * — and empty where nothing would.
@@ -80,6 +90,23 @@ export function questionOf(preview: FreezePreview): PackQuestion {
       title,
       line: 'This folder is being packed already.',
       packs: false,
+      inTheWay: [],
+      leftOut: [],
+      waits: null,
+    };
+  }
+  // Ahead of the count too: a freeze with any such file packs none of the
+  // others, so a count of what would be packed would be a promise the run
+  // breaks (spec: EP-6).
+  if (preview.file_and_folder > 0) {
+    return {
+      folder: preview.folder,
+      title,
+      line:
+        `Can’t pack this folder: ${wouldMake(preview.file_and_folder)} a path both a file ` +
+        'and a folder, so nothing would be packed.',
+      packs: false,
+      inTheWay: inTheWay(preview),
       leftOut: [],
       waits: null,
     };
@@ -91,6 +118,7 @@ export function questionOf(preview: FreezePreview): PackQuestion {
       title,
       line: `Nothing to pack: ${nothingBecause(preview, reasons)}.`,
       packs: false,
+      inTheWay: [],
       leftOut: [],
       waits: null,
     };
@@ -100,6 +128,7 @@ export function questionOf(preview: FreezePreview): PackQuestion {
     title,
     line: `${count(preview.files)}, ${size(preview.bytes)} will be packed`,
     packs: true,
+    inTheWay: [],
     leftOut: reasons,
     // Worded as the drop's line for the same wait is (`PACKED_AFTER`), so the
     // two ways into a freeze say the queue alike.
@@ -159,6 +188,24 @@ function leftOutParts(preview: FreezePreview): string[] {
     parts.push(kept);
   }
   return parts;
+}
+
+/** `1 file would make`, `3 files would each make`. */
+function wouldMake(files: number): string {
+  return files === 1 ? '1 file would make' : `${files} files would each make`;
+}
+
+/**
+ * Each file the server named as standing in the way, with its sentence, and
+ * how many more there are where it named only the first few.
+ */
+function inTheWay(preview: FreezePreview): string[] {
+  const named = preview.in_the_way.map(({ path, message }) => `${path} — ${message}`);
+  const more = preview.file_and_folder - preview.in_the_way.length;
+  if (more > 0) {
+    named.push(`and ${count(more)} more like them`);
+  }
+  return named;
 }
 
 /** `1 file`, `80 files`. */

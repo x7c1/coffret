@@ -54,6 +54,11 @@ use crate::upload;
 /// returns successfully with findings in it has *not* packed every local file
 /// current (spec: PK-14).
 ///
+/// A run is refused whole where any file it selects would make a path both a
+/// file and a folder (spec: EP-6): it spools, uploads and commits nothing,
+/// decides no reservation (spec: PK-17), and names every such file in
+/// [`FreezeOutcome::refused`].
+///
 /// A mapping whose local root the device cannot vouch for is a third such
 /// finding, and it is about a mapping rather than a file:
 /// [`FreezeOutcome::unavailable`] carries it (spec: EP-12). Nothing under such a
@@ -289,6 +294,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         // two different empty answers (spec: EP-9).
         mappings: index.mappings().await?.len(),
         surfaced: survey.surfaced,
+        refused: survey.refused,
         unavailable: survey.unavailable,
         settled,
         released: if commit.is_some() {
@@ -312,6 +318,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         // and neither may reach a diagnostic event.
         mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
+        refused = outcome.refused.len(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),

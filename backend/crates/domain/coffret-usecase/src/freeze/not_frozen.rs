@@ -15,6 +15,11 @@ use coffret_model::{ContainerId, EntryPath};
 /// rather than named. So a folder frozen last month does not produce a finding
 /// per file this month.
 ///
+/// Nor is a file whose addition would leave a path both a file and a folder:
+/// that is not one file the run passes over but the reason it packs nothing,
+/// and it travels in
+/// [`FreezeOutcome::refused`](super::FreezeOutcome::refused) (spec: EP-6).
+///
 /// The Entry Path travels in the value because the caller is what decides what
 /// to do about it. It never travels into a diagnostic event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,27 +49,5 @@ pub enum NotFrozen {
         path: EntryPath,
         /// The Pack whose key the Library records as lost.
         container_id: ContainerId,
-    },
-    /// The file is not yet in a Pack, and adding it would leave one Entry Path
-    /// both a file and a folder: it stands under a path an Entry stands at, or
-    /// Entries stand under its own path (spec: EP-4, EP-6).
-    ///
-    /// Left out of the Packs, because a commit carrying it would be refused
-    /// whole, and the rest of the selection is packed. Reported by every run
-    /// until the file, or a folder no mapping is mapped at, is renamed.
-    FileAndFolder {
-        /// Where in the Library the file left out would stand.
-        path: EntryPath,
-        /// The path that would be both a file and a folder: a folder above
-        /// `path`, or `path` itself.
-        both: EntryPath,
-        /// Whether `both` is the name a top-level mapping of this device is
-        /// mapped at (spec: EP-9).
-        ///
-        /// The folder of the two is then that mapping's own, and its place in
-        /// the Library is the name it was mapped at rather than its local
-        /// folder's name: renaming that folder on disk changes nothing, and
-        /// what helps is renaming the file.
-        mapped: bool,
     },
 }

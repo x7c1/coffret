@@ -253,11 +253,13 @@ Concept background: [Pack](../../concepts/pack/),
     it. Where the run packs any of those paths, the reservation is released by the
     commit's refresh, in the same step that completes the batch's rows (OC-2);
     where none of them is eligible any more — gone from disk, already held by a
-    Pack, ineligible under PK-1 or EP-10, or left out because adding it would
-    make a path both a file and a folder (EP-6) — it is released once the run
-    has finished, with a finding per path saying why. A reservation some of whose
+    Pack, or ineligible under PK-1 or EP-10 — it is released once the run has
+    finished, with a finding per path saying why. A reservation some of whose
     paths are gone packs the rest. A run that stops before either keeps every
-    reservation as it was, for the next run to decide. Only a received
+    reservation as it was, for the next run to decide. So does a run refused
+    whole because a file it selects would make a path both a file and a folder
+    (EP-6): it decides no reservation, so once the names are changed the next
+    `freeze` packs the book the drop asked for. Only a received
     reservation is decided: no `freeze` decides a drop in progress, nor selects
     any path it names, so neither the pages landed so far nor the ones still to
     come are packed apart from the rest of their book. A received reservation
