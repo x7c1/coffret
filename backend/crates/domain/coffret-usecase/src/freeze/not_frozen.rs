@@ -51,12 +51,20 @@ pub enum NotFrozen {
     ///
     /// Left out of the Packs, because a commit carrying it would be refused
     /// whole, and the rest of the selection is packed. Reported by every run
-    /// until one of the two is renamed.
+    /// until the file, or a folder no mapping is mapped at, is renamed.
     FileAndFolder {
         /// Where in the Library the file left out would stand.
         path: EntryPath,
         /// The path that would be both a file and a folder: a folder above
         /// `path`, or `path` itself.
         both: EntryPath,
+        /// Whether `both` is the name a top-level mapping of this device is
+        /// mapped at (spec: EP-9).
+        ///
+        /// The folder of the two is then that mapping's own, and its place in
+        /// the Library is the name it was mapped at rather than its local
+        /// folder's name: renaming that folder on disk changes nothing, and
+        /// what helps is renaming the file.
+        mapped: bool,
     },
 }

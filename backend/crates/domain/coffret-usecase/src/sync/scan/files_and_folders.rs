@@ -1,5 +1,6 @@
 use tracing::debug;
 
+use crate::device_state::Mapping;
 use crate::file_and_folder::{refuse_additions, Adding};
 use crate::index::Index;
 use crate::sync::surfaced::Surfaced;
@@ -45,6 +46,10 @@ pub(super) async fn leave_out_files_and_folders(
             .collect();
         refuse_additions(index, &adding, &renames).await?
     };
+    // Against every mapping this device records, available or not, as the
+    // partition of the Library's namespace is read (spec: EP-9).
+    let mappings = index.mappings().await?;
+    let mapped = Mapping::represented_prefixes(&mappings);
     let mut refusals = refusals.into_iter();
     let mut surfaced = Vec::new();
     survey
@@ -54,6 +59,7 @@ pub(super) async fn leave_out_files_and_folders(
             Some(both) => {
                 surfaced.push(Surfaced::FileAndFolder {
                     path: candidate.source.path.clone(),
+                    mapped: mapped.contains(both.as_str()),
                     both,
                 });
                 false

@@ -1,5 +1,6 @@
 use coffret_model::{ContainerKind, Mtime};
 
+use crate::device_state::Mapping;
 use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{keys, map, plant, request, write, OLDER};
@@ -55,18 +56,14 @@ pub async fn a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out(
             .await
             .expect("a sync leaving files out must succeed");
 
-        let left_out: Vec<(&str, &str)> = outcome
-            .surfaced
-            .iter()
-            .filter_map(|surfaced| match surfaced {
-                Surfaced::FileAndFolder { path, both } => Some((path.as_str(), both.as_str())),
-                _ => None,
-            })
-            .collect();
         assert_eq!(
-            left_out,
-            [("albums", "albums"), ("docs/notes/x.pdf", "docs/notes")],
-            "run {run} reports each file left out and the path it would make both",
+            left_out(&outcome.surfaced),
+            [
+                ("albums", "albums", false),
+                ("docs/notes/x.pdf", "docs/notes", false)
+            ],
+            "run {run} reports each file left out and the path it would make both, \
+             which no mapping of this device is mapped at",
         );
         assert_eq!(
             outcome.surfaced.len(),
@@ -108,4 +105,89 @@ pub async fn a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out(
             "{left} is not",
         );
     }
+}
+
+/// Where the path that would be both a file and a folder is the name a
+/// top-level mapping of this device is mapped at, the finding says so,
+/// whichever of the two is left out (spec: EP-6, EP-9).
+///
+/// The folder of the two is then that mapping's, whose place in the Library is
+/// the name it was mapped at and not its local folder's name, so renaming the
+/// folder on disk would change nothing: whoever reads the finding out needs to
+/// know which case it is to say what helps.
+///
+/// At `notes` the mapped folder's file is in the Library and a file at its name
+/// appears in the root-mapped folder; at `books` it is the other way round, a
+/// folder mapped at the name of a file already in the Library.
+pub async fn a_file_left_out_beside_a_mapped_folder_says_the_folder_is_mapped(
+    fixture: &SyncUnderTest,
+) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    let remainder = fixture.folder().join("everything");
+    let noted = fixture.folder().join("noted");
+    let booked = fixture.folder().join("booked");
+    write(fixture.fs(), &noted, "x.pdf", b"in the mapped folder");
+    write(
+        fixture.fs(),
+        &remainder,
+        "books",
+        b"a file named as a folder will be",
+    );
+    for (prefix, root) in [(None, &remainder), (Some("notes"), &noted)] {
+        index
+            .set_mapping(Mapping::new(prefix.map(entry_path), root.clone()))
+            .await
+            .expect("recording a mapping must succeed");
+    }
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
+        .await
+        .expect("a first sync must succeed");
+    assert_eq!(first.added.len(), 2, "{first:?}");
+
+    write(
+        fixture.fs(),
+        &remainder,
+        "notes",
+        b"a file named as the folder",
+    );
+    write(
+        fixture.fs(),
+        &booked,
+        "y.pdf",
+        b"in the folder mapped later",
+    );
+    index
+        .set_mapping(Mapping::new(Some(entry_path("books")), booked))
+        .await
+        .expect("recording a mapping must succeed");
+    let second = sync_folders(request(store, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a sync leaving files out must succeed");
+
+    assert_eq!(
+        left_out(&second.surfaced),
+        [("books/y.pdf", "books", true), ("notes", "notes", true)],
+        "each file left out is reported beside the folder mapped at the path it would \
+         make both",
+    );
+    assert!(
+        second.commit.is_none(),
+        "and nothing else is new: {second:?}"
+    );
+}
+
+/// Each file a run left out for making a path both a file and a folder, the
+/// path it would make both, and whether that path is one a mapping is mapped at.
+fn left_out(surfaced: &[Surfaced]) -> Vec<(&str, &str, bool)> {
+    surfaced
+        .iter()
+        .filter_map(|surfaced| match surfaced {
+            Surfaced::FileAndFolder { path, both, mapped } => {
+                Some((path.as_str(), both.as_str(), *mapped))
+            }
+            _ => None,
+        })
+        .collect()
 }

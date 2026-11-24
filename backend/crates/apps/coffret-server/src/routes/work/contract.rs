@@ -147,6 +147,7 @@ fn every_finding() -> Vec<Finding> {
             path: entry_path("notes/g.jpg"),
             reason: FindingReason::FileAndFolder {
                 both: entry_path("notes"),
+                mapped: false,
             },
         },
         Found::Surfaced {

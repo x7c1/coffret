@@ -113,9 +113,12 @@ impl From<&FreezeOutcome> for Findings {
                 path: path.clone(),
                 reason: FindingReason::KeyLost,
             },
-            NotFrozen::FileAndFolder { path, both } => Finding::Surfaced {
+            NotFrozen::FileAndFolder { path, both, mapped } => Finding::Surfaced {
                 path: path.clone(),
-                reason: FindingReason::FileAndFolder { both: both.clone() },
+                reason: FindingReason::FileAndFolder {
+                    both: both.clone(),
+                    mapped: *mapped,
+                },
             },
         });
 
@@ -307,9 +310,13 @@ fn surfaced(surfaced: &Surfaced) -> Finding {
                 refusal: refusal.clone(),
             },
         ),
-        Surfaced::FileAndFolder { path, both } => {
-            (path, FindingReason::FileAndFolder { both: both.clone() })
-        }
+        Surfaced::FileAndFolder { path, both, mapped } => (
+            path,
+            FindingReason::FileAndFolder {
+                both: both.clone(),
+                mapped: *mapped,
+            },
+        ),
     };
     Finding::Surfaced {
         path: path.clone(),
@@ -651,6 +658,105 @@ mod tests {
                 "surfaced b.jpg: this device had it and it is gone from disk",
             ]
         );
+    }
+
+    // EP-6 and EP-9: a file a sync or a freeze left out for making a path both
+    // a file and a folder is said with that path and what helps. Where the
+    // folder is one a top-level mapping of this device is mapped at, renaming
+    // it on disk would change nothing, so the sentence says which folder it is
+    // and never offers that; anywhere else it offers renaming either.
+    #[test]
+    fn a_file_left_out_says_what_helps_whether_or_not_the_folder_is_mapped() {
+        let sync = |surfaced| SyncOutcome {
+            reserved: Vec::new(),
+            relocations: Vec::new(),
+            added: Vec::new(),
+            replaced: Vec::new(),
+            renamed: Vec::new(),
+            unchanged: 0,
+            mappings: 2,
+            surfaced,
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: None,
+            retained_keyrings: Vec::new(),
+        };
+        let freeze = |surfaced| FreezeOutcome {
+            settled: Vec::new(),
+            released: 0,
+            lapsed: Vec::new(),
+            packs: Vec::new(),
+            absorbed: Vec::new(),
+            packed_already: 0,
+            mappings: 2,
+            surfaced,
+            unavailable: Vec::new(),
+            commit: None,
+            short: None,
+        };
+        let said = |findings: Findings| -> Vec<String> {
+            assert!(findings.needs_attention(), "a file left out needs somebody");
+            findings.iter().map(ToString::to_string).collect()
+        };
+        let synced = |mapped| {
+            said(Findings::from(&sync(vec![
+                Surfaced::FileAndFolder {
+                    path: entry_path("notes"),
+                    both: entry_path("notes"),
+                    mapped,
+                },
+                Surfaced::FileAndFolder {
+                    path: entry_path("notes/x.pdf"),
+                    both: entry_path("notes"),
+                    mapped,
+                },
+            ])))
+        };
+        let frozen = |mapped| {
+            said(Findings::from(&freeze(vec![
+                NotFrozen::FileAndFolder {
+                    path: entry_path("notes"),
+                    both: entry_path("notes"),
+                    mapped,
+                },
+                NotFrozen::FileAndFolder {
+                    path: entry_path("notes/x.pdf"),
+                    both: entry_path("notes"),
+                    mapped,
+                },
+            ])))
+        };
+
+        let beside_mapped = [
+            "surfaced notes: it was left out, because adding it would make \"notes\" both a \
+             file and a folder, and the folder is the one this device maps at \"notes\", so \
+             renaming that folder on disk changes nothing; rename the file \"notes\", then run \
+             again",
+            "surfaced notes/x.pdf: it was left out, because adding it would make \"notes\" \
+             both a file and a folder, and the folder is the one this device maps at \
+             \"notes\", so renaming that folder on disk changes nothing; rename the file \
+             \"notes\", then run again",
+        ];
+        assert_eq!(synced(true), beside_mapped);
+        assert_eq!(frozen(true), beside_mapped);
+        for line in beside_mapped {
+            for never in ["rename the file or the folder", "another name"] {
+                assert!(
+                    !line.contains(never),
+                    "neither renaming the mapped folder nor mapping it elsewhere is offered: \
+                     {line}",
+                );
+            }
+        }
+
+        let beside_ordinary = [
+            "surfaced notes: it was left out, because adding it would make \"notes\" both a \
+             file and a folder; rename the file or the folder, then run again",
+            "surfaced notes/x.pdf: it was left out, because adding it would make \"notes\" \
+             both a file and a folder; rename the file or the folder, then run again",
+        ];
+        assert_eq!(synced(false), beside_ordinary);
+        assert_eq!(frozen(false), beside_ordinary);
     }
 
     // EP-15's discarded copy is said as what was done, and still

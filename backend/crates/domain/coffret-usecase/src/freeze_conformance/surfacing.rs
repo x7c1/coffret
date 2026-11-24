@@ -245,8 +245,10 @@ pub async fn a_file_that_would_make_a_path_both_a_file_and_a_folder_is_not_froze
         vec![NotFrozen::FileAndFolder {
             path: entry_path("notes/x.pdf"),
             both: entry_path("notes"),
+            mapped: true,
         }],
-        "the file left out is surfaced, naming the path it would make both",
+        "the file left out is surfaced, naming the path it would make both, which the \
+         folder of the two is mapped at",
     );
     assert_eq!(outcome.frozen_entries(), 2, "the rest is packed");
     for (path, held) in [("notes", true), ("top.jpg", true), ("notes/x.pdf", false)] {
