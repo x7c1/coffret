@@ -110,6 +110,10 @@ impl ApiError {
     /// — the request was read, and the folder is what it conflicts with. None
     /// of those is remedied from a page except by choosing another folder, and
     /// the sentence names the folder so that the person can go and look at it.
+    /// A prefix a file of the Library stands at (spec: EP-4, EP-9) is
+    /// `bad_request` at `409` as well: the request was read, and the catalog is
+    /// what it conflicts with. The sentence names that file, which is renamed
+    /// or deleted first, or another prefix chosen.
     ///
     /// Everything else is answered the way the rest of the routes answer the
     /// same failure: a catalog that would not take the row, most of all.
@@ -126,7 +130,8 @@ impl ApiError {
                 return Self::plain(StatusCode::BAD_REQUEST, "bad_path", said).caused_by(error);
             }
             Error::NoSuchLocalRoot { .. } => StatusCode::BAD_REQUEST,
-            Error::ManagementAreaNotADirectory { .. }
+            Error::MappingAtEntry { .. }
+            | Error::ManagementAreaNotADirectory { .. }
             | Error::ManagementAreaIncomplete { .. }
             | Error::ManagementAreaFolded { .. }
             | Error::MarkerNotARegularFile { .. }

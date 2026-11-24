@@ -134,6 +134,11 @@ impl Redacted for Error {
                 Some(cause) => format!("Device::MalformedMappingPrefix: {}", cause.redacted()),
                 None => "Device::MalformedMappingPrefix(more than one component)".to_owned(),
             },
+            // The prefix is an Entry Path and stays out of the event.
+            Self::MappingAtEntry { prefix } => format!(
+                "Device::MappingAtEntry(prefix_len={})",
+                prefix.as_str().len()
+            ),
             Self::NoSuchLocalRoot { cause, .. } => format!(
                 "Device::NoSuchLocalRoot(kind={})",
                 match cause {

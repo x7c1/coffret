@@ -19,6 +19,7 @@ impl error::Error for Error {
             | Self::LibraryInSeveralDirectories { .. }
             | Self::LibraryAlreadyServed { .. }
             | Self::LibraryBeingMoved { .. }
+            | Self::MappingAtEntry { .. }
             | Self::ManagementAreaNotADirectory { .. }
             | Self::ManagementAreaIncomplete { .. }
             | Self::ManagementAreaFolded { .. }

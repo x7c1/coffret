@@ -11,6 +11,9 @@
 mod drive_stub;
 pub(crate) use drive_stub::{consent, DriveStub, CREATED_FOLDER_ID};
 
+mod planted;
+pub(crate) use planted::{deposited_at, library};
+
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 

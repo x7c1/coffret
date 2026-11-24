@@ -125,4 +125,20 @@ impl Mapping {
             .map(EntryPath::as_str)
             .collect()
     }
+
+    /// Whether this mapping represents `path`, beside the top-level mappings
+    /// whose prefixes `elsewhere` names (spec: EP-9).
+    ///
+    /// A top-level mapping represents the Entries under its prefix, and the
+    /// Library-root mapping represents the remainder: every path but those.
+    /// The Entry standing at a top-level mapping's own prefix is not under it —
+    /// the mapped root is the folder the subtree lives in and cannot also be a
+    /// file in it — so it is part of the remainder, and the Library-root
+    /// mapping's to represent.
+    pub fn represents(&self, path: &EntryPath, elsewhere: &BTreeSet<&str>) -> bool {
+        match &self.prefix {
+            Some(prefix) => path != prefix && path.is_under(prefix),
+            None => path.parent().is_none() || !elsewhere.contains(path.top_level()),
+        }
+    }
 }

@@ -115,6 +115,12 @@ pub(crate) mod faulty_store;
 // Containers and commit it under the same keys.
 pub(crate) mod fixtures;
 
+mod file_and_folder;
+pub use file_and_folder::{
+    a_rebased_addition_under_a_file_another_writer_added_is_refused,
+    an_addition_that_makes_a_path_both_a_file_and_a_folder_is_refused,
+};
+
 mod gathering_store;
 
 mod happy_path;
@@ -277,6 +283,8 @@ macro_rules! commit_conformance {
             a_refused_replay_no_checkpoint_explains_is_reported,
             a_refresh_another_process_got_to_first_completes_the_commit,
             a_colliding_entry_path_is_refused_before_any_write,
+            an_addition_that_makes_a_path_both_a_file_and_a_folder_is_refused,
+            a_rebased_addition_under_a_file_another_writer_added_is_refused,
             a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
             a_rebased_batch_whose_removals_are_current_commits,
             a_missing_keyring_replica_stops_the_commit,

@@ -494,16 +494,22 @@ pub trait Index: Send + Sync {
     /// The Entries this device has on disk outside the top-level folders
     /// `excluded` names, ordered by Entry Path bytes: what
     /// [`present_under(None)`](Self::present_under) names, less every path
-    /// whose top-level component is among them.
+    /// under one of them. A path at exactly one of them is not under it and is
+    /// kept.
     ///
     /// The remainder a Library-root mapping represents once other mappings
     /// stand for those folders (spec: EP-9), which a scan reads its records off
-    /// (spec: EP-10). The default reads every materialization record that says
-    /// present and drops the excluded ones; an adapter able to skip a subtree
-    /// overrides it.
+    /// (spec: EP-10). The Entry at a top-level mapping's own prefix is part of
+    /// it: the file standing at the top of the root-mapped folder under that
+    /// name. The default reads every materialization record that says present
+    /// and drops the excluded ones; an adapter able to skip a subtree overrides
+    /// it.
     async fn present_outside(&self, excluded: &BTreeSet<&str>) -> IndexResult<Vec<LocalEntry>> {
         let mut present = self.present_under(None).await?;
-        present.retain(|local| !excluded.contains(local.observation.path.top_level()));
+        present.retain(|local| {
+            let path = &local.observation.path;
+            path.parent().is_none() || !excluded.contains(path.top_level())
+        });
         Ok(present)
     }
 

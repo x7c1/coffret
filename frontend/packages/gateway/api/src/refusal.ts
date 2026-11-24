@@ -367,10 +367,18 @@ export type SurfacedFinding =
   /**
    * The file holds exactly what a file this device had put in place held
    * before that file went, but renaming that Entry here is a rename the Library
-   * refuses, so the file was carried in as a new one and the other is reported
+   * refuses, so the file was taken as a new one and the other is reported
    * deleted locally.
    */
   | 'RenameRefused'
+  /**
+   * Adding the file would make one path both a file and a folder — it stands
+   * under a path an Entry stands at, or Entries stand under its own path — so
+   * the sync or the freeze left it out and carried on with the rest (spec:
+   * EP-4, EP-6). Nothing of it was uploaded; renaming the file or the folder
+   * is what stops the report.
+   */
+  | 'FileAndFolder'
   /**
    * The file is one a Pack drop reserved (spec: PK-17), and the sync left it
    * for the freeze that packs it rather than carrying it in on its own. Not a

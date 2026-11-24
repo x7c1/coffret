@@ -16,6 +16,7 @@
   "RelocationRefused",
   "Renamed",
   "RenameRefused",
+  "FileAndFolder",
   "AwaitsPack",
   "Unreserved"
 ]

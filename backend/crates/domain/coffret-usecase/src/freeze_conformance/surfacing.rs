@@ -195,3 +195,82 @@ pub async fn a_key_lost_pack_entry_is_surfaced_and_untouched(fixture: &FreezeUnd
     assert!(outcome.commit.is_none(), "there was nothing to commit");
     assert!(Library::read(store).await.holds_container(pack));
 }
+
+/// A file whose addition would make one Entry Path both a file and a folder is
+/// left out of the Packs and surfaced, and the rest of the selection is packed
+/// (spec: EP-4, EP-6).
+///
+/// The Library-root mapping holds a file at `notes` and a mapping of its own
+/// holds a folder of files for `notes`, so the two files the run finds would
+/// make `notes` both. A commit carrying both would be refused whole; the run
+/// keeps the first of them in Entry Path order and leaves the other out.
+///
+/// The file left out is one a drop reserved for a Pack, and that reservation
+/// has no other path, so the run releases it with no lapse of its own: the
+/// finding about the file is the one that says why (spec: PK-17).
+pub async fn a_file_that_would_make_a_path_both_a_file_and_a_folder_is_not_frozen(
+    fixture: &FreezeUnderTest,
+) {
+    let index = fixture.source();
+    let keys = keys();
+    let remainder = fixture.source_folder().join("everything");
+    let noted = fixture.source_folder().join("noted");
+    write(
+        fixture.fs(),
+        &remainder,
+        "notes",
+        b"a file named as a folder",
+    );
+    write(fixture.fs(), &remainder, "top.jpg", b"at the top");
+    write(fixture.fs(), &noted, "x.pdf", b"in the mapped folder");
+    map(index, None, &remainder).await;
+    map(index, Some("notes"), &noted).await;
+    let reservation = index
+        .reserve(Some(&entry_path("notes")))
+        .await
+        .expect("recording a reservation must succeed");
+    index
+        .extend_reservation(reservation, &entry_path("notes/x.pdf"))
+        .await
+        .expect("extending a reservation must succeed");
+    index
+        .mark_received(reservation)
+        .await
+        .expect("marking a reservation received must succeed");
+
+    let outcome = freeze(fixture, &keys, TARGET, 1).await;
+
+    assert_eq!(
+        outcome.surfaced,
+        vec![NotFrozen::FileAndFolder {
+            path: entry_path("notes/x.pdf"),
+            both: entry_path("notes"),
+        }],
+        "the file left out is surfaced, naming the path it would make both",
+    );
+    assert_eq!(outcome.frozen_entries(), 2, "the rest is packed");
+    for (path, held) in [("notes", true), ("top.jpg", true), ("notes/x.pdf", false)] {
+        assert_eq!(
+            index
+                .entry_at(&entry_path(path))
+                .await
+                .expect("asking the catalog for a path must succeed")
+                .is_some(),
+            held,
+            "{path}",
+        );
+    }
+    assert_eq!(outcome.released, 1, "the reservation is decided");
+    assert_eq!(
+        outcome.lapsed,
+        Vec::new(),
+        "and its one path already has its finding",
+    );
+    assert_eq!(
+        index
+            .reservations()
+            .await
+            .expect("reading the reservations must succeed"),
+        Vec::new(),
+    );
+}

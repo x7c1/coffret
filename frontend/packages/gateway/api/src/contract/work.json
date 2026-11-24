@@ -1193,10 +1193,16 @@
           "surfaced": "Renamed"
         },
         {
-          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is carried in as a new one",
+          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is taken as a new one",
           "path": "x/f.jpg",
           "reason": "surfaced",
           "surfaced": "RenameRefused"
+        },
+        {
+          "message": "this file was left out, because adding it would make \"notes\" both a file and a folder; rename the file or the folder, then try again",
+          "path": "notes/g.jpg",
+          "reason": "surfaced",
+          "surfaced": "FileAndFolder"
         },
         {
           "message": "this file was added to go into a Pack, and waits for the freeze that packs it",
@@ -1362,10 +1368,16 @@
           "surfaced": "Renamed"
         },
         {
-          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is carried in as a new one",
+          "message": "a file this device had put in place is gone and this file holds exactly its content, but renaming its Entry here was refused, so this file is taken as a new one",
           "path": "x/f.jpg",
           "reason": "surfaced",
           "surfaced": "RenameRefused"
+        },
+        {
+          "message": "this file was left out, because adding it would make \"notes\" both a file and a folder; rename the file or the folder, then try again",
+          "path": "notes/g.jpg",
+          "reason": "surfaced",
+          "surfaced": "FileAndFolder"
         },
         {
           "message": "this file was added to go into a Pack, and waits for the freeze that packs it",

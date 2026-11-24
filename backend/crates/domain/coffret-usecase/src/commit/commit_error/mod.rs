@@ -68,6 +68,22 @@ pub enum CommitError {
         /// The path claimed twice.
         path: EntryPath,
     },
+    /// The batch would leave one Entry Path both an Entry and a folder of
+    /// Entries: an addition under a path an Entry stands at, or an addition
+    /// with Entries standing under it.
+    ///
+    /// No device can materialize both, because a file system gives one name
+    /// in a folder to one thing (spec: EP-4). The state the commit would leave
+    /// is read as the path-uniqueness check reads it — the batch's removals
+    /// and renames first, its additions against one another as well
+    /// (spec: EP-6). The refusal happens before anything is written, and a
+    /// writer that lost the commit race repeats it against the new head, so of
+    /// two devices adding `a` and `a/b` at once the later is refused
+    /// (spec: CP-7, EP-7).
+    FileAndFolder {
+        /// The path that would be both a file and a folder.
+        path: EntryPath,
+    },
     /// The batch removes a Container that is no longer current.
     ///
     /// A batch's removals were decided against the head it was prepared on: the
@@ -330,6 +346,13 @@ impl fmt::Display for CommitError {
                     path.as_str()
                 )
             }
+            // Named for the reason a collision's path is: it is the one thing
+            // a person renames to put it right.
+            Self::FileAndFolder { path } => write!(
+                f,
+                "the Entry Path {:?} would be both a file and a folder",
+                path.as_str()
+            ),
             // The IDs are what identifies the conflict, and unlike a path they
             // are nobody's name for anything, so the sentence and the
             // diagnostic event carry the same list.
@@ -566,10 +589,11 @@ impl Redacted for CommitError {
     /// Almost all of this vocabulary is already log-safe by what it is about:
     /// a commit's own bookkeeping is generations, replica positions, attempt
     /// counts and control-object names, none of which anybody chose. The
-    /// exceptions are [`EntryPathCollision`](Self::EntryPathCollision) and
+    /// exceptions are [`EntryPathCollision`](Self::EntryPathCollision),
+    /// [`FileAndFolder`](Self::FileAndFolder) and
     /// [`RebaseConflict`](Self::RebaseConflict), which are *identified* by a
-    /// path — and either is enough on its own to make rendering this type with
-    /// `Display` unsafe.
+    /// path — and any of them is enough on its own to make rendering this type
+    /// with `Display` unsafe.
     fn redacted(&self) -> String {
         match self {
             Self::Storage(error) => format!("Commit::Storage: {}", error.redacted()),
@@ -579,6 +603,9 @@ impl Redacted for CommitError {
                 "Commit::EntryPathCollision(path_len={})",
                 path.as_str().len()
             ),
+            Self::FileAndFolder { path } => {
+                format!("Commit::FileAndFolder(path_len={})", path.as_str().len())
+            }
             Self::RemovalNotCurrent { container_ids } => format!(
                 "Commit::RemovalNotCurrent(containers=[{}])",
                 listed(container_ids)

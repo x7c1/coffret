@@ -35,6 +35,12 @@ use crate::recorded_mapping::RecordedMapping;
 /// it (spec: EP-13). `marker` says whether a root that already carries an
 /// identity keeps it ([`MarkerRequest`]).
 ///
+/// A new top-level mapping whose prefix is a path a file of the Library stands
+/// at is refused, naming the file: nothing could be added under it, since a
+/// path is never both a file and a folder (spec: EP-4, EP-9). The catalog is
+/// read as it stands, so the state can still arise afterwards — another device
+/// adds the file first — and a sync then leaves out what it cannot add.
+///
 /// The marker is written after everything else that can refuse: the prefix, the
 /// root, and the catalog are all decided first, so a refusal any of them makes
 /// leaves nothing behind in somebody's folder.
@@ -97,6 +103,18 @@ async fn record(
         .await?
         .into_iter()
         .find(|recorded| recorded.prefix == mapping.prefix);
+
+    // A new top-level mapping stands for the folder of its name, and a file of
+    // the Library at that name leaves nothing to add under it (spec: EP-4,
+    // EP-9). Asked of the catalog as it stands; moving a mapping already
+    // recorded changes nothing about what its name holds.
+    if let (None, Some(prefix)) = (&replaced, &mapping.prefix) {
+        if index.entry_at(prefix).await?.is_some() {
+            return Err(Error::MappingAtEntry {
+                prefix: prefix.clone(),
+            });
+        }
+    }
 
     let (expected, marked) = root_marker::register(&mapping.local_root, marker)?;
 

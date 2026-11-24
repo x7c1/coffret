@@ -17,6 +17,9 @@ use deletions::deletions;
 mod examine;
 use examine::examine;
 
+mod files_and_folders;
+use files_and_folders::leave_out_files_and_folders;
+
 mod renames;
 use renames::pair_renames;
 
@@ -55,6 +58,11 @@ use renames::pair_renames;
 /// [`Survey::reserved`] as waiting for its Pack rather than passed over. It is
 /// still a file the walk found, so a file this device placed is not read as
 /// deleted for standing there reserved.
+///
+/// A file whose addition would make one Entry Path both a file and a folder —
+/// under a path an Entry stands at, or with Entries under it — is left out and
+/// reported rather than carried to a commit that would refuse the whole batch
+/// (spec: EP-4, EP-6).
 ///
 /// And it is bounded by `scope` (spec: EP-10): a sync a drop armed walks the
 /// folders the drop wrote into and nothing else, so a file anywhere else is
@@ -113,6 +121,9 @@ pub(super) async fn scan(
     let deletions = deletions(index, &mappings, &walked, &found, scope, &mut survey).await?;
     // Once both halves are known: what is gone, and what appeared (spec: EP-10).
     pair_renames(index, roots, deletions, &mut survey).await?;
+    // Once the batch's renames are known, since what they vacate and take is
+    // part of the state an addition is held to (spec: EP-6).
+    leave_out_files_and_folders(index, &mut survey).await?;
     survey.unavailable = unavailable_roots(&walked);
     survey.stale = stale;
 

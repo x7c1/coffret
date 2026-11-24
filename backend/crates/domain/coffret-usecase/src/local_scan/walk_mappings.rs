@@ -28,10 +28,13 @@ use crate::MappedRelativeLocation;
 /// A device may map a local root to the Library root and other local roots to
 /// top-level components, and then the top-level mapping represents its subtree
 /// while the Library-root mapping represents *the remainder* (spec: EP-9). So
-/// the root walk stops at every top-level name another mapping stands for: a
-/// folder called `albums` under the root-mapped folder is not a second spelling
-/// of the `albums/` subtree, and walking it would either give the root mapping
-/// Entry Paths the other mapping represents or collide with the files it holds.
+/// the root walk stops at every folder at a top-level name another mapping
+/// stands for: a folder called `albums` under the root-mapped folder is not a
+/// second spelling of the `albums/` subtree, and walking it would either give
+/// the root mapping Entry Paths the other mapping represents or collide with
+/// the files it holds. A file at such a name is no subtree: it is the Entry at
+/// the other mapping's own prefix, which the remainder holds, and the root walk
+/// finds it.
 ///
 /// Two local files reaching one Entry Path is then refused rather than
 /// resolved: choosing one of them would back up whichever the walk happened to
@@ -187,10 +190,10 @@ struct RootWalk {
 /// is put into NFC before it is compared with them or joined to them
 /// (spec: EP-1).
 ///
-/// `elsewhere` names the top-level components another mapping represents, which
-/// this walk therefore does not enter (spec: EP-9). It is a top-level name and
-/// so an Entry Path component, which is why nothing here says which one was
-/// passed over.
+/// `elsewhere` names the top-level components another mapping represents, a
+/// folder at which this walk therefore does not enter (spec: EP-9). It is a
+/// top-level name and so an Entry Path component, which is why nothing here
+/// says which one was passed over.
 ///
 /// Beside the files, the locations of the stale scratches it passed over
 /// ([`scratch::is_stale`]) and the names an operating system keeps that it left
@@ -313,8 +316,14 @@ async fn walk(
             }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
-            // (spec: EP-9).
-            if relative.is_none() && elsewhere.contains(name.as_str()) {
+            // (spec: EP-9). Only a subtree: a file standing at that name is the
+            // Entry at the other mapping's own prefix, which is no part of its
+            // subtree and is the Library-root mapping's to represent, so it is
+            // found here like any other file at the top.
+            if relative.is_none()
+                && elsewhere.contains(name.as_str())
+                && !matches!(entry.kind, FolderEntryKind::File { .. })
+            {
                 continue;
             }
             // A folder a desktop keeps its trash in, which it puts at the top

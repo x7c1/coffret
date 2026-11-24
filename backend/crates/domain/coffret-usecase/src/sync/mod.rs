@@ -80,7 +80,10 @@
 //!    reported in [`SyncOutcome::surfaced`] and left exactly as they are:
 //!    read-modify-replace over a Pack is the half of `update` this flow does
 //!    not do (spec: PK-10, PK-11) and propagating a deletion is an explicit
-//!    flow of its own. Reporting them is not optional.
+//!    flow of its own. Reporting them is not optional. So is a file whose
+//!    addition would leave one Entry Path both a file and a folder: it is left
+//!    out before anything is packed, because a commit carrying it would be
+//!    refused whole, and the rest of the run carries on (spec: EP-4, EP-6).
 //! 6. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
 //!    FM-14, OC-2). Encode each Container under a Container Key of its own,
 //!    write the ciphertext to a file in the spool directory, and record it as

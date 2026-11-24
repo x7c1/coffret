@@ -63,6 +63,12 @@ use crate::upload;
 /// [`SyncOutcome::surfaced`]. A run that returns successfully with findings in
 /// it has *not* backed up every local file (spec: PK-14).
 ///
+/// A file whose addition would leave one Entry Path both a file and a folder —
+/// under a path an Entry stands at, or with Entries under its own path — is
+/// reported in [`SyncOutcome::surfaced`] too, and left out of the run rather
+/// than carried to a commit that would refuse every other file with it
+/// (spec: EP-4, EP-6).
+///
 /// A mapping whose local root the device cannot vouch for is reported the same
 /// way, in [`SyncOutcome::unavailable`]: for a root that is not there, or one
 /// that is empty while standing on a filesystem the mapping does not record,

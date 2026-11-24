@@ -432,6 +432,19 @@ pub enum Error {
         /// component.
         cause: Option<coffret_model::Error>,
     },
+    /// A file of the Library stands at the path a new top-level mapping was to
+    /// stand for (spec: EP-9).
+    ///
+    /// A mapping stands for the folder of that name, and nothing could be added
+    /// under it while a file holds the name: a path is never both a file and a
+    /// folder (spec: EP-4, EP-6). So the mapping is refused before anything is
+    /// recorded, naming the file. The state can still arise afterwards, where
+    /// another device adds a file at the name once the mapping is there; a sync
+    /// then leaves out what it cannot add and says why.
+    MappingAtEntry {
+        /// The prefix that was asked for, and the path the file stands at.
+        prefix: EntryPath,
+    },
     /// The local root a mapping was to be recorded against is not a directory
     /// on this device.
     ///

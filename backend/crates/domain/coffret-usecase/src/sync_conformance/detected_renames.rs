@@ -398,8 +398,13 @@ pub async fn a_rename_across_two_mapped_roots_pairs_nothing(fixture: &SyncUnderT
 }
 
 /// A pair whose rename the Library refuses falls back to what the files would
-/// have been — the new one uploaded, the gone one deleted locally — and the run
-/// says why the rename was not carried (spec: EP-10, FM-15).
+/// have been — the new one an addition, the gone one deleted locally — and the
+/// run says why the rename was not carried (spec: EP-10, FM-15).
+///
+/// The addition is then held to the rules for one: where the rename was
+/// refused for making a path both a file and a folder, the addition would make
+/// that path too, so the file is left out and reported rather than uploaded
+/// into a commit that would be refused whole (spec: EP-4, EP-6, EP-10).
 pub async fn a_refused_rename_falls_back_with_a_finding(fixture: &SyncUnderTest) {
     carry_in(fixture, &[("a.jpg", b"the file's bytes")]).await;
     // An Entry another device placed at `x`, which this device never had: a
@@ -421,9 +426,19 @@ pub async fn a_refused_rename_falls_back_with_a_finding(fixture: &SyncUnderTest)
     let (outcome, puts) = sync(fixture, 2).await;
 
     assert!(outcome.renamed.is_empty(), "{:?}", outcome.renamed);
-    assert_eq!(outcome.added.len(), 1, "the new file is uploaded");
-    assert_eq!(puts, 1);
+    assert!(outcome.added.is_empty(), "the new file is left out");
+    assert_eq!(puts, 0);
+    assert!(outcome.commit.is_none(), "and nothing is committed");
     assert_eq!(deleted_locally(&outcome), ["a.jpg"]);
+    assert!(
+        outcome.surfaced.iter().any(|surfaced| matches!(
+            surfaced,
+            Surfaced::FileAndFolder { path, both }
+                if path.as_str() == "x/y" && both.as_str() == "x"
+        )),
+        "the file left out is reported: {:?}",
+        outcome.surfaced,
+    );
     let refused: Vec<_> = outcome
         .surfaced
         .iter()

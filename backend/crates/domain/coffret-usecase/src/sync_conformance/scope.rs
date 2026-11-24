@@ -265,18 +265,21 @@ pub async fn a_sync_within_some_folders_walks_those_alone(fixture: &SyncUnderTes
     );
 }
 
-/// A file this device placed at the Library root under the very name a
-/// top-level mapping later stands for, and no longer has, is reported once by a
-/// sync whose scope holds both the Library root and that mapping's folder
-/// (spec: EP-9, EP-10).
+/// A file standing at the top of the root-mapped folder under the very name a
+/// top-level mapping stands for is the Library-root mapping's: it is walked by
+/// that mapping, is not reported deleted while it stands, and is reported once
+/// when it is gone, by a sync of every mapping and by one whose scope holds
+/// both the Library root and that mapping's folder (spec: EP-9, EP-10).
 ///
-/// The file's path is the mapping's own prefix, so the Library-root mapping's
-/// read of the files directly at the root sees its materialization record but
-/// leaves it to that mapping, and the mapping finds it only by reading the one
-/// record at its prefix. Reporting it twice or not at all would each mean one
-/// of the two mappings got the boundary wrong. The device reaches this state by
-/// mapping the folder after the file was placed under the Library-root mapping:
-/// nothing about a mapping asks whether an Entry stands at its prefix.
+/// The file's path is the mapping's own prefix, which is no part of the
+/// mapping's subtree: the mapped root is the folder the subtree lives in and
+/// cannot also be a file in it, so the Entry at the prefix belongs to the
+/// remainder. Reporting it twice or not at all would each mean one of the two
+/// mappings got the boundary wrong, and a file no walk found would be read as
+/// deleted while it stands. The device reaches this state when the folder is
+/// mapped while nothing stands at its name, and another device adds the file
+/// there before this one syncs again — the mapping is recorded here straight
+/// into the catalog to stand for that.
 pub async fn a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_the_root(
     fixture: &SyncUnderTest,
 ) {
@@ -306,9 +309,24 @@ pub async fn a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_t
         .set_mapping(Mapping::new(Some(entry_path("notes")), noted))
         .await
         .expect("recording a mapping must succeed");
+
+    let standing = sync_folders(request(store, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a sync of every mapping must succeed");
+    assert!(
+        standing.surfaced.is_empty(),
+        "a file that stands is not reported deleted: {:?}",
+        standing.surfaced,
+    );
+    assert_eq!(
+        standing.unchanged, 2,
+        "the root mapping walks the file at the other mapping's prefix",
+    );
+    assert!(standing.commit.is_none(), "nothing changed");
+
     fixture.fs().remove_file(&placed);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2).within(
+    let scoped = sync_folders(request(store, index, &keys, fixture.fs(), 3).within(
         ScanScope::Folders {
             root: true,
             folders: BTreeSet::from([entry_path("notes")]),
@@ -316,20 +334,25 @@ pub async fn a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_t
     ))
     .await
     .expect("a sync within the root and the mapped folder must succeed");
+    let full = sync_folders(request(store, index, &keys, fixture.fs(), 4))
+        .await
+        .expect("a sync of every mapping must succeed");
 
-    assert!(outcome.commit.is_none(), "a sync propagates no deletion");
-    assert!(
-        outcome.unavailable.is_empty(),
-        "both roots are there: {:?}",
-        outcome.unavailable,
-    );
-    assert!(
-        matches!(
-            outcome.surfaced.as_slice(),
-            [Surfaced::DeletedLocally { path }] if *path == entry_path("notes")
-        ),
-        "the missing file is reported once: {:?}",
-        outcome.surfaced,
-    );
-    assert_eq!(outcome.unchanged, 1, "the file at the top is unchanged");
+    for outcome in [&scoped, &full] {
+        assert!(outcome.commit.is_none(), "a sync propagates no deletion");
+        assert!(
+            outcome.unavailable.is_empty(),
+            "both roots are there: {:?}",
+            outcome.unavailable,
+        );
+        assert!(
+            matches!(
+                outcome.surfaced.as_slice(),
+                [Surfaced::DeletedLocally { path }] if *path == entry_path("notes")
+            ),
+            "the missing file is reported once: {:?}",
+            outcome.surfaced,
+        );
+        assert_eq!(outcome.unchanged, 1, "the file at the top is unchanged");
+    }
 }
