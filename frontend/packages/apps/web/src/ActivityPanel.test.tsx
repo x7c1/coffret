@@ -4,6 +4,8 @@ import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { ActivityPanel, SHORTCUTS, SHOW_FAILURES } from './ActivityPanel';
 import { ANSWER_HOLDS, type Entry, type Running } from './activity';
 import { LOCKED, UNLOCK, type UnlockOffer } from './Locked';
+import { RAN_OUT, RECONNECTING } from './reconnect';
+import type { Offer } from './ReconnectOffer';
 import { CHECKING } from './refresh';
 import { COLOR } from './theme';
 import type { Trouble } from './retry';
@@ -47,6 +49,7 @@ function panel({
   onRetry = () => undefined,
   onStop = () => undefined,
   locked = null,
+  reconnect = null,
 }: {
   running?: Running[];
   entries?: Entry[];
@@ -54,6 +57,7 @@ function panel({
   onRetry?: (entry: Entry) => void;
   onStop?: (ask: StopAsk) => void;
   locked?: UnlockOffer | null;
+  reconnect?: Offer | null;
 } = {}) {
   return render(
     <ActivityPanel
@@ -63,7 +67,7 @@ function panel({
       onRetry={onRetry}
       onStop={onStop}
       refresh={QUIET}
-      reconnect={null}
+      reconnect={reconnect}
       locked={locked}
     />,
   );
@@ -376,4 +380,30 @@ it("draws the reader's fetch with its own Stop beside a fill", () => {
   fireEvent.click(progress.getByRole('button', { name: 'Stop — bringing over letters' }));
   expect(onStop).toHaveBeenCalledWith({ server: { fill: 2 } });
   expect(progress.getAllByRole('button')).toHaveLength(2);
+});
+
+// While Drive's permission has run out the row holds the reconnect, a block of
+// stacked lines, with room above and below it rather than touching the row's
+// edges; the row without it keeps its one-line height, with nothing added
+// above or below its parts, so nothing in it moves.
+it("gives the reconnect's lines room above and below, and keeps a one-line row's height", () => {
+  const rowOf = () => screen.getByRole('button', { name: 'Activity' }).parentElement!.parentElement!;
+  panel({ running: [{ key: 'sync', text: 'backing up what was added…', progress: null, stop: null, ending: null }] });
+  const oneLine = rowOf();
+  expect(oneLine.style.minHeight).toBe('36px');
+  expect(oneLine.style.paddingTop).toBe('0px');
+  expect(oneLine.style.paddingBottom).toBe('0px');
+  cleanup();
+
+  const offer: Offer = { reconnect: null, said: null, refused: null, consentPage: null, ask: () => undefined };
+  panel({ entries: [entry({ ...STOPPED_BOOK, ranOut: true })], reconnect: offer });
+  const row = rowOf();
+  expect(row.style.minHeight).toBe('36px');
+  // The sentence and the button, a line apiece, inside the room the row gives them.
+  const lines = screen.getByText(RAN_OUT).parentElement!;
+  expect(within(lines).getByRole('button', { name: RECONNECTING })).toBeTruthy();
+  const room = lines.parentElement!;
+  expect(room.parentElement).toBe(row);
+  expect(parseFloat(room.style.paddingTop)).toBeGreaterThan(0);
+  expect(parseFloat(room.style.paddingBottom)).toBeGreaterThan(0);
 });

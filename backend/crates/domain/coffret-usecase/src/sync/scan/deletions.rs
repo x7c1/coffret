@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use coffret_model::{EntryLocation, EntryPath};
 
-use crate::device_state::{LocalEntry, Mapping};
+use crate::device_state::{LocalEntry, LocalEntryState, Mapping};
 use crate::index::Index;
 use crate::local_scan::{kept_by_system, RootState, ScanScope, SourceFile, WalkedRoot};
 use crate::sync::survey::Survey;
@@ -47,11 +47,9 @@ pub(super) struct Deletions {
 /// That has to be applied as the same partition the walk applies, and not merely
 /// as skipping the unavailable mapping's own pass. A top-level mapping represents
 /// its subtree and the Library-root mapping represents *the remainder*
-/// (spec: EP-9), while `present_under(None)` answers with every present row the
-/// device holds — the rows under a top-level mapping's prefix included. So the
-/// root mapping accounts for the remainder here too: a row under a prefix another
-/// mapping stands for belongs to that mapping, and if that mapping is
-/// unavailable the row is nobody's evidence.
+/// (spec: EP-9), so the root mapping's records are read as the remainder too
+/// ([`reads`]): a row under a prefix another mapping stands for belongs to that
+/// mapping, and if that mapping is unavailable the row is nobody's evidence.
 ///
 /// A row whose Entry has left the Library is no deletion to report: the Library
 /// no longer holds what the file was a copy of, and the disk no longer holds
@@ -71,8 +69,9 @@ pub(super) struct Deletions {
 ///
 /// A row standing in a folder out of `scope` is neither (spec: EP-10): the
 /// walk did not look there, so its file's absence from `found` says nothing
-/// about it. So a scope of folders is read folder by folder ([`reads`]),
-/// rather than every record under a mapping read for the few in scope.
+/// about it. So a scope of folders is read folder by folder, each folder's own
+/// files ([`reads`]), rather than every record under a mapping read for the
+/// few in scope.
 pub(super) async fn deletions(
     index: &dyn Index,
     mappings: &[Mapping],
@@ -93,10 +92,25 @@ pub(super) async fn deletions(
         }
         let prefix = root.mapping.prefix.as_ref();
         for read in reads(scope, prefix, &represented_elsewhere) {
-            for local in index.present_under(read.as_ref()).await? {
-                // A prefixed mapping's answer is already bounded to its own subtree;
-                // the root mapping's can take in the subtrees other mappings stand
-                // for — its whole present set does — so they come out of it here.
+            let present = match read {
+                Read::Under(prefix) => index.present_under(Some(prefix)).await?,
+                Read::Remainder => index.present_outside(&represented_elsewhere).await?,
+                Read::In(folder) => index.present_in(folder).await?,
+                Read::At(path) => index
+                    .local_entry_at(path)
+                    .await?
+                    .into_iter()
+                    .filter(|local| {
+                        local.state == LocalEntryState::Present && !local.awaits_relocation()
+                    })
+                    .collect(),
+            };
+            for local in present {
+                // Every read is bounded to what its mapping stands for, save one:
+                // the files standing directly at the Library root, where a file
+                // can bear the very name a top-level mapping stands for. Its path
+                // is that mapping's prefix, so it is that mapping's to account
+                // for, not the root mapping's (spec: EP-9).
                 if prefix.is_none()
                     && represented_elsewhere.contains(local.observation.path.top_level())
                 {
@@ -109,7 +123,8 @@ pub(super) async fn deletions(
                     continue;
                 }
                 // A row in a folder the walk did not look in is no evidence of
-                // anything (spec: EP-10).
+                // anything (spec: EP-10). The reads already stop at the scope;
+                // this holds the rule here too, whatever an adapter answers.
                 if !scope.covers(&local.observation.path) {
                     continue;
                 }
@@ -140,42 +155,110 @@ pub(super) async fn deletions(
     })
 }
 
-/// What one mapping's records are read as: the subtree the mapping stands for
-/// (`prefix`, `None` being the Library root) where the scope is every mapped
-/// folder, and otherwise each folder in scope that the mapping reaches, read
-/// on its own rather than the whole mapping read and the rest thrown away
-/// (spec: EP-9, EP-10).
+/// One read of this device's present records, bounded to what a mapping
+/// stands for within a scan's scope.
+#[derive(Debug, PartialEq, Eq)]
+enum Read<'a> {
+    /// Everything under a top-level mapping's prefix.
+    Under(&'a EntryPath),
+    /// Everything outside the prefixes other mappings stand for: the
+    /// remainder a Library-root mapping represents (spec: EP-9).
+    Remainder,
+    /// The files standing directly in one folder — `None` is the Library
+    /// root — which is all a scope of folders looks at there (spec: EP-10).
+    In(Option<&'a EntryPath>),
+    /// The one file standing at a top-level mapping's own prefix: directly at
+    /// the Library root, bearing the name the mapping stands for. The walk never
+    /// finds it, the root mapping leaves it to this one (spec: EP-9), and no
+    /// folder's own files hold it but the root's, so a scope holding both the
+    /// root and the mapping's folder reads it here.
+    At(&'a EntryPath),
+}
+
+/// What one mapping's records are read as: the subtree a top-level mapping
+/// stands for, or the remainder the Library-root mapping stands for, where the
+/// scope is every mapped folder; and otherwise the files directly in each
+/// folder in scope that the mapping reaches, each folder read on its own rather
+/// than the whole mapping read and the rest thrown away (spec: EP-9, EP-10).
 ///
-/// A folder in scope beneath another in scope is read with it. The files
-/// standing directly at the Library root are the one part of a scope that is
-/// not the subtree of a folder, so a scope holding the root reads the Library
-/// root mapping's whole present set, as a scan of every mapping does; that set
-/// is what this device has on disk, not what the Library holds.
-fn reads(
-    scope: &ScanScope,
-    prefix: Option<&EntryPath>,
+/// So the Library-root mapping never reads every present record of the device:
+/// the rows under another mapping's prefix are left out of the read itself, and
+/// a scope holding the Library root reads the files standing directly there.
+fn reads<'a>(
+    scope: &'a ScanScope,
+    prefix: Option<&'a EntryPath>,
     elsewhere: &BTreeSet<&str>,
-) -> Vec<Option<EntryPath>> {
+) -> Vec<Read<'a>> {
     let ScanScope::Folders { root, folders } = scope else {
-        return vec![prefix.cloned()];
+        return vec![prefix.map_or(Read::Remainder, Read::Under)];
     };
-    if prefix.is_none() && *root {
-        return vec![None];
-    }
-    let reached: Vec<&EntryPath> = folders
-        .iter()
-        .filter(|folder| match prefix {
-            Some(prefix) => folder.is_under(prefix),
-            None => !elsewhere.contains(folder.top_level()),
-        })
-        .collect();
-    reached
-        .iter()
-        .filter(|folder| {
-            !reached
+    let own = match prefix {
+        None => root.then_some(Read::In(None)),
+        Some(prefix) => (*root && folders.contains(prefix)).then_some(Read::At(prefix)),
+    };
+    own.into_iter()
+        .chain(
+            folders
                 .iter()
-                .any(|outer| outer != *folder && folder.is_under(outer))
-        })
-        .map(|folder| Some((*folder).clone()))
+                .filter(|folder| match prefix {
+                    Some(prefix) => folder.is_under(prefix),
+                    None => !elsewhere.contains(folder.top_level()),
+                })
+                .map(|folder| Read::In(Some(folder))),
+        )
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::{reads, Read};
+    use crate::entry_paths::entry_path;
+    use crate::local_scan::ScanScope;
+
+    /// The Library-root mapping reads the remainder, or the files directly in
+    /// each folder in scope, and never every present row of the device
+    /// (spec: EP-9, EP-10).
+    #[test]
+    fn the_root_mapping_reads_only_what_it_stands_for() {
+        let elsewhere = BTreeSet::from(["albums"]);
+        assert_eq!(
+            reads(&ScanScope::Mappings, None, &elsewhere),
+            [Read::Remainder]
+        );
+
+        let albums = entry_path("albums");
+        assert_eq!(
+            reads(&ScanScope::Mappings, Some(&albums), &elsewhere),
+            [Read::Under(&albums)]
+        );
+
+        let scope = ScanScope::folders_of(&[
+            entry_path("top.jpg"),
+            entry_path("albums/2026/spring.jpg"),
+            entry_path("misc/a.jpg"),
+            entry_path("misc/deep/b.jpg"),
+        ]);
+        let misc = entry_path("misc");
+        let deep = entry_path("misc/deep");
+        assert_eq!(
+            reads(&scope, None, &elsewhere),
+            [Read::In(None), Read::In(Some(&misc)), Read::In(Some(&deep))],
+            "the root's own files and each folder in scope outside other mappings",
+        );
+        assert_eq!(
+            reads(&scope, Some(&albums), &elsewhere),
+            [Read::In(Some(&entry_path("albums/2026")))]
+        );
+
+        // A file at the Library root bearing a top-level mapping's name is
+        // that mapping's, read on its own once the scope holds both the root
+        // and the mapping's folder.
+        let both = ScanScope::folders_of(&[entry_path("top.jpg"), entry_path("albums/a.jpg")]);
+        assert_eq!(
+            reads(&both, Some(&albums), &elsewhere),
+            [Read::At(&albums), Read::In(Some(&albums))]
+        );
+    }
 }

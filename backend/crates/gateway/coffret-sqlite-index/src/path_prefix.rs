@@ -19,12 +19,18 @@ const AFTER_SEPARATOR: u8 = SEPARATOR + 1;
 /// `books/page-001.png`, and a comparison against the bare prefix would sweep
 /// it into the subtree (spec: EP-2, EP-3, EP-9).
 pub(crate) fn subtree_range(prefix: &EntryPath) -> (String, String) {
-    let mut lower = String::with_capacity(prefix.as_str().len() + 1);
-    lower.push_str(prefix.as_str());
+    subtree_range_of(prefix.as_str())
+}
+
+/// [`subtree_range`] of a prefix already spelled as text, such as a mapping's
+/// top-level component.
+pub(crate) fn subtree_range_of(prefix: &str) -> (String, String) {
+    let mut lower = String::with_capacity(prefix.len() + 1);
+    lower.push_str(prefix);
     lower.push(char::from(SEPARATOR));
 
     let mut upper = String::with_capacity(lower.len());
-    upper.push_str(prefix.as_str());
+    upper.push_str(prefix);
     upper.push(char::from(AFTER_SEPARATOR));
 
     (lower, upper)

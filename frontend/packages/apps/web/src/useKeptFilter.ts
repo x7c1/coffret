@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getFilterSettings, setFilterSettings } from '@coffret/api';
 
-import { NO_FILTER, type FilterSettings } from './filter';
+import { nameWithinLimit, NO_FILTER, type FilterSettings } from './filter';
 
 /** Where the settings are kept for this device: the server's two calls about them. */
 export interface KeptFilter {
@@ -47,6 +47,9 @@ export interface KeptFilterState {
  * - A change to Recent or its count is kept at once, with the name as it
  *   stands; a change to the name alone is kept once typing pauses for
  *   [`NAME_PAUSE_MS`], or as the field is left, rather than at every key.
+ * - A name longer than the server keeps is stopped at its limit
+ *   ([`MOST_NAME_CHARS`](./filter)), whatever changed it, so nothing asked to
+ *   be kept is refused for its length (spec: LA-43).
  * - Writes go one after another, so the last change made is the last kept.
  * - A change made before the kept settings are answered wins over them: what
  *   somebody set on this page is not undone by an answer that was late.
@@ -93,7 +96,9 @@ export function useKeptFilter(open: boolean, kept: KeptFilter = ON_THE_SERVER): 
   const change = useCallback(
     (next: FilterChange) => {
       const before = held.current;
-      const after = typeof next === 'function' ? next(before) : next;
+      const asked = typeof next === 'function' ? next(before) : next;
+      const name = nameWithinLimit(asked.name);
+      const after = name === asked.name ? asked : { ...asked, name };
       if (sameSettings(after, before)) {
         return;
       }

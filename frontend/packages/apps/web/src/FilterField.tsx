@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
-import { RECENT_EXPLAINED, recentCount, type FilterSettings } from './filter';
+import { nameWithinLimit, RECENT_EXPLAINED, recentCount, type FilterSettings } from './filter';
 import { COLOR, LAYER, SHADOW } from './theme';
 
 /**
@@ -21,6 +21,10 @@ import { COLOR, LAYER, SHADOW } from './theme';
  * hides it and leaves the panel open; the next closes the panel. The question
  * mark is described by the explainer (`aria-describedby`), so a screen reader
  * reads it whether or not it is shown.
+ *
+ * The name stops at the longest the server keeps
+ * ([`MOST_NAME_CHARS`](./filter)), typed or pasted: what goes past it is not
+ * entered (spec: LA-43).
  *
  * The keys, beside what is typed:
  *
@@ -218,7 +222,7 @@ export function FilterField({
         autoComplete="off"
         spellCheck={false}
         value={settings.name}
-        onChange={(event) => onChange({ ...settings, name: event.currentTarget.value })}
+        onChange={(event) => onChange({ ...settings, name: nameWithinLimit(event.currentTarget.value) })}
         onBlur={onNameLeft}
         onKeyDown={onInputKey}
         style={INPUT}

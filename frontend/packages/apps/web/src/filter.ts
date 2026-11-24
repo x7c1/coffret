@@ -29,6 +29,24 @@ const RECENT_AT_FIRST = 10;
 export const NO_FILTER: FilterSettings = { name: '', recentOn: false, recent: RECENT_AT_FIRST };
 
 /**
+ * The longest name the server keeps for this device, in characters as it
+ * counts them — Unicode code points, so an emoji is one, not the two UTF-16
+ * units a string's `length` and an input's `maxLength` count it as — and
+ * refuses a longer one with `400` (spec: LA-43).
+ */
+export const MOST_NAME_CHARS = 1_000;
+
+/**
+ * The name as typed or pasted, stopped at [`MOST_NAME_CHARS`] characters: a
+ * longer one would filter the tree but be refused at every keep, Recent and
+ * its count included, for as long as the field held it.
+ */
+export function nameWithinLimit(typed: string): string {
+  const chars = [...typed];
+  return chars.length <= MOST_NAME_CHARS ? typed : chars.slice(0, MOST_NAME_CHARS).join('');
+}
+
+/**
  * What the filter is asked with, or `null` where the settings are no filter at
  * all — an empty name with Recent off — and nothing is asked.
  *

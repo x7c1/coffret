@@ -1,11 +1,11 @@
 use coffret_model::{EntryLocation, EntryPath};
 use coffret_usecase::device_state::{DeviceTime, LocalEntry, LocalEntryState, LocalObservation};
 use coffret_usecase::IndexResult;
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 
 use crate::error::classify;
 use crate::folder_totals::ROOT;
-use crate::path_prefix::subtree_range;
+use crate::path_prefix::{subtree_range, subtree_range_of};
 use crate::query::{collect, first};
 use crate::rows;
 
@@ -255,6 +255,79 @@ pub(crate) fn present_under(
                  AND (path = ?2 OR (path >= ?3 AND path < ?4)) \
                  ORDER BY path",
                 params![present, prefix.as_str(), lower, upper],
+                OPERATION,
+                rows::local_entry,
+            )
+        }
+    }
+}
+
+/// The files this device has on disk outside the top-level folders `excluded`
+/// names (spec: EP-9, EP-10): the remainder a Library-root mapping stands for,
+/// each excluded folder's subtree left out in the statement by the range
+/// [`present_under`] reads it by, so none of its rows is handed back.
+pub(crate) fn present_outside(
+    connection: &Connection,
+    excluded: &[String],
+) -> IndexResult<Vec<LocalEntry>> {
+    const OPERATION: &str = "reading what this device has outside some folders";
+    let present = rows::state_text(LocalEntryState::Present);
+    let mut sql = String::from(
+        "SELECT * FROM local_entries \
+         WHERE state = ?1 AND relocate_to IS NULL",
+    );
+    let mut values = vec![present.to_owned()];
+    for folder in excluded {
+        let (lower, upper) = subtree_range_of(folder);
+        let at = values.len();
+        sql.push_str(&format!(
+            " AND NOT (path = ?{} OR (path >= ?{} AND path < ?{}))",
+            at + 1,
+            at + 2,
+            at + 3
+        ));
+        values.extend([folder.clone(), lower, upper]);
+    }
+    sql.push_str(" ORDER BY path");
+    collect(
+        connection,
+        &sql,
+        params_from_iter(values),
+        OPERATION,
+        rows::local_entry,
+    )
+}
+
+/// The files this device has on disk standing directly in `folder`, `None`
+/// being the Library root (spec: EP-10): the folder's subtree by the primary
+/// key range [`present_under`] reads, less every path with a separator left
+/// after the folder's own.
+pub(crate) fn present_in(
+    connection: &Connection,
+    folder: Option<&EntryPath>,
+) -> IndexResult<Vec<LocalEntry>> {
+    const OPERATION: &str = "reading what this device has in one folder";
+    let present = rows::state_text(LocalEntryState::Present);
+    match folder {
+        None => collect(
+            connection,
+            "SELECT * FROM local_entries \
+             WHERE state = ?1 AND relocate_to IS NULL AND instr(path, '/') = 0 \
+             ORDER BY path",
+            params![present],
+            OPERATION,
+            rows::local_entry,
+        ),
+        Some(folder) => {
+            let (lower, upper) = subtree_range(folder);
+            collect(
+                connection,
+                "SELECT * FROM local_entries \
+                 WHERE state = ?1 AND relocate_to IS NULL \
+                 AND path >= ?2 AND path < ?3 \
+                 AND instr(substr(path, length(?2) + 1), '/') = 0 \
+                 ORDER BY path",
+                params![present, lower, upper],
                 OPERATION,
                 rows::local_entry,
             )

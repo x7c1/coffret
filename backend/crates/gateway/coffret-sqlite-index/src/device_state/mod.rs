@@ -10,8 +10,8 @@ pub(crate) use held_parcels::{held_parcels, held_parcels_of, hold_parcel, let_go
 mod local_entries;
 pub(crate) use local_entries::{
     any_remote_in, awaiting_relocation, entries_absent_under, forget_local_entry, local_entry_at,
-    mark_absent, mark_present, present_under, present_without_entry, reconcile, reconcile_all,
-    relocate_local_entries,
+    mark_absent, mark_present, present_in, present_outside, present_under, present_without_entry,
+    reconcile, reconcile_all, relocate_local_entries,
 };
 
 mod mappings;

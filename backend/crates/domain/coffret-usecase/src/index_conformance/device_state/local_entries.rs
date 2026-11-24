@@ -415,3 +415,115 @@ pub async fn a_folder_is_whole_where_nothing_directly_in_it_is_remote(fixture: &
         "a file waiting to follow its Entry elsewhere is not the Entry at its own path",
     );
 }
+
+/// The present rows outside some top-level folders are what this device has on
+/// disk, less every path whose top-level component is one of them: the
+/// remainder a Library-root mapping represents once other mappings stand for
+/// those folders (spec: EP-9, EP-10).
+///
+/// A sibling whose name merely begins with an excluded folder's is not inside
+/// it, a file marked absent is not had, and leaving nothing out is every
+/// present row.
+pub async fn the_present_rows_outside_some_folders_are_the_remainder(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    for (text, size) in [
+        ("cover.jpg", 100),
+        ("albums/a.jpg", 101),
+        ("albums/deep/b.jpg", 102),
+        ("albums-annex/c.jpg", 103),
+        ("books/d.png", 104),
+        ("misc/e.jpg", 105),
+        ("misc/f.jpg", 106),
+    ] {
+        index
+            .mark_present(observation(text, size))
+            .await
+            .expect("recording a materialized file must succeed");
+    }
+    index
+        .mark_absent(
+            &path("misc/f.jpg"),
+            DeviceTime::from_unix_seconds(1_700_000_900),
+        )
+        .await
+        .expect("recording a file gone must succeed");
+
+    let outside = |excluded: &'static [&'static str]| async move {
+        index
+            .present_outside(&excluded.iter().copied().collect())
+            .await
+            .expect("reading what this device has outside some folders must succeed")
+            .into_iter()
+            .map(|local| local.observation.path.as_str().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        outside(&["albums", "books"]).await,
+        ["albums-annex/c.jpg", "cover.jpg", "misc/e.jpg"],
+        "the remainder, in path order",
+    );
+    let every: Vec<String> = index
+        .present_under(None)
+        .await
+        .expect("reading what this device has must succeed")
+        .into_iter()
+        .map(|local| local.observation.path.as_str().to_owned())
+        .collect();
+    assert_eq!(
+        outside(&[]).await,
+        every,
+        "leaving nothing out is every row"
+    );
+}
+
+/// The present rows in a folder are the ones standing directly in it — the
+/// Library root's are the files with no folder at all — and none in the
+/// folders below it or beside it (spec: EP-10).
+///
+/// A folder whose name is in multi-byte characters is bounded the same way.
+pub async fn the_present_rows_in_a_folder_are_the_ones_directly_in_it(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+    for (text, size) in [
+        ("cover.jpg", 100),
+        ("albums/a.jpg", 101),
+        ("albums/deep/b.jpg", 102),
+        ("albums-annex/c.jpg", 103),
+        ("albums/e.jpg", 104),
+        ("写真/f.jpg", 105),
+        ("写真/深/g.jpg", 106),
+    ] {
+        index
+            .mark_present(observation(text, size))
+            .await
+            .expect("recording a materialized file must succeed");
+    }
+    index
+        .mark_absent(
+            &path("albums/e.jpg"),
+            DeviceTime::from_unix_seconds(1_700_000_900),
+        )
+        .await
+        .expect("recording a file gone must succeed");
+
+    let within = |folder: Option<&'static str>| {
+        let folder = folder.map(path);
+        async move {
+            index
+                .present_in(folder.as_ref())
+                .await
+                .expect("reading what this device has in one folder must succeed")
+                .into_iter()
+                .map(|local| local.observation.path.as_str().to_owned())
+                .collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(within(None).await, ["cover.jpg"], "the root's own files");
+    assert_eq!(
+        within(Some("albums")).await,
+        ["albums/a.jpg"],
+        "neither the folder below nor the sibling, nor the file marked absent",
+    );
+    assert_eq!(within(Some("albums/deep")).await, ["albums/deep/b.jpg"]);
+    assert_eq!(within(Some("写真")).await, ["写真/f.jpg"]);
+    assert!(within(Some("books")).await.is_empty());
+}
