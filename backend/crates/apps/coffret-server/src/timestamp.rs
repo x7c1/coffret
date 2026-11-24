@@ -60,11 +60,15 @@ mod tests {
         );
     }
 
+    // LA-44: a modification time that is a count of seconds no calendar
+    // reaches is answered as null rather than as a date.
     #[test]
     fn a_count_of_seconds_no_calendar_reaches_is_no_date() {
         assert_eq!(iso8601(Mtime::from_unix_seconds(i64::MAX)), None);
     }
 
+    // LA-44: a deposit time is stated as a modification time is, and is null
+    // where no calendar reaches it.
     #[test]
     fn a_deposit_time_is_stated_in_utc() {
         assert_eq!(

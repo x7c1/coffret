@@ -374,11 +374,19 @@ pub(crate) fn entries_absent_under(
     }
 }
 
+/// Whether an Entry standing directly in `?1` has no row of state `?2` that
+/// waits to follow no rename, stopping at the first.
+pub(super) const ANY_REMOTE_IN: &str = "SELECT EXISTS (SELECT 1 FROM entries \
+     LEFT JOIN local_entries ON local_entries.path = entries.path \
+     AND local_entries.state = ?2 AND local_entries.relocate_to IS NULL \
+     WHERE entries.parent = ?1 AND local_entries.path IS NULL \
+     LIMIT 1)";
+
 /// Whether any current Entry standing directly in `folder` is remote: one this
 /// device does not have on disk, by the present record a folder's listing
 /// reads (spec: EP-10): the folder's Entries through the index on `parent`,
 /// each against its row on the primary key, stopping at the first that has
-/// none.
+/// none (spec: LA-48).
 pub(crate) fn any_remote_in(
     connection: &Connection,
     folder: Option<&EntryPath>,
@@ -387,11 +395,7 @@ pub(crate) fn any_remote_in(
     let folder = folder.map_or(ROOT, EntryPath::as_str);
     connection
         .query_row(
-            "SELECT EXISTS (SELECT 1 FROM entries \
-             LEFT JOIN local_entries ON local_entries.path = entries.path \
-             AND local_entries.state = ?2 AND local_entries.relocate_to IS NULL \
-             WHERE entries.parent = ?1 AND local_entries.path IS NULL \
-             LIMIT 1)",
+            ANY_REMOTE_IN,
             params![folder, rows::state_text(LocalEntryState::Present)],
             |row| row.get::<_, bool>(0),
         )

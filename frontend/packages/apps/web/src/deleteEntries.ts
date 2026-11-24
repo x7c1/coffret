@@ -72,8 +72,6 @@ export interface DeleteQuestion {
    * (spec: PK-9, PK-10).
    */
   rebuilds: Rebuilds | null;
-  /** One sentence per Pack the deletion would be refused for, with its reason. */
-  refused: string[];
   /** The named files the Library does not hold, where there are any. */
   missing: string | null;
   /** Said where a deletion is already running and this one would wait for it. */
@@ -132,7 +130,6 @@ export function questionOf(preview: DeletePreview): DeleteQuestion {
       ? `${count(preview.entries)}, ${size(preview.bytes)} will be removed from the Library`
       : 'nothing will be removed from the Library',
     rebuilds: preview.rebuilt > 0 ? rebuildLine(preview) : null,
-    refused: preview.refused.map(refusedLine),
     missing:
       preview.missing.length === 0
         ? null

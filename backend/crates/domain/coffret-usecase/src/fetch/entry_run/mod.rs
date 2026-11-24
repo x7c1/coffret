@@ -199,7 +199,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
     // Which Containers are current is what the Journal says rather than what a
     // listing happens to hold (spec: CP-1, OC-1), and the catalog looks the one
-    // holding this Entry up by its ID.
+    // holding this Entry up by its ID (spec: LA-48).
     let summary = index
         .containers_among(&BTreeSet::from([container_id]))
         .await?

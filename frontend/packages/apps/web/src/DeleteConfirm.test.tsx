@@ -11,22 +11,20 @@ const ALBUMS: DeleteQuestion = {
   title: 'Delete “albums”?',
   removes: '12 files, 340.0 MB will be removed from the Library',
   rebuilds: { line: '2 Packs holding other files will be rebuilt', cost: 'Reads 1.8 GB, writes 1.5 GB' },
-  refused: ['page-002.jpg stays in the Library — the Library has no key for the Pack holding them'],
   missing: null,
   waits: null,
   deletes: true,
 };
 
 // Everything the person is owed before saying yes: what leaves the Library,
-// what a rebuild costs, what is refused and why, and that it cannot be undone.
-it('shows what will be removed, rebuilt and refused, and that it cannot be undone', () => {
+// what a rebuild costs, and that it cannot be undone.
+it('shows what will be removed and rebuilt, and that it cannot be undone', () => {
   render(<DeleteConfirm question={ALBUMS} onChoose={() => undefined} />);
 
   const dialog = screen.getByRole('dialog', { name: 'Delete “albums”?' }).textContent;
   expect(dialog).toContain('12 files, 340.0 MB will be removed from the Library');
   expect(dialog).toContain('2 Packs holding other files will be rebuilt');
   expect(dialog).toContain('Reads 1.8 GB, writes 1.5 GB');
-  expect(dialog).toContain('the Library has no key for the Pack holding them');
   expect(dialog).toContain(NOT_UNDOABLE);
 });
 

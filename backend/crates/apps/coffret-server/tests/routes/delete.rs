@@ -26,9 +26,9 @@ async fn with_a_pack() -> Served {
     served
 }
 
-// The whole of what the preview is for: what it counts is what the run then
-// does. One file inside a Pack that keeps two others, and one file that is a
-// one-file Container of its own — so the count has a removal and a rebuild in
+// LA-46: the whole of what the preview is for: what it counts is what the run
+// then does. One file inside a Pack that keeps two others, and one file that is
+// a one-file Container of its own — so the count has a removal and a rebuild in
 // it, and the bytes a rebuild costs.
 #[tokio::test]
 async fn the_preview_counts_exactly_what_the_deletion_does() {
@@ -50,9 +50,13 @@ async fn the_preview_counts_exactly_what_the_deletion_does() {
     let read = preview["rebuild_read"].as_u64().expect("a byte count");
     let written = preview["rebuild_written"].as_u64().expect("a byte count");
     assert!(read > 0 && written > 0, "{preview}");
-    assert_eq!(preview["refused"], json!([]));
     assert_eq!(preview["missing"], json!([]));
     assert_eq!(preview["after_current"], false);
+    assert_eq!(
+        preview.get("refused"),
+        None,
+        "the preview names no refusal: {preview}"
+    );
 
     let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
@@ -76,11 +80,11 @@ async fn the_preview_counts_exactly_what_the_deletion_does() {
         "rebuilt",
         "rebuild_read",
         "rebuild_written",
-        "refused",
         "missing",
     ] {
         assert_eq!(done[count], preview[count], "{count} as counted: {work}");
     }
+    assert_eq!(done["refused"], json!([]), "{work}");
     assert_eq!(done["stopped"], serde_json::Value::Null);
     assert_eq!(done["step"], serde_json::Value::Null);
 
@@ -100,7 +104,7 @@ async fn the_preview_counts_exactly_what_the_deletion_does() {
     assert_eq!(bytes(response).await, b"the third scan");
 }
 
-// The count is the catalog's alone: with Storage gone the preview still
+// LA-46: the count is the catalog's alone: with Storage gone the preview still
 // answers, and asks Storage nothing — no catch-up, no Keyring — while it still
 // splits the selection into a removal and a rebuild (spec: PK-9).
 #[tokio::test]
@@ -127,10 +131,11 @@ async fn the_preview_answers_from_the_catalog_without_reaching_storage() {
     assert_eq!(served.refused_reads(), 0, "nothing met the halted Storage");
 }
 
-// PK-10, KL-17: a Pack whose key is lost cannot be rebuilt, so a deletion of
-// only some of its files is refused for it. The preview reads no Keyring to
-// know it: it counts that Pack as rebuilt. The deletion reads the Keyring after
-// its own catch-up, refuses the Pack and says so, and takes out the rest.
+// LA-46, PK-10, KL-17: a Pack whose key is lost cannot be rebuilt, so a
+// deletion of only some of its files is refused for it. The preview reads no
+// Keyring to know it: it counts that Pack as rebuilt, and names no refusal.
+// The deletion reads the Keyring after its own catch-up, refuses the Pack and
+// says so, and takes out the rest.
 #[tokio::test]
 async fn a_pack_whose_key_is_lost_is_counted_as_rebuilt_and_then_refused() {
     let served = with_a_pack().await;
@@ -146,7 +151,7 @@ async fn a_pack_whose_key_is_lost_is_counted_as_rebuilt_and_then_refused() {
         preview["rebuilt"], 1,
         "the Pack is counted as rebuilt: {preview}"
     );
-    assert_eq!(preview["refused"], json!([]), "{preview}");
+    assert_eq!(preview.get("refused"), None, "{preview}");
 
     let (status, armed) = body_of(served.post(named).await).await;
     assert_eq!(status, 202, "{armed}");
@@ -294,9 +299,10 @@ async fn a_second_deletion_waits_for_the_first() {
     assert!(!left.contains(&"notes.txt".to_owned()), "{left:?}");
 }
 
-// Refused where a freeze is refused for the same reasons — a locked Library,
-// and nothing current under the path — and refused for the Library root as a
-// whole. Each before anything is armed.
+// LA-46: refused where a freeze is refused for the same reasons — a locked
+// Library, and nothing current under the path — and refused for the Library
+// root as a whole, the preview exactly where the deletion is. Each before
+// anything is armed.
 #[tokio::test]
 async fn a_deletion_is_refused_for_a_locked_library_the_root_and_nothing() {
     let served = Served::library().await;
@@ -326,6 +332,78 @@ async fn a_deletion_is_refused_for_a_locked_library_the_root_and_nothing() {
         assert_eq!(status, 423, "{method}: {refusal}");
         assert_eq!(refusal["error"], "locked");
     }
+}
+
+// LA-46: a preview naming a `path` or an `entry` that is not an Entry Path is
+// refused as `400` before the lock is asked, so a locked Library answers it
+// the same.
+#[tokio::test]
+async fn the_preview_is_refused_for_what_is_not_an_entry_path_locked_or_not() {
+    let served = Served::library().await;
+    let malformed = [
+        "/api/delete?path=albums//2026",
+        "/api/delete?path=albums/../etc",
+        "/api/delete?entry=/albums/cover.png",
+    ];
+    for locked in [false, true] {
+        if locked {
+            served.lock();
+        }
+        for named in malformed {
+            let (status, refusal) = body_of(served.get(named).await).await;
+            assert_eq!(status, 400, "locked: {locked}, {named}: {refusal}");
+            assert_eq!(refusal["error"], "bad_path", "{refusal}");
+        }
+    }
+}
+
+// LA-46, LA-31: while a move is pending, a preview of a deletion touching its
+// rows — the moved folder, one under it, its destination — is refused as a
+// conflict saying the move is under way, and a preview of other rows is still
+// counted.
+#[tokio::test]
+async fn the_preview_is_refused_for_the_rows_of_a_pending_move() {
+    let served = Served::library().await;
+    served.arm_fill("albums/2026");
+    served.fill_idle().await;
+    // The deletion is held at its commit, so it holds the turn and the move
+    // armed behind it stays pending.
+    served.hold_commits();
+    let (status, _) = body_of(served.post("/api/delete?entry=albums/notes.txt").await).await;
+    assert_eq!(status, 202);
+    while served.held_commits() == 0 {
+        tokio::task::yield_now().await;
+    }
+    let (status, accepted) = body_of(
+        served
+            .post("/api/move?from=albums/2026&to=books/2026")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted}");
+
+    for touching in [
+        "/api/delete?path=albums",
+        "/api/delete?entry=albums/2026/spring.jpg",
+        "/api/delete?entry=books/2026/a.jpg",
+    ] {
+        let (status, refusal) = body_of(served.get(touching).await).await;
+        assert_eq!(status, 409, "{touching}: {refusal}");
+        assert_eq!(refusal["error"], "conflict", "{refusal}");
+        assert!(
+            refusal["message"]
+                .as_str()
+                .expect("a sentence")
+                .contains("is under way"),
+            "{refusal}"
+        );
+    }
+    let (status, preview) = body_of(served.get("/api/delete?entry=albums/cover.png").await).await;
+    assert_eq!(status, 200, "{preview}");
+
+    served.release_storage();
+    served.delete_idle().await;
+    served.move_idle().await;
 }
 
 // A deletion planned over a Library another device changed meanwhile commits

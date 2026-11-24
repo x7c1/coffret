@@ -24,7 +24,6 @@ function preview(over: Partial<DeletePreview> = {}): DeletePreview {
     rebuilt: 2,
     rebuild_read: 1_800_000_000,
     rebuild_written: 1_500_000_000,
-    refused: [],
     missing: [],
     after_current: false,
     ...over,
@@ -78,7 +77,6 @@ describe('questionOf', () => {
       line: '2 Packs holding other files will be rebuilt',
       cost: 'Reads 1.8 GB, writes 1.5 GB',
     });
-    expect(question.refused).toEqual([]);
     expect(question.deletes).toBe(true);
     expect(question.target).toEqual({ folders: ['albums'], paths: [] });
   });
@@ -110,19 +108,14 @@ describe('questionOf', () => {
     ).toBeNull();
   });
 
-  it('says what would be refused and why, and the files the Library does not hold', () => {
-    const question = questionOf(
-      preview({ refused: [KEY_LOST], missing: ['albums/gone.jpg'], after_current: true }),
-    );
-    expect(question.refused).toEqual([
-      'page-002.jpg stays in the Library — the Library has no key for the Pack holding them',
-    ]);
+  it('says the files the Library does not hold, and a deletion it would wait for', () => {
+    const question = questionOf(preview({ missing: ['albums/gone.jpg'], after_current: true }));
     expect(question.missing).toBe('not in the Library, so nothing to remove: gone.jpg');
     expect(question.waits).toBe('a deletion is running already — this one runs after it');
   });
 
   it('offers no Delete where nothing would be removed', () => {
-    const question = questionOf(preview({ entries: 0, bytes: 0, refused: [KEY_LOST] }));
+    const question = questionOf(preview({ entries: 0, bytes: 0 }));
     expect(question.deletes).toBe(false);
     expect(question.removes).toBe('nothing will be removed from the Library');
   });

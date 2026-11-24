@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::api_error::ApiError;
 use crate::state::ServerState;
 
-/// Every folder in the Library, flat and sorted.
+/// Every folder in the Library, flat and sorted (spec: LA-47).
 ///
 /// Flat because a Library stores no folders to nest (spec: EP-2): what comes back
 /// is every path a separator implies, each named in full, and the tree the

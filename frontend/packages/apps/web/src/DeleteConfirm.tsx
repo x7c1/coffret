@@ -13,9 +13,12 @@ import type { WaitsFor } from './turns';
  * Where Packs that keep other files must be rebuilt, how many and what that
  * reads and writes stand out in a box of their own: rebuilding reads each such
  * Pack whole and uploads its replacement, the one part of a deletion that
- * costs time and transfer (spec: PK-10). The lines for Packs the deletion
- * would be refused for, named files the Library does not hold, and a deletion
- * that waits for another are each drawn only where they apply.
+ * costs time and transfer (spec: PK-10). The lines for named files the
+ * Library does not hold and for a deletion that waits for another are each
+ * drawn only where they apply. The question names no Pack the deletion would
+ * be refused for: the server's count reads no Keyring and names none, so a
+ * Pack whose key is lost is counted as rebuilt here and refused, and said, by
+ * the deletion itself (spec: LA-46).
  *
  * Where nothing would be removed it says so and offers only Close. Where a
  * sync or a freeze is under way it says the deletion starts after it, since
@@ -68,11 +71,6 @@ export function DeleteConfirm({
           <span style={{ fontSize: 12 }}>{question.rebuilds.cost}</span>
         </Note>
       )}
-      {question.refused.map((line) => (
-        <p key={line} style={{ ...LINE, color: COLOR.warn }}>
-          {line}
-        </p>
-      ))}
       {question.missing !== null && <p style={{ ...LINE, color: COLOR.dim }}>{question.missing}</p>}
       {question.waits !== null && <p style={{ ...LINE, color: COLOR.warn }}>{question.waits}</p>}
       {question.deletes && startsAfter !== null && (

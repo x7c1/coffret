@@ -40,3 +40,19 @@ pub(crate) fn first<T>(
         None => Ok(None),
     }
 }
+
+/// How SQLite plans one statement, a line for each step, every parameter bound
+/// to the empty string: what a test of what a statement reads looks at.
+#[cfg(test)]
+pub(crate) fn plan(connection: &Connection, sql: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .expect("a statement of this crate is one SQLite plans");
+    let count = statement.parameter_count();
+    let params: Vec<&dyn rusqlite::ToSql> = (0..count).map(|_| &"" as _).collect();
+    statement
+        .query_map(params.as_slice(), |row| row.get::<_, String>(3))
+        .expect("planning must succeed")
+        .collect::<Result<_, _>>()
+        .expect("planning must succeed")
+}

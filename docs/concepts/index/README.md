@@ -9,13 +9,14 @@ files without asking [Storage](../storage/) for every lookup.
 
 ## Mental Model
 
-The Index keeps three kinds of information with different recovery properties:
+The Index keeps four kinds of information with different recovery properties:
 
 | Part | What it records | After loss |
 | --- | --- | --- |
 | Cached Catalog | Current Containers, Entries with their current and captured paths and their entry numbers, and the checkpoint reached | Reconstruct from intact control state |
 | Device-local records | Mappings, materializations, pending work, and reservations | Restore the Index from a backup of this device, or re-establish the records on this device |
 | Held parcels | Which parcels of which Containers this device keeps the ciphertext of | Nothing to recover: the parcels are read from Storage again when next wanted |
+| Folder totals | For each folder of the Library, the Library root among them, what the current Entries at every depth below it come to: how many there are and how many are present, the plaintext bytes of each of the two, and the newest modification time among them; and for the whole Library, how many Containers are current | Nothing to recover: counted afresh from the cached Catalog and the materialization records |
 
 A new device restores the Catalog and chooses its own mappings. Rebuilding
 only the cache preserves the existing device-local records. Losing the whole
@@ -29,6 +30,18 @@ Nothing on this device knows that until a catch-up, a read Storage refuses, or
 a look at the names of the Library's heads shows it. Such a look reads no
 object and changes nothing, so a stale Index answers as the Catalog stood when
 it was last caught up until a catch-up brings it forward (spec: CK-9, FM-12).
+
+The **folder totals** are a count of the cached Catalog and of this device's
+materialization records, kept so that what a folder comes to is read from the
+folder's own totals rather than counted out of every Entry below it each time
+it is asked. Being a count of the other two parts, they say nothing those do
+not: a folder has totals exactly where a current Entry stands under it, as a
+folder exists exactly there (spec: EP-2). They are brought up to date by every
+write of the Entries or of the materialization records, in the same
+transaction as the write, so no read finds them out of step with what they
+count; an Index the cached Catalog is restored into counts them afresh. Like
+the device-local records they are this device's alone: no Index Snapshot
+carries them and nothing of them reaches Storage (spec: LA-45, CK-7).
 
 A **held parcel** is a parcel of a Container's chunk sequence this device read
 and keeps on its own disk, beside the spool, so that reading a page a second

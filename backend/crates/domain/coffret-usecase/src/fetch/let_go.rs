@@ -32,7 +32,8 @@ pub(in crate::fetch) async fn let_go_departed(
 ) -> FetchResult<()> {
     // Every held parcel is a candidate here, so this reads all of this
     // device's held rows, and then only their Containers, by ID: a page read
-    // costs what this device holds rather than what the Library does.
+    // costs what this device holds rather than what the Library does
+    // (spec: LA-48).
     let held = index.held_parcels().await?;
     if held.is_empty() {
         return Ok(());

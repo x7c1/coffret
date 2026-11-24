@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// The most characters a kept name may have.
+/// The most characters a kept name may have, counted as Unicode scalar
+/// values (spec: LA-43).
 ///
 /// Far past anything a person types into a search field, and short enough
 /// that what is kept stays a few kilobytes at most: a longer one is refused

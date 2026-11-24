@@ -123,7 +123,7 @@ struct FileDto {
     path: String,
     size: u64,
     /// The modification time in UTC, and `null` for the count of seconds no
-    /// calendar reaches.
+    /// calendar reaches (spec: LA-44).
     ///
     /// The Entry's own (spec: FM-9) for a row the Library holds, and the local
     /// file's for an `added` one — which is the only time this device has to
@@ -202,6 +202,9 @@ pub async fn list(
     let folder = query.folder()?;
     let listing = library.list(folder.as_ref()).await?;
     let added = library.added_locally(folder.as_ref()).await?;
+    // Every reservation this device holds, not only this folder's: they are
+    // the drops waiting for their Pack, so their number is bounded by the
+    // drops in flight rather than by the Library (spec: LA-45, PK-17).
     let reserved = library.reserved_paths().await?;
     // Somebody looking at a folder this device can fetch into is about to
     // open something in it, so the fronts of its Containers are read now, in

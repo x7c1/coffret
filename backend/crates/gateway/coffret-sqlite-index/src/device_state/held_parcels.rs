@@ -44,16 +44,20 @@ pub(crate) fn held_parcels(connection: &Connection) -> IndexResult<Vec<HeldParce
     )
 }
 
+/// The rows of one Container's held parcels, on the primary key.
+pub(super) const HELD_PARCELS_OF: &str =
+    "SELECT * FROM held_parcels WHERE container_id = ?1 ORDER BY parcel";
+
 /// Every parcel of one Container this device holds, by parcel index
 /// (spec: PK-21): the rows under that Container on the primary key, and no
-/// other.
+/// other (spec: LA-48).
 pub(crate) fn held_parcels_of(
     connection: &Connection,
     container_id: ContainerId,
 ) -> IndexResult<Vec<HeldParcel>> {
     collect(
         connection,
-        "SELECT * FROM held_parcels WHERE container_id = ?1 ORDER BY parcel",
+        HELD_PARCELS_OF,
         params![container_id.as_bytes().as_slice()],
         "reading one Container's held parcels",
         rows::held_parcel,

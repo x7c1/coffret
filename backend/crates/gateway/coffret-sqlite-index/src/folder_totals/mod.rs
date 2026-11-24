@@ -154,20 +154,7 @@ mod tests {
     use super::library_summary::LIBRARY;
     use super::recount::{COUNT_CHILD_FOLDERS, COUNT_FILES};
     use super::*;
-
-    /// How SQLite plans one statement, a line for each step.
-    fn plan(connection: &Connection, sql: &str) -> Vec<String> {
-        let mut statement = connection
-            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
-            .expect("a statement of this module is one SQLite plans");
-        let count = statement.parameter_count();
-        let params: Vec<&dyn rusqlite::ToSql> = (0..count).map(|_| &ROOT as _).collect();
-        statement
-            .query_map(params.as_slice(), |row| row.get::<_, String>(3))
-            .expect("planning must succeed")
-            .collect::<Result<_, _>>()
-            .expect("planning must succeed")
-    }
+    use crate::query::plan;
 
     // LA-45: what a listing, the Library's totals and the list of folders read
     // is the folder's own rows, each found through an index, and never a scan

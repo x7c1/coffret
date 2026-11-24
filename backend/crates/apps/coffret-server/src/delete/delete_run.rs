@@ -1,4 +1,4 @@
-use coffret_device::{DeleteOutcome, DeletePreview, EntryPath, Findings, PackRefusal, Step};
+use coffret_device::{DeleteOutcome, EntryPath, Findings, PackRefusal, Step};
 
 use crate::finding::Finding;
 
@@ -110,11 +110,6 @@ impl RefusedPack {
                 PackRefusal::Unverified(_) => "unverified",
             },
         }
-    }
-
-    /// Every refusal a preview counts.
-    pub fn all_of(preview: &DeletePreview) -> Vec<Self> {
-        preview.refused.iter().map(Self::of).collect()
     }
 
     /// The sentence a person reads beside the files that stayed.

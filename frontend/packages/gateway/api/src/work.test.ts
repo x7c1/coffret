@@ -338,7 +338,6 @@ it('names a deletion by its folders and its files, the same way both times', asy
             rebuilt: 0,
             rebuild_read: 0,
             rebuild_written: 0,
-            refused: [],
             missing: [],
             after_current: false,
           }

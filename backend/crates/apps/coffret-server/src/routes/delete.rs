@@ -8,7 +8,7 @@ use coffret_device::DeletePreview;
 use serde::Serialize;
 
 use crate::api_error::ApiError;
-use crate::delete::{delete_target, RefusedPack, Target};
+use crate::delete::{delete_target, Target};
 use crate::entry_query::{folder_named, shaped};
 use crate::state::ServerState;
 
@@ -57,7 +57,8 @@ pub async fn delete(
 /// What [`POST /api/delete`](delete) of the same selection would do, counted
 /// before it is asked for: how many files and bytes leave the Library, how
 /// many Containers are removed outright, how many Packs are rebuilt and what
-/// that reads and writes, and which named files the Library does not hold.
+/// that reads and writes, and which named files the Library does not hold
+/// (spec: LA-46).
 ///
 /// The count is the run's own plan (see
 /// [`preview_delete`](coffret_device::OpenLibrary::preview_delete)) over the
@@ -65,10 +66,10 @@ pub async fn delete(
 /// Keyring, so it takes neither Storage nor a key and answers at once. The two
 /// agree about what is removed and what is rebuilt except where the Library
 /// moves between the calls, where a Pack the run reads back does not verify
-/// (spec: PK-10), and where a Pack's key is lost: the preview counts that Pack
-/// as rebuilt and leaves `refused` always empty, and the run, reading the
-/// Keyring after its own catch-up, refuses it and names it in the work answer
-/// (spec: PK-10, KL-17).
+/// (spec: PK-10), and where a Pack's key is lost: the preview, knowing nothing
+/// of lost keys, counts that Pack as rebuilt, and the run, reading the Keyring
+/// after its own catch-up, refuses it and names it in the work answer
+/// (spec: PK-10, KL-17). So the preview names no refusal of its own.
 ///
 /// It changes nothing in the Library and arms nothing. Refused exactly where
 /// the `POST` is.
@@ -162,10 +163,6 @@ pub struct PreviewDto {
     rebuild_read: u64,
     /// How many bytes the rebuilt Packs would weigh on Storage.
     rebuild_written: u64,
-    /// The Packs it would be refused for, and why (spec: KL-17): always empty,
-    /// since the preview reads no Keyring to find a Pack whose key is lost,
-    /// and kept so the answer keeps the shape the run's own count has.
-    refused: Vec<RefusedPackDto>,
     /// Named files the Library holds nothing at.
     missing: Vec<String>,
     /// Whether a deletion is already running, so this one would wait its turn.
@@ -183,47 +180,12 @@ impl PreviewDto {
             rebuilt: preview.rebuilt,
             rebuild_read: preview.rebuild_read,
             rebuild_written: preview.rebuild_written,
-            refused: RefusedPack::all_of(preview)
-                .iter()
-                .map(RefusedPackDto::of)
-                .collect(),
             missing: preview
                 .missing
                 .iter()
                 .map(|path| path.as_str().to_owned())
                 .collect(),
             after_current,
-        }
-    }
-}
-
-/// One Pack a deletion is, or would be, refused for, as the browser is told it.
-///
-/// Shared by the preview and the work answer, because the same refusal is
-/// shown before the deletion and after it.
-#[derive(Debug, Serialize)]
-pub(super) struct RefusedPackDto {
-    /// The named files that stay in the Library because their Pack does.
-    spared: Vec<String>,
-    /// How many other files the Pack holds.
-    kept: usize,
-    /// `key_lost` or `unverified`.
-    reason: &'static str,
-    /// The sentence to show beside the files that stayed.
-    message: String,
-}
-
-impl RefusedPackDto {
-    pub(super) fn of(refused: &RefusedPack) -> Self {
-        Self {
-            spared: refused
-                .spared
-                .iter()
-                .map(|path| path.as_str().to_owned())
-                .collect(),
-            kept: refused.kept,
-            reason: refused.reason,
-            message: refused.message(),
         }
     }
 }

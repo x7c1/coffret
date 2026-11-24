@@ -13,7 +13,8 @@ attached, the one authority it answers to, the **browser token** it admits a
 browser by, and the one-time **launch ticket** a browser exchanges for that
 token.
 
-LA-1 to LA-12, with LA-30 and LA-31 for the move of files and folders, are
+LA-1 to LA-12, with LA-30 and LA-31 for the move of files and folders and
+LA-46 for the preview of a deletion, are
 the contract of the server itself, LA-13 to LA-21 the
 contract of the explorer host, LA-22 to LA-25 that of the desktop app's
 **Passphrase door**: a listener of the app's own that serves the page a
@@ -25,13 +26,14 @@ one-time **drop handle**, and carried into the Library by a request that names
 the handle and never a path. LA-32 onwards are the server's again: how a
 **reader** — the explorer's sheet over the file the tree's focus is on — reads
 on from one folder into the next, and reads ahead of itself without setting a
-folder coming; from LA-34, how a person **stops** an add, a freeze or a
+folder coming, and what reading on and reading a file read of the Index
+(LA-48); from LA-34, how a person **stops** an add, a freeze or a
 fill before it commits, and what a stopped add leaves; which set of
 colours this device's explorer is drawn in, which the server keeps as the
 device's own state (LA-38); and what the whole Library comes to, counted out
 of the catalog for the explorer's details of the Library itself (LA-39); what
-one folder holds, and what reading a folder, the Library's totals and its
-folders costs (LA-44, LA-45); and
+one folder holds, every folder of the Library, and what reading a folder, the
+Library's totals and its folders costs (LA-44, LA-47, LA-45); and
 which rows a tree filtered by a name or by the most recently deposited books
 keeps (LA-40 to LA-42); and what this device's explorer last had its tree
 filtered by, kept beside the colours as the device's own state (LA-43). The
@@ -299,6 +301,33 @@ Concept background: [Library](../../concepts/library/),
   front as a `409 conflict` saying a move of them is under way, changing
   nothing. A move cannot be stopped (LA-34).
   *(Form: test)*
+- **LA-46.** A deletion's preview (`GET /api/delete`) names what it counts the
+  way the deletion (`POST /api/delete`) names it — `path` once per folder, which
+  takes everything under it, and `entry` once per file — and changes nothing
+  in the Library or on the device, arming nothing. It is counted out of this
+  device's catalog as it stands, by the deletion's own plan (PK-9), and out of
+  nothing else: it catches nothing up and reads no Keyring, so it asks Storage
+  nothing, takes no key, and answers while Storage cannot be reached. It
+  answers the folders and the files it names, each in Entry Path order; how
+  many Entries would leave the Library and the plaintext bytes they come to;
+  how many Containers would be removed outright; how many Packs would be
+  rebuilt around the Entries they keep (PK-10), with the bytes those rebuilds
+  read from Storage — each Pack whole — and the bytes the rebuilt Packs would
+  weigh; the named files the Library holds no current Entry at; and whether a
+  deletion is already running, behind which this one would wait (LA-12). It
+  names no refusal. A Pack whose key is lost (KL-7) is counted as one to be
+  rebuilt, since only the Keyring says a key is lost, and it is the deletion,
+  reading the Keyring after its own catch-up, that refuses that Pack and names
+  it (PK-10, KL-17). Where the Library does not move between the two and every
+  Pack the deletion reads back has its key and verifies, the deletion does
+  what its preview counted. The preview is refused exactly where the
+  deletion is, before anything is counted: a `path` or an `entry` that is not
+  an Entry Path as `400`, locked or not (EP-2); a locked Library as every
+  keyed route refuses it (DK-2); a query naming no folder and no file, or the
+  Library root as a whole, as `400`; a selection touching the rows of a move
+  still pending as a `409 conflict` saying a move of them is under way
+  (LA-31); and a selection under which the Library holds no current Entry as
+  `404`. *(Form: test)*
 
 ### The explorer host
 
@@ -451,9 +480,12 @@ Concept background: [Library](../../concepts/library/),
   (LA-18) was refused — is loaded again from a fresh ticket by the app on its
   own: the page tells the app, one way and with no answer, that it holds no
   session, and the app loads the window afresh as *Reload the explorer* does.
-  It does so only where it can use a ticket: not while no Library is served
-  or the app is quitting; while the Library is locked, it waits for the
-  Library to be unlocked before loading the window; and not again within a
+  Only the explorer's own window, from the explorer's origin, is heard saying
+  so, as only it may hand a drop over (LA-26); anything else saying it is let
+  be, with a warning. The app loads the window afresh only where it can use
+  a ticket: not while no Library is served or the app is quitting; while the
+  Library is locked, it waits for the Library to be unlocked before loading
+  the window; and not again within a
   minute of the last time, so that a page that cannot hold a session is not
   loaded round and round. The desktop app writes no file
   for a ticket and hands none to a browser. Only the development host — the
@@ -474,8 +506,9 @@ Concept background: [Library](../../concepts/library/),
   to open the launch file: in a browser, where nothing loads it afresh, that
   is the page a person sees. *(Form: test for the modes, the exclusive
   creation, the page's handling of the fragment, and the page telling the
-  desktop app it holds no session and the app loading the window afresh where
-  it can; prose for the window's URL staying within the app and the browser's
+  desktop app it holds no session, the app hearing it from the explorer's own
+  window and origin alone, and the app loading the window afresh where it
+  can; prose for the window's URL staying within the app and the browser's
   command line carrying no ticket, which are properties of how the app loads
   its window and of how the development host's file is opened, honored by
   construction.)*
@@ -650,6 +683,31 @@ Concept background: [Library](../../concepts/library/),
   none; one that is not a path is refused as `400` (EP-2). This is how a
   tree a filter keeps (LA-40 to LA-42) reads on inside the folders it kept.
   *(Form: test)*
+- **LA-48.** What the server reads of the Index to read on and to read a file
+  does not grow with the Library, nor with the folders the reader passes,
+  beyond what each read touches; no read covers the Entries, the present
+  records or the Containers of the Library or of a subtree:
+  - the files beside a row (`GET /api/beside`, LA-32) are found from the
+    folder the row stands in up towards `under` or the root, by the nearest
+    child folder or Entry of each folder on the side looked at, and then down
+    the first or last child of each folder into the file answered: each a
+    lookup by the folder it stands directly in, ended by the first row on
+    that side, so a few rows for each level of the path;
+  - whether a file read from this device's disk stands in a folder not wholly
+    here, which is whether its read arms that folder's fill (LA-33), is a test
+    for the existence of one remote Entry (EP-10) standing directly in the
+    folder, ended by the first found;
+  - the Container a fetch reads an Entry from, and the parcels this device
+    holds of it (PK-21), are looked up by that Container's ID. Letting go of
+    held parcels whose Container has left the current set reads every parcel
+    this device holds and then only their Containers, by ID: what this device
+    holds, not what the Library does.
+
+  *(Form: test for the files beside a row, the test for a folder not wholly
+  here and the parcels held of one Container; prose for the lookup of
+  Containers by ID, which is the catalog's primary key, and for the reading
+  of every held parcel, which is bounded by what this device holds, honored
+  by construction.)*
 - **LA-33.** A file may be read without arming the fill of its folder: the
   **read ahead** (`GET /api/file?path=<entry>&fill=false`). It is answered as
   a read is, from the file on this device or, where there is none, by the
@@ -835,16 +893,23 @@ Concept background: [Library](../../concepts/library/),
   10, the count the explorer offers at first. A body whose `recent` is not a
   whole number from 1 to 4,294,967,295, whose name is longer than 1,000
   characters, or which lacks a field or carries one more, is refused as `400`
-  and leaves what was kept as it was. Unlike the appearance, both are refused
-  by the server itself while the Library is locked, as every route that reads
-  the catalog is (DK-2), although neither needs its key: a name typed to
-  filter the tree says something about what the Library holds, so a locked
-  server neither hands it out nor takes a new one. Needing no key, neither
+  and leaves what was kept as it was. A name's characters are its Unicode
+  scalar values, so a character outside the Basic Multilingual Plane, as most
+  emoji are, is one and not the two UTF-16 units a browser counts it as.
+  Unlike the appearance, both are refused by the server itself while the
+  Library is locked, as every route that reads the catalog is (DK-2),
+  although neither needs its key: a name typed to filter the tree says
+  something about what the Library holds, so a locked server neither hands it
+  out nor takes a new one. Needing no key, neither
   records anybody being here (DK-4).
   The explorer reads the kept settings as it opens and applies them before it
   first draws a filtered tree, so it opens filtered as it was left, and keeps
   each change: a change of Recent or its count at once, and the name once
-  typing in it pauses or the field is left, not at every key. A change it
+  typing in it pauses or the field is left, not at every key. It stops the
+  name at the 1,000 characters the server keeps, counted as the server counts
+  them, wherever the name is typed or pasted: what goes past them is not
+  entered, so the explorer never asks to keep a name the server refuses. A
+  change it
   could not keep, or kept settings it could not read, is said in the page's
   console and leaves the filter on screen as it is. A change made on the page
   before the kept settings are answered wins over them: the answer that
@@ -871,18 +936,21 @@ Concept background: [Library](../../concepts/library/),
     of them are present on this device (`files_present`, EP-10);
     `present_throughout`, whether every one of them is; `size`, the plaintext
     bytes of all of them, here or not; and `mtime`, the newest modification
-    time among them;
+    time among them, in UTC, and `null` where that time is a count of seconds
+    no calendar reaches;
   - `files` — each current Entry standing directly in it, named by its last
-    component and its whole path, with its size, its `mtime` and deposit
-    time, whether this device has it (`present` or `remote`, EP-10) and the
-    kind of Container it lives in (PK-15), merged in EP-3 order with the files
-    standing in the mapped folder that the Library holds no Entry for
-    (`added`, with the local file's size and `mtime`, and no deposit time or
-    Container). Every row also says whether a reservation of a drop that asks
-    for a Pack names its path (`reserved`, PK-17), and whether a browser can
-    draw it and as which media type, by its extension (`openable`,
-    `content_type`). An Entry standing at exactly the folder's own path is not
-    a child of it and is not among them;
+    component and its whole path, with its size, its `mtime` and its deposit
+    time (`deposited_at`, FM-15), each in UTC and `null` where it is a count
+    of seconds no calendar reaches, whether this device has it (`present` or
+    `remote`, EP-10) and the kind of Container it lives in (`container`,
+    PK-15), merged in EP-3 order with the files standing in the mapped folder
+    that the Library holds no Entry for (`added`, with the local file's size
+    and `mtime`, and `null` for its deposit time and its Container, since no
+    Entry holds it and nothing of it has been deposited). Every row also says
+    whether a reservation of a drop that asks for a Pack names its path
+    (`reserved`, PK-17), and whether a browser can draw it and as which media
+    type, by its extension (`openable`, `content_type`). An Entry standing at
+    exactly the folder's own path is not a child of it and is not among them;
   - `folders_on_disk` — the names of the folders standing in the mapped
     folder that are not folders of the Library, in EP-3 order; coffret's
     scratch, the management area (EP-14) and symbolic links are never named;
@@ -896,19 +964,41 @@ Concept background: [Library](../../concepts/library/),
   - `empty_mapped_prefixes` — at the root only, the top-level folders this
     device maps that no current Entry stands under yet, in EP-3 order.
   *(Form: test)*
+- **LA-47.** The server answers every folder of the Library
+  (`GET /api/folders`, as `{"folders": […]}`), out of the Index and nothing of
+  Storage: flat, each folder named by its whole path, in EP-3 order. A folder
+  is what the separators of the Entry Paths under it imply (EP-2), so the
+  answer holds exactly the folders a current Entry stands under at any depth,
+  every ancestor of a deep path among them, and never the Library root, which
+  is no path; a Library holding no Entry, or only Entries at its root, is
+  answered with none. Nesting them into a tree is the explorer's. It is keyed
+  like every route (LA-2), refused while the Library is locked, as every route
+  that reads the catalog is (DK-2), and changes nothing. *(Form: test)*
 
 - **LA-45.** What the server reads of the Index to answer a folder's listing
   (`GET /api/list`, LA-44), what the whole Library comes to
   (`GET /api/library/totals`, LA-39) and every folder of the Library
-  (`GET /api/folders`) does not grow with the Entries below the folder beyond
-  what the answer itself holds: each row it answers with is found by key, at
+  (`GET /api/folders`, LA-47) does not grow with the Entries below the folder
+  beyond what the answer itself holds: each row it answers with is found by key, at
   a cost of the rows answered times the logarithm of the Entries the Library
   holds, and no read covers the Entries, the present records or the
   Containers of a subtree. What a folder's child folders and the Library come
   to is kept for each folder beside the catalog, on this device alone — no
   Index Snapshot carries it and nothing of it reaches Storage (CK-7) — and is
   brought up to date by every write of the Entries or of the present records,
-  in the same transaction. *(Form: test)*
+  in the same transaction. Two reads beside these are not by key, and a
+  folder's listing makes both. It reads every mapping this device holds, to
+  say which rows are `mapped` and to find the folder on disk: at most one for
+  the Library root and one for each top-level component (EP-9), so they do
+  not grow with the Entries. And it reads every reservation this device
+  holds, with each path it names, to say which rows are `reserved` (LA-44): a
+  reservation is a drop that asked for a Pack and that no `freeze` has
+  decided yet (PK-17), so what that read covers is the files of the drops in
+  flight on this device, which do not grow with the Library. *(Form: test for
+  the reads of the Entries, the present records, the Containers and the kept
+  totals; prose for what bounds the mappings and the reservations, which is
+  what a mapping and a reservation are rather than anything a read of the
+  Index can observe, honored by construction.)*
 
 ### What the Library comes to
 
