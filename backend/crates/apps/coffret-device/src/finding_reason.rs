@@ -189,12 +189,19 @@ pub enum FindingReason {
     /// path — so the run left it out and carried on with the rest
     /// (spec: EP-4, EP-6).
     ///
-    /// Nothing about it was uploaded, and every run reports it again until one
-    /// of the two is renamed.
+    /// Nothing about it was uploaded, and every run reports it again until the
+    /// file, or a folder no mapping is mapped at, is renamed.
     FileAndFolder {
         /// The path that would be both: a folder above the file's own, or the
         /// file's own.
         both: EntryPath,
+        /// Whether `both` is the name a top-level mapping of this device is
+        /// mapped at (spec: EP-9).
+        ///
+        /// The folder is then that mapping's, and its place in the Library is
+        /// that name rather than its local folder's: renaming the folder on
+        /// disk changes nothing, so the sentence never offers it.
+        mapped: bool,
     },
     /// A drop put the file here to be added as a Pack, and the run left it for
     /// the freeze that packs it (spec: PK-17).
@@ -324,12 +331,28 @@ impl fmt::Display for FindingReason {
             // a folder above the file rather than the file itself. Quoted as a
             // refused rename quotes the same phrase, which a detected rename
             // falling back to an addition puts on the line next to this one.
-            Self::FileAndFolder { both } => {
+            Self::FileAndFolder {
+                both,
+                mapped: false,
+            } => {
                 return write!(
                     f,
                     "it was left out, because adding it would make {:?} both a file and a folder; \
                      rename the file or the folder, then run again",
                     both.as_str(),
+                );
+            }
+            // Never "rename the folder": the folder is the one a mapping
+            // stands for, and renaming it on disk leaves it at the name it was
+            // mapped at (spec: EP-9). A person told to rename it would do so
+            // and see nothing change.
+            Self::FileAndFolder { both, mapped: true } => {
+                return write!(
+                    f,
+                    "it was left out, because adding it would make {both:?} both a file and a \
+                     folder, and the folder is the one this device maps at {both:?}, so renaming \
+                     that folder on disk changes nothing; rename the file {both:?}, then run again",
+                    both = both.as_str(),
                 );
             }
             // The one reason with something of its own to name. Which folder it

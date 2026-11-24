@@ -563,9 +563,13 @@ control for a sync, since a drop starts one.
     stands under a path an Entry stands at, or Entries stand under its own
     path — is left out of a sync or a freeze before anything is packed or
     uploaded, and reported with the path and what to do: rename one of the
-    two. The rest of the run carries on; a commit that would make such a path
-    is refused whole, so leaving the file out is how a person hears of it
-    (spec: EP-4, EP-6).
+    two. Where the folder is the one a top-level mapping of this device is
+    mapped at, the report says so, says that renaming that folder on disk
+    changes nothing, since the mapping's place in the Library is that name and
+    not its local folder's (spec: EP-9), and offers renaming the file. The
+    rest of the run carries on; a commit that would make such a path is
+    refused whole, so leaving the file out is how a person hears of it (spec:
+    EP-4, EP-6).
 - A sync, a freeze and a deletion each own this device's pending work for the
   whole of a run, and a competing run is refused (spec: OC-2). Within one
   server the three take **turns** instead, and a move takes the same turn from

@@ -268,6 +268,68 @@ fn a_sync_answers_the_renames_it_detected() {
     );
 }
 
+// A file a sync or a freeze left out for making a path both a file and a
+// folder is said with what helps (spec: EP-6). Where the folder is the one a
+// top-level mapping of this device is mapped at, renaming it on disk changes
+// nothing (spec: EP-9), so the answer says which folder it is and never offers
+// that; beside any other folder it offers renaming either.
+#[test]
+fn a_file_left_out_beside_a_mapped_folder_is_not_told_to_rename_the_folder() {
+    let said = |mapped| {
+        let findings = Findings::assembled([Finding::Surfaced {
+            path: path("notes/x.pdf"),
+            reason: FindingReason::FileAndFolder {
+                both: path("notes"),
+                mapped,
+            },
+        }]);
+        let ran = Ran::found(
+            crate::report::findings(&findings, Form::Json),
+            Answer::Synced(Synced::from(&SyncOutcome {
+                reserved: Vec::new(),
+                relocations: Vec::new(),
+                added: Vec::new(),
+                replaced: Vec::new(),
+                renamed: Vec::new(),
+                unchanged: 0,
+                mappings: 2,
+                surfaced: Vec::new(),
+                unavailable: Vec::new(),
+                settled: Vec::new(),
+                commit: None,
+                retained_keyrings: Vec::new(),
+            })),
+            &findings,
+        );
+        let answered = succeeded("sync", &ran);
+        assert_eq!(answered["findings"][0]["reason"], "FileAndFolder");
+        assert_eq!(answered["findings"][0]["needs_attention"], true);
+        answered["findings"][0]["said"]
+            .as_str()
+            .expect("a finding is said as a string")
+            .to_owned()
+    };
+
+    let mapped = said(true);
+    assert_eq!(
+        mapped,
+        "surfaced notes/x.pdf: it was left out, because adding it would make \"notes\" both a \
+         file and a folder, and the folder is the one this device maps at \"notes\", so \
+         renaming that folder on disk changes nothing; rename the file \"notes\", then run again",
+    );
+    for never in ["rename the file or the folder", "another name"] {
+        assert!(
+            !mapped.contains(never),
+            "neither renaming the mapped folder nor mapping it elsewhere is offered: {mapped}",
+        );
+    }
+    assert_eq!(
+        said(false),
+        "surfaced notes/x.pdf: it was left out, because adding it would make \"notes\" both a \
+         file and a folder; rename the file or the folder, then run again",
+    );
+}
+
 #[test]
 fn a_fetch_answers_its_counts() {
     let outcome = FetchOutcome {

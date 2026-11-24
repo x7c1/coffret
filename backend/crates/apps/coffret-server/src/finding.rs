@@ -371,11 +371,25 @@ fn said(reason: &FindingReason) -> Cow<'static, str> {
                  packs"
             }
         },
-        FindingReason::FileAndFolder { both } => {
+        FindingReason::FileAndFolder {
+            both,
+            mapped: false,
+        } => {
             return Cow::Owned(format!(
                 "this file was left out, because adding it would make {:?} both a file and a \
                  folder; rename the file or the folder, then try again",
                 both.as_str()
+            ))
+        }
+        // Never "rename the folder", for the reason the terminal's sentence
+        // gives: the folder is the one a mapping stands for, and renaming it
+        // on disk leaves it at the name it was mapped at (spec: EP-9).
+        FindingReason::FileAndFolder { both, mapped: true } => {
+            return Cow::Owned(format!(
+                "this file was left out, because adding it would make {both:?} both a file and a \
+                 folder, and the folder is the one this device maps at {both:?}, so renaming that \
+                 folder on disk changes nothing; rename the file {both:?}, then try again",
+                both = both.as_str()
             ))
         }
     })
@@ -498,6 +512,59 @@ mod tests {
 
     const PREFIX: &str = "albums";
     const LOCAL_ROOT: &str = "/mnt/photos";
+
+    /// What the explorer is told of a file a run left out for making `both`
+    /// both a file and a folder, `mapped` saying whether a top-level mapping
+    /// of this device is mapped at that name.
+    fn left_out(path: &str, both: &str, mapped: bool) -> String {
+        Finding::of(&coffret_device::Finding::Surfaced {
+            path: entry_path(path),
+            reason: FindingReason::FileAndFolder {
+                both: entry_path(both),
+                mapped,
+            },
+        })
+        .expect("a file left out is something to say")
+        .message
+    }
+
+    // Where the folder of the two is one a mapping stands for, renaming it on
+    // disk changes nothing — its place in the Library is the name it was
+    // mapped at (spec: EP-9) — so the sentence says which folder it is and
+    // offers what helps instead. Whichever of the two was left out — the file
+    // at the name, or a file in the mapped folder — the remedy is the same.
+    #[test]
+    fn a_file_left_out_beside_a_mapped_folder_is_not_told_to_rename_the_folder() {
+        for path in ["notes", "notes/g.jpg"] {
+            let said = left_out(path, "notes", true);
+
+            assert_eq!(
+                said,
+                "this file was left out, because adding it would make \"notes\" both a file \
+                 and a folder, and the folder is the one this device maps at \"notes\", so \
+                 renaming that folder on disk changes nothing; rename the file \"notes\", then \
+                 try again",
+            );
+            for never in ["rename the file or the folder", "another name"] {
+                assert!(
+                    !said.contains(never),
+                    "neither renaming the mapped folder nor mapping it elsewhere is offered: \
+                     {said}",
+                );
+            }
+        }
+    }
+
+    // Where no mapping stands at the path, the folder is an ordinary one, and
+    // renaming either of the two is what helps.
+    #[test]
+    fn a_file_left_out_beside_an_ordinary_folder_is_told_to_rename_either() {
+        assert_eq!(
+            left_out("notes/g.jpg", "notes", false),
+            "this file was left out, because adding it would make \"notes\" both a file and a \
+             folder; rename the file or the folder, then try again",
+        );
+    }
 
     // The boundary the arm above draws, pinned: the sentence here is the static
     // one about a folder that was not looked at, so neither the prefix nor the
@@ -822,6 +889,7 @@ mod tests {
                 }),
                 FindingReason::RenameRefused { .. } => surfaced(FindingReason::FileAndFolder {
                     both: entry_path("albums"),
+                    mapped: false,
                 }),
                 FindingReason::FileAndFolder { .. } => surfaced(FindingReason::AwaitsPack),
                 FindingReason::AwaitsPack => {

@@ -433,7 +433,7 @@ pub async fn a_refused_rename_falls_back_with_a_finding(fixture: &SyncUnderTest)
     assert!(
         outcome.surfaced.iter().any(|surfaced| matches!(
             surfaced,
-            Surfaced::FileAndFolder { path, both }
+            Surfaced::FileAndFolder { path, both, mapped: false }
                 if path.as_str() == "x/y" && both.as_str() == "x"
         )),
         "the file left out is reported: {:?}",

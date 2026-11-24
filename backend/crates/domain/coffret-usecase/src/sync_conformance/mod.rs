@@ -192,7 +192,10 @@ pub use roots::{
 };
 
 mod files_and_folders;
-pub use files_and_folders::a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out;
+pub use files_and_folders::{
+    a_file_left_out_beside_a_mapped_folder_says_the_folder_is_mapped,
+    a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out,
+};
 
 mod scope;
 pub use scope::{
@@ -279,6 +282,7 @@ macro_rules! sync_conformance {
             a_sync_within_some_folders_walks_those_alone,
             a_file_at_a_top_level_mappings_own_prefix_is_reported_once_within_the_root,
             a_file_that_would_make_a_path_both_a_file_and_a_folder_is_left_out,
+            a_file_left_out_beside_a_mapped_folder_says_the_folder_is_mapped,
             an_unedited_file_this_device_deleted_goes_to_the_trash,
             an_unedited_file_another_device_deleted_goes_to_the_trash,
             an_edited_departed_file_is_kept_and_reported_every_run,
