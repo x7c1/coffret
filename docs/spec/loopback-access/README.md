@@ -707,10 +707,9 @@ Concept background: [Library](../../concepts/library/),
     holds, not what the Library does.
 
   *(Form: test for the files beside a row, the test for a folder not wholly
-  here and the parcels held of one Container; prose for the lookup of
-  Containers by ID, which is the catalog's primary key, and for the reading
-  of every held parcel, which is bounded by what this device holds, honored
-  by construction.)*
+  here, the lookup of Containers by ID and the parcels held of one Container;
+  prose for the reading of every held parcel, which is bounded by what this
+  device holds, honored by construction.)*
 - **LA-33.** A file may be read without arming the fill of its folder: the
   **read ahead** (`GET /api/file?path=<entry>&fill=false`). It is answered as
   a read is, from the file on this device or, where there is none, by the
