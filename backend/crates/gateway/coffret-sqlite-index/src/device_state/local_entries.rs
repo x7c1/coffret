@@ -383,10 +383,10 @@ pub(super) const ANY_REMOTE_IN: &str = "SELECT EXISTS (SELECT 1 FROM entries \
      LIMIT 1)";
 
 /// Whether any current Entry standing directly in `folder` is remote: one this
-/// device does not have on disk, by the present record a folder's listing
-/// reads (spec: EP-10): the folder's Entries through the index on `parent`,
-/// each against its row on the primary key, stopping at the first that has
-/// none (spec: LA-48).
+/// device does not have on disk, by the materialization record a folder's
+/// listing reads (spec: EP-10): the folder's Entries through the index on
+/// `parent`, each against its row on the primary key, stopping at the first
+/// that has none (spec: LA-48).
 pub(crate) fn any_remote_in(
     connection: &Connection,
     folder: Option<&EntryPath>,

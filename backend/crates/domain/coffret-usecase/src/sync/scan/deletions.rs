@@ -155,8 +155,8 @@ pub(super) async fn deletions(
     })
 }
 
-/// One read of this device's present records, bounded to what a mapping
-/// stands for within a scan's scope.
+/// One read of this device's materialization records that say present,
+/// bounded to what a mapping stands for within a scan's scope.
 #[derive(Debug, PartialEq, Eq)]
 enum Read<'a> {
     /// Everything under a top-level mapping's prefix.
@@ -181,9 +181,10 @@ enum Read<'a> {
 /// folder in scope that the mapping reaches, each folder read on its own rather
 /// than the whole mapping read and the rest thrown away (spec: EP-9, EP-10).
 ///
-/// So the Library-root mapping never reads every present record of the device:
-/// the rows under another mapping's prefix are left out of the read itself, and
-/// a scope holding the Library root reads the files standing directly there.
+/// So the Library-root mapping never reads all of the device's materialization
+/// records that say present: the rows under another mapping's prefix are left
+/// out of the read itself, and a scope holding the Library root reads the files
+/// standing directly there.
 fn reads<'a>(
     scope: &'a ScanScope,
     prefix: Option<&'a EntryPath>,

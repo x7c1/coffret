@@ -23,8 +23,8 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
 }
 
 /// [`apply`] less the recount, answering with every Entry Path whose Entry or
-/// present record the record may have changed: the paths of the Entries it
-/// removes, of the Entries it renames before and after, of the Entries it
+/// materialization record the record may have changed: the paths of the Entries
+/// it removes, of the Entries it renames before and after, of the Entries it
 /// adds, and of the rows of this device it reaches (spec: EP-10).
 fn replay(connection: &Connection, record: JournalRecord) -> IndexResult<BTreeSet<String>> {
     // A record at or below the head this catalog stands at is one it holds

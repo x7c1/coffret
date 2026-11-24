@@ -2,8 +2,8 @@ use super::{present_paths, LibrarySummary};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
-/// What the whole Library comes to, read off every Entry, every present
-/// record and every Container.
+/// What the whole Library comes to, read off every Entry, every
+/// materialization record that says present, and every Container.
 pub async fn derive_library_summary(index: &(impl Index + ?Sized)) -> IndexResult<LibrarySummary> {
     let entries = index.entries_under(None).await?;
     let present = present_paths(index, None).await?;

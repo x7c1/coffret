@@ -1,7 +1,7 @@
 use coffret_model::Mtime;
 
 /// What the whole Library comes to, as the Index holds it: the cached
-/// Catalog's Entries and Containers, and this device's present records.
+/// Catalog's Entries and Containers, and this device's materialization records.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LibrarySummary {
     /// How many current Entries the Library holds, at every depth.

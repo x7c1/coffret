@@ -315,8 +315,8 @@ pub async fn the_entries_absent_under_a_prefix_are_the_ones_not_on_disk(fixture:
 }
 
 /// A folder is whole on this device exactly where no current Entry standing
-/// directly in it is remote, by the same present record a folder's listing
-/// reads (spec: EP-10).
+/// directly in it is remote, by the same materialization record a folder's
+/// listing reads (spec: EP-10).
 ///
 /// What a page opened from disk asks of its folder, and the answer has to be
 /// [`folder_contents`](crate::Index::folder_contents)' own: an Entry never

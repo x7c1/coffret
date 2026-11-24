@@ -255,8 +255,9 @@ async fn several_folders_are_deleted_in_one_run() {
     }
 }
 
-// One deletion at a time: a second confirmed while the first is running waits
-// its turn, is said to be waiting, and runs once the first has committed.
+// LA-12: one deletion at a time: a second confirmed while the first is running
+// waits its turn, is said to be waiting, and runs once the first has committed;
+// the same one confirmed again is not queued twice.
 #[tokio::test]
 async fn a_second_deletion_waits_for_the_first() {
     let served = Served::library().await;

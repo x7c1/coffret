@@ -3,10 +3,10 @@
 //! An adapter may keep each folder's figures apart from the Entries they count,
 //! so that a listing reads a folder's own rows rather than its subtree
 //! (spec: LA-45). Figures kept apart are figures that can drift: a write that
-//! changes an Entry or a present record and forgets to recount the folders
-//! above it leaves a count the subtree no longer adds up to. So after every
-//! kind of write the catalog takes, the case recounts each folder out of the
-//! subtree reads and holds the port's answers to them.
+//! changes an Entry or a materialization record and forgets to recount the
+//! folders above it leaves a count the subtree no longer adds up to. So after
+//! every kind of write the catalog takes, the case recounts each folder out of
+//! the subtree reads and holds the port's answers to them.
 
 use std::iter;
 
@@ -66,12 +66,12 @@ pub async fn assert_folder_figures_recount(index: &dyn Index, after: &str) {
     }
 }
 
-/// LA-45, EP-10: each folder's figures add up to the Entries below it and the
-/// present records among them after every kind of write — a replay, this
-/// device's own commit, one completed after another process replayed its
-/// record, a file marked present, gone and forgotten, a rename across folders
-/// and the relocation of its file, a removal that empties a folder, and a
-/// restore.
+/// LA-45, EP-10: after every kind of write — a replay, this device's own
+/// commit, one completed after another process replayed its record, a file
+/// marked present, gone and forgotten, a rename across folders and the
+/// relocation of its file, a removal that empties a folder, and a restore —
+/// each folder's figures add up to the Entries below it and those among them
+/// present on this device.
 pub async fn the_folder_figures_add_up_to_what_lies_below(fixture: &IndexUnderTest) {
     let index = fixture.index();
     assert_folder_figures_recount(index, "nothing").await;
