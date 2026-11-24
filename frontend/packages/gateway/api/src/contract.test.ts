@@ -1244,7 +1244,6 @@ it('reads every other answer the server sends through its type', () => {
       'rebuilt',
       'rebuild_read',
       'rebuild_written',
-      'refused',
       'missing',
       'after_current',
     ]);
@@ -1257,7 +1256,6 @@ it('reads every other answer the server sends through its type', () => {
       rebuilt: number(fields.rebuilt, 'delete_preview.rebuilt'),
       rebuild_read: number(fields.rebuild_read, 'delete_preview.rebuild_read'),
       rebuild_written: number(fields.rebuild_written, 'delete_preview.rebuild_written'),
-      refused: list(fields.refused, 'delete_preview.refused', refusedPack),
       missing: folders(fields.missing, 'delete_preview.missing'),
       after_current: boolean(fields.after_current, 'delete_preview.after_current'),
     };

@@ -1143,7 +1143,8 @@ function deleteUrl(target: DeleteTarget): string {
  * counts is what {@link startDelete} of the same target does — give or take the
  * Library moving in between, a Pack that does not verify when the run reads it
  * back, or a Pack whose key is lost, which the preview counts as rebuilt and
- * the run refuses.
+ * the run refuses. So the preview names no refusal; the run's own answer does
+ * (spec: LA-46).
  */
 export interface DeletePreview {
   /** The folders it would delete, in Entry Path order; empty where it names files only. */
@@ -1162,8 +1163,6 @@ export interface DeletePreview {
   rebuild_read: number;
   /** How many bytes the rebuilt Packs would weigh on Storage. */
   rebuild_written: number;
-  /** The Packs it would be refused for, and why: always empty, since the preview reads no Keyring. */
-  refused: RefusedPack[];
   /** Named files the Library holds nothing at. */
   missing: string[];
   /** Whether a deletion is already running, so this one would wait its turn. */
@@ -1180,8 +1179,7 @@ export async function previewDelete(
   target: DeleteTarget,
   signal?: AbortSignal,
 ): Promise<DeletePreview> {
-  const preview = await askedForJson<DeletePreview>(deleteUrl(target), signal);
-  return { ...preview, refused: preview.refused.map(refusedPackOf) };
+  return askedForJson<DeletePreview>(deleteUrl(target), signal);
 }
 
 /**

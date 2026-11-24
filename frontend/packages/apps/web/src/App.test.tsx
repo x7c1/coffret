@@ -887,7 +887,6 @@ it('describes the rows selected together, and deletes them from the details pane
     rebuilt: 1,
     rebuild_read: 2_000_000,
     rebuild_written: 1_000_000,
-    refused: [],
     missing: [],
     after_current: false,
   });
@@ -1034,7 +1033,6 @@ async function deleteFromTree(name: string, folder: string, after: () => void): 
     rebuilt: 0,
     rebuild_read: 0,
     rebuild_written: 0,
-    refused: [],
     missing: [],
     after_current: false,
   });

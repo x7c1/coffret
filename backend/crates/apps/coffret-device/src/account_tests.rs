@@ -618,7 +618,7 @@ async fn renewing_an_account_renews_it_for_every_library() {
     );
 }
 
-// SA-8, KD-10: a per-Library cache an earlier build left in a Library's
+// SA-8: a per-Library cache an earlier build left in a Library's
 // directory is neither read nor removed: the Library is refused as one that
 // references no account, and the file is left as it was.
 #[tokio::test]

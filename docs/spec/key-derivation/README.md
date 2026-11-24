@@ -193,10 +193,9 @@ Concept background: [Master Key](../../concepts/master-key/),
   - A Library's previous per-Library cache has this same form, sealed under
     that Library's retired `coffret/v1/token-cache` purpose key (KD-4)
     instead. The form does not say which key sealed it; where the file is
-    found does — in a Library's directory, or among the device's accounts —
-    and a device reads only the latter: one left in a Library's directory is
-    neither read nor removed, and the Library is opened as though it were
-    not there. The manual Drive tools (the `authorize` and `app_folders`
+    found does — in a Library's directory, or among the device's accounts.
+    What a device does with one left in a Library's directory is SA-8's to
+    say. The manual Drive tools (the `authorize` and `app_folders`
     examples of `google-drive-store`), run by hand outside any device, still
     seal the cache they keep in this same form, under a
     `coffret/v1/token-cache` key derived from the Master Key they are given.

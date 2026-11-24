@@ -114,8 +114,8 @@ async fn a_folder_the_library_does_not_have_is_told_from_an_empty_one() {
     assert_eq!(files(&root), []);
 }
 
-// Flat and complete: every folder the separators imply, each named in full, for
-// the browser to nest (spec: EP-2).
+// LA-47: flat and complete: every folder the separators imply, each named in
+// full and in EP-3 order, for the browser to nest (spec: EP-2).
 #[tokio::test]
 async fn every_folder_of_the_library_is_listed_flat() {
     let served = Served::library().await;
@@ -164,9 +164,11 @@ async fn a_library_with_no_name_yet_is_answered_with_a_null_name() {
     );
 }
 
-// A file whose Entry left the Library — another device removed the Container
-// holding it — is the same state as one just dropped, and is shown the same way:
-// this device has it and the Library does not.
+// LA-44: a file whose Entry left the Library — another device removed the
+// Container holding it — is the same state as one just dropped, and is shown
+// the same way: this device has it and the Library does not. Its row carries
+// the local file's `mtime`, and no deposit time or Container, since nothing has
+// been deposited.
 #[tokio::test]
 async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
     let served = Served::library().await;
@@ -182,6 +184,10 @@ async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
             ("theirs.jpg".to_owned(), "added".to_owned()),
         ],
     );
+    let theirs = &listing["files"][3];
+    assert!(theirs["mtime"].is_string(), "{theirs}");
+    assert_eq!(theirs["deposited_at"], serde_json::Value::Null, "{theirs}");
+    assert_eq!(theirs["container"], serde_json::Value::Null, "{theirs}");
 }
 
 // A folder on disk whose files all sit in a subfolder has no row of its own to

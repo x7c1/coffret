@@ -1,8 +1,8 @@
 use serde::Serialize;
 
-use crate::delete::{DeleteReport, DeleteStatus};
+use crate::delete::{DeleteReport, DeleteStatus, RefusedPack};
 use crate::pending_rows::TurnTaker;
-use crate::routes::{RefusalDto, RefusedPackDto};
+use crate::routes::RefusalDto;
 
 use super::{waits, FindingDto, StepDto};
 
@@ -79,6 +79,38 @@ impl DeleteDto {
             ),
             waiting: report.waiting,
             stopped: run.status.stopped().map(RefusalDto::of),
+        }
+    }
+}
+
+/// One Pack a deletion was refused for, as the browser is told it.
+///
+/// Only the run names one (spec: PK-10, KL-17): the preview reads no Keyring
+/// and reads no Pack back, so it counts a Pack whose key is lost as one to be
+/// rebuilt and names none (spec: LA-46).
+#[derive(Debug, Serialize)]
+struct RefusedPackDto {
+    /// The named files that stay in the Library because their Pack does.
+    spared: Vec<String>,
+    /// How many other files the Pack holds.
+    kept: usize,
+    /// `key_lost` or `unverified`.
+    reason: &'static str,
+    /// The sentence to show beside the files that stayed.
+    message: String,
+}
+
+impl RefusedPackDto {
+    fn of(refused: &RefusedPack) -> Self {
+        Self {
+            spared: refused
+                .spared
+                .iter()
+                .map(|path| path.as_str().to_owned())
+                .collect(),
+            kept: refused.kept,
+            reason: refused.reason,
+            message: refused.message(),
         }
     }
 }

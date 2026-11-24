@@ -30,7 +30,8 @@ impl OpenLibrary {
     /// the row stands in up towards `under` (or the root), the nearest child
     /// folder or Entry on the side it looks, one at a time, and then down the
     /// first or last child of each folder into the file it answers with —
-    /// a few rows per level of the path, however large the Library is.
+    /// a few rows per level of the path, however large the Library is
+    /// (spec: LA-48).
     pub async fn files_beside(
         &self,
         path: &EntryPath,

@@ -194,8 +194,6 @@ pub use remote_head::remote_head;
 mod refusal_dto;
 use refusal_dto::RefusalDto;
 
-use delete::RefusedPackDto;
-
 mod stop;
 pub use stop::stop;
 

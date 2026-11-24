@@ -301,7 +301,8 @@ async fn answer(
 /// The same fill a placement arms, with nothing to carry: no fetch ran, so
 /// nothing of the Keyring was read and no kept parcel was found unheld. A
 /// folder whose own files are all here, the common case, arms nothing; the
-/// catalog is asked only where no fill has ended on the folder.
+/// catalog is asked only where no fill has ended on the folder, and then
+/// only whether one of its Entries is not here (spec: LA-48).
 async fn fill_unless_whole(
     state: &Arc<ServerState>,
     library: &OpenLibrary,
