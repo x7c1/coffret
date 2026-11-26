@@ -13,8 +13,8 @@
 # of the desktop app every bundle carries. It fails where that crate is not in
 # the workspace, rather than print nothing.
 #
-# The release workflow (scripts/check-version-change.sh) and the desktop
-# bundles (scripts/desktop.sh) both read the version through this.
+# The desktop bundles (scripts/desktop.sh) read the version through this, and
+# scripts/set-workspace-version.sh reads back through it the version it set.
 
 set -euo pipefail
 

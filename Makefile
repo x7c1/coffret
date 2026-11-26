@@ -937,15 +937,17 @@ field-numbers-guard:
 field-numbers-guard-test:
 	./scripts/field-numbers-guard-test.sh
 
-## check-version-change-test: show check-version-change.sh reporting the workspace version, and whether it went up
+## set-workspace-version-test: show set-workspace-version.sh setting the workspace version in Cargo.toml and Cargo.lock, and refusing what it cannot set
 #
-# The release workflow reads the workspace version through
-# scripts/check-version-change.sh; this runs it against throwaway repositories
-# whose workspaces hold coffret-desktop-core, and one that does not, which it
-# must refuse. Needs git, cargo and jq.
-.PHONY: check-version-change-test
-check-version-change-test:
-	./scripts/check-version-change-test.sh
+# The release PR's commit sets the workspace version through
+# scripts/set-workspace-version.sh; this runs it against throwaway workspaces
+# whose members take their version from the workspace, and checks the version
+# cargo reads for each member, scripts/workspace-version.sh's answer, the
+# Cargo.lock entries, and that `cargo metadata --locked --offline` accepts the
+# result. Needs cargo and jq, and no network.
+.PHONY: set-workspace-version-test
+set-workspace-version-test:
+	./scripts/set-workspace-version-test.sh
 
 ## desktop-dev-sandbox-test: show the check desktop-dev makes on Linux letting the development app start where Chromium's sandbox can, and refusing, with the AppArmor profile to install, where it cannot
 #
@@ -1031,7 +1033,7 @@ deny:
 audit:
 	cd frontend && pnpm audit
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + check-version-change-test + desktop-dev-sandbox-test + e2e-electron-display-test + desktop-addon-test + container-images-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + field-numbers-guard (+ its test) + set-workspace-version-test + desktop-dev-sandbox-test + e2e-electron-display-test + desktop-addon-test + container-images-test + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -1100,6 +1102,6 @@ audit:
 # move without this checkout moving. The `frontend` job in CI runs it, and
 # `make audit` above runs it here.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test check-version-change-test desktop-dev-sandbox-test e2e-electron-display-test desktop-addon-test container-images-test shell-lint
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test field-numbers-guard field-numbers-guard-test set-workspace-version-test desktop-dev-sandbox-test e2e-electron-display-test desktop-addon-test container-images-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

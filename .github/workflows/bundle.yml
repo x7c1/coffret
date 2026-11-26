@@ -25,6 +25,10 @@ on:
   # pull request forever.
   pull_request:
     branches: [main, 'feat/**']
+    # The default three, and `ready_for_review`: a draft release PR skips
+    # every job but `bundle-green` (see `changes`), and marking it ready runs
+    # them on it.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       ref:
@@ -38,8 +42,12 @@ jobs:
   # crates that make that addon, the lockfiles, and the scripts that build and
   # check it. A change to the explorer or the server is built and tested by CI,
   # and the Release workflow bundles everything on the way to a release.
+  #
+  # A draft release PR is not judged until someone marks it ready for review:
+  # that is the decision to release (docs/guides/release.md). So this job and
+  # `bundle` skip it, and `bundle-green` passes over the two skips.
   changes:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' && !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -65,8 +73,8 @@ jobs:
     name: bundle (${{ matrix.name }})
     needs: changes
     # Called by the Release workflow or run by hand, `changes` is skipped and
-    # the bundles are always built.
-    if: ${{ !cancelled() && needs.changes.result != 'failure' && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
+    # the bundles are always built. On a draft release PR, see `changes`.
+    if: ${{ !cancelled() && !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) && needs.changes.result != 'failure' && (github.event_name != 'pull_request' || needs.changes.outputs.bundle == 'true') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -199,7 +207,8 @@ jobs:
 
   # The one check of this workflow that `main` requires: it passes only when
   # every job above succeeded or was skipped — the bundles were built or had no
-  # reason to be — and fails on any other result. See ci.yml's `all-green`.
+  # reason to be — and fails on any other result. See ci.yml's `all-green`. On
+  # a draft release PR both are skipped, and it passes.
   bundle-green:
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs: [changes, bundle]
