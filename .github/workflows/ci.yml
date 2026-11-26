@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request:
     branches: [main, 'feat/**']
+    # The default three, and `ready_for_review`: a draft release PR skips
+    # every job (see `backend`), and marking it ready runs them all on it.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -23,6 +26,11 @@ concurrency:
 
 jobs:
   backend:
+    # A draft release PR is not judged until someone marks it ready for
+    # review: that is the decision to release (docs/guides/release.md). Every
+    # job but `all-green` carries this condition; `all-green` accepts the
+    # skips, so it still passes on the draft.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     # Each job is bounded at a few times its usual duration, so a stalled
     # step fails the run instead of holding it until GitHub's six-hour limit.
@@ -107,6 +115,8 @@ jobs:
   # and not a file in this tree. Until it is listed, this reports and nothing
   # waits for it — the failure mode it was added to remove.
   cargo-deny:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -150,6 +160,8 @@ jobs:
         run: cargo deny --locked check
 
   frontend:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -224,10 +236,13 @@ jobs:
   # The shell scripts' lint and format check runs here for the same reason,
   # needing curl beyond those: it fetches the shellcheck and shfmt that
   # scripts/shell-lint.sh pins rather than using the runner's, and that script's
-  # header says why. The release scripts' unit test, which needs only bash,
-  # runs beside it, and so does the test of how the release workflow reads the
-  # workspace version, which needs cargo metadata and jq, both on the runner.
+  # header says why. The test of how the release PR sets the workspace version
+  # runs beside it: it needs cargo and jq, both on the runner, and works on
+  # throwaway workspaces outside this repository, so it uses the runner's
+  # default toolchain rather than waiting on the pinned one.
   spec:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -252,14 +267,10 @@ jobs:
       - name: Container image pins test
         run: make container-images-test
 
-      # The release PR's summary handling (docs/guides/release.md), offline.
-      - name: Release summary tests
-        run: bash .github/scripts/release-summary.test.sh
-
-      # The workspace version the release workflow reads, and whether it went
-      # up (docs/guides/release.md).
-      - name: Version change test
-        run: make check-version-change-test
+      # How the release PR's commit sets the workspace version in Cargo.toml
+      # and Cargo.lock (docs/guides/release.md).
+      - name: Workspace version writer test
+        run: make set-workspace-version-test
 
       # The check the development app makes before it starts, over throwaway
       # stand-ins for /proc and /etc/apparmor.d (docs/guides/environments.md).
@@ -281,6 +292,8 @@ jobs:
   # sets. It runs on every change because the two are independent: a change to
   # either one can only be shown not to break the other by running both.
   interop:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # See the frontend job: nothing here runs Electron.
@@ -337,6 +350,8 @@ jobs:
   # ETag is. It runs on every change because the contract is what the second
   # adapter is held to as well.
   s3-store:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -375,6 +390,8 @@ jobs:
   # whether the screen reads right, and the pictures of a run that failed are the
   # ones most worth looking at.
   e2e:
+    # See `backend`: a draft release PR is not judged.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && startsWith(github.head_ref, 'release/')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -562,7 +579,8 @@ jobs:
   # (failed, cancelled, or abandoned without a runner), so a failure anywhere
   # blocks the merge without each job having to be listed as required — and
   # auto-merge, which waits only for required checks, waits for all of them.
-  # Add a new job to `needs` here.
+  # Add a new job to `needs` here. It carries no draft release PR condition:
+  # on that PR every job it needs is skipped, and it passes.
   all-green:
     if: ${{ always() }}
     needs: [backend, cargo-deny, frontend, spec, interop, s3-store, e2e]
