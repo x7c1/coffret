@@ -8,4 +8,4 @@
 # used to publish bundled it — so a bucket is made by the AWS CLI, in a
 # container of its own. Pinned by digest as well as by tag for the reason the
 # MinIO image is.
-FROM amazon/aws-cli:2.41.1@sha256:538a9a80bc7c78e3228bc65100404a5dbd89ad812a547004c05ea20109543432
+FROM amazon/aws-cli:2.42.2@sha256:6c24ad4e8cdf12defd41c7e6d2ed836e73da9cbfecc1e9d7fd148bb9f4ea5eb2
